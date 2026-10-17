@@ -6,8 +6,10 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(import.meta.dirname, "..");
+const sourcePath = fileURLToPath(import.meta.url);
 const queue = "/work/tmp/wave-heavy/run.sh";
 const operators = [
   ":-",
@@ -65,6 +67,7 @@ Options:
   --seed N        Unsigned deterministic seed (default: 1)
   --timeout-ms N  Timeout for each Bash and shell process (default: 2000)
   --shell PATH    Existing native shell-engine binary
+  --self-control  Compare two fresh Bash processes; cannot record fixtures
   --output PATH   Write the same JSON report printed to stdout
   --record PATH  Record Bash 5.3.15 output and require a clean native run
   --replay PATH  Replay a recorded fixture without invoking Bash (repeatable)
@@ -85,6 +88,10 @@ function parseArgs(argv) {
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (arg === "--queue-active") continue;
+    if (arg === "--self-control") {
+      options.selfControl = true;
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
       usage();
       process.exit(0);
@@ -105,6 +112,11 @@ function parseArgs(argv) {
     throw new Error("--count must be a non-negative integer");
   if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1)
     throw new Error("--timeout-ms must be a positive integer");
+  if (options.record && (options.replays.length || options.selfControl))
+    throw new Error("record cannot be combined with replay or Bash self-control");
+  if (options.selfControl && options.shell) throw new Error("self-control cannot select a shell");
+  if (options.selfControl && options.replays.length)
+    throw new Error("self-control cannot replay fixtures");
   return options;
 }
 
@@ -162,6 +174,130 @@ const patternPool = atomPool.filter(
 const states = ["unset", "empty", "value"];
 const values = ["b", "abc", "a b", "don't", "'", "${", "$(", "a/b", "a*?", "foo"];
 
+const ansiOperands = [
+  { name: "empty", source: "$''", decoded: "empty", tags: ["ansi-c", "ansi-empty"] },
+  {
+    name: "apostrophe-escape",
+    source: "$'\\''",
+    decoded: "apostrophe",
+    tags: ["ansi-c", "ansi-apostrophe", "ansi-backslash-escape"],
+  },
+  {
+    name: "apostrophe-hex",
+    source: "$'\\x27'",
+    decoded: "apostrophe",
+    tags: ["ansi-c", "ansi-apostrophe", "ansi-hex-escape"],
+  },
+  {
+    name: "apostrophe-pair-hex",
+    source: "$'\\x27\\x27'",
+    decoded: "apostrophe-pair",
+    tags: ["ansi-c", "ansi-apostrophe", "ansi-hex-escape"],
+  },
+  {
+    name: "brace-literal",
+    source: "$'}'",
+    decoded: "brace",
+    tags: ["ansi-c", "ansi-brace", "ansi-literal"],
+  },
+  {
+    name: "brace-hex",
+    source: "$'\\x7d'",
+    decoded: "brace",
+    tags: ["ansi-c", "ansi-brace", "ansi-hex-escape"],
+  },
+  {
+    name: "dollar-literal",
+    source: "$'$'",
+    decoded: "dollar",
+    tags: ["ansi-c", "ansi-dollar", "ansi-literal"],
+  },
+  {
+    name: "dollar-hex",
+    source: "$'\\x24'",
+    decoded: "dollar",
+    tags: ["ansi-c", "ansi-dollar", "ansi-hex-escape"],
+  },
+  {
+    name: "dollar-variable",
+    source: "$'$v'",
+    decoded: "dollar-expansion",
+    tags: ["ansi-c", "ansi-dollar", "ansi-expansion"],
+  },
+  {
+    name: "dollar-hex-variable",
+    source: "$'\\x24v'",
+    decoded: "dollar-expansion",
+    tags: ["ansi-c", "ansi-dollar", "ansi-expansion", "ansi-hex-escape"],
+  },
+  {
+    name: "double-quote-literal",
+    source: "$'\"'",
+    decoded: "double-quote",
+    tags: ["ansi-c", "ansi-double-quote", "ansi-literal"],
+  },
+  {
+    name: "double-quote-hex",
+    source: "$'\\x22'",
+    decoded: "double-quote",
+    tags: ["ansi-c", "ansi-double-quote", "ansi-hex-escape"],
+  },
+  {
+    name: "backslash",
+    source: "$'\\\\'",
+    decoded: "backslash",
+    tags: ["ansi-c", "ansi-backslash", "ansi-backslash-escape"],
+  },
+  {
+    name: "newline",
+    source: "$'\\n'",
+    decoded: "newline",
+    tags: ["ansi-c", "ansi-backslash", "ansi-control-escape"],
+  },
+  {
+    name: "digit-literal",
+    source: "$'1'",
+    decoded: "digit",
+    tags: ["ansi-c", "ansi-digit", "ansi-literal"],
+  },
+  {
+    name: "digit-hex",
+    source: "$'\\x31'",
+    decoded: "digit",
+    tags: ["ansi-c", "ansi-digit", "ansi-hex-escape"],
+  },
+];
+
+const conditionalOperators = [":-", "-", ":=", "=", ":+", "+", ":?", "?"];
+const ansiSlots = operators
+  .filter((operator) => operator !== "!" && operator !== "#name")
+  .concat(["?"])
+  .flatMap((operator) =>
+    operatorGroups.get(operator) === "replacement"
+      ? ["pattern", "replacement"].map((slot) => ({ operator, slot }))
+      : [{ operator, slot: "operand" }],
+  )
+  .concat(
+    conditionalOperators.map((operator) => ({ operator: `!${operator}`, slot: "operand" })),
+    [
+      { operator: ":", slot: "offset" },
+      { operator: ":", slot: "length" },
+    ],
+  );
+
+const ansiDecodedValues = {
+  empty: "",
+  apostrophe: "'",
+  "apostrophe-pair": "''",
+  brace: "}",
+  dollar: "$",
+  "dollar-expansion": "$v",
+  "double-quote": '"',
+  backslash: "\\",
+  newline: "\n",
+  digit: "1",
+};
+
 function combineTags(...parts) {
   return Array.from(new Set(parts.flatMap((part) => part.tags ?? part))).toSorted();
 }
@@ -210,6 +346,88 @@ function expressionFor(operator, random, depth, target = "v") {
     source: `\${${target}${operator}${operand.source}}`,
     tags: combineTags(operand, [operatorGroups.get(operator)]),
   };
+}
+
+function ansiSelectionState(operator, selection) {
+  const conditional = operator.startsWith("!") ? operator.slice(1) : operator;
+  if (conditional === ":+" || conditional === "+")
+    return selection === "selected" ? "value" : "unset";
+  if (conditionalOperators.includes(conditional))
+    return selection === "selected" ? "unset" : "value";
+  return selection === "selected" ? "value" : "unset";
+}
+
+function ansiExpression(operator, operand, slot) {
+  const operandTags = operand.tags.concat([`ansi-operator-${operator}`, `ansi-slot-${slot}`]);
+  if (operator === "/" || operator === "//" || operator === "/#" || operator === "/%") {
+    const pattern = slot === "pattern" ? operand.source : "x";
+    const replacement = slot === "replacement" ? operand.source : "x";
+    return {
+      source: `\${v${operator}${pattern}/${replacement}}`,
+      tags: operandTags,
+    };
+  }
+  if (operator === ":") {
+    return {
+      source: slot === "offset" ? `\${v: ${operand.source}:1}` : `\${v:0: ${operand.source}}`,
+      tags: operandTags,
+    };
+  }
+  const target = operator.startsWith("!") ? "!pointer" : "v";
+  const suffix = operator.startsWith("!") ? operator.slice(1) : operator;
+  return {
+    source: `\${${target}${suffix}${operand.source}}`,
+    tags: operandTags,
+  };
+}
+
+function ansiCase(operator, operand, selection, quote, slot) {
+  const expression = ansiExpression(operator, operand, slot);
+  const selectionState = ansiSelectionState(operator, selection);
+  return {
+    id: `ansi-${operator}-${slot}-${operand.name}-${selection}-${quote}`,
+    label: `ansi-${operand.name}`,
+    operator,
+    quote,
+    selection,
+    valueState: selectionState,
+    operandState: "value",
+    value: ansiValue(operator, operand, slot),
+    operandValue: "OPERAND",
+    ansi: {
+      name: operand.name,
+      decoded: operand.decoded,
+      slot,
+    },
+    expression,
+    featureTags: combineTags(expression, [
+      "ansi-c",
+      `ansi-operator-${operator}`,
+      `ansi-quoting-${quote}`,
+      `ansi-selection-${selection}`,
+      `ansi-decoded-${operand.decoded}`,
+      `ansi-spelling-${operand.name}`,
+    ]),
+  };
+}
+
+function ansiValue(operator, operand, slot) {
+  if (slot === "replacement") return "x";
+  const decoded = ansiDecodedValues[operand.decoded];
+  if (operator === "%" || operator === "%%" || operator === "/%") return "aA" + decoded;
+  return decoded + "aA";
+}
+
+function ansiCases() {
+  return ansiSlots.flatMap(({ operator, slot }) =>
+    ansiOperands.flatMap((operand) => ansiSelectionCases(operator, operand, slot)),
+  );
+}
+
+function ansiSelectionCases(operator, operand, slot) {
+  return ["selected", "unselected"].flatMap((selection) =>
+    ["top-level", "double"].map((quote) => ansiCase(operator, operand, selection, quote, slot)),
+  );
 }
 
 function stateAssignment(name, state, value) {
@@ -338,11 +556,11 @@ function generateCases(seed, count) {
       generated++;
     }
   }
-  return cases;
+  return cases.concat(ansiCases());
 }
 
 function sourceHash() {
-  return createHash("sha256").update(readFileSync(process.argv[1])).digest("hex");
+  return createHash("sha256").update(readFileSync(sourcePath)).digest("hex");
 }
 
 function caseIdentity(testCase) {
@@ -482,13 +700,14 @@ function resultView(result) {
 
 function execute(testCase, bashBin, shellBin, timeoutMs) {
   const script = renderCase(testCase);
-  const bash = runProcess(
-    bashBin,
-    ["--noprofile", "--norc", "-c", `set -f\n${script}`],
+  const bashArgs = ["--noprofile", "--norc", "-c", `set -f\n${script}`];
+  const bash = runProcess(bashBin, bashArgs, script, timeoutMs);
+  const ours = runProcess(
+    shellBin,
+    shellBin === bashBin ? bashArgs : ["-c", script],
     script,
     timeoutMs,
   );
-  const ours = runProcess(shellBin, ["-c", script], script, timeoutMs);
   return { script, bash, ours, classification: classify(testCase, bash, ours) };
 }
 
@@ -564,7 +783,7 @@ function replayFixture(path, shellBin, expectedCount) {
 }
 
 function shrinkCase(testCase, bashBin, shellBin, timeoutMs, original) {
-  if (testCase.fixedScript) return original;
+  if (testCase.fixedScript || testCase.ansi) return original;
   const candidates = [];
   const simplify = (patch) => candidates.push({ ...testCase, ...patch });
   simplify({ quote: "top-level" });
@@ -643,9 +862,11 @@ function buildShell(options, scratch) {
 function main() {
   const options = parseArgs(process.argv.slice(2));
   ensureQueued();
-  const scratch = options.shell ? null : mkdtempSync("/work/tmp/brush-web-fuzz-");
+  const scratch =
+    options.shell || options.selfControl ? null : mkdtempSync("/work/tmp/brush-web-helper-words-");
   try {
-    const shellBin = buildShell(options, scratch);
+    const bashBin = process.env.BASH_BIN ?? "/usr/bin/bash";
+    const shellBin = options.selfControl ? bashBin : buildShell(options, scratch);
     if (options.replays.length) {
       const reports = options.replays.map((path) => replayFixture(path, shellBin, options.count));
       const replayReport = { mode: "replay", reports };
@@ -660,7 +881,6 @@ function main() {
         process.exitCode = 1;
       return;
     }
-    const bashBin = process.env.BASH_BIN ?? "bash";
     const cases = generateCases(options.seed, options.count);
     if (options.record) {
       const fixture = recordFixture(options.record, options, cases, bashBin, shellBin);
@@ -671,6 +891,7 @@ function main() {
     const counts = { MATCH: 0, UNSUPPORTED: 0, MISMATCH: 0 };
     const byOperator = {};
     const byFeature = {};
+    const ansiObservations = [];
     const mismatches = [];
     let mismatchTotal = 0;
     for (const testCase of cases) {
@@ -679,6 +900,14 @@ function main() {
       incrementCount(byOperator, testCase.operator, result.classification);
       for (const feature of testCase.featureTags ?? [])
         incrementCount(byFeature, feature, result.classification);
+      if (testCase.ansi)
+        ansiObservations.push({
+          case: caseIdentity(testCase),
+          script: result.script,
+          classification: result.classification,
+          bash: encodeResult(result.bash),
+          ours: encodeResult(result.ours),
+        });
       if (result.classification === "MISMATCH") {
         mismatchTotal++;
         if (mismatches.length >= 50) continue;
@@ -699,6 +928,7 @@ function main() {
     }
     const report = {
       version: 1,
+      mode: options.selfControl ? "bash-self-control" : "live",
       seed: options.seed,
       generated: options.count,
       total: cases.length,
@@ -708,6 +938,7 @@ function main() {
       counts,
       byOperator,
       byFeature,
+      ansiObservations,
       mismatchTotal,
       mismatches,
     };
@@ -735,4 +966,18 @@ function main() {
   }
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main();
+
+export {
+  ansiCases,
+  ansiOperands,
+  caseIdentity,
+  coverage,
+  fixedCases,
+  generateCases,
+  operators,
+  parseArgs,
+  renderCase,
+  sourceHash,
+  validateFixture,
+};

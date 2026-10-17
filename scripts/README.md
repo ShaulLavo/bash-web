@@ -3,17 +3,34 @@
 `npm run fuzz:shell-words` runs a deterministic differential fuzzer against GNU Bash
 5.3.15 and the native `shell-engine` binary. Each generated template is run as a pair,
 once at top level and once inside double quotes; `--count` is the total generated cases
-(the fixed regressions are additional). It generates scalar parameter defaults,
-assignments, alternatives, errors, indirection, length, trim, replacement, and case
-operators at the top level and inside double quotes. Operands cover nested expansions,
-quote boundaries, escaped and literal braces, raw `${`/`$(` text in single quotes,
-slashes, patterns, spaces, empty text, and following words. Seven fixed regressions from
-the parameter-boundary review are included in every run. Field capture uses a repeating
-`printf '<%s>\\n'` format so every post-expansion field is observed without a helper.
+(the fixed regressions and ANSI-C matrix are additional). It generates scalar parameter
+defaults, assignments, alternatives, errors, indirection, length, trim, replacement,
+and case operators at the top level and inside double quotes. Operands cover nested
+expansions, quote boundaries, escaped and literal braces, raw `${`/`$(` text in single
+quotes, slashes, patterns, spaces, empty text, and following words. The appended ANSI-C
+matrix has 2,176 cases: 16 spellings across 34 operand slots, each selected and
+unselected in both quoting modes. It covers apostrophes, braces, dollars, double quotes,
+backslashes, newline and empty text, plus numeric controls for substring offset and
+length expressions. Slots include all eight direct and indirect conditional operators,
+trims, both replacement operands, case patterns, and substring offsets and lengths.
+Length and plain indirection have no operand. Tags identify the operator, operand slot,
+quoting mode, selection, decoded special, and escape spelling for grouped failure
+reports. The original 3,014 cases at seeds 1/42 retain their identities and scripts.
+Seven fixed regressions from the parameter-boundary review are included in every run.
+Field capture uses a repeating `printf '<%s>\\n'` format so every post-expansion field
+is observed without a helper.
+
+Use `--self-control` to compare two fresh `/usr/bin/bash` processes without a candidate
+engine. This is the oracle determinism check and cannot record or replay fixtures:
+
+```sh
+npm run fuzz:shell-words -- --self-control --count 3000 --seed 1
+npm run fuzz:shell-words -- --self-control --count 3000 --seed 42
+```
 
 The command builds the native binary through the shared heavy-job queue, using a temporary
 `CARGO_TARGET_DIR`, unless `--shell PATH` (or `FUZZ_SHELL_BIN`) supplies an existing
-binary. Build scratch is removed on exit. Useful options are:
+binary or `--self-control` selects Bash. Build scratch is removed on exit. Useful options are:
 
 ```sh
 npm run fuzz:shell-words -- --count 3000 --seed 42 --timeout-ms 2000 \
@@ -27,13 +44,20 @@ persistent file. Each case is `MATCH`, `UNSUPPORTED` (a known unsupported featur
 2 with a diagnostic while Bash succeeds), or `MISMATCH`; the command exits non-zero when
 a mismatch is found. Reports include counts by class, operator and quote/operand feature,
 plus minimized mismatches with Bash and shell stdout as both text and base64 bytes.
+Every ANSI-C observation retains the original case, script, classification, status,
+and base64 stdout/stderr in `ansiObservations`, including Bash failures. ANSI-C cases
+retain their original spelling in mismatch diagnostics. Run the generator checks with
+`node --test scripts/test-fuzz-shell-words.mjs`.
 
 ## Recorded CI gate
 
-Bash 5.3.15 is not available on every CI runner, so the two checked-in fixtures under
-`scripts/fixtures/` contain the Bash stdout/status oracle for 3,000 generated cases plus
-fixed regressions at seeds 1 and 42. Recording rejects any Bash version other than 5.3.15
-and requires a clean native run:
+Bash 5.3.15 is not available on every CI runner, so fixtures under `scripts/fixtures/`
+record its stdout/status oracle at seeds 1 and 42. The current generator records 3,000
+original generated cases, 14 fixed controls, and 2,176 ANSI-C operand cases per seed.
+Recording rejects any Bash version other than 5.3.15 and requires a clean native run.
+The committed fixtures predate the ANSI-C matrix and remain unchanged until engine
+support lands and the oracle is intentionally re-recorded. Replay rejects these stale
+fixtures by source hash in the meantime:
 
 ```sh
 npm run fuzz:shell-words -- --count 3000 --seed 1 \
