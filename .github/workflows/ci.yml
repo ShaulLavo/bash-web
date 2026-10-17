@@ -74,11 +74,16 @@ jobs:
       - name: Select compatibility baseline
         shell: bash
         run: |
-          if [[ "$BASH_COMPAT_BASE_REF" == "0000000000000000000000000000000000000000" ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_REF" == "refs/heads/main" ]]; then
+            baseline="$BASH_COMPAT_BASE_REF"
+          else
             baseline="$(git merge-base origin/main "$GITHUB_SHA")"
-            [[ -n "$baseline" ]] || { echo "Could not find a compatibility baseline" >&2; exit 1; }
-            echo "BASH_COMPAT_BASE_REF=$baseline" >> "$GITHUB_ENV"
           fi
+          if [[ -z "$baseline" || "$baseline" == "0000000000000000000000000000000000000000" ]] || ! git cat-file -e "$baseline^{commit}"; then
+            echo "Could not resolve compatibility baseline: $baseline" >&2
+            exit 1
+          fi
+          echo "BASH_COMPAT_BASE_REF=$baseline" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with:
           node-version: 26.7.0
