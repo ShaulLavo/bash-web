@@ -71,9 +71,22 @@ a local pipe test does not establish browser memory bounds.
 
 Supported for the gate: literal/quoted words, ordinary variables and positional
 parameters, `$?`, `PIPESTATUS`, scalar assignments, function definitions/calls,
-AND/OR lists, background lists, brace groups, subshells, `while`, `case` (`;;`, `;&`, `;;&`, quote-aware patterns), pipelines,
-`pipefail`, `!`, file/append/input and descriptor-duplication redirects, and a few
-streaming/state builtins. The first word area adds quote-aware fields for literals,
+AND/OR lists, background lists, brace groups, subshells, `if`/`elif`/`else`,
+`while`/`until`, word-list and arithmetic `for`, nested `break`/`continue`,
+`case` (`;;`, `;&`, `;;&`, quote-aware patterns), structured `[[ ]]`,
+`test`/`[` predicates, pipelines, `pipefail`, `errexit` with
+conditional/list/pipeline suppression, `!`, file/append/input and
+descriptor-duplication redirects, and a few streaming/state builtins.
+File predicates use real virtual-filesystem metadata, with unavailable
+capabilities explicitly unsupported. For-list pathname expansion supports
+quote-aware basic patterns, incremental directory enumeration and `nullglob`;
+ordinary command argv pathname expansion remains deferred. `shopt` stores and
+reports `nullglob`, `inherit_errexit` and `extglob`, without claiming extended
+pattern matching. `[[ =~ ]]` has a bounded cooperative no-capture ERE subset;
+captures/backreferences, locale collation and GNU regex extensions are deferred.
+Dynamic `EPOCHREALTIME` supports scalar reads and unset behavior. Generic
+function prefixes remain unsupported, as before this unit.
+The first word area adds quote-aware fields for literals,
 ordinary variables, positional parameters and `PIPESTATUS`, including IFS splitting,
 quoted `@` boundaries, `*` joins and command-name field promotion. Assignment and
 `export`/`local` assignment operands retain scalar expansion. Scalar default and
@@ -208,8 +221,8 @@ target changes, while `${!ref}` returns the target name. Resolution is bounded
 and cycle-aware; unset targets remain unset under nounset. Local reference
 bindings and admitted isolated snapshots preserve restoration and isolation.
 Arrays, indexed references and general declaration options remain unsupported.
-Other parameter operators, pathname globbing, arrays, traps, aliases, `lastpipe`,
-directory validation and full utility option coverage are not implemented. Whole-script parsing retains the original separator policy. Captured
+Other parameter operators, ordinary argv pathname globbing, arrays, traps,
+aliases, `lastpipe` and full utility option coverage are not implemented. Whole-script parsing retains the original separator policy. Captured
 shell bodies used by substring boundary validation explicitly request
 `Parser::with_strict_command_separators`; nested parsers inherit that policy.
 Unsupported AST forms return status 2. Utility names/format options here are not

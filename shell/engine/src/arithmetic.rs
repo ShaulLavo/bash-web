@@ -552,12 +552,17 @@ async fn read(
     State::admit_scalar_access(state, name, cancel, work).await?;
     let value = {
         let s = state.borrow();
-        let value = s.scalar_parameter(name).unwrap_or("");
-        if value.len() > max {
-            return Err(2.into());
+        if s.dynamic_parameter(name) {
+            work.admit_storage(State::DYNAMIC_PARAMETER_BYTES)?;
+            s.parameter(name).into_owned()
+        } else {
+            let value = s.scalar_parameter(name).unwrap_or("");
+            if value.len() > max {
+                return Err(2.into());
+            }
+            work.admit_storage(value.len())?;
+            value.to_owned()
         }
-        work.admit_storage(value.len())?;
-        value.to_owned()
     };
     work.enter_scalar_arithmetic(name, cancel).await?;
     let result = expression(&value, state, cancel, max, work, depth).await;

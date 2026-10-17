@@ -19,10 +19,20 @@ fn main() {
     let executor = Executor::new();
     let host = InProcessHost::new(executor.clone());
     compat::register(&host);
+    let fs = MemoryFs::new(16 * 1024 * 1024);
+    let cwd = std::env::var("PWD").ok();
+    // The standalone host selects a virtual cwd from its environment. Create
+    // that directory in its own filesystem before exposing it to the shell.
+    if let Some(cwd) = cwd.as_deref() {
+        if let Err(error) = fs.mkdir(cwd, true) {
+            eprintln!("cannot create virtual working directory: {error:?}");
+            std::process::exit(error.status());
+        }
+    }
     let session = Session::new(
         executor.clone(),
         Rc::new(host),
-        Rc::new(MemoryFs::new(16 * 1024 * 1024)),
+        Rc::new(fs),
         Limits::default(),
     );
     {
@@ -30,7 +40,7 @@ fn main() {
         let mut state = state.borrow_mut();
         state.variables = std::env::vars().collect();
         state.exported = state.variables.keys().cloned().collect();
-        if let Ok(cwd) = std::env::var("PWD") {
+        if let Some(cwd) = cwd {
             state.cwd = cwd;
         }
     }

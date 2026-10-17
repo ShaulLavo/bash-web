@@ -18,8 +18,10 @@ use std::{
     future::Future,
     mem::{size_of, size_of_val},
     ops::Deref,
+    pin::Pin,
     rc::Rc,
     sync::{Arc, atomic::AtomicBool},
+    task::{Context as TaskContext, Poll},
     time::Duration,
 };
 
@@ -29,6 +31,29 @@ const TEXT_BYTES_PER_LEVEL: usize = 16;
 const READER_METADATA_BYTES: usize = 4096;
 
 pub(super) type Frame<'a, T = Outcome> = Either<Ready<T>, LocalBoxFuture<'a, T>>;
+
+pin_project_lite::pin_project! {
+    struct Admitted<F> {
+        #[pin]
+        future: F,
+        allocation: Option<Allocation>,
+    }
+}
+
+impl<F: Future> Future for Admitted<F> {
+    type Output = F::Output;
+
+    fn poll(self: Pin<&mut Self>, context: &mut TaskContext<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        match this.future.poll(context) {
+            Poll::Ready(value) => {
+                drop(this.allocation.take());
+                Poll::Ready(value)
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
 
 struct Shared {
     storage: StorageBudget,
@@ -132,10 +157,6 @@ impl Drop for Allocation {
     }
 }
 
-fn frame_bytes<F>(_: &impl FnOnce(Allocation) -> F) -> usize {
-    size_of::<F>()
-}
-
 #[derive(Clone)]
 pub(super) struct Scope {
     shared: Rc<Shared>,
@@ -197,21 +218,19 @@ impl Scope {
         future: F,
         failure: impl FnOnce(i32) -> T,
     ) -> Frame<'a, T> {
-        // Map stores the future once and retains its guard until completion or
-        // drop. An async wrapper can reserve both initial and suspended copies
-        // of F; size the actual combinator type before its heap allocation.
-        let frame = move |allocation: Allocation| {
-            future.map(move |value| {
-                drop(allocation);
-                value
-            })
-        };
-        let bytes = frame_bytes(&frame);
+        // The poll adapter must not move or replace F. A generic Map reserves
+        // F-sized scratch while completing its state machine, even when F is
+        // boxed; recursive command polling then repeats that stack reservation
+        // at every level. Pin projection keeps both poll and drop in place.
+        let bytes = size_of::<Admitted<F>>();
         let allocation = match self.admit_execution(bytes) {
             Ok(allocation) => allocation,
             Err(code) => return Either::Left(ready(failure(code))),
         };
-        let future = frame(allocation);
+        let future = Admitted {
+            future,
+            allocation: Some(allocation),
+        };
         debug_assert_eq!(size_of_val(&future), bytes);
         Either::Right(future.boxed_local())
     }
@@ -547,6 +566,60 @@ mod tests {
             scope.parser_budget(Some(probe)).check(),
             Err(shell_parser::limits::LimitExceeded::Cancelled)
         ));
+    }
+
+    #[test]
+    fn completed_and_cancelled_frames_release_admission_before_the_wrapper_is_dropped() {
+        let limits = Limits::default();
+        let scope = Scope::new(&limits, StorageBudget::new(limits.expansion_bytes));
+        let frame = scope.frame(ready(7), |_| 2);
+        futures::pin_mut!(frame);
+        assert!(scope.shared.execution.get() > 0);
+        assert_eq!(frame.as_mut().now_or_never(), Some(7));
+        assert_eq!(scope.shared.execution.get(), 0);
+
+        let cancel = Cancel::new();
+        let frame = scope.frame(futures::future::pending::<()>(), |_| ());
+        let wait = cancel.run(frame);
+        futures::pin_mut!(wait);
+        assert!(wait.as_mut().now_or_never().is_none());
+        assert!(scope.shared.execution.get() > 0);
+        cancel.cancel();
+        assert!(matches!(wait.as_mut().now_or_never(), Some(Err(_))));
+        assert_eq!(scope.shared.execution.get(), 0);
+    }
+
+    #[test]
+    fn large_admitted_frames_poll_in_place_without_per_level_future_copies() {
+        struct Large {
+            child: Frame<'static, usize>,
+            retained: [u8; 8192],
+        }
+        impl Future for Large {
+            type Output = usize;
+
+            fn poll(self: Pin<&mut Self>, context: &mut TaskContext<'_>) -> Poll<usize> {
+                let this = self.get_mut();
+                Pin::new(&mut this.child)
+                    .poll(context)
+                    .map(|value| value + usize::from(this.retained[0]))
+            }
+        }
+
+        let limits = Limits::default();
+        let scope = Scope::new(&limits, StorageBudget::new(limits.expansion_bytes));
+        let mut frame = scope.frame(ready(0), |_| usize::MAX);
+        for _ in 0..MAX_EXECUTION_DEPTH {
+            frame = scope.frame(
+                Large {
+                    child: frame,
+                    retained: [1; 8192],
+                },
+                |_| usize::MAX,
+            );
+        }
+        assert_eq!(frame.now_or_never(), Some(MAX_EXECUTION_DEPTH));
+        assert_eq!(scope.shared.execution.get(), 0);
     }
 
     #[test]

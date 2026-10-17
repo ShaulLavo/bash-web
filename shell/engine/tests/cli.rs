@@ -60,3 +60,15 @@ fn cli_installs_shared_compatibility_helpers_and_environment() {
     assert_eq!(output.stdout, b"['a', 'b c']\n/home/fixture\nNone\n");
     assert!(output.stderr.is_empty());
 }
+
+#[test]
+fn cli_virtual_working_directory_exists_for_file_predicates() {
+    let output = Command::new(env!("CARGO_BIN_EXE_shell-engine"))
+        .args(["-c", "test -d . && [[ -d $PWD ]] && printf ready"])
+        .env("PWD", "/isolated/working-directory")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"ready");
+    assert!(output.stderr.is_empty());
+}

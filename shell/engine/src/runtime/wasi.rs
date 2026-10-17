@@ -38,6 +38,7 @@ unsafe extern "C" {
 #[link(wasm_import_module = "wasi_snapshot_preview1")]
 unsafe extern "C" {
     fn fd_close(fd: u32) -> u16;
+    fn fd_readdir(fd: u32, buffer: *mut u8, length: usize, cookie: u64, used: *mut usize) -> u16;
     fn fd_prestat_get(fd: u32, output: *mut u8) -> u16;
     fn fd_prestat_dir_name(fd: u32, output: *mut u8, length: usize) -> u16;
     fn path_create_directory(fd: u32, path: *const u8, length: usize) -> u16;
@@ -186,6 +187,82 @@ impl Abi for WasiAbi {
         } else {
             Err(errno as i32)
         }
+    }
+    fn stat(&self, path: &str, follow_symlinks: bool) -> Result<FileMetadata, i32> {
+        if !path.starts_with('/') || path.contains('\0') || path.len() > crate::io::MAX_PATH_BYTES {
+            return Err(28);
+        }
+        let path = path.trim_start_matches('/');
+        let path = if path.is_empty() { "." } else { path };
+        let mut bytes = [0u8; 64];
+        let errno = unsafe {
+            path_filestat_get(
+                self.root,
+                u32::from(follow_symlinks),
+                path.as_ptr(),
+                path.len(),
+                bytes.as_mut_ptr(),
+            )
+        };
+        if errno == 0 {
+            Ok(decode_filestat(&bytes))
+        } else {
+            Err(errno as i32)
+        }
+    }
+    fn open_dir(&self, path: &str) -> Result<u32, i32> {
+        if !path.starts_with('/') || path.contains('\0') || path.len() > crate::io::MAX_PATH_BYTES {
+            return Err(28);
+        }
+        let path = path.trim_start_matches('/');
+        let path = if path.is_empty() { "." } else { path };
+        let mut fd = 0;
+        // DIRECTORY and FD_READDIR only; enumeration cannot read file payloads.
+        let errno = unsafe {
+            path_open(
+                self.root,
+                1,
+                path.as_ptr(),
+                path.len(),
+                2,
+                1 << 14,
+                0,
+                0,
+                &mut fd,
+            )
+        };
+        if errno != 0 {
+            return Err(errno as i32);
+        }
+        Ok(fd)
+    }
+    fn read_dir_entry(
+        &self,
+        fd: u32,
+        cookie: u64,
+        output: &mut [u8],
+    ) -> Result<Option<crate::io::DirectoryEntry>, i32> {
+        let mut used = 0;
+        let errno = unsafe { fd_readdir(fd, output.as_mut_ptr(), output.len(), cookie, &mut used) };
+        if errno != 0 {
+            return Err(errno as i32);
+        }
+        if used == 0 {
+            return Ok(None);
+        }
+        if used < 24 || used > output.len() {
+            return Err(48);
+        }
+        let next_cookie = u64::from_le_bytes(output[..8].try_into().unwrap());
+        let length = u32::from_le_bytes(output[16..20].try_into().unwrap()) as usize;
+        let end = 24usize.checked_add(length).ok_or(48)?;
+        if end > used || next_cookie == cookie {
+            return Err(48);
+        }
+        Ok(Some(crate::io::DirectoryEntry {
+            next_cookie,
+            name: 24..end,
+        }))
     }
     fn open(&self, path: &str, options: &OpenOptions) -> Result<u32, i32> {
         if !path.starts_with('/') || path.contains('\0') || path.len() > crate::io::MAX_PATH_BYTES {

@@ -28,6 +28,8 @@ cargo(
     "--lib",
     "--test",
     "api",
+    "--test",
+    "conditional",
     "-j2",
     "--",
     "--test-threads=1",

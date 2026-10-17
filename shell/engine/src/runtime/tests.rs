@@ -16,6 +16,7 @@ struct FakeChild {
 struct Fake {
     executor: Executor,
     fds: RefCell<BTreeMap<u32, Endpoint>>,
+    directories: RefCell<BTreeMap<u32, Rc<dyn io::Directory>>>,
     inherited: RefCell<Vec<u32>>,
     next_fd: Cell<u32>,
     next_pid: Cell<u32>,
@@ -46,6 +47,7 @@ impl Fake {
                 (1, stdout),
                 (2, Endpoint::null()),
             ])),
+            directories: RefCell::new(BTreeMap::new()),
             inherited: RefCell::new(vec![0, 1, 2]),
             next_fd: Cell::new(10),
             next_pid: Cell::new(100),
@@ -252,6 +254,7 @@ impl Abi for Fake {
     fn close(&self, fd: u32) {
         self.closed.borrow_mut().push(fd);
         self.fds.borrow_mut().remove(&fd);
+        self.directories.borrow_mut().remove(&fd);
     }
     fn mkdir(&self, path: &str, allow_existing: bool) -> Result<(), i32> {
         self.fs
@@ -260,6 +263,46 @@ impl Abi for Fake {
                 IoError::AlreadyExists => 20,
                 IoError::NotDirectory => 54,
                 _ => 44,
+            })
+    }
+    fn stat(&self, path: &str, follow_symlinks: bool) -> Result<FileMetadata, i32> {
+        self.fs
+            .stat(path, follow_symlinks)
+            .map_err(|error| match error {
+                IoError::NotFound => 44,
+                IoError::NotDirectory => 54,
+                IoError::Unsupported => 58,
+                _ => 28,
+            })
+    }
+    fn open_dir(&self, path: &str) -> Result<u32, i32> {
+        let directory = FileSystem::open_dir(&self.fs, path)
+            .now_or_never()
+            .unwrap()
+            .map_err(|error| match error {
+                IoError::NotFound => 44,
+                IoError::NotDirectory => 54,
+                _ => 28,
+            })?;
+        let fd = self.next_fd.get();
+        self.next_fd.set(fd + 1);
+        self.directories.borrow_mut().insert(fd, directory);
+        Ok(fd)
+    }
+    fn read_dir_entry(
+        &self,
+        fd: u32,
+        cookie: u64,
+        output: &mut [u8],
+    ) -> Result<Option<io::DirectoryEntry>, i32> {
+        let directory = self.directories.borrow().get(&fd).cloned().ok_or(8)?;
+        directory
+            .read_entry(cookie, output)
+            .now_or_never()
+            .unwrap()
+            .map_err(|error| match error {
+                IoError::LimitExceeded => 48,
+                _ => 28,
             })
     }
     fn open(&self, path: &str, options: &OpenOptions) -> Result<u32, i32> {
@@ -368,6 +411,92 @@ fn finish<T: Clone + 'static>(
         runtime.poll(0).unwrap();
     }
     panic!("fake runtime failed to finish");
+}
+#[test]
+fn preview1_filestat_decodes_native_widths_and_preserves_missing_capabilities() {
+    use crate::io::FileKind;
+    let mut bytes = [0u8; 64];
+    let values = [
+        (0, 0x1020_3040_5060_7080u64),
+        (8, 0x8090_a0b0_c0d0_e0f0),
+        (24, 99),
+        (32, 0x1_0000_0001),
+        (40, 123_456_789),
+        (48, 987_654_321),
+    ];
+    for (offset, value) in values {
+        bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+    }
+    for (wire, kind) in [
+        (0, FileKind::Unknown),
+        (1, FileKind::BlockDevice),
+        (2, FileKind::CharacterDevice),
+        (3, FileKind::Directory),
+        (4, FileKind::Regular),
+        (5, FileKind::Socket),
+        (6, FileKind::Socket),
+        (7, FileKind::Symlink),
+        (255, FileKind::Unknown),
+    ] {
+        bytes[16] = wire;
+        let stat = decode_filestat(&bytes);
+        assert_eq!(stat.kind, kind);
+        assert_eq!(stat.device, Some(values[0].1));
+        assert_eq!(stat.inode, Some(values[1].1));
+        assert_eq!(stat.size, values[3].1);
+        assert_eq!(stat.accessed_ns, Some(values[4].1));
+        assert_eq!(stat.modified_ns, Some(values[5].1));
+        assert_eq!(stat.mode, None);
+        assert_eq!(stat.uid, None);
+        assert_eq!(stat.gid, None);
+        assert_eq!(stat.readable, None);
+        assert_eq!(stat.writable, None);
+        assert_eq!(stat.executable, None);
+        assert_eq!(stat.owned_by_effective_uid, None);
+        assert_eq!(stat.owned_by_effective_gid, None);
+    }
+    assert_eq!(io_error(58), IoError::Unsupported);
+    assert_eq!(io_error(54), IoError::NotDirectory);
+}
+#[test]
+fn filesystem_stat_does_not_allocate_runtime_descriptors() {
+    use crate::io::FileKind;
+    let (executor, fake, runtime) = setup();
+    fake.fs.write_file("/file", b"contents").unwrap();
+    let initial_fd = fake.next_fd.get();
+    let runtime_task = runtime.clone();
+    let result = finish(
+        &executor,
+        &runtime,
+        executor.spawn(async move {
+            let file = runtime_task.stat("/file", true).await.unwrap();
+            assert_eq!(file.kind, FileKind::Regular);
+            assert_eq!(file.size, 8);
+            assert_eq!(file, runtime_task.stat("/file", false).await.unwrap());
+            assert_eq!(
+                runtime_task.stat("/", true).await.unwrap().kind,
+                FileKind::Directory
+            );
+            assert_eq!(
+                runtime_task.stat("/file/", true).await,
+                Err(IoError::NotDirectory)
+            );
+            assert_eq!(
+                runtime_task.stat("/missing", true).await,
+                Err(IoError::NotFound)
+            );
+            assert_eq!(
+                runtime_task.stat("relative", true).await,
+                Err(IoError::InvalidPath)
+            );
+            file
+        }),
+    );
+    assert_eq!(result, fake.fs.stat("/file", true).unwrap());
+    assert_eq!(fake.next_fd.get(), initial_fd);
+    assert!(fake.closed.borrow().is_empty());
+    assert_eq!(fake.fds.borrow().len(), 3);
+    assert_eq!(executor.drive(64).pending, 0);
 }
 #[test]
 fn exact_sixteen_byte_wire_records() {
@@ -1534,4 +1663,20 @@ fn interrupt_and_shutdown_drain_live_capture_and_blocked_input_writers() {
         );
         shutdown_session(&executor, &runtime, &fake, session);
     }
+}
+
+#[test]
+fn runtime_for_globs_stream_names_and_close_directory_descriptors() {
+    let (executor, fake, runtime) = setup();
+    let session = runtime_session(&executor, &runtime);
+    let job = session.start("mkdir -p /tmp/runtime-glob; cd /tmp/runtime-glob; : >b.txt; : >a.txt; shopt -s nullglob; for f in *.missing *.txt; do echo \"$f\"; done").unwrap();
+    assert_eq!(finish(&executor, &runtime, job), 0);
+    assert_eq!(fake.output.bytes(), b"a.txt\nb.txt\n");
+    assert!(fake.directories.borrow().is_empty());
+    assert!(
+        fake.closed.borrow().len() >= 4,
+        "both redirect and directory descriptors close"
+    );
+    shutdown_session(&executor, &runtime, &fake, session);
+    assert!(fake.directories.borrow().is_empty());
 }

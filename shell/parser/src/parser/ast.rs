@@ -139,9 +139,30 @@ pub enum CompoundCommand {
     // substantially larger than the pipeline wrapper itself.
     Time(Box<TimeCommand>),
     /// Conditional expression [[ ... ]]
-    Conditional(Vec<Word>),
+    Test(Box<TestExpr>),
     /// Coprocess: `coproc [NAME] command`
     Coproc(CoprocCommand),
+}
+
+/// Parse-time structure of `[[ ... ]]`. Operators are recognized before any
+/// expansion: quoted operator-looking words remain operands. Logical chains
+/// are flat so their width does not become AST clone/evaluation stack depth.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum TestExpr {
+    Word(Word),
+    Unary {
+        operator: String,
+        operand: Word,
+    },
+    Binary {
+        left: Word,
+        operator: String,
+        right: Word,
+    },
+    Not(Box<TestExpr>),
+    And(Vec<TestExpr>),
+    Or(Vec<TestExpr>),
+    Group(Box<TestExpr>),
 }
 
 /// Coprocess command - runs a command with bidirectional communication.
@@ -1520,12 +1541,18 @@ mod tests {
 
     #[test]
     fn compound_command_conditional() {
-        let cmd = CompoundCommand::Conditional(vec![Word::literal("-f"), Word::literal("file")]);
-        if let CompoundCommand::Conditional(words) = &cmd {
-            assert_eq!(words.len(), 2);
-        } else {
-            panic!("expected Conditional");
-        }
+        let cmd = CompoundCommand::Test(Box::new(TestExpr::Unary {
+            operator: "-f".into(),
+            operand: Word::literal("file"),
+        }));
+        let CompoundCommand::Test(expression) = cmd else {
+            panic!("expected Test");
+        };
+        let TestExpr::Unary { operator, operand } = *expression else {
+            panic!("expected unary predicate");
+        };
+        assert_eq!(operator, "-f");
+        assert_eq!(operand.to_string(), "file");
     }
 
     #[test]

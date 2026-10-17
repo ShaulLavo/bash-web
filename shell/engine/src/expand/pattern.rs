@@ -20,8 +20,23 @@ pub(crate) struct Pattern {
     /// Case matching selects the first field from a quoted multi-value `$@`.
     /// Continue evaluating the remaining source, but discard its emitted text.
     first_field_complete: bool,
+    /// `[[ ]]` scalar patterns join quoted `$@` instead of selecting one field.
+    pub(super) join_positionals: bool,
 }
 impl Pattern {
+    /// Borrow quote-aware source without glob normalization; ERE escaping has
+    /// different rules and must not change the shared shell expansion result.
+    pub(crate) fn regex_character(&self, index: usize) -> Option<(char, bool)> {
+        self.chars.get(index).map(|ch| (ch.value, ch.protected))
+    }
+
+    pub(super) fn with_joined_positionals(join_positionals: bool) -> Self {
+        Self {
+            join_positionals,
+            ..Self::default()
+        }
+    }
+
     pub(super) fn finish_first_field(&mut self) {
         self.first_field_complete = true;
     }

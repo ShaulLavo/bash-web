@@ -174,8 +174,51 @@ and kill-job covers all current members. Then replace the contained adapter
 fanout with one shell job to one runtime job handle, retaining the same dynamic
 membership, cancellation, isolation and descendant-confirmation regressions.
 
+**Approved foreground-completion follow-up (2026-10-18).** Implement with the
+runtime's inherited-job delivery, after this structured-control-flow unit and
+before accepting 7b foreground lifetime behavior. Waffle's `runtime_proc.job_of(0)`
+returns the calling program's job; Bun's non-detached `Bun.spawn` descendants
+will inherit it. The shell must not confuse that whole job's lifetime with the
+completion of the foreground command it launched.
+
+- Current affected paths: `shell/engine/src/runtime.rs:Runtime::wait_group`
+  (currently lines 852–929, especially `wait_job` / poll kind 4 at 905–914),
+  `shell/engine/src/process.rs:ProcessGroup::finish`, and interpreter job records
+  used by `wait`, `jobs` and `kill`. Today natural finish waits for every member,
+  including grandchildren. Keep that stronger drain for explicit termination,
+  cancellation and shutdown; do not simply weaken all `wait_group` calls.
+- Natural foreground completion waits for the shell's own spawned pids (all
+  direct pipeline stages and shell-owned execution tasks), preserves their
+  existing status/pipefail rules, and returns the prompt without waiting for a
+  still-running grandchild. Transfer residual job handles to runtime-owned
+  lifecycle/reaping instead of dropping or implicitly killing them.
+- Retain a bounded reachable group handle until runtime membership is empty.
+  `kill_job` must still signal lingering members after their direct parent exits;
+  Ctrl+C while the command is foreground reaches the entire inherited group.
+  Do not attach a completed foreground command's residual descendants to an
+  unrelated later foreground job. Runtime owns their eventual reaping.
+- `wait PID`, `wait %job` and no-argument `wait` observe shell-known direct
+  children/jobs, not adopted grandchildren; preserve remembered direct-child
+  statuses and the current no-argument status rule. `jobs` marks an explicit
+  background shell job Done when its shell-owned processes finish, not Running
+  solely for a lingering descendant; naturally completed foreground work does
+  not become a new `%job`. Keep the residual runtime cleanup/signal handle
+  separate from visible job membership. Confirm one-shot Done reporting and
+  numeric/percent kill reachability against Bash before finalizing that API.
+- GNU Bash 5.3 oracle: `sh -c 'sleep 2 & exit 0'; echo done` prints `done` and
+  returns status 0 immediately, before the two-second sleep exits. Observe the
+  line and direct-shell exit rather than waiting for pipe EOF: the grandchild
+  may inherit stdout. Pair this with a background direct-child `wait`/`jobs`
+  case and a group-signal case. A test supervisor owns and reaps every descendant.
+- Acceptance must exercise real inherited Bun children through the shared
+  process service, not only stand-ins: parent exits while child remains live,
+  prompt readiness precedes child exit, residual group kill works, foreground
+  Ctrl+C drains descendants, background/foreground groups remain isolated, and
+  cancellation/shutdown leaves no processes, descriptors, job holds or pumps.
+  Retain native/WASI ProcessHost controls and add runtime/browser regressions.
+
 Runtime delivery order after its package split is slot recycling and creator-held
-job handles, then 7b, then asynchronous filesystem requests. The current PR does
+job handles, then 7b (including the foreground-completion follow-up), then asynchronous filesystem requests. The current PR does
 not implement substitute cross-transport job fencing or a blocking filesystem
 fallback.
 
@@ -635,7 +678,34 @@ actions return a diagnostic before job or host mutation. Out-of-range numbers
 are invalid. Traps, ignored-signal inheritance and broader POSIX signal action
 parity remain deferred rather than being represented as termination statuses.
 
-## Current unit: preflight and loop-work repairs
+## Current unit: structured control flow and conditionals
+
+Status: Approved; source acceptance passed, final PR evidence and landing pending.
+The starting main `b60cc95` has 681/1,682 Oils, 606/1,888 Brush-suite and
+1,028/2,222 Bashkit-suite passes. Every previously passing case must remain passing, not merely each
+corpus total. Frozen oracle identity and all six existing differential-generator
+sources and fixture bytes remain unchanged.
+
+The unit executes structured if/elif/else, until, word/arithmetic for, counted
+break/continue, case fall-through, argv test/[ and parse-time [[ ]] expressions,
+with Bash errexit eligibility and suppression contexts. Original real metadata,
+incremental quote-aware for-list pathname expansion, shopt state/inheritance,
+no-capture ERE and dynamic EPOCHREALTIME adapters are narrow prerequisites for
+preserving passes exposed by executing formerly unsupported loops. Extended
+pattern matching, capture groups/BASH_REMATCH arrays and locale collation remain
+explicitly unsupported; they are not claimed as implemented here.
+
+The new original generator has 2,448 cases per seed (1,848 structured controls
+at depths 0–3 plus 600 seeded cases). GNU Bash 5.3.15 self-controls and oracle-only
+fixtures for seeds 1/42 and strict candidate replay pass. The integrated source
+passes 919 native and 904 WASI tests. Release size is 2,654,346 raw bytes and
+566,155 Brotli-11 bytes, below the unchanged 1,000,000-byte ceiling. Local frozen
+scores are 917/927/1,286, gains of 236/321/258 with zero lost case IDs.
+Independent exact-head approval and green CI remain required before merge.
+Baseline membership will come from the PR CI score artifact, not inferred local
+totals. No limit or stack-size increases are allowed.
+
+## Previous unit: preflight and loop-work repairs
 
 Status: Source acceptance passed at `e4202c7`; final fixture/evidence-head CI,
 independent review and merge remain required. Its exact native CLI passed all

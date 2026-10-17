@@ -128,12 +128,17 @@ impl Expansion<'_> {
         self.work.checkpoint(self.cancel).await?;
         let value = {
             let s = state.borrow();
-            let value = s.scalar_parameter(name);
-            if value.is_some_and(|v| v.len() > self.raw_remaining.min(self.work.remaining)) {
-                return Err(2.into());
+            if !s.scalar_is_set(name) {
+                None
+            } else {
+                Some(super::parameter_snapshot(
+                    &s,
+                    name,
+                    self.raw_remaining.min(self.work.remaining),
+                    true,
+                    self.work,
+                )?)
             }
-            self.work.admit_storage(value.map_or(0, str::len))?;
-            value.map(str::to_owned)
         };
         let Some(value) = value else {
             return self
@@ -151,6 +156,7 @@ impl Expansion<'_> {
             replacement: None,
             pattern_context: true,
             pattern_snapshots: true,
+            admit_frames: self.admit_frames,
             ifs: None,
             ifs_changed: false,
             work: self.work,
@@ -224,6 +230,7 @@ mod tests {
             replacement: None,
             pattern_context: snapshots,
             pattern_snapshots: snapshots,
+            admit_frames: false,
             ifs: None,
             ifs_changed: false,
             work: &mut work,

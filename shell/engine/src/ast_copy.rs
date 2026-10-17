@@ -7,8 +7,8 @@ use crate::{
 use shell_parser::parser::{
     ArithmeticForCommand, Assignment, AssignmentValue, CaseCommand, CaseItem, Command, CommandList,
     CompoundCommand, CoprocCommand, ForCommand, FunctionDef, IfCommand, ListOperator, ParameterOp,
-    Pipeline, Redirect, SelectCommand, SimpleCommand, TimeCommand, UntilCommand, WhileCommand,
-    Word, WordPart,
+    Pipeline, Redirect, SelectCommand, SimpleCommand, TestExpr, TimeCommand, UntilCommand,
+    WhileCommand, Word, WordPart,
 };
 use std::mem::size_of;
 
@@ -217,8 +217,9 @@ pub(crate) async fn admit(
                         push_boxed_command(&mut stack, command, work)?;
                     }
                 }
-                CompoundCommand::Conditional(words) => {
-                    push_vec(&mut stack, words, Visit::Words, work)?;
+                CompoundCommand::Test(expression) => {
+                    work.admit_storage(size_of::<TestExpr>())?;
+                    push(&mut stack, Visit::Test(expression), work)?;
                 }
                 CompoundCommand::Coproc(CoprocCommand {
                     name,
@@ -229,6 +230,32 @@ pub(crate) async fn admit(
                     push_boxed_command(&mut stack, body, work)?;
                 }
             },
+            Visit::Test(expression) => match expression {
+                TestExpr::Word(word) => push(&mut stack, Visit::Word(word), work)?,
+                TestExpr::Unary { operator, operand } => {
+                    push(&mut stack, Visit::Text(operator), work)?;
+                    push(&mut stack, Visit::Word(operand), work)?;
+                }
+                TestExpr::Binary {
+                    left,
+                    operator,
+                    right,
+                } => {
+                    push(&mut stack, Visit::Text(operator), work)?;
+                    push(&mut stack, Visit::Word(left), work)?;
+                    push(&mut stack, Visit::Word(right), work)?;
+                }
+                TestExpr::Not(child) | TestExpr::Group(child) => {
+                    work.admit_storage(size_of::<TestExpr>())?;
+                    push(&mut stack, Visit::Test(child), work)?;
+                }
+                TestExpr::And(children) | TestExpr::Or(children) => {
+                    push_vec(&mut stack, children, Visit::Tests, work)?;
+                }
+            },
+            Visit::Tests(items) => {
+                visit_slice(&mut stack, items, Visit::Tests, Visit::Test, work)?;
+            }
             Visit::Case(CaseItem {
                 patterns,
                 commands,
@@ -406,6 +433,8 @@ pub(crate) async fn command(
 enum Visit<'a> {
     Commands(&'a [Command]),
     Words(&'a [Word]),
+    Tests(&'a [TestExpr]),
+    Test(&'a TestExpr),
     Parts(&'a [WordPart]),
     Redirects(&'a [Redirect]),
     Assignments(&'a [Assignment]),

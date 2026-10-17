@@ -496,3 +496,33 @@ passes compared with the corrected target baseline (**524 / 394 / 785**). The
 committed baseline records this exact pass membership; the same replay failed
 only because that membership had not yet been refreshed. This score is separate
 from the browser, native-test, and Safari gates.
+
+### Structured control-flow gate
+
+The standalone shell executes if/elif/else, while/until, word-list and C-style
+for loops, nested break/continue counts, and case `;;`, `;&` and `;;&`.
+`set -e` follows conditional, AND/OR, negation, pipeline and function suppression
+contexts. Unredirected compound commands preserve `exec` descriptor changes;
+redirected compounds restore their caller's descriptors.
+
+`test` and `[` use argv semantics and decimal integer comparisons. `[[ ]]` has
+its own parsed expression tree: operators are fixed before expansion, logical
+branches short circuit, and scalar/pattern operands preserve quoting. Arithmetic
+comparisons share the bounded arithmetic evaluator. File predicates use virtual
+filesystem metadata, not attempts to open a file. A filesystem that cannot
+supply a required permission/ownership capability reports explicit unsupported
+status 2 rather than inventing an answer. `=~` supports a bounded, cooperative
+no-capture ERE subset; captures, backreferences and locale collation remain
+explicitly unsupported. Dynamic `EPOCHREALTIME` emits seconds and six fractional
+digits, with Bash-compatible unset behavior. `shopt` stores and reports
+`inherit_errexit`, `nullglob` and `extglob`; extended-pattern matching remains
+unsupported. For-list pathname expansion uses quote metadata and incremental
+filesystem directory reads, including real positive matches and nullglob misses.
+
+The new control-flow generator has its own two recorded GNU Bash 5.3.15 seed
+fixtures, each containing 1,848 structured controls plus 600 seeded cases.
+Its initial oracle-only capture is explicitly distinguished from a
+candidate-verified recording. Strict CI replay verifies generator and fixture
+identity and accepts neither `UNSUPPORTED` nor byte/status mismatches.
+Existing differential generators and their fixtures keep their original bytes.
+See [the gate commands](../scripts/README.md#structured-control-flow-and-conditionals).
