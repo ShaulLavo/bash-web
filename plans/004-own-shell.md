@@ -680,7 +680,8 @@ parity remain deferred rather than being represented as termination statuses.
 
 ## Current unit: structured control flow and conditionals
 
-Status: Approved; source acceptance passed, final PR evidence and landing pending.
+Status: Approved; implementation and acceptance evidence are recorded below.
+Delivery is tracked in [PR #4](https://github.com/ShaulLavo/bash-web/pull/4).
 The starting main `b60cc95` has 681/1,682 Oils, 606/1,888 Brush-suite and
 1,028/2,222 Bashkit-suite passes. Every previously passing case must remain passing, not merely each
 corpus total. Frozen oracle identity and all six existing differential-generator
@@ -709,15 +710,16 @@ controls pass, including 2,448/2,448 control-flow matches per seed with zero
 mismatches/unsupported results; 109 generator/scoreboard/runner tests pass.
 Independent exact-head approval and green CI remain required before merge.
 
-The repaired local frozen score is 919/929/1,285: gains of 238/323/257 with zero
-lost `b60cc95` case IDs and identical frozen identity/case membership. The first
-PR CI score artifact ([run 39077708873](https://github.com/ShaulLavo/bash-web/actions/runs/39077708873))
-records 917/927/1,286 passes and currently supplies the candidate baseline.
-Compared with that unmerged result, review repairs add four passes and replace
-one accidentally accepted Unicode ERE case (`bashkit-suite:bashbox-utf8:56`)
-with explicit unsupported status 2. The baseline assertion correctly rejects
-those five stale memberships. Refresh from the repaired PR's actual CI score
-artifact before landing, never inferred local totals.
+The repaired [PR CI score artifact, run 39080569449](https://github.com/ShaulLavo/bash-web/actions/runs/39080569449)
+records 919/929/1,285 passes: gains of 238/323/257 with zero lost `b60cc95`
+case IDs and identical frozen identity/case membership. Its exact exported bytes
+supply the candidate baseline; these are not inferred local totals. Compared
+with the first unmerged CI result (917/927/1,286), review repairs add four passes
+and replace one accidentally accepted Unicode ERE case
+(`bashkit-suite:bashbox-utf8:56`) with explicit unsupported status 2. Independent
+source review approved `cd99ae3`; final delivery requires exact-head approval
+and green CI. [PR #4](https://github.com/ShaulLavo/bash-web/pull/4) contains the
+source, repair and artifact evidence.
 
 ## Previous unit: preflight and loop-work repairs
 

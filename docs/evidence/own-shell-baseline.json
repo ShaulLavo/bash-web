@@ -10,7 +10,7 @@
   "counts": {
     "oils": {
       "total": 2492,
-      "passed": 917,
+      "passed": 919,
       "skipped": 810,
       "categories": {
         "Quoting and word splitting": {
@@ -75,7 +75,7 @@
         },
         "errexit, options and traps": {
           "total": 239,
-          "passed": 89,
+          "passed": 91,
           "skipped": 75
         },
         "echo, printf, read, mapfile, getopts": {
@@ -97,7 +97,7 @@
     },
     "brush-suite": {
       "total": 2894,
-      "passed": 927,
+      "passed": 929,
       "skipped": 1006,
       "categories": {
         "and_or": {
@@ -632,7 +632,7 @@
         },
         "redirection": {
           "total": 43,
-          "passed": 17,
+          "passed": 19,
           "skipped": 23
         },
         "simple_commands": {
@@ -704,7 +704,7 @@
     },
     "bashkit-suite": {
       "total": 3835,
-      "passed": 1286,
+      "passed": 1285,
       "skipped": 1613,
       "categories": {
         "alias": {
@@ -1114,7 +1114,7 @@
         },
         "bashbox-utf8": {
           "total": 10,
-          "passed": 8,
+          "passed": 7,
           "skipped": 1
         },
         "bashbox-wc": {
@@ -3759,8 +3759,8 @@
 {"id":"oils:errexit:308","corpus":"oils","category":"errexit, options and traps","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:errexit:342","corpus":"oils","category":"errexit, options and traps","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:errexit:370","corpus":"oils","category":"errexit, options and traps","kind":"needs-commands","outcome":"skip"},
-{"id":"oils:errexit:404","corpus":"oils","category":"errexit, options and traps","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"c3RhdHVzPTEKc2hvdWxkIG5vdCBnZXQgaGVyZQo=","stderr":""}},
-{"id":"oils:errexit:435","corpus":"oils","category":"errexit, options and traps","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"c3RhdHVzPTEKc2hvdWxkIG5vdCBnZXQgaGVyZQo=","stderr":""}},
+{"id":"oils:errexit:404","corpus":"oils","category":"errexit, options and traps","kind":"builtins-only","outcome":"pass"},
+{"id":"oils:errexit:435","corpus":"oils","category":"errexit, options and traps","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:errexit:468","corpus":"oils","category":"errexit, options and traps","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:errexit:512","corpus":"oils","category":"errexit, options and traps","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:errexit:531","corpus":"oils","category":"errexit, options and traps","kind":"builtins-only","outcome":"pass"},
@@ -7084,7 +7084,7 @@
 {"id":"brush-suite:redirection:9","corpus":"brush-suite","category":"redirection","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:redirection:10","corpus":"brush-suite","category":"redirection","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:redirection:11","corpus":"brush-suite","category":"redirection","outcome":"skip","excluded":"needs Brush harness arguments, files, environment, terminal or a skip marker"},
-{"id":"brush-suite:redirection:12","corpus":"brush-suite","category":"redirection","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogc2hvcHQ6IC1vOiBpbnZhbGlkIG9wdGlvbgovdXNyL2Jpbi9iYXNoOiAtYzogbGluZSAyOiBzeW50YXggZXJyb3IgbmVhciB1bmV4cGVjdGVkIHRva2VuIGA8KCcK"}},
+{"id":"brush-suite:redirection:12","corpus":"brush-suite","category":"redirection","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:redirection:13","corpus":"brush-suite","category":"redirection","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"dmFyOiAK","stderr":""}},
 {"id":"brush-suite:redirection:14","corpus":"brush-suite","category":"redirection","kind":"needs-commands","outcome":"skip"},
 {"id":"brush-suite:redirection:15","corpus":"brush-suite","category":"redirection","outcome":"skip","excluded":"needs Brush harness arguments, files, environment, terminal or a skip marker"},
@@ -7114,7 +7114,7 @@
 {"id":"brush-suite:redirection:39","corpus":"brush-suite","category":"redirection","kind":"needs-commands","outcome":"skip"},
 {"id":"brush-suite:redirection:40","corpus":"brush-suite","category":"redirection","kind":"needs-commands","outcome":"skip"},
 {"id":"brush-suite:redirection:41","corpus":"brush-suite","category":"redirection","kind":"builtins-only","outcome":"pass"},
-{"id":"brush-suite:redirection:42","corpus":"brush-suite","category":"redirection","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"ZXhpdDogMgo=","stderr":""}},
+{"id":"brush-suite:redirection:42","corpus":"brush-suite","category":"redirection","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:redirection:43","corpus":"brush-suite","category":"redirection","outcome":"skip","excluded":"needs Brush harness arguments, files, environment, terminal or a skip marker"},
 {"id":"brush-suite:simple_commands:1","corpus":"brush-suite","category":"simple_commands","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:simple_commands:2","corpus":"brush-suite","category":"simple_commands","kind":"builtins-only","outcome":"pass"},
@@ -8611,7 +8611,7 @@
 {"id":"bashkit-suite:bashbox-utf8:34","corpus":"bashkit-suite","category":"bashbox-utf8","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:bashbox-utf8:41","corpus":"bashkit-suite","category":"bashbox-utf8","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:bashbox-utf8:49","corpus":"bashkit-suite","category":"bashbox-utf8","kind":"builtins-only","outcome":"pass"},
-{"id":"bashkit-suite:bashbox-utf8:56","corpus":"bashkit-suite","category":"bashbox-utf8","kind":"builtins-only","outcome":"pass"},
+{"id":"bashkit-suite:bashbox-utf8:56","corpus":"bashkit-suite","category":"bashbox-utf8","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"Y2FzZQpnbG9iCg==","stderr":""}},
 {"id":"bashkit-suite:bashbox-utf8:65","corpus":"bashkit-suite","category":"bashbox-utf8","kind":"needs-commands","outcome":"skip"},
 {"id":"bashkit-suite:bashbox-utf8:72","corpus":"bashkit-suite","category":"bashbox-utf8","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:bashbox-wc:5","corpus":"bashkit-suite","category":"bashbox-wc","kind":"needs-commands","outcome":"skip"},
