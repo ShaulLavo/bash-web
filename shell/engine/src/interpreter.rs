@@ -1158,6 +1158,19 @@ async fn compound_command(
         Ok(fds) => fds,
     };
     let context = context.compound_body();
+    // Unredirected compounds share shell bindings so exec persists, but their
+    // process-substitution descriptors still belong only to this command.
+    let allocation = match context.evaluation.admit_execution(
+        std::mem::size_of::<ProcessSubstitutionFds>() + 2 * std::mem::size_of::<usize>(),
+    ) {
+        Ok(allocation) => allocation,
+        Err(code) => return Outcome::status(code),
+    };
+    let process_fds = Rc::new(ProcessSubstitutionFds {
+        fds: fds.clone(),
+        opened: Cell::new(0),
+        _allocation: allocation,
+    });
     // Other bodies must release the expansion reader's descriptor references.
     work.substitutions = matches!(
         compound,
@@ -1170,6 +1183,7 @@ async fn compound_command(
     .then(|| Substitutions {
         context: context.clone(),
         fds: fds.clone(),
+        process_fds: Some(process_fds.clone()),
     });
     execute_compound_body(compound, state, fds, context, &mut work).await
 }
@@ -1187,7 +1201,19 @@ fn command_redirects<'a>(
             let original_fds = fds.clone();
             match redirects(redirs, state, fds, context, work, None).await {
                 Ok(fds) => Ok(fds),
-                Err(error) => Err(expansion_failure(error, &original_fds, context).await),
+                Err(error) => {
+                    let mut outcome = expansion_failure(error, &original_fds, context).await;
+                    // Setup failure is a command failure even when its compound
+                    // body's statuses have their own errexit rules.
+                    if outcome.flow == Flow::Normal
+                        && outcome.code != 0
+                        && !context.ignore_errexit
+                        && state.borrow().errexit
+                    {
+                        outcome.flow = Flow::Abort;
+                    }
+                    Err(outcome)
+                }
             }
         },
         |code| Err(Outcome::status(code)),
@@ -1729,6 +1755,7 @@ async fn subshell(
                 work.substitutions = Some(Substitutions {
                     context: child_context.clone(),
                     fds: child_fds.clone(),
+                    process_fds: None,
                 });
                 let result =
                     match command_redirects(&redirs, &child, child_fds, &child_context, &mut work)
@@ -2004,8 +2031,29 @@ fn substitution_work(context: &Context, fds: &Descriptors) -> expand::Work {
     work.substitutions = Some(Substitutions {
         context: context.clone(),
         fds: fds.clone(),
+        process_fds: None,
     });
     work
+}
+
+/// Compound-local descriptor cleanup without retaining individual pipe ends.
+struct ProcessSubstitutionFds {
+    fds: Descriptors,
+    opened: Cell<u64>,
+    _allocation: eval::Allocation,
+}
+impl Drop for ProcessSubstitutionFds {
+    fn drop(&mut self) {
+        let mut opened = self.opened.get();
+        let mut fds = self.fds.borrow_mut();
+        while opened != 0 {
+            let fd = opened.trailing_zeros();
+            opened &= opened - 1;
+            // Bash closes the generated number even if exec replaced it;
+            // deliberate duplicates at other descriptor numbers stay open.
+            fds.remove(fd);
+        }
+    }
 }
 
 /// Runs `$(...)` bodies as subshell tasks. Expansion work carries one while it
@@ -2015,6 +2063,7 @@ fn substitution_work(context: &Context, fds: &Descriptors) -> expand::Work {
 pub(crate) struct Substitutions {
     context: Context,
     fds: Descriptors,
+    process_fds: Option<Rc<ProcessSubstitutionFds>>,
 }
 impl Substitutions {
     pub(crate) fn filesystem(&self) -> Rc<dyn FileSystem> {
@@ -2137,8 +2186,8 @@ impl Substitutions {
     /// Start `<(commands)` (`is_input`) or `>(commands)` as a job of this
     /// shell and open its end of the pipe in the command's descriptor table,
     /// at the highest free descriptor from 63 down, as bash does. Returns
-    /// that descriptor; the caller expands it to `/dev/fd/N`. The table is
-    /// the command's own copy, so the descriptor closes with the command.
+    /// that descriptor; the caller expands it to `/dev/fd/N`. Simple commands
+    /// own a copied table; compounds track generated numbers for scoped cleanup.
     pub(crate) fn process<'a>(
         &'a self,
         commands: Vec<Command>,
@@ -2241,6 +2290,11 @@ impl Substitutions {
             },
         );
         self.fds.borrow_mut().insert(fd, parent_end);
+        if let Some(process_fds) = &self.process_fds {
+            process_fds
+                .opened
+                .set(process_fds.opened.get() | (1u64 << fd));
+        }
         parent_state.borrow_mut().last_async = Some(identity);
         Ok(fd)
     }
@@ -2897,6 +2951,89 @@ async fn redirect_target(
     .await
 }
 
+// Keep descriptor validation and diagnostic writes out of recursive poll frames.
+#[inline(never)]
+fn duplicate_descriptor<'a>(
+    target: &'a str,
+    line: Option<usize>,
+    fds: &'a Descriptors,
+    context: &'a Context,
+    work: &'a mut expand::Work,
+) -> eval::Frame<'a, Result<io::Endpoint, CommandError>> {
+    context.evaluation.frame(
+        async move {
+            let mut source = Some(0u32);
+            let mut first_nonzero = None;
+            for (offset, byte) in target.bytes().enumerate() {
+                work.checkpoint(&context.cancel).await?;
+                if !byte.is_ascii_digit() {
+                    return Err(2.into());
+                }
+                if byte != b'0' && first_nonzero.is_none() {
+                    first_nonzero = Some(offset);
+                }
+                source = source
+                    .and_then(|value| value.checked_mul(10))
+                    .and_then(|value| value.checked_add(u32::from(byte - b'0')));
+            }
+            if target.is_empty() {
+                return Err(2.into());
+            }
+            if let Some(endpoint) = source.and_then(|source| fds.borrow().get(source)) {
+                return Ok(endpoint);
+            }
+            let stderr = fds.borrow().get(2);
+            if let Some(stderr) = stderr {
+                let source = &target.as_bytes()[first_nonzero.unwrap_or(target.len() - 1)..];
+                // A bounded stack buffer handles the line number; the possibly
+                // large target is borrowed and streamed without allocation.
+                let mut digits = [0u8; std::mem::size_of::<usize>() * 3];
+                let mut start = digits.len();
+                let (label, separator): (&[u8], &[u8]) = if let Some(mut value) = line {
+                    loop {
+                        start -= 1;
+                        digits[start] = b'0' + (value % 10) as u8;
+                        value /= 10;
+                        if value == 0 {
+                            break;
+                        }
+                    }
+                    (b"line ", b": ")
+                } else {
+                    (b"", b"")
+                };
+                let parts: [&[u8]; 6] = [
+                    b"/usr/bin/bash: ",
+                    label,
+                    &digits[start..],
+                    separator,
+                    source,
+                    b": Bad file descriptor\n",
+                ];
+                let bytes = parts
+                    .iter()
+                    .fold(0usize, |bytes, part| bytes.saturating_add(part.len()));
+                if bytes > context.limits().expansion_bytes {
+                    return Err(2.into());
+                }
+                for part in parts {
+                    if stderr.write_all(part, &context.cancel).await.is_err() {
+                        break;
+                    }
+                }
+            }
+            // A redirect error is not intrinsically fatal; the command's
+            // existing errexit boundary decides whether execution continues.
+            Err(if context.cancel.is_cancelled() {
+                130.into()
+            } else {
+                1.into()
+            })
+        },
+        |code| Err(code.into()),
+    )
+}
+
 async fn redirects(
     redirs: &[Redirect],
     state: &SharedState,
@@ -2977,8 +3114,9 @@ async fn redirects(
                 if target == "-" {
                     fds.borrow_mut().remove(fd);
                 } else {
-                    let source = target.parse::<u32>().map_err(|_| 2)?;
-                    let endpoint = fds.borrow().get(source).ok_or(1)?;
+                    let endpoint =
+                        duplicate_descriptor(&target, redirect.expansion_line, &fds, context, work)
+                            .await?;
                     fds.borrow_mut().insert(fd, endpoint);
                 }
             }
@@ -3078,6 +3216,57 @@ mod scope_tests {
             }
         }
         panic!("arithmetic replay exceeded bounded polls");
+    }
+
+    #[test]
+    fn descriptor_diagnostics_stream_large_targets_without_storage_growth() {
+        for (target, expected) in [
+            ("8".repeat(8192), "8".repeat(8192)),
+            (format!("{}9", "0".repeat(8192)), "9".to_owned()),
+        ] {
+            let (_state, fds, context) = replay_context();
+            let (stderr, errors) = io::capture(16384);
+            fds.borrow_mut().insert(2, stderr);
+            let mut work = expand::Work::new(65536, 0, 16);
+            let outcome = finish_replay(async {
+                let error =
+                    match duplicate_descriptor(&target, Some(2), &fds, &context, &mut work).await {
+                        Ok(_) => panic!("descriptor must be closed"),
+                        Err(error) => error,
+                    };
+                expansion_failure(error, &fds, &context).await
+            });
+            assert_eq!(outcome.code, 1);
+            assert_eq!(outcome.flow, Flow::Normal);
+            assert_eq!(
+                errors.bytes(),
+                format!("/usr/bin/bash: line 2: {expected}: Bad file descriptor\n").as_bytes()
+            );
+        }
+    }
+
+    #[test]
+    fn descriptor_validation_observes_cancellation_during_long_numeric_targets() {
+        let (_state, fds, mut context) = replay_context();
+        let probes = Rc::new(Cell::new(0));
+        let observed = probes.clone();
+        context.cancel = Cancel::with_probe(Rc::new(move || {
+            observed.set(observed.get() + 1);
+            observed.get() >= 32
+        }));
+        let target = "0".repeat(8192);
+        let mut work = expand::Work::new(65536, 0, 16);
+        let outcome = finish_replay(async {
+            let error =
+                match duplicate_descriptor(&target, Some(1), &fds, &context, &mut work).await {
+                    Ok(_) => panic!("cancelled validation must not return a descriptor"),
+                    Err(error) => error,
+                };
+            expansion_failure(error, &fds, &context).await
+        });
+        assert_eq!(outcome.code, 130);
+        assert_eq!(probes.get(), 32);
+        assert!(context.cancel.is_cancelled());
     }
 
     #[test]

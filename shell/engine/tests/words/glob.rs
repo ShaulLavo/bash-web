@@ -100,3 +100,58 @@ fn unsupported_extended_pathname_patterns_fail_instead_of_becoming_literals() {
     );
     assert_eq!(*rig.calls.borrow(), [vec!["@(a|b)"]]);
 }
+
+#[test]
+fn shell_pattern_quote_boundaries_are_distinct_from_scalar_patterns() {
+    let rig = Rig::new(Limits::default());
+    let source = r#"p='\'; case a in $p"a") args case-a;; esac; case ax in $p"a"x) args case-ax;; esac; value="${p}a"; case "$value" in $p"*") args case-slash;; esac; case a in $p"*") args forbidden;; esac; [[ a == $p"a" ]]; args "$?"; [[ a != $p"a" ]]; args "$?"; [[ ax == $p"a"x ]]; args "$?"; [[ ax != $p"a"x ]]; args "$?"; [[ "$value" == $p"*" ]]; args "$?"; [[ "$value" != $p"*" ]]; args "$?"; [[ a == $p"*" ]]; args "$?"; [[ a != $p"*" ]]; args "$?"; value=a; args "${value#$p"a"}" "${value^^$p"a"}""#;
+    assert_eq!(rig.run(source), 0);
+    assert_eq!(
+        *rig.calls.borrow(),
+        [
+            vec!["case-a"],
+            vec!["case-ax"],
+            vec!["case-slash"],
+            vec!["0"],
+            vec!["1"],
+            vec!["0"],
+            vec!["1"],
+            vec!["0"],
+            vec!["1"],
+            vec!["1"],
+            vec!["0"],
+            vec!["a", "a"],
+        ]
+    );
+    assert!(rig.errors.is_empty());
+}
+
+#[test]
+fn repeated_glob_matches_preserve_quote_boundary_escape_semantics() {
+    for (source, expected) in [
+        (
+            ": >aa; : >ab; : >z; p='\\'; shopt -s nullglob; case a in $p\"a\") args case-no;; esac; [[ a == $p\"a\" ]] && args cond-no; case aa in $p\"a\"*) args case-a;; esac; [[ aa == $p\"a\"* ]] && args cond-a; for f in $p\"a\"*; do args \"$f\"; done",
+            vec![
+                vec!["case-no"],
+                vec!["cond-no"],
+                vec!["case-a"],
+                vec!["cond-a"],
+                vec!["aa"],
+                vec!["ab"],
+            ],
+        ),
+        (
+            ": >'\\first'; : >'\\second'; : >z; p='\\'; shopt -s nullglob; for f in $p\"*\"*; do args \"$f\"; done",
+            vec![vec!["\\first"], vec!["\\second"]],
+        ),
+        (
+            ": >aa; p='\\'; shopt -s nullglob; for f in $p\"\\\\\"*; do args \"$f\"; done",
+            vec![vec!["\\\\*"]],
+        ),
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 0, "{source}");
+        assert_eq!(*rig.calls.borrow(), expected, "{source}");
+        assert!(rig.errors.is_empty(), "{source}");
+    }
+}

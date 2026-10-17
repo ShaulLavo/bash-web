@@ -145,6 +145,166 @@ fn errexit_suppression_propagates_through_functions_and_pipeline_stages() {
     check_output("set -e; { false && true; }; echo after", "after\n");
 }
 
+// Original regressions, checked with GNU Bash 5.3.15; shared by native and WASI.
+#[test]
+fn compound_process_substitution_descriptors_close_before_wait() {
+    for source in [
+        "for path in >(cat); do :; done; wait; echo done",
+        "for ((i=0;i<80;i++)); do for path in >(cat); do :; done; wait; done; echo done",
+        "for path in >(cat); do exec 3>&63; done; echo held >&3; exec 3>&-; wait; echo done",
+        "for path in >(cat); do exec 62>saved; done; wait; echo preserved >&62; cat saved",
+        "for path in >(cat); do exec 63>&-; wait; echo inside; done; echo done",
+        "for ((i=0;i<80;i++)); do for path in <(:); do :; done; wait; done; echo done",
+        "for path in >(cat); do exec 63>saved; done; wait; echo lost 2>/dev/null >&63; echo closed:$?",
+    ] {
+        let expected = if source.contains("closed") {
+            "closed:1\n"
+        } else if source.contains("held") {
+            "held\ndone\n"
+        } else if source.contains("preserved") {
+            "preserved\n"
+        } else if source.contains("inside") {
+            "inside\ndone\n"
+        } else {
+            "done\n"
+        };
+        let rig = Rig::new(Limits::default());
+        let job = rig.shell.start(source).unwrap();
+        for _ in 0..2048 {
+            if job.is_finished() {
+                break;
+            }
+            rig.ex.drive(64);
+        }
+        assert!(
+            job.is_finished(),
+            "temporary descriptor kept wait pending: {source}"
+        );
+        assert_eq!(rig.finish(job), 0, "{source}");
+        assert_eq!(rig.output.bytes(), expected.as_bytes(), "{source}");
+        assert!(rig.errors.bytes().is_empty(), "{source}");
+    }
+}
+
+#[test]
+fn compound_redirect_failures_obey_errexit_without_changing_body_status_rules() {
+    for compound in [
+        "if true; then :; fi",
+        "for x in once; do :; done",
+        "for ((i=0;i<1;i++)); do :; done",
+        "while false; do :; done",
+        "until true; do :; done",
+        "case x in x) :;; esac",
+        "{ :; }",
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(
+            rig.run(&format!("set -e; {compound} 1>&9; echo survived")),
+            1,
+            "{compound}"
+        );
+        assert!(rig.output.bytes().is_empty(), "{compound}");
+        check_output(
+            &format!("set -e; {compound} 1>&9 || echo caught; echo survived"),
+            "caught\nsurvived\n",
+        );
+        check_output(
+            &format!("set -e; if {compound} 1>&9; then echo wrong; fi; echo survived"),
+            "survived\n",
+        );
+        check_output(&format!("{compound} 1>&9; echo status:$?"), "status:1\n");
+    }
+    for source in [
+        "set -e; for ((i=1/0;;)); do :; done; echo survived",
+        "set -e; for ((;1/0;)); do :; done; echo survived",
+        "set -e; for ((i=0;i<1;1/0)); do ((i+=1)); done; echo survived",
+        "set -e; for i.j in once; do :; done; echo survived",
+        "set -e; { false && true; }; echo survived",
+        "readonly i=0; for ((i=1;;)); do :; done; echo survived",
+    ] {
+        check_output(source, "survived\n");
+    }
+    for source in [
+        "set -e; readonly i=0; for ((i=1;;)); do :; done; echo survived",
+        "set -e; readonly i=0; for ((;i++;)); do :; done; echo survived",
+        "set -e; readonly i=0; for ((j=0;j<1;i++)); do ((j+=1)); done; echo survived",
+        "set -e; readonly i=0; for ((i=1;;)); do :; done || echo caught; echo survived",
+        "set -e; readonly x; for x in a; do :; done || echo caught; echo survived",
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 1, "{source}");
+        assert!(rig.output.bytes().is_empty(), "{source}");
+    }
+}
+
+#[test]
+fn closed_descriptor_redirects_diagnose_without_unconditionally_aborting() {
+    let diagnostic = "/usr/bin/bash: line 1: 9: Bad file descriptor\n";
+    for source in [
+        ": 1>&9; echo status:$?",
+        ": 0<&9; echo status:$?",
+        ": 1>&0009; echo status:$?",
+        ": 1>&9 2>errors; echo status:$?",
+        "if true; then :; fi 1>&9; echo status:$?",
+        "set -e; : 1>&9 || echo status:$?",
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 0, "{source}");
+        assert_eq!(rig.output.bytes(), b"status:1\n", "{source}");
+        assert_eq!(rig.errors.bytes(), diagnostic.as_bytes(), "{source}");
+    }
+    for source in [
+        ": 2>&1 1>&9; echo status:$?",
+        ": 2>errors 1>&9; echo status:$?; cat errors",
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 0, "{source}");
+        let expected = if source.contains("cat errors") {
+            format!("status:1\n{diagnostic}")
+        } else {
+            format!("{diagnostic}status:1\n")
+        };
+        assert_eq!(rig.output.bytes(), expected.as_bytes(), "{source}");
+        assert!(rig.errors.bytes().is_empty(), "{source}");
+    }
+    check_output(": 2>&- 1>&9; echo status:$?", "status:1\n");
+    for number in ["4294967296", "999999999999999999999999999"] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(&format!(": >&{number}; echo status:$?")), 0);
+        assert_eq!(rig.output.bytes(), b"status:1\n");
+        assert_eq!(
+            rig.errors.bytes(),
+            format!("/usr/bin/bash: line 1: {number}: Bad file descriptor\n").as_bytes()
+        );
+    }
+    let number = "8".repeat(8192);
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run(&format!(": >&{number}; echo status:$?")), 0);
+    assert_eq!(rig.output.bytes(), b"status:1\n");
+    assert_eq!(
+        rig.errors.bytes(),
+        format!("/usr/bin/bash: line 1: {number}: Bad file descriptor\n").as_bytes()
+    );
+    let rig = Rig::new(Limits::default());
+    rig.variable("fd", &format!("{}9", "0".repeat(8192)));
+    assert_eq!(rig.run(": 1>&\"$fd\"; echo status:$?"), 0);
+    assert_eq!(rig.output.bytes(), b"status:1\n");
+    assert_eq!(rig.errors.bytes(), diagnostic.as_bytes());
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("\n: 1>&9; echo status:$?"), 0);
+    assert_eq!(rig.output.bytes(), b"status:1\n");
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: line 2: 9: Bad file descriptor\n"
+    );
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("set -e; : 1>&9; echo survived"), 1);
+    assert!(rig.output.bytes().is_empty());
+    assert_eq!(rig.errors.bytes(), diagnostic.as_bytes());
+    assert_eq!(rig.run("echo recovered"), 0);
+    assert_eq!(rig.output.bytes(), b"recovered\n");
+}
+
 #[test]
 fn nested_control_flow_executes_on_the_deepest_admitted_parser_level() {
     for (prefix, suffix) in [

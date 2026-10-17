@@ -205,6 +205,7 @@ async fn binary(
             work,
         )
         .await?;
+        regex::locale(state)?;
         return regex::matches(&pattern, &left, work, &context.cancel).await;
     }
     let right = scalar(right, state, context, work).await?;

@@ -34,39 +34,29 @@ async fn magic(
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<bool, Error> {
-    let bytes = text.as_bytes();
-    let mut index = 0;
-    while index < bytes.len() {
-        work.checkpoint(cancel).await?;
-        if protection[index] {
-            index += 1;
-            continue;
+    let mut offset = 0;
+    for component in text.split('/') {
+        let storage = work.storage_left();
+        let mut pattern = Pattern::default();
+        for (index, ch) in component.char_indices() {
+            work.checkpoint(cancel).await?;
+            pattern.push(
+                ch,
+                if protection[offset + index] {
+                    Protection::All
+                } else {
+                    Protection::None
+                },
+                work,
+            )?;
         }
-        match bytes[index] {
-            b'\\' => index += 2,
-            b'*' | b'?' => return Ok(true),
-            b'[' => {
-                let mut end = index + 1;
-                if end < bytes.len() && !protection[end] && matches!(bytes[end], b'!' | b'^') {
-                    end += 1;
-                }
-                if end < bytes.len() && !protection[end] && bytes[end] == b']' {
-                    end += 1;
-                }
-                while end < bytes.len() && bytes[end] != b'/' {
-                    work.checkpoint(cancel).await?;
-                    if !protection[end] && bytes[end] == b']' {
-                        return Ok(true);
-                    }
-                    if !protection[end] && bytes[end] == b'\\' {
-                        end += 1;
-                    }
-                    end += 1;
-                }
-                index += 1;
-            }
-            _ => index += 1,
+        let magic = pattern.has_pathname_magic(work, cancel).await?;
+        drop(pattern);
+        work.release_storage(storage.saturating_sub(work.storage_left()));
+        if magic {
+            return Ok(true);
         }
+        offset += component.len() + 1;
     }
     Ok(false)
 }
@@ -166,24 +156,27 @@ async fn literal(
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<String, Error> {
-    work.admit_storage(text.len())?;
-    let mut output = String::new();
-    output
-        .try_reserve_exact(text.len())
-        .map_err(|_| Error::Status(2))?;
-    let mut chars = text.char_indices();
-    while let Some((index, ch)) = chars.next() {
+    let storage = work.storage_left();
+    let mut pattern = Pattern::default();
+    for (index, ch) in text.char_indices() {
         work.checkpoint(cancel).await?;
-        if ch == '\\' && !protection[index] {
-            if let Some((_, next)) = chars.next() {
-                output.push(next);
+        pattern.push(
+            ch,
+            if protection[index] {
+                Protection::All
             } else {
-                output.push(ch);
-            }
-        } else {
-            output.push(ch);
-        }
+                Protection::None
+            },
+            work,
+        )?;
     }
+    let output = pattern.pathname_literal(text.len(), work, cancel).await?;
+    drop(pattern);
+    work.release_storage(
+        storage
+            .saturating_sub(work.storage_left())
+            .saturating_sub(output.capacity()),
+    );
     Ok(output)
 }
 fn push(

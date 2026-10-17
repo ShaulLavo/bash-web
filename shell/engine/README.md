@@ -83,7 +83,9 @@ quote-aware basic patterns, incremental directory enumeration and `nullglob`;
 ordinary command argv pathname expansion remains deferred. `shopt` stores and
 reports `nullglob`, `inherit_errexit` and `extglob`, without claiming extended
 pattern matching. `[[ =~ ]]` has a bounded cooperative no-capture ERE subset;
-captures/backreferences, locale collation and GNU regex extensions are deferred.
+ASCII patterns and input in C/POSIX/C.UTF-8/C.utf8 locales are supported.
+Non-ASCII data, other locales, captures/backreferences, locale collation and GNU
+regex extensions explicitly return status 2.
 Dynamic `EPOCHREALTIME` supports scalar reads and unset behavior. Generic
 function prefixes remain unsupported, as before this unit.
 The first word area adds quote-aware fields for literals,

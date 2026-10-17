@@ -1887,6 +1887,9 @@ impl<'a> Parser<'a> {
                         });
                         self.advance();
                     }
+                    Some(tokens::Token::ProcessSubIn | tokens::Token::ProcessSubOut) => {
+                        words.push(self.expect_word()?);
+                    }
                     Some(tokens::Token::Newline) | Some(tokens::Token::Semicolon) => {
                         self.advance();
                         break;

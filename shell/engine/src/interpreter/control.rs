@@ -273,7 +273,7 @@ async fn for_assignment_body(
             expansion: false,
         };
         let mut outcome = expansion_failure(error.into(), fds, context).await;
-        outcome.flow = if state.borrow().errexit && !context.ignore_errexit {
+        outcome.flow = if state.borrow().errexit {
             Flow::Abort
         } else {
             Flow::Normal
@@ -327,9 +327,18 @@ async fn arithmetic_clause_body(
                     ..
                 }
             );
+            let readonly = matches!(
+                error,
+                expand::Error::Readonly {
+                    expansion: false,
+                    ..
+                }
+            );
             let mut outcome = expansion_failure(error.into(), fds, context).await;
             if ordinary {
-                outcome.flow = if state.borrow().errexit && !context.ignore_errexit {
+                // Clause arithmetic errors end the loop, not the reader.
+                // Readonly assignment is fatal under -e even in a condition.
+                outcome.flow = if readonly && state.borrow().errexit {
                     Flow::Abort
                 } else {
                     Flow::Normal

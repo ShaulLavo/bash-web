@@ -4,13 +4,59 @@
 //! Thompson states avoid backtracking. Compilation, epsilon closure, character
 //! classes and input scans all charge Work and poll cancellation. Every vector
 //! reserves against storage before growing; no host regex fallback is used.
+//! ASCII pattern/input only, in C/POSIX/C.UTF-8/C.utf8 character and collation
+//! locales. Other input/locale combinations fail closed rather than pretending
+//! Unicode classes or byte-oriented C-locale matching have been implemented.
 //! Capture groups/backreferences and locale collating/equivalence constructs
-//! fail closed (status 2): BASH_REMATCH belongs to the future arrays subarea.
+//! also fail closed (status 2): BASH_REMATCH belongs to the future arrays subarea.
 use crate::{
     executor::Cancel,
     expand::{Error, Work, pattern::Pattern},
+    state::SharedState,
 };
 use std::mem::size_of;
+
+/// Like the scalar case adapter, select the first nonempty locale variable.
+/// ERE ranges additionally depend on LC_COLLATE, not only LC_CTYPE. Never
+/// silently substitute ASCII rules for a locale we do not implement.
+pub(super) fn locale(state: &SharedState) -> Result<(), Error> {
+    let state = state.borrow();
+    for category in ["LC_CTYPE", "LC_COLLATE"] {
+        let locale = ["LC_ALL", category, "LANG"]
+            .iter()
+            .filter_map(|name| state.variables.get(*name))
+            .find(|value| !value.is_empty())
+            .map(String::as_str)
+            .unwrap_or("C");
+        if !matches!(locale, "C" | "POSIX" | "C.UTF-8" | "C.utf8") {
+            return Err(2.into());
+        }
+    }
+    Ok(())
+}
+
+async fn ascii(
+    pattern: &Pattern,
+    value: &str,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<(), Error> {
+    let mut index = 0;
+    while let Some((ch, _)) = pattern.regex_character(index) {
+        work.checkpoint(cancel).await?;
+        if !ch.is_ascii() {
+            return Err(2.into());
+        }
+        index += 1;
+    }
+    for byte in value.bytes() {
+        work.checkpoint(cancel).await?;
+        if !byte.is_ascii() {
+            return Err(2.into());
+        }
+    }
+    Ok(())
+}
 
 #[derive(Clone, Copy)]
 enum Atom {
@@ -445,6 +491,7 @@ pub(super) async fn matches(
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<bool, Error> {
+    ascii(pattern, value, work, cancel).await?;
     let (nodes, start) = compile(pattern, work, cancel).await?;
     let mut current = slots(nodes.len(), false, work)?;
     let mut next = slots(nodes.len(), false, work)?;

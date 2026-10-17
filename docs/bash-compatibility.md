@@ -503,7 +503,9 @@ The standalone shell executes if/elif/else, while/until, word-list and C-style
 for loops, nested break/continue counts, and case `;;`, `;&` and `;;&`.
 `set -e` follows conditional, AND/OR, negation, pipeline and function suppression
 contexts. Unredirected compound commands preserve `exec` descriptor changes;
-redirected compounds restore their caller's descriptors.
+redirected compounds restore their caller's descriptors. Temporary process-substitution
+descriptors close with their owning compound, without undoing unrelated `exec`
+changes. Redirection setup failures obey `-e` even on compound commands.
 
 `test` and `[` use argv semantics and decimal integer comparisons. `[[ ]]` has
 its own parsed expression tree: operators are fixed before expansion, logical
@@ -512,9 +514,11 @@ comparisons share the bounded arithmetic evaluator. File predicates use virtual
 filesystem metadata, not attempts to open a file. A filesystem that cannot
 supply a required permission/ownership capability reports explicit unsupported
 status 2 rather than inventing an answer. `=~` supports a bounded, cooperative
-no-capture ERE subset; captures, backreferences and locale collation remain
-explicitly unsupported. Dynamic `EPOCHREALTIME` emits seconds and six fractional
-digits, with Bash-compatible unset behavior. `shopt` stores and reports
+no-capture ERE subset for ASCII patterns/input in C/POSIX/C.UTF-8/C.utf8
+character and collation locales. Non-ASCII data, other locales, captures,
+backreferences and locale collation return explicit unsupported status 2.
+Dynamic `EPOCHREALTIME` emits seconds and six fractional digits, with
+Bash-compatible unset behavior. `shopt` stores and reports
 `inherit_errexit`, `nullglob` and `extglob`; extended-pattern matching remains
 unsupported. For-list pathname expansion uses quote metadata and incremental
 filesystem directory reads, including real positive matches and nullglob misses.

@@ -697,13 +697,27 @@ explicitly unsupported; they are not claimed as implemented here.
 
 The new original generator has 2,448 cases per seed (1,848 structured controls
 at depths 0–3 plus 600 seeded cases). GNU Bash 5.3.15 self-controls and oracle-only
-fixtures for seeds 1/42 and strict candidate replay pass. The integrated source
-passes 919 native and 904 WASI tests. Release size is 2,654,346 raw bytes and
-566,155 Brotli-11 bytes, below the unchanged 1,000,000-byte ceiling. Local frozen
-scores are 917/927/1,286, gains of 236/321/258 with zero lost case IDs.
+fixtures for seeds 1/42 and strict candidate replay pass. The repaired integrated
+source passes 929 native and 914 WASI tests. Release size is 2,665,164 raw bytes
+and 568,677 Brotli-11 bytes, below the unchanged 1,000,000-byte ceiling.
+Review repairs close compound-owned process-substitution descriptors, apply
+redirection-setup errexit, stream missing-descriptor diagnostics, preserve scalar
+pattern behavior while fixing repeated case/pathname matching, and explicitly
+reject unsupported non-ASCII ERE data/locales. No limit or stack-size increases
+are allowed. All six strict differential families and the 27 parser-boundary
+controls pass, including 2,448/2,448 control-flow matches per seed with zero
+mismatches/unsupported results; 109 generator/scoreboard/runner tests pass.
 Independent exact-head approval and green CI remain required before merge.
-Baseline membership will come from the PR CI score artifact, not inferred local
-totals. No limit or stack-size increases are allowed.
+
+The repaired local frozen score is 919/929/1,285: gains of 238/323/257 with zero
+lost `b60cc95` case IDs and identical frozen identity/case membership. The first
+PR CI score artifact ([run 39077708873](https://github.com/ShaulLavo/bash-web/actions/runs/39077708873))
+records 917/927/1,286 passes and currently supplies the candidate baseline.
+Compared with that unmerged result, review repairs add four passes and replace
+one accidentally accepted Unicode ERE case (`bashkit-suite:bashbox-utf8:56`)
+with explicit unsupported status 2. The baseline assertion correctly rejects
+those five stale memberships. Refresh from the repaired PR's actual CI score
+artifact before landing, never inferred local totals.
 
 ## Previous unit: preflight and loop-work repairs
 
@@ -887,6 +901,32 @@ filesystem. Then introduce a redirect-specific expansion contract with correct
 ambiguity diagnostics, preserving scalar assignments/declarations. Confirm
 Bash results before implementation, run full native/WASI tests and exact pass
 membership ratchet, and keep zero CI exemptions.
+
+**Approved lexical descriptor-target correction (2026-10-18).** The control-flow
+review's diagnostic follow-up exposed an existing target-spelling loss in
+`shell/parser/src/parser/lexer.rs:871`: `target_str.parse().unwrap_or(1)` silently
+turns an overflowing `N>&M` target into descriptor 1. Bash 5.3.15 command
+`/usr/bin/bash -c ': 1>&4294967296; echo status:$?'` exits 0, prints
+`status:1\n`, and diagnoses `/usr/bin/bash: line 1: 4294967296: Bad file descriptor`.
+The native candidate at source head `51a883e` plus the review repairs instead
+prints `status:0\n` with empty stderr; the new handwritten probe observed this
+once before the parser correction was deferred. The lexer fallback explains the
+result without a race; unprefixed and expanded targets reach the correct runtime
+diagnostic path, ruling out runtime numeric lookup as the cause. Input duplication has the analogous
+`unwrap_or(0)` at lexer line 899; that direction is code-derived, not a separately
+executed candidate result. Confirm it with `: 0<&4294967296; echo status:$?`.
+
+Preserve raw target spelling and expansion instead of casting failure to a
+valid descriptor or a parse-time status 2. Output already has `DupFdWord(i32)`;
+input needs the equivalent representation. Inspect
+`shell/parser/src/parser/tokens.rs:144` and both redirect readers in
+`shell/parser/src/parser/mod.rs:1403` and `:4358`, then update lexer, tokens and
+both parser paths together. Cover both directions, literal/expanded numeric
+limits, leading zeros, closed descriptors, stderr redirects, `-e`, and read-unit
+recovery under native/WASI plus the exact no-loss ratchet. Keep spelling scans
+cooperative and allocations admitted. Runtime diagnostics for correctly
+preserved targets are implemented in this control-flow unit; this lexer/parser
+representation work belongs to the redirect unit, with its provenance record.
 
 ## Approved extraction: public `ShaulLavo/bash-web`, with history
 

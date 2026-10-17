@@ -68,6 +68,8 @@ impl Pattern {
     async fn normalize(&mut self, work: &mut Work, cancel: &Cancel) -> Result<(), Error> {
         // Backslashes introduced by an unquoted variable are pattern escapes.
         // Source escapes have already been removed and structurally protected.
+        // Keep the escaped-protected marker once observed: scalar pattern
+        // operations may compile the same Pattern more than once.
         let mut read = 0;
         let mut write = 0;
         while read < self.chars.len() {
@@ -75,7 +77,42 @@ impl Pattern {
             let escape = self.active(read, '\\') && read + 1 < self.chars.len();
             read += usize::from(escape);
             let mut ch = self.chars[read];
-            ch.escaped_protected = escape && ch.protected;
+            ch.escaped_protected |= escape && ch.protected;
+            ch.protected |= escape;
+            self.chars[write] = ch;
+            read += 1;
+            write += 1;
+        }
+        self.chars.truncate(write);
+        Ok(())
+    }
+    /// Pathname expansion has one additional quote-boundary rule: an
+    /// expansion-provided backslash escapes the synthetic quote marker on a
+    /// quoted glob character. Keep this normalization separate from scalar
+    /// trim/case matching, whose established Bash compatibility uses the
+    /// escaped-protected distinction above.
+    async fn normalize_pathname(&mut self, work: &mut Work, cancel: &Cancel) -> Result<(), Error> {
+        let mut read = 0;
+        let mut write = 0;
+        while read < self.chars.len() {
+            work.checkpoint(cancel).await?;
+            let escape = self.active(read, '\\') && read + 1 < self.chars.len();
+            if escape
+                && self.chars[read + 1].protected
+                && matches!(self.chars[read + 1].value, '*' | '?' | '[' | ']' | '\\')
+            {
+                self.chars[write] = Character {
+                    value: '\\',
+                    protected: true,
+                    escaped_protected: false,
+                };
+                self.chars[read + 1].protected = false;
+                read += 1;
+                write += 1;
+                continue;
+            }
+            read += usize::from(escape);
+            let mut ch = self.chars[read];
             ch.protected |= escape;
             self.chars[write] = ch;
             read += 1;
@@ -116,8 +153,57 @@ impl Pattern {
         }
         Ok(None)
     }
+    /// A pathname component has magic only after quote-boundary escapes have
+    /// been resolved. Share normalization with matching rather than guessing
+    /// from the unnormalized source bytes and their quote mask.
+    pub(super) async fn has_pathname_magic(
+        &mut self,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<bool, Error> {
+        self.normalize_pathname(work, cancel).await?;
+        for index in 0..self.chars.len() {
+            work.checkpoint(cancel).await?;
+            if self.active(index, '*') || self.active(index, '?') {
+                return Ok(true);
+            }
+            if self.active(index, '[') && self.bracket(index + 1, work, cancel).await?.is_some() {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+    pub(super) async fn pathname_literal(
+        &mut self,
+        max_bytes: usize,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<String, Error> {
+        self.normalize_pathname(work, cancel).await?;
+        work.admit_storage(max_bytes)?;
+        let mut value = String::new();
+        value
+            .try_reserve_exact(max_bytes)
+            .map_err(|_| Error::Status(2))?;
+        for ch in &self.chars {
+            work.checkpoint(cancel).await?;
+            if ch.value.len_utf8() > max_bytes.saturating_sub(value.len()) {
+                return Err(2.into());
+            }
+            value.push(ch.value);
+        }
+        Ok(value)
+    }
     async fn compile(&mut self, work: &mut Work, cancel: &Cancel) -> Result<Vec<Atom>, Error> {
         self.normalize(work, cancel).await?;
+        self.atoms(0, work, cancel).await
+    }
+    async fn compile_pathname(
+        &mut self,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<Vec<Atom>, Error> {
+        self.normalize_pathname(work, cancel).await?;
         self.atoms(0, work, cancel).await
     }
     async fn atoms(
@@ -171,13 +257,15 @@ impl Pattern {
         })
     }
 
+    /// Shell case, conditional equality and pathname components share these
+    /// quote-boundary rules, unlike scalar trim and case conversion.
     pub(crate) async fn matches_full(
         &mut self,
         value: &str,
         work: &mut Work,
         cancel: &Cancel,
     ) -> Result<bool, Error> {
-        let atoms = self.compile(work, cancel).await?;
+        let atoms = self.compile_pathname(work, cancel).await?;
         let count = atoms.len().checked_add(1).ok_or(2)?;
         work.admit_storage(count)?;
         let mut states = Vec::new();
@@ -202,9 +290,6 @@ impl Pattern {
         cancel: &Cancel,
     ) -> Result<(Atom, usize), Error> {
         let ch = self.chars[index];
-        // GNU Bash cannot match an expansion-provided escape followed by an
-        // already quoted character outside a bracket. Keep that distinction
-        // typed; inside a bracket it remains an ordinary literal member.
         if ch.escaped_protected {
             return Ok((Atom::Never, index + 1));
         }
@@ -236,8 +321,8 @@ impl Pattern {
     ) -> Result<bool, Error> {
         match *atom {
             Atom::Literal(ch) => Ok(ch == value),
-            Atom::Any => Ok(true),
             Atom::Never => Ok(false),
+            Atom::Any => Ok(true),
             Atom::Star => Err(2.into()),
             Atom::Class {
                 start,
@@ -515,6 +600,83 @@ enum Atom {
 mod tests {
     use super::*;
     use futures::FutureExt;
+
+    fn finish<T>(future: impl std::future::Future<Output = T>) -> T {
+        let mut future = Box::pin(future);
+        let mut context = std::task::Context::from_waker(futures::task::noop_waker_ref());
+        for _ in 0..4096 {
+            if let std::task::Poll::Ready(value) = future.as_mut().poll(&mut context) {
+                return value;
+            }
+        }
+        panic!("bounded pattern operation did not finish");
+    }
+
+    #[test]
+    fn quote_boundary_normalization_is_idempotent_across_repeated_matches() {
+        for (quoted, suffix, positive, negative, magic, expected) in [
+            ('a', '*', "aa", "ba", true, vec![('a', true), ('*', false)]),
+            (
+                '*',
+                '*',
+                "\\first",
+                "first",
+                true,
+                vec![('\\', true), ('*', false), ('*', false)],
+            ),
+            (
+                '?',
+                '*',
+                "\\first",
+                "first",
+                true,
+                vec![('\\', true), ('?', false), ('*', false)],
+            ),
+            (
+                '\\',
+                '*',
+                "\\*",
+                "\\first",
+                false,
+                vec![('\\', true), ('*', true)],
+            ),
+        ] {
+            let cancel = Cancel::new();
+            let mut work = Work::new(16384, 16384, 16);
+            let mut pattern = Pattern::default();
+            pattern
+                .push('\\', Protection::None, &mut work)
+                .unwrap_or_else(|_| panic!("escape fits"));
+            pattern
+                .push(quoted, Protection::All, &mut work)
+                .unwrap_or_else(|_| panic!("quoted target fits"));
+            pattern
+                .push(suffix, Protection::None, &mut work)
+                .unwrap_or_else(|_| panic!("suffix fits"));
+            for _ in 0..3 {
+                assert_eq!(
+                    finish(pattern.has_pathname_magic(&mut work, &cancel)).ok(),
+                    Some(magic)
+                );
+                assert_eq!(
+                    finish(pattern.matches_full(positive, &mut work, &cancel)).ok(),
+                    Some(true)
+                );
+                assert_eq!(
+                    finish(pattern.matches_full(negative, &mut work, &cancel)).ok(),
+                    Some(false)
+                );
+                assert_eq!(
+                    pattern
+                        .chars
+                        .iter()
+                        .map(|ch| (ch.value, ch.protected))
+                        .collect::<Vec<_>>(),
+                    expected
+                );
+            }
+        }
+    }
 
     #[test]
     fn case_result_admits_capacity_not_only_written_bytes() {

@@ -162,3 +162,50 @@ fn epoch_realtime_assignment_rhs_keeps_the_dynamic_hook() {
         "rhs\nglobal\n",
     );
 }
+
+#[test]
+fn regex_non_ascii_input_and_patterns_are_explicitly_unsupported_in_all_locales() {
+    // Bash 5.3 distinguishes these cases: C.UTF-8 classifies é as alpha,
+    // whereas C matches its two UTF-8 bytes with ^..$. Until both character
+    // models exist, neither combination may silently become a false match.
+    for locale in ["C", "POSIX", "C.UTF-8", "C.utf8"] {
+        let rig = Rig::new(Limits::default());
+        rig.variable("LC_ALL", locale);
+        rig.variable("value", "é");
+        rig.variable("pattern", "^[[:alpha:]]$");
+        for source in [
+            "[[ $value =~ $pattern ]]",
+            "[[ ! $value =~ $pattern ]]",
+            "[[ $value =~ ^..$ ]]",
+            "[[ ! $value =~ ^..$ ]]",
+            "[[ ascii =~ 'é' ]]",
+        ] {
+            assert_eq!(rig.run(source), 2, "locale={locale}, source={source}");
+            assert!(rig.calls.borrow().is_empty());
+        }
+        assert_eq!(
+            rig.run("[[ yes || $value =~ $pattern ]] && args skipped"),
+            0
+        );
+        assert_eq!(rig.run("[[ '' && $value =~ $pattern ]]"), 1);
+        assert_eq!(*rig.calls.borrow(), [vec!["skipped"]]);
+        assert_eq!(rig.run("[[ abc =~ ^[[:alpha:]]+$ ]] && args ascii"), 0);
+        assert_eq!(*rig.calls.borrow().last().unwrap(), ["ascii"]);
+    }
+}
+
+#[test]
+fn regex_locale_precedence_preserves_supported_ascii_and_rejects_other_locales() {
+    check_output(
+        r#"LANG=C.utf8; LC_CTYPE=POSIX; LC_COLLATE=C; [[ ab12 =~ ^[[:alpha:]]{2}[[:digit:]]{2}$ ]]; echo $?; LC_ALL=C.UTF-8; LC_CTYPE=unimplemented; LC_COLLATE=unimplemented; [[ ab12 =~ ^[a-z]+[0-9]+$ ]]; echo $?; LC_ALL=C; [[ ! ab =~ ^[0-9]+$ ]]; echo $?"#,
+        "0\n0\n0\n",
+    );
+    for variable in ["LC_ALL", "LC_CTYPE", "LC_COLLATE", "LANG"] {
+        let rig = Rig::new(Limits::default());
+        rig.variable(variable, "en_US.utf8");
+        assert_eq!(rig.run("[[ abc =~ ^[a-z]+$ ]]"), 2, "{variable}");
+        assert_eq!(rig.run("[[ ! abc =~ ^[a-z]+$ ]]"), 2, "{variable}");
+        assert_eq!(rig.run("[[ yes || abc =~ ^[a-z]+$ ]] && args skipped"), 0);
+        assert_eq!(*rig.calls.borrow(), [vec!["skipped"]]);
+    }
+}
