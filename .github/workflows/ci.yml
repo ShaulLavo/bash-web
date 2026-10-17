@@ -1,41 +1,8 @@
-name: Browser shell
+name: Shell
 on: [push, pull_request]
 permissions:
   contents: read
 jobs:
-  verify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 26.7.0
-          cache: npm
-      - uses: dtolnay/rust-toolchain@1.98.1
-        with:
-          targets: wasm32-wasip1
-          components: rustfmt
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            rust/brush-browser -> ../../.build/rust
-            shell -> ../.build/shell
-      - uses: actions/cache@v4
-        with:
-          path: |
-            .build/bashkit
-            .build/wasm-bindgen
-          key: bashkit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('sources.lock.json') }}
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium firefox
-      - run: npm run verify
-      - run: npm run test:rust
-        env:
-          CARGO_TARGET_DIR: .build/rust
-      - run: cargo fmt --manifest-path rust/brush-browser/Cargo.toml --check
-      - run: cargo fmt --manifest-path shell/Cargo.toml --all --check
   shell:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -46,6 +13,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 26.7.0
+          cache: npm
       - uses: dtolnay/rust-toolchain@1.98.1
         with:
           targets: wasm32-wasip1
@@ -56,6 +24,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: shell -> ../.build/shell
+      - run: npm ci
       - run: node scripts/check-shell-parser.mjs
       - run: cargo fmt --manifest-path shell/Cargo.toml --all --check
       - name: Native shell tests
@@ -70,8 +39,7 @@ jobs:
         run: |
           sha256sum .build/shell/release/shell-engine > .build/shell/cli-sha256.txt
           git rev-parse HEAD > .build/shell/cli-source.txt
-      - name: Upload native shell CLI
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: shell-cli-${{ github.sha }}
           path: |
@@ -86,7 +54,7 @@ jobs:
       - run: npm run fuzz:shell-readonly:ci -- --shell .build/shell/release/shell-engine
       - run: npm run test:fuzz-shell-substitutions
       - run: npm run fuzz:shell-substitutions:ci -- --shell .build/shell/release/shell-engine
-      - run: node scripts/fuzz-shell-parse-boundaries.mjs --shell .build/shell/release/shell-engine --replay scripts/fixtures/shell-parse-boundaries.json
+      - run: npm run fuzz:shell-parse-boundaries:ci -- --shell .build/shell/release/shell-engine
 
   own-shell-compatibility:
     runs-on: ubuntu-latest
@@ -98,7 +66,7 @@ jobs:
       BASH_COMPAT_JOBS: 4
       BASH_COMPAT_SKIP_BUILD: "1"
       BASH_COMPAT_RECORD: "0"
-      BASH_COMPAT_BASE_REF: ${{ github.event.pull_request.base.sha }}
+      BASH_COMPAT_BASE_REF: ${{ github.event.pull_request.base.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -112,16 +80,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: shell -> ../.build/shell
-      - name: Install isolated Bash capture tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bubblewrap python3
-          # The disposable Ubuntu runner must permit bubblewrap's user namespace.
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          bwrap --unshare-all --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 --proc /proc --dev /dev -- /usr/bin/true
+      - run: npm ci
       - run: npm run test:shell:scoreboard
-        env:
-          BASH_COMPAT_SCRATCH: ${{ runner.temp }}
       - run: npm run build:shell
       - run: npm run compat:shell
         env:

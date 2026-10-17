@@ -1,9 +1,10 @@
 # Shell workspace
 
-Plan [004](../plans/004-own-shell.md) now has a parser library and an original
-async engine with a runnable native/WASI CLI. Brush remains the workbench's
-default. The native fixture process host stays separate from the runtime-backed
-WASI executable; step 1's real browser gate remains mandatory before replacing Brush.
+Plan [004](../plans/004-own-shell.md) defines this standalone parser and
+original async engine with a runnable native/WASI CLI. The native fixture
+process host stays separate from the runtime-backed WASI executable. Browser
+process, filesystem, and terminal adapters remain host concerns and are not
+part of this package.
 
 ## Parser and provenance
 
@@ -77,19 +78,19 @@ cargo fmt --manifest-path shell/Cargo.toml --all --check
 npm run build:shell
 ```
 
-`test:rust` checks parser provenance and the retained license, runs all upstream parser unit tests plus
-original adapter/API tests, then retains the existing Brush tests. CI runs that
-command and the WASI release build. `build:shell` produces the runnable
+`test:rust` checks parser provenance and the retained license, then runs all
+parser and engine workspace tests. CI runs that command and the WASI release
+build. `build:shell` produces the runnable
 `.build/shell/wasm32-wasip1/release/shell-engine.wasm` CLI as well as the libraries.
-`../scripts/notices.mjs` includes the pinned MIT license and this workspace's Rust
-dependency licenses in the existing distribution notices flow.
+`npm run notices:shell` writes `dist/THIRD_PARTY_NOTICES.txt` with the pinned
+parser, Rust dependency, and retained corpus licenses.
 
 ## Async engine core
 
-The original async [engine core](engine/README.md) is now tested natively and under
-wasmtime against an explicitly in-process `ProcessHost`. This is not the browser
-worker gate: Brush remains the default. The runtime adapter below is the browser
-embedding, separate from this native test host.
+The original async [engine core](engine/README.md) is tested natively and under
+wasmtime against an explicitly in-process `ProcessHost`. This fixture host is
+separate from the production runtime boundary: applications provide a shared
+`waffle` instance when embedding the WASM program.
 
 ## CLI and fixed compatibility scoreboard
 
@@ -125,13 +126,13 @@ secondary denominators. Candidate baselines must include every current passing
 case; CI separately rejects any corpus count below the target branch. Browser cold-start measurement is deferred until browser
 integration; this CLI establishes no cold-start or browser acceptance result.
 
-
 ## Runtime-backed interactive guest
 
 `cargo build --manifest-path shell/Cargo.toml --release --target wasm32-wasip1
--p shell-engine --bin shell-runtime` builds the persistent guest. The browser
-publishes it as `/programs/shell-engine.wasm`; the existing `shell-engine -c`
-fixture executable and its in-process compatibility registry are unchanged.
+-p shell-engine --bin shell-runtime` builds the persistent guest. A host such
+as waffle registers and runs the resulting WASM program; the existing
+`shell-engine -c` fixture executable and its in-process compatibility registry
+are unchanged.
 
 Start the runtime guest with argv `['shell-engine', '-i']` (or `-c SCRIPT`).
 It imports the environment, uses `PWD` for its cwd, and defaults `PS1` to `$ `.

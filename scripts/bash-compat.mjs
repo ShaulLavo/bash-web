@@ -1,5 +1,6 @@
-// Runs the pinned Oils shell spec corpus through real GNU bash and each browser engine.
+// Runs the pinned shell spec corpora through GNU bash and the standalone WASM shell.
 // Bash is the oracle: a case passes when stdout and exit status match bash exactly.
+// Browser and reference engines remain optional integrations owned by the host.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -41,7 +42,7 @@ const baselineFile = resolve(
   process.env.BASH_COMPAT_BASELINE ?? "docs/evidence/own-shell-baseline.json",
 );
 const sourceFiles = {};
-const brushCorpus = resolve(root, process.env.BASH_COMPAT_BRUSH_DIR ?? "vendor/brush");
+const brushCorpus = resolve(root, process.env.BASH_COMPAT_BRUSH_DIR ?? ".sources/brush");
 const bashkitCorpus = resolve(root, process.env.BASH_COMPAT_BASHKIT_DIR ?? ".sources/bashkit");
 const jobs = Number(
   process.env.BASH_COMPAT_JOBS ?? Math.min(4, Math.max(2, availableParallelism() >> 1)),
@@ -72,9 +73,7 @@ const engines = {
   // Reference only: the same pinned Brush source built natively, with host processes.
   "brush-native": { binary: resolve(root, ".build/brush-native/release/brush") },
 };
-const engineNames =
-  process.env.BASH_COMPAT_ENGINES?.split(",") ??
-  (mode === "live" ? Object.keys(engines) : ["own-shell"]);
+const engineNames = process.env.BASH_COMPAT_ENGINES?.split(",") ?? ["own-shell"];
 if (!engineNames.length || engineNames.some((name) => !(name in engines)))
   throw new Error(`Unknown compatibility engines: ${engineNames.join(",")}`);
 if (

@@ -1,104 +1,71 @@
-# brush-web
+# bash-web
 
-Brush runs as Rust/WASM inside a browser worker, connected to Ghostty's byte-oriented terminal. Remix 3 supplies the workbench. The shell session retains cwd, variables, exports, functions, aliases, history, and exit status. Files live in memory until the session ends.
+`bash-web` is a WASM-first bash-compatible shell. It contains the Rust parser
+and shell engine extracted from [brush-web](https://github.com/ShaulLavo/brush-web)
+with the original commits, fixtures, oracle observations, and compatibility
+harness preserved.
 
-The shell can [run Bun as an external command](docs/external-commands.md), with live output, byte pipes, exit status, Ctrl+C, and file changes after exit.
+The shell is a WASM program, not a browser runtime. A host supplies process,
+filesystem, pipe, and page lifecycle services through the separate
+[`waffle`](https://github.com/ShaulLavo/waffle) package. Applications pass one
+shared runtime instance per page, for example `createShell({ runtime })`.
+`waffle` will be a peer dependency when the runtime switch lands; it is not a
+dependency of this extraction yet. A later standalone entry will wire waffle,
+the shell, and a terminal for applications that do not provide their own host.
 
-The demo includes completion, grapheme-aware editing, safe bracketed paste, resize handling, incremental terminal output, interruptible stdin, and Ctrl+C cancellation of tight shell loops. Run `browser-help` for the small Rust command host, or `keydemo` for an interactive key and resize demonstration.
+## Build and test
 
-## Run the shell
-
-Prerequisites: Node 26.7 or newer, npm, Git, Rust through rustup, and `tar`. The repository pins Rust 1.98.1 for Brush, Rust 1.95.0 for Bashkit's source API, and Remix 3.0.0. Use a current browser on localhost or HTTPS. The first build installs Bashkit's pinned Rust target and wasm-bindgen CLI, then compiles its source with the `terminal` feature. Later builds reuse that output.
+Prerequisites are Node 26.7 or newer, npm, Rust 1.98.1 through rustup, and
+wasmtime for WASI tests.
 
 ```sh
-git clone --recurse-submodules https://github.com/ShaulLavo/brush-web.git
-cd brush-web
+git clone https://github.com/ShaulLavo/bash-web.git
+cd bash-web
 rustup toolchain install 1.98.1 --profile minimal --component rustfmt --target wasm32-wasip1
 npm ci
-npm run build
-npm run dev
-```
-
-Open `http://localhost:5187/`. The development server provides the required isolation headers. The terminal requests WebGPU when available and labels any Ghostty fallback renderer.
-
-For the built static demo:
-
-```sh
-npm run serve
-```
-
-Open `http://localhost:4187/`. This server serves files only. Shell commands run inside the browser worker.
-
-Try these as separate submissions to exercise persistent state:
-
-```sh
-export COLOR=violet
-hello() { echo "hello $1, $COLOR"; }
-hello browser
-mkdir demo; cd demo
-printf 'file data\n' > note; cat note | cat
-while :; do :; done
-```
-
-Press Ctrl+C during the loop, then run `echo "$? $COLOR"`. The expected result is `130 violet`.
-
-## Verify behavior
-
-Build before running the browser tests. They drive Ghostty's textarea, keyboard, and paste events, then inspect the native terminal grid.
-
-```sh
-npx playwright install chromium
-npm run verify
+npm run build:shell
 npm run test:rust
-cargo fmt --manifest-path rust/brush-browser/Cargo.toml --check
+npm run test:shell:wasi
 ```
 
-`npm run verify` builds from pinned sources, checks TypeScript and Oxfmt, and tests the production bundle in Chromium using Ghostty Canvas2D. This is explicitly fallback-renderer coverage. For an installed Chromium, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to its executable path.
+The shell-only CI also runs the native and WASI suites, size ceiling,
+scoreboard runner tests, generator source tests and fixed fixture replays.
+Run the individual shell fuzz replays with the `:ci` scripts in
+`package.json`; they use only the committed generator and fixture bytes.
 
-`npm run compare` inventories actual commands and runs four shared workloads with five warm trials per engine. It checks each result and records raw evidence.
+The frozen compatibility score can be replayed without downloading corpora,
+installing GNU Bash, or installing browser assets:
 
-`npm run measure` records startup, actual terminal frame latency, output streaming, and available memory data under `docs/evidence`. It owns and stops its temporary server and browser. Set `BRUSH_RENDERER=webgpu` to request the GPU path and `BRUSH_HEADED=1` to run a visible browser for visual review. Report the returned adapter information; a WebGPU API alone does not prove hardware acceleration.
-
-See the [manual UX checklist](docs/ux-checklist.md), [runtime architecture and patches](docs/brush-runtime.md), [worker transport](docs/architecture.md), [just-bash adapter](docs/baseline.md), and [measured comparison](docs/comparison.md), and [command inventory and workload benchmarks](docs/commands.md).
-
-## Static hosting
-
-Upload the contents of `dist/` to a static host. Serve `.wasm` as `application/wasm` and apply these headers to the page and assets:
-
-```text
-Cross-Origin-Opener-Policy: same-origin
-Cross-Origin-Embedder-Policy: require-corp
-Cross-Origin-Resource-Policy: same-origin
+```sh
+BASH_COMPAT_BASE_REF=$(git rev-parse HEAD) npm run compat:shell
 ```
 
-HTTPS or localhost is required. The page explains missing capabilities and offers session restart after a worker failure. All runtime assets come from the same origin. There is no shell backend, PTY server, or command network endpoint.
+For explicit maintenance capture, prepare the pinned corpus sources only with
+`npm run prepare:shell-corpus`. That command verifies archive checksums and
+does not build an engine. Capture itself requires Linux, GNU Bash 5.3.15,
+bubblewrap, Python's standard library, and the `yaml` package.
 
-## Scope and limitations
+## Repository layout
 
-Brush's WASM pipelines run stages sequentially with a bounded intermediate buffer. Interactive terminal output streams incrementally. Registered WASI programs, including bun.wasm, run in separate child workers. Arbitrary native executables, job control, process substitution, networking, package downloads, and persistence are unsupported. A long parser or regex operation can delay cooperative cancellation until its next execution checkpoint.
+- `shell/` contains the parser and WASI shell engine.
+- `scripts/` contains the shell runner, scoreboard, provenance checks, and
+  differential generators.
+- `scripts/fixtures/` contains frozen generator inputs; do not regenerate them
+  during ordinary maintenance.
+- `docs/evidence/` contains frozen oracle, baseline, and classification data.
+- `docs/extraction/brush-web-commit-map.txt` maps every retained source commit
+  to its rewritten destination commit.
+- `plans/004-own-shell.md` records the approved extraction, and
+  `plans/005-bash-web-packaging.md` records the package boundary.
 
-The just-bash baseline uses the same terminal and byte bridge, but its public `exec` API isolates shell state and returns collected stdout and stderr. Its adapter preserves files and input history, supplies its own small editor, and discloses those differences. This comparison does not claim equivalent interactive sessions.
+The pinned source revisions, archive checksums, and implementation
+classifications are in [`sources.lock.json`](sources.lock.json). The generated
+license file is `dist/THIRD_PARTY_NOTICES.txt`; regenerate it with
+`npm run notices:shell`.
 
-The source revisions and archive checksum are in [sources.lock.json](sources.lock.json). Brush is a pinned Git submodule with a checked-in patch; terminal source is downloaded from the public mirror, whose `src/` matches the inspected canonical revision. No dependency requires an existing local checkout. The build generates `dist/THIRD_PARTY_NOTICES.txt` with dependency licenses and the terminal's notices.
+## Host boundary
 
-## New shell parser
-
-Plan [004](plans/004-own-shell.md) starts a separate Rust workspace at [`shell/`](shell/README.md). Its `shell-parser` library vendors Bashkit's parser and public AST unchanged, with original parser-only adapters. `npm run test:rust` runs the upstream parser tests and verifies its pinned source checksums; `npm run build:shell` checks the library on `wasm32-wasip1`. This skeleton adds no engine and does not replace Brush or change the browser demo.
-
-## Choose the next architecture change
-
-The [architecture research](reports/Browser%20shell%20architecture%20choices.md) separates avoidable host I/O costs from session, pipeline, and process requirements. It compares supported just-bash improvements and browser-runtime precedents, then defines one bounded experiment before considering a fork.
-
-The [completed performance proof](docs/performance-proof.md) separates worker execution from visible output and records both improvements and remaining losses. OPFS remains deferred.
-
-The [instrumented cost breakdown](docs/execution-costs.md) measures host calls, conversion, copying, queue gaps and submitted frames for both engines, with separate controls for profiler overhead and hardware WebGPU replay.
-
-The [bash compatibility run](docs/bash-compatibility.md) checks each interpreter against real GNU bash on the Oils spec corpus plus Brush's and Bashkit's own suites. Reproduce it with `npm run compat`.
-
-The [cold-start measurement](docs/cold-start.md) times first and repeat visits for every engine over Fast 4G and Slow 4G with CPU throttling, and attributes the time to download, compile, initialization and the first command (`npm run measure:cold`).
-
-The [Bashkit comparison](docs/bashkit-comparison.md) evaluates `@everruns/bashkit-wasm` through the same Ghostty adapter and records its session and cancellation limits.
-
-The separate **Bashkit native terminal** option uses its source-tree `Terminal` API at the revision in `sources.lock.json`. It forwards raw bytes to the native editor and drains raw output into Ghostty. Its own package tests run with `npm run test:bashkit`. No source patch is applied. OPFS remains deferred.
-
-Add `?presentation=immediate` to exercise Ghostty's new synchronous first paint, or `?presentation=frame` for its normal frame scheduling. Both paths retain the same terminal renderer. Set `BRUSH_PRESENTATION=immediate` when running `npm run measure:costs`; use `BRUSH_COST_ENGINES=brush,just-bash,bashkit,bashkit-terminal` to include both Bashkit APIs in the same fixture matrix.
+Browser terminal UI, Bun payloads, browser process/runtime adapters, and
+reference-engine comparisons remain in brush-web. This repository owns the
+shell program and its standalone verification only. The historical browser
+measurements and comparisons in brush-web are not standalone bash-web gates.

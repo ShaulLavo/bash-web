@@ -1,8 +1,13 @@
 # Bash compatibility
 
-**Verdict.** Source-built Bashkit matches GNU bash most closely, and the gap is large. On scripts that use only shell builtins it agrees with bash on 95% of the Oils spec cases. Brush in the browser agrees on 78% and just-bash on 85%. The Oils number flatters Bashkit and just-bash, because both projects test against Oils (details below). Bashkit still leads on corpora it was not tuned for: on Brush's own test cases it scores 84%, compared with 71% for Brush in the browser and 77% for natively built Brush. This study recommended Bashkit source over its npm release, whose published 0.18.2 scores only 55% on Oils. Plan 004 now builds an original engine; its fixed scoreboard is described below. Bashkit has one serious bug to fix first: the `mapfile` budget leak described below.
+**Historical study.** The tables below preserve the original Brush, Bashkit,
+just-bash, and native-reference comparison. They are historical evidence from
+brush-web, not standalone bash-web gates or fresh measurements. The
+bash-web-owned fixed scoreboard and replay instructions are in the own-shell
+section below.
 
-Reproduce with `npm run compat`. Raw results, one line per case, are in [bash-compatibility.json](evidence/bash-compatibility.json).
+Reproduce the frozen standalone result with `npm run compat:shell`. Raw
+historical results remain in [bash-compatibility.json](evidence/bash-compatibility.json).
 
 ## Method
 
@@ -102,10 +107,11 @@ Cause: `mapfile` replaces the array through builtin side effects that remove the
 
 ## Own-shell fixed scoreboard
 
-The original `shell-engine` CLI is registered as `own-shell`. Brush is still the
-browser default. The first measured baseline is **288/1,682 Oils, 295/1,888 Brush-suite and
-445/2,222 Bashkit-suite**. The historical engine tables above keep their original
-case sets and are not a comparison under this new fixed identity.
+The original `shell-engine` CLI is registered as `own-shell`. It is the
+standalone package's only default engine. The first measured baseline is
+**288/1,682 Oils, 295/1,888 Brush-suite and 445/2,222 Bashkit-suite**. The
+historical engine tables above keep their original case sets and are not a
+comparison under this fixed identity.
 
 | Corpus        | Previously classified builtins-only cases | Fresh scored cases | Own-shell passes |
 | ------------- | ----------------------------------------: | -----------------: | ---------------: |
@@ -261,10 +267,9 @@ release `wasm32-wasip1` CLI. Each case gets a fresh memory filesystem with no ho
 preopens and only the two fixture process programs. There is a 10-second timeout
 and a 4 MiB combined output ceiling per case. A crash or timeout fails that case;
 it never silently becomes a skip. The CLI drains both output pipes between
-executor turns; it does not collect program output until exit. Browser transport,
-shared filesystem behavior and cold-start measurement remain deferred until
-browser integration. Plan 004 steps 2 and 3 can use the tested stand-ins, but
-step 1's real browser gate must pass before step 6 replaces Brush.
+executor turns; it does not collect program output until exit. Browser transport, shared filesystem behavior and cold-start measurement
+remain host/product concerns. This package verifies the shell program and its
+runtime boundary; it does not replace the browser host.
 
 ```sh
 # Normal fixed replay, no installed GNU bash or corpus sources required.
@@ -274,7 +279,7 @@ npm run compat:shell
 BASH_COMPAT_OUT=/work/tmp/brush-web-current.json npm run compat:shell
 
 # Also compare with the baseline on the target branch, as pull-request CI does.
-BASH_COMPAT_BASE_REF="$(git merge-base HEAD origin/main)" npm run compat:shell
+BASH_COMPAT_BASE_REF="$(git rev-parse HEAD)" npm run compat:shell
 
 # Cheap mutation/selection tests, independent of Rust and the corpora.
 npm run test:shell:scoreboard
