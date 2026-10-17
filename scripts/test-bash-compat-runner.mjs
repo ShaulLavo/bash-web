@@ -283,7 +283,13 @@ test("capture teardown retains scratch and ownership until its process group sto
     }
     return signal(pid, kind);
   };
-  const run = createShellRunner({ scratch, timeoutMs: 5000, activeChildren });
+  const created = Promise.withResolvers();
+  const run = createShellRunner({
+    scratch,
+    timeoutMs: 5000,
+    activeChildren,
+    onScratchCreated: created.resolve,
+  });
   pending = run(
     "/usr/bin/bash",
     'sleep 30 >/dev/null 2>&1 & printf "%s" "$!" > "$TMP/live"; printf done',
@@ -291,17 +297,18 @@ test("capture teardown retains scratch and ownership until its process group sto
     false,
     "socket",
   );
-  let directory;
+  const { directory, tmp, home } = await created.promise;
+  assert.deepEqual(await readdir(directory), ["home", "tmp"]);
+  assert.equal(tmp, resolve(directory, "tmp"));
+  assert.equal(home, resolve(directory, "home"));
   const deadline = Date.now() + 5000;
   while (!groups.size) {
     assert.ok(Date.now() < deadline, "capture did not reach owned-group teardown");
-    directory = (await readdir(scratch)).find((name) => name.startsWith("bash-"));
     await delay(5);
   }
   await delay(50);
   assert.equal(activeChildren.size, 1, "capture dropped ownership before its consumer stopped");
-  assert.ok(directory, "capture scratch was not created");
-  assert.match(await readFile(resolve(scratch, directory, "tmp/live"), "utf8"), /^\d+$/);
+  assert.match(await readFile(resolve(tmp, "live"), "utf8"), /^\d+$/);
   release();
   assert.equal((await pending).stdout.toString(), "done");
   assert.equal(activeChildren.size, 0);

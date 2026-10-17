@@ -11,7 +11,12 @@ export const bashStdoutTransport =
 export const bashStderrTransport =
   "Independent Python3 subprocess stderr=PIPE forwarded byte-for-byte";
 
-export function createShellRunner({ scratch, timeoutMs, activeChildren = new Map() }) {
+export function createShellRunner({
+  scratch,
+  timeoutMs,
+  activeChildren = new Map(),
+  onScratchCreated,
+}) {
   return async function runShell(shell, code, path, sandbox = false, transport = "pipe") {
     if (!["pipe", "socket"].includes(transport)) throw new Error("Unknown stdout transport");
     const directory = await mkdtemp(resolve(scratch, "bash-"));
@@ -21,6 +26,7 @@ export function createShellRunner({ scratch, timeoutMs, activeChildren = new Map
     try {
       await mkdir(tmp);
       await mkdir(home);
+      onScratchCreated?.({ directory, tmp, home });
       const sandboxArgs = [
         "--unshare-all",
         "--die-with-parent",
