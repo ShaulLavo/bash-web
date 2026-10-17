@@ -48,19 +48,19 @@ numbers, browser worker transport or shared-memory layout are frozen here.
 
 ## Explicit bounds
 
-| Boundary | Bound / policy |
-| --- | --- |
-| Pipe / terminal queue | 32 KiB of queued bytes, partial writes and backpressure |
-| Producer/consumer scratch | At most 8 KiB per copy iteration |
-| Capture | Caller supplies a byte ceiling; overflow returns `LimitExceeded` |
-| Accumulating test consumer | 64 KiB capture, explicit failure (not unbounded collection) |
-| Memory filesystem | Caller supplies total data ceiling; growth fails |
-| Source input | 256 KiB per invocation plus parser depth, fuel, work and time limits |
-| Expanded command | 1 MiB, at most 65,536 fields including command name and assignments |
-| Expansion work | Per command: source-byte + expansion-byte + argument capacity in character/part/element steps; cooperative yield every 64 steps; intermediate word bytes also capped at 1 MiB |
-| `read` line | 64 KiB, explicit failure |
-| Pipeline / jobs / function nesting | 128 stages / 128 retained jobs / 128 function frames |
-| Eval readers / execution chain | 16 active readers / 256 execution levels, shared admission and explicit rejection |
+| Boundary                           | Bound / policy                                                                                                                                                                |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pipe / terminal queue              | 32 KiB of queued bytes, partial writes and backpressure                                                                                                                       |
+| Producer/consumer scratch          | At most 8 KiB per copy iteration                                                                                                                                              |
+| Capture                            | Caller supplies a byte ceiling; overflow returns `LimitExceeded`                                                                                                              |
+| Accumulating test consumer         | 64 KiB capture, explicit failure (not unbounded collection)                                                                                                                   |
+| Memory filesystem                  | Caller supplies total data ceiling; growth fails                                                                                                                              |
+| Source input                       | 256 KiB per invocation plus parser depth, fuel, work and time limits                                                                                                          |
+| Expanded command                   | 1 MiB, at most 65,536 fields including command name and assignments                                                                                                           |
+| Expansion work                     | Per command: source-byte + expansion-byte + argument capacity in character/part/element steps; cooperative yield every 64 steps; intermediate word bytes also capped at 1 MiB |
+| `read` line                        | 64 KiB, explicit failure                                                                                                                                                      |
+| Pipeline / jobs / function nesting | 128 stages / 128 retained jobs / 128 function frames                                                                                                                          |
+| Eval readers / execution chain     | 16 active readers / 256 execution levels, shared admission and explicit rejection                                                                                             |
 
 A terminal is a bounded endpoint drained by the host, not a result string appended
 until exit. The standalone harness drains it **between** executor turns. The real

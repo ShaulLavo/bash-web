@@ -8,7 +8,7 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import { createShellRunner } from "./bash-compat-runner.mjs";
 
-const root = process.env.RUNNER_TEMP ?? "/work/tmp/brush-web-climb-subst";
+const root = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
 await mkdir(root, { recursive: true });
 
 test("Bash capture uses real stdout pipe without changing shell input or status", async (t) => {

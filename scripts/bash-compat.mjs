@@ -1,9 +1,7 @@
 // Runs the pinned shell spec corpora through GNU bash and the standalone WASM shell.
 // Bash is the oracle: a case passes when stdout and exit status match bash exactly.
-// Browser and reference engines remain optional integrations owned by the host.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { availableParallelism } from "node:os";
 import { basename, resolve } from "node:path";
@@ -66,12 +64,6 @@ const engines = {
       process.env.BASH_COMPAT_SHELL_WASM ?? ".build/shell/wasm32-wasip1/release/shell-engine.wasm",
     ),
   },
-  brush: { modulePath: resolve(root, ".build/rust/wasm32-wasip1/release/brush-compat.wasm") },
-  "bashkit-source": { modulePath: resolve(root, ".sources/bashkit/pkg") },
-  "bashkit-published": { modulePath: resolve(root, "node_modules/@everruns/bashkit-wasm") },
-  "just-bash": {},
-  // Reference only: the same pinned Brush source built natively, with host processes.
-  "brush-native": { binary: resolve(root, ".build/brush-native/release/brush") },
 };
 const engineNames = process.env.BASH_COMPAT_ENGINES?.split(",") ?? ["own-shell"];
 if (!engineNames.length || engineNames.some((name) => !(name in engines)))
@@ -354,7 +346,7 @@ const spotSetup =
 
 const scratchRoot = process.env.BASH_COMPAT_SCRATCH ?? process.env.RUNNER_TEMP ?? "/work/tmp";
 await mkdir(scratchRoot, { recursive: true });
-const scratch = await mkdtemp(resolve(scratchRoot, "brush-web-compat-"));
+const scratch = await mkdtemp(resolve(scratchRoot, "bash-web-compat-"));
 const pools = [];
 const activeChildren = new Map();
 const runShell = createShellRunner({ scratch, timeoutMs, activeChildren });
@@ -439,10 +431,7 @@ async function main() {
   const inventories = {};
   for (const engine of engineNames) {
     if (cancelled) return;
-    const native = engines[engine].binary;
-    const pool = native
-      ? { run: (code) => runShell(native, code, fullPath), close: async () => {} }
-      : new Pool(engine, jobs);
+    const pool = new Pool(engine, jobs);
     pools.push(pool);
     const inventory = await pool.run(inventoryScript);
     if (cancelled) return;
@@ -474,7 +463,6 @@ async function main() {
   }
 
   const evidence = buildEvidence({ bashVersion, cases, spots, inventories, inventoryNames });
-  evidence.mapfile = await probeMapfile(fullPath);
   if (cancelled) return;
   // One line per case keeps the evidence file reviewable in diffs.
   const rows = evidence.cases.map((item) => JSON.stringify(item)).join(",\n");
@@ -523,104 +511,27 @@ async function prepareCorpus() {
 }
 
 function prepareEngines() {
-  if (engineNames.includes("own-shell") && process.env.BASH_COMPAT_SKIP_BUILD !== "1") {
-    execFileSync(
-      "cargo",
-      [
-        "build",
-        "--locked",
-        "--release",
-        "--target",
-        "wasm32-wasip1",
-        "--manifest-path",
-        "shell/Cargo.toml",
-        "-p",
-        "shell-engine",
-        "-j2",
-      ],
-      {
-        cwd: root,
-        stdio: "inherit",
-        env: { ...process.env, CARGO_TARGET_DIR: resolve(root, ".build/shell") },
-      },
-    );
-  }
-  if (engineNames.includes("brush")) {
-    log("building the Brush compatibility driver");
-    execFileSync("node", [resolve(root, "scripts/build-wasm.mjs")], {
+  if (process.env.BASH_COMPAT_SKIP_BUILD === "1") return;
+  execFileSync(
+    "cargo",
+    [
+      "build",
+      "--locked",
+      "--release",
+      "--target",
+      "wasm32-wasip1",
+      "--manifest-path",
+      "shell/Cargo.toml",
+      "-p",
+      "shell-engine",
+      "-j2",
+    ],
+    {
       cwd: root,
       stdio: "inherit",
-    });
-  }
-  if (engineNames.includes("brush-native"))
-    execFileSync(
-      "cargo",
-      // Same compiler as the browser build, not the submodule's own toolchain file.
-      [
-        `+${rustChannel()}`,
-        "build",
-        "--locked",
-        "--release",
-        "-p",
-        "brush-shell",
-        "--bin",
-        "brush",
-      ],
-      {
-        cwd: resolve(root, "vendor/brush"),
-        env: { ...process.env, CARGO_TARGET_DIR: resolve(root, ".build/brush-native") },
-        stdio: "inherit",
-      },
-    );
-  if (engineNames.includes("bashkit-source"))
-    execFileSync("node", [resolve(root, "scripts/build-bashkit.mjs")], {
-      cwd: root,
-      stdio: "inherit",
-    });
-}
-
-// Bashkit triage: repeated mapfile into one array. Checks whether maxMemory matters and
-// whether the effect outlives the execute() call that caused it.
-async function probeMapfile(fullPath) {
-  const script =
-    'seq 50000 > /tmp/s; for i in 1 2 3; do mapfile -t a < /tmp/s; echo "mapfile=$? n=${#a[@]}"; done; ' +
-    'b=(x y z); echo "b=${#b[@]}"; unset a; c=(x y z); echo "c=${#c[@]}"';
-  const lines = (text) => text.trim().split("\n");
-  const result = {
-    script,
-    bash: lines((await runShell(bashPath, script, fullPath)).stdout.toString()),
-  };
-  for (const engine of ["bashkit-source", "bashkit-published"]) {
-    if (!engineNames.includes(engine)) continue;
-    const { modulePath } = engines[engine];
-    const { initBashkit, Bash } = await import(resolve(modulePath, "index.js"));
-    await initBashkit(readFileSync(resolve(modulePath, "bashkit_wasm_bg.wasm")));
-    const runs = {};
-    for (const maxMemory of [undefined, 32 * 1024 * 1024, 256 * 1024 * 1024]) {
-      const output = await new Bash(maxMemory ? { maxMemory } : {}).execute(script);
-      runs[maxMemory ? `maxMemory ${maxMemory}` : "default options"] = {
-        stdout: lines(output.stdout),
-        stderr: output.stderr,
-        exitCode: output.exitCode,
-      };
-    }
-    const session = new Bash({});
-    await session.execute("seq 50000 > /tmp/s");
-    for (let index = 0; index < 3; index++) await session.execute("mapfile -t a < /tmp/s");
-    runs["later execute() in the same session"] = lines(
-      (await session.execute('b=(x y z); echo "b=${#b[@]}"')).stdout,
-    );
-    runs["new Bash instance"] = lines(
-      (await new Bash({}).execute('b=(x y z); echo "b=${#b[@]}"')).stdout,
-    );
-    result[engine] = runs;
-  }
-  return result;
-}
-
-function rustChannel() {
-  const toolchain = readFileSync(resolve(root, "rust-toolchain.toml"), "utf8");
-  return /channel = "([^"]+)"/.exec(toolchain)[1];
+      env: { ...process.env, CARGO_TARGET_DIR: resolve(root, ".build/shell") },
+    },
+  );
 }
 
 async function loadOilsCases(corpus) {
@@ -1030,11 +941,6 @@ function buildEvidence({ bashVersion, cases, spots, inventories, inventoryNames 
     engines: {
       "own-shell":
         "Original shell-engine CLI, wasm32-wasip1, in-process fixture ProcessHost on node:wasi; no browser integration",
-      brush: `Brush ${pins.brush.revision} with patches/brush-browser.patch, wasm32-wasip1 brush-compat driver (same brush-core, builtins and browser utilities as brush-browser.wasm) on node:wasi`,
-      "bashkit-source": `Bashkit ${pins.bashkitTerminal.revision} source build (the bashkit-terminal engine's WASM), Bash.execute`,
-      "bashkit-published": `@everruns/bashkit-wasm ${pins.bashkit.version}, Bash.execute`,
-      "just-bash": `just-bash ${pins.justBash.version}, Bash.exec with rawScript and workbench limits`,
-      "brush-native": `Reference only: Brush ${pins.brush.revision} brush-shell built natively (brush -c), with host processes and the full PATH`,
     },
     corpora,
     oilsByCategory: Object.fromEntries(

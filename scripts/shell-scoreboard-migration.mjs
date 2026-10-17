@@ -75,7 +75,7 @@ async function migrate() {
     "candidate oracle checksum",
   );
   assert.notEqual(candidate.identity.oracle, oracle.identity.oracle, "oracle did not change");
-  const scratchRoot = process.env.RUNNER_TEMP ?? "/work/tmp/brush-web-climb-subst";
+  const scratchRoot = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
   await mkdir(scratchRoot, { recursive: true });
   const scratch = await mkdtemp(resolve(scratchRoot, "audit-oracle-migration-"));
   try {

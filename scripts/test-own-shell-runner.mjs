@@ -52,7 +52,7 @@ async function runFixture(outputSize) {
   const scratch = await mkdtemp(
     resolve(
       process.env.BASH_COMPAT_SCRATCH ?? process.env.RUNNER_TEMP ?? "/work/tmp",
-      "brush-web-runner-test-",
+      "bash-web-runner-test-",
     ),
   );
   let worker;

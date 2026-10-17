@@ -34,7 +34,8 @@ Run the individual shell fuzz replays with the `:ci` scripts in
 `package.json`; they use only the committed generator and fixture bytes.
 
 The frozen compatibility score can be replayed without downloading corpora,
-installing GNU Bash, or installing browser assets:
+installing GNU Bash, or installing browser assets. The full compatibility CI job
+also runs sandbox and transport tests, which require bubblewrap and Python 3:
 
 ```sh
 BASH_COMPAT_BASE_REF=$(git rev-parse HEAD) npm run compat:shell
