@@ -266,6 +266,54 @@ const ansiOperands = [
     decoded: "digit",
     tags: ["ansi-c", "ansi-digit", "ansi-hex-escape"],
   },
+  {
+    name: "brace-tail",
+    source: "$'}tail'",
+    decoded: "brace-tail",
+    tags: ["ansi-c", "ansi-brace", "ansi-literal", "ansi-tail"],
+  },
+  {
+    name: "double-quote-pair-variable",
+    source: String.raw`$'\x22$v\x22'`,
+    decoded: "double-quote-pair-variable",
+    tags: ["ansi-c", "ansi-double-quote", "ansi-expansion", "ansi-hex-escape"],
+  },
+  {
+    name: "braced-variable",
+    source: "$'${u}'",
+    decoded: "braced-variable",
+    tags: ["ansi-c", "ansi-dollar", "ansi-brace", "ansi-expansion"],
+  },
+  {
+    name: "command-substitution",
+    source: "$'$(printf H)'",
+    decoded: "command-substitution",
+    tags: ["ansi-c", "ansi-dollar", "ansi-expansion", "ansi-command"],
+  },
+  {
+    name: "backtick-command",
+    source: "$'`printf H`'",
+    decoded: "backtick-command",
+    tags: ["ansi-c", "ansi-expansion", "ansi-command", "ansi-backtick"],
+  },
+  {
+    name: "nul-tail",
+    source: String.raw`$'\0tail'`,
+    decoded: "nul",
+    tags: ["ansi-c", "ansi-nul", "ansi-control-escape", "ansi-tail"],
+  },
+  {
+    name: "quote-marker-start",
+    source: String.raw`$'\x1e'`,
+    decoded: "quote-marker-start",
+    tags: ["ansi-c", "ansi-marker", "ansi-control-escape"],
+  },
+  {
+    name: "quote-marker-end",
+    source: String.raw`$'\x1f'`,
+    decoded: "quote-marker-end",
+    tags: ["ansi-c", "ansi-marker", "ansi-control-escape"],
+  },
 ];
 
 const conditionalOperators = [":-", "-", ":=", "=", ":+", "+", ":?", "?"];
@@ -296,6 +344,15 @@ const ansiDecodedValues = {
   backslash: "\\",
   newline: "\n",
   digit: "1",
+  "brace-tail": "}tail",
+  "double-quote-pair-variable": '"$v"',
+  "braced-variable": "${u}",
+  "command-substitution": "$(printf H)",
+  "backtick-command": "`printf H`",
+  // Source setup cannot contain a NUL byte; the decoded ANSI-C string is empty.
+  nul: "",
+  "quote-marker-start": "\u001e",
+  "quote-marker-end": "\u001f",
 };
 
 function combineTags(...parts) {
