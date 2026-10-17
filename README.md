@@ -9,9 +9,11 @@ The shell is a WASM program, not a browser runtime. A host supplies process,
 filesystem, pipe, and page lifecycle services through the separate
 [`waffle`](https://github.com/ShaulLavo/waffle) package. Applications pass one
 shared runtime instance per page, for example `createShell({ runtime })`.
-`waffle` will be a peer dependency when the runtime switch lands; it is not a
-dependency of this extraction yet. A later standalone entry will wire waffle,
-the shell, and a terminal for applications that do not provide their own host.
+`waffle` is an optional peer dependency pinned to a reviewed commit; it is not
+installed by this package because the extracted package has no JavaScript entry
+that imports it yet. A later standalone entry will wire waffle, the shell, and a
+terminal for applications that do not provide their own host, and will make the
+peer required when it imports waffle.
 
 ## Build and test
 
