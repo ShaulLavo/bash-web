@@ -66,11 +66,24 @@ jobs:
       BASH_COMPAT_JOBS: 4
       BASH_COMPAT_SKIP_BUILD: "1"
       BASH_COMPAT_RECORD: "0"
-      BASH_COMPAT_BASE_REF: ${{ github.event.pull_request.base.sha || github.sha }}
+      BASH_COMPAT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Select compatibility baseline
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_REF" == "refs/heads/main" ]]; then
+            baseline="$BASH_COMPAT_BASE_REF"
+          else
+            baseline="$(git merge-base origin/main "$GITHUB_SHA")"
+          fi
+          if [[ -z "$baseline" || "$baseline" == "0000000000000000000000000000000000000000" ]] || ! git cat-file -e "$baseline^{commit}"; then
+            echo "Could not resolve compatibility baseline: $baseline" >&2
+            exit 1
+          fi
+          echo "BASH_COMPAT_BASE_REF=$baseline" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with:
           node-version: 26.7.0

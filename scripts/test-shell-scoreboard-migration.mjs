@@ -182,7 +182,7 @@ async function fixture(
   const owner = fixtureOwner(); // Teardown and the pre-existing child inventory precede setup.
   const saved = { ...process.env };
   try {
-    const scratchRoot = process.env.RUNNER_TEMP ?? "/work/tmp/brush-web-climb-subst";
+    const scratchRoot = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
     mkdirSync(scratchRoot, { recursive: true });
     const scratch = mkdtempSync(resolve(scratchRoot, "audit-migration-test-"));
     owner.scratch = scratch;

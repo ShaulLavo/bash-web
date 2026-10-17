@@ -1,7 +1,18 @@
 {
   "name": "bash-web",
-  "version": "0.0.34",
+  "version": "0.0.35",
+  "private": true,
   "description": "WASM-first bash-compatible shell",
+  "files": [
+    "dist",
+    "shell",
+    "scripts",
+    "docs",
+    "plans",
+    "sources.lock.json",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
   "scripts": {
     "format:check": "oxfmt --check scripts shell package.json '!scripts/fixtures/**/*.json'",

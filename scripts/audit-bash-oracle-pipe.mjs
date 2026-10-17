@@ -18,10 +18,10 @@ const oraclePath = resolve(
   process.env.BASH_COMPAT_ORACLE ?? "docs/evidence/own-shell-oracle.json",
 );
 const destination = resolve(
-  process.env.BASH_ORACLE_AUDIT_OUT ?? "/work/tmp/brush-web-climb-subst/oracle-pipe-audit.json",
+  process.env.BASH_ORACLE_AUDIT_OUT ?? "/work/tmp/bash-web-climb-subst/oracle-pipe-audit.json",
 );
 const scratchRoot =
-  process.env.BASH_COMPAT_SCRATCH ?? process.env.RUNNER_TEMP ?? "/work/tmp/brush-web-climb-subst";
+  process.env.BASH_COMPAT_SCRATCH ?? process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
 const shell = process.env.BASH_COMPAT_BASH ?? "/usr/bin/bash";
 const jobs = Number(process.env.BASH_COMPAT_JOBS ?? 4);
 assert.ok(Number.isInteger(jobs) && jobs >= 1 && jobs <= 32, "jobs must be 1..32");

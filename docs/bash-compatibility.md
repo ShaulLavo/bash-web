@@ -267,8 +267,8 @@ release `wasm32-wasip1` CLI. Each case gets a fresh memory filesystem with no ho
 preopens and only the two fixture process programs. There is a 10-second timeout
 and a 4 MiB combined output ceiling per case. A crash or timeout fails that case;
 it never silently becomes a skip. The CLI drains both output pipes between
-executor turns; it does not collect program output until exit. Browser transport, shared filesystem behavior and cold-start measurement
-remain host/product concerns. This package verifies the shell program and its
+executor turns; it does not collect program output until exit. Browser transport, shared filesystem behavior and cold-start measurement remain
+host/product concerns. This package verifies the shell program and its
 runtime boundary; it does not replace the browser host.
 
 ```sh
@@ -276,7 +276,7 @@ runtime boundary; it does not replace the browser host.
 npm run compat:shell
 
 # Keep exact per-case results, counts, gained/lost IDs and newly failing cases.
-BASH_COMPAT_OUT=/work/tmp/brush-web-current.json npm run compat:shell
+BASH_COMPAT_OUT=/work/tmp/bash-web-current.json npm run compat:shell
 
 # Also compare with the baseline on the target branch, as pull-request CI does.
 BASH_COMPAT_BASE_REF="$(git rev-parse HEAD)" npm run compat:shell
@@ -319,7 +319,7 @@ part of compatibility CI:
 ```sh
 # Requires bubblewrap, Python 3, GNU bash 5.3.15 and pinned corpus sources.
 # BASH_COMPAT_BRUSH_DIR and BASH_COMPAT_BASHKIT_DIR may select existing caches.
-BASH_COMPAT_MODE=capture BASH_COMPAT_BASH=/usr/bin/bash npm run compat
+BASH_COMPAT_MODE=capture BASH_COMPAT_BASH=/usr/bin/bash BASH_COMPAT_ENGINES=own-shell node scripts/bash-compat.mjs
 
 # After reviewing the oracle and pinning its SHA-256 in sources.lock.json:
 BASH_COMPAT_RECORD=1 BASH_COMPAT_OUT=docs/evidence/own-shell-baseline.json npm run compat:shell
@@ -327,13 +327,13 @@ BASH_COMPAT_RECORD=1 BASH_COMPAT_OUT=docs/evidence/own-shell-baseline.json npm r
 
 Run builds, native/WASI tests and corpus captures through this host's heavy queue.
 `BASH_COMPAT_SCRATCH` selects the scratch parent, defaulting to `/work/tmp` locally
-and `RUNNER_TEMP` in Actions. Each run owns a `brush-web-compat-*` directory and
+and `RUNNER_TEMP` in Actions. Each run owns a `bash-web-compat-*` directory and
 removes it, workers and child groups on completion or interruption. Keep requested
 result files outside that scratch directory and remove disposable result files
 after review. Frozen replay neither prepares corpora nor invokes GNU bash, probes
 external commands, runs mapfile sweeps or downloads other engines. Live ad hoc
-comparisons still use `BASH_COMPAT_ENGINES` and `BASH_COMPAT_CORPORA`; unselected
-engines and Oils are not prepared.
+comparisons use the own-shell engine and can select corpus groups with
+`BASH_COMPAT_CORPORA`; corpus sources are not prepared when unselected.
 
 ### Differential arithmetic checks
 
@@ -485,6 +485,7 @@ npm run fuzz:shell-substitutions -- --shell /path/to/native/shell-engine --seed 
 npm run fuzz:shell-substitutions -- --shell /path/to/native/shell-engine --seed 42
 npm run fuzz:shell-substitutions:ci -- --shell /path/to/native/shell-engine
 ```
+
 ### Runtime integration utility and prefix slice
 
 The [CI replay at `7d1f730`](https://github.com/ShaulLavo/brush-web/actions/runs/39027801280)

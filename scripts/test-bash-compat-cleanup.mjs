@@ -7,7 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
 import { drainGroup, killGroup } from "./shell-process-group.mjs";
 
-const root = process.env.RUNNER_TEMP ?? "/work/tmp/brush-web-climb-subst";
+const root = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
 await mkdir(root, { recursive: true });
 
 async function waitFor(check, message) {
@@ -117,7 +117,7 @@ test("live capture cancellation holds owned groups until they stop", async (t) =
   );
   const marker = await waitFor(async () => {
     for (const name of await readdir(scratch)) {
-      if (!name.startsWith("brush-web-compat-")) continue;
+      if (!name.startsWith("bash-web-compat-")) continue;
       for (const childName of await readdir(resolve(scratch, name))) {
         if (!childName.startsWith("bash-")) continue;
         const candidate = resolve(scratch, name, childName, "tmp", "live");
@@ -196,7 +196,7 @@ async function workerLifetime(t, mode) {
     },
   );
   await owner.message("running");
-  const directory = (await readdir(scratch)).find((name) => name.startsWith("brush-web-compat-"));
+  const directory = (await readdir(scratch)).find((name) => name.startsWith("bash-web-compat-"));
   assert.ok(directory);
   child.kill("SIGTERM");
   await owner.message("terminate");
