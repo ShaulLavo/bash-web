@@ -4016,6 +4016,8 @@ mod arithmetic;
 mod braces;
 #[path = "words/command.rs"]
 mod command;
+#[path = "words/control.rs"]
+mod control;
 #[path = "words/indirect.rs"]
 mod indirect;
 

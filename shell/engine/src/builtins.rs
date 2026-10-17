@@ -84,6 +84,8 @@ pub(crate) fn is_builtin(name: &str) -> bool {
             | "wait"
             | "kill"
             | "unset"
+            | "break"
+            | "continue"
     )
 }
 fn valid_name(name: &str) -> bool {
@@ -143,6 +145,65 @@ pub(crate) async fn run(
                     Flow::Exit
                 } else {
                     Flow::Return
+                },
+            });
+        }
+        "break" | "continue" => {
+            if args.len() > 1 {
+                if context.loop_depth() == 0 {
+                    let diagnostic = format!(
+                        "/usr/bin/bash: {name}: only meaningful in a `for', `while', or `until' loop\n"
+                    );
+                    diagnose(&fds, &diagnostic, &context).await?;
+                    return Ok(Outcome::status(0));
+                }
+                let diagnostic = format!("/usr/bin/bash: {name}: too many arguments\n");
+                diagnose(&fds, &diagnostic, &context).await?;
+                return Ok(Outcome {
+                    code: 1,
+                    flow: Flow::Exit,
+                });
+            }
+            let count = match args.first() {
+                None => 1,
+                Some(value) => match value.parse::<usize>() {
+                    Ok(0) => {
+                        let diagnostic =
+                            format!("/usr/bin/bash: {name}: {value}: loop count out of range\n");
+                        diagnose(&fds, &diagnostic, &context).await?;
+                        if context.loop_depth() == 0 {
+                            return Ok(Outcome::status(0));
+                        }
+                        return Ok(Outcome {
+                            code: 1,
+                            flow: Flow::Break(1),
+                        });
+                    }
+                    Ok(count) => count,
+                    Err(_) => {
+                        let diagnostic =
+                            format!("/usr/bin/bash: {name}: {value}: numeric argument required\n");
+                        diagnose(&fds, &diagnostic, &context).await?;
+                        return Ok(Outcome {
+                            code: 2,
+                            flow: Flow::Exit,
+                        });
+                    }
+                },
+            };
+            if context.loop_depth() == 0 {
+                let diagnostic = format!(
+                    "/usr/bin/bash: {name}: only meaningful in a `for', `while', or `until' loop\n"
+                );
+                diagnose(&fds, &diagnostic, &context).await?;
+                return Ok(Outcome::status(0));
+            }
+            return Ok(Outcome {
+                code: 0,
+                flow: if name == "break" {
+                    Flow::Break(count)
+                } else {
+                    Flow::Continue(count)
                 },
             });
         }

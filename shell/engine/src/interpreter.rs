@@ -51,6 +51,8 @@ pub(crate) enum Flow {
     Normal,
     Exit,
     Return,
+    Break(usize),
+    Continue(usize),
     DiscardReadUnit,
 }
 #[derive(Clone, Copy, Debug)]
@@ -128,6 +130,7 @@ pub(crate) struct Context {
     scope: u64,
     parameter_error_status: i32,
     compound_child: bool,
+    loop_depth: usize,
 }
 impl Context {
     pub(crate) fn fs(&self) -> &dyn FileSystem {
@@ -139,8 +142,24 @@ impl Context {
     fn isolated(&self) -> Self {
         Self {
             scope: self.core.allocate_id(),
+            loop_depth: 0,
             ..self.clone()
         }
+    }
+    fn loop_body(&self) -> Self {
+        Self {
+            loop_depth: self.loop_depth.saturating_add(1),
+            ..self.clone()
+        }
+    }
+    fn function_body(&self) -> Self {
+        Self {
+            loop_depth: 0,
+            ..self.clone()
+        }
+    }
+    pub(crate) fn loop_depth(&self) -> usize {
+        self.loop_depth
     }
     fn child_error_status(&self, command: &Command) -> i32 {
         if matches!(
@@ -288,6 +307,7 @@ impl Session {
             scope: 0,
             parameter_error_status: 127,
             compound_child: false,
+            loop_depth: 0,
         };
         let state = self.state.clone();
         let join = self.core.executor.spawn(async move {
@@ -620,11 +640,17 @@ fn execute(
                         // Only `((...))` expands words itself, after its
                         // redirections; other bodies must not retain the
                         // caller's descriptors while they run.
-                        work.substitutions = matches!(compound, CompoundCommand::Arithmetic(_))
-                            .then(|| Substitutions {
-                                context: context.compound_body(),
-                                fds: fds.clone(),
-                            });
+                        work.substitutions = matches!(
+                            compound,
+                            CompoundCommand::Arithmetic(_)
+                                | CompoundCommand::ArithmeticFor(_)
+                                | CompoundCommand::For(_)
+                                | CompoundCommand::Case(_)
+                        )
+                        .then(|| Substitutions {
+                            context: context.compound_body(),
+                            fds: fds.clone(),
+                        });
                         execute_compound_body(
                             compound,
                             state.clone(),
@@ -668,6 +694,33 @@ async fn execute_compound_body(
     work: &mut expand::Work,
 ) -> Outcome {
     match compound {
+        CompoundCommand::If(if_) => {
+            let mut branches = std::iter::once((&if_.condition, &if_.then_branch)).chain(
+                if_.elif_branches
+                    .iter()
+                    .map(|(condition, body)| (condition, body)),
+            );
+            while let Some((condition, body)) = branches.next() {
+                let result = sequence(
+                    condition.clone(),
+                    state.clone(),
+                    fds.clone(),
+                    context.clone(),
+                )
+                .await;
+                if result.flow != Flow::Normal {
+                    return result;
+                }
+                if result.code == 0 {
+                    return sequence(body.clone(), state, fds, context).await;
+                }
+            }
+            if let Some(body) = if_.else_branch {
+                sequence(body, state, fds, context).await
+            } else {
+                Outcome::status(0)
+            }
+        }
         CompoundCommand::Arithmetic(source) => {
             arithmetic_command(&source, &state, &fds, &context, work).await
         }
@@ -675,38 +728,389 @@ async fn execute_compound_body(
             sequence(commands, state.clone(), fds, context.clone()).await
         }
         CompoundCommand::While(loop_) => {
-            let mut result = Outcome::status(0);
-            loop {
-                let condition = sequence(
-                    loop_.condition.clone(),
-                    state.clone(),
-                    fds.clone(),
-                    context.clone(),
-                )
-                .await;
-                if context.cancel.is_cancelled() {
-                    break Outcome::status(130);
-                }
-                if condition.flow != Flow::Normal {
-                    break condition;
-                }
-                if condition.code != 0 {
-                    break result;
-                }
-                result = sequence(
-                    loop_.body.clone(),
-                    state.clone(),
-                    fds.clone(),
-                    context.clone(),
-                )
-                .await;
-                if result.flow != Flow::Normal {
-                    break result;
-                }
-            }
+            run_while_loop(loop_.condition, loop_.body, false, state, fds, context).await
         }
+        CompoundCommand::Until(loop_) => {
+            run_while_loop(loop_.condition, loop_.body, true, state, fds, context).await
+        }
+        CompoundCommand::For(loop_) => run_for_loop(loop_, state, fds, context, work).await,
+        CompoundCommand::ArithmeticFor(loop_) => {
+            run_arithmetic_for_loop(loop_, state, fds, context, work).await
+        }
+        CompoundCommand::Case(case_) => run_case(case_, state, fds, context, work).await,
         _ => Outcome::status(2),
     }
+}
+
+enum LoopStep {
+    Normal(Outcome),
+    Continue,
+    Break(Outcome),
+    Propagate(Outcome),
+}
+
+fn loop_step(outcome: Outcome, active_depth: usize) -> LoopStep {
+    match outcome.flow {
+        Flow::Normal => LoopStep::Normal(outcome),
+        Flow::Continue(count) => {
+            if count <= 1 || active_depth <= 1 {
+                LoopStep::Continue
+            } else {
+                LoopStep::Propagate(Outcome {
+                    code: outcome.code,
+                    flow: Flow::Continue(count - 1),
+                })
+            }
+        }
+        Flow::Break(count) => {
+            if count <= 1 || active_depth <= 1 {
+                LoopStep::Break(Outcome::status(outcome.code))
+            } else {
+                LoopStep::Propagate(Outcome {
+                    code: outcome.code,
+                    flow: Flow::Break(count - 1),
+                })
+            }
+        }
+        Flow::Exit | Flow::Return | Flow::DiscardReadUnit => LoopStep::Propagate(outcome),
+    }
+}
+
+async fn loop_checkpoint(budget: &mut Budget, context: &Context) -> Result<(), Outcome> {
+    budget
+        .checkpoint(&context.cancel)
+        .await
+        .map_err(|_| Outcome::status(130))
+}
+
+async fn run_while_loop(
+    condition: Vec<Command>,
+    body: Vec<Command>,
+    until: bool,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> Outcome {
+    let loop_context = context.loop_body();
+    let mut budget = Budget::default();
+    let mut result = Outcome::status(0);
+    loop {
+        if let Err(outcome) = loop_checkpoint(&mut budget, &loop_context).await {
+            return outcome;
+        }
+        let condition_result = sequence(
+            condition.clone(),
+            state.clone(),
+            fds.clone(),
+            loop_context.clone(),
+        )
+        .await;
+        match loop_step(condition_result, loop_context.loop_depth) {
+            LoopStep::Normal(condition_result) => {
+                let run_body = if until {
+                    condition_result.code != 0
+                } else {
+                    condition_result.code == 0
+                };
+                if !run_body {
+                    return result;
+                }
+            }
+            LoopStep::Continue => continue,
+            LoopStep::Break(outcome) => return outcome,
+            LoopStep::Propagate(outcome) => return outcome,
+        }
+        if let Err(outcome) = loop_checkpoint(&mut budget, &loop_context).await {
+            return outcome;
+        }
+        let body_result = sequence(
+            body.clone(),
+            state.clone(),
+            fds.clone(),
+            loop_context.clone(),
+        )
+        .await;
+        match loop_step(body_result, loop_context.loop_depth) {
+            LoopStep::Normal(body_result) => result = body_result,
+            LoopStep::Continue => continue,
+            LoopStep::Break(outcome) => return outcome,
+            LoopStep::Propagate(outcome) => return outcome,
+        }
+    }
+}
+
+async fn run_for_loop(
+    loop_: ForCommand,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+    work: &mut expand::Work,
+) -> Outcome {
+    let mut values = Vec::new();
+    let words = loop_.words.unwrap_or_else(|| {
+        vec![Word {
+            parts: vec![WordPart::Variable("@".into())],
+            quoted: true,
+            has_unquoted_glob: false,
+            part_quoted: Vec::new(),
+            raw: Some("\"$@\"".into()),
+        }]
+    });
+    for word in words {
+        let remaining = context.limits().arguments.saturating_sub(values.len());
+        if remaining == 0 {
+            return Outcome::status(2);
+        }
+        let fields = match expand::fields(
+            &word,
+            &state,
+            &context.cancel,
+            context.limits().expansion_bytes,
+            remaining,
+            context.limits().expansion_bytes,
+            work,
+        )
+        .await
+        {
+            Ok(fields) => fields,
+            Err(error) => return expansion_failure(error.into(), &fds, &context).await,
+        };
+        values.extend(fields);
+    }
+    run_for_values(
+        loop_.variable,
+        values,
+        loop_.body,
+        loop_.span.start.line,
+        state,
+        fds,
+        context,
+    )
+    .await
+}
+
+async fn run_for_values(
+    variable: String,
+    values: Vec<String>,
+    body: Vec<Command>,
+    line: usize,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> Outcome {
+    let loop_context = context.loop_body();
+    let mut budget = Budget::default();
+    let mut result = Outcome::status(0);
+    for value in values {
+        if let Err(outcome) = loop_checkpoint(&mut budget, &loop_context).await {
+            return outcome;
+        }
+        if state
+            .borrow_mut()
+            .assign_parameter(variable.clone(), value.clone())
+            .is_err()
+        {
+            let diagnostic = format!("/usr/bin/bash: line {line}: {variable}: readonly variable\n");
+            if let Some(stderr) = fds.borrow().get(2) {
+                let _ = stderr
+                    .write_all(diagnostic.as_bytes(), &context.cancel)
+                    .await;
+            }
+            return Outcome::status(1);
+        }
+        if let Err(outcome) = loop_checkpoint(&mut budget, &loop_context).await {
+            return outcome;
+        }
+        let body_result = sequence(
+            body.clone(),
+            state.clone(),
+            fds.clone(),
+            loop_context.clone(),
+        )
+        .await;
+        match loop_step(body_result, loop_context.loop_depth) {
+            LoopStep::Normal(body_result) => result = body_result,
+            LoopStep::Continue => continue,
+            LoopStep::Break(outcome) => return outcome,
+            LoopStep::Propagate(outcome) => return outcome,
+        }
+    }
+    result
+}
+
+async fn arithmetic_clause(
+    source: &str,
+    state: &SharedState,
+    fds: &Descriptors,
+    context: &Context,
+    work: &mut expand::Work,
+) -> Result<i64, Outcome> {
+    if source.trim().is_empty() {
+        return Ok(0);
+    }
+    match crate::arithmetic::evaluate(
+        source,
+        state,
+        &context.cancel,
+        context.limits().expansion_bytes,
+        work,
+    )
+    .await
+    {
+        Ok(value) => Ok(value),
+        Err(error) => {
+            let ordinary = matches!(
+                error,
+                expand::Error::Arithmetic {
+                    expansion: false,
+                    ..
+                } | expand::Error::Readonly {
+                    expansion: false,
+                    ..
+                }
+            );
+            let mut outcome = expansion_failure(error.into(), fds, context).await;
+            if ordinary {
+                outcome.flow = Flow::Normal;
+            }
+            Err(outcome)
+        }
+    }
+}
+
+async fn run_arithmetic_for_loop(
+    loop_: ArithmeticForCommand,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+    work: &mut expand::Work,
+) -> Outcome {
+    if let Err(outcome) = arithmetic_clause(&loop_.init, &state, &fds, &context, work).await {
+        return outcome;
+    }
+    let loop_context = context.loop_body();
+    let mut budget = Budget::default();
+    let mut result = Outcome::status(0);
+    loop {
+        if let Err(outcome) = loop_checkpoint(&mut budget, &loop_context).await {
+            return outcome;
+        }
+        if !loop_.condition.trim().is_empty() {
+            let value = match arithmetic_clause(&loop_.condition, &state, &fds, &loop_context, work)
+                .await
+            {
+                Ok(value) => value,
+                Err(outcome) => return outcome,
+            };
+            if value == 0 {
+                return result;
+            }
+        }
+        if let Err(outcome) = loop_checkpoint(&mut budget, &loop_context).await {
+            return outcome;
+        }
+        let body_result = sequence(
+            loop_.body.clone(),
+            state.clone(),
+            fds.clone(),
+            loop_context.clone(),
+        )
+        .await;
+        let continue_loop = match loop_step(body_result, loop_context.loop_depth) {
+            LoopStep::Normal(body_result) => {
+                result = body_result;
+                true
+            }
+            LoopStep::Continue => true,
+            LoopStep::Break(outcome) => return outcome,
+            LoopStep::Propagate(outcome) => return outcome,
+        };
+        if continue_loop
+            && !loop_.step.trim().is_empty()
+            && let Err(outcome) =
+                arithmetic_clause(&loop_.step, &state, &fds, &loop_context, work).await
+        {
+            return outcome;
+        }
+    }
+}
+
+async fn run_case(
+    case_: CaseCommand,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+    work: &mut expand::Work,
+) -> Outcome {
+    let word = match expand::word(
+        &case_.word,
+        &state,
+        &context.cancel,
+        context.limits().expansion_bytes,
+        context.limits().expansion_bytes,
+        work,
+    )
+    .await
+    {
+        Ok(word) => word,
+        Err(error) => return expansion_failure(error.into(), &fds, &context).await,
+    };
+    let mut matched = false;
+    let mut result = Outcome::status(0);
+    let mut budget = Budget::default();
+    for item in case_.cases {
+        if let Err(outcome) = loop_checkpoint(&mut budget, &context).await {
+            return outcome;
+        }
+        if !matched {
+            let mut item_match = false;
+            for pattern in &item.patterns {
+                if let Err(outcome) = loop_checkpoint(&mut budget, &context).await {
+                    return outcome;
+                }
+                match expand::pattern(
+                    pattern,
+                    &state,
+                    &context.cancel,
+                    context.limits().expansion_bytes,
+                    work,
+                )
+                .await
+                {
+                    Ok(mut pattern) => {
+                        match pattern.matches_full(&word, work, &context.cancel).await {
+                            Ok(true) => {
+                                item_match = true;
+                                break;
+                            }
+                            Ok(false) => {}
+                            Err(error) => {
+                                return expansion_failure(error.into(), &fds, &context).await;
+                            }
+                        }
+                    }
+                    Err(error) => return expansion_failure(error.into(), &fds, &context).await,
+                }
+            }
+            if !item_match {
+                continue;
+            }
+            matched = true;
+        }
+        if !matched {
+            continue;
+        }
+        result = sequence(item.commands, state.clone(), fds.clone(), context.clone()).await;
+        if result.flow != Flow::Normal {
+            return result;
+        }
+        match item.terminator {
+            CaseTerminator::Break => return result,
+            CaseTerminator::FallThrough => {}
+            CaseTerminator::Continue => matched = false,
+        }
+    }
+    result
 }
 
 async fn arithmetic_command(
@@ -934,6 +1338,7 @@ fn background(
         scope: context.core.allocate_id(),
         parameter_error_status: context.child_error_status(&command),
         compound_child: matches!(command, Command::Compound(..)),
+        loop_depth: 0,
     };
     let child = state.borrow().clone().shared();
     let fds = Rc::new(RefCell::new(fds.borrow().clone()));
@@ -1351,7 +1756,7 @@ async fn dispatch_simple_command(
             return Err(2);
         }
         let _frame = FunctionFrame::enter(state.clone(), args, context.limits().function_depth)?;
-        let mut outcome = execute(body, state, fds, context).await;
+        let mut outcome = execute(body, state, fds, context.function_body()).await;
         if outcome.flow == Flow::Return {
             outcome.flow = Flow::Normal;
         }

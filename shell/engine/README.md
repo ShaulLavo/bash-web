@@ -171,6 +171,11 @@ storage/work accounting and cancellation checkpoints. Arrays, subscript arithmet
 namerefs and command substitution remain outside this scalar arithmetic subset.
 Nested scalar operands have an explicit depth limit of 16, exercised through the
 deepest accepted level in both native and WASI tests.
+Control flow supports `if`/`elif`/`else`, `while`, `until`, word-list and
+positional `for`, C-style arithmetic `for`, and `case` with quoted basic
+patterns plus `;&`/`;;&` fallthrough. Loop bodies honor bounded cancellation
+checkpoints, `break`/`continue` counts and readonly loop-variable errors;
+`select` remains unsupported with status 2.
 Other parameter operators, pathname globbing, command substitution, arrays, traps,
 aliases, `lastpipe`, directory validation and full utility option coverage are not
 implemented. Whole-script parsing retains the original separator policy. Captured
