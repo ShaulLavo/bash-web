@@ -503,21 +503,12 @@ impl ProcessHost for InProcessHost {
     fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
         Self::signal_valid(signal)?;
         let children = self.0.children.borrow();
-        if !children.contains_key(&pid) {
-            return Err(ProcessError::UnknownProcess(pid));
-        }
-        // Walk ancestry, not only immediate children. Groups are independent, but
-        // every child must inherit its parent's group at spawn.
-        for (candidate, child) in children.iter() {
-            let mut ancestor = Some(*candidate);
-            while let Some(current) = ancestor {
-                if current == pid {
-                    Self::cancel(child, signal);
-                    break;
-                }
-                ancestor = children.get(&current).and_then(|child| child.parent);
-            }
-        }
+        let child = children
+            .get(&pid)
+            .ok_or(ProcessError::UnknownProcess(pid))?;
+        // Match runtime_proc.kill: a reader-local abort signals only this PID.
+        // Inherited descendants remain owned by the enclosing job's cleanup.
+        Self::cancel(child, signal);
         Ok(())
     }
     fn kill_group(&self, group: GroupId, signal: i32) -> Result<(), ProcessError> {
@@ -1017,7 +1008,7 @@ mod tests {
         assert_eq!(host.wait(pid).now_or_never(), Some(Ok(23)));
     }
     #[test]
-    fn group_cancellation_confirms_subtree_without_background() {
+    fn pid_kill_leaves_descendants_for_group_cleanup_without_background() {
         let ex = Executor::new();
         let host = InProcessHost::new(ex.clone());
         host.register("/home/guest/wait", |_, _| {
@@ -1036,6 +1027,11 @@ mod tests {
         let grandchild_wait = host.wait(grandchild);
         ex.drive(10);
         host.kill(root, 2).unwrap();
+        ex.drive(10);
+        assert_eq!(host.active_count(), 3);
+        assert!(host.wait(child).now_or_never().is_none());
+        assert!(host.wait(grandchild).now_or_never().is_none());
+        host.kill_group(1, 2).unwrap();
         ex.drive(10);
         assert_eq!(host.active_count(), 1);
         assert_eq!(host.wait_group(1).now_or_never(), Some(Ok(())));
@@ -1074,7 +1070,7 @@ mod tests {
         assert_eq!(read.read(&mut [0; 1]).now_or_never(), Some(Ok(0)));
     }
     #[test]
-    fn subtree_kill_survives_intermediate_reaping() {
+    fn pid_kill_leaves_orphan_after_intermediate_reaping_until_group_cleanup() {
         let ex = Executor::new();
         let host = InProcessHost::new(ex.clone());
         host.register("/home/guest/wait", |_, _| {
@@ -1103,6 +1099,10 @@ mod tests {
         ex.drive(10);
         assert_eq!(host.wait(middle).now_or_never(), Some(Ok(0)));
         host.kill(root, 2).unwrap();
+        ex.drive(10);
+        assert!(host.wait(leaf).now_or_never().is_none());
+        assert_eq!(host.active_count(), 1);
+        host.kill_group(1, 2).unwrap();
         ex.drive(10);
         assert_eq!(host.wait_group(1).now_or_never(), Some(Ok(())));
         assert_eq!(root_wait.now_or_never(), Some(Ok(130)));
