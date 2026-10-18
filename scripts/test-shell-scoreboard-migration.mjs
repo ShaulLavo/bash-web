@@ -14,8 +14,15 @@ import { dirname, resolve } from "node:path";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { baselinePath, oraclePath, targetBranchBaseline } from "./shell-scoreboard-base.mjs";
+import {
+  authorizedInstrumentTransition,
+  baselinePath,
+  instrumentReceiptPath,
+  oraclePath,
+  targetBranchBaseline,
+} from "./shell-scoreboard-base.mjs";
 import { bytesDigest, compareScores, sealOracle, validateScore } from "./shell-scoreboard.mjs";
+import { killGroup } from "./shell-process-group.mjs";
 
 // Original fake compiler/scorer: no Cargo, WASI execution, network, or installed dependencies.
 const cargoFixture = `#!${process.execPath}
@@ -35,10 +42,14 @@ const integer = (value) => {
 // Genuine minimal Wasm keeps verification real while the compiler is a stand-in.
 const memory = [1, 1, 1].concat(integer(JSON.parse(source).invalidArtifact ? 65536 : 4096));
 const payload = Buffer.concat([Buffer.from([7]), Buffer.from('fixture'), source]);
-writeFileSync(resolve(target, 'wasm32-wasip1/release/shell-engine.wasm'), Buffer.concat([
+const names = process.argv.includes('shell-runtime')
+  ? ['shell-runtime', 'argv-py', 'printenv-py']
+  : ['shell-engine'];
+const bytes = Buffer.concat([
   Buffer.from([0, 97, 115, 109, 1, 0, 0, 0, 5].concat(integer(memory.length), memory)),
   Buffer.from([0].concat(integer(payload.length))), payload,
-]));
+]);
+for (const name of names) writeFileSync(resolve(target, 'wasm32-wasip1/release', name + '.wasm'), bytes);
 if (JSON.parse(source).buildFail) throw Error('fake build failure');
 if (JSON.parse(source).hang) {
   const marker = resolve(target, '../started');
@@ -53,9 +64,21 @@ if (JSON.parse(source).hang) {
   setInterval(() => {}, 1000);
 }
 `;
+const npmFixture = `#!${process.execPath}
+import assert from 'node:assert/strict';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+assert.equal(process.argv[2], 'ci');
+assert.equal(process.argv[3], '--ignore-scripts');
+const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+const pinned = lock.packages[''].dependencies.waffle;
+mkdirSync(resolve('node_modules/waffle'), { recursive: true });
+writeFileSync(resolve('node_modules/waffle/content.txt'), pinned);
+assert.equal(process.env.NPM_CONFIG_CACHE, process.env.RUNNER_TEMP + '/shared-npm-cache');
+`;
 const scorerFixture = `
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 assert.equal(process.env.BASH_COMPAT_RECORD, '1');
 assert.equal(process.env.BASH_COMPAT_BASE_REF, undefined, 'recursive base validation');
 assert.equal(process.env.BASH_COMPAT_SKIP_BUILD, '1');
@@ -63,6 +86,7 @@ const oracle = JSON.parse(readFileSync('${oraclePath}'));
 assert.equal(process.env.BASH_COMPAT_TIMEOUT_MS, String(oracle.environment.timeoutMs));
 const module = new WebAssembly.Module(readFileSync(process.env.BASH_COMPAT_SHELL_WASM));
 const actual = JSON.parse(Buffer.from(WebAssembly.Module.customSections(module, 'fixture')[0]));
+if (existsSync('harness-observed.txt')) assert.equal(readFileSync('harness-observed.txt', 'utf8'), 'target-pinned');
 if (actual.invalidArtifact) writeFileSync(process.env.WASI_SDK_PATH + '/../scorer-ran', 'unexpected scoring');
 if (actual.scoreFail && oracle.oracle.capture === 'corrected') throw Error('fake scorer failure');
 writeFileSync(process.env.BASH_COMPAT_OUT, JSON.stringify({
@@ -201,6 +225,8 @@ async function fixture(
     invalidArtifact = false,
     scoreFail = false,
     entrypoint = false,
+    targetRunner = undefined,
+    tarMode = undefined,
   } = {},
 ) {
   const owner = fixtureOwner(); // Teardown and the pre-existing child inventory precede setup.
@@ -227,7 +253,9 @@ async function fixture(
     const old = makeOracle(
       entrypoint
         ? JSON.parse(readFileSync(new URL(`../${oraclePath}`, import.meta.url))).environment
-        : undefined,
+        : targetRunner
+          ? { nodeVersion: "v26.7.0", stdin: "empty", timeoutMs: 10000, runner: targetRunner }
+          : undefined,
     );
     const sourcePins = {
       oils: { revision: "fixture" },
@@ -236,6 +264,20 @@ async function fixture(
     };
     put(oraclePath, JSON.stringify(old));
     put(baselinePath, JSON.stringify(score(old, wrongBaseline ? ["fail", "pass"] : undefined)));
+    if (targetRunner === "waffle-node") {
+      put(
+        "package-lock.json",
+        JSON.stringify({
+          name: "fixture",
+          lockfileVersion: 3,
+          packages: { "": { dependencies: { waffle: "target-pinned" } } },
+        }),
+      );
+      put(
+        "scripts/build-node-harness.ts",
+        "import { readFileSync, writeFileSync } from 'node:fs';\nwriteFileSync('harness-observed.txt', readFileSync('node_modules/waffle/content.txt', 'utf8'));\n",
+      );
+    }
     put(
       "sources.lock.json",
       JSON.stringify({
@@ -264,6 +306,28 @@ async function fixture(
       "fixture",
     ]);
     const ref = git(["rev-parse", "HEAD"]);
+    if (targetRunner === "waffle-node") {
+      put(
+        "package-lock.json",
+        JSON.stringify({
+          name: "fixture",
+          lockfileVersion: 3,
+          packages: { "": { dependencies: { waffle: "candidate-pinned" } } },
+        }),
+      );
+      put("node_modules/waffle/content.txt", "candidate-pinned");
+    }
+    if (tarMode) {
+      writeFileSync(
+        resolve(bin, "tar"),
+        `#!${process.execPath}\nimport { writeFileSync } from 'node:fs';\nconst mode = ${JSON.stringify(tarMode)};\nif (mode === 'fail') throw Error('fake archive extraction failure');\nwriteFileSync('setup-started', String(process.pid));\nprocess.on('SIGTERM', () => {});\nsetInterval(() => {}, 1000);\n`,
+      );
+      chmodSync(resolve(bin, "tar"), 0o755);
+    }
+    if (targetRunner === "waffle-node") {
+      writeFileSync(resolve(bin, "npm"), npmFixture);
+      chmodSync(resolve(bin, "npm"), 0o755);
+    }
     const candidate = structuredClone(old);
     candidate.oracle.capture = "corrected";
     candidate.cases[0].bash.stdout = "eg==";
@@ -304,6 +368,7 @@ printf fixture > "$1/lib/wasm32-wasip1/libc.a"
     chmodSync(resolve(bin, "cargo"), 0o755);
     process.env.PATH = `${bin}:${process.env.PATH}`;
     process.env.RUNNER_TEMP = runner;
+    process.env.NPM_CONFIG_CACHE = resolve(runner, "shared-npm-cache");
     process.env.CARGO_TARGET_DIR = resolve(repo, ".build/shell");
     process.env.RUSTC_WRAPPER = "candidate-wrapper-must-not-run";
     process.env.RUSTFLAGS = "candidate-flags-must-not-apply";
@@ -607,3 +672,116 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
     );
   });
 }
+
+test("archive setup failure removes scratch acquired before extraction", async () => {
+  await fixture(
+    async ({ repo, ref, next, runner }) => {
+      await assert.rejects(targetBranchBaseline(repo, ref, next), /tar failed/);
+      assert.deepEqual(readdirSync(runner), []);
+    },
+    { tarMode: "fail" },
+  );
+});
+
+function setupConsumer(runner) {
+  const directory = readdirSync(runner).find((name) => name.startsWith("audit-oracle-migration-"));
+  if (!directory) return;
+  const marker = resolve(runner, directory, "setup-started");
+  if (!existsSync(marker)) return;
+  const pid = Number(readFileSync(marker, "utf8"));
+  const start = processState(pid).start;
+  if (!start) return;
+  return { directory, pid, start };
+}
+
+async function cleanupSetupConsumer(consumer) {
+  if (!consumer || processState(consumer.pid).start !== consumer.start) return;
+  killGroup(consumer.pid, "SIGKILL");
+  await until(() => !processState(consumer.pid).active);
+}
+
+async function interruptSetup({ repo, ref, runner }, cancellation) {
+  const launcher = fileURLToPath(new URL("./shell-scoreboard-migration.mjs", import.meta.url));
+  const child = fork(launcher, [repo, ref], { stdio: ["ignore", "ignore", "ignore", "ipc"] });
+  const exited = new Promise((accept) => child.once("exit", accept));
+  const watchdog = setTimeout(() => child.kill("SIGKILL"), 8000).unref();
+  let consumer;
+  try {
+    await until(() => {
+      consumer = setupConsumer(runner);
+      return consumer !== undefined;
+    });
+    if (cancellation === "TERM") child.kill("SIGTERM");
+    else child.disconnect();
+    await delay(50);
+    assert.equal(child.exitCode, null, "launcher exited before extraction stopped");
+    assert.equal(existsSync(resolve(runner, consumer.directory)), true);
+    await exited;
+    assert.equal(processState(consumer.pid).active, false, "extractor outlived launcher");
+    assert.deepEqual(readdirSync(runner), []);
+  } finally {
+    child.kill("SIGTERM");
+    await exited;
+    clearTimeout(watchdog);
+    await cleanupSetupConsumer(consumer);
+  }
+}
+
+for (const cancellation of ["TERM", "parent disconnect"]) {
+  test(`${cancellation} during archive setup drains its consumer and removes scratch`, async () => {
+    await fixture((context) => interruptSetup(context, cancellation), { tarMode: "hang" });
+  });
+}
+
+test("waffle target migration installs target-pinned dependencies in target scratch", async () => {
+  await fixture(
+    async ({ repo, ref, next }) => {
+      const result = await targetBranchBaseline(repo, ref, next);
+      assert.deepEqual(
+        result.cases.map((item) => item.outcome),
+        ["fail", "pass"],
+      );
+      assert.equal(
+        readFileSync(resolve(repo, "node_modules/waffle/content.txt"), "utf8"),
+        "candidate-pinned",
+      );
+    },
+    { targetRunner: "waffle-node" },
+  );
+});
+
+test("instrument migration prepares a cold patched sysroot before its first cargo build", async () => {
+  await fixture(async ({ repo, runner, put, update }) => {
+    const root = resolve(import.meta.dirname, "..");
+    const common = execFileSync("git", ["rev-parse", "--git-common-dir"], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim();
+    put(".git/objects/info/alternates", `${resolve(root, common, "objects")}\n`);
+    const candidate = JSON.parse(readFileSync(resolve(root, oraclePath), "utf8"));
+    update(candidate);
+    put(instrumentReceiptPath, readFileSync(resolve(root, instrumentReceiptPath)));
+    const proof = resolve(repo, "cold-build-proof");
+    const compiler = resolve(runner, "../bin/cargo");
+    writeFileSync(
+      compiler,
+      `#!${process.execPath}
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+const sysroot = process.env.CFLAGS_wasm32_wasip1.split('--sysroot=')[1];
+assert.ok(existsSync(resolve(sysroot, 'lib/wasm32-wasip1/libc.a')), 'cold libc not prepared');
+assert.match(readFileSync(resolve(sysroot, '../recipe.sha256'), 'utf8'), /^[a-f0-9]{64}$/);
+writeFileSync(${JSON.stringify(proof)}, sysroot);
+process.exit(21);
+`,
+    );
+    assert.equal(existsSync(resolve(repo, ".build/wasi-libc")), false);
+    await assert.rejects(
+      targetBranchBaseline(repo, authorizedInstrumentTransition.target, candidate),
+      /cargo failed \(21\)/,
+    );
+    assert.ok(readFileSync(proof, "utf8").startsWith(resolve(repo, ".build/wasi-libc")));
+    assert.deepEqual(readdirSync(runner), []);
+  });
+});

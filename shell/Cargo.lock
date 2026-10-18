@@ -196,6 +196,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "shell-compat-fixtures"
+version = "0.0.1"
+dependencies = [
+ "futures",
+ "shell-engine",
+]
+
+[[package]]
 name = "shell-engine"
 version = "0.0.31"
 dependencies = [

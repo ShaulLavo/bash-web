@@ -63,6 +63,15 @@ npm run test:rust
 npm run test:shell:wasi
 ```
 
+The frozen compatibility replay (`npm run compat`) runs the production
+`shell-runtime` guest on Waffle's Node runtime, one fresh Runtime per case, with the
+oracle's `argv.py` and `printenv.py` helpers as separate guests from the test-only
+`shell/compat-fixtures` crate. The harness (`scripts/waffle-compat.ts`, its root and
+child worker entries and the Node `Worker` adapter), the fixture crate and the
+one-time instrument migration are original local code; no upstream source is
+copied. Each parallel runner needs about 1.2 GiB, so local replays under the heavy
+runner's build class use `BASH_COMPAT_JOBS=1`.
+
 Build and check the browser integration separately:
 
 ```sh
