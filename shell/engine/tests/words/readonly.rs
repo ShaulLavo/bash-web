@@ -54,7 +54,7 @@ fn arithmetic_readonly_errors_preserve_rhs_effects_and_skip_unselected_writes() 
             rig.shell
                 .state()
                 .borrow()
-                .variables
+                .bindings()
                 .get("saved")
                 .map(String::as_str),
             expected
@@ -157,6 +157,6 @@ fn rejected_writes_discard_the_read_unit_and_keep_readonly_state() {
             0
         );
         assert_eq!(*rig.calls.borrow(), [vec!["after=1", "unset"]]);
-        assert!(rig.shell.state().borrow().readonly.contains("x"));
+        assert!(rig.shell.state().borrow().readonly_bindings().contains("x"));
     }
 }

@@ -72,7 +72,7 @@ fn default_functions_really_execute_512_nested_calls_with_completed_evals() {
         assert_eq!(rig.output.bytes(), b"512:inner\n");
         for counter in ["n", "seen", "unwound"] {
             assert_eq!(
-                rig.shell.state().borrow().variables[counter],
+                rig.shell.state().borrow().bindings()[counter],
                 "512",
                 "{counter}"
             );
@@ -101,7 +101,7 @@ fn funcnest_accepts_bash_integer_spellings_and_recovers_after_unwind() {
             1,
             "{value}"
         );
-        assert_eq!(rig.shell.state().borrow().variables["n"], "2");
+        assert_eq!(rig.shell.state().borrow().bindings()["n"], "2");
         assert!(
             String::from_utf8(rig.errors.bytes())
                 .unwrap()
@@ -120,7 +120,7 @@ fn funcnest_accepts_bash_integer_spellings_and_recovers_after_unwind() {
             rig.run("n=0; f() { n=$((n+1)); if test $n -lt 4; then f; fi; }; f"),
             0
         );
-        assert_eq!(rig.shell.state().borrow().variables["n"], "4");
+        assert_eq!(rig.shell.state().borrow().bindings()["n"], "4");
     }
 }
 
@@ -190,7 +190,7 @@ fn cancelled_nested_prefix_local_and_positional_frames_leave_background_peer_ali
         assert_eq!(rig.run("peer() { local x=peer; set -- peer; park_peer; args peer \"$x\" \"$1\"; }; peer & peer_job=$!"), 0);
         let job = rig.shell.start("x=caller; set -- caller; n=0; f() { local x=$1; n=$((n+1)); case $n in 32) park_foreground;; *) x=prefix f nested;; esac; }; x=prefix f outer").unwrap();
         drive_active(&rig, 2);
-        assert_eq!(rig.shell.state().borrow().variables["n"], "32");
+        assert_eq!(rig.shell.state().borrow().bindings()["n"], "32");
         let observed = if drop_observer {
             drop(job);
             None
@@ -264,8 +264,8 @@ fn dropping_session_with_parked_nested_calls_unwinds_before_join_completion() {
         }
     }
     assert_eq!(job.now_or_never(), Some(130));
-    assert_eq!(state.borrow().variables["x"], "caller");
-    assert!(!state.borrow().variables.contains_key("y"));
+    assert_eq!(state.borrow().bindings()["x"], "caller");
+    assert!(!state.borrow().bindings().contains_key("y"));
     assert_eq!(ex.drive(64).pending, 0);
     assert_eq!(host.active_count(), 0);
     assert_eq!(host.retained_count(), 0);
@@ -278,7 +278,7 @@ fn live_memory_exhaustion_is_explicit_and_refunds_frames_for_recovery() {
         ..Limits::default()
     });
     assert_eq!(rig.run("x=caller; set -- caller; n=0; f() { local x=inner; n=$((n+1)); f child; }; f outer; args bad"), 2);
-    let depth: usize = rig.shell.state().borrow().variables["n"].parse().unwrap();
+    let depth: usize = rig.shell.state().borrow().bindings()["n"].parse().unwrap();
     assert!(
         depth > 1 && depth < 512,
         "actual memory-limited depth {depth}"
@@ -421,8 +421,8 @@ fn command_path_queries_use_executable_metadata_without_running_programs() {
         invocations.borrow()[0].1.get("x").map(String::as_str),
         Some("temporary")
     );
-    assert_eq!(session.state().borrow().variables["PATH"], "/custom");
-    assert!(!session.state().borrow().variables.contains_key("x"));
+    assert_eq!(session.state().borrow().bindings()["PATH"], "/custom");
+    assert!(!session.state().borrow().bindings().contains_key("x"));
     assert_eq!(host.retained_count(), 0);
     assert_eq!(ex.drive(64).pending, 0);
 }
@@ -491,7 +491,7 @@ fn function_prefix_funcnest_controls_entry_and_body_changes_control_later_calls(
             )),
             1
         );
-        assert_eq!(rig.shell.state().borrow().variables["n"], "1");
+        assert_eq!(rig.shell.state().borrow().bindings()["n"], "1");
         assert!(rig.calls.borrow().is_empty());
         assert_eq!(rig.run("printf recovered"), 0);
     }

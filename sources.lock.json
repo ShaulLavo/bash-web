@@ -1057,6 +1057,24 @@
     ],
     "verification": "Focused Bash 5.3.15 C.UTF-8 controls; runtime and corpus deltas must be established by the coordinator after integration. Fixed oracle, baselines, scores and versions unchanged."
   },
+  "shellBindings": {
+    "classification": "Original binding ownership and restoration adapters moved within the owned engine; no additional upstream implementation copied.",
+    "baseRevision": "163386141175458cf9d265e70e92d0c5074333dc",
+    "originalSources": [
+      "shell/engine/src/interpreter.rs: BuiltinPrefixFrame and function/status publication",
+      "shell/engine/src/state.rs: PrefixFrame, FunctionFrame, checked scalar/attribute operations and snapshot",
+      "shell/engine/src/main.rs and runtime_main.rs: distinct inherited-environment initialization"
+    ],
+    "localPaths": [
+      "shell/engine/src/state.rs",
+      "shell/engine/src/state/bindings_tests.rs",
+      "shell/engine/src/interpreter.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/main.rs",
+      "shell/engine/src/runtime_main.rs"
+    ],
+    "strategy": "Make binding, attribute, nameref, function, positional and local storage private to state, exposing immutable raw views and operation-specific assignment, declaration, environment initialization and execution-result publication. One state PrefixFrame owns expansion and builtin policies with shared privileged scalar restoration. Expansion retains state-owned saved values for durable RHS writes, checked target/readonly installation and conditional IFS metadata restoration. Builtin replay retains guard-owned saves, exact admission order and partial-failure rollback, no second readonly check or IFS refresh/restore, and owned dynamic-clock suspension. FunctionFrame keeps its distinct nested local/prefix/positional lifetime. Original lifecycle tests pin these differences. Existing adapted Bashkit semantics and licenses remain separately classified."
+  },
   "shellExecution": {
     "classification": "Original shared execution ownership and admission, extracted from locally maintained engine adapters; no additional upstream implementation copied.",
     "baseRevision": "2c6ad634dacbd109d0a45c978cb98dc39e0a3a9d",

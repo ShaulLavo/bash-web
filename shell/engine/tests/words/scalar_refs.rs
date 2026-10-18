@@ -68,8 +68,20 @@ fn readonly_aliases_guard_the_target_through_alias_and_direct_writes() {
         assert_eq!(rig.run("target=changed"), 1, "{declaration}");
         assert_eq!(rig.run(r#"args "$ref" "$target" "${!ref}""#), 0);
         assert_eq!(*rig.calls.borrow(), [vec!["locked", "locked", "target"]]);
-        assert!(rig.shell.state().borrow().readonly.contains("target"));
-        assert!(!rig.shell.state().borrow().readonly.contains("ref"));
+        assert!(
+            rig.shell
+                .state()
+                .borrow()
+                .readonly_bindings()
+                .contains("target")
+        );
+        assert!(
+            !rig.shell
+                .state()
+                .borrow()
+                .readonly_bindings()
+                .contains("ref")
+        );
         assert!(
             String::from_utf8(rig.errors.bytes())
                 .unwrap()
@@ -115,8 +127,20 @@ fn resolved_attributes_restore_with_the_target_local_frame() {
         ]
     );
     assert_eq!(*rig.calls.borrow(), [vec!["1", "local"], vec!["after"]]);
-    assert!(!rig.shell.state().borrow().readonly.contains("target"));
-    assert!(!rig.shell.state().borrow().exported.contains("target"));
+    assert!(
+        !rig.shell
+            .state()
+            .borrow()
+            .readonly_bindings()
+            .contains("target")
+    );
+    assert!(
+        !rig.shell
+            .state()
+            .borrow()
+            .exported_bindings()
+            .contains("target")
+    );
 }
 
 #[test]
@@ -136,8 +160,20 @@ fn cancelling_after_resolved_attributes_restores_the_local_target() {
     assert_eq!(rig.finish(job), 130);
     assert_eq!(rig.run(r#"ref=after; args "$ref" "$target""#), 0);
     assert_eq!(*rig.calls.borrow(), [vec!["after", "after"]]);
-    assert!(!rig.shell.state().borrow().readonly.contains("target"));
-    assert!(!rig.shell.state().borrow().exported.contains("target"));
+    assert!(
+        !rig.shell
+            .state()
+            .borrow()
+            .readonly_bindings()
+            .contains("target")
+    );
+    assert!(
+        !rig.shell
+            .state()
+            .borrow()
+            .exported_bindings()
+            .contains("target")
+    );
 }
 
 #[test]

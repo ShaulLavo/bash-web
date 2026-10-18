@@ -369,7 +369,7 @@ fn brace_scanning_range_emission_and_products_cooperate_with_cancellation() {
             rig.shell
                 .state()
                 .borrow()
-                .variables
+                .bindings()
                 .get("scope")
                 .map(String::as_str),
             Some("inside"),

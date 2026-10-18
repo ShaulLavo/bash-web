@@ -653,11 +653,11 @@ impl Expansion<'_> {
             let state = state.borrow();
             match name {
                 "0" | "?" | "#" | "@" | "*" | "PWD" | "PIPESTATUS" => false,
-                "!" => state.last_async.is_none(),
+                "!" => state.last_async().is_none(),
                 _ if operand::scalar_name(name) => !state.scalar_is_set(name),
                 _ if !name.is_empty() && name.bytes().all(|byte| byte.is_ascii_digit()) => name
                     .parse::<usize>()
-                    .map_or(true, |index| index > state.positional.len()),
+                    .map_or(true, |index| index > state.positional().len()),
                 // Other special parameters and general arrays are outside the
                 // scalar adapter; nounset does not add semantics for them.
                 _ => false,
@@ -1171,7 +1171,7 @@ impl Expansion<'_> {
                 name.parse::<usize>()
                     .ok()
                     .and_then(|n| n.checked_sub(1))
-                    .is_some_and(|n| n < s.positional.len())
+                    .is_some_and(|n| n < s.positional().len())
             };
             if !present {
                 drop(s);
@@ -1182,7 +1182,7 @@ impl Expansion<'_> {
             let value = substring_snapshot(&s, name, self.raw_remaining, self.work)?;
             let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
                 .iter()
-                .filter_map(|name| s.variables.get(*name))
+                .filter_map(|name| s.bindings().get(*name))
                 .find(|v| !v.is_empty());
             (value, locale.is_some_and(|v| utf8_locale(v)))
         };
@@ -1278,7 +1278,7 @@ impl Expansion<'_> {
             )?;
             let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
                 .iter()
-                .filter_map(|name| s.variables.get(*name))
+                .filter_map(|name| s.bindings().get(*name))
                 .find(|value| !value.is_empty());
             (value, locale.is_some_and(|value| utf8_locale(value)))
         };
@@ -1764,8 +1764,8 @@ impl Expansion<'_> {
         let (count, at) = {
             let s = state.borrow();
             match part {
-                WordPart::Variable(name) => (s.positional.len(), name == "@"),
-                WordPart::ArrayAccess { index, .. } => (s.pipestatus.len(), index == "@"),
+                WordPart::Variable(name) => (s.positional().len(), name == "@"),
+                WordPart::ArrayAccess { index, .. } => (s.pipeline_status().len(), index == "@"),
                 _ => return Err(2.into()),
             }
         };
@@ -1894,11 +1894,11 @@ fn substring_snapshot(
     }
     let size = match name {
         "?" => {
-            state.status.unsigned_abs().checked_ilog10().unwrap_or(0) as usize
+            state.status().unsigned_abs().checked_ilog10().unwrap_or(0) as usize
                 + 1
-                + usize::from(state.status < 0)
+                + usize::from(state.status() < 0)
         }
-        "#" => state.positional.len().checked_ilog10().unwrap_or(0) as usize + 1,
+        "#" => state.positional().len().checked_ilog10().unwrap_or(0) as usize + 1,
         _ => state.parameter(name).len(),
     };
     if size > max {
@@ -1950,7 +1950,7 @@ fn scalar_value(
             index
                 .parse::<usize>()
                 .ok()
-                .and_then(|i| s.pipestatus.get(i))
+                .and_then(|i| s.pipeline_status().get(i))
                 .map(i32::to_string)
                 .unwrap_or_default(),
         ),
@@ -1971,7 +1971,7 @@ fn list_value(
     let s = state.borrow();
     match part {
         WordPart::Variable(_) => {
-            let value = s.positional.get(index).map(String::as_str).unwrap_or("");
+            let value = s.positional().get(index).map(String::as_str).unwrap_or("");
             if value.len() > max {
                 return Err(2.into());
             }
@@ -1982,7 +1982,7 @@ fn list_value(
             work.admit_storage(20)?;
             bounded(
                 Cow::Owned(
-                    s.pipestatus
+                    s.pipeline_status()
                         .get(index)
                         .map(i32::to_string)
                         .unwrap_or_default(),
@@ -2484,8 +2484,8 @@ mod tests {
         let state = State::default().shared();
         state
             .borrow_mut()
-            .variables
-            .insert("v".into(), "one two".into());
+            .assign_parameter("v".into(), "one two".into())
+            .unwrap();
         let cancel = Cancel::new();
         for source in ["$v", "\"$v\"", "{a,b}$v", "{a,b}\"$v\""] {
             let word = shell_parser::Parser::parse_word_string_with_limits(source, 16, 4096);
@@ -2547,8 +2547,8 @@ mod tests {
         let state = State::default().shared();
         state
             .borrow_mut()
-            .variables
-            .insert("IFS".into(), ":".into());
+            .assign_parameter("IFS".into(), ":".into())
+            .unwrap();
         let cancel = Cancel::new();
         let mut work = Work::new(64, 0, 1);
         assert!(matches!(
@@ -2579,8 +2579,8 @@ mod tests {
             if let Some(value) = value {
                 state
                     .borrow_mut()
-                    .variables
-                    .insert("sep".into(), value.into());
+                    .assign_parameter("sep".into(), value.into())
+                    .unwrap();
             }
             let cancel = Cancel::new();
             if peak != 0 {
@@ -2609,8 +2609,8 @@ mod tests {
             .unwrap();
         state
             .borrow_mut()
-            .variables
-            .insert("sep".into(), ":".repeat(4096));
+            .assign_parameter("sep".into(), ":".repeat(4096))
+            .unwrap();
         let cancel = Cancel::new();
         let mut work = Work::new(16_384, 8192, 1);
         // Reference admission yields before the effective value's raw bound
@@ -2639,7 +2639,7 @@ mod tests {
             state.borrow().scalar_parameter("IFS").map(str::len),
             Some(4096)
         );
-        assert_eq!(state.borrow().namerefs["IFS"], "sep");
+        assert_eq!(state.borrow().namerefs()["IFS"], "sep");
     }
 
     #[test]
@@ -2683,8 +2683,8 @@ mod tests {
     #[test]
     fn substring_special_snapshots_admit_decimal_storage_before_formatting() {
         let mut state = crate::state::State::default();
-        state.status = i32::MIN;
-        state.positional = vec![String::new(); 12];
+        state.publish_status(i32::MIN);
+        state.replace_positional(vec![String::new(); 12]).unwrap();
         for (name, expected) in [("?", "-2147483648"), ("#", "12")] {
             let mut work = Work::new(64, 0, 1);
             assert!(matches!(
