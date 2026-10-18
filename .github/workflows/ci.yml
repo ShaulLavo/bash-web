@@ -34,7 +34,6 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run typecheck:layers
   shell:
-    needs: layers
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -98,7 +97,6 @@ jobs:
       - run: ulimit -c 0; npm run fuzz:shell-printf:ci -- --shell .build/shell/release/shell-engine
 
   own-shell-compatibility:
-    needs: layers
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -157,7 +155,6 @@ jobs:
           if-no-files-found: ignore
 
   browser:
-    needs: layers
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
