@@ -132,7 +132,7 @@ export async function createWaffleRunner(options: WaffleCaseOptions) {
   };
 }
 
-async function runRoot(
+export async function runRoot(
   runtime: Runtime,
   waffle: typeof Api,
   module: WebAssembly.Module,
@@ -154,12 +154,14 @@ async function runRoot(
   let worker: Worker | undefined;
   const stop = () => void worker?.terminate();
   onStop(() => void service.kill(transport.pid, 9).catch(stop));
-  await service.adoptRuntimeRoot(transport, {
+  const controller = {
     filesystem: identity,
     output,
     acknowledged: () => acknowledged,
+    canConfirmExit: () => acknowledged,
     stop,
-  });
+  };
+  await service.adoptRuntimeRoot(transport, controller);
   const supervisor = await service.ready();
   const state = waffle.workerProcessState(transport);
   const root = new Worker(new URL("root.mjs", nodeDirectory), { type: "module" });

@@ -388,3 +388,20 @@ The page owns runtime disposal. Waffle owns shared services and their teardown;
 terminal rendering, browser controls, and asset serving remain host concerns.
 Browser acceptance complements the frozen shell scoreboard and never replaces
 or regenerates its oracle, baseline, classifications, or generator fixtures.
+
+### Frozen runner completion
+
+The canonical Waffle root controller gates ordinary exit confirmation on the
+worker's ordered acknowledgement. Its shared outcome can become visible before
+queued stdout and stderr messages. Resolving on that outcome alone could dispose
+the runtime and discard the output tail after an external utility. Signals still
+settle without an ordinary acknowledgement through Waffle's supervisor.
+
+This is an original local adapter correction, not copied upstream code.
+`scripts/test-own-shell-root.ts` holds real root-worker messages until its outcome
+is published, observes it through the real supervisor, then delivers those messages
+in order. It pins raw output, status and the acknowledgement boundary, and separately
+pins a killed root that never starts. `scripts/own-shell-runner-fixture.ts` only
+relocates the unchanged original tiny WASI fixture from the existing runner tests.
+No oracle, baseline, migration receipt, stdio kind, case deadline or output bound
+changes.
