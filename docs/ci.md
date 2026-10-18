@@ -36,7 +36,9 @@ prefix fallback. Rust compilation targets may restore dependency caches, but
 those caches never substitute for a check result.
 
 Dependency keys use the complete npm lock after removing only the root package
-version. Dependency changes still invalidate the cache. Root patch bumps do not.
+version. Dependency changes still invalidate the cache. Root patch bumps do not. Both installed packages and npm downloads use this
+normalized key. If either exact cache is missing, the one install also fills the
+download cache before saving it.
 The workflow also caches npm downloads, the pinned Rust toolchain, both Cargo
 targets, patched libc, SDK 34.0, cargo-machete 0.9.2 and Playwright browsers.
 SDK keys include the verified archive checksum. Playwright keys use its browser

@@ -27,3 +27,13 @@ test("the existing shell check stays red if any producer or moved check fails or
   assert.match(gate.run, /!= 'success'/);
   assert.match(gate.run, /exit 1/);
 });
+
+test("npm downloads use normalized dependency inputs rather than the root package version", () => {
+  const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+  assert.doesNotMatch(workflow, /cache: npm/);
+  assert.match(workflow, /key: npm-downloads-.*steps\.inputs\.outputs\.dependencies/);
+  assert.match(
+    workflow,
+    /steps\.packages\.outputs\.cache-hit != 'true' \|\| steps\.downloads\.outputs\.cache-hit != 'true'/,
+  );
+});

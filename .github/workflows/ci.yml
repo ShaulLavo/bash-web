@@ -19,15 +19,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 26.7.0
-          cache: npm
       - id: inputs
         run: node scripts/ci-inputs.ts
+      - uses: actions/cache@v4
+        id: downloads
+        with:
+          path: ~/.npm
+          key: npm-downloads-${{ runner.os }}-${{ runner.arch }}-node26.7.0-${{ steps.inputs.outputs.dependencies }}
+          restore-keys: npm-downloads-${{ runner.os }}-${{ runner.arch }}-node26.7.0-
       - uses: actions/cache@v4
         id: packages
         with:
           path: node_modules
           key: packages-${{ runner.os }}-${{ runner.arch }}-node26.7.0-${{ steps.inputs.outputs.dependencies }}
-      - if: steps.packages.outputs.cache-hit != 'true'
+      - if: steps.packages.outputs.cache-hit != 'true' || steps.downloads.outputs.cache-hit != 'true'
         run: npm ci --ignore-scripts
       - run: npm run sources:browser && npm run build:worker
       - name: Pack shared JavaScript inputs
