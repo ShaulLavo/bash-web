@@ -2683,7 +2683,7 @@ async fn retain_declaration_syntax(
     let mut target = words.next();
     let mut redirect_operand = false;
     let mut budget = Budget::default();
-    while let Some(token) = tokens.next() {
+    for token in tokens {
         budget.checkpoint(cancel).await.map_err(|_| 130)?;
         let Some(raw) = token.raw else {
             let spelling = &source[token.span.start.offset..token.span.end.offset];
