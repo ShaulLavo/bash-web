@@ -4109,6 +4109,8 @@ mod braces;
 mod case;
 #[path = "words/command.rs"]
 mod command;
+#[path = "words/command_metadata.rs"]
+mod command_metadata;
 #[path = "words/control.rs"]
 mod control;
 #[path = "words/indirect.rs"]

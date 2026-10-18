@@ -64,13 +64,14 @@ shares process-result codecs and byte validation instead of accepting those copi
 The baseline fingerprints include multiplicities, so adding another occurrence of
 an existing clone is not an allowance to grow it.
 
-Merging main `3cec14c` reconciles token identities after its binding-state and
-execution-accounting changes. Exact clones change from 344 to 354, with 43 added
-and 33 removed occurrences. Structural clones change from 16 to 13, with 2 added
-and 5 removed. Every added fingerprint and multiplicity exists in an independent
-scan of that immutable main snapshot. The repeated guest-registration loop is
-shared instead of baselined. [The fingerprint delta](evidence/quality-integration.json)
-records this reconciliation. No-new-clones and empty-scan failures stay unchanged.
+Merging main `2a0905a` reconciles token identities after its binding-state,
+shared parse entry points, typed command dispatch, and Waffle build changes.
+Exact clones change from 344 to 356, with 50 added and 38 removed occurrences.
+Structural clones change from 16 to 15, with 5 added and 6 removed. Every added
+fingerprint and multiplicity exists in an independent scan of that immutable main
+snapshot. The repeated guest-registration loop is shared instead of baselined.
+[The fingerprint delta](evidence/quality-integration.json) records this
+reconciliation. No-new-clones and empty-scan failures stay unchanged.
 
 To review a deliberate baseline change:
 

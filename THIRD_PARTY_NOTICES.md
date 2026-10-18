@@ -33,6 +33,16 @@ GNU bash executable code is not included. Keep these notices and licenses with
 copies of the fixture. The new CLI's fixture helpers and replay/comparison scripts
 are original code; no additional upstream implementation is ported.
 
+The typed command catalogue in `shell/engine/src/commands.rs` and its
+`commands/tests.rs` and `tests/words/command_metadata.rs` controls are original
+local ownership adapters over bash-web `92ab384516abcf91da811e11ac871b73f6722ba0`.
+They replace the duplicated local command-name lists with typed metadata and
+handler selection, not new upstream command implementations. Declaration syntax
+and continuation checks remain in the adapted `builtins.rs` code classified
+below, with their quoting and raw-spelling behavior unchanged. The parser's
+separate grammar tables, pinned sources and existing adapted algorithms are not
+moved or changed. No upstream payload or provenance-lock update is introduced.
+
 The parsing context facade in `shell/engine/src/parse.rs` and its
 `parse/tests.rs` controls are original local adapters. They centralize the
 existing script/eval, generated-word, lazy-operand and substitution parser calls
