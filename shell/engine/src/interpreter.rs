@@ -3201,6 +3201,7 @@ async fn dispatch_simple_command_body(
         (s.environment(), s.cwd.clone())
     };
     env.extend(assigned);
+    let command = name.clone();
     let mut argv = vec![name];
     argv.extend(args);
     let pid = context
@@ -3217,9 +3218,11 @@ async fn dispatch_simple_command_body(
         .map_err(|_| 127)?;
     // The child owns its inherited descriptors. Shell-side stage copies must
     // not keep a closed child reader/writer alive while waiting for its exit.
+    let stderr = fds.borrow().get(2);
     drop(fds);
     match context.cancel.run(context.core.host.wait(pid)).await {
-        Ok(result) => Ok(Outcome::status(result.map_err(|_| 1)?)),
+        Ok(Ok(status)) => Ok(Outcome::status(status)),
+        Ok(Err(error)) => external_wait_failure(error, &command, stderr, &context).await,
         Err(_) => {
             // Signal inherited members before waiting/reaping the direct child;
             // it may be the last live direct stage but not the last group member.
@@ -3236,6 +3239,32 @@ async fn dispatch_simple_command_body(
             Err(context.cancel_status())
         }
     }
+}
+
+async fn external_wait_failure(
+    error: ProcessError,
+    command: &str,
+    stderr: Option<io::Endpoint>,
+    context: &Context,
+) -> Result<Outcome, i32> {
+    let ProcessError::StartFailed(errno) = error else {
+        return Err(1);
+    };
+    let fork = matches!(errno, 6 | 29 | 48);
+    let operation = if fork { "fork" } else { command };
+    if let Some(stderr) = stderr {
+        let diagnostic = format!("/usr/bin/bash: {operation}: {error}\n");
+        let _ = stderr
+            .write_all(diagnostic.as_bytes(), &context.cancel)
+            .await;
+    }
+    if fork {
+        return Ok(Outcome {
+            code: 254,
+            flow: Flow::Abort,
+        });
+    }
+    Ok(Outcome::status(if errno == 44 { 127 } else { 126 }))
 }
 
 #[inline(never)]

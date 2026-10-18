@@ -45,7 +45,10 @@ impl std::fmt::Display for ProcessError {
             Self::InvalidParent(pid) => write!(f, "invalid process parent: {pid}"),
             Self::InvalidSignal => f.write_str("invalid signal"),
             Self::Runtime(errno) => write!(f, "runtime process error: errno {errno}"),
-            Self::StartFailed(errno) => match usize::try_from(*errno).ok().and_then(|index| WASI_ERRNO_MESSAGES.get(index)) {
+            Self::StartFailed(errno) => match usize::try_from(*errno)
+                .ok()
+                .and_then(|index| WASI_ERRNO_MESSAGES.get(index))
+            {
                 Some(message) => f.write_str(message),
                 None => write!(f, "Unknown error {errno}"),
             },
