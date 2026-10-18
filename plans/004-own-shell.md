@@ -152,7 +152,7 @@ they are removed, and they remain mandatory before step 6 replaces Brush:
   completion-before-registration, completion/cancel ownership and invalid output
   memory are separate pending cases. These TODOs are not execution evidence.
 
-**Approved startup-diagnostic adoption (2026-10-18; implemented, integrated CI pending).**
+**Approved startup-diagnostic adoption (2026-10-18; delivered in PR #21).**
 Waffle 0.0.50 at `33ece68f9f484d99b8a57a675de71d847e248051` includes
 the quiet-start 0.0.49 contract: typed
 `START_FAILED` is the only child-visible report for admitted `runtime_proc` children,
@@ -176,18 +176,24 @@ locks, trust version and source provenance move together.
   the bounded runtime suite passes 127/127. The final 0.0.50 pin also passes
   127/127, package contracts, strict TypeScript, lint, format, Knip, exact and
   structural duplicate gates, layer controls and cleanup/negative controls.
-  These are local results, not completed browser, PR or post-merge evidence.
+  These local results are separate from the integrated delivery evidence below.
 - The browser fixture `/bin/test-lazy-start-failure` uses the shipped lazy loader.
   `tests/pipelines.acceptance.spec.ts` requires one complete shell diagnostic in
   both a pipe and regular file, and retains closed-fd2, real126/127, worker
-  cleanup and foreground/background EOF acknowledgement controls. Normal required
-  Chromium/Firefox CI must qualify these captures before delivery is claimed.
+  cleanup and foreground/background EOF acknowledgement controls. Required
+  Chromium/Firefox CI qualified these captures in PR #21 and on its main merge.
+- PR #21 merged as `c81f3b57e861835bc6390b32ecfc4544627c1729` after independent
+  approval and all ten required PR checks. Its exact-main run `39144577199`
+  passed all five checks: 1,130 native and 1,115 WASI tests, 214 browser passes
+  with the same 16 inherited skips, and frozen memberships 949/955/1341 with
+  no gained, lost or newly failing cases. Actual-host checkout/scratch cleanup
+  is complete. This delivered quiet-start evidence is not descriptor-unit evidence.
 - Keep the explicit adapter `startFailed` hook: its removal changes host-spawn
   behavior. The five host-broker modes now explicitly distinguish retained adapter
   policy from unchanged host-default reporting, post-start failure and genuine
   exits. Quiet runtime-child reporting has independent no-hook coverage.
 
-**Inherited-descriptor predicates unit (2026-10-18), implemented; focused checks pass.**
+**Approved inherited-descriptor predicates unit (2026-10-18); implemented, focused checks pass.**
 This separate unit follows the quiet-start adoption in PR #21. `test`, `[` and
 shared `[[ ]]` now query `runtime_proc.fd_kind` from Waffle #36 at the adopted
 0.0.50 pin. The query uses the endpoint's physical handle, including inherited
@@ -215,8 +221,8 @@ predicate capability/status behavior stay unchanged.
   code and both strict duplicate gates passed without baseline/exclusion changes.
   Independent review and normal required native/WASI/frozen/Chromium/Firefox CI
   remain the delivery gate. Older quiet-start/frozen runs are not this unit's
-  qualification. Root is 0.0.57 and engine 0.0.31 after normal PR #21 integration;
-  the already adopted Waffle pin is unchanged.
+  qualification. Root is 0.0.57, engine 0.0.31 and the changed test guest 0.0.5
+  after normal PR #21 integration; the already adopted Waffle pin is unchanged.
 
 **Approved job-lifetime transition (2026-10-17).** The current runtime seals a
 job when its pending membership reaches zero, before it is reaped. A shell job
