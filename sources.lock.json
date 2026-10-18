@@ -1478,7 +1478,7 @@
       "scripts/fixtures/shell-printf-seed-42.json"
     ],
     "escapes": "Distinct format and %b escape modes preserve raw NUL/high bytes, octal/hex/control-letter/Unicode boundaries, malformed input statuses and stop-output behavior. Use existing cooperative execution/output admission instead of an unbounded reconstructed string or lossy UTF-8 conversion.",
-    "gate": "Original deterministic byte-exact printf family with separate seeds 1 and 42, strict healthy exit status and raw stdout comparison, unchanged stderr diagnostic evidence and no exclusions or normalization. Preserve the precursor 107 Bash observations as review evidence and all previous differential fixtures unchanged.",
+    "gate": "Original deterministic byte-exact printf family: 433 fixed plus 128 generated cases per seed, seeds 1 and 42, strict healthy exit status and raw stdout comparison, unchanged stderr diagnostic evidence and no exclusions or normalization. All 107 precursor Bash observations remain byte-identical; 64 explicit locale controls cover supported C/POSIX and UTF-8 semantics. All previous differential fixtures remain unchanged.",
     "localHarnessProvenance": {
       "baseRevision": "0630e1d8011edab6d3351192361c25adaca21c90",
       "adapted": [
