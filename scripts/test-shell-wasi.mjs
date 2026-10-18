@@ -47,6 +47,8 @@ cargo(
     "--test",
     "streaming",
     "--test",
+    "terminal_display",
+    "--test",
     "words",
     "-j2",
     "--",
