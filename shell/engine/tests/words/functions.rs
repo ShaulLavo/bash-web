@@ -416,7 +416,7 @@ fn command_path_queries_use_executable_metadata_without_running_programs() {
         finish(session.start("x=temporary command -p tool arg").unwrap()),
         126
     );
-    assert_eq!(invocations.borrow()[0].0, ["/usr/bin/tool", "arg"]);
+    assert_eq!(invocations.borrow()[0].0, ["tool", "arg"]);
     assert_eq!(
         invocations.borrow()[0].1.get("x").map(String::as_str),
         Some("temporary")
