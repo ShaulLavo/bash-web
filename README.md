@@ -2,11 +2,11 @@
 
 `bash-web` is a WASM-first bash-compatible shell with a Rust engine and a browser embedding adapter.
 
-Build from a checkout with Node 26.7.0 and Rust 1.98.1:
+Follow the [tool setup](docs/development.md#build-and-test), then build the browser assets:
 
 ```sh
 npm ci
-npm run build:shell
+npm run build:browser
 ```
 
 Pass the page’s existing Waffle runtime to each browser shell:
@@ -15,13 +15,13 @@ Pass the page’s existing Waffle runtime to each browser shell:
 import { createRuntime } from "waffle";
 import { createShell } from "bash-web";
 
-const runtime = createRuntime({
-  filesystem: { workerURL: new URL("/fs-worker.js", location.href) },
-});
-const shell = await createShell({ runtime, script: "printf 'hello\\n'" });
-await shell.done;
-await shell.dispose();
-await runtime.dispose();
+const runtime = createRuntime({ filesystem: { workerURL: new URL("/fs-worker.js", location.href) } });
+try {
+  const shell = await createShell({ runtime, script: "printf 'hello\\n'" });
+  try { await shell.done; } finally { await shell.dispose(); }
+} finally {
+  await runtime.dispose();
+}
 ```
 
 See [browser integration](docs/browser-runtime.md), [development and tests](docs/development.md),
