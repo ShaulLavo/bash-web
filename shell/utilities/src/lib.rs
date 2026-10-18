@@ -99,23 +99,64 @@ pub struct Invocation {
     pub context: Context,
 }
 
-#[cfg(not(target_os = "wasi"))]
-pub fn main(_utility: Utility) {
-    eprintln!("utility requires wasm32-wasip1 and a runtime_proc host");
-    std::process::exit(2);
-}
-#[cfg(target_os = "wasi")]
-pub fn main(utility: Utility) {
-    guest_main(move |invocation| async move {
-        run(
-            utility,
-            invocation.args,
-            &invocation.cwd,
-            &invocation.fds,
-            &invocation.context,
-        )
+/// Each guest entry calls only its own implementation, so every program links
+/// just its own code: only `grep` carries the regex crate.
+pub async fn cat(invocation: Invocation) -> i32 {
+    let Invocation {
+        args,
+        cwd,
+        fds,
+        context,
+        ..
+    } = invocation;
+    acceptance::cat(args, &cwd, &fds, &context)
         .await
-    });
+        .map(|()| 0)
+        .unwrap_or_else(|status| status)
+}
+pub async fn grep(invocation: Invocation) -> i32 {
+    let Invocation {
+        args,
+        cwd,
+        fds,
+        context,
+        ..
+    } = invocation;
+    grep::run(args, &cwd, &fds, &context)
+        .await
+        .unwrap_or_else(|status| status)
+}
+pub async fn mkdir(invocation: Invocation) -> i32 {
+    let Invocation {
+        args,
+        cwd,
+        fds,
+        context,
+        ..
+    } = invocation;
+    acceptance::mkdir(args, &cwd, &fds, &context)
+        .await
+        .unwrap_or_else(|status| status)
+}
+pub async fn seq(invocation: Invocation) -> i32 {
+    let Invocation {
+        args, fds, context, ..
+    } = invocation;
+    acceptance::seq(&args, &fds, &context)
+        .await
+        .map(|()| 0)
+        .unwrap_or_else(|status| status)
+}
+
+/// Native builds have no runtime_proc host; the guests are wasm32-wasip1 only.
+#[cfg(not(target_os = "wasi"))]
+pub fn guest_main<F, Fut>(_program: F) -> !
+where
+    F: FnOnce(Invocation) -> Fut + 'static,
+    Fut: std::future::Future<Output = i32> + 'static,
+{
+    eprintln!("this program requires wasm32-wasip1 and a runtime_proc host");
+    std::process::exit(2);
 }
 
 /// Drive one guest program over Waffle's runtime_proc descriptors and patched libc

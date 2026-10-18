@@ -39,7 +39,12 @@ async fn copy(input: Endpoint, fds: &FdTable, context: &Context) -> Result<(), i
     }
 }
 
-async fn cat(args: Vec<String>, cwd: &str, fds: &FdTable, context: &Context) -> Result<(), i32> {
+pub(crate) async fn cat(
+    args: Vec<String>,
+    cwd: &str,
+    fds: &FdTable,
+    context: &Context,
+) -> Result<(), i32> {
     if args.is_empty() {
         return copy(endpoint(fds, 0)?, fds, context).await;
     }
@@ -62,7 +67,12 @@ async fn cat_path(path: &str, cwd: &str, fds: &FdTable, context: &Context) -> Re
         .map_err(|e| e.status())?;
     copy(input, fds, context).await
 }
-async fn mkdir(args: Vec<String>, cwd: &str, fds: &FdTable, context: &Context) -> Result<i32, i32> {
+pub(crate) async fn mkdir(
+    args: Vec<String>,
+    cwd: &str,
+    fds: &FdTable,
+    context: &Context,
+) -> Result<i32, i32> {
     let mut parents = false;
     let mut operands = Vec::new();
     let mut options = true;
@@ -117,7 +127,7 @@ async fn mkdir_error(
         .await
         .map_err(|error| error.status())
 }
-async fn seq(args: &[String], fds: &FdTable, context: &Context) -> Result<(), i32> {
+pub(crate) async fn seq(args: &[String], fds: &FdTable, context: &Context) -> Result<(), i32> {
     let (start, end) = match args {
         [end] => (1, end.parse::<i64>().map_err(|_| 2)?),
         [start, end] => (

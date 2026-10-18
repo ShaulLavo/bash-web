@@ -1,3 +1,3 @@
 fn main() {
-    shell_utilities::main(shell_utilities::Utility::Grep);
+    shell_utilities::guest_main(shell_utilities::grep);
 }

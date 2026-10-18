@@ -93,13 +93,14 @@ async function runFixture(outputSize) {
     await assert.rejects(access(scratch), { code: "ENOENT" });
   }
 }
+function assertFixtureResult(result, label) {
+  assert.equal(result.crash, undefined, label);
+  assert.equal(result.status, 7, label);
+  assert.deepEqual(Buffer.from(result.stdout), Buffer.from([255, 0]), label);
+  assert.equal(Buffer.from(result.stderr).toString(), "err", label);
+}
 test("own-shell worker preserves raw stdout, separate stderr and status", async () => {
-  const result = await runFixture(2);
-  assert.equal(result.crash, undefined);
-  assert.equal(result.status, 7);
-  assert.deepEqual(Buffer.from(result.stdout), Buffer.from([255, 0]));
-  assert.equal(Buffer.from(result.stderr).toString(), "err");
-  assert.equal(result.crash, undefined);
+  assertFixtureResult(await runFixture(2), "worker");
 });
 test("own-shell worker enforces the combined output ceiling before writing", async () => {
   const result = await runFixture(4 * 1024 * 1024 + 1);
@@ -123,11 +124,7 @@ test("repeated fresh Waffle runtimes leave no threads or handles behind", async 
     assert.equal(warm.status, 7);
     const baseline = handles();
     for (let index = 0; index < 25; index++) {
-      const result = await run("fixture");
-      assert.equal(result.crash, undefined);
-      assert.equal(result.status, 7);
-      assert.deepEqual(Buffer.from(result.stdout), Buffer.from([255, 0]));
-      assert.equal(Buffer.from(result.stderr).toString(), "err");
+      assertFixtureResult(await run("fixture"), `case ${index}`);
       assert.equal(liveNodeWorkers(), 0, `case ${index} left Waffle threads running`);
     }
     assert.ok(handles() <= baseline, "repeated cases accumulated handles");

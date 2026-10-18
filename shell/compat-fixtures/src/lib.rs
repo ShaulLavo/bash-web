@@ -2,6 +2,10 @@
 //! They reuse the standalone harness's exact implementations rather than a copy.
 #[path = "../../engine/src/compat.rs"]
 pub mod compat;
+// The shared compat.rs module above uses these; name them where tools look.
+use futures as _;
+use serde as _;
+use serde_json as _;
 
 use shell_engine::process::SpawnRequest;
 use shell_utilities::Invocation;
@@ -26,12 +30,6 @@ pub fn request(
 }
 
 /// Entry for the argv.py and printenv.py guests.
-#[cfg(not(target_os = "wasi"))]
-pub fn fixture_main(name: &'static str) {
-    eprintln!("{name} fixture requires wasm32-wasip1 and a runtime_proc host");
-    std::process::exit(2);
-}
-#[cfg(target_os = "wasi")]
 pub fn fixture_main(name: &'static str) {
     shell_utilities::guest_main(move |invocation| async move {
         let (request, cancel) = request(name, invocation);
