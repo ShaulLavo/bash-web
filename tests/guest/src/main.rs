@@ -121,8 +121,10 @@ fn write_fd(fd: u32, mut data: &[u8]) -> io::Result<()> {
 }
 
 fn line(fd: u32, text: &str) -> io::Result<()> {
-    write_fd(fd, text.as_bytes())?;
-    write_fd(fd, b"\n")
+    let mut record = String::with_capacity(text.len() + 1);
+    record.push_str(text);
+    record.push('\n');
+    write_fd(fd, record.as_bytes())
 }
 
 fn copy_fd(input: u32, output: u32) -> io::Result<()> {
