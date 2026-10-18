@@ -1,8 +1,3 @@
-// Frozen-compatibility instrument on Waffle's Node runtime. One fresh Runtime and
-// filesystem per case; the shell root and every program it starts are real guests on
-// Waffle's production process, descriptor and bootstrap path. Output is raw bytes:
-// the root's fds 1 and 2 and its children's inherited copies reach this owner as
-// separate streams, never through a terminal text sink.
 import { readFile } from "node:fs/promises";
 import type { Runtime } from "waffle";
 import type { RuntimeWorkerMessage, RuntimeWorkerRequest } from "waffle/browser/worker";
@@ -13,7 +8,6 @@ export interface WaffleCaseOptions {
   readonly modulePath: string;
   readonly tmp: string;
   readonly env: Readonly<Record<string, string>>;
-  /** Directory holding the frozen oracle's argv.py/printenv.py fixture guests. */
   readonly fixtureDirectory: string;
 }
 export interface WaffleCaseResult {
@@ -24,7 +18,6 @@ export interface WaffleCaseResult {
   outputLimit?: boolean;
 }
 
-/** The existing frozen contract: stdout and stderr together, counted before acceptance. */
 const OUTPUT_LIMIT_BYTES = 4 * 1024 * 1024;
 const nodeDirectory = new URL("../.build/node/", import.meta.url);
 const fixtures = [
@@ -36,7 +29,6 @@ class OutputLimit extends Error {}
 
 let api: Promise<typeof Api> | undefined;
 function loadApi(): Promise<typeof Api> {
-  // build-node-harness.ts emits this bundle from waffle-node-api.ts and pinned Waffle.
   api ??= import(new URL("api.mjs", nodeDirectory).href) as Promise<typeof Api>;
   return api;
 }
@@ -55,8 +47,6 @@ async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: t
   // /dev directory reproduces exactly that on Waffle's real filesystem.
   for (const path of [options.tmp, "/usr/local/bin", "/usr/bin", "/bin", "/dev"])
     await runtime.filesystem.mkdirp(path);
-  // The fixtures are separate guests on Waffle's process path, found by PATH lookup
-  // through their executable entries, exactly as the shell starts any program.
   const adapter = "bash-web-compat:fixture";
   const workerUrl = new URL("child.mjs", nodeDirectory).href;
   runtime.registerAdapter(adapter, (context, service) => {
@@ -118,8 +108,6 @@ export async function createWaffleRunner(options: WaffleCaseOptions) {
         ...(error instanceof OutputLimit || limited ? { outputLimit: true } : {}),
       };
     } finally {
-      // Runtime.dispose fences the broker, descendants and filesystem worker. Any
-      // thread it leaves is a harness leak; stopping it keeps the next case fresh.
       await runtime.dispose();
       await stopNodeWorkers();
     }
@@ -159,15 +147,12 @@ async function runRoot(
   const root = new Worker(new URL("root.mjs", nodeDirectory), { type: "module" });
   worker = root;
   const status = await new Promise<number>((resolve, reject) => {
-    // Same ownership protocol as the page shell host: the owner claims the root's
-    // typed outcome, acknowledges the worker, then reports it through rootExit.
     const settle = (outcome: { kind: "exited" | "signaled"; code: number }, ack: boolean) => {
       unobserve();
       acknowledged ||= ack;
       const status = waffle.waitStatus(waffle.claimOutcome(state.signals.outcome, outcome));
       service.rootExit(transport.pid, status).then(() => resolve(status), reject);
     };
-    // A root stopped by a signal (the output bound's kill) exits through Waffle.
     const unobserve = supervisor.onChildExit((event) => {
       if (event.pid === transport.pid) {
         unobserve();
@@ -180,7 +165,6 @@ async function runRoot(
     };
     root.onmessageerror = () => reject(new Error("root worker message decode failed"));
     root.onmessage = ({ data }: MessageEvent<RuntimeWorkerMessage>) => {
-      // After teardown the Runtime owns the fence; late worker messages are moot.
       if (runtime.disposed) return;
       if (data.type === "runtime-proc") {
         if (waffle.readOutcome(state.signals.outcome)?.kind === "signaled")

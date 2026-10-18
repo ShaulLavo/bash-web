@@ -514,7 +514,6 @@ async function prepareCorpus() {
 
 function prepareEngines() {
   if (process.env.BASH_COMPAT_SKIP_BUILD === "1") return;
-  // The shell guest and the instrument's fixture guests, all verified.
   buildWasiShell();
 }
 
@@ -743,7 +742,6 @@ class Pool {
         engine: this.engine.startsWith("bashkit") ? "bashkit" : this.engine,
         modulePath: engines[this.engine].modulePath,
         scratch,
-        // The frozen oracle's argv.py/printenv.py helpers, as separate fixture guests.
         fixtureDirectory: resolve(
           root,
           process.env.BASH_COMPAT_FIXTURE_DIR ??

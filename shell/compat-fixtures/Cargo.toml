@@ -6,8 +6,6 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
-# Compatibility-instrument guests only: the frozen oracle's argv.py and printenv.py
-# helpers as genuine programs on Waffle's process boundary. Never packaged.
 [dependencies]
 shell-engine = { path = "../engine" }
 futures.workspace = true

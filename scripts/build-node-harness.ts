@@ -1,5 +1,3 @@
-// Bundle the Node compatibility instrument: its API, the shell root worker, the
-// fixture-program worker and Waffle's filesystem worker.
 import { build } from "esbuild";
 import { resolve } from "node:path";
 
@@ -14,8 +12,6 @@ await build({
   },
   bundle: true,
   format: "esm",
-  // The same Waffle source entries the browser build consumes; the harness supplies
-  // Worker over node:worker_threads (node-worker-host.ts).
   platform: "neutral",
   conditions: ["browser"],
   external: ["node:*"],

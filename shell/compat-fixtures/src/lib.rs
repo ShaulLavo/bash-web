@@ -1,13 +1,8 @@
-//! Original guests reproducing the frozen oracle's Python helpers, with the same
-//! output the standalone harness's in-process fixtures produced: `argv.py` prints
-//! its arguments as a Python list repr, `printenv.py` one value (or `None`) per name.
 use shell_engine::{
     executor::Cancel,
     io::{Endpoint, FdTable},
 };
 
-/// Python's `repr` of one argument: double quotes only when it contains a single
-/// quote and no double quote; bytes outside printable ASCII become `\xNN`.
 pub fn python_repr(argument: &[u8], output: &mut Vec<u8>) {
     let delimiter = if argument.contains(&b'\'') && !argument.contains(&b'"') {
         b'"'
@@ -36,7 +31,6 @@ pub fn python_repr(argument: &[u8], output: &mut Vec<u8>) {
     output.push(delimiter);
 }
 
-/// The full `argv.py` line for these arguments.
 pub fn argv_line(arguments: &[String]) -> Vec<u8> {
     let mut line = vec![b'['];
     for (index, argument) in arguments.iter().enumerate() {
@@ -49,7 +43,6 @@ pub fn argv_line(arguments: &[String]) -> Vec<u8> {
     line
 }
 
-/// The full `printenv.py` output for these names.
 pub fn printenv_lines(
     names: &[String],
     environment: &std::collections::BTreeMap<String, String>,
@@ -67,7 +60,6 @@ pub fn printenv_lines(
     lines
 }
 
-/// Write to standard output; a missing or failed descriptor is status 1.
 pub async fn emit(fds: &FdTable, bytes: &[u8], cancel: &Cancel) -> i32 {
     let Some(output): Option<Endpoint> = fds.get(1) else {
         return 1;
@@ -79,7 +71,6 @@ pub async fn emit(fds: &FdTable, bytes: &[u8], cancel: &Cancel) -> i32 {
     }
 }
 
-/// Run one helper over Waffle's runtime_proc descriptors and patched libc root preopen.
 #[cfg(target_os = "wasi")]
 pub fn guest_main(
     helper: fn(&[String], &std::collections::BTreeMap<String, String>) -> Vec<u8>,

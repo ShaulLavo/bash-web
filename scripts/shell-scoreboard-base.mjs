@@ -2,24 +2,19 @@ import assert from "node:assert/strict";
 import { execFileSync, fork } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { bytesDigest, verifyOracle, validateScore } from "./shell-scoreboard.mjs";
+import { bytesDigest, digest, verifyOracle, validateScore } from "./shell-scoreboard.mjs";
 
 export const oraclePath = "docs/evidence/own-shell-oracle.json";
 export const baselinePath = "docs/evidence/own-shell-baseline.json";
 export const instrumentReceiptPath = "docs/evidence/own-shell-instrument-migration.json";
 
-/**
- * The single authorized replay-instrument transition: main 9f0bf6a's standalone
- * node:wasi/InProcessHost replay to the Waffle Node harness. Bash observations, case
- * set, sources and schema are unchanged; only the replay environment record differs.
- * No other environment change is comparable, here or in any later target.
- */
 export const authorizedInstrumentTransition = Object.freeze({
   target: "9f0bf6a88ebba236a5db9ac3ca6fbe364632db9e",
   fromEnvironment: "507eb1db0221423576b1a0daba7d79a7b2bc3fbbac1a5d86af3a00bc65b29e6a",
   toEnvironment: "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
   fromRunner: "node:wasi",
   toRunner: "waffle-node",
+  receiptSha256: "5478df004ad89919bf1cc60b2195f0cab9d2b08bb5cf4497e0cf79b19d3a7d9a",
 });
 
 // Filter before fork startup, not only after the launcher has loaded Node hooks.
@@ -29,6 +24,8 @@ export function migrationEnvironment() {
       "PATH",
       "HOME",
       "CARGO_HOME",
+      "NPM_CONFIG_CACHE",
+      "npm_config_cache",
       "RUSTUP_HOME",
       "WASI_SDK_PATH",
       "WASI_LIBC_SCRATCH_ROOT",
@@ -74,7 +71,6 @@ export function baseBranchBaseline(root, ref) {
   return JSON.parse(baseFile(root, ref, baselinePath));
 }
 
-// The target's checksummed oracle and its validated baseline, beside a verified candidate.
 function targetEvidence(root, ref, candidateOracle) {
   const pins = JSON.parse(baseFile(root, ref, "sources.lock.json"));
   const bytes = baseFile(root, ref, oraclePath);
@@ -107,7 +103,6 @@ function sameExceptEnvironment(target, candidate) {
 }
 
 /**
- * Validate the authorized instrument transition and its committed receipt; throw otherwise.
  * @param {string} root
  * @param {string} ref
  * @param {any} candidateOracle
@@ -159,10 +154,10 @@ export function instrumentMigrationEvidence(root, ref, candidateOracle, receipt 
     assert.ok(change.reason, `receipt reason ${change.id}`);
     if (change.class === "a") assert.ok(change.plan, `receipt plan item ${change.id}`);
   }
+  assert.equal(digest(recorded), transition.receiptSha256, "authorized receipt changed");
   return { pins, oracle, baseline, receipt: recorded };
 }
 
-/** Exact per-case transition proof: the rescored target differs only by the receipt's changes. */
 export function assertInstrumentChanges(before, after, receipt) {
   const outcome = new Map(after.cases.map((item) => [item.id, item.outcome]));
   const changes = [];
@@ -197,8 +192,6 @@ export async function targetBranchBaseline(root, ref, oracle) {
       validateScore(oracle, baseline);
       return baseline;
     }
-    // Only the recorded one-time transition may rescore the target; anything else
-    // is an incomparable environment and fails closed.
     instrumentMigrationEvidence(root, ref, oracle);
   } else migrationEvidence(root, ref, oracle);
   for (const name of ["BASH_COMPAT_SHELL_WASM", "BASH_COMPAT_BASELINE", "BASH_COMPAT_ORACLE"])

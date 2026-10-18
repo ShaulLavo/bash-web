@@ -1,4 +1,3 @@
-// Browser Worker transport over Node threads. Waffle remains the process/FS/descriptor owner.
 // Threads take no parent CLI flags: test-runner and stdin-module flags are not theirs.
 import { Worker as Thread, MessagePort } from "node:worker_threads";
 const bootstrap = new URL("./node-worker-thread.ts", import.meta.url);
@@ -52,7 +51,6 @@ class NodeWorker extends EventTarget {
     return this.thread.terminate();
   }
 }
-/** Threads this realm started that have not exited: a leak check for the harness. */
 export function liveNodeWorkers(): number {
   return live.size;
 }

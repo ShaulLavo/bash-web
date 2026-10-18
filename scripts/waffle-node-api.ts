@@ -1,4 +1,3 @@
-// Bundled by build-node-harness.ts for the Node compatibility instrument only.
 export { createRuntime } from "waffle";
 export {
   createWorkerProcessTransport,

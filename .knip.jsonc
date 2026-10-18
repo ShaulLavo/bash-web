@@ -1,7 +1,6 @@
 {
   // Package exports, HTML, Vite/Playwright config and package scripts are discovered by Knip.
   // These roots are loaded dynamically by the runtime-test driver and compatibility pool.
-  // The Node compatibility instrument bundles its API and worker roots by path.
   "entry": [
     "src/{runtime,browser}/*.test.ts",
     "tests/*.unit.ts",

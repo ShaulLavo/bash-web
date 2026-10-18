@@ -1,4 +1,3 @@
-// Original contract tests for the one authorized replay-instrument transition.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -124,4 +123,49 @@ test("a receipt naming another transition or omitting a plan item is rejected", 
   ];
   for (const [recorded, pattern] of cases)
     assert.throws(() => instrumentMigrationEvidence(root, target, candidate(), recorded), pattern);
+});
+
+test("the authorized receipt cannot add losses or rewrite its evidence", () => {
+  const original = receipt();
+  const altered = [
+    {
+      ...original,
+      changes: original.changes.concat([
+        { ...original.changes[0], id: "oils:quote:4", change: "lost" },
+      ]),
+    },
+    { ...original, changes: original.changes.slice(1) },
+    { ...original, from: { ...original.from, counts: { ...original.from.counts, oils: 0 } } },
+    { ...original, classification: { a: 0, b: 16 } },
+    {
+      ...original,
+      changes: original.changes.map((change: Record<string, unknown>, index: number) =>
+        index === 0 ? { ...change, reason: "rewritten" } : change,
+      ),
+    },
+  ];
+  for (const changed of altered)
+    assert.throws(
+      () => instrumentMigrationEvidence(root, target, candidate(), changed),
+      /authorized receipt/,
+    );
+});
+
+test("the authorized receipt rejects nonexistent and unrelated plan items", () => {
+  const original = receipt();
+  for (const plan of [
+    "plans/DOES-NOT-EXIST.md#unapproved",
+    "plans/004-own-shell.md#follow-up-real-runtime-scoreboard-differences R1",
+  ]) {
+    const recorded = {
+      ...original,
+      changes: original.changes.map((change: Record<string, unknown>, index: number) =>
+        index === 0 ? { ...change, plan } : change,
+      ),
+    };
+    assert.throws(
+      () => instrumentMigrationEvidence(root, target, candidate(), recorded),
+      /authorized receipt/,
+    );
+  }
 });
