@@ -1,8 +1,10 @@
 import type { Runtime } from "waffle";
-import { installUtility, type UtilityOptions, type UtilityInstallation } from "./install";
-export type { UtilityOptions, UtilityInstallation } from "./install";
+import { installUtility, type UtilityInstallation, type UtilityOptions } from "./install";
+export type { UtilityInstallation, UtilityModule, UtilityOptions } from "./install";
 export { UtilityConflictError } from "./install";
 
-export function installCat(runtime: Runtime, options: UtilityOptions = {}): Promise<UtilityInstallation> {
-  return installUtility(runtime, "cat", new URL("../../dist/cat.wasm", import.meta.url), options);
+/** Provision and register `/bin/cat`, its own WASM program, on the caller's Runtime. */
+export function installCat(runtime: Runtime, options?: UtilityOptions): Promise<UtilityInstallation> {
+  const defaultUrl = new URL("../../dist/cat.wasm", import.meta.url);
+  return installUtility(runtime, { name: "cat", path: "/bin/cat", defaultUrl }, options);
 }

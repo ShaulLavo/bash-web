@@ -196,6 +196,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "shell-compat-fixtures"
+version = "0.0.1"
+dependencies = [
+ "futures",
+ "serde",
+ "serde_json",
+ "shell-engine",
+ "shell-utilities",
+]
+
+[[package]]
 name = "shell-engine"
 version = "0.0.31"
 dependencies = [

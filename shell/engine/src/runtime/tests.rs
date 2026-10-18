@@ -1476,8 +1476,8 @@ fn runtime_pipeline_builtins_external_and_fs_share_descriptor_namespace() {
     session.set_descriptors(runtime.stdio().unwrap()).unwrap();
     let script = "consume() { IFS= read -r value; printf '%s' \"$value\"; }; printf first | runtime-cat | runtime-cat | consume > /result; runtime-cat < /result 3>&1; emit | runtime-cat | runtime-cat";
     let job = session
-        // `cat` is an engine builtin. Use a distinct fake executable so these
-        // stages really cross ProcessHost; retain a builtin consumer as well.
+        // Use a distinct fake executable so these stages really cross ProcessHost;
+        // retain an in-shell consumer (a function over the read builtin) as well.
         .start(script)
         .unwrap();
     assert_eq!(finish(&executor, &runtime, job), 0);
@@ -2076,6 +2076,36 @@ fn sigint_registration_calls_runtime_with_handle_not_ignore() {
 }
 
 #[test]
+fn runtime_mkdir_and_grep_are_external_programs_not_shell_stand_ins() {
+    // The former in-shell stand-ins ran without spawning. The core shell now keeps
+    // only Bash builtins: these resolve through PATH and cross the process boundary.
+    let (executor, fake, runtime) = setup();
+    let session = runtime_session(&executor, &runtime);
+    let job = session
+        .start("mkdir -p nested/deep; cd nested/deep 2>/dev/null; grep -n tick result; cat result; seq 2")
+        .unwrap();
+    assert_eq!(finish(&executor, &runtime, job), 0);
+    let requests = fake.requests.borrow();
+    assert_eq!(
+        requests
+            .iter()
+            .map(|request| request.executable.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "/home/guest/mkdir",
+            "/home/guest/grep",
+            "/home/guest/cat",
+            "/home/guest/seq"
+        ]
+    );
+    assert_eq!(requests[0].argv, ["mkdir", "-p", "nested/deep"]);
+    assert_eq!(requests[1].argv, ["grep", "-n", "tick", "result"]);
+    // The shell itself created nothing: only the external program owns that effect.
+    assert!(fake.fs.read_file("/home/guest/nested/deep/result").is_err());
+    assert!(fake.output.bytes().is_empty());
+}
+
+#[test]
 fn inherited_shell_bootstrap_preserves_extra_and_sparse_logical_bindings() {
     let (executor, fake, runtime) = setup();
     fake.fs
@@ -2584,12 +2614,10 @@ fn interrupt_and_shutdown_drain_live_capture_and_blocked_input_writers() {
 fn runtime_for_globs_stream_names_and_close_directory_descriptors() {
     let (executor, fake, runtime) = setup();
     let session = runtime_session(&executor, &runtime);
+    // mkdir is an external program now; the fixture provisions the directory.
     fake.fs.mkdir("/tmp/runtime-glob", true).unwrap();
-    let setup = "";
-    let source = format!(
-        r#"{setup}cd /tmp/runtime-glob; : >b.txt; : >a.txt; shopt -s nullglob; for f in *.missing *.txt; do echo "$f"; done"#
-    );
-    let job = session.start(&source).unwrap();
+    let source = r#"cd /tmp/runtime-glob; : >b.txt; : >a.txt; shopt -s nullglob; for f in *.missing *.txt; do echo "$f"; done"#;
+    let job = session.start(source).unwrap();
     assert_eq!(finish(&executor, &runtime, job), 0);
     assert_eq!(fake.output.bytes(), b"a.txt\nb.txt\n");
     assert!(fake.directories.borrow().is_empty());

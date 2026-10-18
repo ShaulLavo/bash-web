@@ -1,24 +1,58 @@
-// Build immutable integrated main with its original in-shell utilities for instrument control.
+// Build immutable integrated main, with its original in-shell utilities, as the
+// unchanged-main instrument control for the Waffle Node harness. Never candidate scoring.
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync, copyFileSync, rmSync } from "node:fs";
+import { copyFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { wasiBuildEnvironment } from "./wasi-build.ts";
+import { shellTargetDirectory } from "./shell-build.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
+import { wasiBuildEnvironment, wasiTarget } from "./wasi-build.ts";
+
 const root = resolve(import.meta.dirname, "..");
 const reference = process.argv[2] ?? "02df6429cc142a771ff9ad26fae3f3d250d0bc04";
-const sha = execFileSync("git", ["rev-parse", "--verify", `${reference}^{commit}`], { cwd: root, encoding: "utf8" }).trim();
+const sha = execFileSync("git", ["rev-parse", "--verify", `${reference}^{commit}`], {
+  cwd: root,
+  encoding: "utf8",
+}).trim();
+const base = shellTargetDirectory(root);
+// A separate Cargo target: the control must never overwrite the candidate's guests.
+const target = resolve(base, "compat-control-target");
 const source = resolve(root, ".build", `compat-control-${sha}`);
 mkdirSync(source, { recursive: false });
 try {
   const archive = resolve(source, "source.tar");
-  writeFileSync(archive, execFileSync("git", ["archive", sha, "shell"], { cwd: root, maxBuffer: 32 * 1024 * 1024 }));
+  execFileSync("git", ["archive", "--output", archive, sha, "shell"], { cwd: root });
   execFileSync("tar", ["-xf", archive, "-C", source]);
-  const target = resolve(root, process.env.CARGO_TARGET_DIR ?? ".build/shell");
-  execFileSync("cargo", ["build", "--locked", "--release", "--target", "wasm32-wasip1", "--manifest-path", resolve(source, "shell/Cargo.toml"), "-p", "shell-engine", "--bin", "shell-runtime", "-j2"], { cwd: root, env: wasiBuildEnvironment(root, target), stdio: "inherit" });
-  const wasm = resolve(target, "wasm32-wasip1/release/shell-runtime.wasm");
+  execFileSync(
+    "cargo",
+    [
+      "build",
+      "--locked",
+      "--release",
+      "--target",
+      wasiTarget,
+      "--manifest-path",
+      resolve(source, "shell/Cargo.toml"),
+      "-p",
+      "shell-engine",
+      "--bin",
+      "shell-runtime",
+      "-j2",
+    ],
+    { cwd: root, env: wasiBuildEnvironment(root, target), stdio: "inherit" },
+  );
+  const wasm = resolve(target, wasiTarget, "release", "shell-runtime.wasm");
   verifyWasiGuest(wasm);
-  const output = resolve(target, "compat-control");
+  const output = resolve(base, "compat-control");
   mkdirSync(output, { recursive: true });
   copyFileSync(wasm, resolve(output, `${sha}.wasm`));
-  writeFileSync(resolve(output, `${sha}.json`), JSON.stringify({ commit: sha, artifact: `${sha}.wasm`, purpose: "unchanged-main Waffle Node instrument control; not candidate scoring" }) + "\n");
-} finally { rmSync(source, { recursive: true, force: true }); }
+  writeFileSync(
+    resolve(output, `${sha}.json`),
+    JSON.stringify({
+      commit: sha,
+      artifact: `${sha}.wasm`,
+      purpose: "unchanged-main Waffle Node instrument control; not candidate scoring",
+    }) + "\n",
+  );
+} finally {
+  rmSync(source, { recursive: true, force: true });
+}

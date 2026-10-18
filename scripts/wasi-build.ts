@@ -10,7 +10,7 @@ import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 type Environment = NodeJS.ProcessEnv;
 const helper = fileURLToPath(import.meta.url);
 const repositoryRoot = resolve(import.meta.dirname, "..");
-const wasiTarget = "wasm32-wasip1";
+export const wasiTarget = "wasm32-wasip1";
 
 export function wasiBuildConfiguration(root: string, env: Environment = process.env) {
   const sdk = resolve(env.WASI_SDK_PATH ?? "/work/cache/wasi-sdk-34.0-x86_64-linux");
@@ -115,6 +115,17 @@ export function wasiCargoEnvironment(
   return result;
 }
 
+export const workspaceGuests = [
+  "shell-engine",
+  "shell-runtime",
+  "cat",
+  "grep",
+  "mkdir",
+  "seq",
+  "argv-py",
+  "printenv-py",
+] as const;
+
 export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
   const target = shellTargetDirectory(repositoryRoot);
   execFileSync(
@@ -136,7 +147,10 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
     },
   );
   const binIndex = args.indexOf("--bin");
-  const binaries = binIndex < 0 ? ["shell-engine", "shell-runtime", "cat", "grep", "mkdir", "seq"] : [args[binIndex + 1]];
+  // The core shell, each separately linked utility, and the compatibility fixtures
+  // all pass the same patched-libc verifier.
+  const binaries =
+    binIndex < 0 ? workspaceGuests.slice() : [args[binIndex + 1]];
   for (const binary of binaries) {
     verifyWasiGuest(resolve(target, wasiTarget, "release", `${binary}.wasm`));
   }

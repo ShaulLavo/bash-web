@@ -742,7 +742,16 @@ class Pool {
         engine: this.engine.startsWith("bashkit") ? "bashkit" : this.engine,
         modulePath: engines[this.engine].modulePath,
         scratch,
-        utilityDirectory: process.env.BASH_COMPAT_UTILITY_DIR,
+        // Frozen fixture guests (argv.py, printenv.py) belong to the instrument and are
+        // installed for the control and candidate alike; utilities only for the candidate.
+        fixtureDirectory: resolve(
+          root,
+          process.env.BASH_COMPAT_FIXTURE_DIR ??
+            `${process.env.CARGO_TARGET_DIR ?? ".build/shell"}/wasm32-wasip1/release`,
+        ),
+        utilityDirectory: process.env.BASH_COMPAT_UTILITY_DIR
+          ? resolve(root, process.env.BASH_COMPAT_UTILITY_DIR)
+          : undefined,
         tmp: virtualTmp,
         home: virtualHome,
         env: { HOME: virtualHome, TMP: virtualTmp, SH: "bash", LC_ALL: "C.UTF-8" },

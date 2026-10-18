@@ -47,6 +47,15 @@ pub async fn run(
         .unwrap_or_else(|status| status)
 }
 
+/// One external program invocation, as delivered by the host process boundary.
+pub struct Invocation {
+    pub args: Vec<String>,
+    pub env: std::collections::BTreeMap<String, String>,
+    pub cwd: String,
+    pub fds: FdTable,
+    pub context: Context,
+}
+
 #[cfg(not(target_os = "wasi"))]
 pub fn main(_utility: Utility) {
     eprintln!("utility requires wasm32-wasip1 and a runtime_proc host");
@@ -54,6 +63,26 @@ pub fn main(_utility: Utility) {
 }
 #[cfg(target_os = "wasi")]
 pub fn main(utility: Utility) {
+    guest_main(move |invocation| async move {
+        run(
+            utility,
+            invocation.args,
+            &invocation.cwd,
+            &invocation.fds,
+            &invocation.context,
+        )
+        .await
+    });
+}
+
+/// Drive one guest program over Waffle's runtime_proc descriptors and patched libc
+/// root preopen. Interrupts cancel the program's future; it exits with its status.
+#[cfg(target_os = "wasi")]
+pub fn guest_main<F, Fut>(program: F) -> !
+where
+    F: FnOnce(Invocation) -> Fut + 'static,
+    Fut: std::future::Future<Output = i32> + 'static,
+{
     use futures::FutureExt;
     use shell_engine::{
         executor::Executor,
@@ -65,14 +94,20 @@ pub fn main(utility: Utility) {
     let runtime = Runtime::new(abi, executor.clone());
     let fds = runtime.stdio().expect("inherited descriptors");
     let cancel = Cancel::new();
-    let context = Context {
-        cancel: cancel.clone(),
-        filesystem: Rc::new(runtime.clone()),
-        line_bytes: shell_engine::Limits::default().line_bytes,
+    let invocation = Invocation {
+        args: std::env::args().skip(1).collect(),
+        env: std::env::vars().collect(),
+        cwd: std::env::var("PWD").unwrap_or_else(|_| "/".into()),
+        fds,
+        context: Context {
+            cancel: cancel.clone(),
+            filesystem: Rc::new(runtime.clone()),
+            // The shell's production limits are its defaults; a separate program
+            // keeps the same record bound the former in-shell stand-in used.
+            line_bytes: shell_engine::Limits::default().line_bytes,
+        },
     };
-    let args = std::env::args().skip(1).collect();
-    let cwd = std::env::var("PWD").unwrap_or_else(|_| "/".into());
-    let job = executor.spawn(async move { run(utility, args, &cwd, &fds, &context).await });
+    let job = executor.spawn(program(invocation));
     while !job.is_finished() {
         if runtime.take_interrupt() {
             cancel.cancel();

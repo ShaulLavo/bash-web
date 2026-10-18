@@ -59,14 +59,13 @@ test("worker preparation bundles the public Waffle FS worker and finish-build re
   await mkdir(resolve(scratch, "src/runtime"), { recursive: true });
   await symlink(resolve(root, "node_modules"), resolve(scratch, "node_modules"), "dir");
   await writeFile(resolve(scratch, "src/runtime/worker.ts"), "export const shellWorker = true;\n");
-  await writeFile(resolve(scratch, "src/runtime/program-worker.ts"), "export const programWorker = true;\n");
   for (const script of ["build-worker.mjs", "finish-build.mjs", "serve.mjs"]) {
     await copyFile(resolve(root, "scripts", script), resolve(scratch, "scripts", script));
   }
   const run = promisify(execFile);
   await run(process.execPath, [resolve(scratch, "scripts/build-worker.mjs")], { timeout: 30000 });
   const prepared = new Map();
-  for (const worker of ["shell-worker", "program-worker", "fs-worker"]) {
+  for (const worker of ["shell-worker", "fs-worker"]) {
     const bytes = await readFile(resolve(scratch, `.build/browser/${worker}.js`));
     assert.ok(bytes.byteLength > 0);
     assert.deepEqual(await readFile(resolve(scratch, `dist/${worker}.js`)), bytes);

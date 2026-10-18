@@ -68,7 +68,9 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
         },
       };
     },
-    resolveTerminal: endpoint,
+    // Without a page terminal, inherited terminal descriptions keep Waffle's raw
+    // output path to the root's owner instead of failing to resolve a ring.
+    ...(terminal ? { resolveTerminal: endpoint } : {}),
     spawnData: () => ({ shellTerminal: terminal, terminalAdmission: createTerminalAdmission() }),
     beforeBindings({ wasi }) {
       if (!request.terminal) for (const fd of [0, 1, 2]) wasi.descriptors.close(fd);

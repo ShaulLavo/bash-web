@@ -392,7 +392,7 @@ pub fn register_fixture(
         .collect())
 }
 
-async fn argv(request: SpawnRequest, cancel: Cancel) -> i32 {
+pub async fn argv(request: SpawnRequest, cancel: Cancel) -> i32 {
     let Some(output) = request.fds.get(1) else {
         return 1;
     };
@@ -413,7 +413,7 @@ async fn argv(request: SpawnRequest, cancel: Cancel) -> i32 {
     0
 }
 
-async fn printenv(request: SpawnRequest, cancel: Cancel) -> i32 {
+pub async fn printenv(request: SpawnRequest, cancel: Cancel) -> i32 {
     let Some(output) = request.fds.get(1) else {
         return 1;
     };

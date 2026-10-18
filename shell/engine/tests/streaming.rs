@@ -3,7 +3,10 @@ use shell_engine::{
     io::{PIPE_CAPACITY, pipe},
     process::ProcessHost,
 };
-use support::register_utilities;
+/// Core tests use the test-only external fixtures; none is linked into the shell.
+fn register_utilities(host: &shell_engine::process::InProcessHost, fs: &shell_engine::io::MemoryFs, _line_bytes: usize) {
+    support::register_utilities(host, fs, true);
+}
 include!("support/streaming.rs");
 #[test]
 fn ticker_streams_through_filter_before_exit() {

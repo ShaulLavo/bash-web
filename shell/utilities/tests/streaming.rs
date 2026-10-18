@@ -1,5 +1,6 @@
 include!("../../engine/tests/support/streaming.rs");
-fn register_utilities(host: &InProcessHost, fs: &MemoryFs, _with_seq: bool) {
+/// The separately linked utilities, driven exactly as their guest entry drives them.
+fn register_utilities(host: &InProcessHost, fs: &MemoryFs, line_bytes: usize) {
     for (name, utility) in [
         ("cat", shell_utilities::Utility::Cat),
         ("grep", shell_utilities::Utility::Grep),
@@ -11,7 +12,7 @@ fn register_utilities(host: &InProcessHost, fs: &MemoryFs, _with_seq: bool) {
             let context = shell_utilities::Context {
                 cancel,
                 filesystem: Rc::new(fs.clone()),
-                line_bytes: Limits::default().line_bytes,
+                line_bytes,
             };
             async move {
                 shell_utilities::run(

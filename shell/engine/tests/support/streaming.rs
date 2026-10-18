@@ -26,6 +26,7 @@ impl Rig {
         Self::with_limits(Limits::default())
     }
     fn with_limits(limits: Limits) -> Self {
+        let line_bytes = limits.line_bytes;
         let ex = Executor::new();
         let host = InProcessHost::new(ex.clone());
         let fs = MemoryFs::new(16 * 1024 * 1024);
@@ -62,7 +63,7 @@ impl Rig {
             written,
         };
         value.register();
-                register_utilities(&value.host, &value.fs, true);
+        register_utilities(&value.host, &value.fs, line_bytes);
         value
     }
     fn register(&self) {
