@@ -12,17 +12,30 @@ function fixture(context: TestContext) {
   });
   let mutations = 0;
   let registrations = 0;
+  const programPaths: string[] = [];
+  const files = new Set<string>();
   const runtime = {
     disposed: false,
     registerAdapter() {},
-    registerProgram() {
+    registerProgram(path: string) {
+      assert.ok(path.startsWith("/"));
+      assert.ok(
+        path
+          .slice(1)
+          .split("/")
+          .every((part) => part && part !== "." && part !== ".."),
+      );
+      if (path !== "/programs/shell-engine.wasm")
+        assert.ok(files.has(path), "the caller must create the guest's marker before registration");
+      programPaths.push(path);
       registrations++;
     },
     filesystem: {
       async mkdirp() {
         mutations++;
       },
-      async writeFile() {
+      async writeFile(path: string) {
+        files.add(path);
         mutations++;
       },
       async drain() {},
@@ -33,8 +46,42 @@ function fixture(context: TestContext) {
     if (previousDocument) Object.defineProperty(globalThis, "document", previousDocument);
     else Reflect.deleteProperty(globalThis, "document");
   });
-  return { runtime, mutations: () => mutations, registrations: () => registrations };
+  return {
+    runtime,
+    files,
+    programPaths,
+    mutations: () => mutations,
+    registrations: () => registrations,
+  };
 }
+
+test("test programs use canonical paths with caller-created executable markers", async (context) => {
+  const state = fixture(context);
+  globalThis.fetch = async () => new Response(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0));
+  await registerTestPrograms(state.runtime);
+  const guests = [
+    "/bin/test-guest",
+    "/programs/test-guest.wasm",
+    "/bin/test-spin",
+    "/programs/test-spin.wasm",
+  ];
+  assert.deepEqual(state.programPaths, ["/programs/shell-engine.wasm"].concat(guests));
+  assert.deepEqual(Array.from(state.files), guests);
+});
+
+test("test program registration stops if cancelled while writing a marker", async (context) => {
+  const state = fixture(context);
+  const controller = new AbortController();
+  globalThis.fetch = async () => new Response(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0));
+  state.runtime.filesystem.writeFile = async () => {
+    controller.abort(new Error("Owned lease disposed during marker write"));
+  };
+  await assert.rejects(
+    registerTestPrograms(state.runtime, controller.signal),
+    /Owned lease disposed during marker write/,
+  );
+  assert.equal(state.registrations(), 1, "no guest is registered after cancellation");
+});
 
 test("owned test program registration cancels pending fetches before touching the filesystem", async (context) => {
   const state = fixture(context);

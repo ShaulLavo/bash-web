@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.44",
+  "version": "0.0.45",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -50,6 +50,9 @@
     "fuzz:shell-functions": "node scripts/fuzz-shell-functions.ts",
     "test:fuzz-shell-functions": "node --test scripts/test-fuzz-shell-functions.ts",
     "fuzz:shell-functions:ci": "node scripts/fuzz-shell-functions.ts --replay scripts/fixtures/shell-functions-seed-1.json --replay scripts/fixtures/shell-functions-seed-42.json",
+    "fuzz:shell-path": "node scripts/fuzz-shell-path.ts",
+    "test:fuzz-shell-path": "node --test scripts/test-fuzz-shell-path.ts",
+    "fuzz:shell-path:ci": "node scripts/fuzz-shell-path.ts --replay scripts/fixtures/shell-path-seed-1.json --replay scripts/fixtures/shell-path-seed-42.json",
     "sources:browser": "node scripts/sources.mjs",
     "build:shell:browser": "node scripts/build-shell-browser.mjs",
     "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:test-guest && npm run notices:browser && vite build && node scripts/finish-build.mjs",
@@ -77,11 +80,11 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.1",
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#c458a488bba70855c27a2921c2665c7150ef2090",
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#ba968a6f86468d03394792a3e9c447dfc713c279",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#c458a488bba70855c27a2921c2665c7150ef2090"
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#ba968a6f86468d03394792a3e9c447dfc713c279"
   },
   "overrides": {
     "esbuild": "0.28.2"
@@ -91,6 +94,6 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "waffle@0.0.26": true
+    "waffle@0.0.27": true
   }
 }

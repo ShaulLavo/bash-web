@@ -10,14 +10,68 @@ use futures::{
 };
 use std::{
     cell::{Cell, RefCell},
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     rc::Rc,
 };
 
 pub type ProcessId = u64;
 pub type GroupId = u64;
+
+fn access_path(
+    cwd: &str,
+    path: &str,
+    traversal: Option<(&BTreeMap<String, i32>, &BTreeSet<String>)>,
+) -> Result<String, i32> {
+    let mut result = if path.starts_with('/') || cwd == "/" {
+        String::from("/")
+    } else {
+        cwd.trim_end_matches('/').to_owned()
+    };
+    for component in path.split('/') {
+        // A component must be traversable before even `.` or `..` can be
+        // resolved. Lexical simplification must not bypass denied ancestors.
+        if let Some((errors, directories)) = traversal {
+            if let Some(errno) = errors.get(&result) {
+                return Err(*errno);
+            }
+            // Captured cwd and its ancestors already exist. Every other
+            // traversed component must belong to the fixture directory tree.
+            if result != "/"
+                && result != cwd
+                && !cwd
+                    .strip_prefix(&result)
+                    .is_some_and(|rest| rest.starts_with('/'))
+                && !directories.contains(&result)
+            {
+                return Err(44);
+            }
+        }
+        match component {
+            "" | "." => {}
+            ".." => {
+                if let Some(index) = result.rfind('/') {
+                    result.truncate(index.max(1));
+                }
+            }
+            component => {
+                if result != "/" {
+                    result.push('/');
+                }
+                result.push_str(component);
+            }
+        }
+    }
+    Ok(if result.is_empty() {
+        "/".to_owned()
+    } else {
+        result
+    })
+}
+
 #[derive(Clone)]
 pub struct SpawnRequest {
+    /// Executable selected by lookup, independent of the caller's argv[0] spelling.
+    pub executable: String,
     pub argv: Vec<String>,
     pub env: BTreeMap<String, String>,
     pub cwd: String,
@@ -67,6 +121,13 @@ pub trait ProcessHost {
     fn interrupted(&self) -> bool {
         false
     }
+    /// Check whether `path` is executable from `cwd` without spawning it. The
+    /// returned future owns any host request and cancellation must retire it.
+    fn access(
+        &self,
+        path: String,
+        cwd: String,
+    ) -> LocalBoxFuture<'static, Result<(), ProcessError>>;
     fn spawn(&self, request: SpawnRequest) -> Result<ProcessId, ProcessError>;
     fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<i32, ProcessError>>;
     fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError>;
@@ -106,6 +167,9 @@ type Program = dyn Fn(SpawnRequest, Cancel) -> LocalBoxFuture<'static, i32>;
 struct HostState {
     executor: Executor,
     registry: RefCell<BTreeMap<String, Rc<Program>>>,
+    accesses: RefCell<BTreeMap<String, Result<(), i32>>>,
+    traversal: RefCell<BTreeMap<String, i32>>,
+    directories: RefCell<BTreeSet<String>>,
     children: RefCell<BTreeMap<ProcessId, Child>>,
     // Only unreaped groups have entries; true means reject new descendants.
     groups: RefCell<BTreeMap<GroupId, bool>>,
@@ -121,6 +185,9 @@ impl InProcessHost {
         Self(Rc::new(HostState {
             executor,
             registry: RefCell::new(BTreeMap::new()),
+            accesses: RefCell::new(BTreeMap::new()),
+            traversal: RefCell::new(BTreeMap::new()),
+            directories: RefCell::new(BTreeSet::new()),
             children: RefCell::new(BTreeMap::new()),
             groups: RefCell::new(BTreeMap::new()),
             waits: RefCell::new(BTreeMap::new()),
@@ -128,16 +195,60 @@ impl InProcessHost {
             next_group: Cell::new(1),
         }))
     }
-    /// Registry callbacks construct futures; command work belongs inside the future.
+    /// Register one exact canonical executable path, never a basename alias.
+    /// Callbacks construct futures; command work belongs inside the future.
     pub fn register(
         &self,
         name: impl Into<String>,
         program: impl Fn(SpawnRequest, Cancel) -> LocalBoxFuture<'static, i32> + 'static,
     ) {
+        let name = name.into();
+        self.register_ancestors(&name);
         self.0
-            .registry
+            .traversal
             .borrow_mut()
-            .insert(name.into(), Rc::new(program));
+            .entry(name.clone())
+            .or_insert(54);
+        self.0.registry.borrow_mut().insert(name, Rc::new(program));
+    }
+    /// Install deterministic executable-access results for native/WASI shell
+    /// fixtures. This is explicit host capability data, not a spawn probe.
+    pub fn register_access(
+        &self,
+        path: impl Into<String>,
+        cwd: impl Into<String>,
+        result: Result<(), i32>,
+    ) {
+        let path = path.into();
+        let cwd = cwd.into();
+        let key = access_path(&cwd, &path, None).expect("unchecked fixture path");
+        self.register_ancestors(&key);
+        self.0.accesses.borrow_mut().insert(key, result);
+    }
+    /// Mark a fixture node as non-traversable (e.g. a file or denied
+    /// directory). Unlike its final-component X_OK result, this error applies
+    /// before subsequent components, including `.` and `..`, are resolved.
+    pub fn register_traversal_error(
+        &self,
+        path: impl Into<String>,
+        cwd: impl Into<String>,
+        errno: i32,
+    ) {
+        let key = access_path(&cwd.into(), &path.into(), None).expect("unchecked fixture path");
+        self.register_ancestors(&key);
+        self.0.traversal.borrow_mut().insert(key, errno);
+    }
+    /// Declare an existing, traversable fixture directory, including empty ones.
+    pub fn register_directory(&self, path: impl Into<String>, cwd: impl Into<String>) {
+        let key = access_path(&cwd.into(), &path.into(), None).expect("unchecked fixture path");
+        self.register_ancestors(&key);
+        self.0.directories.borrow_mut().insert(key);
+    }
+    fn register_ancestors(&self, path: &str) {
+        let mut directories = self.0.directories.borrow_mut();
+        for (index, _) in path.match_indices('/') {
+            directories.insert(path[..index.max(1)].to_owned());
+        }
     }
     pub fn active_count(&self) -> usize {
         self.0
@@ -181,6 +292,35 @@ impl InProcessHost {
     }
 }
 impl ProcessHost for InProcessHost {
+    fn access(
+        &self,
+        path: String,
+        cwd: String,
+    ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        let result = access_path(
+            &cwd,
+            &path,
+            Some((&self.0.traversal.borrow(), &self.0.directories.borrow())),
+        )
+        .and_then(|key| {
+            self.0
+                .accesses
+                .borrow()
+                .get(&key)
+                .copied()
+                .or_else(|| {
+                    self.0
+                        .registry
+                        .borrow()
+                        .contains_key(&key)
+                        .then_some(Ok(()))
+                })
+                .unwrap_or(Err(44))
+        });
+        Box::pin(futures::future::ready(
+            result.map_err(ProcessError::Runtime),
+        ))
+    }
     fn allocate_group(&self) -> GroupId {
         let group = self.0.next_group.get();
         self.0
@@ -192,12 +332,21 @@ impl ProcessHost for InProcessHost {
         if self.retained_count() >= 4096 {
             return Err(ProcessError::ProcessLimit);
         }
-        let name = request.argv.first().cloned().unwrap_or_default();
+        let name = request.executable.clone();
+        let key = access_path(
+            &request.cwd,
+            &name,
+            Some((&self.0.traversal.borrow(), &self.0.directories.borrow())),
+        )
+        .map_err(ProcessError::Runtime)?;
+        if let Some(Err(errno)) = self.0.accesses.borrow().get(&key) {
+            return Err(ProcessError::Runtime(*errno));
+        }
         let program = self
             .0
             .registry
             .borrow()
-            .get(&name)
+            .get(&key)
             .cloned()
             .ok_or_else(|| ProcessError::UnknownCommand(name))?;
         let group = request.group;
@@ -464,7 +613,8 @@ mod tests {
     use futures::FutureExt;
     fn request(name: &str, group: GroupId) -> SpawnRequest {
         SpawnRequest {
-            argv: vec![name.to_owned()],
+            executable: format!("/home/guest/{name}"),
+            argv: vec![name.into()],
             env: BTreeMap::new(),
             cwd: "/".into(),
             fds: FdTable::default(),
@@ -473,11 +623,83 @@ mod tests {
         }
     }
     #[test]
+    fn executable_registration_admits_only_the_exact_canonical_path_and_never_runs_queries() {
+        let ex = Executor::new();
+        let host = InProcessHost::new(ex.clone());
+        let calls = Rc::new(Cell::new(0));
+        let observed = calls.clone();
+        host.register("/one/tool", move |_, _| {
+            observed.set(observed.get() + 1);
+            Box::pin(async { 0 })
+        });
+        assert_eq!(
+            host.access("tool".into(), "/one".into()).now_or_never(),
+            Some(Ok(()))
+        );
+        assert_eq!(
+            host.access("./tool".into(), "/one".into()).now_or_never(),
+            Some(Ok(()))
+        );
+        for path in ["/other/tool", "/usr/bin/tool", "/tool"] {
+            assert_eq!(
+                host.access(path.into(), "/one".into()).now_or_never(),
+                Some(Err(ProcessError::Runtime(44)))
+            );
+            let mut req = request("unused", 1);
+            req.executable = path.into();
+            req.argv = vec![path.into()];
+            assert!(matches!(
+                host.spawn(req),
+                Err(ProcessError::UnknownCommand(_) | ProcessError::Runtime(44))
+            ));
+        }
+        assert_eq!(calls.get(), 0);
+        assert_eq!(host.retained_count(), 0);
+        host.register_access("/one/tool", "/", Err(2));
+        let mut req = request("unused", 1);
+        req.executable = "/one/tool".into();
+        req.argv = vec!["/one/tool".into()];
+        assert_eq!(host.spawn(req), Err(ProcessError::Runtime(2)));
+        assert_eq!(calls.get(), 0);
+    }
+    #[test]
+    fn access_and_spawn_walk_ancestors_before_resolving_dot_components() {
+        let host = InProcessHost::new(Executor::new());
+        host.register("/one/tool", |_, _| Box::pin(async { 7 }));
+        host.register_traversal_error("/file", "/", 54);
+        host.register_traversal_error("/denied", "/", 44);
+        for (path, errno) in [
+            ("/file/../one/tool", 54),
+            ("/file/./../one/tool", 54),
+            ("/denied/../one/tool", 44),
+            ("/denied/./../one/tool", 44),
+            ("/missing/../one/tool", 44),
+            ("/missing/./../one/tool", 44),
+            ("/one/tool/../tool", 54),
+            ("/one/tool/", 54),
+        ] {
+            assert_eq!(
+                host.access(path.into(), "/".into()).now_or_never(),
+                Some(Err(ProcessError::Runtime(errno)))
+            );
+            let mut req = request("unused", 1);
+            req.executable = path.into();
+            req.argv = vec![path.into()];
+            assert_eq!(host.spawn(req), Err(ProcessError::Runtime(errno)));
+        }
+        assert_eq!(
+            host.access("/one/../one/tool".into(), "/".into())
+                .now_or_never(),
+            Some(Ok(()))
+        );
+        assert_eq!(host.retained_count(), 0);
+    }
+    #[test]
     fn group_allocator_is_shared_and_never_reuses_reaped_ids() {
         let ex = Executor::new();
         let host = InProcessHost::new(ex.clone());
         let other = host.clone();
-        host.register("exit", |_, _| Box::pin(async { 0 }));
+        host.register("/home/guest/exit", |_, _| Box::pin(async { 0 }));
         let first = host.allocate_group();
         let second = other.allocate_group();
         assert_ne!(first, second);
@@ -499,7 +721,7 @@ mod tests {
     fn explicit_numeric_groups_do_not_require_allocation() {
         let ex = Executor::new();
         let host = InProcessHost::new(ex.clone());
-        host.register("exit", |_, _| Box::pin(async { 17 }));
+        host.register("/home/guest/exit", |_, _| Box::pin(async { 17 }));
         // Explicit IDs are a caller-managed namespace, not allocator reservations.
         for group in [0, 123, GroupId::MAX] {
             let pid = host.spawn(request("exit", group)).unwrap();
@@ -512,7 +734,7 @@ mod tests {
     fn finish_confirms_natural_exit_without_cancelling() {
         let ex = Executor::new();
         let host = InProcessHost::new(ex.clone());
-        host.register("exit", |_, _| Box::pin(async { 17 }));
+        host.register("/home/guest/exit", |_, _| Box::pin(async { 17 }));
         let group = host.allocate_group();
         let pid = host.spawn(request("exit", group)).unwrap();
         let wait = host.wait(pid);
@@ -547,7 +769,9 @@ mod tests {
         for polled in [false, true] {
             let ex = Executor::new();
             let host = InProcessHost::new(ex.clone());
-            host.register("wait", |_, _| Box::pin(futures::future::pending()));
+            host.register("/home/guest/wait", |_, _| {
+                Box::pin(futures::future::pending())
+            });
             let group = host.allocate_group();
             host.spawn(request("wait", group)).unwrap();
             ex.drive(64);
@@ -581,7 +805,7 @@ mod tests {
         let host = InProcessHost::new(ex.clone());
         let release = Cancel::new();
         let gate = release.clone();
-        host.register("wait", move |_, _| {
+        host.register("/home/guest/wait", move |_, _| {
             let gate = gate.clone();
             async move {
                 gate.cancelled().await;
@@ -607,7 +831,9 @@ mod tests {
     fn dropped_pending_finish_preserves_abandon_cleanup() {
         let ex = Executor::new();
         let host = InProcessHost::new(ex.clone());
-        host.register("wait", |_, _| Box::pin(futures::future::pending()));
+        host.register("/home/guest/wait", |_, _| {
+            Box::pin(futures::future::pending())
+        });
         let group = host.allocate_group();
         let pid = host.spawn(request("wait", group)).unwrap();
         let wait = host.wait(pid);
@@ -625,7 +851,7 @@ mod tests {
         let weak_host = Rc::downgrade(&host.0);
         let remaining = Rc::new(Cell::new(8192));
         let count = remaining.clone();
-        host.register("chain", move |request, _| {
+        host.register("/home/guest/chain", move |request, _| {
             let host = InProcessHost(weak_host.upgrade().unwrap());
             let count = count.clone();
             Box::pin(async move {
@@ -650,7 +876,7 @@ mod tests {
     fn exits_notify_joiners_and_reap_fds() {
         let ex = Executor::new();
         let host = InProcessHost::new(ex.clone());
-        host.register("write", |request, cancel| {
+        host.register("/home/guest/write", |request, cancel| {
             Box::pin(async move {
                 request
                     .fds
@@ -683,7 +909,7 @@ mod tests {
     fn handled_broken_pipe_status_is_not_overwritten() {
         let ex = Executor::new();
         let host = InProcessHost::new(ex.clone());
-        host.register("handle", |req, _| {
+        host.register("/home/guest/handle", |req, _| {
             Box::pin(async move {
                 assert_eq!(
                     req.fds.get(1).unwrap().write(b"x").await,
@@ -704,7 +930,9 @@ mod tests {
     fn group_cancellation_confirms_subtree_without_background() {
         let ex = Executor::new();
         let host = InProcessHost::new(ex.clone());
-        host.register("wait", |_, _| Box::pin(futures::future::pending()));
+        host.register("/home/guest/wait", |_, _| {
+            Box::pin(futures::future::pending())
+        });
         let root = host.spawn(request("wait", 1)).unwrap();
         let mut req = request("wait", 1);
         req.parent = Some(root);
@@ -741,7 +969,7 @@ mod tests {
         let host = InProcessHost::new(ex.clone());
         let called = Rc::new(Cell::new(false));
         let invocation = called.clone();
-        host.register("never", move |_, _| {
+        host.register("/home/guest/never", move |_, _| {
             invocation.set(true);
             Box::pin(async { 0 })
         });
@@ -759,10 +987,12 @@ mod tests {
     fn subtree_kill_survives_intermediate_reaping() {
         let ex = Executor::new();
         let host = InProcessHost::new(ex.clone());
-        host.register("wait", |_, _| Box::pin(futures::future::pending()));
+        host.register("/home/guest/wait", |_, _| {
+            Box::pin(futures::future::pending())
+        });
         let gate = crate::executor::Event::default();
         let event = gate.clone();
-        host.register("exit", move |_, _| {
+        host.register("/home/guest/exit", move |_, _| {
             let wait = event.listen();
             Box::pin(async move {
                 wait.await;
@@ -793,7 +1023,9 @@ mod tests {
     fn dropped_group_transfers_confirmed_cleanup_to_executor() {
         let ex = Executor::new();
         let host = InProcessHost::new(ex.clone());
-        host.register("wait", |_, _| Box::pin(futures::future::pending()));
+        host.register("/home/guest/wait", |_, _| {
+            Box::pin(futures::future::pending())
+        });
         host.spawn(request("wait", 1)).unwrap();
         ex.drive(10);
         {
@@ -814,7 +1046,7 @@ mod tests {
         let host = InProcessHost::new(ex.clone());
         let release = Cancel::new();
         let gate = release.clone();
-        host.register("linger", move |request, _| {
+        host.register("/home/guest/linger", move |request, _| {
             let gate = gate.clone();
             async move {
                 gate.cancelled().await;
@@ -824,7 +1056,7 @@ mod tests {
             .boxed_local()
         });
         let weak = Rc::downgrade(&host.0);
-        host.register("parent", move |mut req, _| {
+        host.register("/home/guest/parent", move |mut req, _| {
             let host = InProcessHost(weak.upgrade().unwrap());
             async move {
                 let parent = host
@@ -838,6 +1070,7 @@ mod tests {
                     .map(|(&pid, _)| pid)
                     .unwrap();
                 req.parent = Some(parent);
+                req.executable = "/home/guest/linger".into();
                 req.argv = vec!["linger".into()];
                 host.spawn(req).unwrap();
                 7
