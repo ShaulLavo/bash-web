@@ -43,10 +43,11 @@ pub(super) async fn run(
             break;
         }
     }
-    // Check the complete repeated output and work before the first write. A
-    // resource failure is not an ordinary printf warning with partial output.
-    // Delivery then needs only constant stack space and cancellation checkpoints;
-    // it cannot discover a new expansion/work allocation limit midway through.
+    // Admit the complete repeated output and work before the first write, so
+    // expansion/work admission failures emit nothing. Delivery needs constant
+    // stack space and cannot discover a new expansion/work allocation limit.
+    // I/O failures and cancellation are not atomic: they can leave a genuine
+    // streamed prefix, including when writing a later warning to closed stderr.
     let mut printer = Printer {
         fds,
         context,

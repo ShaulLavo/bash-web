@@ -293,9 +293,11 @@ fn printf_delivery_cancellation_preserves_only_real_streamed_prefix() {
 }
 
 #[test]
-fn printf_warning_write_failure_is_not_swallowed() {
+fn printf_warning_write_failure_preserves_only_the_real_streamed_prefix() {
     let rig = Rig::new(Limits::default());
-    assert_ne!(rig.run(r"printf 'A\xZ' 2>&-"), 0);
+    assert_eq!(rig.run(r"printf 'prefixA\xZ' 2>&-"), 1);
+    assert_eq!(rig.output.bytes(), b"prefixA");
+    assert!(rig.errors.bytes().is_empty());
     assert_eq!(rig.run("echo recovered"), 0);
-    assert!(rig.output.bytes().ends_with(b"recovered\n"));
+    assert_eq!(rig.output.bytes(), b"prefixArecovered\n");
 }
