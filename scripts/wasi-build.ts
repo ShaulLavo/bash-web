@@ -134,7 +134,10 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
     },
   );
   const binIndex = args.indexOf("--bin");
-  const binaries = binIndex < 0 ? ["shell-engine", "shell-runtime"] : [args[binIndex + 1]];
+  const binaries =
+    binIndex < 0
+      ? ["shell-engine", "shell-runtime", "argv-py", "printenv-py"]
+      : [args[binIndex + 1]];
   for (const binary of binaries) {
     verifyWasiGuest(
       resolve(

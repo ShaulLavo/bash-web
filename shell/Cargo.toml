@@ -1,5 +1,5 @@
 [workspace]
-members = ["parser", "engine"]
+members = ["parser", "engine", "compat-fixtures"]
 resolver = "3"
 
 [workspace.package]

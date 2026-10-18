@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.57",
+  "version": "0.0.58",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -24,8 +24,9 @@
     "test:rust": "node scripts/check-shell-parser.mjs && cargo fmt --manifest-path shell/Cargo.toml --all --check && cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2",
     "build:shell": "node scripts/build-shell.ts",
     "test:shell:wasi": "node scripts/test-shell-wasi.mjs",
-    "test:shell:scoreboard": "node --test scripts/test-shell-scoreboard*.mjs scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-bash-compat*.mjs",
-    "compat:shell": "BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell node scripts/bash-compat.mjs",
+    "test:shell:scoreboard": "npm run build:node-harness && node --test scripts/test-shell-scoreboard*.mjs scripts/test-shell-scoreboard-instrument.ts scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-bash-compat*.mjs",
+    "build:node-harness": "node scripts/build-node-harness.ts",
+    "compat:shell": "npm run build:node-harness && BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell node scripts/bash-compat.mjs",
     "prepare:shell-corpus": "node scripts/prepare-shell-corpus.mjs",
     "fuzz:shell-braces": "node scripts/fuzz-shell-braces.mjs",
     "test:fuzz-shell-braces": "node --test scripts/test-fuzz-shell-braces.mjs",
