@@ -9,7 +9,8 @@ import type {
 import terminalWasmUrl from "ghostty-webgpu/ghostty-vt.wasm?url";
 import terminalBridgeUrl from "ghostty-webgpu/bridge.wasm?url";
 import { BrowserSession } from "./session";
-import { createRuntime, type Runtime } from "waffle";
+import { createRuntime, type Runtime, type SharedFilesystemState } from "waffle";
+import { waitForStorage } from "./storage";
 import filesystemWorkerUrl from "../../.build/browser/fs-worker.js?url";
 import { TerminalNewlines } from "../index";
 import "./style.css";
@@ -22,6 +23,7 @@ interface BrowserTestAccess {
     engine: "own-shell";
     state: string;
     error: string | undefined;
+    storage: SharedFilesystemState | undefined;
     renderer: string | undefined;
     presentation: "frame" | "immediate";
     desynchronized: boolean;
@@ -33,6 +35,7 @@ interface BrowserTestAccess {
   outputTimings(): readonly TerminalOutputTiming[];
   runtimeSnapshot(): ReturnType<BrowserSession["runtimeSnapshot"]>;
   restart(): Promise<void>;
+  dispose(): Promise<void>;
   crash(): void;
 }
 
@@ -131,6 +134,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
     let disposeRuntime: (() => Promise<void>) | undefined;
     let stopping: Promise<void> = Promise.resolve();
     let state = "starting";
+    let storage: SharedFilesystemState | undefined;
     let error: string | undefined;
     let warning: string | undefined;
     let busy = true;
@@ -208,7 +212,9 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         render();
         return;
       }
-      if (!["starting", "ready", "running", "interrupting", "exited"].includes(nextState)) {
+      if (
+        !["starting", "waiting", "ready", "running", "interrupting", "exited"].includes(nextState)
+      ) {
         const message = nextState.replace(/^(?:error|failed):\s*/, "");
         fail(message, expectedGeneration);
         return;
@@ -218,7 +224,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         performance.mark("bash:ready");
       }
       state = nextState;
-      busy = nextState === "starting";
+      busy = nextState === "starting" || nextState === "waiting";
       if (terminal?.textarea) terminal.textarea.disabled = busy || nextState === "exited";
       render();
     }
@@ -256,6 +262,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       const stopped = stop();
       const expectedGeneration = generation;
       state = "starting";
+      storage = undefined;
       error = undefined;
       warning = undefined;
       busy = true;
@@ -289,12 +296,27 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         }
         // The owner must make lease disposal idempotent, including during preparation.
         disposeRuntime = () => lease.dispose();
-        await lease.ready;
+        const controller = new AbortController();
+        startup = controller;
+        await Promise.all([
+          lease.ready,
+          waitForStorage(lease.runtime, controller.signal, (nextStorage) => {
+            if (generation !== expectedGeneration || handle.signal.aborted) return;
+            storage = nextStorage;
+            if (nextStorage.status === "opening" || nextStorage.status === "waiting")
+              receiveState(
+                nextStorage.status === "waiting" ? "waiting" : "starting",
+                expectedGeneration,
+              );
+            else if (nextStorage.status === "ready") receiveState("starting", expectedGeneration);
+            render();
+          }),
+        ]);
         if (generation !== expectedGeneration || handle.signal.aborted) {
           await lease.dispose();
           return;
         }
-        await createSession(current, lease.runtime, expectedGeneration);
+        await createSession(current, lease.runtime, expectedGeneration, controller);
       } catch (cause) {
         fail(cause, expectedGeneration);
       }
@@ -304,13 +326,12 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       current: Terminal,
       pageRuntime: Runtime,
       expectedGeneration: number,
+      controller: AbortController,
     ) {
       const grid = current.appearance.grid;
       // Newline conversion belongs only at the final display sink, never in pipes or files.
       const newlines = new TerminalNewlines();
       performance.mark("bash:session-start");
-      const controller = new AbortController();
-      startup = controller;
       const pending = BrowserSession.create({
         runtime: pageRuntime,
         signal: controller.signal,
@@ -381,6 +402,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
           engine,
           state,
           error,
+          storage,
           renderer: terminal?.diagnostics.rendererBackend,
           presentation: query.get("presentation") === "immediate" ? "immediate" : "frame",
           desynchronized: terminal?.diagnostics.desynchronized ?? false,
@@ -392,6 +414,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         runtimeSnapshot: () => session?.runtimeSnapshot(),
         outputTimings: () => outputTimings,
         restart: start,
+        dispose: stop,
         crash: () => session?.crash(),
       };
     }
@@ -496,7 +519,9 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
             {busy && (
               <div class="loading-overlay" role="status">
                 <span class="loading-dot" />
-                Starting shell…
+                {state === "waiting"
+                  ? "Waiting for another tab to release storage…"
+                  : "Starting shell…"}
               </div>
             )}
           </div>

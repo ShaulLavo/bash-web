@@ -1,6 +1,7 @@
 import { createShell, runtimeSnapshot, SharedBridge, type Shell } from "../index";
 import { control } from "../bridge";
 import type { Runtime } from "waffle";
+import { waitForStorage } from "./storage";
 
 export type SessionOptions = {
   runtime: Runtime;
@@ -78,6 +79,12 @@ export class BrowserSession {
     try {
       session.resize(options.cols, options.rows);
       options.onState("starting");
+      if (options.runtime.filesystem.state.status !== "ready") {
+        await waitForStorage(options.runtime, session.admission.signal, (state) => {
+          options.onState(state.status === "waiting" ? "waiting" : "starting");
+        });
+      }
+      session.admission.signal.throwIfAborted();
       let timeout: ReturnType<typeof setTimeout> | undefined;
       const failure = new Promise<never>((_resolve, reject) => {
         session.startupReject = reject;
