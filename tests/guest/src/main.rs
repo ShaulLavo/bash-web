@@ -9,6 +9,8 @@ use std::time::{Duration, Instant};
 
 #[link(wasm_import_module = "runtime_proc")]
 extern "C" {
+    #[link_name = "fd_kind"]
+    fn proc_fd_kind(fd: u32) -> i32;
     #[link_name = "read"]
     fn proc_read(fd: u32, data: *mut u8, length: usize) -> i32;
     #[link_name = "write"]
@@ -505,6 +507,12 @@ fn run(args: &[String]) -> Result<i32> {
         "zero-read" => {
             let count = read_fd(0, &mut [])?;
             line(1, &format!("ZERO_READ:{count}"))?;
+        }
+        "fd-kinds" => {
+            for text in &args[1..] {
+                let fd = text.parse::<u32>()?;
+                line(1, &format!("FD_KIND:{fd}:{}", unsafe { proc_fd_kind(fd) }))?;
+            }
         }
         "fd-types" => {
             line(
