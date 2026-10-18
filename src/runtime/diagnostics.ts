@@ -1,5 +1,6 @@
 // Original adapter telemetry. These are borrowed observations, not a second process service.
 import type { Runtime, RuntimeSupervisor } from "waffle";
+import { ProcessErrno, ProcessError } from "waffle/proc/types";
 import {
   attachPipeController,
   type PipeController,
@@ -26,6 +27,25 @@ interface Observations {
   guests: Map<number, { memory?: SharedArrayBuffer }>;
   supervisor?: RuntimeSupervisor;
   droppedTerminalBytes: number;
+}
+function readProcessState(transport: WorkerProcessTransport, slot?: number) {
+  try {
+    return workerProcessState(transport, slot);
+  } catch (error) {
+    // Enumeration borrows rows; a consuming wait can collect the process or its job.
+    if (
+      error instanceof ProcessError &&
+      (error.errno === ProcessErrno.SRCH || error.errno === ProcessErrno.CHILD)
+    )
+      return;
+    throw error;
+  }
+}
+function liveProcessStates(transport: WorkerProcessTransport) {
+  return workerProcessSlots(transport).flatMap((slot) => {
+    const state = readProcessState(transport, slot);
+    return state ? [state] : [];
+  });
 }
 const observations = new WeakMap<Runtime, Observations>();
 function forRuntime(runtime: Runtime): Observations {
@@ -99,16 +119,11 @@ function sweepPipes(root: RootObservation): void {
 export function observeProcessMessage(runtime: Runtime, message: WorkerProcessMessage): void {
   if (message.operation !== "pipe") return;
   const handle = message.handle as PipeEndpointHandle;
+  const sender = readProcessState(message.transport);
+  if (!sender) return;
   for (const root of forRuntime(runtime).roots.values()) {
     // SAB wrappers can differ after structured clone; process identities do not.
-    if (
-      !workerProcessSlots(root.transport).some(
-        (slot) =>
-          workerProcessState(root.transport, slot).pid ===
-          workerProcessState(message.transport).pid,
-      )
-    )
-      continue;
+    if (!liveProcessStates(root.transport).some((state) => state.pid === sender.pid)) continue;
     if (!root.pipes.has(handle.id)) {
       // Manual attachment never pumps, claims a relay, retains an endpoint or disposes
       // the pipe. The page runtime remains its only relay/disposal owner.
@@ -131,10 +146,8 @@ export function runtimeSnapshot(runtime: Runtime) {
     roots: runtime.disposed
       ? []
       : Array.from(observed.roots, ([pid, root]) => {
-          const slots = workerProcessSlots(root.transport);
-          const identities = new Set(
-            slots.map((slot) => workerProcessState(root.transport, slot).pid),
-          );
+          const states = liveProcessStates(root.transport);
+          const identities = new Set(states.map((state) => state.pid));
           const own = records.filter((record) => identities.has(record.pid));
           const live = own.filter((record) => !record.result);
           // Keep an immediate snapshot exact; the autonomous sweep owns reclamation.
@@ -150,7 +163,7 @@ export function runtimeSnapshot(runtime: Runtime) {
             processes: own.length,
             liveProcesses: live.length,
             liveJobs: new Set(live.map((record) => record.job)).size,
-            retainedSlots: slots.length,
+            retainedSlots: states.length,
             // Root-message observations only, not a descendant-wide pipe census.
             pipes: root.pipes.size,
             pipeCapacity: runtimePipeOptions.capacity,
