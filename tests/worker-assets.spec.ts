@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { startupReady } from "./helpers/readiness.ts";
 
 test("production startup loads an emitted Waffle filesystem worker", async ({ page, request }) => {
   const filesystemResponses: { url: string; status: number; type: string }[] = [];
@@ -11,7 +12,7 @@ test("production startup loads an emitted Waffle filesystem worker", async ({ pa
     });
   });
   await page.goto("/?test=1&renderer=canvas");
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await startupReady(page);
   expect(filesystemResponses).toHaveLength(1);
   expect(filesystemResponses[0].status).toBe(200);
   expect(filesystemResponses[0].type).toMatch(/javascript/);
@@ -34,7 +35,7 @@ test("a browser exposing WebGPU without an adapter opens a working Canvas termin
     });
   });
   await page.goto("/?test=1");
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await startupReady(page);
   expect(await page.evaluate(() => window.bashWeb?.snapshot().renderer)).toBe("canvas2d");
   await page.locator("textarea").focus();
   await page.keyboard.insertText("printf 'canvas-fallback-works\\n'");

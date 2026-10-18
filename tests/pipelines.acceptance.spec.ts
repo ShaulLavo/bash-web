@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { ready, startupReady } from "./helpers/readiness.ts";
 
 import { execFileSync } from "node:child_process";
 
@@ -6,12 +7,9 @@ import { execFileSync } from "node:child_process";
 // Runtime owns a persistent filesystem worker as well as the guest shell.
 const baselineWorkers = new WeakMap<Page, number>();
 
-async function ready(page: Page) {
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
-}
 async function open(page: Page) {
   await page.goto("/?test=1&renderer=canvas&engine=own-shell");
-  await ready(page);
+  await startupReady(page);
   expect(await page.evaluate(() => window.bashWeb?.snapshot().engine)).toBe("own-shell");
   baselineWorkers.set(page, page.workers().length);
   await page.locator("textarea").focus();

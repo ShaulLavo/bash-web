@@ -1,19 +1,11 @@
 import { test, expect, type Page } from "@playwright/test";
+import { ready, startupReady } from "./helpers/readiness.ts";
 
 test.setTimeout(60000);
-async function ready(page: Page) {
-  await expect
-    .poll(() =>
-      page.evaluate(() => ({
-        state: window.bashWeb?.snapshot().state,
-        failure: document.querySelector('[role="alert"]')?.textContent?.trim(),
-      })),
-    )
-    .toMatchObject({ state: "ready" });
-}
+
 async function open(page: Page) {
   await page.goto("/?test=1&renderer=canvas&engine=own-shell");
-  await ready(page);
+  await startupReady(page);
   expect(await page.evaluate(() => window.bashWeb?.snapshot().engine)).toBe("own-shell");
   await page.locator("textarea").focus();
   return page.workers().length;
@@ -45,7 +37,7 @@ async function file(page: Page, path: string, source: string) {
 
 test("own shell is the default engine", async ({ page }) => {
   await page.goto("/?test=1&renderer=canvas");
-  await ready(page);
+  await startupReady(page);
   expect(await page.evaluate(() => window.bashWeb?.snapshot().engine)).toBe("own-shell");
 });
 

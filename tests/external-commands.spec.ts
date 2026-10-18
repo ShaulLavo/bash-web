@@ -1,16 +1,15 @@
 import { test, expect, type Page } from "@playwright/test";
+import { ready, startupReady } from "./helpers/readiness.ts";
 
 const baselineWorkers = new WeakMap<Page, number>();
 
 async function open(page: Page) {
   await page.goto("/?test=1&renderer=canvas");
-  await ready(page);
+  await startupReady(page);
   baselineWorkers.set(page, page.workers().length);
   await page.locator("textarea").focus();
 }
-async function ready(page: Page) {
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
-}
+
 async function command(page: Page, text: string) {
   await page.keyboard.insertText(text);
   await page.keyboard.press("Enter");
@@ -173,8 +172,10 @@ test("session restart terminates a running child worker", async ({ page }) => {
   await command(page, "test-spin RESTART_CHILD");
   await output(page, "RESTART_CHILD");
   await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page)! + 1);
-  await page.evaluate(() => window.bashWeb?.restart());
-  await ready(page);
+  await page.evaluate(() => {
+    void window.bashWeb?.restart();
+  });
+  await startupReady(page);
   await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
   await page.locator("textarea").focus();
   await command(page, `test-guest emit $'RESTART_OK\\n'`);

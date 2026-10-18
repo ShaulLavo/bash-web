@@ -1,10 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
-
-async function ready(page: Page) {
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
-  expect(await page.evaluate(() => window.bashWeb?.snapshot().storage?.status)).toBe("ready");
-}
+import { startupReady } from "./helpers/readiness.ts";
 
 async function waiting(page: Page) {
   await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("waiting");
@@ -28,7 +24,7 @@ for (const storage of ["opfs", "indexeddb"]) {
     // OPFS defaults to waiting; IndexedDB retains its default takeover behavior unless opted in.
     if (storage === "indexeddb") query.set("whenBusy", "wait");
     await page.goto(`/?${query}`);
-    await ready(page);
+    await startupReady(page);
     const second = await context.newPage();
     try {
       query.set("startupTimeout", "3000");
@@ -37,7 +33,7 @@ for (const storage of ["opfs", "indexeddb"]) {
       await second.waitForTimeout(3300);
       await waiting(second);
       await page.close();
-      await ready(second);
+      await startupReady(second);
       await second.locator("textarea").focus();
       await second.keyboard.insertText("printf 'storage-resumed\\n'");
       await second.keyboard.press("Enter");
@@ -61,7 +57,7 @@ test("awaited disposal cancels queued storage before a replacement runtime is ac
     workspace: `bash-web-storage-dispose-${randomUUID()}`,
   });
   await page.goto(`/?${query}`);
-  await ready(page);
+  await startupReady(page);
   const second = await context.newPage();
   try {
     await second.goto(`/?${query}`);
@@ -73,7 +69,7 @@ test("awaited disposal cancels queued storage before a replacement runtime is ac
     await waiting(second);
     await page.close();
     await restarted;
-    await ready(second);
+    await startupReady(second);
   } finally {
     await second.close();
   }
