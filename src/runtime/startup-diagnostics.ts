@@ -38,6 +38,7 @@ const startupOperations = [
   "test-guest-program-write",
   "test-spin-bin-write",
   "test-spin-program-write",
+  "test-start-failure-bin-write",
   "test-filesystem-drain",
   "shell-home-mkdir",
   "shell-tmp-mkdir",

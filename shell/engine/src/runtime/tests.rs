@@ -9,6 +9,7 @@ use std::collections::BTreeSet;
 
 struct FakeChild {
     job: u32,
+    startup: Rc<Cell<Option<Result<(), i32>>>>,
     status: Rc<Cell<Option<WaitResult>>>,
     collected: Cell<bool>,
     cancel: Cancel,
@@ -34,6 +35,8 @@ struct Fake {
     descendant_gates: RefCell<BTreeMap<u32, Cancel>>,
     spawn_errors: RefCell<BTreeMap<String, i32>>,
     outcomes: RefCell<BTreeMap<String, WaitResult>>,
+    startup_gate: RefCell<Option<Cancel>>,
+    failure_cleanup_gate: RefCell<Option<Cancel>>,
     access_next: Cell<u32>,
     access_requests: RefCell<BTreeMap<u32, Option<Result<(), i32>>>>,
     access_paths: RefCell<Vec<(u32, String, String)>>,
@@ -76,6 +79,8 @@ impl Fake {
             descendant_gates: RefCell::new(BTreeMap::new()),
             spawn_errors: RefCell::new(BTreeMap::new()),
             outcomes: RefCell::new(BTreeMap::new()),
+            startup_gate: RefCell::new(None),
+            failure_cleanup_gate: RefCell::new(None),
             access_next: Cell::new(1),
             access_requests: RefCell::new(BTreeMap::new()),
             access_paths: RefCell::new(Vec::new()),
@@ -91,6 +96,15 @@ impl Fake {
             fs: MemoryFs::new(4 * 1024 * 1024),
             output,
         })
+    }
+    fn retained_child(&self, pid: u32) -> Result<std::cell::Ref<'_, FakeChild>, i32> {
+        let child =
+            std::cell::Ref::filter_map(self.children.borrow(), |children| children.get(&pid))
+                .map_err(|_| 12)?;
+        if child.collected.get() || self.reaped_jobs.borrow().contains(&child.job) {
+            return Err(12);
+        }
+        Ok(child)
     }
     fn child_status(&self, pid: u32) -> Option<i32> {
         self.children
@@ -193,12 +207,14 @@ impl Abi for Fake {
         }
         self.requests.borrow_mut().push(request.clone());
         let status = Rc::new(Cell::new(None));
+        let startup = Rc::new(Cell::new(None));
         let cancel = Cancel::new();
         let signal = Rc::new(Cell::new(15));
         self.children.borrow_mut().insert(
             pid,
             FakeChild {
                 job,
+                startup: startup.clone(),
                 status: status.clone(),
                 collected: Cell::new(false),
                 cancel: cancel.clone(),
@@ -221,6 +237,7 @@ impl Abi for Fake {
                 descendant,
                 FakeChild {
                     job,
+                    startup: Rc::new(Cell::new(Some(Ok(())))),
                     status: status.clone(),
                     collected: Cell::new(false),
                     cancel: cancel.clone(),
@@ -256,9 +273,26 @@ impl Abi for Fake {
             .to_owned();
         let parse_gate = self.parse_gate.clone();
         let eof_ack = self.eof_ack.clone();
+        let startup_gate = self.startup_gate.borrow().clone();
+        let failure_cleanup_gate = self.failure_cleanup_gate.borrow().clone();
         self.executor.spawn(async move {
+            if let Some(gate) = startup_gate
+                && cancel.run(gate.cancelled()).await.is_err()
+            {
+                startup.set(Some(Err(11)));
+                drop(fds);
+                status.set(Some(WaitResult::Signaled(signal.get())));
+                return;
+            }
+            startup.set(Some(match outcome {
+                Some(WaitResult::StartFailed(errno)) => Err(errno),
+                _ => Ok(()),
+            }));
             if let Some(outcome) = outcome {
                 drop(fds);
+                if let Some(gate) = failure_cleanup_gate {
+                    let _ = cancel.run(gate.cancelled()).await;
+                }
                 status.set(Some(outcome));
                 return;
             }
@@ -339,12 +373,18 @@ impl Abi for Fake {
             .map(|child| child.job)
             .ok_or(71)
     }
-    fn wait(&self, pid: u32) -> Result<WaitResult, i32> {
-        let children = self.children.borrow();
-        let child = children.get(&pid).ok_or(12)?;
-        if child.collected.get() || self.reaped_jobs.borrow().contains(&child.job) {
-            return Err(12);
+    fn start_status(&self, pid: u32) -> Result<i32, i32> {
+        let child = self.retained_child(pid)?;
+        match child.startup.get() {
+            None => Err(AGAIN),
+            Some(Ok(())) => Ok(0),
+            Some(Err(11)) => Err(11),
+            Some(Err(errno)) => Ok(errno),
         }
+    }
+
+    fn wait(&self, pid: u32) -> Result<WaitResult, i32> {
+        let child = self.retained_child(pid)?;
         let status = child.status.get().ok_or(AGAIN)?;
         child.collected.set(true);
         Ok(status)
@@ -496,13 +536,14 @@ impl Abi for Fake {
         self.polls
             .borrow_mut()
             .push((timeout, subscriptions.to_vec()));
-        let ready = subscriptions.iter().filter(|sub| {
-            sub.kind != 5
-                || self
-                    .access_requests
-                    .borrow()
-                    .get(&sub.id)
-                    .is_some_and(Option::is_some)
+        let ready = subscriptions.iter().filter(|sub| match sub.kind {
+            5 => self
+                .access_requests
+                .borrow()
+                .get(&sub.id)
+                .is_some_and(Option::is_some),
+            6 => self.start_status(sub.id) != Err(AGAIN),
+            _ => true,
         });
         let mut count = 0;
         for (slot, sub) in output.iter_mut().zip(ready) {
@@ -730,6 +771,137 @@ fn typed_wait_diagnostic_does_not_retain_closed_pipeline_writer() {
 }
 
 #[test]
+fn child_start_readiness_is_non_consuming_and_precedes_terminal_cleanup() {
+    for outcome in [WaitResult::Exited(127), WaitResult::StartFailed(44)] {
+        let (executor, fake, runtime) = setup();
+        let gate = Cancel::new();
+        let cleanup = Cancel::new();
+        *fake.startup_gate.borrow_mut() = Some(gate.clone());
+        *fake.failure_cleanup_gate.borrow_mut() = Some(cleanup.clone());
+        fake.outcomes
+            .borrow_mut()
+            .insert("/startup-tool".into(), outcome);
+        let group = runtime.allocate_group();
+        let pid = runtime
+            .spawn(request(&runtime, "/startup-tool", group))
+            .unwrap();
+        let started = executor.spawn(runtime.wait_start(pid));
+        executor.drive(64);
+        assert!(!started.is_finished());
+        assert_eq!(fake.start_status(pid as u32), Err(AGAIN));
+        assert!(
+            runtime
+                .0
+                .waiters
+                .borrow()
+                .values()
+                .any(|waiter| waiter.kind == 6)
+        );
+        gate.cancel();
+        let expected = match outcome {
+            WaitResult::StartFailed(errno) => Err(ProcessError::StartFailed(errno)),
+            _ => Ok(()),
+        };
+        assert_eq!(finish(&executor, &runtime, started), expected);
+        assert_eq!(
+            finish(&executor, &runtime, executor.spawn(runtime.wait_start(pid))),
+            expected
+        );
+        assert_eq!(fake.wait(pid as u32), Err(AGAIN));
+        assert!(
+            !fake
+                .children
+                .borrow()
+                .get(&(pid as u32))
+                .unwrap()
+                .collected
+                .get()
+        );
+        cleanup.cancel();
+        let expected = match outcome {
+            WaitResult::Exited(code) => Ok(code),
+            WaitResult::StartFailed(errno) => Err(ProcessError::StartFailed(errno)),
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
+            expected
+        );
+        assert_eq!(fake.start_status(pid as u32), Err(12));
+        finish(
+            &executor,
+            &runtime,
+            executor.spawn(runtime.wait_group(group)),
+        )
+        .unwrap();
+        assert_eq!(runtime.retained_count(), 0);
+    }
+}
+
+#[test]
+fn start_failure_diagnostic_releases_pipe_before_failure_cleanup_fence() {
+    let (executor, fake, runtime) = setup();
+    let cleanup = Cancel::new();
+    *fake.failure_cleanup_gate.borrow_mut() = Some(cleanup.clone());
+    fake.outcomes
+        .borrow_mut()
+        .insert("/startup-tool".into(), WaitResult::StartFailed(45));
+    let session = runtime_session(&executor, &runtime);
+    let job = session
+        .start("/startup-tool 2>&1 | eof-ack; echo complete")
+        .unwrap();
+    for _ in 0..100 {
+        executor.drive(64);
+        runtime.poll(0).unwrap();
+        if fake.eof_ack.is_cancelled() {
+            break;
+        }
+    }
+    assert!(
+        fake.eof_ack.is_cancelled(),
+        "diagnostic pipe survived until terminal cleanup"
+    );
+    assert!(
+        !job.is_finished(),
+        "startup observation consumed the terminal fence"
+    );
+    assert_eq!(
+        fake.output.bytes(),
+        b"/usr/bin/bash: /startup-tool: Exec format error\n"
+    );
+    cleanup.cancel();
+    assert_eq!(finish(&executor, &runtime, job), 0);
+    shutdown_session(&executor, &runtime, &fake, session);
+}
+
+#[test]
+fn cancelled_pending_start_preserves_terminal_signal_without_diagnostic() {
+    let (executor, fake, runtime) = setup();
+    let gate = Cancel::new();
+    *fake.startup_gate.borrow_mut() = Some(gate);
+    let group = runtime.allocate_group();
+    let pid = runtime.spawn(request(&runtime, "sleep", group)).unwrap();
+    let started = executor.spawn(runtime.wait_start(pid));
+    executor.drive(64);
+    runtime.kill(pid, 2).unwrap();
+    assert_eq!(
+        finish(&executor, &runtime, started),
+        Err(ProcessError::Runtime(11))
+    );
+    assert_eq!(
+        finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
+        Ok(130)
+    );
+    finish(
+        &executor,
+        &runtime,
+        executor.spawn(runtime.wait_group(group)),
+    )
+    .unwrap();
+    assert_eq!(runtime.retained_count(), 0);
+}
+
+#[test]
 fn typed_and_synchronous_fork_failures_abort_the_whole_reader() {
     for synchronous in [false, true] {
         for errno in [6, 29, 48] {
@@ -810,7 +982,7 @@ fn typed_start_failure_first_group_consumer_releases_cleanup_reservation() {
 }
 
 #[test]
-fn typed_start_failure_status_and_expired_stderr_fallback() {
+fn typed_start_failure_keeps_redirected_stderr_until_diagnostic() {
     for (errno, status, message) in [
         (48, 254, "fork: Cannot allocate memory"),
         (6, 254, "fork: Resource temporarily unavailable"),
@@ -838,12 +1010,18 @@ fn typed_start_failure_status_and_expired_stderr_fallback() {
                 .unwrap(),
         );
         assert_eq!(code, if status == 254 { 254 } else { 0 }, "errno {errno}");
-        assert_eq!(
-            error_output.bytes(),
-            format!("/usr/bin/bash: {message}\n").as_bytes(),
-            "errno {errno}"
-        );
-        assert!(fake.fs.read_file("/failure").unwrap().is_empty());
+        let diagnostic = format!("/usr/bin/bash: {message}\n");
+        if status == 254 {
+            assert_eq!(error_output.bytes(), diagnostic.as_bytes(), "errno {errno}");
+            assert!(fake.fs.read_file("/failure").unwrap().is_empty());
+        } else {
+            assert!(error_output.bytes().is_empty(), "errno {errno}");
+            assert_eq!(
+                fake.fs.read_file("/failure").unwrap(),
+                diagnostic.as_bytes(),
+                "errno {errno}"
+            );
+        }
         let expected = if status == 254 {
             String::new()
         } else {
@@ -857,6 +1035,36 @@ fn typed_start_failure_status_and_expired_stderr_fallback() {
             0
         );
         shutdown_session(&executor, &runtime, &fake, session);
+    }
+}
+
+#[test]
+fn start_failure_pipeline_delivers_diagnostic_before_eof() {
+    for (errno, code) in [(44, 127), (2, 126), (45, 126)] {
+        let (executor, fake, runtime) = setup();
+        fake.outcomes
+            .borrow_mut()
+            .insert("/startup-tool".into(), WaitResult::StartFailed(errno));
+        let (stderr, parent_output) = io::capture(4096);
+        fake.fds.borrow_mut().insert(2, stderr);
+        let session = runtime_session(&executor, &runtime);
+        let command = "/startup-tool 2>&1 | runtime-cat; printf 'status:%s:%s\\n' \"$?\" \"${PIPESTATUS[*]}\"";
+        let status = finish(&executor, &runtime, session.start(command).unwrap());
+        let output = fake.output.bytes();
+        shutdown_session(&executor, &runtime, &fake, session);
+        assert_eq!(status, 0);
+        assert!(
+            parent_output.bytes().is_empty(),
+            "diagnostic escaped redirected pipe"
+        );
+        assert_eq!(
+            output,
+            format!(
+                "/usr/bin/bash: /startup-tool: {}\nstatus:0:{code} 0\n",
+                ProcessError::StartFailed(errno)
+            )
+            .as_bytes()
+        );
     }
 }
 

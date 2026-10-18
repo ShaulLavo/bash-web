@@ -10,8 +10,8 @@ import { drainGroup, killGroup } from "./shell-process-group.mjs";
 const root = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
 await mkdir(root, { recursive: true });
 
-async function waitFor(check, message) {
-  const deadline = Date.now() + 10000;
+async function waitFor(check, message, timeout = 10000) {
+  const deadline = Date.now() + timeout;
   for (;;) {
     const value = await check();
     if (value) return value;
@@ -64,10 +64,11 @@ function fixtureOwner(t) {
     });
     return child;
   };
-  owner.message = (kind) =>
+  owner.message = (kind, timeout) =>
     waitFor(
       () => owner.messages.find((value) => value === kind || value?.kind === kind),
       `missing ${kind} message: ${Buffer.concat(owner.stderr)}`,
+      timeout,
     );
   return owner;
 }
@@ -137,7 +138,7 @@ test("live capture cancellation holds owned groups until they stop", async (t) =
   assert.deepEqual(await readdir(scratch), ["crates"]);
 });
 
-async function workerLifetime(t, mode) {
+async function workerLifetime(t, mode, bypassInterception = false) {
   const owner = fixtureOwner(t);
   const scratch = await mkdtemp(resolve(root, `compat-cleanup-${mode}-`));
   owner.scratch = scratch;
@@ -170,6 +171,10 @@ async function workerLifetime(t, mode) {
     };
     Worker.prototype.postMessage = function (...args) {
       if (!running && args[0]?.id === 1) {
+        if (${bypassInterception}) {
+          process.send?.("bypassed");
+          return postMessage.apply(this, args);
+        }
         running = true;
         process.send?.("running");
         return;
@@ -195,7 +200,10 @@ async function workerLifetime(t, mode) {
       BASH_COMPAT_TIMEOUT_MS: "10000",
     },
   );
-  await owner.message("running");
+  // The body above runs before importing the production entrypoint. Require a
+  // real dispatch observation, not just a live process or a termination call.
+  if (bypassInterception) await owner.message("bypassed");
+  await owner.message("running", bypassInterception ? 100 : 10000);
   const directory = (await readdir(scratch)).find((name) => name.startsWith("bash-web-compat-"));
   assert.ok(directory);
   child.kill("SIGTERM");
@@ -216,6 +224,10 @@ for (const mode of ["frozen", "live"]) {
   test(`${mode} replay awaits worker termination before removing scratch`, (t) =>
     workerLifetime(t, mode));
 }
+
+test("worker cleanup observation rejects a bypassed dispatch interceptor", async (t) => {
+  await assert.rejects(workerLifetime(t, "frozen", true), /missing running message/);
+});
 
 test("record-only frozen cancellation during oracle loading starts no build or worker", async (t) => {
   const owner = fixtureOwner(t);

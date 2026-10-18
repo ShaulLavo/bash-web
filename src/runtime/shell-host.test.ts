@@ -3,7 +3,14 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import type { ProcessService, Runtime, RuntimeConsumer } from "waffle";
-import type { RuntimeRootOptions, WorkerLaunchOptions } from "waffle/browser/process-broker";
+import {
+  BrowserProcessBroker,
+  type ProcessController,
+  type RuntimeRootOptions,
+  type WorkerLaunchOptions,
+} from "waffle/browser/process-broker";
+import { ExecutableRegistry } from "waffle/proc/registry";
+import { ProcessTable } from "waffle/proc/table";
 import type { ChildExitEvent, ProcessContext } from "waffle/proc/types";
 import type { ShellWorkerRequest } from "./worker";
 import {
@@ -475,6 +482,147 @@ test("abort after worker admission waits for its fence and physical stop", async
   assert.ok(host.events.indexOf("fenced") < host.events.indexOf("terminated"));
   assert.equal(host.runtime.disposed, false);
 });
+
+for (const mode of ["startup", "without-hook", "post-start", "exit126", "exit127"] as const) {
+  test(`real broker preserves shell diagnostic ownership: ${mode}`, async (testContext) => {
+    const host = fixture(testContext);
+    registerShell(host.runtime, host.options);
+    const adapter = host.adapters.get("bash-web:preview1")!;
+    const registry = new ExecutableRegistry();
+    registry.register("fixture", {
+      adapter: "bash-web:preview1",
+      module: new WebAssembly.Module(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0)),
+    });
+    const output: string[] = [];
+    const events: string[] = [];
+    const errors: unknown[] = [];
+    const startupError = Object.assign(new Error("guest has no _start entry point"), {
+      code: "ENOEXEC",
+    });
+    let launched!: ProcessContext;
+    const broker = new BrowserProcessBroker({
+      identities: host.runtime.identities,
+      table: new ProcessTable(host.runtime.identities),
+      registry,
+      onError: (error) => errors.push(error),
+      filesystem: {
+        connect() {
+          throw new Error("No filesystem connection in this controller fixture");
+        },
+        revoke() {},
+        reap() {},
+        async quiesce() {},
+      },
+      launch(context) {
+        const transport = createWorkerProcessTransport({
+          pid: context.pid,
+          job: context.job,
+          identity: host.runtime.identities.buffer,
+          capacity: 4,
+        });
+        transport.data = { filesystem: createFilesystemIdentity(undefined, 1024 * 1024) };
+        const service = {
+          transportFor: () => transport,
+          registerController(pid: number, controller: ProcessController) {
+            assert.equal(pid, context.pid);
+            assert.equal(typeof controller.startFailed, "function");
+            events.push("controller");
+            const startFailed = controller.startFailed!;
+            broker.registerController(pid, {
+              ...controller,
+              // Deliberately bypass the adapter policy to exercise the real generic writer.
+              startFailed:
+                mode === "without-hook"
+                  ? undefined
+                  : (error, active) => {
+                      assert.equal(error, startupError);
+                      assert.equal(active(), true);
+                      events.push("startup-diagnostic");
+                      return startFailed(error, active);
+                    },
+            });
+          },
+          launchWorker(child: ProcessContext, options: WorkerLaunchOptions<ShellWorkerRequest>) {
+            assert.deepEqual(events, ["controller"]);
+            events.push("launch");
+            launched = child;
+            return { terminate: () => options.cleanup?.() };
+          },
+        } as unknown as ProcessService;
+        return adapter(context, service);
+      },
+    });
+    try {
+      const supervisor = await broker.ready();
+      const descriptors = new DescriptorTable();
+      const write = (chunks: readonly Uint8Array[]) => {
+        for (const chunk of chunks) output.push(new TextDecoder().decode(chunk));
+        return chunks.reduce((size, chunk) => size + chunk.length, 0);
+      };
+      descriptors.openAt(
+        2,
+        {
+          kind: "terminal",
+          read: () => 0,
+          write,
+          tryWrite: write,
+          readiness: () => ({ readable: false, writable: true, hangup: false }),
+        },
+        1n << 6n,
+        0n,
+      );
+      const root = supervisor.createRoot({ descriptors });
+      const pid = supervisor.reserveSpawn(root, {
+        executable: "fixture",
+        argv: ["fixture"],
+        env: {},
+        cwd: "/",
+        job: -1,
+        fds: [{ parent: 2, child: 2 }],
+      });
+      await supervisor.start(pid);
+      assert.deepEqual(errors, []);
+      assert.deepEqual(events, ["controller", "launch"]);
+      const startup = mode === "startup" || mode === "without-hook";
+      if (!startup) assert.equal(launched.started(), true);
+      const stderr = launched.descriptors.get(2)!.resource;
+      assert.ok(stderr.kind === "terminal");
+      assert.equal(stderr.write([new TextEncoder().encode("GUEST_STDERR\n")]), 13);
+      if (startup) launched.startFailed(startupError);
+      else if (mode === "post-start") launched.fail(new Error("guest execution failed"));
+      else launched.exit(mode === "exit127" ? 127 : 126);
+      // Guest ABI uses WASI 45; the typed host outcome retains Linux ENOEXEC 8.
+      assert.equal(supervisor.startStatus(root, pid), startup ? 45 : 0);
+      const result = await supervisor.waitForExit(root, pid);
+      assert.deepEqual(
+        result,
+        startup
+          ? { kind: "start-failed", error: "ENOEXEC", code: 8, status: null }
+          : {
+              kind: "exited",
+              code: mode === "exit127" ? 127 : 126,
+              status: mode === "exit127" ? 127 : 126,
+            },
+      );
+      assert.deepEqual(
+        events,
+        mode === "startup"
+          ? ["controller", "launch", "startup-diagnostic"]
+          : ["controller", "launch"],
+      );
+      assert.equal(
+        output.join(""),
+        mode === "without-hook"
+          ? `GUEST_STDERR\nruntime: process start failed: ${String(startupError)}\n`
+          : "GUEST_STDERR\n",
+      );
+      assert.deepEqual(errors, []);
+    } finally {
+      await broker.dispose();
+    }
+    assert.equal(host.consumers.size, 0);
+  });
+}
 
 test("the shell adapter forwards source admission instrumentation to the worker bootstrap", async (testContext) => {
   const host = fixture(testContext);

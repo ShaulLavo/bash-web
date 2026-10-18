@@ -119,5 +119,51 @@
       },
       "additionsNotInMain": {}
     }
+  },
+  "startupIntegration": {
+    "base": "b14a245d274503ded8d058de875852d25a835f2b",
+    "method": "Same jscpd 5.4.1 settings. Share Fake retained-child validation rather than baseline its repeated start_status/wait preconditions. Retain only independent ABI declarations and trait forwarding exceptions for explicit review.",
+    "exact": {
+      "oldClones": 356,
+      "integratedClones": 356,
+      "added": {
+        "a872f3ba804b0591": {
+          "multiplicity": 1,
+          "locations": ["shell/engine/src/runtime/wasi.rs:22", "tests/guest/src/main.rs:30"],
+          "reason": "Independent ABI declarations for production engine and standalone acceptance guest. Sharing production bindings with the guest would couple acceptance to the implementation it verifies."
+        },
+        "e138e5ae23008199": {
+          "multiplicity": 1,
+          "locations": [
+            "shell/engine/src/interpreter/command_builtin/tests.rs:53",
+            "shell/engine/tests/words/session.rs:61"
+          ],
+          "reason": "Required ProcessHost spawn/wait_start/wait forwarding in different test wrappers. A shared wrapper abstraction would couple otherwise independent failure and session fixtures for no shared behavior."
+        },
+        "e946ce1cfef54e86": {
+          "multiplicity": 1,
+          "locations": [
+            "shell/engine/src/interpreter.rs:3983",
+            "shell/engine/src/interpreter/command_builtin/tests.rs:56"
+          ],
+          "reason": "Required ProcessHost wait_start/wait/kill/group forwarding in distinct test wrappers. Sharing would require a broad fixture abstraction unrelated to startup semantics."
+        }
+      },
+      "removed": {
+        "113158c4e0b8b35e": 1,
+        "c64258c06a5312aa": 1,
+        "f9c72c2ae0ee1321": 1
+      },
+      "notBaselined": {
+        "d0f3597bd92545db": "Repeated Fake start_status/wait retained-child lookup extracted into retained_child."
+      }
+    },
+    "rustStructural": {
+      "oldClones": 15,
+      "integratedClones": 15,
+      "added": {},
+      "removed": {}
+    },
+    "policy": "No changed thresholds, exclusions or gate failure controls. New clones still fail."
   }
 }
