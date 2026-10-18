@@ -450,6 +450,14 @@ impl Abi for Fake {
         let (read, write) = io::pipe();
         Ok((self.fd(read), self.fd(write)))
     }
+    fn fd_kind(&self, fd: u32) -> Result<DescriptorKind, i32> {
+        self.fds
+            .borrow()
+            .get(&fd)
+            .ok_or(8)?
+            .descriptor_kind()
+            .map_err(|_| 8)
+    }
     fn dup(&self, fd: u32) -> Result<u32, i32> {
         let endpoint = self.fds.borrow().get(&fd).cloned().ok_or(8)?;
         Ok(self.fd(endpoint))
@@ -3601,4 +3609,85 @@ fn stalled_path_query_keeps_background_and_peer_progress_and_interrupt_retires_r
         executor.spawn(async move { session.shutdown().await }),
     );
     shutdown_session(&executor, &runtime, &fake, peer);
+}
+
+#[test]
+fn descriptor_categories_are_not_preview1_filetypes() {
+    for (wire, expected) in [
+        (0, DescriptorKind::Other),
+        (1, DescriptorKind::Pipe),
+        (2, DescriptorKind::Terminal),
+        (3, DescriptorKind::Regular),
+        (4, DescriptorKind::Directory),
+        (5, DescriptorKind::Other),
+        (u32::MAX, DescriptorKind::Other),
+    ] {
+        assert_eq!(decode_descriptor_kind(wire), expected);
+    }
+}
+
+#[test]
+fn descriptor_queries_use_private_physical_handles_without_consuming_or_retaining_pipe_ends() {
+    let (_executor, fake, runtime) = setup();
+    let (read, write) = io::pipe();
+    fake.fds.borrow_mut().insert(0, read);
+    fake.fds.borrow_mut().insert(1, write);
+    let mut table = runtime.stdio().unwrap();
+    fake.close(0);
+    fake.close(1);
+    let read = table.remove(0).unwrap();
+    let write = table.remove(1).unwrap();
+    let next_fd = fake.next_fd.get();
+    let closed = fake.closed.borrow().len();
+    assert_eq!(read.descriptor_kind(), Ok(DescriptorKind::Pipe));
+    assert_eq!(write.descriptor_kind(), Ok(DescriptorKind::Pipe));
+    assert_eq!(fake.next_fd.get(), next_fd);
+    assert_eq!(fake.closed.borrow().len(), closed);
+    assert_eq!(write.write(b"payload").now_or_never(), Some(Ok(7)));
+    assert_eq!(read.descriptor_kind(), Ok(DescriptorKind::Pipe));
+    let mut payload = [0; 7];
+    assert_eq!(read.read(&mut payload).now_or_never(), Some(Ok(7)));
+    assert_eq!(&payload, b"payload");
+    drop(write);
+    assert_eq!(read.read(&mut payload).now_or_never(), Some(Ok(0)));
+    let physical = read.runtime_fd().unwrap();
+    fake.close(physical);
+    assert_eq!(read.descriptor_kind(), Err(IoError::BadDescriptor));
+    assert_eq!(fake.fd_kind(0), Err(8));
+    drop(read);
+    drop(table);
+    assert_eq!(fake.fds.borrow().keys().copied().collect::<Vec<_>>(), [2]);
+}
+
+// This supplies classification only. Real terminal acceptance lives in the
+// browser suite; querying a kind must never invoke these I/O methods.
+struct KindOnly(DescriptorKind);
+impl HostEndpoint for KindOnly {
+    fn descriptor_kind(&self) -> Result<DescriptorKind, IoError> {
+        Ok(self.0)
+    }
+    fn read<'a>(&'a self, _output: &'a mut [u8]) -> LocalBoxFuture<'a, Result<usize, IoError>> {
+        panic!("descriptor query read from the endpoint")
+    }
+    fn write<'a>(&'a self, _input: &'a [u8]) -> LocalBoxFuture<'a, Result<usize, IoError>> {
+        panic!("descriptor query wrote to the endpoint")
+    }
+}
+
+#[test]
+fn descriptor_terminal_mock_preserves_numeric_range_and_remapped_bindings() {
+    let (executor, fake, runtime) = setup();
+    fake.fds.borrow_mut().insert(
+        0,
+        Endpoint::host(Rc::new(KindOnly(DescriptorKind::Terminal))),
+    );
+    let session = runtime_session(&executor, &runtime);
+    fake.fds.borrow_mut().insert(0, Endpoint::null());
+    let source = "test -t '-0'; echo $?; [ -t '+0' ]; echo $?; [[ -t ' 00 ' ]]; echo $?; [[ -t 4294967296 ]]; echo $?; test -t -4294967296; echo $?; [ -t -9223372036854775808 ]; echo $?; test -t 3 3<&0; echo $?; [[ -p /dev/stdin ]]; echo $?";
+    assert_eq!(
+        finish(&executor, &runtime, session.start(source).unwrap()),
+        0
+    );
+    assert_eq!(fake.output.bytes(), b"0\n0\n0\n1\n1\n1\n0\n1\n");
+    shutdown_session(&executor, &runtime, &fake, session);
 }

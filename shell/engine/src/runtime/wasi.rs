@@ -30,6 +30,8 @@ unsafe extern "C" {
     fn proc_kill_job(job: u32, signal: i32) -> i32;
     #[link_name = "pipe"]
     fn proc_pipe(output: *mut u8) -> i32;
+    #[link_name = "fd_kind"]
+    fn proc_fd_kind(fd: u32) -> i32;
     #[link_name = "dup"]
     fn proc_dup(fd: u32) -> i32;
     #[link_name = "read"]
@@ -171,6 +173,9 @@ impl Abi for WasiAbi {
             u32::from_le_bytes(bytes[..4].try_into().unwrap()),
             u32::from_le_bytes(bytes[4..].try_into().unwrap()),
         ))
+    }
+    fn fd_kind(&self, fd: u32) -> Result<DescriptorKind, i32> {
+        result(unsafe { proc_fd_kind(fd) }).map(decode_descriptor_kind)
     }
     fn dup(&self, fd: u32) -> Result<u32, i32> {
         result(unsafe { proc_dup(fd) })
