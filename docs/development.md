@@ -113,7 +113,7 @@ heavy runner's suite class use `BASH_COMPAT_JOBS=2`. The unchanged-main control
 builds main's own shell, with its in-shell utilities, in a separate target:
 
 ```sh
-npm run build:compat-control -- 02df6429cc142a771ff9ad26fae3f3d250d0bc04
+npm run build:compat-control -- c81f3b57e861835bc6390b32ecfc4544627c1729
 BASH_COMPAT_SHELL_WASM=$CARGO_TARGET_DIR/compat-control/<sha>.wasm \
   BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell BASH_COMPAT_SKIP_BUILD=1 \
   node scripts/bash-compat.mjs   # control: no BASH_COMPAT_UTILITY_DIR

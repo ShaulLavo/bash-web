@@ -7,7 +7,7 @@ import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 import { shellTargetDirectory, wasiBuildEnvironment, wasiTarget } from "./wasi-build.ts";
 
 const root = resolve(import.meta.dirname, "..");
-const reference = process.argv[2] ?? "02df6429cc142a771ff9ad26fae3f3d250d0bc04";
+const reference = process.argv[2] ?? "c81f3b57e861835bc6390b32ecfc4544627c1729";
 const sha = execFileSync("git", ["rev-parse", "--verify", `${reference}^{commit}`], {
   cwd: root,
   encoding: "utf8",
