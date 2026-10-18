@@ -54,7 +54,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: shell -> ../.build/shell
+      - uses: ./.github/actions/wasi-sdk
       - run: npm ci --ignore-scripts
+      - run: node --test scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts
       - run: node scripts/check-shell-parser.mjs
       - run: cargo fmt --manifest-path shell/Cargo.toml --all --check
       - name: Native shell tests
@@ -133,6 +135,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: shell -> ../.build/shell
+      - uses: ./.github/actions/wasi-sdk
       - run: npm ci --ignore-scripts
       - name: Install isolated Bash runner tools
         run: |
@@ -175,6 +178,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: shell -> ../.build/shell
+      - uses: ./.github/actions/wasi-sdk
       - run: npm ci
       - run: npx playwright install --with-deps chromium firefox
       - run: npm run test:browser:package

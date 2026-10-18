@@ -4,11 +4,7 @@ import { test } from "node:test";
 import { DescriptorTable, MAX_DESCRIPTOR } from "waffle/core/descriptors";
 import { SharedBridge, control, INPUT_CAPACITY, OUTPUT_CAPACITY } from "../bridge";
 import { TerminalNewlines } from "../shell-terminal-output";
-import {
-  preservePreopenDiscovery,
-  preserveRootPreopen,
-  shellTerminalImports,
-} from "./guest-imports";
+import { shellTerminalImports } from "./guest-imports";
 import { createBridgeTerminal } from "./runtime-terminals";
 import {
   attachTerminal,
@@ -172,28 +168,6 @@ test("only the interactive root owns shell phase and columns follow its live ter
   bridge.close();
   root.phase(1);
   assert.equal(Atomics.load(bridge.state, control.phase), 2);
-});
-
-test("relocated preopen discovery tells occupied non-directory from absent descriptor", () => {
-  const table = new DescriptorTable();
-  const stream = createBridgeTerminal(new SharedBridge().buffer, 1);
-  const root = table.open({ kind: "directory", handle: 1 }, 0n, 0n);
-  table.inherit(3, table.get(root)!);
-  table.close(root);
-  table.get(3)!.preopen = "/";
-  const preopen = preserveRootPreopen(table, [3, MAX_DESCRIPTOR]);
-  assert.equal(preopen, 4);
-  const output = table.open(stream, 0n, 0n);
-  table.inherit(3, table.get(output)!);
-  table.close(output);
-  const imports = {
-    wasi_snapshot_preview1: { fd_prestat_get: (fd: number) => (table.get(fd)?.preopen ? 0 : 8) },
-  };
-  preservePreopenDiscovery(imports, table, preopen);
-  assert.equal(imports.wasi_snapshot_preview1.fd_prestat_get(3), 58);
-  assert.equal(imports.wasi_snapshot_preview1.fd_prestat_get(4), 0);
-  assert.equal(imports.wasi_snapshot_preview1.fd_prestat_get(5), 8);
-  table.dispose();
 });
 
 test("final terminal newline discipline is byte-exact across drains", () => {

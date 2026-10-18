@@ -1,8 +1,9 @@
 import { test, expect, type Page } from "./helpers/browser-test";
+import { ready, startupReady, storageReady } from "./helpers/readiness.ts";
 
 async function open(page: Page) {
   await page.goto("/?test=1&renderer=canvas");
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await startupReady(page);
   await page.locator("textarea").focus();
 }
 async function lines(page: Page) {
@@ -68,7 +69,7 @@ test("Ctrl+C interrupts tight loops and stdin while retaining shell state", asyn
   await output(page, "LOOP_READY");
   await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("running");
   await page.keyboard.press("Control+c");
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await ready(page);
   await command(page, `printf 'interrupt:%s:%s\\n' "$?" "$KEEP"`);
   await output(page, "interrupt:130:still-here");
   await command(page, 'read answer; printf "stdin:%s\\n" "$answer"');
@@ -77,7 +78,7 @@ test("Ctrl+C interrupts tight loops and stdin while retaining shell state", asyn
   await output(page, "stdin:typed-input");
   await command(page, "cat");
   await page.keyboard.press("Control+c");
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await ready(page);
   await command(page, `printf 'recovered\\n'`);
   await output(page, "recovered");
 });
@@ -106,7 +107,7 @@ test("bounded heavy streaming keeps the main thread responsive", async ({ page }
   }));
   expect(responsive.bytes).toBeGreaterThan(1000);
   await page.keyboard.press("Control+c");
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await ready(page);
   await command(page, `printf 'stream-ended\\n'`);
   await output(page, "stream-ended");
 });
@@ -116,11 +117,11 @@ test("EOF closes session; worker failure is recoverable with Restart", async ({ 
   await page.keyboard.press("Control+d");
   await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("exited");
   await page.getByRole("button", { name: "Restart", exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await startupReady(page);
   await page.evaluate(() => window.bashWeb?.crash());
   await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("failed");
   await page.getByRole("button", { name: "Restart session" }).click();
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await startupReady(page);
   await command(page, `printf 'fresh-worker\\n'`);
   await output(page, "fresh-worker");
 });
@@ -142,7 +143,7 @@ test("sleep and editing interruptions return to prompt", async ({ page }) => {
   await command(page, "test-guest sleep 30000");
   await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("running");
   await page.keyboard.press("Control+c");
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await ready(page);
   await command(page, "echo sleep-interrupted");
   await output(page, "sleep-interrupted");
 });
@@ -195,11 +196,12 @@ test("IME composition commits exactly once through Ghostty input", async ({ page
 test("missing WASM gives an actionable startup error and Restart recovers", async ({ page }) => {
   await page.route("**/programs/shell-engine.wasm", (route) => route.fulfill({ status: 404 }));
   await page.goto("/?test=1&renderer=canvas");
+  await storageReady(page);
   await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("failed");
   await expect(page.getByRole("alert")).toContainText(/shell|WASM|fetch/i);
   await page.unroute("**/programs/shell-engine.wasm");
   await page.getByRole("button", { name: "Restart session" }).click();
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await startupReady(page);
   await command(page, "echo wasm-recovered");
   await output(page, "wasm-recovered");
 });
@@ -218,7 +220,7 @@ test("long wrapped prompt survives resizing while editing and streaming", async 
   await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("running");
   await page.setViewportSize({ width: 950, height: 700 });
   await page.keyboard.press("Control+c");
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await ready(page);
   await command(page, "echo resized-stream");
   await output(page, "resized-stream");
 });

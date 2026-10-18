@@ -12,6 +12,7 @@ import {
   validateScore,
   verifyOracle,
 } from "./shell-scoreboard.mjs";
+import { wasiCargoEnvironment, wasiSysrootCommand } from "./wasi-build.ts";
 import { drainGroup, killGroup } from "./shell-process-group.mjs";
 
 const root = resolve(process.argv[2] ?? ".");
@@ -86,6 +87,8 @@ async function migrate() {
     await run("git", ["archive", "--format=tar", `--output=${archive}`, ref], root);
     await run("tar", ["-xf", archive, "-C", checkout], scratch);
     await rm(archive);
+    const [prepareCommand, prepareArgs] = wasiSysrootCommand(root);
+    await run(prepareCommand, prepareArgs, root);
     await run(
       "cargo",
       [
@@ -98,12 +101,19 @@ async function migrate() {
         "shell/Cargo.toml",
         "-p",
         "shell-engine",
+        "--bin",
+        "shell-engine",
         "-j2",
       ],
       checkout,
-      { CARGO_TARGET_DIR: targetDir, CARGO_INCREMENTAL: "0" },
+      { ...wasiCargoEnvironment(root, targetDir, env), CARGO_INCREMENTAL: "0" },
     );
     const wasm = resolve(targetDir, "wasm32-wasip1/release/shell-engine.wasm");
+    await run(
+      process.execPath,
+      [fileURLToPath(new URL("./verify-wasi-guests.ts", import.meta.url)), wasm],
+      root,
+    );
     const binaryHash = bytesDigest(await readFile(wasm));
     const score = async (label) => {
       const output = resolve(scratch, `${label}.json`);

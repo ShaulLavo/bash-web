@@ -529,4 +529,4 @@ Its initial oracle-only capture is explicitly distinguished from a
 candidate-verified recording. Strict CI replay verifies generator and fixture
 identity and accepts neither `UNSUPPORTED` nor byte/status mismatches.
 Existing differential generators and their fixtures keep their original bytes.
-See [the gate commands](../scripts/README.md#structured-control-flow-and-conditionals).
+See [the gate commands](shell-fuzzing.md#structured-control-flow-and-conditionals).

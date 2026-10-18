@@ -301,6 +301,7 @@ fn run(args: &[String]) -> Result<i32> {
                 .collect::<std::result::Result<Vec<_>, _>>()?;
             write_fd(1, &data)?;
         }
+        "preopen-probe" | "preopen-input" => test_guest::preopen_probe(args)?,
         "cat" => copy_fd(0, 1)?,
         "fd-read" => copy_fd(number(args, 1)?.try_into()?, 1)?,
         "fd-write" => write_fd(number(args, 1)?.try_into()?, arg(args, 2)?.as_bytes())?,
