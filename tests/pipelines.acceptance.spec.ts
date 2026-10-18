@@ -207,6 +207,7 @@ for (const mode of ["foreground", "background"]) {
 for (const [name, code, diagnostic] of [
   ["nosuch", 127, "/usr/bin/bash: nosuch: command not found"],
   ["test-start-failure", 126, "/usr/bin/bash: test-start-failure: Exec format error"],
+  ["test-lazy-start-failure", 126, "/usr/bin/bash: test-lazy-start-failure: Exec format error"],
 ] as const) {
   test(`failed startup delivers redirected diagnostic before pipe EOF, ${name}`, async ({
     page,
@@ -225,27 +226,29 @@ for (const [name, code, diagnostic] of [
   });
 }
 
-test("asynchronous start failure honors redirected and explicitly closed stderr", async ({
-  page,
-}) => {
-  await open(page);
-  await command(
+for (const name of ["test-start-failure", "test-lazy-start-failure"]) {
+  test(`asynchronous start failure honors redirected and explicitly closed stderr, ${name}`, async ({
     page,
-    "test-start-failure 2>start-error; echo FILE_STATUS:$?; printf 'FILE_DIAGNOSTIC:<%s>\\n' \"$(cat start-error)\"; test-start-failure 2>&-; echo CLOSED_STATUS:$?; test-guest emit '' 1 126; echo EXIT_STATUS:$?; test-guest emit '' 1 127; echo REAL127:$?",
-  );
-  await output(page, "FILE_STATUS:126");
-  await output(page, "FILE_DIAGNOSTIC:</usr/bin/bash: test-start-failure: Exec format error>");
-  await output(page, "CLOSED_STATUS:126");
-  await output(page, "EXIT_STATUS:126");
-  await output(page, "REAL127:127");
-  await ready(page);
-  const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
-  expect(
-    lines?.filter(
-      (line) =>
-        line.includes("/usr/bin/bash: test-start-failure: Exec format error") &&
-        !line.includes("test-start-failure 2>"),
-    ),
-  ).toHaveLength(1);
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
-});
+  }) => {
+    await open(page);
+    await command(
+      page,
+      `${name} 2>start-error; echo FILE_STATUS:$?; printf 'FILE_DIAGNOSTIC:<%s>\\n' "$(cat start-error)"; ${name} 2>&-; echo CLOSED_STATUS:$?; test-guest emit '' 1 126; echo EXIT_STATUS:$?; test-guest emit '' 1 127; echo REAL127:$?`,
+    );
+    await output(page, "FILE_STATUS:126");
+    await output(page, `FILE_DIAGNOSTIC:</usr/bin/bash: ${name}: Exec format error>`);
+    await output(page, "CLOSED_STATUS:126");
+    await output(page, "EXIT_STATUS:126");
+    await output(page, "REAL127:127");
+    await ready(page);
+    const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
+    expect(
+      lines?.filter(
+        (line) =>
+          line.includes(`/usr/bin/bash: ${name}: Exec format error`) &&
+          !line.includes(`${name} 2>`),
+      ),
+    ).toHaveLength(1);
+    await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  });
+}

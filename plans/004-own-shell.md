@@ -152,40 +152,60 @@ they are removed, and they remain mandatory before step 6 replaces Brush:
   completion-before-registration, completion/cancel ownership and invalid output
   memory are separate pending cases. These TODOs are not execution evidence.
 
-**Approved startup-diagnostic follow-up (2026-10-18).** A shell child whose lazy
-executable loader rejects before adapter entry still receives Waffle's generic
-startup message before the shell's errno diagnostic. This already occurs on main;
-the child-start stderr change fixes adapter-entry failures without regressing this
-remaining path. The independent review explicitly cleared that change to land.
+**Approved startup-diagnostic adoption (2026-10-18; implemented, integrated CI pending).**
+Waffle 0.0.50 at `33ece68f9f484d99b8a57a675de71d847e248051` includes
+the quiet-start 0.0.49 contract: typed
+`START_FAILED` is the only child-visible report for admitted `runtime_proc` children,
+including executable resolution and lazy loading before adapter registration.
+Full errors remain in host diagnostics. Host spawns with bookkeeping parents are
+not runtime children and retain generic stderr; no root-only interception or
+local runtime patch is used. Package peer/dev pins, both generated dependency
+locks, trust version and source provenance move together.
 
-- Waffle owns the fix: a typed `START_FAILED` delivered to a `runtime_proc` parent
-  must be the only report, with zero Waffle bytes on the child's stdio at every
-  startup stage, including executable resolution and lazy loading. Root-process
-  reporting stays unchanged, and the full error remains in host diagnostics.
-  The upstream lane is `fix/start-failure-quiet`; use its merged API, not a local
-  patch, admission-observer side effect or root-only interception.
-- Pin the exact merged Waffle dependency in bash-web and update its locks and
-  provenance together. The current affected pin is 0.0.47 at
-  `afe9cc1f3f93ea84929903e5a55854dbfd973448`; do not claim the upstream fix has
-  landed merely because adapter-entry errors are quiet.
-- Add the reviewer's real-broker lazy-loader regression beside the controls in
-  `src/runtime/shell-host.test.ts`, and retain strict browser pipe/file/closed-fd2
-  captures in `tests/pipelines.acceptance.spec.ts`. Admit executable metadata,
-  then make the lazy module loader throw
-  `WebAssembly.CompileError("review loader failure")` before the adapter runs.
-  The current reproduction observes zero adapter launches, Preview1 start status
-  45, typed `start-failed` / `ENOEXEC` / host errno 8, and the unwanted bytes
-  `runtime: process start failed: Error: review loader failure\n`. The fixed
-  child path must preserve the typed result and cleanup while emitting no generic
-  bytes; the shell emits exactly its one redirected command diagnostic. Keep a
-  root-process reporting control. Run `bun test src/runtime/shell-host.test.ts`
-  and the normal Chromium/Firefox gate; do not weaken captures to accept stacks.
-- The new pin will also include Waffle 0.0.48, whose merged pipe
-  `fd_filestat_get` support replaces errno 76 for `runtime_proc` pipe endpoints
-  (Waffle PR 34, merge `7d095e5`). Inspect shell `test -p`, `[ -p /dev/stdin ]`
-  and inherited-pipe detection coverage; add a missing real-pipe regression.
-  Preserve startup-only stderr ownership, foreground/background EOF acknowledgments,
-  real exits 126/127, cancellation and worker/descriptor cleanup throughout.
+- Original `src/runtime/lazy-start.test.ts` exercises real `WorkerProcessClient`
+  notifications through `broker.runtimeMessage`, not a host spawn masquerading
+  as a runtime child. Metadata admission precedes a lazy
+  `WebAssembly.CompileError("review loader failure")`, with zero adapter launches,
+  guest errno 45 and typed ENOEXEC / host errno 8. Terminal and pipe must stay
+  empty, the pipe reaches EOF, and exactly one full host error retains its cause
+  and stack. The host-root reporting control remains unchanged.
+- Failing-first on Waffle 0.0.47: the shipped `npm run test:runtime:terminal`
+  runner passed 124/126 controls; only the new runtime-terminal and runtime-pipe
+  cases failed, observing the generic line and 60 pipe bytes respectively.
+  The same cases pass with 0.0.49; after adding lazy-fixture cancellation coverage,
+  the bounded runtime suite passes 127/127. The final 0.0.50 pin also passes
+  127/127, package contracts, strict TypeScript, lint, format, Knip, exact and
+  structural duplicate gates, layer controls and cleanup/negative controls.
+  These are local results, not completed browser, PR or post-merge evidence.
+- The browser fixture `/bin/test-lazy-start-failure` uses the shipped lazy loader.
+  `tests/pipelines.acceptance.spec.ts` requires one complete shell diagnostic in
+  both a pipe and regular file, and retains closed-fd2, real126/127, worker
+  cleanup and foreground/background EOF acknowledgement controls. Normal required
+  Chromium/Firefox CI must qualify these captures before delivery is claimed.
+- Keep the explicit adapter `startFailed` hook: its removal changes host-spawn
+  behavior. The five host-broker modes now explicitly distinguish retained adapter
+  policy from unchanged host-default reporting, post-start failure and genuine
+  exits. Quiet runtime-child reporting has independent no-hook coverage.
+
+**Approved separate inherited-descriptor predicates unit (2026-10-18).**
+The adopted runtime includes pipe `fd_filestat_get` support, but this does not
+implement shell predicates. Existing real inherited-pipe tests exercise streaming,
+process substitution and EOF handshakes, not positive pipe metadata or `-p`.
+Descriptor-alias tests currently return capability-error status 2 for predicates
+other than `-a`/`-e`; retain every current `-p`/`-t` status in the adoption unit.
+
+- Consume the separately agreed append-only
+  `runtime_proc.fd_kind(fd: u32) -> i32`: 0 other/unknown, 1 pipe (either endpoint),
+  2 terminal, 3 regular file, 4 directory, negative EBADF (-8) for invalid/closed.
+  It is non-consuming, needs no rights, and remains truthful after inherit, dup
+  and remap. The upstream API is delivered in the adopted 0.0.50 pin; the shell
+  predicate caller and its qualification remain this separate Approved unit.
+- Add real inherited runtime_proc pipe/remap tests, regular files, terminals,
+  directories and closed descriptors; compare `test -p`, `[ -p /dev/stdin ]` and
+  `-t` against Bash. Prove probes consume no payload and retain no endpoint that
+  delays EOF. Never infer FIFO from Preview1 UNKNOWN (there is no FIFO enum).
+- This is a separate implementation/qualification unit, not a partial predicate
+  change hidden inside the quiet-start dependency adoption.
 
 **Approved job-lifetime transition (2026-10-17).** The current runtime seals a
 job when its pending membership reaches zero, before it is reaped. A shell job

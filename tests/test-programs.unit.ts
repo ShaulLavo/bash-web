@@ -13,11 +13,12 @@ function fixture(context: TestContext) {
   let mutations = 0;
   let registrations = 0;
   const programPaths: string[] = [];
+  const programs = new Map<string, Parameters<Runtime["registerProgram"]>[1]>();
   const files = new Set<string>();
   const runtime = {
     disposed: false,
     registerAdapter() {},
-    registerProgram(path: string) {
+    registerProgram(path: string, program: Parameters<Runtime["registerProgram"]>[1]) {
       assert.ok(path.startsWith("/"));
       assert.ok(
         path
@@ -28,6 +29,7 @@ function fixture(context: TestContext) {
       if (path !== "/programs/shell-engine.wasm")
         assert.ok(files.has(path), "the caller must create the guest's marker before registration");
       programPaths.push(path);
+      programs.set(path, program);
       registrations++;
     },
     filesystem: {
@@ -50,6 +52,7 @@ function fixture(context: TestContext) {
     runtime,
     files,
     programPaths,
+    programs,
     mutations: () => mutations,
     registrations: () => registrations,
   };
@@ -65,9 +68,19 @@ test("test programs use canonical paths with caller-created executable markers",
     "/bin/test-spin",
     "/programs/test-spin.wasm",
     "/bin/test-start-failure",
+    "/bin/test-lazy-start-failure",
   ];
   assert.deepEqual(state.programPaths, ["/programs/shell-engine.wasm"].concat(guests));
   assert.deepEqual(Array.from(state.files), guests);
+  const lazy = state.programs.get("/bin/test-lazy-start-failure")!;
+  assert.ok("module" in lazy);
+  const loader = lazy.module;
+  assert.ok(typeof loader === "function");
+  assert.throws(
+    () => loader(),
+    WebAssembly.CompileError,
+    "the lazy failure is not evaluated at registration",
+  );
 });
 
 test("test program registration stops if cancelled while writing a marker", async (context) => {
@@ -84,27 +97,40 @@ test("test program registration stops if cancelled while writing a marker", asyn
   assert.equal(state.registrations(), 1, "no guest is registered after cancellation");
 });
 
-test("startup-failure fixture registration stops if cancelled during its marker write", async (context) => {
-  const state = fixture(context);
-  const controller = new AbortController();
-  globalThis.fetch = async () => new Response(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0));
-  const writeFile = state.runtime.filesystem.writeFile;
-  state.runtime.filesystem.writeFile = async (path, bytes) => {
-    await writeFile(path, bytes);
-    if (path === "/bin/test-start-failure")
-      controller.abort(new Error("Owned lease disposed during startup-failure marker write"));
-  };
-  let drained = false;
-  state.runtime.filesystem.drain = async () => {
-    drained = true;
-  };
-  await assert.rejects(
-    registerTestPrograms(state.runtime, controller.signal),
-    /Owned lease disposed during startup-failure marker write/,
-  );
-  assert.equal(state.registrations(), 5, "the failed-start module was not registered");
-  assert.equal(drained, false, "cancelled composition must not admit another filesystem operation");
-});
+for (const [name, registrations] of [
+  ["test-start-failure", 5],
+  ["test-lazy-start-failure", 6],
+] as const) {
+  test(`${name} registration stops if cancelled during its marker write`, async (context) => {
+    const state = fixture(context);
+    const controller = new AbortController();
+    globalThis.fetch = async () => new Response(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0));
+    const writeFile = state.runtime.filesystem.writeFile;
+    state.runtime.filesystem.writeFile = async (path, bytes) => {
+      await writeFile(path, bytes);
+      if (path === `/bin/${name}`)
+        controller.abort(new Error("Owned lease disposed during startup-failure marker write"));
+    };
+    let drained = false;
+    state.runtime.filesystem.drain = async () => {
+      drained = true;
+    };
+    await assert.rejects(
+      registerTestPrograms(state.runtime, controller.signal),
+      /Owned lease disposed during startup-failure marker write/,
+    );
+    assert.equal(
+      state.registrations(),
+      registrations,
+      "the failed-start module was not registered",
+    );
+    assert.equal(
+      drained,
+      false,
+      "cancelled composition must not admit another filesystem operation",
+    );
+  });
+}
 
 test("owned test program registration cancels pending fetches before touching the filesystem", async (context) => {
   const state = fixture(context);
