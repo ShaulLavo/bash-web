@@ -187,7 +187,7 @@ locks, trust version and source provenance move together.
   policy from unchanged host-default reporting, post-start failure and genuine
   exits. Quiet runtime-child reporting has independent no-hook coverage.
 
-**Inherited-descriptor predicates unit (2026-10-18), implemented; qualification pending.**
+**Inherited-descriptor predicates unit (2026-10-18), implemented; focused checks pass.**
 This separate unit follows the quiet-start adoption in PR #21. `test`, `[` and
 shared `[[ ]]` now query `runtime_proc.fd_kind` from Waffle #36 at the adopted
 0.0.50 pin. The query uses the endpoint's physical handle, including inherited
@@ -206,9 +206,17 @@ predicate capability/status behavior stay unchanged.
   unrelated capability errors. These mocks are not transported-WASI evidence.
 - `tests/runtime-shell.spec.ts` and the raw `test-guest fd-kinds` mode exercise
   actual WASI child pipe ends/remaps, runtime terminals, files, directories,
-  closed handles, payload and worker/pipe retirement. New browser cases still
-  require current-head execution; existing quiet-start/frozen coverage is not
-  evidence for this unit. Normal required CI retains the full qualification gate.
+  closed handles, payload and worker/pipe retirement. At `8238cf5`, all five new
+  Chromium cases and 127 runtime/terminal host tests passed on UpCloud. The WASI
+  build is from `afce126`, with identical production Rust/host code; `8238cf5`
+  only extracted shared browser assertions to remove new duplicate clones.
+- Also at `8238cf5`, 263 native library and 544 word tests, wasm32-wasip1 type
+  checking, Clippy, Rust formatting, TypeScript checks, lint, formatting, unused
+  code and both strict duplicate gates passed without baseline/exclusion changes.
+  Independent review and normal required native/WASI/frozen/Chromium/Firefox CI
+  remain the delivery gate. Older quiet-start/frozen runs are not this unit's
+  qualification. Root is 0.0.57 and engine 0.0.31 after normal PR #21 integration;
+  the already adopted Waffle pin is unchanged.
 
 **Approved job-lifetime transition (2026-10-17).** The current runtime seals a
 job when its pending membership reaches zero, before it is reaped. A shell job
