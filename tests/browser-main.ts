@@ -8,10 +8,10 @@ import { registerTestPrograms } from "./helpers/test-programs";
 import filesystemWorkerUrl from "../.build/browser/fs-worker.js?url";
 
 mountBrowser({
-  acquireRuntime(): BrowserRuntimeLease {
+  acquireRuntime(onStartupStage): BrowserRuntimeLease {
     const runtime = createRuntime({ filesystem: { workerURL: filesystemWorkerUrl } });
     const registration = new AbortController();
-    const ready = registerTestPrograms(runtime, registration.signal);
+    const ready = registerTestPrograms(runtime, registration.signal, onStartupStage);
     let disposing: Promise<void> | undefined;
     return {
       runtime,

@@ -3,6 +3,7 @@
 // 8d3d416aa9cb23718ed3487a33d0b06e8e373672. This adapter no longer creates an FS,
 // broker or supervisor: the supplied Waffle Runtime is their sole page owner.
 import type { ProcessService, Runtime } from "waffle";
+import { markStartup } from "./startup-diagnostics";
 import { claimOutcome, readOutcome } from "waffle/proc/outcome";
 import { waitStatus } from "waffle/proc/wait-status";
 import {
@@ -55,10 +56,17 @@ export function registerShell(runtime: Runtime, options: ShellOptions): Registra
   const module = () => {
     if (!loaded) {
       const attempt = (async () => {
+        markStartup(options.onStartupStage, "shell-wasm-fetch-requested");
         const response = await fetch(wasmUrl);
+        markStartup(options.onStartupStage, "shell-wasm-fetch-resolved");
         if (!response.ok) throw new Error(`Shell executable fetch failed (${response.status})`);
+        markStartup(options.onStartupStage, "shell-wasm-body-requested");
         const bytes = await response.arrayBuffer();
-        return { module: await WebAssembly.compile(bytes), size: bytes.byteLength };
+        markStartup(options.onStartupStage, "shell-wasm-body-resolved");
+        markStartup(options.onStartupStage, "shell-wasm-compile-requested");
+        const module = await WebAssembly.compile(bytes);
+        markStartup(options.onStartupStage, "shell-wasm-compile-resolved");
+        return { module, size: bytes.byteLength };
       })();
       loaded = attempt;
       void attempt.catch(() => {
@@ -105,11 +113,27 @@ export function registerShell(runtime: Runtime, options: ShellOptions): Registra
     get initialized() {
       if (initialized) return initialized;
       const attempt = (async () => {
-        for (const directory of ["/home/guest", "/tmp", "/bin", "/programs"])
+        for (const [name, directory] of [
+          ["home", "/home/guest"],
+          ["tmp", "/tmp"],
+          ["bin", "/bin"],
+          ["programs", "/programs"],
+        ] as const) {
+          markStartup(options.onStartupStage, `shell-${name}-mkdir-requested`);
           await runtime.filesystem.mkdirp(directory);
-        if (!(await runtime.filesystem.lookup(executable)))
+          markStartup(options.onStartupStage, `shell-${name}-mkdir-resolved`);
+        }
+        markStartup(options.onStartupStage, "shell-executable-lookup-requested");
+        const exists = await runtime.filesystem.lookup(executable);
+        markStartup(options.onStartupStage, "shell-executable-lookup-resolved");
+        if (!exists) {
+          markStartup(options.onStartupStage, "shell-executable-write-requested");
           await runtime.filesystem.writeFile(executable, new Uint8Array());
+          markStartup(options.onStartupStage, "shell-executable-write-resolved");
+        }
+        markStartup(options.onStartupStage, "shell-filesystem-drain-requested");
         await runtime.filesystem.drain();
+        markStartup(options.onStartupStage, "shell-filesystem-drain-resolved");
       })();
       initialized = attempt;
       void attempt.catch(() => {
@@ -253,10 +277,17 @@ export async function startShell(
     options.signal?.throwIfAborted();
     // Accepted synchronously, before fetch, FS initialization, or lazy process admission.
     release = runtime.retainConsumer({ filesystem: identity, revoke, stop: physicallyStop });
+    markStartup(options.onStartupStage, "shell-registration-requested");
     await pending(() => registration.initialized);
+    markStartup(options.onStartupStage, "shell-registration-resolved");
+    markStartup(options.onStartupStage, "shell-module-requested");
     const loaded = await pending(() => registration.module);
+    markStartup(options.onStartupStage, "shell-module-resolved");
     if (runtime.disposed) throw new Error("Runtime is disposed");
+    markStartup(options.onStartupStage, "shell-processes-requested");
     service = await pending(() => runtime.processes());
+    markStartup(options.onStartupStage, "shell-processes-resolved");
+    markStartup(options.onStartupStage, "shell-root-adopt-requested");
     await service.adoptRuntimeRoot(transport, {
       filesystem: identity,
       acknowledged: () => acknowledged,
@@ -273,11 +304,14 @@ export async function startShell(
         observation.retired();
       },
     });
+    markStartup(options.onStartupStage, "shell-root-adopt-resolved");
     accepted = true;
     // Admission may already own this transport when its promise settles. Join it before
     // observing cancellation so cleanup cannot race a late broker acceptance.
     options.signal?.throwIfAborted();
+    markStartup(options.onStartupStage, "shell-supervisor-requested");
     const supervisor = await pending(() => service!.ready());
+    markStartup(options.onStartupStage, "shell-supervisor-resolved");
     observeSupervisor(runtime, supervisor);
     if (runtime.disposed) throw new Error("Runtime is disposed");
     // Waffle already owns process completion. Observe its exit event instead of
@@ -352,7 +386,9 @@ export async function startShell(
       memoryUsage: memory,
     };
     worker.postMessage(request, [filesystem.port]);
+    markStartup(options.onStartupStage, "shell-worker-start-requested");
     await pending(() => started);
+    markStartup(options.onStartupStage, "shell-worker-start-resolved");
     return {
       pid: state.pid,
       wasmBytes: loaded.size,

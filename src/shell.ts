@@ -1,6 +1,7 @@
 // Adapted from brush-web src/shell.ts at a2a4e96. The public facade accepts Waffle's
 // exact Runtime, not a shell-specific runtime interface or a second service owner.
 import type { Runtime } from "waffle";
+import type { StartupObserver } from "./runtime/startup-diagnostics";
 import { SharedBridge } from "./bridge";
 import { runtimeSnapshot } from "./runtime/diagnostics";
 import { startShell } from "./runtime/shell-host";
@@ -19,6 +20,8 @@ export interface RuntimeProcess {
 export interface ShellOptions {
   /** The embedding page's one shared runtime. Disposing a shell does not dispose it. */
   runtime: Runtime;
+  /** Optional, non-blocking startup diagnostics. */
+  onStartupStage?: StartupObserver;
   /** Guest and worker asset URLs; bundlers can supply their emitted URLs explicitly. */
   wasmUrl?: string | URL;
   workerUrl?: string | URL;
