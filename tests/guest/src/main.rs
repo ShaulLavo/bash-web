@@ -362,7 +362,7 @@ fn run(args: &[String]) -> Result<i32> {
                 _ => return Err("unknown EOF handshake job mode".into()),
             };
             let request = spawn_request_fds(
-                "/usr/bin/bash",
+                "/programs/shell-engine.wasm",
                 &["-c".into(), source],
                 &[(0, 0), (1, 1), (2, 2), (4, pipe.0[0]), (5, pipe.0[1])],
             );
