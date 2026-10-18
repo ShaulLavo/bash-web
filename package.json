@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.56",
+  "version": "0.0.57",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -55,7 +55,7 @@
     "fuzz:shell-path:ci": "node scripts/fuzz-shell-path.ts --replay scripts/fixtures/shell-path-seed-1.json --replay scripts/fixtures/shell-path-seed-42.json",
     "sources:browser": "node scripts/sources.mjs",
     "build:shell:browser": "node scripts/build-shell-browser.mjs",
-    "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:test-guest && npm run notices:browser && vite build && node scripts/finish-build.mjs",
+    "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:test-guest && npm run build:browser:assets",
     "typecheck:browser": "tsc --noEmit",
     "test:browser": "playwright test",
     "test:runtime:terminal": "node --expose-gc scripts/test-runtime-terminal.mjs",
@@ -79,7 +79,10 @@
     "check:duplicates": "node scripts/check-duplicates.mjs",
     "check:rust": "node scripts/check-rust-quality.mjs",
     "test:quality-gates": "node --test scripts/test-quality-gates.mjs",
-    "quality": "npm run sources:browser && npm run build:worker && npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates && npm run check:rust"
+    "quality": "npm run sources:browser && npm run build:worker && npm run quality:js && npm run check:rust",
+    "quality:js": "npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates",
+    "build:browser:assets": "npm run notices:browser && vite build && node scripts/finish-build.mjs",
+    "test:ci": "node --test scripts/test-ci-inputs.ts"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",

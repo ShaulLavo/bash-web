@@ -3,7 +3,13 @@ description: Supply the SDK used by Waffle's shared patched-libc builder
 runs:
   using: composite
   steps:
-    - shell: bash
+    - uses: actions/cache@v4
+      id: sdk
+      with:
+        path: .build/wasi-sdk
+        key: wasi-sdk-34.0-x86_64-linux-b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4
+    - if: steps.sdk.outputs.cache-hit != 'true'
+      shell: bash
       run: |
         set -euo pipefail
         scratch=$(mktemp -d "$RUNNER_TEMP/bash-web-wasi-sdk-XXXXXX")
@@ -14,7 +20,8 @@ runs:
         echo "b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4  $scratch/sdk.tar.gz" | sha256sum --check
         tar -xzf "$scratch/sdk.tar.gz" -C "$scratch"
         mkdir -p .build
-        test ! -e .build/wasi-sdk
         mv "$scratch/wasi-sdk-34.0-x86_64-linux" .build/wasi-sdk
+    - shell: bash
+      run: |
         echo "WASI_SDK_PATH=$GITHUB_WORKSPACE/.build/wasi-sdk" >> "$GITHUB_ENV"
         echo "WASI_LIBC_SCRATCH_ROOT=$RUNNER_TEMP" >> "$GITHUB_ENV"

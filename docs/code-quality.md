@@ -12,7 +12,8 @@ npm run quality
 `quality` prepares the pinned Ghostty source and Waffle worker, checks the immutable
 peer/development/lockfile package identity and worker assets, then runs formatting,
 lint, types, unused-code analysis, both duplicate scans, gate failure probes, and Rust
-checks. The `quality` CI job runs the same command on pushes and pull requests.
+checks. CI runs `quality:js` once and `check:rust` in the shared native producer.
+Native workspace tests run once in that producer, not inside the quality command.
 Existing architecture, native/WASI, browser, and frozen compatibility jobs remain
 separate blocking checks. Set `BASH_WEB_TEST_PORT` for a browser test run in a
 parallel worktree. Its default remains 4198, and Playwright never reuses an

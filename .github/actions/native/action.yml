@@ -1,0 +1,18 @@
+name: Restore checked native binaries
+description: Reuse the CLI and WASI guests checked by the native producer
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: native-${{ github.sha }}
+        path: .build/ci-native
+    - shell: bash
+      run: |
+        (cd .build/ci-native && sha256sum --check SHA256SUMS)
+        mkdir -p .build/shell/release .build/shell/wasm32-wasip1/release public/programs
+        cp .build/ci-native/shell-engine .build/shell/release/
+        chmod +x .build/shell/release/shell-engine
+        cp .build/ci-native/shell-{engine,runtime}.wasm .build/shell/wasm32-wasip1/release/
+        cp .build/ci-native/shell-runtime.wasm public/programs/shell-engine.wasm
+        cp .build/ci-native/test-{guest,spin}.wasm public/programs/
