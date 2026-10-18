@@ -234,20 +234,20 @@ establish Safari behavior. Safari still requires verification on an actual Mac.
 
 ### Migrated browser scope
 
-The current Playwright listing (`playwright test --list`) contains 81 unique
-cases configured once for Chromium and once for Firefox: 162 configured
+The current Playwright listing (`playwright test --list`) contains 82 unique
+cases configured once for Chromium and once for Firefox: 164 configured
 executions. This is configuration inventory, not final browser acceptance
 evidence; a configured or runnable case is not a passing result.
 
 | Suite | Configured cases | Runnable cases | Missing public Bun API | Original known failures | New engine/Waffle pending |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Shell | 12 | 11 | 0 | 0 | 1 |
-| External commands | 25 | 23 | 2 | 0 | 0 |
+| External commands | 26 | 24 | 2 | 0 | 0 |
 | Pipelines | 19 | 18 | 1 | 0 | 0 |
 | Runtime | 23 | 19 | 1 | 3 | 0 |
 | Worker assets and renderer fallback | 2 | 2 | 0 | 0 | 0 |
-| **Unique cases** | **81** | **73** | **4** | **3** | **1** |
-| **Chromium + Firefox executions** | **162** | **146** | **8** | **6** | **2** |
+| **Unique cases** | **82** | **74** | **4** | **3** | **1** |
+| **Chromium + Firefox executions** | **164** | **148** | **8** | **6** | **2** |
 
 The `command` and byte-exact `printf` external-guest cases are runnable following
 the functions and printf units.
@@ -264,10 +264,11 @@ access/PATH-search unit:
 | Deleted registered executable | Deleting a registered marker prevents execution and produces 127. |
 | Registered directory replacement | Replacing a registered marker with a directory prevents execution and produces 126. |
 
-Five additional original cases exercise PATH candidate skipping and relative/empty
+Six additional original cases exercise PATH candidate skipping and relative/empty
 components; denied-versus-missing search status and recovery; regular-file
-intermediates/trailing slashes; root-parent traversal; and a missing intermediate
-before `..`. Rejected paths must not emit guest output or leave a child worker.
+intermediates/trailing slashes; root-parent traversal; a missing intermediate
+before `..`; and shared `command -v`/`-V` lookup, including a deleted marker.
+Rejected paths must not emit guest output or leave a child worker.
 The registration helper's unit regressions separately check canonical-only keys,
 caller-created markers before guest registration, and cancellation during marker
 creation. Enabling a case is not evidence that it has passed a browser run.

@@ -186,6 +186,37 @@ test("PATH skips non-runnable candidates and resolves cwd components", async ({ 
   }
 });
 
+test("command queries share live PATH lookup without launching a guest", async ({ page }) => {
+  await open(page);
+  await command(
+    page,
+    "printf unregistered > /home/guest/test-guest; mkdir /tmp/test-guest; export PATH=/missing:/home/guest:/tmp:/bin; command -v test-guest; echo QUERY:$?; command -V test-guest; echo VERBOSE:$?",
+  );
+  await output(page, "/bin/test-guest");
+  await output(page, "test-guest is /bin/test-guest");
+  await output(page, "QUERY:0");
+  await output(page, "VERBOSE:0");
+  await ready(page);
+  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  await command(
+    page,
+    "cd /programs; export PATH=../bin; command -v test-guest; command -V test-guest; export PATH=/missing; command -v test-guest; echo MISSING_QUERY:$?; command -V test-guest; echo MISSING_VERBOSE:$?",
+  );
+  await output(page, "../bin/test-guest");
+  await output(page, "test-guest is /programs/../bin/test-guest");
+  await output(page, "MISSING_QUERY:1");
+  await output(page, "MISSING_VERBOSE:1");
+  await ready(page);
+  await command(
+    page,
+    "/bin/test-guest unlink /bin/test-guest; export PATH=/bin; command -v test-guest; echo DELETED_QUERY:$?; command -V test-guest; echo DELETED_VERBOSE:$?",
+  );
+  await output(page, "DELETED_QUERY:1");
+  await output(page, "DELETED_VERBOSE:1");
+  await ready(page);
+  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+});
+
 test("PATH preserves denied versus missing status without executing rejected files", async ({
   page,
 }) => {
