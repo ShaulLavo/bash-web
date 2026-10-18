@@ -8,8 +8,8 @@ import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
 type Environment = NodeJS.ProcessEnv;
 const helper = fileURLToPath(import.meta.url);
-export const repositoryRoot = resolve(import.meta.dirname, "..");
-export const wasiTarget = "wasm32-wasip1";
+const repositoryRoot = resolve(import.meta.dirname, "..");
+const wasiTarget = "wasm32-wasip1";
 
 export function wasiBuildConfiguration(root: string, env: Environment = process.env) {
   const sdk = resolve(env.WASI_SDK_PATH ?? "/work/cache/wasi-sdk-34.0-x86_64-linux");

@@ -33,6 +33,30 @@ jobs:
       - run: npm run check:layers
       - run: npm ci --ignore-scripts
       - run: npm run typecheck:layers
+  quality:
+    needs: layers
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CARGO_TARGET_DIR: .build/quality
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.7.0
+          cache: npm
+      - uses: dtolnay/rust-toolchain@1.98.1
+        with:
+          targets: wasm32-wasip1
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: shell -> ../.build/quality
+      - run: npm ci --ignore-scripts
+      - name: Install pinned Rust dependency checker
+        run: cargo install cargo-machete --version 0.9.2 --locked --root .build/quality-tools
+      - run: ulimit -c 0; npm run quality
+
   shell:
     runs-on: ubuntu-latest
     timeout-minutes: 15

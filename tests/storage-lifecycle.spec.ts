@@ -167,13 +167,12 @@ function holdIndexedDBEpoch() {
   IDBObjectStore.prototype.get = function (key) {
     const request = get.call(this, key);
     if (this.name !== "metadata" || key !== "epoch") return request;
-    const store = this;
     let reported = false;
     const hold = (event: Event) => {
       event.stopImmediatePropagation();
       if (!reported) console.info("bash-web:test:indexeddb-epoch-held");
       reported = true;
-      const next = get.call(store, key);
+      const next = get.call(this, key);
       next.addEventListener("success", hold, { once: true });
     };
     request.addEventListener("success", hold, { once: true });

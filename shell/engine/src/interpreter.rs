@@ -2034,7 +2034,7 @@ async fn subshell(
         let result =
             match command_redirects(&redirs, &child, child_fds, &child_context, &mut work).await {
                 Ok(fds) => {
-                    drop(work.substitutions.take());
+                    work.substitutions.take();
                     let body_context = Context {
                         parameter_error_status: 1,
                         compound_child: false,
@@ -2677,13 +2677,13 @@ async fn retain_declaration_syntax(
     let source = source
         .get(simple.span.start.offset..simple.span.end.offset)
         .ok_or(2)?;
-    let mut tokens = parse::declaration_tokens(source);
+    let tokens = parse::declaration_tokens(source);
     let mut assignments = simple.assignments.len();
     let mut words = std::iter::once(&mut simple.name).chain(simple.args.iter_mut());
     let mut target = words.next();
     let mut redirect_operand = false;
     let mut budget = Budget::default();
-    while let Some(token) = tokens.next() {
+    for token in tokens {
         budget.checkpoint(cancel).await.map_err(|_| 130)?;
         let Some(raw) = token.raw else {
             let spelling = &source[token.span.start.offset..token.span.end.offset];
@@ -3579,7 +3579,7 @@ async fn redirects(
                     .shared(),
             );
         }
-        let target_reader = reader_status.and_then(|_| reader_state.as_ref());
+        let target_reader = reader_status.and(reader_state.as_ref());
         let target = redirect_target(redirect, state, context, work, target_reader)
             .await
             .map_err(|error| {

@@ -1,26 +1,6 @@
 // Oils spec tests call two small Python 2 helpers. Every engine gets the same behavior:
 // bash runs these files, and the in-process engines register equivalent builtins.
 
-/** Formats arguments like Python 2's `print(sys.argv[1:])`. */
-export function pythonList(args) {
-  return `[${args.map((arg) => pythonRepr(Buffer.from(arg, "utf8"))).join(", ")}]\n`;
-}
-
-function pythonRepr(bytes) {
-  const quote = bytes.includes(0x27) && !bytes.includes(0x22) ? '"' : "'";
-  let text = quote;
-  for (const byte of bytes) {
-    if (byte === 0x5c) text += "\\\\";
-    else if (byte === 0x0a) text += "\\n";
-    else if (byte === 0x0d) text += "\\r";
-    else if (byte === 0x09) text += "\\t";
-    else if (byte === 0x27 && quote === "'") text += "\\'";
-    else if (byte >= 0x20 && byte < 0x7f) text += String.fromCharCode(byte);
-    else text += `\\x${byte.toString(16).padStart(2, "0")}`;
-  }
-  return text + quote;
-}
-
 export const pythonHelpers = {
   "argv.py": `#!/usr/bin/env python3
 import os, sys

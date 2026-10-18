@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { validateResultBytes } from "./fuzz-shell-results.ts";
 // Original bounded PATH grammar and portable filesystem manifest. Process lifetime,
 // byte comparison, CLI and fixture identity follow the functions oracle family.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
@@ -25,6 +26,17 @@ import {
 } from "./fuzz-shell-control-flow.mjs";
 import { drainGroup, killGroup } from "./shell-process-group.mjs";
 export { healthy, matches, outputLimit };
+
+import {
+  encode,
+  decode,
+  type FuzzFixture,
+  type FuzzOptions,
+  type RecordedCase,
+  type ProcessResult,
+  type RunOptions,
+} from "./fuzz-shell-results.ts";
+type Case = ReturnType<typeof generateCases>[number];
 
 export const defaultCount = 128;
 export const defaultTimeoutMs = 2000;
@@ -91,7 +103,7 @@ export function validateManifest(value: unknown): asserts value is typeof fixtur
       !node.path.isWellFormed() ||
       Buffer.byteLength(node.path) > manifestLimits.pathBytes ||
       !node.path ||
-      /[\x00-\x1f\x7f]/.test(node.path) ||
+      Array.from(node.path).some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) ||
       node.path.split("/").some((part) => !part || part === "." || part === "..") ||
       paths.has(node.path)
     )
@@ -219,7 +231,7 @@ export const selectedDirectories = [
   "path-b",
   "path-b",
 ];
-export const variants = {
+export const variants: Record<string, string[]> = {
   search: searchPaths.map((_, index) => "path-" + index).concat(["unset", "generated"]),
   cwd: ["empty", "relative", "parent", "double-empty", "change-after-query"],
   precedence: [
@@ -415,59 +427,60 @@ export function render(spec: Spec) {
       case "slash/denied":
         body = `PATH=path-b; path-denied/${invocation(spec.value)}`;
         break;
-      default: {
-        if (spec.family !== "query") throw new Error("missing path variant");
-        const verbose = spec.variant.endsWith("-V") || spec.variant === "V";
-        const option = verbose ? "-V" : "-v";
-        const kind = spec.variant.replace(/-?[vV]$/, "");
-        const prefixes = {
-          nonexec: "path-noexec",
-          directory: "path-dir",
-          denied: "path-denied",
-          "not-directory": "path-file",
-        };
-        if (Object.hasOwn(prefixes, kind)) {
-          const directory = kind === "nonexec" ? "path-noexec" : null;
-          body = `PATH=${prefixes[kind]}; ${verbose ? exactQuery(`command -V ${probe}`, verboseExpected(directory)) : `command -v ${probe}`}`;
-        } else if (kind === "unset") {
-          body = `unset PATH; ${exactQuery(`command ${option} ${probe}`, verbose ? verboseExpected("") : `"$PWD/${probe}"`)}`;
-        } else if (
-          kind.startsWith("slash-") &&
-          (Object.hasOwn(prefixes, kind.slice(6)) || kind === "slash-missing")
-        )
-          body = `PATH=path-a; command ${option} ${prefixes[kind.slice(6)] ?? "missing"}/${probe}`;
-        else if (kind === "absolute") {
-          const expected = verbose
-            ? `"$PWD/path-a/${probe} is $PWD/path-a/${probe}"`
-            : `"$PWD/path-a/${probe}"`;
-          body = `PATH=path-b; ${exactQuery(`command ${option} "$PWD/path-a/${probe}"`, expected)}`;
-        } else {
-          const operands = {
-            "": probe,
-            missing: "bw_path_missing_5315",
-            mixed: `bw_path_missing_5315 ${probe} bw_path_other_missing_5315`,
-            "all-missing": "bw_path_missing_5315 bw_path_other_missing_5315",
-            "no-args": "",
-            slash: `./path-a/${probe}`,
-            "builtin-function-external": `printf shadow ${probe}`,
-          }[kind];
-          if (operands === undefined) throw new Error("missing query variant");
-          const prefix = kind === "builtin-function-external" ? "shadow() { :; }; " : "";
-          let query = `command ${option} ${operands}`;
-          if (verbose && ["", "mixed", "builtin-function-external"].includes(kind)) {
-            const expected =
-              kind === "builtin-function-external"
-                ? quote(
-                    "printf is a shell builtin\nshadow is a function\nshadow () \n{ \n    :\n}\n",
-                  ) + verboseExpected("path-a")
-                : verboseExpected("path-a");
-            query = exactQuery(query, expected);
-          }
-          body = `PATH=path-a; ${prefix}${query}`;
-        }
-      }
+      default:
+        body = renderQuery(spec);
     }
   return `${body}\n${observe}\n`;
+}
+function renderQuery(spec: Spec) {
+  if (spec.family !== "query") throw new Error("missing path variant");
+  const verbose = spec.variant.endsWith("-V") || spec.variant === "V";
+  const option = verbose ? "-V" : "-v";
+  const kind = spec.variant.replace(/-?[vV]$/, "");
+  const prefixes: Record<string, string> = {
+    nonexec: "path-noexec",
+    directory: "path-dir",
+    denied: "path-denied",
+    "not-directory": "path-file",
+  };
+  if (Object.hasOwn(prefixes, kind)) {
+    const directory = kind === "nonexec" ? "path-noexec" : null;
+    return `PATH=${prefixes[kind]}; ${verbose ? exactQuery(`command -V ${probe}`, verboseExpected(directory)) : `command -v ${probe}`}`;
+  } else if (kind === "unset") {
+    return `unset PATH; ${exactQuery(`command ${option} ${probe}`, verbose ? verboseExpected("") : `"$PWD/${probe}"`)}`;
+  } else if (
+    kind.startsWith("slash-") &&
+    (Object.hasOwn(prefixes, kind.slice(6)) || kind === "slash-missing")
+  )
+    return `PATH=path-a; command ${option} ${prefixes[kind.slice(6)] ?? "missing"}/${probe}`;
+  else if (kind === "absolute") {
+    const expected = verbose
+      ? `"$PWD/path-a/${probe} is $PWD/path-a/${probe}"`
+      : `"$PWD/path-a/${probe}"`;
+    return `PATH=path-b; ${exactQuery(`command ${option} "$PWD/path-a/${probe}"`, expected)}`;
+  } else {
+    const operands = {
+      "": probe,
+      missing: "bw_path_missing_5315",
+      mixed: `bw_path_missing_5315 ${probe} bw_path_other_missing_5315`,
+      "all-missing": "bw_path_missing_5315 bw_path_other_missing_5315",
+      "no-args": "",
+      slash: `./path-a/${probe}`,
+      "builtin-function-external": `printf shadow ${probe}`,
+    }[kind];
+    if (operands === undefined) throw new Error("missing query variant");
+    const prefix = kind === "builtin-function-external" ? "shadow() { :; }; " : "";
+    let query = `command ${option} ${operands}`;
+    if (verbose && ["", "mixed", "builtin-function-external"].includes(kind)) {
+      const expected =
+        kind === "builtin-function-external"
+          ? quote("printf is a shell builtin\nshadow is a function\nshadow () \n{ \n    :\n}\n") +
+            verboseExpected("path-a")
+          : verboseExpected("path-a");
+      query = exactQuery(query, expected);
+    }
+    return `PATH=path-a; ${prefix}${query}`;
+  }
 }
 function makeCase(id: string, spec: Spec) {
   return { id, ...spec, tags: [spec.family, "variant=" + spec.variant], script: render(spec) };
@@ -521,8 +534,9 @@ export function generateCases(seed: number, count = defaultCount) {
   }
   return cases;
 }
-export function coverage(cases) {
-  const unique = (fn) => Array.from(new Set(cases.map(fn))).sort();
+export function coverage(cases: readonly Case[]) {
+  const unique = (fn: (item: Case) => string | undefined) =>
+    Array.from(new Set(cases.map(fn))).sort();
   return {
     families: unique((item) => item.family),
     variants: unique((item) => item.family + "/" + item.variant),
@@ -573,16 +587,21 @@ export function removeSandbox(sandbox: string) {
   rmSync(root, { recursive: true, force: true });
   sandboxDirectories.delete(root);
 }
-export async function run(bin: string, script: string, options) {
+export async function run(
+  bin: string,
+  script: string,
+  options: RunOptions,
+): Promise<ProcessResult> {
   if (options.interrupted) throw new Error("interrupted");
   if (process.geteuid?.() === 0)
     throw new Error("PATH permission fixtures require an unprivileged host user");
+  if (!options.cwd) throw new Error("process sandbox parent required");
   const sandbox = mkdtempSync(resolve(options.cwd, "process-"));
-  let child;
-  let timer;
+  let child: ReturnType<typeof spawn> | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     provision(sandbox);
-    child = spawn(bin, ["-c", script], {
+    const running = spawn(bin, ["-c", script], {
       cwd: sandbox,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
@@ -596,30 +615,33 @@ export async function run(bin: string, script: string, options) {
         [fixtureEnvironmentKey]: fixtureManifestJson,
       },
     });
-    const chunks = { stdout: [], stderr: [] };
+    child = running;
+    const chunks: { stdout: Buffer[]; stderr: Buffer[] } = { stdout: [], stderr: [] };
     let bytes = 0,
       timedOut = false,
-      error = null;
-    const stop = (reason) => {
+      error: string | null = null;
+    const stop = (reason: string) => {
       error ??= reason;
-      killGroup(child.pid, "SIGKILL");
+      killGroup(running.pid, "SIGKILL");
     };
     timer = setTimeout(() => {
       timedOut = true;
       stop("ETIMEDOUT");
     }, options.timeoutMs);
-    for (const name of ["stdout", "stderr"])
-      child[name].on("data", (chunk) => {
+    for (const name of ["stdout", "stderr"] as const)
+      running[name].on("data", (chunk: Buffer) => {
         bytes += chunk.length;
         if (bytes > outputLimit) stop("ENOBUFS");
         else chunks[name].push(chunk);
       });
-    const result = await new Promise((done) => {
-      child.once("error", (failure) => {
-        error ??= failure.code ?? "SPAWN_ERROR";
-      });
-      child.once("close", (status, signal) => done({ status, signal: signal ?? null }));
-    });
+    const result = await new Promise<{ status: number | null; signal: NodeJS.Signals | null }>(
+      (done) => {
+        running.once("error", (failure: NodeJS.ErrnoException) => {
+          error ??= failure.code ?? "SPAWN_ERROR";
+        });
+        running.once("close", (status, signal) => done({ status, signal: signal ?? null }));
+      },
+    );
     return {
       ...result,
       timedOut,
@@ -644,6 +666,7 @@ export function scratchParent(env = process.env) {
 export const sourceFiles = [
   "fuzz-shell-path.ts",
   "fuzz-shell-control-flow.mjs",
+  "fuzz-shell-results.ts",
   "shell-process-group.mjs",
 ];
 export const sourceHashes = () =>
@@ -657,25 +680,12 @@ export const sourceHashes = () =>
   );
 export const fingerprint = () =>
   createHash("sha256").update(JSON.stringify(sourceHashes())).digest("hex");
-export function optionsFor(args) {
+export function optionsFor(args: string[]) {
   const options = sharedOptionsFor(["--count", String(defaultCount)].concat(args));
   if (options.count > maxGeneratedCount) throw new Error(`invalid count (0..${maxGeneratedCount})`);
   return options;
 }
-const encode = (result) => ({
-  status: result.status,
-  signal: result.signal,
-  timedOut: result.timedOut,
-  error: result.error,
-  stdoutBase64: result.stdout.toString("base64"),
-  stderrBase64: result.stderr.toString("base64"),
-});
-const decode = (result) => ({
-  ...result,
-  stdout: Buffer.from(result.stdoutBase64, "base64"),
-  stderr: Buffer.from(result.stderrBase64, "base64"),
-});
-export function validateFixture(path, fixture, options) {
+export function validateFixture(path: string, fixture: FuzzFixture<Case>, options: FuzzOptions) {
   if (
     fixture.schema !== 1 ||
     fixture.sourceHash !== fingerprint() ||
@@ -713,20 +723,18 @@ export function validateFixture(path, fixture, options) {
       throw new Error("fixture case differs at " + index);
     if (!entry?.bash || !healthy(entry.bash))
       throw new Error("invalid fixture process result at " + index);
-    let bytes = 0;
-    for (const key of ["stdoutBase64", "stderrBase64"]) {
-      const value = entry.bash[key];
-      if (typeof value !== "string" || Buffer.from(value, "base64").toString("base64") !== value)
-        throw new Error("invalid fixture bytes at " + index);
-      bytes += Buffer.from(value, "base64").length;
-    }
-    if (bytes > outputLimit) throw new Error("fixture output limit exceeded at " + index);
+    validateResultBytes(entry.bash, outputLimit, index);
   }
   return cases;
 }
-export async function execute(cases, options, shell, recorded) {
+export async function execute<T extends { id: string; family: string; script: string }>(
+  cases: readonly T[],
+  options: Pick<FuzzOptions, "cwd" | "timeoutMs" | "interrupted" | "record" | "recordOracle">,
+  shell: string,
+  recorded?: readonly Pick<RecordedCase<T>, "bash">[],
+) {
   const counts = { MATCH: 0, MISMATCH: 0 },
-    byFamily = {},
+    byFamily: Record<string, { MATCH: number; MISMATCH: number }> = {},
     mismatches = [],
     results = [];
   for (const [index, item] of cases.entries()) {
@@ -798,7 +806,7 @@ async function main() {
     const reports = [];
     if (options.replays.length) {
       const inputs = options.replays.map((path) => {
-        const fixture = JSON.parse(readFileSync(path, "utf8"));
+        const fixture: FuzzFixture<Case> = JSON.parse(readFileSync(path, "utf8"));
         return { path, fixture, cases: validateFixture(path, fixture, options) };
       });
       for (const { path, fixture, cases } of inputs)
@@ -819,9 +827,9 @@ async function main() {
         result = await execute(cases, options, shell);
       reports.push({ seed: options.seed, bash, ...result });
       const recordPath = options.record ?? options.recordOracle;
+      if (recordPath && result.counts.MISMATCH)
+        throw new Error("refusing candidate-verified recording with differences");
       if (recordPath) {
-        if (result.counts.MISMATCH)
-          throw new Error("refusing candidate-verified recording with differences");
         const fixture = {
           schema: 1,
           sourceHash: fingerprint(),
@@ -853,7 +861,7 @@ async function main() {
             ? "bash-self-control"
             : "live",
       shell: options.recordOracle ? null : shell,
-      reports: reports.map(({ results, ...report }) => report),
+      reports: reports.map(({ results: _results, ...report }) => report),
     };
     const text = JSON.stringify(report, null, 2) + "\n";
     if (options.output) {

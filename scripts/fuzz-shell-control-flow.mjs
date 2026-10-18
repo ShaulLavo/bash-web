@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { encode, decode } from "./fuzz-shell-results.ts";
 // Generator-first differential control-flow gate. Oracle-only recording deliberately
 // does not depend on candidate support; replay is always strict, including UNSUPPORTED.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
@@ -85,6 +86,7 @@ const quote = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
 export const fingerprint = () =>
   createHash("sha256")
     .update(readFileSync(sourcePath))
+    .update(readFileSync(new URL("./fuzz-shell-results.ts", import.meta.url)))
     .update(readFileSync(new URL("./shell-process-group.mjs", import.meta.url)))
     .digest("hex");
 const observe = 'cf_status=$?; printf "status=%s\\n" "$cf_status"; exit "$cf_status"';
@@ -413,7 +415,7 @@ export const prerequisiteControls = (() => {
   for (const enabled of [false, true]) {
     const mode = enabled ? "on" : "off";
     const prefix = `shopt -${enabled ? "s" : "u"} nullglob; `;
-    const loop = (words) => `for f in ${words}; do printf '<%s>\\n' \"$f\"; done; printf 'done\\n'`;
+    const loop = (words) => `for f in ${words}; do printf '<%s>\\n' "$f"; done; printf 'done\\n'`;
     add(
       "nullglob-" + mode + "-unmatched",
       "nullglob",
@@ -676,7 +678,7 @@ function makeCase(id, spec) {
 export function matrixCases() {
   const result = [];
   const add = (spec) => result.push(makeCase("matrix-" + result.length, spec));
-  for (const depth of depths) {
+  const addDepth = (depth) => {
     for (const kind of conditionKinds) {
       for (const [index, value] of values.entries())
         add({ family: "condition", depth, condition: kind, value, number: index % 4 });
@@ -705,7 +707,8 @@ export function matrixCases() {
     for (const [failure] of descriptorControls) add({ family: "redirection", depth, failure });
     for (const [failure] of syntaxFailures) add({ family: "syntax-failure", depth, failure });
     for (const [failure] of runtimeFailures) add({ family: "runtime-failure", depth, failure });
-  }
+  };
+  depths.forEach(addDepth);
   for (const verb of ["break", "continue"])
     for (const loops of [1, 2, 3])
       for (const level of ["1", "2", "3", "4", "0", "-1", "bad", "1 2"])
@@ -798,26 +801,19 @@ export function classify(bash, candidate, selfControl = false) {
     return "UNSUPPORTED";
   return "MISMATCH";
 }
-const encode = (result) => ({
-  status: result.status,
-  signal: result.signal,
-  timedOut: result.timedOut,
-  error: result.error,
-  stdoutBase64: result.stdout.toString("base64"),
-  stderrBase64: result.stderr.toString("base64"),
-});
-const decode = (result) => ({
-  ...result,
-  stdout: Buffer.from(result.stdoutBase64, "base64"),
-  stderr: Buffer.from(result.stderrBase64, "base64"),
-});
 
 // Finite builtin grammar, plus cat in descriptor controls. Own every process
 // group and give each observation a fresh cwd: candidate output files must never
 // be supplied by an earlier oracle/candidate process, even during shrinking.
 const active = new Set();
+/** @param {string} bin
+ * @param {string} script
+ * @param {import("./fuzz-shell-results.ts").RunOptions} options
+ * @returns {Promise<import("./fuzz-shell-results.ts").ProcessResult>}
+ */
 export async function run(bin, script, options) {
   if (options.interrupted) throw new Error("interrupted");
+  if (!options.cwd) throw new Error("process sandbox parent required");
   const sandbox = mkdtempSync(resolve(options.cwd, "process-"));
   const child = spawn(bin, ["-c", script], {
     cwd: sandbox,
@@ -866,7 +862,9 @@ export async function run(bin, script, options) {
   }
 }
 
+/** @param {string[]} args */
 export function optionsFor(args) {
+  /** @type {{ seed: number, count: number, timeoutMs: number, replays: string[], selfControl?: boolean, help?: boolean, explicitSeed?: boolean, shell?: string, record?: string, recordOracle?: string, output?: string, cwd?: string, interrupted?: boolean }} */
   const options = { seed: 1, count: defaultCount, timeoutMs: defaultTimeoutMs, replays: [] };
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
@@ -895,6 +893,12 @@ export function optionsFor(args) {
     else if (name === "--replay") options.replays.push(resolve(value));
     else throw new Error("unknown option " + name);
   }
+  validateOptions(options);
+  return options;
+}
+
+/** @param {import("./fuzz-shell-results.ts").FuzzOptions} options */
+function validateOptions(options) {
   if (!Number.isInteger(options.seed) || options.seed < 0 || options.seed > 0xffffffff)
     throw new Error("invalid uint32 seed");
   if (!Number.isSafeInteger(options.count) || options.count < 0 || options.count > 10000)
@@ -908,14 +912,13 @@ export function optionsFor(args) {
   if (
     Number(Boolean(options.record)) +
       Number(Boolean(options.recordOracle)) +
-      Number(Boolean(options.replays.length)) +
+      Number(Boolean(options.replays?.length)) +
       Number(Boolean(options.selfControl)) >
     1
   )
     throw new Error("record, record-oracle, replay and self-control are exclusive");
   if ((options.recordOracle || options.selfControl) && options.shell)
     throw new Error("oracle-only/self-control cannot select a shell");
-  return options;
 }
 
 export function validateFixture(path, fixture, options) {
@@ -965,7 +968,7 @@ export function validateFixture(path, fixture, options) {
 }
 
 export function reductions(test) {
-  const { id, tags, script, ...spec } = test;
+  const { id, tags: _tags, script, ...spec } = test;
   const result = [];
   if (spec.depth > 0) result.push(makeCase(id, { ...spec, depth: spec.depth - 1 }));
   if (spec.limit > 1) result.push(makeCase(id, { ...spec, limit: 1 }));
@@ -1071,6 +1074,10 @@ function ensureQueued() {
   process.exit(child.status ?? 1);
 }
 
+function assertRunning(options) {
+  if (options.interrupted) throw new Error("interrupted");
+}
+
 async function main() {
   const options = optionsFor(process.argv.slice(2));
   if (options.help) {
@@ -1111,7 +1118,7 @@ async function main() {
         return { path, fixture, cases: validateFixture(path, fixture, options) };
       });
       for (const { path, fixture, cases } of inputs) {
-        if (interrupted) throw new Error("interrupted");
+        assertRunning(options);
         reports.push({
           path,
           seed: fixture.seed,
@@ -1130,9 +1137,9 @@ async function main() {
       const result = await execute(cases, options, shell);
       reports.push({ seed: options.seed, bash, ...result });
       const recordPath = options.record ?? options.recordOracle;
+      if (recordPath && (result.counts.MISMATCH || result.counts.UNSUPPORTED))
+        throw new Error("refusing candidate-verified recording with differences");
       if (recordPath) {
-        if (result.counts.MISMATCH || result.counts.UNSUPPORTED)
-          throw new Error("refusing candidate-verified recording with differences");
         const fixture = {
           schema: 1,
           sourceHash: fingerprint(),
@@ -1163,7 +1170,7 @@ async function main() {
             : "live",
       shell: options.recordOracle ? null : shell,
       timeoutMs: options.timeoutMs,
-      reports: reports.map(({ results, ...report }) => report),
+      reports: reports.map(({ results: _results, ...report }) => report),
     };
     const text = JSON.stringify(report, null, 2) + "\n";
     if (options.output) {

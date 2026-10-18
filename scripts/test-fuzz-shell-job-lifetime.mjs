@@ -159,6 +159,7 @@ test("own source and every imported process runner source participate in identit
   assert.deepEqual(sourceFiles, [
     "fuzz-shell-job-lifetime.mjs",
     "fuzz-shell-control-flow.mjs",
+    "fuzz-shell-results.ts",
     "shell-process-group.mjs",
   ]);
   for (const name of sourceFiles)

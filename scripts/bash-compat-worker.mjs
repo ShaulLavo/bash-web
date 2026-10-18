@@ -11,14 +11,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
-import { pythonList } from "./bash-compat-helpers.mjs";
 
 const { engine, modulePath, scratch, home, tmp, env } = workerData;
-
-const helpers = {
-  "argv.py": (args) => pythonList(args),
-  "printenv.py": (args, exported) => args.map((name) => `${exported[name] ?? "None"}\n`).join(""),
-};
 
 async function createRunner() {
   if (engine !== "own-shell") throw new Error(`Unknown compatibility engine: ${engine}`);

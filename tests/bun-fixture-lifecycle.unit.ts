@@ -104,3 +104,16 @@ test("a failing adapter still awaits the runtime's physical teardown", async (co
   }
   assert.equal(settled, true);
 });
+
+test("failed adapter installation still disposes the runtime and preserves its error", async (context) => {
+  const create = browserOwner(context);
+  const failure = new Error("Adapter installation failed");
+  let borrowed: Runtime | undefined;
+  const lease = create((runtime) => {
+    borrowed = runtime;
+    throw failure;
+  });
+  await assert.rejects(lease.ready, failure);
+  await assert.rejects(lease.dispose(), failure);
+  assert.equal(borrowed?.disposed, true);
+});

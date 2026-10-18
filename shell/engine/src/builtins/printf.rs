@@ -383,10 +383,10 @@ fn unicode(value: u32, utf8: bool, out: &mut Escape) {
         return;
     }
     let (length, prefix) = match value {
-        0..=0x7ff => (2, 0xc0),
-        0..=0xffff => (3, 0xe0),
-        0..=0x1f_ffff => (4, 0xf0),
-        0..=0x3ff_ffff => (5, 0xf8),
+        0x80..=0x7ff => (2, 0xc0),
+        0x800..=0xffff => (3, 0xe0),
+        0x1_0000..=0x1f_ffff => (4, 0xf0),
+        0x20_0000..=0x3ff_ffff => (5, 0xf8),
         _ => (6, 0xfc),
     };
     out.push(prefix | (value >> (6 * (length - 1))) as u8);

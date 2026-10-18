@@ -116,6 +116,27 @@ function directChildren() {
       : [],
   );
 }
+function signalChild(pid) {
+  if (!processState(pid).active) return;
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch (error) {
+    if (error.code !== "ESRCH") throw error;
+  }
+}
+function admitChildren(preexisting, owned) {
+  for (const [pid, start] of directChildren()) {
+    if (preexisting.get(pid) === start || owned.has(pid)) continue;
+    owned.set(pid, start);
+    signalChild(pid);
+  }
+}
+function restoreEnvironment(saved) {
+  for (const name of Object.keys(process.env)) {
+    if (!(name in saved)) delete process.env[name];
+  }
+  Object.assign(process.env, saved);
+}
 function fixtureOwner() {
   const preexisting = directChildren();
   const owner = { scratch: undefined };
@@ -125,18 +146,7 @@ function fixtureOwner() {
       const owned = new Map();
       const deadline = Date.now() + 15000;
       for (;;) {
-        for (const [pid, start] of directChildren()) {
-          if (preexisting.get(pid) !== start && !owned.has(pid)) {
-            owned.set(pid, start);
-            if (processState(pid).active) {
-              try {
-                process.kill(pid, "SIGTERM");
-              } catch (error) {
-                if (error.code !== "ESRCH") throw error;
-              }
-            }
-          }
-        }
+        admitChildren(preexisting, owned);
         const live = Array.from(owned, ([pid, start]) => {
           const current = processState(pid);
           return current.active && current.start === start;
@@ -310,8 +320,7 @@ printf fixture > "$1/lib/wasm32-wasip1/libc.a"
       await owner.close();
       if (owner.scratch) assert.equal(existsSync(owner.scratch), false);
     } finally {
-      for (const name of Object.keys(process.env)) if (!(name in saved)) delete process.env[name];
-      Object.assign(process.env, saved);
+      restoreEnvironment(saved);
     }
   }
 }

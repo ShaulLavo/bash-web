@@ -40,32 +40,51 @@ export async function registerTestPrograms(
   markStartup(onStartupStage, "test-programs-mkdir-resolved");
   // Filesystem visibility belongs to this caller, not registration. Bare commands
   // reach /bin through the shell's PATH search, never a registry-only name alias.
-  for (const name of ["/bin/test-guest", "/programs/test-guest.wasm"]) {
-    signal?.throwIfAborted();
-    const stage = name.startsWith("/bin/") ? "test-guest-bin-write" : "test-guest-program-write";
-    markStartup(onStartupStage, `${stage}-requested`);
-    await runtime.filesystem.writeFile(name, new Uint8Array());
-    markStartup(onStartupStage, `${stage}-resolved`);
-    signal?.throwIfAborted();
-    runtime.registerProgram(name, {
+  await registerGuest(
+    runtime,
+    "test-guest",
+    {
       adapter: "bash-web:preview1",
       module: guest,
       cooperative: true,
-    });
-  }
+    },
+    signal,
+    onStartupStage,
+  );
   // The separate spin guest intentionally has no cooperative/runtime_proc imports.
   // Waffle admits and instruments its source bytes; no hand-built interrupt shim is used.
-  for (const name of ["/bin/test-spin", "/programs/test-spin.wasm"]) {
-    signal?.throwIfAborted();
-    const stage = name.startsWith("/bin/") ? "test-spin-bin-write" : "test-spin-program-write";
-    markStartup(onStartupStage, `${stage}-requested`);
-    await runtime.filesystem.writeFile(name, new Uint8Array());
-    markStartup(onStartupStage, `${stage}-resolved`);
-    signal?.throwIfAborted();
-    runtime.registerProgram(name, { adapter: "bash-web:preview1", source: spinBytes });
-  }
+  await registerGuest(
+    runtime,
+    "test-spin",
+    {
+      adapter: "bash-web:preview1",
+      source: spinBytes,
+    },
+    signal,
+    onStartupStage,
+  );
   signal?.throwIfAborted();
   markStartup(onStartupStage, "test-filesystem-drain-requested");
   await runtime.filesystem.drain();
   markStartup(onStartupStage, "test-filesystem-drain-resolved");
+}
+
+async function registerGuest(
+  runtime: Runtime,
+  guestName: "test-guest" | "test-spin",
+  program: Parameters<Runtime["registerProgram"]>[1],
+  signal?: AbortSignal,
+  onStartupStage?: StartupObserver,
+): Promise<void> {
+  for (const path of [`/bin/${guestName}`, `/programs/${guestName}.wasm`]) {
+    signal?.throwIfAborted();
+    const stage = path.startsWith("/bin/")
+      ? (`${guestName}-bin-write` as const)
+      : (`${guestName}-program-write` as const);
+    markStartup(onStartupStage, `${stage}-requested`);
+    await runtime.filesystem.writeFile(path, new Uint8Array());
+    markStartup(onStartupStage, `${stage}-resolved`);
+    signal?.throwIfAborted();
+    runtime.registerProgram(path, program);
+  }
 }
