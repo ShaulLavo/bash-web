@@ -883,6 +883,69 @@ fn wait_group_observes_descendants_and_abandoned_group_confirms_cleanup() {
 }
 
 #[test]
+fn dropping_wait_observers_does_not_retain_runtime_or_readiness() {
+    for polled in [false, true] {
+        let (executor, fake, runtime) = setup();
+        let group = runtime.allocate_group();
+        runtime.spawn(request(&runtime, "inherit", group)).unwrap();
+        executor.drive(64);
+        let references = Rc::strong_count(&runtime.0);
+        let wait = runtime.wait_group(group);
+        if polled {
+            assert!(wait.now_or_never().is_none());
+        } else {
+            drop(wait);
+        }
+        assert_eq!(Rc::strong_count(&runtime.0), references, "polled={polled}");
+        assert!(runtime.0.waiters.borrow().is_empty());
+        runtime.kill_group(group, 15).unwrap();
+        finish(
+            &executor,
+            &runtime,
+            executor.spawn(runtime.wait_group(group)),
+        )
+        .unwrap();
+        assert_eq!(runtime.retained_count(), 0);
+        assert!(runtime.0.groups.borrow().is_empty());
+        assert!(runtime.0.waits.borrow().is_empty());
+        assert!(runtime.0.waiters.borrow().is_empty());
+        assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
+        for unobserved in 100..116 {
+            drop(runtime.wait_group(unobserved));
+            assert_eq!(runtime.0.waits.borrow().len(), 1);
+        }
+        let weak = Rc::downgrade(&runtime.0);
+        drop(runtime);
+        assert!(weak.upgrade().is_none());
+        assert_eq!(executor.drive(64).pending, 0);
+    }
+}
+
+#[test]
+fn dropping_detached_wait_observer_preserves_runtime_reaper() {
+    let (executor, fake, runtime) = setup();
+    let group = runtime.allocate_group();
+    let parent = runtime.spawn(request(&runtime, "inherit", group)).unwrap();
+    executor.drive(64);
+    assert_eq!(runtime.wait(parent).now_or_never(), Some(Ok(0)));
+    drop(runtime.detach_group(group));
+    fake.descendant_gate.cancel();
+    for _ in 0..10 {
+        executor.drive(64);
+        runtime.poll(0).unwrap();
+    }
+    assert_eq!(runtime.retained_count(), 0);
+    assert!(runtime.0.groups.borrow().is_empty());
+    assert!(runtime.0.waits.borrow().is_empty());
+    assert!(runtime.0.waiters.borrow().is_empty());
+    assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
+    let weak = Rc::downgrade(&runtime.0);
+    drop(runtime);
+    assert!(weak.upgrade().is_none());
+    assert_eq!(executor.drive(64).pending, 0);
+}
+
+#[test]
 fn external_after_builtin_pipeline_starts_a_fresh_runtime_job() {
     let (executor, fake, runtime) = setup();
     let session = Session::new(

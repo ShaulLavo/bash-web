@@ -8,7 +8,7 @@ use crate::{
 };
 use futures::{
     FutureExt,
-    future::{LocalBoxFuture, Shared},
+    future::{LocalBoxFuture, WeakShared},
 };
 use serde::Serialize;
 use std::{
@@ -291,7 +291,8 @@ struct State {
     next_group: Cell<GroupId>,
     groups: RefCell<BTreeMap<GroupId, Group>>,
     children: RefCell<BTreeMap<ProcessId, Rc<Child>>>,
-    waits: RefCell<BTreeMap<GroupId, Shared<LocalBoxFuture<'static, Result<(), ProcessError>>>>>,
+    waits:
+        RefCell<BTreeMap<GroupId, WeakShared<LocalBoxFuture<'static, Result<(), ProcessError>>>>>,
     input_slots: Rc<Cell<usize>>,
     inputs: RefCell<Vec<InputPump>>,
 }
@@ -921,7 +922,20 @@ impl ProcessHost for Runtime {
         self.0.executor.spawn(wait)
     }
     fn wait_group(&self, group: GroupId) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
-        if let Some(wait) = self.0.waits.borrow().get(&group).cloned() {
+        // Observers share a drain, but the cache must not own a future that
+        // captures this host. Detach/abandon own their strong handles separately.
+        // Prune dropped observations so dead weak entries cannot accumulate.
+        self.0
+            .waits
+            .borrow_mut()
+            .retain(|_, wait| wait.upgrade().is_some());
+        if let Some(wait) = self
+            .0
+            .waits
+            .borrow()
+            .get(&group)
+            .and_then(WeakShared::upgrade)
+        {
             return wait.boxed_local();
         }
         let runtime = self.clone();
@@ -1019,7 +1033,10 @@ impl ProcessHost for Runtime {
         }
         .boxed_local()
         .shared();
-        self.0.waits.borrow_mut().insert(group, wait.clone());
+        self.0
+            .waits
+            .borrow_mut()
+            .insert(group, wait.downgrade().expect("new drain is unpolled"));
         wait.boxed_local()
     }
     fn abandon_group(&self, group: GroupId, signal: i32) {

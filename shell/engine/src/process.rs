@@ -6,7 +6,7 @@ use crate::{
 };
 use futures::{
     FutureExt,
-    future::{LocalBoxFuture, Shared},
+    future::{LocalBoxFuture, WeakShared},
 };
 use std::{
     cell::{Cell, RefCell},
@@ -109,7 +109,8 @@ struct HostState {
     children: RefCell<BTreeMap<ProcessId, Child>>,
     // Only unreaped groups have entries; true means reject new descendants.
     groups: RefCell<BTreeMap<GroupId, bool>>,
-    waits: RefCell<BTreeMap<GroupId, Shared<LocalBoxFuture<'static, Result<(), ProcessError>>>>>,
+    waits:
+        RefCell<BTreeMap<GroupId, WeakShared<LocalBoxFuture<'static, Result<(), ProcessError>>>>>,
     next: Cell<ProcessId>,
     next_group: Cell<GroupId>,
 }
@@ -326,7 +327,20 @@ impl ProcessHost for InProcessHost {
         self.0.executor.spawn(wait)
     }
     fn wait_group(&self, group: GroupId) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
-        if let Some(wait) = self.0.waits.borrow().get(&group).cloned() {
+        // Observers share a drain, but the cache must not own a future that
+        // captures this host. Detach/abandon own their strong handles separately.
+        // Prune dropped observations so dead weak entries cannot accumulate.
+        self.0
+            .waits
+            .borrow_mut()
+            .retain(|_, wait| wait.upgrade().is_some());
+        if let Some(wait) = self
+            .0
+            .waits
+            .borrow()
+            .get(&group)
+            .and_then(WeakShared::upgrade)
+        {
             return wait.boxed_local();
         }
         // Capture eagerly so another waiter may reap records without stealing
@@ -364,7 +378,10 @@ impl ProcessHost for InProcessHost {
         }
         .boxed_local()
         .shared();
-        self.0.waits.borrow_mut().insert(group, wait.clone());
+        self.0
+            .waits
+            .borrow_mut()
+            .insert(group, wait.downgrade().expect("new drain is unpolled"));
         wait.boxed_local()
     }
     fn abandon_group(&self, group: GroupId, signal: i32) {
@@ -510,6 +527,67 @@ mod tests {
         assert!(guard.terminated);
         drop(guard);
         assert_eq!(host.retained_count(), 0);
+    }
+    #[test]
+    fn dropping_wait_observers_does_not_retain_inprocess_host() {
+        for polled in [false, true] {
+            let ex = Executor::new();
+            let host = InProcessHost::new(ex.clone());
+            host.register("wait", |_, _| Box::pin(futures::future::pending()));
+            let group = host.allocate_group();
+            host.spawn(request("wait", group)).unwrap();
+            ex.drive(64);
+            let references = Rc::strong_count(&host.0);
+            let wait = host.wait_group(group);
+            if polled {
+                assert!(wait.now_or_never().is_none());
+            } else {
+                drop(wait);
+            }
+            assert_eq!(Rc::strong_count(&host.0), references, "polled={polled}");
+            // Dropped observations must not prevent a new drain from taking over.
+            host.kill_group(group, 15).unwrap();
+            ex.drive(64);
+            assert_eq!(host.wait_group(group).now_or_never(), Some(Ok(())));
+            assert_eq!(host.retained_count(), 0);
+            assert!(host.0.waits.borrow().is_empty());
+            for unobserved in 100..116 {
+                drop(host.wait_group(unobserved));
+                assert_eq!(host.0.waits.borrow().len(), 1);
+            }
+            let weak = Rc::downgrade(&host.0);
+            drop(host);
+            assert!(weak.upgrade().is_none());
+            assert_eq!(ex.drive(64).pending, 0);
+        }
+    }
+    #[test]
+    fn dropping_detached_wait_observer_preserves_inprocess_reaper() {
+        let ex = Executor::new();
+        let host = InProcessHost::new(ex.clone());
+        let release = Cancel::new();
+        let gate = release.clone();
+        host.register("wait", move |_, _| {
+            let gate = gate.clone();
+            async move {
+                gate.cancelled().await;
+                17
+            }
+            .boxed_local()
+        });
+        let group = host.allocate_group();
+        host.spawn(request("wait", group)).unwrap();
+        ex.drive(64);
+        drop(host.detach_group(group));
+        release.cancel();
+        ex.drive(256);
+        assert_eq!(host.retained_count(), 0);
+        assert!(host.0.groups.borrow().is_empty());
+        assert!(host.0.waits.borrow().is_empty());
+        let weak = Rc::downgrade(&host.0);
+        drop(host);
+        assert!(weak.upgrade().is_none());
+        assert_eq!(ex.drive(64).pending, 0);
     }
     #[test]
     fn dropped_pending_finish_preserves_abandon_cleanup() {
