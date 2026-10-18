@@ -387,4 +387,3 @@ async fn count(req: &SpawnRequest, cancel: &Cancel, verify: bool) -> i32 {
         Err(e) => e.status(),
     }
 }
-

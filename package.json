@@ -88,8 +88,8 @@
     "build:utilities": "node scripts/build-utilities.ts",
     "build:node-harness": "node scripts/build-node-harness.ts",
     "build:compat-control": "node scripts/build-compat-control.ts",
-    "test:guest-build": "node --test scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts",
-    "typecheck:guest-build": "tsc --ignoreConfig --noEmit --strict --skipLibCheck --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-shell-capabilities.ts scripts/wasi-build.ts scripts/build-utilities.ts scripts/build-compat-control.ts scripts/test-build-compat-control.ts scripts/test-utility-packaging.ts scripts/test-shell-wasi.ts scripts/test-wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts"
+    "test:guest-build": "node --test scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts",
+    "typecheck:guest-build": "tsc --ignoreConfig --noEmit --strict --skipLibCheck --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-shell-capabilities.ts scripts/wasi-build.ts scripts/utility-artifacts.ts scripts/test-utility-artifacts.ts scripts/build-utilities.ts scripts/build-compat-control.ts scripts/test-build-compat-control.ts scripts/test-utility-packaging.ts scripts/test-shell-wasi.ts scripts/test-wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",

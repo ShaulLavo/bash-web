@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
+import { stageUtilityArtifacts, utilityNames } from "./utility-artifacts.ts";
 
 type Environment = NodeJS.ProcessEnv;
 const helper = fileURLToPath(import.meta.url);
@@ -119,19 +120,27 @@ export function shellTargetDirectory(root: string, env: Environment = process.en
   return resolve(root, env.CARGO_TARGET_DIR ?? ".build/shell");
 }
 
-const workspaceGuests = [
-  "shell-engine",
-  "shell-runtime",
-  "cat",
-  "grep",
-  "mkdir",
-  "seq",
+const workspaceGuests: readonly string[] = ["shell-engine", "shell-runtime"].concat(utilityNames, [
   "argv-py",
   "printenv-py",
-] as const;
+]);
 
 export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
   const target = shellTargetDirectory(repositoryRoot);
+  const artifacts = process.env.BASH_WEB_UTILITY_ARTIFACTS;
+  const utilityPackage = args.includes("shell-utilities");
+  if (artifacts) {
+    stageUtilityArtifacts(
+      repositoryRoot,
+      resolve(repositoryRoot, artifacts),
+      resolve(target, wasiTarget, "release"),
+    );
+    if (utilityPackage) return;
+  }
+  const cargoArgs =
+    artifacts && args.includes("--workspace")
+      ? args.concat(["--exclude", "shell-utilities"])
+      : args;
   execFileSync(
     "cargo",
     [
@@ -143,7 +152,7 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
       "--manifest-path",
       "shell/Cargo.toml",
       "-j2",
-    ].concat(args),
+    ].concat(cargoArgs),
     {
       cwd: repositoryRoot,
       env: wasiBuildEnvironment(repositoryRoot, target),
@@ -153,7 +162,8 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
   const binIndex = args.indexOf("--bin");
   // The core shell, each separately linked utility, and the compatibility fixtures
   // all pass the same patched-libc verifier.
-  const binaries = binIndex < 0 ? workspaceGuests.slice() : [args[binIndex + 1]];
+  const binaries =
+    binIndex >= 0 ? [args[binIndex + 1]] : utilityPackage ? utilityNames : workspaceGuests;
   for (const binary of binaries) {
     verifyWasiGuest(resolve(target, wasiTarget, "release", `${binary}.wasm`));
   }

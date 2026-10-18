@@ -90,6 +90,14 @@ jobs:
         run: ulimit -c 0; npm run test:shell:wasi
         env:
           CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime run -W max-memory-size=268435456
+      - name: Identify verified utility guests
+        run: node scripts/utility-artifacts.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: utility-guests-${{ github.sha }}
+          path: .build/utility-artifacts/
+          if-no-files-found: error
+          retention-days: 3
       - name: Core dependency proof
         run: npm run check:capabilities
       # shell-engine is the core-only CLI; shell-cli composes it with the separately
@@ -131,10 +139,13 @@ jobs:
       - run: ulimit -c 0; npm run fuzz:shell-printf:ci -- --shell .build/shell/release/shell-cli
 
   own-shell-compatibility:
+    needs: shell
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
       CARGO_TARGET_DIR: .build/shell
+      BASH_WEB_UTILITY_ARTIFACTS: .build/utility-artifacts
       BASH_COMPAT_MODE: frozen
       BASH_COMPAT_ENGINES: own-shell
       BASH_COMPAT_JOBS: 4
@@ -177,6 +188,10 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --unshare-all --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 --proc /proc --dev /dev -- /usr/bin/true
       - run: npm run test:shell:scoreboard
+      - uses: actions/download-artifact@v4
+        with:
+          name: utility-guests-${{ github.sha }}
+          path: .build/utility-artifacts/
       - run: npm run build:shell
       - run: npm run compat:shell
         env:
@@ -190,10 +205,13 @@ jobs:
           if-no-files-found: ignore
 
   browser:
+    needs: shell
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       CARGO_TARGET_DIR: .build/shell
+      BASH_WEB_UTILITY_ARTIFACTS: .build/utility-artifacts
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -214,6 +232,10 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium firefox
       - run: npm run test:browser:package
+      - uses: actions/download-artifact@v4
+        with:
+          name: utility-guests-${{ github.sha }}
+          path: .build/utility-artifacts/
       - run: npm run build:browser
       - run: cargo fmt --manifest-path tests/guest/Cargo.toml --check
       - run: npm run typecheck:browser

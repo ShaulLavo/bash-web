@@ -1,10 +1,11 @@
 import { copyFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { buildWasiShell, shellTargetDirectory } from "./wasi-build.ts";
+import { utilityNames } from "./utility-artifacts.ts";
 const root = resolve(import.meta.dirname, "..");
 // Build each independent executable through the same patched-libc contract and verifier.
-for (const command of ["cat", "grep", "mkdir", "seq"]) {
-  buildWasiShell(["-p", "shell-utilities", "--bin", command]);
+buildWasiShell(["-p", "shell-utilities"]);
+for (const command of utilityNames) {
   for (const directory of ["dist", "public/programs"]) {
     mkdirSync(resolve(root, directory), { recursive: true });
     copyFileSync(

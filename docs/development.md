@@ -42,8 +42,8 @@ bridge to its UI. Terminal rendering and demo controls live in `src/browser/`,
 separate from the shell facade.
 
 `waffle` is a **required peer dependency**, pinned to the published Git commit
-`afe9cc1f3f93ea84929903e5a55854dbfd973448`:
-`git+https://github.com/ShaulLavo/waffle.git#afe9cc1f3f93ea84929903e5a55854dbfd973448`.
+`33ece68f9f484d99b8a57a675de71d847e248051`:
+`git+https://github.com/ShaulLavo/waffle.git#33ece68f9f484d99b8a57a675de71d847e248051`.
 The development dependency uses the same pin so local builds and tests exercise
 the same runtime applications supply.
 
@@ -79,7 +79,17 @@ A foreign executable entry or duplicate installation raises
 `UtilityConflictError`. Disposal releases that installation's registrations and
 removes its executable marker only if the installation created it and its bytes
 remain unchanged. Stop the utility's processes before disposing its installation.
-The application still owns the Runtime.
+The application still owns the Runtime. A failed install keeps its path reserved until
+registration release and marker rollback have settled. Concurrent attempts conflict
+during rollback; afterward a fresh install may retry.
+
+CI's shell job builds and verifies the four utility guests once. Its artifact
+contains the exact Git source SHA and each guest's SHA-256. Compatibility and
+browser builds check that receipt and the patched-libc/memory contract before
+staging those guests, without compiling utility binaries again. This utility-only
+handoff does not replace the separately owned CI-speed work on native/core builds.
+Local builds without `BASH_WEB_UTILITY_ARTIFACTS` compile normally. Hosted cache
+hits still need confirmation from the publication run's logs.
 
 Without an installed or otherwise registered program, ordinary PATH lookup
 returns status 127. Shell-language features remain in the core. Only `grep`
