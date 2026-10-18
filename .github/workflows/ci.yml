@@ -201,7 +201,7 @@ jobs:
           mkdir -p .build/wasi-checked
           echo '${{ needs.prepare.outputs.native }}' > .build/wasi-checked/inputs
 
-  shell:
+  fuzz:
     needs: [prepare, native]
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -308,3 +308,17 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 3
+
+  shell:
+    needs: [prepare, layers, quality, native, wasi, fuzz, own-shell-compatibility, browser]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require every check
+        run: |
+          for result in ${{ join(needs.*.result, ' ') }}; do
+            if [[ "$result" != 'success' ]]; then
+              exit 1
+            fi
+          done

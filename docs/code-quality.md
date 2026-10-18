@@ -13,7 +13,8 @@ npm run quality
 peer/development/lockfile package identity and worker assets, then runs formatting,
 lint, types, unused-code analysis, both duplicate scans, gate failure probes, and Rust
 checks. CI runs `quality:js` once and `check:rust` in the shared native producer.
-Native workspace tests run once in that producer, not inside the quality command.
+Native workspace tests run once in that producer. The local `quality` command
+also runs them; CI uses `quality:js` and does not repeat them.
 Existing architecture, native/WASI, browser, and frozen compatibility jobs remain
 separate blocking checks. Set `BASH_WEB_TEST_PORT` for a browser test run in a
 parallel worktree. Its default remains 4198, and Playwright never reuses an
