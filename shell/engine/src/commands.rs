@@ -80,13 +80,11 @@ impl Command {
         self.class == Class::Keyword
     }
 
-    /// Builtin query metadata is independent of PATH lookup.
     pub(crate) fn query_builtin(&self) -> bool {
         matches!(self.class, Class::SpecialBuiltin | Class::RegularBuiltin)
             && self.handler().is_some()
     }
 
-    /// Builtin heredoc errors belong to the shell. External errors are command-local.
     pub(crate) fn shell_heredoc_errors(&self) -> bool {
         self.heredoc_errors == HeredocErrors::Shell && self.handler().is_some()
     }

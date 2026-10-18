@@ -3,7 +3,6 @@ use shell_engine::{
     io::{PIPE_CAPACITY, pipe},
     process::ProcessHost,
 };
-/// Core tests use the test-only external fixtures; none is linked into the shell.
 fn register_utilities(
     host: &shell_engine::process::InProcessHost,
     fs: &shell_engine::io::MemoryFs,

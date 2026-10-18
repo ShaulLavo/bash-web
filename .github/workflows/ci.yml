@@ -100,8 +100,6 @@ jobs:
           retention-days: 3
       - name: Core dependency proof
         run: npm run check:capabilities
-      # shell-engine is the core-only CLI; shell-cli composes it with the separately
-      # linked utilities for the fuzzers, whose fixtures use cat.
       - name: Native shell CLIs
         run: >-
           cargo build --locked --release --manifest-path shell/Cargo.toml

@@ -26,7 +26,6 @@ impl Context {
         self.filesystem.as_ref()
     }
 }
-/// Standard output writes keep the former stand-ins' exact failure statuses.
 async fn write(fds: &FdTable, bytes: &[u8], context: &Context) -> Result<(), i32> {
     let output = endpoint(fds, 1)?;
     let written = output.write_all(bytes, &context.cancel).await;
@@ -44,7 +43,6 @@ pub async fn run(
         .unwrap_or_else(|status| status)
 }
 
-/// Every separately linked utility, by its executable name.
 pub const UTILITIES: [(&str, Utility); 4] = [
     ("cat", Utility::Cat),
     ("grep", Utility::Grep),
@@ -85,12 +83,10 @@ pub fn register_in_process(
     }
 }
 
-/// A missing inherited descriptor is status 1, as it was inside the shell.
 fn endpoint(fds: &FdTable, fd: u32) -> Result<Endpoint, i32> {
     fds.get(fd).ok_or(1)
 }
 
-/// One external program invocation, as delivered by the host process boundary.
 pub struct Invocation {
     pub args: Vec<String>,
     pub env: std::collections::BTreeMap<String, String>,
@@ -99,8 +95,6 @@ pub struct Invocation {
     pub context: Context,
 }
 
-/// Each guest entry calls only its own implementation, so every program links
-/// just its own code: only `grep` carries the regex crate.
 pub async fn cat(invocation: Invocation) -> i32 {
     let Invocation {
         args,
@@ -148,7 +142,6 @@ pub async fn seq(invocation: Invocation) -> i32 {
         .unwrap_or_else(|status| status)
 }
 
-/// Native builds have no runtime_proc host; the guests are wasm32-wasip1 only.
 #[cfg(not(target_os = "wasi"))]
 pub fn guest_main<F, Fut>(_program: F) -> !
 where
@@ -186,8 +179,6 @@ where
         context: Context {
             cancel: cancel.clone(),
             filesystem: Rc::new(runtime.clone()),
-            // The shell's production limits are its defaults; a separate program
-            // keeps the same record bound the former in-shell stand-in used.
             line_bytes: shell_engine::Limits::default().line_bytes,
         },
     };

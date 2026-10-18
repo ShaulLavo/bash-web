@@ -1,5 +1,3 @@
-// Build immutable integrated main, with its original in-shell utilities, as the
-// unchanged-main instrument control for the Waffle Node harness. Never candidate scoring.
 import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -16,7 +14,6 @@ const sha = execFileSync("git", ["rev-parse", "--verify", `${reference}^{commit}
   encoding: "utf8",
 }).trim();
 const base = shellTargetDirectory(root);
-// A separate Cargo target: the control must never overwrite the candidate's guests.
 const target = resolve(base, "compat-control-target");
 const source = resolve(root, ".build", `compat-control-${sha}`);
 mkdirSync(source, { recursive: false });

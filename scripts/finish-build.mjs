@@ -11,7 +11,6 @@ for (const worker of ["shell-worker", "fs-worker"]) {
     new URL(`../dist/${worker}.js`, import.meta.url),
   );
 }
-// Each optional utility entry resolves its program beside the worker in dist.
 for (const command of ["cat", "grep", "mkdir", "seq"]) {
   await copyFile(
     new URL(`../public/programs/${command}.wasm`, import.meta.url),

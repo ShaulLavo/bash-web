@@ -1,4 +1,3 @@
-// Original installer contracts for the optional utility entries.
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import type { Runtime } from "waffle";
@@ -147,7 +146,6 @@ test("dispose preserves entries it did not create or that changed since", async 
   const first = await installCat(state.runtime);
   const marker = state.files.get("/bin/cat")!;
   await first.dispose();
-  // A persisted workspace may already hold this utility's own marker.
   state.files.set("/bin/cat", marker);
   const adopted = await installCat(state.runtime);
   await adopted.dispose();

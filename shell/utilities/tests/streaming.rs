@@ -1,12 +1,10 @@
 include!("../../engine/tests/support/streaming.rs");
-/// The separately linked utilities, driven exactly as their guest entry drives them.
 fn register_utilities(host: &InProcessHost, fs: &MemoryFs, line_bytes: usize) {
     shell_utilities::register_in_process(host, "/home/guest", Rc::new(fs.clone()), line_bytes);
 }
 // Every scenario runs the real utility implementations through the ProcessHost
 // path, never mock executables called grep/mkdir or upstream output buffers.
 
-/// A pipeline that never produces output stays live until interrupted, then stops.
 fn interrupt_parked_pipeline(rig: &Rig, source: &str) {
     let job = rig.start(source);
     for _ in 0..100 {

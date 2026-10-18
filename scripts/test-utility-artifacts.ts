@@ -5,7 +5,6 @@ import { test } from "node:test";
 import { stageUtilityArtifacts, utilityNames, writeUtilityArtifacts } from "./utility-artifacts.ts";
 
 const root = resolve(import.meta.dirname, "..");
-// Original verifier fixture: one defined memory capped at the production 256 MiB bound.
 const wasm = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0, 5, 5, 1, 1, 1, 128, 32);
 
 function fixture(run: (source: string, output: string, target: string) => void) {
@@ -47,7 +46,6 @@ test("a mismatched source receipt is rejected before replacing consumer output",
 test("a tampered but valid guest is rejected by its hash", () => {
   fixture((source, output, target) => {
     writeUtilityArtifacts(root, source, output);
-    // A valid empty custom section changes bytes without changing the memory contract.
     writeFileSync(resolve(output, "cat.wasm"), Buffer.concat([wasm, Uint8Array.of(0, 1, 0)]));
     assert.throws(() => stageUtilityArtifacts(root, output, target), /every verified guest hash/);
   });

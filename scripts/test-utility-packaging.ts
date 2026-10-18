@@ -1,5 +1,3 @@
-// Original packaging contract: the core entry and each optional utility entry bundle
-// only their own assets, so an application ships just the programs it imports.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";

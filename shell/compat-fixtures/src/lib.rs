@@ -2,7 +2,6 @@
 //! They reuse the standalone harness's exact implementations rather than a copy.
 #[path = "../../engine/src/compat.rs"]
 pub mod compat;
-// The shared compat.rs module above uses these; name them where tools look.
 use futures as _;
 use serde as _;
 use serde_json as _;

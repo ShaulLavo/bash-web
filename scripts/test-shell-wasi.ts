@@ -1,4 +1,3 @@
-// Exercise the engine and utility tests on WASI, then size the core and each add-on.
 // The browser process service is deliberately not substituted by this harness.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";

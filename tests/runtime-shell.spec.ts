@@ -666,7 +666,6 @@ test("an accumulating consumer cannot make the shell or transport buffer its inp
 }) => {
   const baselineWorkers = await open(page);
   const before = await page.evaluate(() => window.bashWeb!.runtimeSnapshot()!);
-  // Both seq and the accumulating consumer are external guests, one child slot each.
   const externalPipelineProcesses = 2;
   const baseMemory = before.roots[0].memoryBytes;
   let peakShell = baseMemory;
@@ -705,7 +704,6 @@ test("an accumulating consumer cannot make the shell or transport buffer its inp
     .toBe(before.roots[0].retainedSlots);
   const after = await page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0]);
   assertPipelineReclaimed(before.roots[0], after);
-  // Fail closed even when workers and pipes retire but an anonymous slot remains.
   expect(() =>
     assertPipelineChildren(
       before.roots[0],

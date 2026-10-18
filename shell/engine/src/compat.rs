@@ -521,7 +521,6 @@ pub fn standalone(install: impl FnOnce(&InProcessHost, &MemoryFs, Rc<dyn FileSys
     }
     let filesystem: Rc<dyn FileSystem> =
         Rc::new(ReadOnlyMount::new(fs.clone(), "/usr").with_denied_directories(denied_directories));
-    // External programs see the same mounted view the shell does.
     install(&host, &fs, filesystem.clone());
     let session = Session::new(
         executor.clone(),

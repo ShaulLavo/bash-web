@@ -1,4 +1,3 @@
-// Original handoff for the four separately linked utilities, not a general CI build cache.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";

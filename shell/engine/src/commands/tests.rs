@@ -18,8 +18,6 @@ fn baseline(names: &[&'static str]) -> Vec<&'static str> {
     names
 }
 
-/// Every executable builtin. External commands (cat, grep, mkdir, seq) are not here.
-// Sorted, as `baseline` compares it.
 const BUILTINS: &[&str] = &[
     ":", "[", "break", "cd", "command", "continue", "declare", "echo", "eval", "exec", "exit",
     "export", "false", "jobs", "kill", "let", "local", "printf", "pwd", "read", "readonly",
