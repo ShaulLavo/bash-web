@@ -317,6 +317,7 @@ pub struct Cancel {
     shared: Rc<CancelShared>,
     event: Event,
     probe: Option<Rc<dyn Fn() -> bool>>,
+    parent: Option<Rc<Cancel>>,
 }
 impl Cancel {
     pub fn new() -> Self {
@@ -330,6 +331,15 @@ impl Cancel {
             }),
             event: Event::default(),
             probe: Some(probe),
+            parent: None,
+        }
+    }
+    /// A reader-local abort must not cancel its caller. Parent interruption
+    /// still reaches parked operations and descendants that outlive the reader.
+    pub(crate) fn child(&self) -> Self {
+        Self {
+            parent: Some(Rc::new(self.clone())),
+            ..Self::default()
         }
     }
     pub fn cancel(&self) {
@@ -342,11 +352,23 @@ impl Cancel {
             shared: self.shared.clone(),
             event: self.event.clone(),
             probe: None,
+            parent: self
+                .parent
+                .as_ref()
+                .map(|parent| Rc::new(parent.without_probe())),
         }
     }
     pub fn is_cancelled(&self) -> bool {
         let shared = &*self.shared;
         if shared.flag.get() {
+            return true;
+        }
+        if self
+            .parent
+            .as_ref()
+            .is_some_and(|parent| parent.is_cancelled())
+        {
+            self.cancel();
             return true;
         }
         let Some(probe) = &self.probe else {
@@ -370,7 +392,12 @@ impl Cancel {
         if shared.flag.get() {
             return true;
         }
-        if self.probe.as_ref().is_some_and(|probe| probe()) {
+        if self
+            .parent
+            .as_ref()
+            .is_some_and(|parent| parent.probe_now())
+            || self.probe.as_ref().is_some_and(|probe| probe())
+        {
             self.cancel();
         }
         shared.flag.get()
@@ -378,7 +405,11 @@ impl Cancel {
     pub async fn cancelled(&self) {
         let notification = self.event.listen();
         if !self.is_cancelled() {
-            notification.await;
+            if let Some(parent) = &self.parent {
+                let _ = futures::future::select(notification, Box::pin(parent.cancelled())).await;
+            } else {
+                notification.await;
+            }
         }
     }
     /// Dropping this operation or losing the race removes both wait registrations.
@@ -402,6 +433,7 @@ impl Default for Cancel {
             }),
             event: Event::default(),
             probe: None,
+            parent: None,
         }
     }
 }
@@ -505,6 +537,40 @@ mod tests {
             Poll::Ready(Err(Cancelled))
         );
         assert_eq!(cancel.event.waiter_count(), 0);
+    }
+    #[test]
+    fn child_cancellation_is_local_but_parent_wakes_parked_descendants() {
+        let parent = Cancel::new();
+        let child = parent.child();
+        let grandchild = child.child();
+        let mut wait = Box::pin(grandchild.cancelled());
+        let waker = noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        assert!(wait.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(parent.event.waiter_count(), 1);
+        parent.cancel();
+        assert!(wait.as_mut().poll(&mut cx).is_ready());
+        drop(wait);
+        assert!(grandchild.is_cancelled());
+        assert_eq!(parent.event.waiter_count(), 0);
+
+        let parent = Cancel::new();
+        let child = parent.child();
+        child.cancel();
+        assert!(!parent.is_cancelled());
+    }
+    #[test]
+    fn child_preserves_host_probe_and_without_probe_suppresses_it() {
+        let interrupted = Rc::new(Cell::new(false));
+        let observed = interrupted.clone();
+        let parent = Cancel::with_probe(Rc::new(move || observed.get()));
+        let child = parent.child();
+        let passive = child.without_probe();
+        interrupted.set(true);
+        assert!(!passive.probe_now());
+        assert!(child.probe_now());
+        assert!(parent.is_cancelled());
+        assert!(passive.is_cancelled());
     }
     #[test]
     fn notification_before_registration_and_nested_spawns() {

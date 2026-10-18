@@ -2885,3 +2885,227 @@ fn runtime_job_retention_is_bounded_and_empty_jobs_do_not_accumulate() {
     assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
     assert_eq!(executor.drive(64).pending, 0);
 }
+
+#[test]
+fn review_followup_pipeline_preserves_host_interrupt_probe() {
+    let (executor, fake, runtime) = setup();
+    let session = runtime_session(&executor, &runtime);
+    let foreground = session.start("true | while true; do :; done").unwrap();
+    for _ in 0..32 {
+        executor.drive(64);
+        runtime.poll(0).unwrap();
+    }
+    fake.interrupt.set(2);
+    for _ in 0..128 {
+        executor.drive(64);
+        runtime.poll(0).unwrap();
+    }
+    let observed = foreground.is_finished();
+    if !observed {
+        session.interrupt();
+    }
+    let code = finish(&executor, &runtime, foreground);
+    shutdown_session(&executor, &runtime, &fake, session);
+    assert_eq!(code, 130);
+    assert!(observed, "pipeline lost the host-provided interrupt probe");
+    assert_eq!(fake.consumed_interrupts.get(), 1);
+}
+
+#[test]
+fn review_followup_subshell_failure_does_not_close_enclosing_group() {
+    for sibling in ["true", "sleep", "while true; do :; done"] {
+        let (executor, fake, runtime) = setup();
+        fake.outcomes
+            .borrow_mut()
+            .insert("/startup-tool".into(), WaitResult::StartFailed(48));
+        let session = runtime_session(&executor, &runtime);
+        let command = format!("( /startup-tool | {sibling} ); /ok; echo status:$?");
+        let code = finish(&executor, &runtime, session.start(&command).unwrap());
+        let ran_ok = fake
+            .requests
+            .borrow()
+            .iter()
+            .any(|request| request.executable == "/ok");
+        let output = fake.output.bytes();
+        shutdown_session(&executor, &runtime, &fake, session);
+        assert_eq!(code, 0, "{command}");
+        assert!(
+            ran_ok,
+            "isolated failed pipeline closed outer reader group: {command}"
+        );
+        assert_eq!(output, b"status:0\n", "{command}");
+    }
+}
+
+#[test]
+fn review_followup_successful_pipeline_substitution_keeps_interrupt_owner() {
+    let (executor, fake, runtime) = setup();
+    let session = runtime_session(&executor, &runtime);
+    let foreground = session
+        .start(": | : <(sleep); while true; do :; done")
+        .unwrap();
+    drive_until_spawn(&executor, &runtime, &fake, 1);
+    for _ in 0..64 {
+        executor.drive(64);
+        runtime.poll(0).unwrap();
+    }
+    let pid = fake
+        .requests
+        .borrow()
+        .iter()
+        .position(|request| request.executable == "sleep")
+        .map(|offset| offset as u32 + 100)
+        .unwrap();
+    session.interrupt();
+    let code = finish(&executor, &runtime, foreground);
+    for _ in 0..64 {
+        executor.drive(64);
+        runtime.poll(0).unwrap();
+    }
+    let retained = runtime.retained_count();
+    let child_status = fake.child_status(pid);
+    shutdown_session(&executor, &runtime, &fake, session);
+    assert_eq!(code, 130);
+    assert_eq!(
+        retained, 0,
+        "successful pipeline orphaned substitution cancellation"
+    );
+    assert_eq!(child_status, Some(130));
+}
+
+#[test]
+fn review_followup_closed_stderr_does_not_use_core_fallback() {
+    for (source, errno) in [("/startup-tool 2>&-", 44), ("{ /startup-tool; } 2>&-", 48)] {
+        let (executor, fake, runtime) = setup();
+        fake.outcomes
+            .borrow_mut()
+            .insert("/startup-tool".into(), WaitResult::StartFailed(errno));
+        let (stderr, error_output) = io::capture(4096);
+        fake.fds.borrow_mut().insert(2, stderr);
+        let session = runtime_session(&executor, &runtime);
+        let code = finish(&executor, &runtime, session.start(source).unwrap());
+        let diagnostic = error_output.bytes();
+        shutdown_session(&executor, &runtime, &fake, session);
+        assert_eq!(code, if errno == 44 { 127 } else { 254 });
+        assert!(
+            diagnostic.is_empty(),
+            "fallback reopened explicitly closed stderr: {source}"
+        );
+    }
+}
+
+#[test]
+fn fork_failure_subshell_status_is_254_but_outer_reader_continues() {
+    for source in [
+        "( /startup-tool ); echo sub:$?; /ok; echo status:$?",
+        "( /startup-tool | sleep ); echo sub:$?; /ok; echo status:$?",
+        "( while /startup-tool; do :; done ); echo sub:$?; /ok; echo status:$?",
+    ] {
+        let (executor, fake, runtime) = setup();
+        fake.outcomes
+            .borrow_mut()
+            .insert("/startup-tool".into(), WaitResult::StartFailed(48));
+        let session = runtime_session(&executor, &runtime);
+        assert_eq!(
+            finish(&executor, &runtime, session.start(source).unwrap()),
+            0,
+            "{source}"
+        );
+        assert_eq!(fake.output.bytes(), b"sub:254\nstatus:0\n", "{source}");
+        shutdown_session(&executor, &runtime, &fake, session);
+    }
+}
+
+#[test]
+fn subshell_pipeline_interrupt_preserves_foreground_group_and_stops_all_stages() {
+    let (executor, fake, runtime) = setup();
+    let session = runtime_session(&executor, &runtime);
+    let foreground = session.start("( sleep; true ) | cat").unwrap();
+    drive_until_spawn(&executor, &runtime, &fake, 1);
+    assert_eq!(
+        runtime.0.groups.borrow().len(),
+        1,
+        "subshell must remain in the invoking foreground group"
+    );
+    session.interrupt();
+    assert_eq!(finish(&executor, &runtime, foreground), 130);
+    for _ in 0..64 {
+        executor.drive(64);
+        runtime.poll(0).unwrap();
+    }
+    assert_eq!(runtime.retained_count(), 0);
+    assert_eq!(fake.child_status(100), Some(130));
+    shutdown_session(&executor, &runtime, &fake, session);
+}
+
+#[test]
+fn successful_subshell_substitution_keeps_invocation_interrupt_owner() {
+    let (executor, fake, runtime) = setup();
+    let session = runtime_session(&executor, &runtime);
+    let foreground = session
+        .start("( : <(sleep) ); while true; do :; done")
+        .unwrap();
+    drive_until_spawn(&executor, &runtime, &fake, 1);
+    for _ in 0..64 {
+        executor.drive(64);
+        runtime.poll(0).unwrap();
+    }
+    session.interrupt();
+    assert_eq!(finish(&executor, &runtime, foreground), 130);
+    for _ in 0..64 {
+        executor.drive(64);
+        runtime.poll(0).unwrap();
+    }
+    assert_eq!(runtime.retained_count(), 0);
+    assert_eq!(fake.child_status(100), Some(130));
+    shutdown_session(&executor, &runtime, &fake, session);
+}
+
+#[test]
+fn aborted_subshell_leaves_descendants_to_enclosing_invocation_cleanup() {
+    for interrupt in [false, true] {
+        let (executor, fake, runtime) = setup();
+        fake.outcomes
+            .borrow_mut()
+            .insert("/startup-tool".into(), WaitResult::StartFailed(48));
+        let session = runtime_session(&executor, &runtime);
+        let foreground = session
+            .start("( inherit-sleep | /startup-tool ); echo sub:$?; /ok; parse-gate")
+            .unwrap();
+        drive_until_spawn(&executor, &runtime, &fake, 4);
+        for _ in 0..64 {
+            executor.drive(64);
+            runtime.poll(0).unwrap();
+        }
+        assert_eq!(fake.output.bytes(), b"sub:254\n");
+        assert_eq!(fake.child_status(100), Some(130));
+        assert_eq!(
+            fake.child_status(101),
+            None,
+            "local abort must not hunt descendants"
+        );
+        assert!(fake.signals.borrow().iter().all(|(group, _, _)| !group));
+        assert_eq!(runtime.0.groups.borrow().len(), 1);
+        if interrupt {
+            session.interrupt();
+        } else {
+            // The inherited member exits on its own, then the outer script ends.
+            fake.descendant_gates.borrow()[&101].cancel();
+            fake.parse_gate.cancel();
+        }
+        let code = finish(&executor, &runtime, foreground);
+        for _ in 0..64 {
+            executor.drive(64);
+            runtime.poll(0).unwrap();
+        }
+        let descendant_status = fake.child_status(101);
+        let retained = runtime.retained_count();
+        let groups = runtime.0.groups.borrow().len();
+        shutdown_session(&executor, &runtime, &fake, session);
+        assert_eq!(code, if interrupt { 130 } else { 0 });
+        assert_eq!(descendant_status, Some(if interrupt { 130 } else { 23 }));
+        assert_eq!(retained, 0, "orphaned member leaked a process slot");
+        assert_eq!(groups, 0, "enclosing invocation did not reap its group");
+        assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
+    }
+}

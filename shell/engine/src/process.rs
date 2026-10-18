@@ -139,8 +139,9 @@ const WASI_ERRNO_MESSAGES: [&str; 77] = [
     "Capabilities insufficient",
 ];
 /// All entry points are nonblocking. Waiting must register wake notifications, not
-/// poll or sleep. Kill includes descendants; completion means the host has observed
-/// their actual exits and released process-owned descriptors. EPIPE is an I/O error,
+/// poll or sleep. Kill targets one PID; group cleanup owns inherited descendants.
+/// Completion means the host observed actual exits and released process-owned
+/// descriptors. EPIPE is an I/O error,
 /// NOT a reason for the host to overwrite a guest's chosen exit status with 141.
 pub trait ProcessHost {
     /// Allocate a group ID synchronously, without running command work. IDs are

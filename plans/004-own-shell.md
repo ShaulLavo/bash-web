@@ -1160,6 +1160,10 @@ clears during backoff succeeds, and exhaustion that does not clear gives 254
 without executing the rest of the submitted reader. Preserve cancellation and
 cleanup during every wait and do not retry other synchronous errno values.
 
+### Follow-up: parallel shell WASM and storage startup
+
+Status: Approved. Start fetching and compiling the shell WASM in parallel with the filesystem's storage open, instead of after it. Firefox's first-visit IndexedDB open costs 586 ms median, 877 ms p90 and 2.3 s max (N26 on the PC, /work/reports/bash-web/startup-diagnostics/firefox-idb-profile/). The failed stall trace showed the shell WASM not requested until the filesystem was ready. Measure first-visit time-to-prompt in Firefox and Chromium before and after with #11's stage timestamps; keep it only if it's faster, with zero behaviour change. Sequence it after the fd-3 PR, which changes startup readiness.
+
 ### Follow-up: start-status-scoped exec diagnostic ownership
 
 Status: Approved. In the fd-3 lane's PR or the immediately following PR, integrate
