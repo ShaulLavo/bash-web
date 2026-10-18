@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.40",
+  "version": "0.0.41",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -11,11 +11,16 @@
     "plans",
     "sources.lock.json",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "src"
   ],
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./shell": "./src/shell.ts"
+  },
   "scripts": {
-    "format:check": "oxfmt --check scripts shell package.json '!scripts/fixtures/**/*.json'",
+    "format:check": "oxfmt --check scripts shell src tests package.json vite.config.ts playwright.config.ts tsconfig.json '!scripts/fixtures/**/*.json'",
     "test:rust": "node scripts/check-shell-parser.mjs && cargo fmt --manifest-path shell/Cargo.toml --all --check && cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2",
     "build:shell": "CARGO_TARGET_DIR=.build/shell cargo build --locked --release --target wasm32-wasip1 --manifest-path shell/Cargo.toml --workspace",
     "test:shell:wasi": "node scripts/test-shell-wasi.mjs",
@@ -41,21 +46,45 @@
     "fuzz:shell-control-flow:ci": "node scripts/fuzz-shell-control-flow.mjs --replay scripts/fixtures/shell-control-flow-seed-1.json --replay scripts/fixtures/shell-control-flow-seed-42.json",
     "fuzz:shell-job-lifetime": "node scripts/fuzz-shell-job-lifetime.mjs",
     "test:fuzz-shell-job-lifetime": "node --test scripts/test-fuzz-shell-job-lifetime.mjs",
-    "fuzz:shell-job-lifetime:ci": "node scripts/fuzz-shell-job-lifetime.mjs --replay scripts/fixtures/shell-job-lifetime-seed-1.json --replay scripts/fixtures/shell-job-lifetime-seed-42.json"
+    "fuzz:shell-job-lifetime:ci": "node scripts/fuzz-shell-job-lifetime.mjs --replay scripts/fixtures/shell-job-lifetime-seed-1.json --replay scripts/fixtures/shell-job-lifetime-seed-42.json",
+    "sources:browser": "node scripts/sources.mjs",
+    "build:shell:browser": "node scripts/build-shell-browser.mjs",
+    "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:test-guest && npm run notices:browser && vite build && node scripts/finish-build.mjs",
+    "typecheck:browser": "tsc --noEmit",
+    "test:browser": "playwright test",
+    "test:runtime:terminal": "node scripts/test-runtime-terminal.mjs",
+    "notices:browser": "npm run notices:shell && node scripts/browser-notices.mjs",
+    "serve": "node dist/serve.mjs",
+    "verify:browser": "npm run test:browser:package && npm run build:browser && npm run typecheck:browser && npm run test:runtime:terminal && npm run test:browser",
+    "test:browser:package": "node --test scripts/test-browser-package.mjs",
+    "build:worker": "node scripts/build-worker.mjs",
+    "prepare": "npm run build:worker",
+    "build:test-guest": "node scripts/build-test-guest.mjs"
   },
   "devDependencies": {
+    "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",
+    "@playwright/test": "1.64.0",
+    "@types/node": "26.6.3",
+    "@webgpu/types": "0.1.74",
+    "esbuild": "0.28.2",
     "oxfmt": "0.70.0",
+    "remix": "3.0.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.1",
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#c458a488bba70855c27a2921c2665c7150ef2090",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#b88b6ac1500c61c16411b479531f18df820e81e5"
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#c458a488bba70855c27a2921c2665c7150ef2090"
   },
-  "peerDependenciesMeta": {
-    "waffle": {
-      "optional": true
-    }
+  "overrides": {
+    "esbuild": "0.28.2"
   },
   "engines": {
     "node": ">=26.7.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "waffle@0.0.26": true
   }
 }
