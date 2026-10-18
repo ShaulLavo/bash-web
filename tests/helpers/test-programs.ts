@@ -20,7 +20,7 @@ export async function registerTestPrograms(runtime: Runtime, signal?: AbortSigna
   await runtime.filesystem.mkdirp("/bin");
   signal?.throwIfAborted();
   await runtime.filesystem.mkdirp("/programs");
-  for (const name of ["test-guest", "/bin/test-guest", "/programs/test-guest.wasm"]) {
+  for (const name of ["/bin/test-guest", "/programs/test-guest.wasm"]) {
     signal?.throwIfAborted();
     runtime.registerProgram(name, {
       adapter: "bash-web:preview1",
@@ -31,7 +31,7 @@ export async function registerTestPrograms(runtime: Runtime, signal?: AbortSigna
   }
   // The separate spin guest intentionally has no cooperative/runtime_proc imports.
   // Waffle admits and instruments its source bytes; no hand-built interrupt shim is used.
-  for (const name of ["test-spin", "/bin/test-spin", "/programs/test-spin.wasm"]) {
+  for (const name of ["/bin/test-spin", "/programs/test-spin.wasm"]) {
     signal?.throwIfAborted();
     runtime.registerProgram(name, { adapter: "bash-web:preview1", source: spinBytes });
     if (name.startsWith("/")) await runtime.filesystem.writeFile(name, new Uint8Array());
