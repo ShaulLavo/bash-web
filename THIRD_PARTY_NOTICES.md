@@ -572,7 +572,7 @@ assets are ignored build output, not externally sourced guest payloads.
 
 ### Waffle peer
 
-`waffle` at published revision `c458a488bba70855c27a2921c2665c7150ef2090`
+`waffle` **0.0.47** at published revision `afe9cc1f3f93ea84929903e5a55854dbfd973448`
 is MIT licensed, Copyright 2026 Shaul Lavochkin. It is a required peer imported
 by the shell adapter and is pinned identically for development. The application
 creates the runtime through Waffle's root `createRuntime` and supplies it to the
@@ -589,3 +589,26 @@ host. Browser distributions must include the generated terminal, npm/Waffle,
 and adapter notices as well as shell dependency notices in
 `dist/THIRD_PARTY_NOTICES.txt`. This port changes no frozen shell scoreboard,
 corpus licenses, generator fixture bytes, or earlier extraction provenance.
+
+### Startup observation and original acceptance controls
+
+**External dependency:** Waffle `afe9cc1f3f93ea84929903e5a55854dbfd973448`,
+`docs/host-abi.md`, `proc/abi.ts`, and `browser/worker.ts` define the
+non-consuming `start_status` and CHILD_START (kind 6) boundary. This pin also
+fixes nested `wait_job` observation after a pending claim. No Waffle implementation
+or libc patch is copied or changed locally.
+
+**Original adapters:** `shell/engine/src/{process.rs,runtime.rs,runtime/wasi.rs}`
+and `interpreter.rs` observe that boundary and retain the command diagnostic
+endpoint only through startup resolution and its diagnostic, not terminal/job
+cleanup. Fork diagnostics use parent stderr; real exits 126/127 remain ordinary
+exits. `tests/guest/src/main.rs`, `tests/helpers/test-programs.ts`, and
+`tests/pipelines.acceptance.spec.ts` add original EOF acknowledgement programs
+and an original empty core-Wasm module that fails executable startup. These are
+MIT-licensed original fixtures, not copied upstream implementations.
+
+**Original test instrumentation:** `scripts/test-bash-compat-cleanup.mjs` installs
+its Node Worker interceptor before importing the compatibility entrypoint and
+requires its actual dispatch message. A bypass mutation must fail that assertion.
+This standalone CLI fixture uses Node WASI, not Waffle's browser worker; no runtime
+built-in capture behavior is changed for instrumentation.

@@ -219,6 +219,10 @@ pub trait ProcessHost {
         cwd: String,
     ) -> LocalBoxFuture<'static, Result<(), ProcessError>>;
     fn spawn(&self, request: SpawnRequest) -> Result<ProcessId, ProcessError>;
+    /// Observe executable startup without collecting the child or awaiting teardown.
+    /// StartFailed carries the exec/fork errno; Runtime(11) means cancellation
+    /// prevented entry and the terminal wait still owns its actual outcome.
+    fn wait_start(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<(), ProcessError>>;
     fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<i32, ProcessError>>;
     fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError>;
     /// Wait only for shell-owned direct processes, never inherited descendants.
@@ -485,6 +489,17 @@ impl ProcessHost for InProcessHost {
             },
         );
         Ok(pid)
+    }
+    fn wait_start(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        // Registry lookup/admission is all the fallible setup in this host.
+        let result = self
+            .0
+            .children
+            .borrow()
+            .contains_key(&pid)
+            .then_some(())
+            .ok_or(ProcessError::UnknownProcess(pid));
+        futures::future::ready(result).boxed_local()
     }
     fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<i32, ProcessError>> {
         let exit = self

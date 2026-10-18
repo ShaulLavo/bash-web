@@ -18,6 +18,8 @@ unsafe extern "C" {
     fn proc_spawn(ptr: *const u8, length: usize) -> i32;
     #[link_name = "job_of"]
     fn proc_job_of(pid: u32) -> i32;
+    #[link_name = "start_status"]
+    fn proc_start_status(pid: u32) -> i32;
     #[link_name = "wait"]
     fn proc_wait(pid: u32, output: *mut u8) -> i32;
     #[link_name = "wait_job"]
@@ -142,6 +144,9 @@ impl Abi for WasiAbi {
     }
     fn job_of(&self, pid: u32) -> Result<u32, i32> {
         result(unsafe { proc_job_of(pid) })
+    }
+    fn start_status(&self, pid: u32) -> Result<i32, i32> {
+        result(unsafe { proc_start_status(pid) }).map(|status| status as i32)
     }
     fn wait(&self, pid: u32) -> Result<WaitResult, i32> {
         let mut bytes = [0; 8];

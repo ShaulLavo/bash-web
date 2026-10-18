@@ -55,6 +55,12 @@ impl ProcessHost for Host {
     fn spawn(&self, request: SpawnRequest) -> Result<ProcessId, ProcessError> {
         self.inner.spawn(request)
     }
+    fn wait_start(
+        &self,
+        pid: ProcessId,
+    ) -> futures::future::LocalBoxFuture<'static, Result<(), ProcessError>> {
+        self.inner.wait_start(pid)
+    }
     fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<i32, ProcessError>> {
         self.inner.wait(pid)
     }

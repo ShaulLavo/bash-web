@@ -103,3 +103,22 @@ configured in Chromium and Firefox: 30 configured executions, not a passing
 result until browser verification completes. Existing unrelated Bun
 skips are not evidence for this matrix. The default `test-spin` remains genuine
 source-admission/no-checkpoint interruption coverage.
+
+## Startup and EOF job controls
+
+The original `test-guest` modes `eof-handshake`, `close-output-await-ack`, and
+`ack-output-eof` use an actual runtime pipe inherited by a nested shell. The
+producer closes fd1 and fd2, then blocks reading an acknowledgement; downstream
+writes it only after observing real pipe EOF. Both foreground and background
+pipeline/job paths must complete, with no timer substituting for acknowledgement.
+The driver waits for both child and job cleanup. Its runtime pipe descriptors are
+owned by a drop guard on every return path.
+
+The original empty core-Wasm `test-start-failure` module is valid at registration
+but lacks executable entry/memory, so real worker startup fails with ENOEXEC.
+Pipeline diagnostics are captured and read back from a file, distinguishing
+redirected output from an incorrect fallback to parent stderr. Separate controls
+cover ordinary missing-command lookup, closed fd2, redirected files, actual exits
+126/127, and worker return to the initial count. These five new unique cases are
+configured in Chromium and Firefox (ten executions). This is test inventory,
+not acceptance evidence; report actual full-suite results separately.

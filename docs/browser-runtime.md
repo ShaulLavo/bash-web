@@ -13,7 +13,7 @@ TypeScript entry and its worker imports. Install the required `waffle` peer at
 the exact pin in `package.json`:
 
 ```text
-git+https://github.com/ShaulLavo/waffle.git#8bfc767d6097cf3c741092328573460a3047d114
+git+https://github.com/ShaulLavo/waffle.git#afe9cc1f3f93ea84929903e5a55854dbfd973448
 ```
 
 The package's development dependency uses that same published commit. There
@@ -113,7 +113,7 @@ and callbacks from a stopped generation cannot contaminate the next start.
 Backend contention policy belongs to the runtime owner, not the shell. At the
 pinned Waffle revision, OPFS waits and rejects takeover; IndexedDB defaults to
 takeover with optional `whenBusy: "wait"`. See Waffle's
-[storage ownership contract](https://github.com/ShaulLavo/waffle/blob/8bfc767d6097cf3c741092328573460a3047d114/docs/storage.md).
+[storage ownership contract](https://github.com/ShaulLavo/waffle/blob/afe9cc1f3f93ea84929903e5a55854dbfd973448/docs/storage.md).
 
 Restart/stop cancels admission, joins pending session creation and awaits
 `BrowserSession.dispose()` before releasing an owned lease or creating its
@@ -340,9 +340,9 @@ establish Safari behavior. Safari still requires verification on an actual Mac.
 
 ### Migrated browser scope
 
-The current Playwright listing (`playwright test --list`) contains 108 unique
-cases configured once for Chromium and once for Firefox: 216 configured
-executions, with 200 runnable executions and 16 unchanged configured skips. This is
+The current Playwright listing (`playwright test --list`) contains 113 unique
+cases configured once for Chromium and once for Firefox: 226 configured
+executions, with 210 runnable executions and 16 unchanged configured skips. This is
 configuration inventory, not final browser acceptance evidence; a configured or
 runnable case is not a passing result.
 
@@ -350,13 +350,13 @@ runnable case is not a passing result.
 | ----------------------------------- | ---------------: | -------------: | ---------------------: | ----------------------: | ------------------------: |
 | Shell                               |               12 |             11 |                      0 |                       0 |                         1 |
 | External commands                   |               26 |             24 |                      2 |                       0 |                         0 |
-| Pipelines                           |               19 |             18 |                      1 |                       0 |                         0 |
+| Pipelines                           |               24 |             23 |                      1 |                       0 |                         0 |
 | Runtime                             |               38 |             34 |                      1 |                       3 |                         0 |
 | Startup diagnostics                 |                4 |              4 |                      0 |                       0 |                         0 |
 | Storage lifecycle                   |                7 |              7 |                      0 |                       0 |                         0 |
 | Worker assets and renderer fallback |                2 |              2 |                      0 |                       0 |                         0 |
-| **Unique cases**                    |          **108** |        **100** |                  **4** |                   **3** |                     **1** |
-| **Chromium + Firefox executions**   |          **216** |        **200** |                  **8** |                   **6** |                     **2** |
+| **Unique cases**                    |          **113** |        **105** |                  **4** |                   **3** |                     **1** |
+| **Chromium + Firefox executions**   |          **226** |        **210** |                  **8** |                   **6** |                     **2** |
 
 The `command` and byte-exact `printf` external-guest cases are runnable following
 the functions and printf units.
@@ -502,7 +502,7 @@ engines, or vendored `@bun-wasm/runtime` tree.
 | Original inherited-descriptor browser regression matrix             | `tests/runtime-shell.spec.ts` and `tests/guest/src/{main.rs,bin/test-spin.rs}`                                                                                                                                                      | Check filesystem access alongside literal inherited fd 3, sparse/occupied layouts, nested shells and input inheritance for every rebuilt guest. Existing shell operations through the original Rust WASI adapter and ordinary libc-backed fixture probes, not external Bun evidence.                                                                                                                                                                                                                                                                                                                                                          |
 | Original browser notice aggregator                                  | `scripts/browser-notices.mjs`                                                                                                                                                                                                       | New distribution integration collecting shell, terminal, peer and npm notices; no additional upstream code copied.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | Original browser packaging regressions                              | `scripts/test-browser-package.mjs`                                                                                                                                                                                                  | Verify peer/development/lock pin identity and the absence of copied runtime/Bun implementation sources or Bun payloads before the browser build; no upstream tests copied.                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| External shared runtime, not vendored                               | Waffle `8bfc767d6097cf3c741092328573460a3047d114`                                                                                                                                                                                   | Required peer plus identical development pin. The application imports the single `createRuntime` from Waffle's package root.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| External shared runtime, not vendored                               | Waffle `afe9cc1f3f93ea84929903e5a55854dbfd973448`                                                                                                                                                                                   | Required peer plus identical development pin. The application imports the single `createRuntime` from Waffle's package root.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Pinned terminal source                                              | Ghostty WebGPU source/archive pin under `terminal` in `sources.lock.json`                                                                                                                                                           | Retain the existing terminal source revision/archive checksum and its included WASM notices; do not substitute an unpinned terminal build.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 Exact pins, checksums, import mappings, classifications, and reasons are recorded
@@ -532,8 +532,27 @@ Browser test failures print pending stages and attach the full snapshot as
 `browser-startup-diagnostics`. Shell embeddings may supply `onStartupStage` to
 `createShell` for the same non-blocking observations. Observer throws and rejected
 returns are ignored; observers are never awaited. Observers must not abort or start/stop
-shell or runtime control, matching [Waffle's passive observer contract](https://github.com/ShaulLavo/waffle/blob/8bfc767d6097cf3c741092328573460a3047d114/docs/runtime-startup.md).
+shell or runtime control, matching [Waffle's passive observer contract](https://github.com/ShaulLavo/waffle/blob/afe9cc1f3f93ea84929903e5a55854dbfd973448/docs/runtime-startup.md).
 No polling or history is kept by the observer hook.
 An absent marker means unobserved, not pending. In particular, a borrowed runtime
 or cached shell registration may have completed work before observation began.
 Restart clears timestamps and ignores callbacks from the stopped generation.
+
+## Startup-scoped diagnostic ownership
+
+The original Rust process adapter observes Waffle 0.0.47's non-consuming
+`runtime_proc.start_status` with CHILD_START (poll kind 6). The interpreter retains
+only redirected stderr during pending startup. It emits START_FAILED diagnostics
+before releasing that endpoint, then separately awaits terminal and job cleanup.
+Successful entry releases the diagnostic copy before terminal wait; retaining it
+until exit can prevent pipe EOF when a producer waits for downstream acknowledgement.
+Cancellation before entry leaves the terminal wait's actual exit/signal authoritative.
+Fork errors use parent stderr, deliberately closed stderr stays closed, and real
+exits 126/127 are not reclassified as startup failures.
+
+The compatibility-cleanup Node fixture installs its Worker prototype hooks before
+importing the production compatibility entrypoint and requires an observed dispatch
+message. Its deliberate interceptor-bypass control rejects missing observation;
+the standalone CLI path uses Node WASI, not the browser Waffle executor. Production
+`src/runtime/worker.ts` only sets `host.onmessage` and invokes Waffle bootstrap; it
+does not replace postMessage or supply a version-specific custom host.

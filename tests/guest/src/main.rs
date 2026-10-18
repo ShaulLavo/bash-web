@@ -13,6 +13,10 @@ extern "C" {
     fn proc_read(fd: u32, data: *mut u8, length: usize) -> i32;
     #[link_name = "write"]
     fn proc_write(fd: u32, data: *const u8, length: usize) -> i32;
+    #[link_name = "pipe"]
+    fn proc_pipe(output: *mut u32) -> i32;
+    #[link_name = "close"]
+    fn proc_close(fd: u32) -> i32;
     #[link_name = "poll"]
     fn proc_poll(
         subscriptions: *const Subscription,
@@ -235,6 +239,10 @@ fn quote(value: &str) -> String {
 }
 
 fn spawn_request(executable: &str, args: &[String]) -> String {
+    spawn_request_fds(executable, args, &[(0, 0), (1, 1), (2, 2)])
+}
+
+fn spawn_request_fds(executable: &str, args: &[String], fds: &[(u32, u32)]) -> String {
     let argv = std::iter::once(executable)
         .chain(args.iter().map(String::as_str))
         .map(quote)
@@ -244,7 +252,12 @@ fn spawn_request(executable: &str, args: &[String]) -> String {
         .map(|(key, value)| format!("{}:{}", quote(&key), quote(&value)))
         .collect::<Vec<_>>()
         .join(",");
-    format!("{{\"executable\":{},\"argv\":[{argv}],\"env\":{{{env}}},\"cwd\":{},\"job\":0,\"fds\":[{{\"child\":0,\"parent\":0}},{{\"child\":1,\"parent\":1}},{{\"child\":2,\"parent\":2}}]}}", quote(executable), quote(&cwd()))
+    let bindings = fds
+        .iter()
+        .map(|(child, parent)| format!("{{\"child\":{child},\"parent\":{parent}}}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("{{\"executable\":{},\"argv\":[{argv}],\"env\":{{{env}}},\"cwd\":{},\"job\":0,\"fds\":[{bindings}]}}", quote(executable), quote(&cwd()))
 }
 
 fn wait_status(bytes: [u8; 8]) -> io::Result<i32> {
@@ -302,6 +315,51 @@ fn run(args: &[String]) -> Result<i32> {
             write_fd(1, &data)?;
         }
         "preopen-probe" | "preopen-input" => test_guest::preopen_probe(args)?,
+        "close-output-await-ack" => {
+            // This process cannot exit until the consumer sees EOF. Retaining a
+            // shell-side fd2 through terminal wait would make this cycle deadlock.
+            write_fd(1, b"EOF_PAYLOAD\n")?;
+            checked(unsafe { proc_close(1) })?;
+            checked(unsafe { proc_close(2) })?;
+            let mut ack = [0];
+            if read_fd(3, &mut ack)? != 1 || ack != [b'!'] {
+                return Err("missing downstream EOF acknowledgement".into());
+            }
+        }
+        "ack-output-eof" => {
+            copy_fd(0, 1)?;
+            write_fd(3, b"!")?;
+            line(1, "DOWNSTREAM_EOF_ACK")?;
+        }
+        "eof-handshake" => {
+            let mut pipe = [0; 2];
+            checked(unsafe { proc_pipe(pipe.as_mut_ptr()) })?;
+            struct Pipe([u32; 2]);
+            impl Drop for Pipe {
+                fn drop(&mut self) {
+                    for fd in self.0 {
+                        unsafe { proc_close(fd) };
+                    }
+                }
+            }
+            let pipe = Pipe(pipe);
+            let pipeline = "test-guest close-output-await-ack 3<&4 4<&- 5>&- 2>&1 | test-guest ack-output-eof 3>&5 4<&- 5>&-";
+            let source = match arg(args, 1)? {
+                "foreground" => {
+                    format!("{pipeline}; printf 'EOF_JOB:%s:%s\\n' \"$?\" \"${{PIPESTATUS[*]}}\"")
+                }
+                "background" => {
+                    format!("{pipeline} & job=$!; wait \"$job\"; printf 'EOF_JOB:%s\\n' \"$?\"")
+                }
+                _ => return Err("unknown EOF handshake job mode".into()),
+            };
+            let request = spawn_request_fds(
+                "/bin/bash",
+                &["-c".into(), source],
+                &[(0, 0), (1, 1), (2, 2), (4, pipe.0[0]), (5, pipe.0[1])],
+            );
+            return spawn_wait(&request, None);
+        }
         "cat" => copy_fd(0, 1)?,
         "fd-read" => copy_fd(number(args, 1)?.try_into()?, 1)?,
         "fd-write" => write_fd(number(args, 1)?.try_into()?, arg(args, 2)?.as_bytes())?,

@@ -3173,7 +3173,7 @@ async fn dispatch_simple_command_body(
             return external_wait_failure(
                 ProcessError::StartFailed(errno),
                 &command,
-                WeakStderr::Closed,
+                None,
                 parent_stderr,
                 &context,
             )
@@ -3183,7 +3183,7 @@ async fn dispatch_simple_command_body(
             return external_wait_failure(
                 ProcessError::StartFailed(6),
                 &command,
-                WeakStderr::Closed,
+                None,
                 parent_stderr,
                 &context,
             )
@@ -3193,18 +3193,33 @@ async fn dispatch_simple_command_body(
         Err(ProcessError::Runtime(_)) => return Err(126),
         Err(_) => return Err(2),
     };
-    // The child owns its inherited descriptors. Shell-side stage copies must
-    // not keep a closed child reader/writer alive while waiting for its exit.
-    let stderr = match fds.borrow().get(2) {
-        Some(stderr) => WeakStderr::Open(stderr.downgrade()),
-        None => WeakStderr::Closed,
-    };
+    // Keep only the diagnostic endpoint through startup, not through execution
+    // or job teardown: a running producer can close output and await downstream EOF.
+    let mut stderr = fds.borrow().get(2);
     drop(fds);
+    let startup = context.cancel.run(context.core.host.wait_start(pid)).await;
+    let failure = match startup {
+        Ok(Err(error @ ProcessError::StartFailed(_))) => Some(
+            external_wait_failure(error, &command, stderr.take(), parent_stderr, &context).await,
+        ),
+        Ok(Err(ProcessError::Runtime(11))) | Ok(Ok(())) | Err(_) => None,
+        Ok(Err(_)) => {
+            let _ = context.core.host.kill(pid, context.stop_signal());
+            Some(Err(1))
+        }
+    };
+    drop(stderr);
+    if let Some(outcome) = failure {
+        // Startup observation does not collect or await descriptor/FS cleanup.
+        // Even a fork diagnostic that cancels this invocation must reap its child.
+        match context.core.host.wait(pid).await {
+            Ok(_) | Err(ProcessError::StartFailed(_)) => return outcome,
+            Err(_) => return Err(1),
+        }
+    }
     match context.cancel.run(context.core.host.wait(pid)).await {
         Ok(Ok(status)) => Ok(Outcome::status(status)),
-        Ok(Err(error)) => {
-            external_wait_failure(error, &command, stderr, parent_stderr, &context).await
-        }
+        Ok(Err(_)) => Err(1),
         Err(_) => {
             // Signal inherited members before waiting/reaping the direct child;
             // it may be the last live direct stage but not the last group member.
@@ -3228,7 +3243,7 @@ async fn dispatch_simple_command_body(
 async fn external_wait_failure(
     error: ProcessError,
     command: &str,
-    stderr: WeakStderr,
+    stderr: Option<io::Endpoint>,
     parent_stderr: WeakStderr,
     context: &Context,
 ) -> Result<Outcome, i32> {
@@ -3237,16 +3252,17 @@ async fn external_wait_failure(
     };
     let fork = matches!(errno, 6 | 29 | 48);
     let operation = if fork { "fork" } else { command };
-    // Bash reports fork failure in the parent, before command redirections.
-    // Exec failures use the child's stderr when that open description survives.
-    // Until start_status-scoped ownership is integrated, a dead weak reference
-    // falls back to shell stderr rather than retaining a pipeline endpoint and
-    // preventing EOF. See plan004's approved start-status follow-up.
-    let stderr = match if fork { parent_stderr } else { stderr } {
-        WeakStderr::Closed => None,
-        WeakStderr::Open(stderr) => stderr
-            .upgrade()
-            .or_else(|| context.core.descriptors.borrow().get(2)),
+    // Fork errors use the caller's stderr, before command redirections. Only
+    // that borrowed parent may need the shell fallback; closed stderr stays closed.
+    let stderr = if fork {
+        match parent_stderr {
+            WeakStderr::Closed => None,
+            WeakStderr::Open(stderr) => stderr
+                .upgrade()
+                .or_else(|| context.core.descriptors.borrow().get(2)),
+        }
+    } else {
+        stderr
     };
     if let Some(stderr) = stderr {
         let diagnostic = format!("/usr/bin/bash: {operation}: {error}\n");
@@ -3965,6 +3981,12 @@ mod residual_review_tests {
                 self.direct.borrow_mut().insert(group, pid);
             }
             Ok(pid)
+        }
+        fn wait_start(
+            &self,
+            pid: ProcessId,
+        ) -> futures::future::LocalBoxFuture<'static, Result<(), ProcessError>> {
+            self.inner.wait_start(pid)
         }
         fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<i32, ProcessError>> {
             self.inner.wait(pid)

@@ -148,6 +148,9 @@ pub trait Abi {
     fn access_cancel(&self, request: u32);
     fn spawn(&self, request: &RuntimeSpawn) -> Result<u32, i32>;
     fn job_of(&self, pid: u32) -> Result<u32, i32>;
+    /// Zero means entry committed; positive values are startup errnos.
+    /// Negative ABI results are represented as Err, including pending EAGAIN.
+    fn start_status(&self, pid: u32) -> Result<i32, i32>;
     fn wait(&self, pid: u32) -> Result<WaitResult, i32>;
     /// Nonblocking runtime wait_job with NOHANG=1. EAGAIN until all members exit.
     fn wait_job(&self, job: u32) -> Result<WaitResult, i32>;
@@ -970,6 +973,23 @@ impl ProcessHost for Runtime {
             }),
         );
         Ok(pid as u64)
+    }
+    fn wait_start(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        let runtime = self.clone();
+        async move {
+            if !runtime.0.children.borrow().contains_key(&pid) {
+                return Err(ProcessError::UnknownProcess(pid));
+            }
+            loop {
+                match runtime.0.abi.start_status(pid as u32) {
+                    Ok(0) => return Ok(()),
+                    Ok(errno) => return Err(ProcessError::StartFailed(errno)),
+                    Err(AGAIN) => runtime.ready(6, pid as u32).await,
+                    Err(errno) => return Err(ProcessError::Runtime(errno)),
+                }
+            }
+        }
+        .boxed_local()
     }
     fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<i32, ProcessError>> {
         let child = self.0.children.borrow().get(&pid).cloned();
