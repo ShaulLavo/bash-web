@@ -30,6 +30,8 @@ cargo(
     "api",
     "--test",
     "conditional",
+    "--test",
+    "command_print",
     "-j2",
     "--",
     "--test-threads=1",

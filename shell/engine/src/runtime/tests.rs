@@ -2214,6 +2214,107 @@ fn admission_sweep_wakes_parked_job_wait_without_releasing_its_input_pump() {
 }
 
 #[test]
+fn healed_wait_errors_keep_logical_cleanup_bounded_until_successful_retry() {
+    let (executor, fake, runtime) = setup();
+    let mut failed = Vec::new();
+    for attempt in 0..=MAX_RETAINED_PROCESSES {
+        let group = runtime.allocate_group();
+        let direct = runtime.spawn(request(&runtime, "inherit", group));
+        if attempt == MAX_RETAINED_PROCESSES {
+            assert_eq!(direct, Err(ProcessError::ProcessLimit));
+            assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
+            break;
+        }
+        let direct = direct.unwrap();
+        executor.drive(64);
+        assert_eq!(runtime.wait(direct).now_or_never(), Some(Ok(0)));
+        let job = fake.job_of(direct as u32).unwrap();
+        fake.wait_job_errors.borrow_mut().insert(job, 63);
+        assert_eq!(
+            runtime.detach_group(group).now_or_never(),
+            Some(Err(ProcessError::Runtime(63)))
+        );
+        fake.wait_job_errors.borrow_mut().remove(&job);
+        fake.descendant_gates.borrow()[&(direct as u32 + 1)].cancel();
+        executor.drive(64);
+        failed.push(group);
+    }
+    assert_eq!(runtime.retained_count(), 0);
+    assert_eq!(fake.reaped_jobs.borrow().len(), MAX_RETAINED_PROCESSES);
+    assert_eq!(runtime.0.groups.borrow().len(), MAX_RETAINED_PROCESSES);
+    assert_eq!(runtime.retained_slots(), MAX_RETAINED_PROCESSES);
+    assert!(runtime.0.waits.borrow().is_empty());
+    for group in failed {
+        assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
+    }
+    assert_eq!(runtime.retained_slots(), 0);
+    let group = runtime.allocate_group();
+    let pid = runtime.spawn(request(&runtime, "done", group)).unwrap();
+    assert_eq!(
+        finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
+        Ok(0)
+    );
+    assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
+    assert!(runtime.0.groups.borrow().is_empty());
+    assert!(runtime.0.waiters.borrow().is_empty());
+    assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
+    assert_eq!(executor.drive(64).pending, 0);
+}
+
+#[test]
+fn healed_wait_error_keeps_input_ownership_charged_until_retry_completes() {
+    let (executor, fake, runtime) = setup();
+    let group = runtime.allocate_group();
+    let mut spec = request(&runtime, "inherit", group);
+    let source = Endpoint::bytes(vec![b'x'; io::PIPE_CAPACITY * 3]);
+    spec.fds.insert(0, source.clone());
+    let direct = runtime.spawn(spec).unwrap();
+    executor.drive(64);
+    assert_eq!(runtime.wait(direct).now_or_never(), Some(Ok(0)));
+    let job = fake.job_of(direct as u32).unwrap();
+    fake.wait_job_errors.borrow_mut().insert(job, 63);
+    assert_eq!(
+        runtime.detach_group(group).now_or_never(),
+        Some(Err(ProcessError::Runtime(63)))
+    );
+    fake.wait_job_errors.borrow_mut().remove(&job);
+    fake.descendant_gates.borrow()[&(direct as u32 + 1)].cancel();
+    executor.drive(64);
+    let sibling = runtime.allocate_group();
+    let pid = runtime.spawn(request(&runtime, "sleep", sibling)).unwrap();
+    assert!(fake.reaped_jobs.borrow().contains(&job));
+    assert_eq!(
+        runtime.retained_slots(),
+        2,
+        "healed ABI job is not full logical cleanup"
+    );
+    assert!(runtime.0.inputs.borrow()[0].users.contains(&group));
+    drop(source);
+    let retry = runtime.detach_group(group);
+    assert!(
+        !retry.is_finished(),
+        "input-pump join still owns the failed slot"
+    );
+    assert_eq!(runtime.retained_slots(), 2);
+    assert_eq!(finish(&executor, &runtime, retry), Ok(()));
+    assert!(!runtime.0.groups.borrow().contains_key(&group));
+    assert_eq!(runtime.retained_slots(), 1);
+    assert!(runtime.0.inputs.borrow().is_empty());
+    assert_eq!(runtime.0.input_slots.get(), 0);
+    runtime.kill_group(sibling, 15).unwrap();
+    assert_eq!(
+        finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
+        Ok(143)
+    );
+    assert_eq!(runtime.wait_group(sibling).now_or_never(), Some(Ok(())));
+    assert!(runtime.0.groups.borrow().is_empty());
+    assert!(runtime.0.waits.borrow().is_empty());
+    assert!(runtime.0.waiters.borrow().is_empty());
+    assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
+    assert_eq!(executor.drive(64).pending, 0);
+}
+
+#[test]
 fn runtime_job_retention_is_bounded_and_empty_jobs_do_not_accumulate() {
     let (executor, fake, runtime) = setup();
     let group = runtime.allocate_group();

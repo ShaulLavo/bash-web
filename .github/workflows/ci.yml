@@ -30,7 +30,7 @@ jobs:
       - name: Native shell tests
         run: ulimit -c 0; cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast
       - name: WASI shell tests and size
-        run: npm run test:shell:wasi
+        run: ulimit -c 0; npm run test:shell:wasi
         env:
           CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime run -W max-memory-size=268435456
       - name: Native shell CLI

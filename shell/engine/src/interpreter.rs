@@ -212,6 +212,8 @@ struct Job {
 struct Residual {
     owner: Scope,
     cleanup: JoinHandle<Result<(), ProcessError>>,
+    // Retries still belong to the invocation that created the descendants.
+    lifetime: (Cancel, Rc<Cell<Option<i32>>>),
 }
 struct Core {
     executor: Executor,
@@ -353,8 +355,14 @@ impl Context {
             join.await;
             self.core.jobs.borrow_mut().remove(&id);
         }
-        for (_, cleanup) in residuals {
-            let _ = cleanup.await;
+        for (group, cleanup) in residuals {
+            let result = match cleanup.await {
+                Ok(()) => Ok(()),
+                Err(_) => self.core.host.wait_group(group).await,
+            };
+            if result.is_ok() {
+                self.core.residuals.borrow_mut().remove(&group);
+            }
         }
     }
     /// A successful isolated scope leaves asynchronous descendants running.
@@ -800,28 +808,53 @@ impl Core {
         cleanup: JoinHandle<Result<(), ProcessError>>,
         lifetime: (Cancel, Rc<Cell<Option<i32>>>),
     ) {
-        // Successful handles are history, not ownership. Errors keep the handle
-        // reachable for shutdown retry. Live entries are bounded by host process
-        // admission (including residual runtime jobs), not visible shell jobs.
-        self.residuals.borrow_mut().retain(|_, residual| {
+        // One natural retry per completion checkpoint keeps transient errors
+        // recoverable without a retry loop. The host retains admission ownership
+        // until full cleanup succeeds, even if its runtime members already exited.
+        self.residuals.borrow_mut().retain(|group, residual| {
+            if !residual.cleanup.is_finished() {
+                return true;
+            }
+            if matches!(residual.cleanup.clone().now_or_never(), Some(Ok(()))) {
+                return false;
+            }
+            residual.cleanup = self.monitor_residual(
+                *group,
+                self.host.detach_group(*group),
+                residual.lifetime.clone(),
+            );
             !residual.cleanup.is_finished()
                 || !matches!(residual.cleanup.clone().now_or_never(), Some(Ok(())))
         });
-        if cleanup.is_finished() {
-            if matches!(cleanup.clone().now_or_never(), Some(Err(_))) {
-                // Failed cleanup still needs a shutdown/Drop retry, but no
-                // lifetime monitor can make an already-finished drain progress.
-                self.residuals
-                    .borrow_mut()
-                    .insert(group, Residual { owner, cleanup });
-            }
-            return;
-        }
         // Old monitors observe explicit cancellation only; they must not consume
         // a host interrupt belonging to the next foreground invocation.
         let lifetime = (lifetime.0.without_probe(), lifetime.1);
+        let cleanup = self.monitor_residual(group, cleanup, lifetime.clone());
+        if cleanup.is_finished() && matches!(cleanup.clone().now_or_never(), Some(Ok(()))) {
+            return;
+        }
+        self.residuals.borrow_mut().insert(
+            group,
+            Residual {
+                owner,
+                cleanup,
+                lifetime,
+            },
+        );
+    }
+    fn monitor_residual(
+        &self,
+        group: GroupId,
+        cleanup: JoinHandle<Result<(), ProcessError>>,
+        lifetime: (Cancel, Rc<Cell<Option<i32>>>),
+    ) -> JoinHandle<Result<(), ProcessError>> {
+        // Ready success has no ownership left; ready failure needs a future
+        // checkpoint or shutdown retry, not an extra executor task.
+        if cleanup.is_finished() {
+            return cleanup;
+        }
         let host = self.host.clone();
-        let cleanup = self.executor.spawn(async move {
+        self.executor.spawn(async move {
             match futures::future::select(cleanup, lifetime.0.cancelled().boxed_local()).await {
                 futures::future::Either::Left((result, _)) => result,
                 futures::future::Either::Right(((), cleanup)) => {
@@ -831,10 +864,7 @@ impl Core {
                     cleanup.await
                 }
             }
-        });
-        self.residuals
-            .borrow_mut()
-            .insert(group, Residual { owner, cleanup });
+        })
     }
     fn reap_internal_jobs(&self) {
         self.jobs
@@ -3676,6 +3706,8 @@ mod residual_review_tests {
         abandoned: RefCell<Vec<GroupId>>,
         interrupt: Cell<bool>,
         fail_detach: Cell<bool>,
+        cleanup_error: Cell<bool>,
+        release: Cancel,
         signal_error: Cell<bool>,
         release_on_signals: RefCell<Option<(Vec<GroupId>, Cancel)>>,
     }
@@ -3711,7 +3743,9 @@ mod residual_review_tests {
             self.inner.wait_direct_group(group)
         }
         fn detach_group(&self, group: GroupId) -> JoinHandle<Result<(), ProcessError>> {
-            if self.fail_detach.replace(false) {
+            if self.cleanup_error.get() {
+                JoinHandle::ready(Err(ProcessError::Runtime(8)))
+            } else if self.fail_detach.replace(false) {
                 self.executor.spawn(async { Err(ProcessError::Runtime(8)) })
             } else {
                 self.inner.detach_group(group)
@@ -3734,7 +3768,11 @@ mod residual_review_tests {
             }
         }
         fn wait_group(&self, group: GroupId) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
-            self.inner.wait_group(group)
+            if self.cleanup_error.get() {
+                futures::future::ready(Err(ProcessError::Runtime(8))).boxed_local()
+            } else {
+                self.inner.wait_group(group)
+            }
         }
         fn abandon_group(&self, group: GroupId, signal: i32) {
             self.abandoned.borrow_mut().push(group);
@@ -3758,11 +3796,21 @@ mod residual_review_tests {
                 abandoned: RefCell::new(Vec::new()),
                 interrupt: Cell::new(false),
                 fail_detach: Cell::new(false),
+                cleanup_error: Cell::new(false),
+                release: Cancel::new(),
                 signal_error: Cell::new(false),
                 release_on_signals: RefCell::new(None),
             });
-            host.inner
-                .register("sleep", |_, _| Box::pin(futures::future::pending()));
+            let release = host.release.clone();
+            host.inner.register("sleep", move |request, _| {
+                let release = release.clone();
+                async move {
+                    release.cancelled().await;
+                    drop(request);
+                    23
+                }
+                .boxed_local()
+            });
             let weak = Rc::downgrade(&host);
             host.inner.register("inherit", move |mut request, _| {
                 let host = weak.upgrade().unwrap();
@@ -4078,6 +4126,7 @@ mod residual_review_tests {
     #[test]
     fn residual_review_ready_failed_cleanup_keeps_ownership_without_a_monitor() {
         let rig = Harness::new();
+        rig.host.cleanup_error.set(true);
         let context = rig.context();
         context.core.retain_residual(
             context.group,
@@ -4102,6 +4151,136 @@ mod residual_review_tests {
         );
         assert_eq!(rig.executor.drive(64).polls, 0);
         assert_eq!(context.core.residuals.borrow().len(), 1);
+        let retry = context.clone();
+        rig.finish(
+            rig.executor
+                .spawn(async move { retry.cleanup_jobs().await }),
+        );
+        assert_eq!(
+            context.core.residuals.borrow().len(),
+            1,
+            "failed scope retry must preserve ownership"
+        );
+        assert_eq!(rig.executor.drive(256).pending, 0);
+        rig.host.cleanup_error.set(false);
+        context.core.retain_residual(
+            rig.host.allocate_group(),
+            context.scope.clone(),
+            JoinHandle::ready(Ok(())),
+            context.lifetime.clone(),
+        );
+        assert!(
+            context.core.residuals.borrow().is_empty(),
+            "a healed failed retry must release ownership"
+        );
+        drop(context);
+        rig.shutdown();
+    }
+    #[test]
+    fn residual_review_failed_scope_cleanup_retries_before_cancellation_returns() {
+        let rig = Harness::new();
+        rig.host.fail_detach.set(true);
+        let command = rig
+            .session()
+            .start("(x=$(inherit >/dev/null); sleep)")
+            .unwrap();
+        let mut ready = false;
+        for _ in 0..2000 {
+            rig.executor.drive(1);
+            if rig.host.inner.active_count() == 2
+                && rig
+                    .session()
+                    .core
+                    .residuals
+                    .borrow()
+                    .values()
+                    .any(|residual| {
+                        residual.cleanup.is_finished()
+                            && matches!(residual.cleanup.clone().now_or_never(), Some(Err(_)))
+                    })
+            {
+                ready = true;
+                break;
+            }
+        }
+        assert!(
+            ready,
+            "isolated scope must own both the failed residual and blocked shell command"
+        );
+        rig.session().interrupt();
+        assert_eq!(rig.finish(command), 130);
+        assert_eq!(
+            rig.host.inner.retained_count(),
+            0,
+            "scope exit must confirm reaping after a failed observer"
+        );
+        assert!(rig.session().core.residuals.borrow().is_empty());
+        rig.shutdown();
+    }
+    #[test]
+    fn residual_review_healed_errors_do_not_accumulate_core_ownership() {
+        let rig = Harness::new();
+        rig.host.release.cancel();
+        for _ in 0..4097 {
+            rig.host.fail_detach.set(true);
+            assert_eq!(rig.run("inherit"), 0);
+            rig.executor.drive(256);
+            assert!(
+                rig.session().core.residuals.borrow().len() <= 1,
+                "healed ownership must be retired at the next completion checkpoint"
+            );
+            assert!(rig.host.inner.retained_count() <= 1);
+        }
+        assert_eq!(rig.run(":"), 0);
+        assert!(rig.session().core.residuals.borrow().is_empty());
+        assert_eq!(rig.host.inner.retained_count(), 0);
+        assert!(
+            rig.host.signals.borrow().is_empty(),
+            "natural retries must not signal"
+        );
+        rig.shutdown();
+    }
+    #[test]
+    fn residual_review_pending_error_retry_keeps_original_lifetime_cancellation() {
+        let rig = Harness::new();
+        let context = rig.context();
+        rig.host
+            .spawn(SpawnRequest {
+                argv: vec!["inherit".into()],
+                env: BTreeMap::new(),
+                cwd: "/".into(),
+                fds: rig.session().core.descriptors.borrow().clone(),
+                group: context.group,
+                parent: None,
+            })
+            .unwrap();
+        rig.executor.drive(256);
+        rig.host.fail_detach.set(true);
+        let cleanup = rig.host.detach_group(context.group);
+        rig.executor.drive(256);
+        context.core.retain_residual(
+            context.group,
+            context.scope.clone(),
+            cleanup,
+            context.lifetime.clone(),
+        );
+        let next = rig.host.allocate_group();
+        context.core.retain_residual(
+            next,
+            context.scope.clone(),
+            JoinHandle::ready(Ok(())),
+            (Cancel::new(), Rc::new(Cell::new(None))),
+        );
+        assert!(
+            !context.core.residuals.borrow()[&context.group]
+                .cleanup
+                .is_finished(),
+            "a pending retry must replace the failed observer"
+        );
+        context.cancel.cancel();
+        rig.executor.drive(256);
+        assert_eq!(rig.host.inner.retained_count(), 0);
+        assert!(rig.host.signals.borrow().contains(&context.group));
         drop(context);
         rig.shutdown();
     }

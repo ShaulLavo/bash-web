@@ -173,6 +173,7 @@ struct Group {
     runtime_jobs: Vec<u32>,
     background: bool,
     closing: bool,
+    cleanup_failed: bool,
 }
 
 const MAX_RETAINED_PROCESSES: usize = 4096;
@@ -392,6 +393,7 @@ impl Runtime {
                 runtime_jobs: Vec::new(),
                 background,
                 closing: false,
+                cleanup_failed: false,
             },
         );
         id
@@ -405,7 +407,15 @@ impl Runtime {
             .groups
             .borrow()
             .values()
-            .map(|group| group.runtime_jobs.len())
+            // A sweep may heal the last ABI job after a failed drain. Its
+            // logical group/input ownership still needs a successful retry;
+            // do not release the final admission slot before that teardown.
+            .map(|group| {
+                group
+                    .runtime_jobs
+                    .len()
+                    .max(usize::from(group.cleanup_failed))
+            })
             .sum();
         // Metadata failures still own a direct pid even without a runtime job ID.
         jobs.saturating_add(
@@ -1073,6 +1083,11 @@ impl ProcessHost for Runtime {
         };
         let wait = async move {
             let result = drain.await;
+            if result.is_err()
+                && let Some(group) = owner.0.groups.borrow_mut().get_mut(&group)
+            {
+                group.cleanup_failed = true;
+            }
             owner.0.waits.borrow_mut().remove(&group);
             result
         }
