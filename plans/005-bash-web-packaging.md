@@ -126,8 +126,8 @@ must distinguish live pipes, process ownership and descendant membership without
 retaining endpoints, pumping relays, or changing disposal authority.
 
 The current limitation is exact: at Waffle `c458a488`,
-`browser/process-broker.ts:330` consumes child `runtime-proc` messages and returns
-without calling `WorkerLaunchOptions.onMessage`. Bash-web's
+`browser/process-broker.ts:436-442` consumes child `runtime-proc` messages and
+returns without calling `WorkerLaunchOptions.onMessage`. Bash-web's
 `src/runtime/diagnostics.ts:99` therefore observes root-shell pipe requests, but
 not pipe requests created inside a nested shell worker. A root snapshot can
 report zero observed pipes while a descendant still owns a live pipe. Existing

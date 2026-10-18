@@ -221,9 +221,11 @@
           "src/runtime/diagnostics.ts",
           "src/runtime/diagnostics.test.ts",
           "src/runtime/terminal.test.ts",
-          "src/runtime/shell-host.test.ts"
+          "src/runtime/shell-host.test.ts",
+          "src/runtime/worker.test.ts",
+          "src/runtime/child-status.test.ts"
         ],
-        "changes": "Export the runtime-injected shell facade and synchronous borrowed-service observations, including global/root droppedTerminalBytes visibility rather than a lossless foreign-adapter claim. Manual pipe observers reclaim closed entries on a 100 ms sweep and clear the timer when their root retires, without relay/disposal ownership. Original diagnostics regressions verify the closed getter runs autonomously before any snapshot and root retirement stops the timer. Original targeted regressions cover terminal streams, cancelable startup, explicit post-fetch-failure admission retry and locally observed shell-worker cleanup; they do not guarantee foreign-adapter physical teardown. No hidden runtime/service or copied upstream suite."
+        "changes": "Export the runtime-injected shell facade and synchronous borrowed-service observations, including global/root droppedTerminalBytes visibility rather than a lossless foreign-adapter claim. Manual pipe observers reclaim closed entries on a 100 ms sweep and clear the timer when their root retires, without relay/disposal ownership. Original diagnostics regressions verify the closed getter runs autonomously before any snapshot and root retirement stops the timer. Original targeted regressions cover terminal streams, cancelable startup, explicit post-fetch-failure admission retry, typed child startup status, memory telemetry and locally observed shell-worker cleanup; they do not guarantee foreign-adapter physical teardown. No hidden runtime/service or copied upstream suite."
       },
       {
         "classification": "Original prototype build helpers, adapted here",
