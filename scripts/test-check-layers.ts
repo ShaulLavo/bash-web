@@ -289,6 +289,28 @@ enum Variants {
   ]);
 });
 
+test("guarded tuple function-pointer fields do not guard following production fields or items", () => {
+  for (const pointer of ["fn", "unsafe fn", 'extern "C" fn', 'unsafe extern "C" fn']) {
+    for (const source of [
+      `struct Functions(#[cfg(test)] ${pointer}(crate::io::Endpoint), crate::interpreter::Session);
+       fn following() { crate::process::ordinary(); }`,
+      `enum Functions {
+         Tuple(#[cfg(test)] ${pointer}(crate::io::Endpoint), crate::interpreter::Session),
+         Following(crate::process::Process),
+       }`,
+    ]) {
+      const evidence = scan({ "runtime.rs": source });
+      assert.deepEqual(
+        keys(evidence),
+        ["production:runtime->interpreter", "production:runtime->process", "testOnly:runtime->io"],
+        source,
+      );
+      assert.equal(evidence.counts.production.violations, 1);
+      assert.equal(evidence.counts.testOnly.violations, 0);
+    }
+  }
+});
+
 test("production and test-only edges are deduplicated separately with stable source locations", () => {
   const evidence = scan({
     "state/z.rs": "fn z() { crate::expand::other(); }",

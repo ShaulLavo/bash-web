@@ -412,11 +412,12 @@ function scanFile(file: SourceFile, inheritedTestOnly: boolean, policy: Policy):
       const activeTest = testOnly || pendingTest;
       // Commas separate fields/variants, but not the generic parameters or
       // where predicates in an item's header. Recognize items only at a fresh
-      // boundary, not `fn` in a field's function-pointer type.
+      // boundary; fn items also require a name, unlike fn(...) pointer types.
       if (
         itemStart &&
-        ["fn", "struct", "enum", "union", "trait", "impl", "type", "const", "static"].some((name) =>
-          keyword(i, name),
+        ["fn", "struct", "enum", "union", "trait", "impl", "type", "const", "static"].some(
+          (name) =>
+            keyword(i, name) && (name !== "fn" || identifier.test(tokens[i + 1]?.text ?? "")),
         )
       )
         itemHeader = true;
