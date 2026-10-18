@@ -136,8 +136,8 @@ impl Rig {
         self.session
             .state
             .borrow_mut()
-            .variables
-            .insert("PATH".into(), value.into());
+            .assign_parameter("PATH".into(), value.into())
+            .unwrap();
     }
     fn settle_or_cancel(&self, job: JoinHandle<i32>) -> i32 {
         for _ in 0..100_000 {

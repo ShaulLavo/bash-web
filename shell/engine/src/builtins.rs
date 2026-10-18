@@ -174,7 +174,7 @@ pub(crate) async fn run(
                         });
                     }
                 },
-                None => state.borrow().status,
+                None => state.borrow().status(),
             };
             if args.len() > 1 {
                 return Ok(Outcome {
@@ -932,7 +932,7 @@ async fn declarations(
             return Err(2);
         }
         let local = name == "local"
-            || matches!(name, "declare" | "typeset") && !state.borrow().locals.is_empty();
+            || matches!(name, "declare" | "typeset") && state.borrow().in_function_scope();
         if extended || local {
             let storage = state
                 .borrow()
@@ -998,9 +998,9 @@ async fn nameref_declaration(
         None => {
             let state = state.borrow();
             let target = state
-                .namerefs
+                .namerefs()
                 .get(key)
-                .or_else(|| state.variables.get(key))
+                .or_else(|| state.bindings().get(key))
                 .ok_or(2)?;
             work.admit_storage(target.len()).map_err(error_status)?;
             target.clone()
@@ -1036,7 +1036,7 @@ fn apply_declaration(
     if name == "local" {
         return state.declare_local(key.to_owned(), value);
     }
-    if matches!(name, "declare" | "typeset") && !state.locals.is_empty() {
+    if matches!(name, "declare" | "typeset") && state.in_function_scope() {
         return state.declare_local(key.to_owned(), value);
     }
     if let Some(value) = value {
@@ -1094,7 +1094,7 @@ async fn unset(
             continue;
         }
         if functions {
-            state.borrow_mut().functions.remove(name);
+            state.borrow_mut().unset_function(name);
             continue;
         }
         State::admit_scalar_access(state, name, &context.cancel, work)
@@ -1103,7 +1103,7 @@ async fn unset(
         let target_bytes = {
             let state = state.borrow();
             state
-                .namerefs
+                .namerefs()
                 .contains_key(name)
                 .then(|| state.scalar_target(name))
                 .transpose()?
@@ -1120,7 +1120,7 @@ async fn unset(
                 code = 1;
             }
             Ok(false) if !variables => {
-                state.borrow_mut().functions.remove(name);
+                state.borrow_mut().unset_function(name);
             }
             Ok(_) => {}
         }

@@ -14,7 +14,7 @@ impl Expansion<'_> {
         if let Some(length) = length {
             self.slice_boundaries(length).await?;
         }
-        let count = state.borrow().positional.len().checked_add(1).ok_or(2)?;
+        let count = state.borrow().positional().len().checked_add(1).ok_or(2)?;
         let offset =
             arithmetic::evaluate(offset, state, self.cancel, self.raw_remaining, self.work).await?;
         self.ifs = None;
@@ -81,7 +81,7 @@ impl Expansion<'_> {
         let value = if index == 0 {
             &state.shell_name
         } else {
-            &state.positional[index - 1]
+            &state.positional()[index - 1]
         };
         if value.len() > self.raw_remaining {
             return Err(2.into());

@@ -1398,8 +1398,8 @@ fn background_eval_parser_routes_consuming_interrupt_to_the_current_foreground()
     session
         .state()
         .borrow_mut()
-        .variables
-        .insert("source".into(), ":; ".repeat(32));
+        .assign_parameter("source".into(), ":; ".repeat(32))
+        .unwrap();
     assert_eq!(
         finish(
             &executor,
@@ -1448,8 +1448,8 @@ fn nested_capture_eval_parser_interrupts_foreground_without_stopping_background(
     session
         .state()
         .borrow_mut()
-        .variables
-        .insert("source".into(), ":; ".repeat(32));
+        .assign_parameter("source".into(), ":; ".repeat(32))
+        .unwrap();
     assert_eq!(
         finish(&executor, &runtime, session.start("sleep &").unwrap()),
         0,
@@ -2041,8 +2041,8 @@ fn large_heredoc_inputs_stream_after_spawn_and_aliases_share_read_position() {
     session
         .state()
         .borrow_mut()
-        .variables
-        .insert("payload".into(), payload.clone());
+        .assign_parameter("payload".into(), payload.clone())
+        .unwrap();
     let job = session.start("runtime-cat <<< \"$payload\"; runtime-cat <<EOF\n$payload\nEOF\nf() { take-one; runtime-cat; }; f 3<<<abcd 0<&3").unwrap();
     assert_eq!(finish(&executor, &runtime, job), 0);
     let expected = format!("{payload}\n{payload}\nabcd\n");
@@ -2087,8 +2087,8 @@ fn failed_spawn_and_redirect_never_leave_a_buffered_input_writer() {
     session
         .state()
         .borrow_mut()
-        .variables
-        .insert("payload".into(), "x".repeat(io::PIPE_CAPACITY * 3));
+        .assign_parameter("payload".into(), "x".repeat(io::PIPE_CAPACITY * 3))
+        .unwrap();
     let baseline: Vec<_> = fake.fds.borrow().keys().copied().collect();
     let next_fd = fake.next_fd.get();
     assert_eq!(
@@ -2370,8 +2370,8 @@ fn interrupt_and_shutdown_drain_live_capture_and_blocked_input_writers() {
         session
             .state()
             .borrow_mut()
-            .variables
-            .insert("payload".into(), "x".repeat(io::PIPE_CAPACITY * 3));
+            .assign_parameter("payload".into(), "x".repeat(io::PIPE_CAPACITY * 3))
+            .unwrap();
         let job = session.start(source).unwrap();
         for _ in 0..1000 {
             executor.drive(64);
@@ -2623,8 +2623,8 @@ fn interrupt_and_shutdown_drain_real_inherited_members_and_input_pumps() {
         session
             .state()
             .borrow_mut()
-            .variables
-            .insert("payload".into(), "x".repeat(io::PIPE_CAPACITY * 3));
+            .assign_parameter("payload".into(), "x".repeat(io::PIPE_CAPACITY * 3))
+            .unwrap();
         let command = session.start(source).unwrap();
         drive_until_spawn(&executor, &runtime, &fake, 1);
         let (descendant, job) = inherited_member(&fake);
@@ -2651,7 +2651,7 @@ fn inherited_completion_keeps_pipeline_status_and_pipefail_direct_only() {
             expected
         );
         let (descendant, _) = inherited_member(&fake);
-        assert_eq!(session.state().borrow().pipestatus, vec![7, 0]);
+        assert_eq!(session.state().borrow().pipeline_status(), vec![7, 0]);
         assert_eq!(fake.wait(descendant), Err(AGAIN));
         shutdown_session(&executor, &runtime, &fake, session);
     }

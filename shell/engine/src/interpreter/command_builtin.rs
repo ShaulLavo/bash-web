@@ -346,7 +346,7 @@ pub(super) async fn query(
                 .await
                 .map_err(admission_status)?;
         }
-        let function = state.borrow().functions.get(name).cloned();
+        let function = state.borrow().functions().get(name).cloned();
         if keyword(name) {
             output(fds, context, name.as_bytes()).await?;
             output(

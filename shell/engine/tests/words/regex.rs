@@ -71,21 +71,21 @@ fn epoch_realtime_reads_the_host_clock_and_disables_only_on_unset() {
     assert_eq!(
         state
             .borrow()
-            .variables
+            .bindings()
             .get("EPOCHREALTIME")
             .map(String::as_str),
         Some("ordinary")
     );
     let before = state
         .borrow()
-        .variables
+        .bindings()
         .get("before")
         .unwrap()
         .parse::<f64>()
         .unwrap();
     let after = state
         .borrow()
-        .variables
+        .bindings()
         .get("after")
         .unwrap()
         .parse::<f64>()

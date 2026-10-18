@@ -39,8 +39,8 @@ impl Rig {
         shell
             .state()
             .borrow_mut()
-            .variables
-            .insert("PATH".into(), "/home/guest".into());
+            .assign_parameter("PATH".into(), "/home/guest".into())
+            .unwrap();
         let (out, output) = capture(8 * 1024 * 1024);
         let mut fds = FdTable::default();
         fds.insert(0, Endpoint::null());
@@ -559,7 +559,7 @@ fn cancelled_function_restores_local_positional_and_export_frames() {
         0
     );
     assert!(r.text().contains("outer:0::kept\n"));
-    assert!(!r.shell.state().borrow().exported.contains("x"));
+    assert!(!r.shell.state().borrow().exported_bindings().contains("x"));
 }
 #[test]
 fn ordinary_function_shares_state_but_pipeline_subshell_and_background_do_not() {
@@ -719,10 +719,10 @@ fn command_byte_limit_includes_prefix_and_assignment_only_values() {
         r.shell
             .state()
             .borrow_mut()
-            .variables
-            .insert("VALUE".into(), "123456789".into());
+            .assign_parameter("VALUE".into(), "123456789".into())
+            .unwrap();
         assert_eq!(r.run(script), 2, "{script}");
-        assert!(!r.shell.state().borrow().variables.contains_key("A"));
+        assert!(!r.shell.state().borrow().bindings().contains_key("A"));
         assert!(r.output.is_empty());
         assert_eq!(r.host.retained_count(), 0);
     }
@@ -732,7 +732,10 @@ fn command_byte_limit_includes_prefix_and_assignment_only_values() {
     });
     assert_eq!(r.run("A=1234 B=5678"), 0);
     assert_eq!(r.run("C=1234 okay"), 0);
-    assert_eq!(r.shell.state().borrow().variables.get("A").unwrap(), "1234");
+    assert_eq!(
+        r.shell.state().borrow().bindings().get("A").unwrap(),
+        "1234"
+    );
 }
 
 #[test]
@@ -743,7 +746,7 @@ fn command_word_limit_includes_prefix_and_assignment_only_values() {
             ..Limits::default()
         });
         assert_eq!(r.run(script), 2, "{script}");
-        assert!(!r.shell.state().borrow().variables.contains_key("A"));
+        assert!(!r.shell.state().borrow().bindings().contains_key("A"));
     }
     let r = Rig::with_limits(Limits {
         arguments: 2,
@@ -864,10 +867,10 @@ fn local_restores_export_state_at_declaration_not_function_entry() {
     let r = Rig::new();
     assert_eq!(r.run("f() { export X=outer; local X=inner; }; f"), 0);
     assert_eq!(
-        r.shell.state().borrow().variables.get("X").unwrap(),
+        r.shell.state().borrow().bindings().get("X").unwrap(),
         "outer"
     );
-    assert!(r.shell.state().borrow().exported.contains("X"));
+    assert!(r.shell.state().borrow().exported_bindings().contains("X"));
 }
 
 #[test]
