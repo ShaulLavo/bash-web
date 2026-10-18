@@ -127,6 +127,22 @@ function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+async function descriptorOutput(page: Page, markers: readonly string[]) {
+  for (const marker of markers) await output(page, marker);
+  await ready(page);
+  return page.evaluate(() => window.bashWeb!.readLines().map((line) => line.trim()));
+}
+
+async function descriptorRetired(page: Page, workers: number) {
+  await ready(page);
+  await expect
+    .poll(async () => ({
+      workers: page.workers().length,
+      pipes: await page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0].pipes),
+    }))
+    .toEqual({ workers, pipes: 0 });
+}
+
 // Each child is a separately instantiated WASI shell. These are transported
 // RuntimeEndpoint descriptors, not the native engine's in-memory pipe fixture.
 const descriptorForms = [
@@ -160,7 +176,7 @@ for (const form of descriptorForms) {
       page,
       `printf 'PIPE_PAYLOAD\\n' | /programs/shell-engine.wasm -c ${shellQuote(read)}; /programs/shell-engine.wasm -c ${shellQuote(write)} | cat; echo DESCRIPTOR_DONE:$?`,
     );
-    for (const marker of [
+    const lines = await descriptorOutput(page, [
       "READ_STDIN:0",
       "READ_FD:0",
       "READ_REMAP:0",
@@ -172,16 +188,9 @@ for (const form of descriptorForms) {
       "WRITE_TTY:1",
       "WRITE_CLOSED:1",
       "DESCRIPTOR_DONE:0",
-    ]) {
-      await output(page, marker);
-    }
-    await ready(page);
-    const lines = await page.evaluate(() => window.bashWeb!.readLines().map((line) => line.trim()));
+    ]);
     expect(lines.filter((line) => line === "PIPE_PAYLOAD")).toHaveLength(2);
-    await expect.poll(() => page.workers().length).toBe(baseline);
-    await expect
-      .poll(() => page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0].pipes))
-      .toBe(0);
+    await descriptorRetired(page, baseline);
   });
 }
 
@@ -193,7 +202,7 @@ test("descriptor kinds distinguish actual runtime terminals, files and invalid h
     page,
     `test-guest fd-kinds 0 1 2 99; printf 'RAW_PAYLOAD\\n' | { test-guest fd-kinds 0 3 3<&0; cat; }; { test-guest fd-kinds 1 3 3>&1; printf 'RAW_PAYLOAD\\n'; } | cat; : > descriptor-file; test-guest fd-kinds 3 3< descriptor-file; test-guest fd-kinds 3 3< .`,
   );
-  for (const marker of [
+  const rawLines = await descriptorOutput(page, [
     "FD_KIND:0:2",
     "FD_KIND:1:2",
     "FD_KIND:2:2",
@@ -203,13 +212,7 @@ test("descriptor kinds distinguish actual runtime terminals, files and invalid h
     "FD_KIND:3:1",
     "FD_KIND:3:3",
     "FD_KIND:3:4",
-  ]) {
-    await output(page, marker);
-  }
-  await ready(page);
-  const rawLines = await page.evaluate(() =>
-    window.bashWeb!.readLines().map((line) => line.trim()),
-  );
+  ]);
   expect(rawLines.filter((line) => line === "RAW_PAYLOAD")).toHaveLength(2);
   const predicates = descriptorForms.flatMap((form) => [
     `${form.predicate("-p /dev/stdin")}; echo ${form.name}_TERMINAL_PIPE:$?`,
@@ -237,11 +240,7 @@ test("descriptor kinds distinguish actual runtime terminals, files and invalid h
       await output(page, `${form.name}_${suffix}`);
     }
   }
-  await ready(page);
-  await expect.poll(() => page.workers().length).toBe(baseline);
-  await expect
-    .poll(() => page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0].pipes))
-    .toBe(0);
+  await descriptorRetired(page, baseline);
 });
 
 test("terminal operand errors keep Bash conditional status and short circuiting", async ({
@@ -262,7 +261,7 @@ test("terminal operand errors keep Bash conditional status and short circuiting"
     "test -t 9223372036854775808; echo OVERFLOW_ERROR:$?",
   ].join("; ");
   await command(page, `/programs/shell-engine.wasm -c ${shellQuote(source)}`);
-  for (const marker of [
+  const lines = await descriptorOutput(page, [
     "SIGNED_TTY:0",
     "PADDED_TTY:0",
     "WIDE_FD:1",
@@ -274,18 +273,14 @@ test("terminal operand errors keep Bash conditional status and short circuiting"
     "AND_ERROR:2",
     "SKIPPED_ERROR:0",
     "OVERFLOW_ERROR:2",
-  ]) {
-    await output(page, marker);
-  }
-  await ready(page);
-  const lines = await page.evaluate(() => window.bashWeb!.readLines().map((line) => line.trim()));
+  ]);
   expect(lines.filter((line) => line === "/usr/bin/bash: [[: nope: integer expected")).toHaveLength(
     4,
   );
   expect(lines).toContain("/usr/bin/bash: test: nope: integer expected");
   expect(lines).toContain("/usr/bin/bash: [: nope: integer expected");
   expect(lines.some((line) => line.includes("skipped: integer expected"))).toBe(false);
-  await expect.poll(() => page.workers().length).toBe(baseline);
+  await descriptorRetired(page, baseline);
 });
 
 const preopenGuests = ["shell-engine", "test-guest", "test-spin"] as const;
