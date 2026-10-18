@@ -16,7 +16,7 @@ import {
   type StartupSnapshot,
 } from "../runtime/startup-diagnostics";
 import { createRuntime, type Runtime, type SharedFilesystemState } from "waffle";
-import { waitForStorage } from "./storage";
+import { createStorageStartup, waitForStorage, type StorageStartup } from "./storage";
 import filesystemWorkerUrl from "../../.build/browser/fs-worker.js?url";
 import { TerminalNewlines } from "../index";
 import "./style.css";
@@ -131,8 +131,12 @@ export type BrowserRuntimeLease = {
   dispose(): Promise<void>;
 };
 export type BrowserHostOptions =
-  | { runtime: Runtime; acquireRuntime?: never }
-  | { runtime?: never; acquireRuntime?: (onStartupStage?: StartupObserver) => BrowserRuntimeLease };
+  | { runtime: Runtime; acquireRuntime?: never; storageStartup?: StorageStartup }
+  | {
+      runtime?: never;
+      storageStartup?: never;
+      acquireRuntime?: (onStartupStage?: StartupObserver) => BrowserRuntimeLease;
+    };
 
 /** An app-supplied runtime is borrowed; a factory lease keeps cleanup with its owner. */
 export function mountBrowser(options: BrowserHostOptions = {}): void {
@@ -271,7 +275,11 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       const stopped = stop();
       const expectedGeneration = generation;
       const currentDiagnostics = (diagnostics = createStartupDiagnostics(expectedGeneration));
-      const onStartupStage = currentDiagnostics.observe;
+      const storageStartup = options.storageStartup ?? createStorageStartup();
+      const onStartupStage: StartupObserver = (stage, timestamp) => {
+        storageStartup.observe(stage, timestamp);
+        currentDiagnostics.observe(stage, timestamp);
+      };
       state = "starting";
       storage = undefined;
       error = undefined;
@@ -319,16 +327,20 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         startup = controller;
         await Promise.all([
           lease.ready,
-          waitForStorage(lease.runtime, controller.signal, (nextStorage) => {
-            if (generation !== expectedGeneration || handle.signal.aborted) return;
-            storage = nextStorage;
-            if (nextStorage.status === "opening" || nextStorage.status === "waiting")
-              receiveState(
-                nextStorage.status === "waiting" ? "waiting" : "starting",
-                expectedGeneration,
-              );
-            else if (nextStorage.status === "ready") receiveState("starting", expectedGeneration);
-            render();
+          waitForStorage(lease.runtime, controller.signal, {
+            startup: storageStartup,
+            onStartupStage,
+            onState(nextStorage) {
+              if (generation !== expectedGeneration || handle.signal.aborted) return;
+              storage = nextStorage;
+              if (nextStorage.status === "opening" || nextStorage.status === "waiting")
+                receiveState(
+                  nextStorage.status === "waiting" ? "waiting" : "starting",
+                  expectedGeneration,
+                );
+              else if (nextStorage.status === "ready") receiveState("starting", expectedGeneration);
+              render();
+            },
           }),
         ]);
         markStartup(onStartupStage, "runtime-lease-resolved");

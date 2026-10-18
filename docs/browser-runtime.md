@@ -84,10 +84,29 @@ shell's 60-second startup timeout begins **after** storage is ready. Initial
 `opening` has its own separate 60-second guard; expiry reports “Browser storage
 did not become ready within 60 seconds.” Entering `waiting` disarms that guard.
 Waiting may last indefinitely while another tab owns the workspace, and the typed
-state remains `waiting` through recovery. Ownership release lets the same runtime
-finish recovery and continue without a reload. Recovery after waiting has no
-separate timeout. Readiness, failure, disposal and cancellation clear the opening
-guard. Storage `failed`/`disposed` states are terminal, not a fallback to empty storage.
+state remains `waiting` through recovery. The passive `filesystem-lock-acquired`
+milestone starts a fresh 60-second active-recovery guard, separate from both opening
+and shell startup. Repeated waiting states or milestones cannot erase or extend it.
+Expiry reports “Browser storage recovery did not finish within 60 seconds.”
+Ownership release normally lets the same runtime recover and continue without a
+reload. Readiness, failure, disposal and cancellation clear both guards and detach
+the milestone listener. Storage `failed`/`disposed` states are terminal, not a fallback
+to empty storage.
+
+The demo installs `createStorageStartup()` before creating its owned runtime or
+calling its runtime factory, so even a grant before the consumer subscribes retains
+its recovery budget. A borrowed runtime that is still opening needs its owner to
+create that signal before runtime construction, forward `onStartupStage` to its
+`observe` callback, and pass the same signal as `mountBrowser({ runtime, storageStartup })`.
+A borrowed ready runtime needs no startup signal. The guard measures elapsed time
+from local receipt of acquisition; worker timestamps are forwarded unchanged to
+diagnostics, not compared against another realm's clock.
+
+`storage-wait-requested` and `storage-wait-resolved` describe only this consumer's
+storage-readiness await. They remain distinct from `runtime-lease` preparation,
+which also joins caller registration, and from all existing runtime milestones.
+They are fixed, passive diagnostics: observers cannot delay startup or reject it,
+and callbacks from a stopped generation cannot contaminate the next start.
 
 Backend contention policy belongs to the runtime owner, not the shell. At the
 pinned Waffle revision, OPFS waits and rejects takeover; IndexedDB defaults to

@@ -5,7 +5,8 @@ import { FilesystemError, type FilesystemConnection } from "waffle/fs/protocol";
 import { FilesystemService } from "waffle/fs/service";
 import { MemoryBackend } from "waffle/fs/backend";
 import { BrowserSession } from "./session";
-import { STORAGE_READY_TIMEOUT_MS, waitForStorage } from "./storage";
+import { createStartupDiagnostics } from "../runtime/startup-diagnostics";
+import { createStorageStartup, STORAGE_READY_TIMEOUT_MS, waitForStorage } from "./storage";
 
 function storageWorker(context: TestContext) {
   const previousWorker = globalThis.Worker;
@@ -54,6 +55,7 @@ function storageWorker(context: TestContext) {
   }
   globalThis.Worker = StorageWorker as unknown as typeof Worker;
   let runtime: Runtime | undefined;
+  let disposalFailure: RegExp | undefined;
   context.after(async () => {
     // The final worker abort follows admitted consumer fences, not the dispose() call.
     for (const worker of workers) worker.holdDisposal = false;
@@ -62,7 +64,8 @@ function storageWorker(context: TestContext) {
       if (worker.disposalRequested) worker.finishDisposal();
     }
     try {
-      await disposing;
+      if (disposing && disposalFailure) await assert.rejects(disposing, disposalFailure);
+      else await disposing;
     } finally {
       for (const worker of workers) worker.connection?.port.close();
       globalThis.Worker = previousWorker;
@@ -71,6 +74,9 @@ function storageWorker(context: TestContext) {
     }
   });
   return {
+    expectDisposalFailure(error: RegExp) {
+      disposalFailure = error;
+    },
     create(options: Parameters<typeof createRuntime>[0] = {}) {
       runtime = createRuntime({
         ...options,
@@ -94,8 +100,8 @@ test("waiting remains typed and pending until recovery reports ready, preserving
   });
   const states: string[] = [];
   let ready = false;
-  const opening = waitForStorage(runtime, new AbortController().signal, (state) => {
-    states.push(state.status);
+  const opening = waitForStorage(runtime, new AbortController().signal, {
+    onState: (state) => states.push(state.status),
   }).then(() => {
     ready = true;
   });
@@ -325,4 +331,180 @@ test("storage defaults are forwarded unchanged and OPFS takeover is rejected", a
     () => createRuntime({ filesystem: invalid as never }),
     /only supports whenBusy: "wait"/,
   );
+});
+
+test("a queued ownership wait gets a fresh recovery budget only after the lock grant", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const fixture = storageWorker(context);
+  const startup = createStorageStartup();
+  const { runtime, worker } = fixture.create({ onStartupStage: startup.observe });
+  const diagnostics = createStartupDiagnostics(1);
+  const opening = waitForStorage(runtime, new AbortController().signal, {
+    startup,
+    onStartupStage: diagnostics.observe,
+  });
+  let failed = false;
+  const rejected = assert
+    .rejects(opening, /storage recovery did not finish within 60 seconds/)
+    .then(() => {
+      failed = true;
+    });
+  worker.state("waiting");
+  context.mock.timers.tick(STORAGE_READY_TIMEOUT_MS * 3);
+  await Promise.resolve();
+  assert.equal(failed, false, "another tab can own the workspace indefinitely");
+  worker.dispatchEvent(
+    new MessageEvent("message", {
+      data: { type: "filesystem-startup", stage: "filesystem-lock-acquired", timestamp: 123 },
+    }),
+  );
+  context.mock.timers.tick(STORAGE_READY_TIMEOUT_MS - 1);
+  await Promise.resolve();
+  assert.equal(failed, false);
+  // Neither another waiting observation nor a duplicate milestone may erase/reset recovery.
+  worker.state("waiting");
+  startup.observe("filesystem-lock-acquired", 456);
+  context.mock.timers.tick(1);
+  await rejected;
+  assert.equal(runtime.disposed, false, "the application still owns teardown");
+  assert.equal(runtime.filesystem.onStateChange, undefined);
+  assert.deepEqual(diagnostics.snapshot().pending, ["storage-wait-requested"]);
+});
+
+test("lock acquisition replaces a nearly spent opening budget, even before waiting", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const fixture = storageWorker(context);
+  const startup = createStorageStartup();
+  const { runtime } = fixture.create();
+  const opening = waitForStorage(runtime, new AbortController().signal, { startup });
+  let failed = false;
+  const rejected = assert.rejects(opening, /storage recovery/).then(() => {
+    failed = true;
+  });
+  context.mock.timers.tick(STORAGE_READY_TIMEOUT_MS - 1000);
+  startup.observe("filesystem-lock-acquired", 1);
+  context.mock.timers.tick(STORAGE_READY_TIMEOUT_MS - 1);
+  await Promise.resolve();
+  assert.equal(failed, false);
+  context.mock.timers.tick(1);
+  await rejected;
+});
+
+test("a lock grant preceding subscription retains its elapsed recovery time", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  let now = 1000;
+  context.mock.method(performance, "now", () => now);
+  const fixture = storageWorker(context);
+  const startup = createStorageStartup();
+  const { runtime, worker } = fixture.create();
+  startup.observe("filesystem-lock-acquired", 99);
+  now += STORAGE_READY_TIMEOUT_MS - 1000;
+  worker.state("waiting");
+  const opening = waitForStorage(runtime, new AbortController().signal, { startup });
+  const rejected = assert.rejects(opening, /storage recovery/);
+  context.mock.timers.tick(1000);
+  await rejected;
+});
+
+for (const outcome of ["ready", "cancelled", "disposed", "failed"] as const) {
+  test(`recovery ${outcome} detaches its milestone listener and clears the guard`, async (context) => {
+    context.mock.timers.enable({ apis: ["setTimeout"] });
+    const fixture = storageWorker(context);
+    const startup = createStorageStartup();
+    const { runtime, worker } = fixture.create();
+    const subscribe = startup.onLockAcquired;
+    let detached = 0;
+    context.mock.method(startup, "onLockAcquired", (listener: Parameters<typeof subscribe>[0]) => {
+      const detach = subscribe(listener);
+      return () => {
+        detached++;
+        detach();
+      };
+    });
+    const controller = new AbortController();
+    const opening = waitForStorage(runtime, controller.signal, { startup });
+    const completed = outcome === "ready" ? opening : assert.rejects(opening);
+    worker.state("waiting");
+    startup.observe("filesystem-lock-acquired", 1);
+    const clear = context.mock.method(globalThis, "clearTimeout");
+    if (outcome === "ready") worker.state("ready");
+    if (outcome === "cancelled") controller.abort(new Error("Host stopped"));
+    if (outcome === "disposed") await runtime.dispose();
+    if (outcome === "failed") fixture.expectDisposalFailure(/Recovery failed/);
+    if (outcome === "failed")
+      worker.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "filesystem-error", message: "Recovery failed" },
+        }),
+      );
+    await completed;
+    assert.equal(detached, 1);
+    assert.equal(clear.mock.callCount(), 1);
+    assert.notEqual(clear.mock.calls[0].arguments[0], undefined);
+    context.mock.timers.tick(STORAGE_READY_TIMEOUT_MS * 2);
+  });
+}
+
+test("the storage await resolves independently of registration and preserves runtime timestamps", async (context) => {
+  const fixture = storageWorker(context);
+  const { runtime, worker } = fixture.create();
+  const startup = createStorageStartup();
+  const diagnostics = createStartupDiagnostics(4);
+  diagnostics.observe("runtime-lease-requested", 10);
+  diagnostics.observe("filesystem-lock-acquired", 20);
+  startup.observe("filesystem-lock-acquired", 20);
+  const opening = waitForStorage(runtime, new AbortController().signal, {
+    startup,
+    onStartupStage: diagnostics.observe,
+  });
+  worker.state("ready");
+  await opening;
+  const snapshot = diagnostics.snapshot();
+  assert.equal(snapshot.stages["filesystem-lock-acquired"], 20);
+  assert.ok(
+    snapshot.stages["storage-wait-resolved"]! >= snapshot.stages["storage-wait-requested"]!,
+  );
+  assert.deepEqual(snapshot.pending, ["runtime-lease-requested"]);
+});
+
+test("storage markers ignore thrown, rejected and never-settling diagnostic observers", async (context) => {
+  const fixture = storageWorker(context);
+  const { runtime, worker } = fixture.create();
+  const thrown = waitForStorage(runtime, new AbortController().signal, {
+    onStartupStage() {
+      throw new Error("Observer failed");
+    },
+  });
+  const rejected = waitForStorage(runtime, new AbortController().signal, {
+    onStartupStage: () => Promise.reject(new Error("Observer rejected")),
+  });
+  const pending = waitForStorage(runtime, new AbortController().signal, {
+    onStartupStage: () => new Promise<void>(() => {}),
+  });
+  worker.state("ready");
+  await Promise.all([thrown, rejected, pending]);
+  assert.equal(runtime.filesystem.onStateChange, undefined);
+});
+
+test("a borrowed session bounds acquired recovery without disposing its runtime", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const fixture = storageWorker(context);
+  const startup = createStorageStartup();
+  const { runtime, worker } = fixture.create({ onStartupStage: startup.observe });
+  worker.state("waiting");
+  const starting = BrowserSession.create({
+    runtime,
+    storageStartup: startup,
+    cols: 80,
+    rows: 24,
+    onOutput() {},
+    onState() {},
+  });
+  const rejected = assert.rejects(starting, /storage recovery/);
+  startup.observe("filesystem-lock-acquired", 1);
+  context.mock.timers.tick(STORAGE_READY_TIMEOUT_MS);
+  await rejected;
+  assert.equal(runtime.disposed, false);
+  assert.equal(runtime.filesystem.onStateChange, undefined);
+  assert.equal(worker.disposalRequested, false);
 });

@@ -1,4 +1,5 @@
 import type { Runtime, SharedFilesystemState, SharedFilesystemStateObserver } from "waffle";
+import { markStartup, type StartupObserver } from "../runtime/startup-diagnostics.ts";
 
 type Listener = (state: SharedFilesystemState) => void;
 type Observation = {
@@ -8,22 +9,53 @@ type Observation = {
 };
 const observations = new WeakMap<Runtime, Observation>();
 
-/** Separate from the shell guard; slow first-use browser storage has its own budget. */
+/** Separate from the shell guard; opening and active recovery each have their own budget. */
 export const STORAGE_READY_TIMEOUT_MS = 60000;
+
+/** Attach before runtime creation so a fast lock grant cannot precede its consumer's wait. */
+export function createStorageStartup() {
+  let acquiredAt: number | undefined;
+  const listeners = new Set<(at: number) => void>();
+  const observe: StartupObserver = (stage) => {
+    if (stage !== "filesystem-lock-acquired" || acquiredAt !== undefined) return;
+    // Budget from receipt in this realm, not a worker clock or the duration of a queued wait.
+    acquiredAt = performance.now();
+    for (const listener of Array.from(listeners)) listener(acquiredAt);
+  };
+  return {
+    observe,
+    onLockAcquired(listener: (at: number) => void): () => void {
+      listeners.add(listener);
+      if (acquiredAt !== undefined) listener(acquiredAt);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+export type StorageStartup = ReturnType<typeof createStorageStartup>;
+
+type StorageWaitOptions = {
+  onState?: Listener;
+  onStartupStage?: StartupObserver;
+  startup?: StorageStartup;
+};
+
+function createObservation(runtime: Runtime): Observation {
+  const listeners = new Set<Listener>();
+  const previous = runtime.filesystem.onStateChange;
+  const observer: SharedFilesystemStateObserver = (state) => {
+    // A listener may detach itself or start another wait during notification.
+    for (const receive of Array.from(listeners)) receive(state);
+    return previous?.(state);
+  };
+  runtime.filesystem.onStateChange = observer;
+  return { listeners, previous, observer };
+}
 
 function observeStorage(runtime: Runtime, listener: Listener): () => void {
   const filesystem = runtime.filesystem;
   let observation = observations.get(runtime);
   if (!observation) {
-    const listeners = new Set<Listener>();
-    const previous = filesystem.onStateChange;
-    const observer: SharedFilesystemStateObserver = (state) => {
-      // A listener may detach itself or start another wait during notification.
-      for (const receive of Array.from(listeners)) receive(state);
-      return previous?.(state);
-    };
-    observation = { listeners, previous, observer };
-    filesystem.onStateChange = observer;
+    observation = createObservation(runtime);
     observations.set(runtime, observation);
   }
   const current = observation;
@@ -39,64 +71,81 @@ function observeStorage(runtime: Runtime, listener: Listener): () => void {
   };
 }
 
-/** Storage ownership/recovery is not shell startup and may wait for another tab indefinitely. */
+function startStorageWait(
+  runtime: Runtime,
+  signal: AbortSignal,
+  options: StorageWaitOptions,
+  resolve: () => void,
+  reject: (error: unknown) => void,
+): void {
+  let settled = false;
+  let recovering = false;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let unobserve = () => {};
+  let unobserveLock = () => {};
+  const clearGuard = () => {
+    clearTimeout(timeout);
+    timeout = undefined;
+  };
+  const finish = (error?: unknown) => {
+    if (settled) return;
+    settled = true;
+    clearGuard();
+    signal.removeEventListener("abort", abort);
+    unobserve();
+    unobserveLock();
+    if (error !== undefined) return reject(error);
+    markStartup(options.onStartupStage, "storage-wait-resolved");
+    resolve();
+  };
+  const abort = () => finish(signal.reason);
+  const acquired = (at: number) => {
+    if (settled || recovering) return;
+    recovering = true;
+    clearGuard();
+    timeout = setTimeout(
+      () => finish(new Error("Browser storage recovery did not finish within 60 seconds.")),
+      Math.max(0, STORAGE_READY_TIMEOUT_MS - (performance.now() - at)),
+    );
+  };
+  const receive = (state: SharedFilesystemState) => {
+    if (settled) return;
+    // Waffle stays typed waiting during recovery; only the actual grant starts that budget.
+    if (state.status === "waiting" && !recovering) clearGuard();
+    try {
+      options.onState?.(state);
+    } catch (error) {
+      finish(error);
+      return;
+    }
+    if (state.status === "ready") finish();
+    else if (state.status === "failed")
+      finish(state.error ?? new Error("Browser storage could not be opened."));
+    else if (state.status === "disposed") finish(new Error("Browser storage was disposed."));
+  };
+  markStartup(options.onStartupStage, "storage-wait-requested");
+  if (signal.aborted) return finish(signal.reason);
+  if (runtime.disposed) return finish(new Error("Runtime is disposed"));
+  unobserve = observeStorage(runtime, receive);
+  signal.addEventListener("abort", abort, { once: true });
+  const initial = runtime.filesystem.state;
+  if (initial.status === "opening") {
+    timeout = setTimeout(
+      () => finish(new Error("Browser storage did not become ready within 60 seconds.")),
+      STORAGE_READY_TIMEOUT_MS,
+    );
+  }
+  receive(initial);
+  if (!settled && options.startup) unobserveLock = options.startup.onLockAcquired(acquired);
+}
+
+/** Genuine pre-lock ownership waiting is indefinite; active recovery is not shell startup. */
 export function waitForStorage(
   runtime: Runtime,
   signal: AbortSignal,
-  onState?: Listener,
+  options: StorageWaitOptions = {},
 ): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    let settled = false;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    let unobserve = () => {};
-    const finish = (error?: unknown) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      timeout = undefined;
-      signal.removeEventListener("abort", abort);
-      unobserve();
-      if (error === undefined) resolve();
-      else reject(error);
-    };
-    const abort = () => finish(signal.reason);
-    const receive = (state: SharedFilesystemState) => {
-      if (settled) return;
-      if (state.status === "waiting") {
-        // Another tab may own storage indefinitely. The typed state intentionally stays
-        // waiting through recovery too; resuming a recovery budget needs the lock-acquired
-        // startup milestone rather than guessing ownership from elapsed time.
-        clearTimeout(timeout);
-        timeout = undefined;
-      }
-      try {
-        onState?.(state);
-      } catch (error) {
-        finish(error);
-        return;
-      }
-      if (state.status === "ready") finish();
-      else if (state.status === "failed")
-        finish(state.error ?? new Error("Browser storage could not be opened."));
-      else if (state.status === "disposed") finish(new Error("Browser storage was disposed."));
-    };
-    if (signal.aborted) {
-      finish(signal.reason);
-      return;
-    }
-    if (runtime.disposed) {
-      finish(new Error("Runtime is disposed"));
-      return;
-    }
-    unobserve = observeStorage(runtime, receive);
-    signal.addEventListener("abort", abort, { once: true });
-    const initial = runtime.filesystem.state;
-    if (initial.status === "opening") {
-      timeout = setTimeout(
-        () => finish(new Error("Browser storage did not become ready within 60 seconds.")),
-        STORAGE_READY_TIMEOUT_MS,
-      );
-    }
-    receive(initial);
-  });
+  return new Promise<void>((resolve, reject) =>
+    startStorageWait(runtime, signal, options, resolve, reject),
+  );
 }

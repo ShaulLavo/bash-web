@@ -159,3 +159,106 @@ test("OPFS takeover is rejected without changing the default storage policy", as
     'OPFS storage only supports whenBusy: "wait"',
   );
 });
+
+// Keep a real epoch transaction active after its lock grant. Abort still travels
+// through native IndexedDB transaction events, so normal owner teardown can finish.
+function holdIndexedDBEpoch() {
+  const get = IDBObjectStore.prototype.get;
+  IDBObjectStore.prototype.get = function (key) {
+    const request = get.call(this, key);
+    if (this.name !== "metadata" || key !== "epoch") return request;
+    const store = this;
+    let reported = false;
+    const hold = (event: Event) => {
+      event.stopImmediatePropagation();
+      if (!reported) console.info("bash-web:test:indexeddb-epoch-held");
+      reported = true;
+      const next = get.call(store, key);
+      next.addEventListener("success", hold, { once: true });
+    };
+    request.addEventListener("success", hold, { once: true });
+    return request;
+  };
+}
+
+test("queued IndexedDB ownership is indefinite but stalled lock-acquired recovery times out", async ({
+  context,
+  page,
+}) => {
+  const query = new URLSearchParams({
+    test: "1",
+    renderer: "canvas",
+    storage: "indexeddb",
+    whenBusy: "wait",
+    workspace: `bash-web-storage-recovery-${randomUUID()}`,
+  });
+  await page.goto(`/?${query}`);
+  await startupReady(page);
+  const second = await context.newPage();
+  try {
+    let heldEpochs = 0;
+    second.on("console", (message) => {
+      if (message.text() === "bash-web:test:indexeddb-epoch-held") heldEpochs++;
+    });
+    await second.route(
+      "**/fs-worker*.js",
+      async (route) => {
+        const response = await route.fetch();
+        await route.fulfill({
+          response,
+          body: `(${holdIndexedDBEpoch.toString()})();\n${await response.text()}`,
+        });
+      },
+      { times: 1 },
+    );
+    await second.clock.install();
+    await second.goto(`/?${query}`);
+    await waiting(second);
+    expect(
+      await second.evaluate(
+        () => window.bashWeb?.snapshot().startup.stages["filesystem-lock-acquired"],
+      ),
+    ).toBeUndefined();
+    await second.clock.fastForward(STORAGE_READY_TIMEOUT_MS * 3);
+    await waiting(second);
+    expect(heldEpochs).toBe(0);
+    await page.close();
+    await expect.poll(() => heldEpochs).toBe(1);
+    await expect
+      .poll(() =>
+        second.evaluate(
+          () => window.bashWeb?.snapshot().startup.stages["filesystem-lock-acquired"],
+        ),
+      )
+      .toBeDefined();
+    const recovering = await second.evaluate(() => window.bashWeb!.snapshot());
+    expect(recovering.storage?.status).toBe("waiting");
+    expect(recovering.startup.stages["filesystem-lock-acquired"]).toBeDefined();
+    expect(recovering.startup.stages["filesystem-epoch-resolved"]).toBeUndefined();
+    expect(recovering.startup.stages["storage-wait-resolved"]).toBeUndefined();
+    expect(recovering.startup.pending).toContain("storage-wait-requested");
+    expect(await second.evaluate(() => window.bashWeb?.metrics())).toBeUndefined();
+    await second.clock.fastForward(STORAGE_READY_TIMEOUT_MS + 1);
+    await expect.poll(() => second.evaluate(() => window.bashWeb?.snapshot().state)).toBe("failed");
+    await expect(second.getByRole("alert")).toContainText(
+      "Browser storage recovery did not finish within 60 seconds.",
+    );
+    expect(
+      await second.evaluate(
+        () => window.bashWeb?.snapshot().startup.stages["filesystem-lock-acquired"],
+      ),
+    ).toBe(recovering.startup.stages["filesystem-lock-acquired"]);
+    const restarted = second.evaluate(() => window.bashWeb?.restart());
+    await startupReady(second);
+    await restarted;
+    expect(heldEpochs).toBe(1);
+    await second.locator("textarea").focus();
+    await second.keyboard.insertText("printf 'recovery-restarted\\n'");
+    await second.keyboard.press("Enter");
+    await expect
+      .poll(() => second.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())))
+      .toContain("recovery-restarted");
+  } finally {
+    await second.close();
+  }
+});
