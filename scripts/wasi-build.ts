@@ -134,7 +134,12 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
     },
   );
   const binIndex = args.indexOf("--bin");
-  const binaries = binIndex < 0 ? ["shell-engine", "shell-runtime"] : [args[binIndex + 1]];
+  // The shell binaries and the compatibility instrument's fixture guests all pass
+  // the same patched-libc verifier.
+  const binaries =
+    binIndex < 0
+      ? ["shell-engine", "shell-runtime", "argv-py", "printenv-py"]
+      : [args[binIndex + 1]];
   for (const binary of binaries) {
     verifyWasiGuest(
       resolve(
