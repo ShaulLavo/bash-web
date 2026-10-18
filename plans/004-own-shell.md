@@ -187,25 +187,28 @@ locks, trust version and source provenance move together.
   policy from unchanged host-default reporting, post-start failure and genuine
   exits. Quiet runtime-child reporting has independent no-hook coverage.
 
-**Approved separate inherited-descriptor predicates unit (2026-10-18).**
-The adopted runtime includes pipe `fd_filestat_get` support, but this does not
-implement shell predicates. Existing real inherited-pipe tests exercise streaming,
-process substitution and EOF handshakes, not positive pipe metadata or `-p`.
-Descriptor-alias tests currently return capability-error status 2 for predicates
-other than `-a`/`-e`; retain every current `-p`/`-t` status in the adoption unit.
+**Inherited-descriptor predicates unit (2026-10-18), implemented; qualification pending.**
+This separate unit follows the quiet-start adoption in PR #21. `test`, `[` and
+shared `[[ ]]` now query `runtime_proc.fd_kind` from Waffle #36 at the adopted
+0.0.50 pin. The query uses the endpoint's physical handle, including inherited
+private duplicates and logical remaps. Both local pipe ends and transported
+runtime pipes satisfy descriptor-alias `-p`; terminal descriptors satisfy `-t`.
+Category 0 remains other/unknown, never FIFO. Preview1 filetypes and unrelated
+predicate capability/status behavior stay unchanged.
 
-- Consume the separately agreed append-only
-  `runtime_proc.fd_kind(fd: u32) -> i32`: 0 other/unknown, 1 pipe (either endpoint),
-  2 terminal, 3 regular file, 4 directory, negative EBADF (-8) for invalid/closed.
-  It is non-consuming, needs no rights, and remains truthful after inherit, dup
-  and remap. The upstream API is delivered in the adopted 0.0.50 pin; the shell
-  predicate caller and its qualification remain this separate Approved unit.
-- Add real inherited runtime_proc pipe/remap tests, regular files, terminals,
-  directories and closed descriptors; compare `test -p`, `[ -p /dev/stdin ]` and
-  `-t` against Bash. Prove probes consume no payload and retain no endpoint that
-  delays EOF. Never infer FIFO from Preview1 UNKNOWN (there is no FIFO enum).
-- This is a separate implementation/qualification unit, not a partial predicate
-  change hidden inside the quiet-start dependency adoption.
+- GNU Bash 5.3.15 oracle covers inherited read/write pipes, aliases/remaps, files,
+  closed fds and a real controlled PTY, including numeric statuses and unchanged
+  payload/EOF. Signed decimal and surrounding ASCII whitespace follow the
+  existing intmax parser; signed-64 overflow is an integer error, not a wrapped
+  descriptor. Malformed `-t` is status 2 participating in `[[ !/&&/|| ]]` only.
+- Native engine regressions cover local pipes, private physical mock handles,
+  non-consuming queries, writer release/EOF, integer diagnostics and unchanged
+  unrelated capability errors. These mocks are not transported-WASI evidence.
+- `tests/runtime-shell.spec.ts` and the raw `test-guest fd-kinds` mode exercise
+  actual WASI child pipe ends/remaps, runtime terminals, files, directories,
+  closed handles, payload and worker/pipe retirement. New browser cases still
+  require current-head execution; existing quiet-start/frozen coverage is not
+  evidence for this unit. Normal required CI retains the full qualification gate.
 
 **Approved job-lifetime transition (2026-10-17).** The current runtime seals a
 job when its pending membership reaches zero, before it is reaped. A shell job
@@ -1226,16 +1229,13 @@ Status: Approved. Start fetching and compiling the shell WASM in parallel with t
 
 ### Follow-up: start-status-scoped exec diagnostic ownership
 
-Status: Approved. In the fd-3 lane's PR or the immediately following PR, integrate
-Waffle #22's `start_status` and CHILD_START poll (0.0.37), after the 0.0.36 patched
-libc guest rebuild prerequisite. Hold the command's redirected stderr strongly
-only until start status resolves. Drop it immediately on successful start;
-write the exec failure diagnostic and then drop it on START_FAILED. Fork failure
-messages still use parent-shell stderr. #11 deliberately uses a non-owning weak
-endpoint; if it has expired before the failure is observed, the message falls
-back to shell stderr. This keeps successful children from retaining a closed
-pipeline writer but cannot guarantee redirected exec diagnostics after that
-endpoint disappears. Add controls proving `nosuch 2>&1 | cat` prints the message
-before EOF and `producer 2>&1 | eof-ack` (producer closes output and waits for an
-EOF acknowledgement) finishes without deadlock. Keep real exit statuses 126/127
-distinct from startup failure; do not pin above the fd-3 prerequisite early.
+Status: Delivered by PR #20, merge
+`02df6429cc142a771ff9ad26fae3f3d250d0bc04`. The runtime adapter holds redirected
+stderr until start status resolves, drops it immediately on successful start,
+and diagnoses START_FAILED before releasing it. Fork failures still use parent
+stderr; genuine program exits 126/127 remain distinct. Exact-main checks and
+actual-host cleanup completed for that unit. Its pipe/file diagnostic and
+foreground/background EOF-ack controls remain covered. PR #21 separately adopted
+Waffle 0.0.50 and covered lazy-loader quiet-start reporting. This historical item
+is not another open assignment; later reader-cancellation, filesystem/device
+and external Bun work remain separate.
