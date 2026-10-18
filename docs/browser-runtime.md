@@ -101,6 +101,7 @@ it does not dispose a borrowed runtime. The owner must `await runtime.dispose()`
 when its final consumer stops, including while waiting for storage: Waffle then
 cancels queued filesystem work and joins worker cleanup/ownership release.
 Do not treat a shell exit or an unawaited dispose call as that ownership fence.
+Restart after a truly hung default IndexedDB open awaits Waffle's pending disposal fix.
 
 ## Terminal and host responsibilities
 
