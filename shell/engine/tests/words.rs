@@ -4136,3 +4136,5 @@ mod glob;
 
 #[path = "words/functions.rs"]
 mod functions;
+#[path = "words/printf.rs"]
+mod printf;

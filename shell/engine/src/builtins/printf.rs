@@ -1,0 +1,345 @@
+//! Original byte-oriented printf escape adapter. Admission and delivery walk the
+//! same borrowed inputs: no decoded String or whole-result buffer is allocated.
+use super::{endpoint, error_status, write};
+use crate::{
+    executor::Budget,
+    expand::Work,
+    interpreter::Context,
+    io::FdTable,
+    state::{SharedState, State},
+};
+
+pub(super) async fn run(
+    args: &[String],
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    args.first().ok_or(2)?;
+    let mut utf8 = false;
+    for name in ["LC_ALL", "LC_CTYPE", "LANG"] {
+        State::admit_scalar_access(state, name, &context.cancel, work)
+            .await
+            .map_err(error_status)?;
+        let state = state.borrow();
+        if let Some(locale) = state
+            .scalar_parameter(name)
+            .filter(|value| !value.is_empty())
+        {
+            // The engine's byte locales are C/POSIX and UTF-8. Check fixed-size
+            // codeset suffixes without copying or scanning an arbitrary value.
+            utf8 = ["UTF-8", "UTF8"].iter().any(|encoding| {
+                locale.eq_ignore_ascii_case(encoding)
+                    || locale
+                        .len()
+                        .checked_sub(encoding.len() + 1)
+                        .is_some_and(|start| {
+                            locale.as_bytes()[start] == b'.'
+                                && locale.as_bytes()[start + 1..]
+                                    .eq_ignore_ascii_case(encoding.as_bytes())
+                        })
+            });
+            break;
+        }
+    }
+    // Check the complete repeated output and work before the first write. A
+    // resource failure is not an ordinary printf warning with partial output.
+    // Delivery then needs only constant stack space and cancellation checkpoints;
+    // it cannot discover a new expansion/work allocation limit midway through.
+    let mut printer = Printer {
+        fds,
+        context,
+        work: Some(work),
+        budget: Budget::default(),
+        remaining: context.limits().expansion_bytes,
+        utf8,
+    };
+    format(args, &mut printer).await?;
+    printer.work = None;
+    let status = format(args, &mut printer).await?;
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+struct Printer<'a> {
+    fds: &'a FdTable,
+    context: &'a Context,
+    work: Option<&'a mut Work>,
+    budget: Budget,
+    remaining: usize,
+    utf8: bool,
+}
+impl Printer<'_> {
+    async fn scan(&mut self, bytes: usize) -> Result<(), i32> {
+        for _ in 0..bytes {
+            if let Some(work) = &mut self.work {
+                work.checkpoint(&self.context.cancel)
+                    .await
+                    .map_err(error_status)?;
+            } else {
+                self.budget
+                    .checkpoint(&self.context.cancel)
+                    .await
+                    .map_err(|_| 130)?;
+            }
+        }
+        Ok(())
+    }
+    async fn emit(&mut self, fd: u32, bytes: &[u8]) -> Result<(), i32> {
+        if self.work.is_some() {
+            self.remaining = self.remaining.checked_sub(bytes.len()).ok_or(2)?;
+            return Ok(());
+        }
+        if fd == 1 {
+            write(self.fds, bytes, self.context).await
+        } else {
+            endpoint(self.fds, fd)?
+                .write_all(bytes, &self.context.cancel)
+                .await
+                .map_err(|error| error.status())
+        }
+    }
+    async fn escape(&mut self, input: &[u8], mode: Mode) -> Result<Escape, i32> {
+        let escape = decode(input, mode, self.utf8);
+        self.scan(escape.consumed).await?;
+        if let Some(diagnostic) = escape.diagnostic {
+            self.emit(2, diagnostic).await?;
+        }
+        self.emit(1, &escape.bytes[..escape.len]).await?;
+        Ok(escape)
+    }
+    async fn operand(&mut self, input: &[u8], escaped: bool) -> Result<bool, i32> {
+        let mut offset = 0;
+        while offset < input.len() {
+            if escaped && input[offset] == b'\\' {
+                let escape = self.escape(&input[offset..], Mode::Operand).await?;
+                offset += escape.consumed;
+                if escape.stop {
+                    return Ok(true);
+                }
+            } else {
+                let start = offset;
+                while offset < input.len()
+                    && offset - start < 4096
+                    && (!escaped || input[offset] != b'\\')
+                {
+                    offset += 1;
+                }
+                self.scan(offset - start).await?;
+                self.emit(1, &input[start..offset]).await?;
+            }
+        }
+        Ok(false)
+    }
+}
+
+async fn format(args: &[String], printer: &mut Printer<'_>) -> Result<i32, i32> {
+    let input = args[0].as_bytes();
+    let mut index = 1;
+    loop {
+        printer.scan(1).await?;
+        let mut offset = 0;
+        let mut consumed = false;
+        while offset < input.len() {
+            match input[offset] {
+                b'\\' => {
+                    let escape = printer.escape(&input[offset..], Mode::Format).await?;
+                    offset += escape.consumed;
+                }
+                b'%' => {
+                    printer.scan(1).await?;
+                    offset += 1;
+                    match input.get(offset) {
+                        Some(b'%') => {
+                            printer.scan(1).await?;
+                            printer.emit(1, b"%").await?;
+                        }
+                        Some(conversion @ (b's' | b'd' | b'b')) => {
+                            printer.scan(1).await?;
+                            let arg = args.get(index).map(String::as_bytes).unwrap_or(b"");
+                            index += 1;
+                            consumed = true;
+                            if printer.operand(arg, *conversion == b'b').await? {
+                                return Ok(0);
+                            }
+                        }
+                        _ => {
+                            // Keep unsupported conversions unsupported. In
+                            // particular, decoding an escape must not introduce
+                            // a second interpretation as format syntax.
+                            printer
+                                .emit(2, b"/usr/bin/bash: printf: unsupported format conversion\n")
+                                .await?;
+                            return Ok(2);
+                        }
+                    }
+                    offset += 1;
+                }
+                _ => {
+                    let start = offset;
+                    while offset < input.len()
+                        && offset - start < 4096
+                        && !matches!(input[offset], b'%' | b'\\')
+                    {
+                        offset += 1;
+                    }
+                    printer.scan(offset - start).await?;
+                    printer.emit(1, &input[start..offset]).await?;
+                }
+            }
+        }
+        if !consumed || index >= args.len() {
+            return Ok(0);
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Mode {
+    Format,
+    Operand,
+}
+struct Escape {
+    bytes: [u8; 10],
+    len: usize,
+    consumed: usize,
+    diagnostic: Option<&'static [u8]>,
+    stop: bool,
+}
+impl Escape {
+    fn new() -> Self {
+        Self {
+            bytes: [0; 10],
+            len: 0,
+            consumed: 1,
+            diagnostic: None,
+            stop: false,
+        }
+    }
+    fn push(&mut self, byte: u8) {
+        self.bytes[self.len] = byte;
+        self.len += 1;
+    }
+}
+
+fn decode(input: &[u8], mode: Mode, utf8: bool) -> Escape {
+    let mut out = Escape::new();
+    let Some(&code) = input.get(1) else {
+        out.push(b'\\');
+        return out;
+    };
+    out.consumed = 2;
+    let simple = match code {
+        b'a' => Some(7),
+        b'b' => Some(8),
+        b'e' | b'E' => Some(27),
+        b'f' => Some(12),
+        b'n' => Some(10),
+        b'r' => Some(13),
+        b't' => Some(9),
+        b'v' => Some(11),
+        b'\\' => Some(b'\\'),
+        b'\'' | b'"' | b'?' if mode == Mode::Format => Some(code),
+        _ => None,
+    };
+    if let Some(byte) = simple {
+        out.push(byte);
+        return out;
+    }
+    if code == b'c' && mode == Mode::Operand {
+        out.stop = true;
+        return out;
+    }
+    if matches!(code, b'0'..=b'7') {
+        let mut value = u32::from(code - b'0');
+        // Both modes accept nonzero-prefixed octal. Only %b ignores an
+        // initial zero before consuming up to three additional octal digits.
+        let digits = if mode == Mode::Operand && code == b'0' {
+            3
+        } else {
+            2
+        };
+        for _ in 0..digits {
+            let Some(&digit @ b'0'..=b'7') = input.get(out.consumed) else {
+                break;
+            };
+            value = value * 8 + u32::from(digit - b'0');
+            out.consumed += 1;
+        }
+        out.push(value as u8);
+        return out;
+    }
+    if matches!(code, b'x' | b'u' | b'U') {
+        let limit = match code {
+            b'x' => 2,
+            b'u' => 4,
+            _ => 8,
+        };
+        let mut value = 0u32;
+        for _ in 0..limit {
+            let Some(digit) = input.get(out.consumed).and_then(|byte| hex(*byte)) else {
+                break;
+            };
+            value = (value << 4) | digit;
+            out.consumed += 1;
+        }
+        if out.consumed == 2 {
+            out.diagnostic = Some(match code {
+                b'x' => b"/usr/bin/bash: printf: missing hex digit for \\x\n",
+                b'u' => b"/usr/bin/bash: printf: missing unicode digit for \\u\n",
+                _ => b"/usr/bin/bash: printf: missing unicode digit for \\U\n",
+            });
+        } else {
+            if code == b'x' {
+                out.push(value as u8);
+            } else {
+                unicode(value, utf8, &mut out);
+            }
+            return out;
+        }
+    }
+    out.push(b'\\');
+    out.push(code);
+    out
+}
+fn hex(byte: u8) -> Option<u32> {
+    match byte {
+        b'0'..=b'9' => Some(u32::from(byte - b'0')),
+        b'a'..=b'f' => Some(u32::from(byte - b'a' + 10)),
+        b'A'..=b'F' => Some(u32::from(byte - b'A' + 10)),
+        _ => None,
+    }
+}
+fn unicode(value: u32, utf8: bool, out: &mut Escape) {
+    // Bash accepts a 31-bit character, not just a Unicode scalar. In particular
+    // surrogates and legacy five/six-byte UTF-8 must not pass through Rust char
+    // validation or a lossy String conversion. The high signed-bit range emits
+    // nothing in both locales, without turning the command into a failure.
+    if value >= 0x8000_0000 {
+        return;
+    }
+    if value < 0x80 {
+        out.push(value as u8);
+        return;
+    }
+    if !utf8 {
+        let digits = if value <= 0xffff { 4 } else { 8 };
+        out.push(b'\\');
+        out.push(if digits == 4 { b'u' } else { b'U' });
+        for shift in (0..digits).rev() {
+            out.push(b"0123456789ABCDEF"[((value >> (shift * 4)) & 15) as usize]);
+        }
+        return;
+    }
+    let (length, prefix) = match value {
+        0..=0x7ff => (2, 0xc0),
+        0..=0xffff => (3, 0xe0),
+        0..=0x1f_ffff => (4, 0xf0),
+        0..=0x3ff_ffff => (5, 0xf8),
+        _ => (6, 0xfc),
+    };
+    out.push(prefix | (value >> (6 * (length - 1))) as u8);
+    for shift in (0..length - 1).rev() {
+        out.push(0x80 | ((value >> (shift * 6)) & 0x3f) as u8);
+    }
+}

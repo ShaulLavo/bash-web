@@ -62,7 +62,10 @@
     "test:browser:package": "node --test scripts/test-browser-package.mjs",
     "build:worker": "node scripts/build-worker.mjs",
     "prepare": "npm run build:worker",
-    "build:test-guest": "node scripts/build-test-guest.mjs"
+    "build:test-guest": "node scripts/build-test-guest.mjs",
+    "fuzz:shell-printf": "node scripts/fuzz-shell-printf.ts",
+    "test:fuzz-shell-printf": "node --test scripts/test-fuzz-shell-printf.ts",
+    "fuzz:shell-printf:ci": "node scripts/fuzz-shell-printf.ts --replay scripts/fixtures/shell-printf-seed-1.json --replay scripts/fixtures/shell-printf-seed-42.json"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",

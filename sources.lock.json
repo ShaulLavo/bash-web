@@ -1464,5 +1464,32 @@
       ],
       "reason": "Reuse owned record/replay/validation/CLI scaffolding, without-replacement LCG and process-group cleanup controls; new grammar and observations are original. No external upstream code copied or adapted."
     }
+  },
+  "shellPrintf": {
+    "classification": "Original byte-oriented printf escape adapter; GNU Bash 5.3.15 is a behavior oracle, not copied implementation.",
+    "paths": [
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/printf.rs",
+      "shell/engine/tests/words.rs",
+      "shell/engine/tests/words/printf.rs",
+      "scripts/fuzz-shell-printf.ts",
+      "scripts/test-fuzz-shell-printf.ts",
+      "scripts/fixtures/shell-printf-seed-1.json",
+      "scripts/fixtures/shell-printf-seed-42.json"
+    ],
+    "escapes": "Distinct format and %b escape modes preserve raw NUL/high bytes, octal/hex/control-letter/Unicode boundaries, malformed input statuses and stop-output behavior. Use existing cooperative execution/output admission instead of an unbounded reconstructed string or lossy UTF-8 conversion.",
+    "gate": "Original deterministic byte-exact printf family with separate seeds 1 and 42, strict healthy exit status and raw stdout comparison, unchanged stderr diagnostic evidence and no exclusions or normalization. Preserve the precursor 107 Bash observations as review evidence and all previous differential fixtures unchanged.",
+    "localHarnessProvenance": {
+      "baseRevision": "0630e1d8011edab6d3351192361c25adaca21c90",
+      "adapted": [
+        "scripts/fuzz-shell-job-lifetime.mjs",
+        "scripts/test-fuzz-shell-job-lifetime.mjs"
+      ],
+      "importedUnchanged": [
+        "scripts/fuzz-shell-control-flow.mjs",
+        "scripts/shell-process-group.mjs"
+      ],
+      "reason": "Reuse owned bounded Buffer-preserving record/replay/validation, seeded sampling, source identity and process-group teardown; the printf grammar and observations are original. No external upstream implementation copied or adapted."
+    }
   }
 }
