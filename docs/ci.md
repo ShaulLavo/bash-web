@@ -60,3 +60,8 @@ The existing `shell` check aggregates every job with `always()`. A failed,
 cancelled or skipped prerequisite fails this check instead of turning a required
 check into a successful skip. Its regression test checks the complete dependency
 list and failure condition.
+
+The native cache is also checked with a temporary Rust fixture-source change.
+The probe is reverted after its run. A following documentation-only commit checks
+that the previously checked native input set restores without any compilation.
+Run links, cache sizes and job timings are recorded in the CI change's PR.
