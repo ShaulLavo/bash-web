@@ -68,10 +68,10 @@
   },
   "waffle": {
     "repository": "https://github.com/ShaulLavo/waffle",
-    "revision": "c458a488bba70855c27a2921c2665c7150ef2090",
+    "revision": "ba968a6f86468d03394792a3e9c447dfc713c279",
     "package": "waffle",
-    "version": "0.0.26",
-    "specifier": "git+https://github.com/ShaulLavo/waffle.git#c458a488bba70855c27a2921c2665c7150ef2090",
+    "version": "0.0.27",
+    "specifier": "git+https://github.com/ShaulLavo/waffle.git#ba968a6f86468d03394792a3e9c447dfc713c279",
     "license": "MIT",
     "strategy": "Required peer imported by the JavaScript shell adapter; exact same Git pin used as development dependency for browser builds and tests. One application-created runtime per page owns shared services. No runtime source tree is vendored."
   },
@@ -1491,6 +1491,48 @@
         "scripts/shell-process-group.mjs"
       ],
       "reason": "Reuse owned bounded Buffer-preserving record/replay/validation, seeded sampling, source identity and process-group teardown; the printf grammar and observations are original. No external upstream implementation copied or adapted."
+    }
+  },
+  "shellPathSearch": {
+    "classification": "Original shell PATH-search, asynchronous runtime-access, and shared command-query adapters; GNU Bash 5.3.15 is a behavior oracle, not copied implementation.",
+    "runtime": {
+      "repository": "https://github.com/ShaulLavo/waffle",
+      "revision": "ba968a6f86468d03394792a3e9c447dfc713c279",
+      "version": "0.0.27",
+      "boundary": "runtime_proc.access_start/take/cancel with process-poll kind 5; canonical registration and live-file X_OK admission remain runtime-owned."
+    },
+    "paths": [
+      "shell/engine/src/interpreter/command_builtin.rs",
+      "shell/engine/src/interpreter.rs",
+      "shell/engine/src/process.rs",
+      "shell/engine/src/runtime.rs",
+      "shell/engine/src/runtime/wasi.rs",
+      "shell/engine/src/runtime/tests.rs",
+      "shell/engine/src/compat.rs",
+      "shell/engine/src/main.rs",
+      "shell/engine/tests/words/path.rs",
+      "tests/external-commands.spec.ts",
+      "tests/helpers/test-programs.ts",
+      "tests/test-programs.unit.ts",
+      "scripts/fuzz-shell-path.ts",
+      "scripts/test-fuzz-shell-path.ts",
+      "scripts/fixtures/shell-path-seed-1.json",
+      "scripts/fixtures/shell-path-seed-42.json"
+    ],
+    "strategy": "Search only no-slash names using the request PATH and cwd, preserving empty/relative components, earlier non-executable candidates, missing 127 versus non-runnable 126, and Bash directory-only search behavior. Execution and command -v/-V share one bounded cooperative resolver. The runtime access request owns copied path/cwd through nonblocking take/cancel and reactor readiness, never a spawn probe. In-process test registrations are exact paths, with ancestor traversal checked before normalization; no basename fallback or version-skew branch.",
+    "fixture": "One schema-1 manifest provisions real Bash files and simulated shell files/programs. Both boundaries validate the whole manifest before mutation, with raw <=32768 bytes, <=128 nodes, path <=256 UTF-8 bytes, marker <=64 bytes, canonical ordered relative paths and explicit permission/status/program-pair checks. Native/WASI tests use explicit fixture programs, not a second hand-written filesystem tree.",
+    "gate": "Frozen seeds 1 and 42 contain 156 fixed plus 128 generated observations each, 568 total. Strict healthy status and stdout-byte equality, independent Bash 5.3.15 self-controls, native and WASI release replay. Source-fingerprint metadata refreshed after validator changes; all 568 captured case/observation records are unchanged. Browser coverage activates all six waiting PATH/runtime cases and checks shared queries create no transient workers; process identity stays pending.",
+    "localHarnessProvenance": {
+      "baseRevision": "e2d777bb5657506557f763d29ce5a0027e7e8e4b",
+      "adapted": [
+        "scripts/fuzz-shell-functions.ts",
+        "scripts/test-fuzz-shell-functions.ts"
+      ],
+      "importedUnchanged": [
+        "scripts/fuzz-shell-control-flow.mjs",
+        "scripts/shell-process-group.mjs"
+      ],
+      "reason": "Reuse owned deterministic record/replay, process-group supervision, CLI and fixture identity scaffolding; new grammar, manifest validators, fixture programs and observations are original. No external upstream implementation copied or adapted."
     }
   }
 }
