@@ -1511,6 +1511,7 @@
       "shell/engine/src/runtime/tests.rs",
       "shell/engine/src/compat.rs",
       "shell/engine/src/main.rs",
+      "shell/engine/tests/cli.rs",
       "shell/engine/tests/words/path.rs",
       "tests/external-commands.spec.ts",
       "tests/helpers/test-programs.ts",
@@ -1521,7 +1522,7 @@
       "scripts/fixtures/shell-path-seed-42.json"
     ],
     "strategy": "Search only no-slash names using the request PATH and cwd, preserving empty/relative components, earlier non-executable candidates, missing 127 versus non-runnable 126, and Bash directory-only search behavior. Keep the selected executable separate from invoked argv[0], and apply effective temporary PATH bindings including namerefs. Execution and command -v/-V share one cooperative resolver; each query has one command-wide PATH scan allowance. Actual snapshot, candidate, request, metadata and display strings are admitted against local live PATH storage and shared session execution memory; RAII tickets release retired temporaries and remain with retained results through consumers. The runtime access request owns copied path/cwd through nonblocking take/cancel and reactor readiness, never a spawn probe. In-process test registrations are exact paths, with ancestor traversal checked before normalization; no basename fallback or version-skew branch.",
-    "fixture": "One schema-1 manifest provisions real Bash files and simulated shell files/programs. Both boundaries validate the whole manifest before mutation, with raw <=32768 bytes, <=128 nodes, path <=256 UTF-8 bytes, marker <=64 bytes, canonical ordered relative paths and explicit permission/status/program-pair checks. Native/WASI tests use explicit fixture programs, not a second hand-written filesystem tree.",
+    "fixture": "One schema-1 manifest provisions real Bash files and simulated shell files/programs. Both boundaries validate the whole manifest before mutation, with raw <=32768 bytes, <=128 nodes, path <=256 UTF-8 bytes, marker <=64 bytes, canonical ordered relative paths and explicit permission/status/program-pair checks. Native/WASI tests use explicit fixture programs, not a second hand-written filesystem tree. An original standalone-only filesystem adapter preserves the frozen Bash sandbox's read-only /usr mount while cwd/tmp remain writable; it does not change the caller-owned browser filesystem or copy upstream implementation.",
     "gate": "Frozen seeds 1 and 42 contain 156 fixed plus 128 generated observations each, 568 total. Strict healthy status and stdout-byte equality, independent Bash 5.3.15 self-controls, native and WASI release replay. Source-fingerprint metadata refreshed for validator, portable temporary storage and sandbox-cleanup changes; all 568 captured case/observation records are unchanged. Source controls include custom denied-directory cleanup and replaced-symlink boundaries. Native/WASI controls cover original argv, effective nameref prefixes, path spelling, newly created files, global admission, pending cancellation and refunds, exact live-storage boundaries and shared query fuel. Browser coverage activates all six waiting PATH/runtime cases and checks shared queries create no transient workers; process identity stays pending.",
     "localHarnessProvenance": {
       "baseRevision": "e2d777bb5657506557f763d29ce5a0027e7e8e4b",

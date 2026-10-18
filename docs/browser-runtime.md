@@ -116,6 +116,9 @@ The browser uses the **`shell-runtime.wasm`** binary, built from the local
 
 This binary is distinct from the stand-in CLI used by the standalone WASI
 verification harness. Do not substitute the CLI at the browser asset URL.
+The CLI's original fixture adapter keeps `/usr` read-only, matching the frozen
+Bash sandbox, while its working directory and `/tmp` remain writable. That
+standalone policy does not change the caller-owned browser filesystem.
 
 The default worker is the package's already-bundled `dist/shell-worker.js`,
 resolved relative to the package, not a raw `.ts` worker or a Vite-specific
