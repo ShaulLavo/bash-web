@@ -1,6 +1,6 @@
 //! Persistent interactive WASI shell. Host stdin/stdout are runtime_proc endpoints;
 //! blocking preview1 fd_read/fd_write are never used by the shell's reactor.
-#[cfg(any(target_os = "wasi", test))]
+#[cfg(target_os = "wasi")]
 mod terminal;
 #[cfg(not(target_os = "wasi"))]
 fn main() {

@@ -269,28 +269,24 @@ fn parse_manifest(raw: &str) -> Result<FixtureManifest, String> {
         {
             return Err("invalid or duplicate fixture path".to_owned());
         }
-        if let Some((parent, _)) = node.path.rsplit_once('/') {
-            if !manifest.nodes[..index]
+        if let Some((parent, _)) = node.path.rsplit_once('/')
+            && !manifest.nodes[..index]
                 .iter()
                 .any(|prior| prior.kind == FixtureKind::Directory && prior.path == parent)
-            {
-                return Err("fixture parent must be an earlier directory".to_owned());
-            }
+        {
+            return Err("fixture parent must be an earlier directory".to_owned());
         }
         if node.mode > 0o777 {
             return Err("invalid fixture mode".to_owned());
         }
         match (&node.marker, node.status) {
-            (None, None) => (),
+            (None, None) => {}
             (Some(marker), Some(1..=255))
                 if node.kind == FixtureKind::File
                     && !marker.is_empty()
                     && marker.bytes().all(|byte| {
                         byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')
-                    }) =>
-            {
-                ()
-            }
+                    }) => {}
             _ => return Err("invalid fixture program".to_owned()),
         }
     }

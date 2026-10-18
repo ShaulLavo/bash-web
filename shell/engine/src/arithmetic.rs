@@ -245,7 +245,7 @@ pub(crate) fn evaluate_program<'a>(
             if parser.current == Token::End {
                 return Ok(0);
             }
-            let result = parse(&mut parser, 0, true, state, cancel, max, work, 1).await?;
+            let result = parse(&mut parser, (0, true), state, cancel, max, work, 1).await?;
             if parser.current == Token::Unsupported {
                 return Err(2.into());
             }
@@ -291,7 +291,7 @@ fn expression<'a>(
         if parser.current == Token::End {
             return Ok(0);
         }
-        let result = parse(&mut parser, 0, true, state, cancel, max, work, depth + 1).await?;
+        let result = parse(&mut parser, (0, true), state, cancel, max, work, depth + 1).await?;
         if parser.current == Token::Unsupported {
             return Err(2.into());
         }
@@ -330,14 +330,14 @@ fn precedence(op: &str) -> Option<u8> {
 
 fn parse<'a, 's: 'a>(
     p: &'a mut Parser<'s>,
-    min: u8,
-    active: bool,
+    mode: (u8, bool),
     state: &'a SharedState,
     cancel: &'a Cancel,
     max: usize,
     work: &'a mut Work,
     depth: usize,
 ) -> ResultFuture<'a, i64> {
+    let (min, active) = mode;
     admitted(work, move |work| async move {
         if depth >= MAX_DEPTH {
             return Err(2.into());
@@ -356,7 +356,7 @@ fn parse<'a, 's: 'a>(
             } else {
                 read(name, active, state, cancel, max, work, depth + 1).await?
             };
-            let rhs = parse(p, 1, active, state, cancel, max, work, depth + 1).await?;
+            let rhs = parse(p, (1, active), state, cancel, max, work, depth + 1).await?;
             let result = if op == "=" {
                 rhs
             } else {
@@ -385,8 +385,7 @@ fn parse<'a, 's: 'a>(
                 p.advance(work, cancel).await?;
                 let yes = parse(
                     p,
-                    0,
-                    active && value != 0,
+                    (0, active && value != 0),
                     state,
                     cancel,
                     max,
@@ -400,8 +399,7 @@ fn parse<'a, 's: 'a>(
                 p.advance(work, cancel).await?;
                 let no = parse(
                     p,
-                    2,
-                    active && value == 0,
+                    (2, active && value == 0),
                     state,
                     cancel,
                     max,
@@ -422,8 +420,7 @@ fn parse<'a, 's: 'a>(
             let rhs_active = active && !(op == "&&" && value == 0 || op == "||" && value != 0);
             let rhs = parse(
                 p,
-                if op == "**" { prec } else { prec + 1 },
-                rhs_active,
+                (if op == "**" { prec } else { prec + 1 }, rhs_active),
                 state,
                 cancel,
                 max,
@@ -513,7 +510,7 @@ fn unary<'a, 's: 'a>(
             }
             Token::Open => {
                 p.advance(work, cancel).await?;
-                let value = parse(p, 0, active, state, cancel, max, work, depth + 1).await?;
+                let value = parse(p, (0, active), state, cancel, max, work, depth + 1).await?;
                 if p.current != Token::Close {
                     return fault("missing `)'", work);
                 }

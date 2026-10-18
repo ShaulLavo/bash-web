@@ -560,11 +560,11 @@ foreign-adapter teardown guarantee. Manual pipe observations retain no relay or
 disposal ownership and clear closed observations on a bounded timer.
 
 The browser acceptance harness in `tests/browser-main.ts` and
-`tests/helpers/{test-programs.ts,bun-fixture.ts}` is original package composition
+`tests/helpers/test-programs.ts` is original package composition
 around the page's Waffle runtime. The page owns its source-guest lease;
 `test-programs.ts` registers compiled cooperative `test-guest` and source-admitted,
 instrumented `test-spin` through the existing shell adapter, without copied
-runtime or ABI-host implementations. The injected installer contract describes
+runtime or ABI-host implementations. The documented installer contract describes
 future Bun composition. The required public Bun installer/worker and matching
 verified guest descriptor are not yet available at a published dependency pin:
 there is no Bun host package dependency, implementation, guest binary or guest

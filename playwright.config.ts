@@ -1,5 +1,8 @@
 import { defineConfig } from "@playwright/test";
 
+const port = process.env.BASH_WEB_TEST_PORT ?? "4198";
+const baseURL = `http://127.0.0.1:${port}`;
+
 export default defineConfig({
   testDir: "./tests",
   testMatch: "**/*.spec.ts",
@@ -7,7 +10,7 @@ export default defineConfig({
   workers: 1,
   timeout: 60000,
   use: {
-    baseURL: "http://127.0.0.1:4198",
+    baseURL,
     viewport: { width: 1200, height: 800 },
   },
   projects: [
@@ -25,8 +28,8 @@ export default defineConfig({
   ],
   webServer: {
     command: "npm run serve",
-    env: { PORT: "4198" },
-    url: "http://127.0.0.1:4198",
+    env: { PORT: port },
+    url: baseURL,
     reuseExistingServer: false,
     timeout: 30000,
   },

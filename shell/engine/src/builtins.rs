@@ -981,7 +981,7 @@ async fn unset(
         work.admit_storage(target_bytes).map_err(error_status)?;
         let removed = state.borrow_mut().unset_variable(name);
         match removed {
-            Err(()) => {
+            Err(_) => {
                 let diagnostic =
                     format!("/usr/bin/bash: unset: {name}: cannot unset: readonly variable\n");
                 diagnose(fds, &diagnostic, context).await?;

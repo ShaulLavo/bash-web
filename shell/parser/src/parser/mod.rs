@@ -38,7 +38,6 @@ pub use ast::*;
 pub use budget::{BudgetError, validate as validate_budget};
 pub use lexer::{Lexer, SpannedToken};
 pub use print_cmd::{command_string, function_string, function_string_bounded};
-pub(crate) use print_cmd::word_text;
 pub use span::{Position, Span};
 pub use subst_scan::{Step as CommandBoundaryStep, SubstScanner as CommandBoundaryScanner};
 
@@ -288,17 +287,6 @@ impl<'a> Parser<'a> {
         self.lexer.set_track_plain(options.aliases.is_some());
         self.lexer.set_extglob_bang(options.extglob);
         self.options = options;
-    }
-
-    /// Count lines from `line` (text taken from later in a larger source).
-    pub(crate) fn starting_at_line(mut self, line: usize) -> Self {
-        let shift = line.saturating_sub(1);
-        if shift > 0 {
-            self.lexer.shift_lines(shift);
-            self.current_span.start.line += shift;
-            self.current_span.end.line += shift;
-        }
-        self
     }
 
     /// Expand an alias named by the current word, if it is one: its value
@@ -639,22 +627,6 @@ impl<'a> Parser<'a> {
                 error: format!("syntax error while looking for matching `)' at line {line}"),
             }),
         }
-    }
-
-    /// Prompt reparses must charge the same request budget as their caller.
-    pub(crate) fn parse_prompt_body(
-        input: &str,
-        max_depth: usize,
-        max_fuel: usize,
-        budget: crate::limits::ExecutionBudget,
-    ) -> Result<Word> {
-        let parser =
-            Parser::with_limits(input, max_depth, max_fuel).with_execution_budget(budget.clone());
-        let word = parser.parse_word(heredoc_body_escapes(input));
-        // Word parsing can turn child parse errors into literal text. A poisoned
-        // request must still fail closed rather than continue with that fallback.
-        budget.check()?;
-        Ok(word)
     }
 
     /// Create a parse error with the current position. A grammar error
@@ -1133,12 +1105,9 @@ impl<'a> Parser<'a> {
         }
         let mut rest = Vec::new();
         while let Some(op) = self.list_operator(top_level, &mut rest)? {
-            match self.parse_pipeline()? {
-                Some(cmd) => push_list_command(&mut rest, op, cmd),
-                None => {
-                    end_list_without_command(&mut rest, op, self.current_span);
-                    break;
-                }
+            if !push_list_command(&mut rest, op, self.parse_pipeline()?) {
+                end_list_without_command(&mut rest, op, self.current_span);
+                break;
             }
         }
         self.check_list_end()?;
@@ -1238,9 +1207,8 @@ impl<'a> Parser<'a> {
         }
         let mut commands = pipeline_commands(first);
         while self.next_pipeline_stage(&mut commands)? {
-            match self.parse_command()? {
-                Some(cmd) => push_pipeline_command(&mut commands, cmd),
-                None => return Err(self.error("expected command after |")),
+            if !push_pipeline_command(&mut commands, self.parse_command()?) {
+                return Err(self.error("expected command after |"));
             }
         }
         finish_pipeline(commands, negated, start_span.merge(self.current_span))
@@ -3324,16 +3292,6 @@ impl<'a> Parser<'a> {
             result.push((current, is_quoted));
         }
         result
-    }
-
-    fn strip_quotes(s: &str) -> &str {
-        if s.len() >= 2
-            && ((s.starts_with('"') && s.ends_with('"'))
-                || (s.starts_with('\'') && s.ends_with('\'')))
-        {
-            return &s[1..s.len() - 1];
-        }
-        s
     }
 
     /// Find the assignment operator, ignoring `=` characters inside array subscripts.
@@ -6323,14 +6281,27 @@ fn pipeline_commands(first: Option<Box<Command>>) -> Vec<Command> {
     first.into_iter().map(|cmd| *cmd).collect()
 }
 
+// Consume optional parser results here, keeping Command moves off recursive WASI frames.
 #[inline(never)]
-fn push_pipeline_command(commands: &mut Vec<Command>, cmd: Box<Command>) {
+fn push_pipeline_command(commands: &mut Vec<Command>, cmd: Option<Box<Command>>) -> bool {
+    let Some(cmd) = cmd else {
+        return false;
+    };
     commands.push(*cmd);
+    true
 }
 
 #[inline(never)]
-fn push_list_command(rest: &mut Vec<(ListOperator, Command)>, op: ListOperator, cmd: Box<Command>) {
+fn push_list_command(
+    rest: &mut Vec<(ListOperator, Command)>,
+    op: ListOperator,
+    cmd: Option<Box<Command>>,
+) -> bool {
+    let Some(cmd) = cmd else {
+        return false;
+    };
     rest.push((op, *cmd));
+    true
 }
 
 /// `cmd &` followed by nothing still records the empty background job.

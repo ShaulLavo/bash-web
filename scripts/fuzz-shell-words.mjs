@@ -679,23 +679,22 @@ function main() {
       incrementCount(byOperator, testCase.operator, result.classification);
       for (const feature of testCase.featureTags ?? [])
         incrementCount(byFeature, feature, result.classification);
-      if (result.classification === "MISMATCH") {
-        mismatchTotal++;
-        if (mismatches.length >= 50) continue;
-        const minimized = shrinkCase(testCase, bashBin, shellBin, options.timeoutMs, {
-          ...result,
-          case: testCase,
-        });
-        mismatches.push({
-          id: minimized.case.id,
-          operator: minimized.case.operator,
-          quote: minimized.case.quote,
-          featureTags: minimized.case.featureTags,
-          script: minimized.script,
-          bash: resultView(minimized.bash),
-          ours: resultView(minimized.ours),
-        });
-      }
+      if (result.classification !== "MISMATCH") continue;
+      mismatchTotal++;
+      if (mismatches.length >= 50) continue;
+      const minimized = shrinkCase(testCase, bashBin, shellBin, options.timeoutMs, {
+        ...result,
+        case: testCase,
+      });
+      mismatches.push({
+        id: minimized.case.id,
+        operator: minimized.case.operator,
+        quote: minimized.case.quote,
+        featureTags: minimized.case.featureTags,
+        script: minimized.script,
+        bash: resultView(minimized.bash),
+        ours: resultView(minimized.ours),
+      });
     }
     const report = {
       version: 1,

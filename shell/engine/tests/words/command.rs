@@ -830,12 +830,12 @@ fn isolated_readers_inherit_async_identity_without_changing_the_caller() {
     assert_eq!(capture[0], "127");
     assert_eq!(capture[1], parent);
     assert_ne!(capture[2], parent);
-    assert_eq!(calls[1], [parent.clone()]);
+    assert_eq!(calls[1], std::slice::from_ref(&parent));
     assert_eq!(calls[2], ["127"]);
     assert_eq!(calls[3][0], calls[3][1]);
     assert_ne!(calls[3][0], parent);
     assert_eq!(calls[4], ["1"]);
-    assert_eq!(calls[5], [parent.clone()]);
+    assert_eq!(calls[5], std::slice::from_ref(&parent));
     assert_eq!(calls[6], [parent]);
     assert_eq!(calls[7], ["1"]);
     assert!(!rig.shell.state().borrow().bindings().contains_key("local"));

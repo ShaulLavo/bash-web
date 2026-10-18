@@ -797,14 +797,14 @@ impl State {
     /// calling function is removed from that frame instead, revealing the
     /// value it shadowed, as Bash's dynamic scoping does. Returns whether a
     /// variable existed; readonly variables are an error.
-    pub fn unset_variable(&mut self, name: &str) -> Result<bool, ()> {
+    pub fn unset_variable(&mut self, name: &str) -> Result<bool, i32> {
         if !self.namerefs.contains_key(name) {
             return self.unset_binding(name);
         }
         let explicit_ifs = name == "IFS";
         let name = match self.resolve_scalar_target(name) {
             ScalarResolution::Target(name) => name.to_owned(),
-            ScalarResolution::Cycle | ScalarResolution::DepthExceeded => return Err(()),
+            ScalarResolution::Cycle | ScalarResolution::DepthExceeded => return Err(1),
         };
         let removed = self.unset_binding(&name)?;
         if explicit_ifs {
@@ -812,9 +812,9 @@ impl State {
         }
         Ok(removed)
     }
-    fn unset_binding(&mut self, name: &str) -> Result<bool, ()> {
+    fn unset_binding(&mut self, name: &str) -> Result<bool, i32> {
         if self.is_readonly(name) {
-            return Err(());
+            return Err(1);
         }
         let was_dynamic =
             name == "EPOCHREALTIME" && self.epoch_realtime && !self.epoch_realtime_shadowed();
@@ -828,7 +828,7 @@ impl State {
         if let Some(index) = frame
             && index + 1 != self.locals.len()
         {
-            let local = self.locals[index].remove(name).ok_or(())?;
+            let local = self.locals[index].remove(name).ok_or(1)?;
             restore_nameref(&mut self.namerefs, name, local.nameref);
             if local.exported {
                 self.exported.insert(name.to_owned());
@@ -854,7 +854,7 @@ impl State {
         }
         // Removing a current local keeps its saved outer binding but releases
         // its live value charge. Shrinking cannot fail admission.
-        self.reserve_local_value(name, 0).map_err(|_| ())?;
+        self.reserve_local_value(name, 0).map_err(|_| 1)?;
         self.exported.remove(name);
         let removed = self.variables.remove(name).is_some() || was_dynamic;
         if name == "IFS" {
@@ -1123,7 +1123,7 @@ fn snapshot_node_bytes<T>() -> Result<usize, Error> {
     std::mem::size_of::<(String, T)>()
         .checked_add(std::mem::size_of::<usize>())
         .and_then(|slot| slot.checked_mul(16))
-        .ok_or_else(|| Error::Status(2))
+        .ok_or(Error::Status(2))
 }
 
 async fn snapshot_map<T: SnapshotValue>(

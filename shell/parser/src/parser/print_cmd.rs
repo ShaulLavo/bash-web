@@ -127,18 +127,10 @@ impl<'a> PrintQuota<'a> {
     }
 }
 
+#[derive(Default)]
 struct Output<'a> {
     text: String,
     quota: Option<Rc<PrintQuota<'a>>>,
-}
-
-impl<'a> Default for Output<'a> {
-    fn default() -> Self {
-        Self {
-            text: String::new(),
-            quota: None,
-        }
-    }
 }
 
 impl<'a> Output<'a> {
@@ -192,6 +184,7 @@ impl std::fmt::Write for Output<'_> {
     }
 }
 
+#[derive(Default)]
 struct Printer<'a> {
     out: Output<'a>,
     indentation: usize,
@@ -771,21 +764,6 @@ impl<'a> Printer<'a> {
         self.print_redirector(redirect, default_fd);
         self.out.push_str(suffix);
         self.print_word(&redirect.target);
-    }
-}
-
-impl<'a> Default for Printer<'a> {
-    fn default() -> Self {
-        Self {
-            out: Output::default(),
-            indentation: 0,
-            skip_this_indent: 0,
-            was_heredoc: false,
-            printing_connection: 0,
-            inside_function_def: 0,
-            deferred: Vec::new(),
-            printing_comsub: false,
-        }
     }
 }
 
@@ -1503,7 +1481,9 @@ fn is_empty_placeholder(cmd: &Command) -> bool {
             && sc.name.parts.iter().all(|p| matches!(p, WordPart::Literal(s) if s.is_empty())))
 }
 
+
 /// One clause of `for ((...))`: leading blanks dropped, empty means `1`.
+#[cfg(test)]
 fn arith_for_part(p: &str) -> String {
     let t = p.trim_start();
     if t.trim().is_empty() {
@@ -1522,54 +1502,9 @@ fn redirector(r: &Redirect, default_fd: i32) -> String {
         _ => String::new(),
     }
 }
-
-fn redirection_text(r: &Redirect) -> String {
-    let target = word_text(&r.target);
-    match r.kind {
-        RedirectKind::Output => format!("{}> {target}", redirector(r, 1)),
-        RedirectKind::Clobber => format!("{}>| {target}", redirector(r, 1)),
-        RedirectKind::Append => format!("{}>> {target}", redirector(r, 1)),
-        RedirectKind::Input => format!("{}< {target}", redirector(r, 0)),
-        RedirectKind::HereString => format!("{}<<< {target}", redirector(r, 0)),
-        RedirectKind::ReadWrite => format!("{}<> {target}", redirector(r, 0)),
-        RedirectKind::OutputBoth => format!("&> {target}"),
-        RedirectKind::DupOutput => {
-            let fd_is_default = r.fd_var.is_none() && r.fd.is_none_or(|fd| fd == 1);
-            let word_target = !target.starts_with(|c: char| c == '-' || c.is_ascii_digit())
-                && !target.starts_with('$');
-            if fd_is_default && word_target {
-                format!("&> {target}")
-            } else {
-                format!("{}>&{target}", redirector(r, 1))
-            }
-        }
-        RedirectKind::DupInput => format!("{}<&{target}", redirector(r, 0)),
-        RedirectKind::HereDoc | RedirectKind::HereDocStrip => String::new(),
-    }
-}
-
-fn assignment_text(a: &Assignment) -> String {
-    let mut s = a.name.clone();
-    if let Some(idx) = &a.index {
-        s.push('[');
-        s.push_str(idx);
-        s.push(']');
-    }
-    s.push_str(if a.append { "+=" } else { "=" });
-    match &a.value {
-        AssignmentValue::Scalar(w) => s.push_str(&word_text(w)),
-        AssignmentValue::Array(elems) => {
-            let e: Vec<String> = elems.iter().map(word_text).collect();
-            s.push('(');
-            s.push_str(&e.join(" "));
-            s.push(')');
-        }
-    }
-    s
-}
-
 /// A word as written: its source text without line continuations, or a
 /// reconstruction when the parser did not record the source.
+#[cfg(test)]
 pub(crate) fn word_text(w: &Word) -> String {
     match &w.raw {
         Some(raw) => normalize_raw_word(raw),
@@ -1627,6 +1562,7 @@ fn normalize_raw_word(raw: &str) -> String {
     out
 }
 
+#[cfg(test)]
 fn reconstruct_word(w: &Word) -> String {
     let mut s = String::new();
     for part in &w.parts {
@@ -1686,6 +1622,7 @@ pub fn command_string(
 }
 
 /// A substitution body as bash stores it after parsing (`print_comsub`).
+#[cfg(test)]
 pub(crate) fn comsub_commands(cmds: &[Command]) -> String {
     let mut p = Printer {
         printing_comsub: true,
