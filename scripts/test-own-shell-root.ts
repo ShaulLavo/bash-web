@@ -5,11 +5,54 @@ import { installNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
 import { fixture } from "./own-shell-runner-fixture.ts";
 import { runRoot } from "./waffle-compat.ts";
 import type * as Api from "./waffle-node-api.ts";
+import type { Runtime } from "waffle";
 import type { RuntimeWorkerMessage } from "waffle/browser/worker";
 
 const waffle = (await import(
   new URL("../.build/node/api.mjs", import.meta.url).href
 )) as typeof Api;
+
+type ProcessService = Awaited<ReturnType<Runtime["processes"]>>;
+type Supervisor = Awaited<ReturnType<ProcessService["ready"]>>;
+
+function rootWorker(OriginalWorker: typeof Worker, configure: (worker: Worker) => void) {
+  return class extends OriginalWorker {
+    constructor(url: string | URL, options?: WorkerOptions) {
+      super(url, options);
+      if (String(url).endsWith("/root.mjs")) configure(this);
+    }
+  };
+}
+
+function queueRootMessages(worker: Worker, supervisor: Supervisor, beforeDelivery: () => void) {
+  const queued: MessageEvent<RuntimeWorkerMessage>[] = [];
+  let handler: ((event: MessageEvent<RuntimeWorkerMessage>) => void) | null = null;
+  const deliver = async (event: MessageEvent<RuntimeWorkerMessage>) => {
+    queued.push(event);
+    if (event.data.type !== "exit") return;
+    const root = Array.from(supervisor.table.values()).find((record) => record.parentPid === 0);
+    assert.ok(root);
+    assert.equal(waffle.readOutcome(root.outcome)?.code, 7);
+    supervisor.exit(root.pid, 7);
+    await setImmediate();
+    beforeDelivery();
+    for (const message of queued) handler?.(message);
+  };
+  Object.defineProperty(worker, "onmessage", {
+    get: () => deliver,
+    set: (listener: typeof handler) => {
+      handler = listener;
+    },
+  });
+}
+
+function killRootOnStart(worker: Worker, service: ProcessService, supervisor: Supervisor) {
+  worker.postMessage = () => {
+    const root = Array.from(supervisor.table.values()).find((record) => record.parentPid === 0);
+    assert.ok(root);
+    void service.kill(root.pid, 9);
+  };
+}
 
 test("root completion waits for queued output before acknowledging ordinary exit", async () => {
   installNodeWorkers();
@@ -30,33 +73,9 @@ test("root completion waits for queued output before acknowledging ordinary exit
     unobserve = supervisor.onChildExit(() => {
       rootExitObserved = true;
     });
-    class QueuedRootWorker extends OriginalWorker {
-      constructor(url: string | URL, options?: WorkerOptions) {
-        super(url, options);
-        if (!String(url).endsWith("/root.mjs")) return;
-        const queued: MessageEvent<RuntimeWorkerMessage>[] = [];
-        let handler: ((event: MessageEvent<RuntimeWorkerMessage>) => void) | null = null;
-        const deliver = async (event: MessageEvent<RuntimeWorkerMessage>) => {
-          queued.push(event);
-          if (event.data.type !== "exit") return;
-          const root = Array.from(supervisor.table.values()).find(
-            (record) => record.parentPid === 0,
-          );
-          assert.ok(root);
-          assert.equal(waffle.readOutcome(root.outcome)?.code, 7);
-          supervisor.exit(root.pid, 7);
-          await setImmediate();
-          observedBeforeDelivery = rootExitObserved;
-          for (const message of queued) handler?.(message);
-        };
-        Object.defineProperty(this, "onmessage", {
-          get: () => deliver,
-          set: (listener: typeof handler) => {
-            handler = listener;
-          },
-        });
-      }
-    }
+    const QueuedRootWorker = rootWorker(OriginalWorker, (worker) =>
+      queueRootMessages(worker, supervisor, () => (observedBeforeDelivery = rootExitObserved)),
+    );
     Object.defineProperty(globalThis, "Worker", { value: QueuedRootWorker, configurable: true });
     const status = await runRoot(
       runtime,
@@ -95,13 +114,9 @@ test("a signaled root settles without an ordinary worker acknowledgement", async
   try {
     const service = await runtime.processes();
     const supervisor = await service.ready();
-    class UnstartedRootWorker extends OriginalWorker {
-      postMessage() {
-        const root = Array.from(supervisor.table.values()).find((record) => record.parentPid === 0);
-        assert.ok(root);
-        void service.kill(root.pid, 9);
-      }
-    }
+    const UnstartedRootWorker = rootWorker(OriginalWorker, (worker) =>
+      killRootOnStart(worker, service, supervisor),
+    );
     Object.defineProperty(globalThis, "Worker", { value: UnstartedRootWorker, configurable: true });
     const output: Buffer[] = [];
     const status = await runRoot(
