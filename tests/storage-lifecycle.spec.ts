@@ -68,8 +68,8 @@ test("awaited disposal cancels queued storage before a replacement runtime is ac
     const restarted = second.evaluate(() => window.bashWeb?.restart());
     await waiting(second);
     await page.close();
-    await restarted;
     await startupReady(second);
+    await restarted;
   } finally {
     await second.close();
   }
