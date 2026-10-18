@@ -64,7 +64,13 @@ fn selected_lazy_operands_still_enforce_plain_variable_reads() {
             b"/usr/bin/bash: line 1: other: unbound variable\n",
             "{expression}"
         );
-        assert!(!rig.shell.state().borrow().variables.contains_key("missing"));
+        assert!(
+            !rig.shell
+                .state()
+                .borrow()
+                .bindings()
+                .contains_key("missing")
+        );
     }
 }
 
@@ -274,12 +280,12 @@ fn prefix_rhs_failure_is_fatal_even_when_the_command_has_a_heredoc() {
             rig.shell
                 .state()
                 .borrow()
-                .variables
+                .bindings()
                 .get("TEMP")
                 .map(String::as_str),
             Some("before")
         );
-        assert!(!rig.shell.state().borrow().variables.contains_key("value"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("value"));
     }
     let rig = Rig::new(Limits::default());
     let observed = rig.calls.clone();
@@ -374,12 +380,12 @@ fn cancellation_before_a_later_unbound_read_has_no_partial_dispatch_or_diagnosti
         rig.shell
             .state()
             .borrow()
-            .variables
+            .bindings()
             .get("TEMP")
             .map(String::as_str),
         Some("before")
     );
-    assert!(!rig.shell.state().borrow().variables.contains_key("value"));
+    assert!(!rig.shell.state().borrow().bindings().contains_key("value"));
 }
 
 #[test]

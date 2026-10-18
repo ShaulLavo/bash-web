@@ -33,7 +33,7 @@ impl Expansion<'_> {
         let code = result?;
         self.work.substitution_status = Some(code);
         // Bash updates `$?` as soon as each substitution finishes.
-        state.borrow_mut().status = code;
+        state.borrow_mut().publish_status(code);
         Ok(())
     }
 
@@ -178,7 +178,7 @@ impl Expansion<'_> {
             return Err(130.into());
         }
         self.work.substitution_status = Some(2);
-        state.borrow_mut().status = 2;
+        state.borrow_mut().publish_status(2);
         self.segment(
             "",
             Protection::expansion(scalar || quoted, state),

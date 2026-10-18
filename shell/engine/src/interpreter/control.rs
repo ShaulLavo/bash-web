@@ -253,7 +253,7 @@ async fn for_assignment_body(
     // The value moves into the binding, but the owned key and a possible
     // new B-tree node must be admitted before the state map grows.
     let binding_bytes = command.variable.len().saturating_add(
-        if state.borrow().variables.contains_key(&command.variable) {
+        if state.borrow().bindings().contains_key(&command.variable) {
             0
         } else {
             std::mem::size_of::<(String, String)>() * 16

@@ -33,6 +33,15 @@ GNU bash executable code is not included. Keep these notices and licenses with
 copies of the fixture. The new CLI's fixture helpers and replay/comparison scripts
 are original code; no additional upstream implementation is ported.
 
+The binding ownership and restoration move in `shell/engine/src/state.rs` and
+its original `state/bindings_tests.rs` controls extracts the original local
+`BuiltinPrefixFrame` from `interpreter.rs` at bash-web
+`163386141175458cf9d265e70e92d0c5074333dc`. One state-owned guard preserves
+separate expansion and builtin replay policies; function locals keep their
+own scope guard. Private storage, immutable raw views, startup initialization
+and result-publication operations introduce no copied upstream code. Existing
+Bashkit-derived variable and expansion classifications below remain applicable.
+
 The shared execution module `shell/engine/src/exec.rs` is original engine
 admission and ownership machinery extracted from the local interpreter,
 expansion and arithmetic adapters. It owns shared fault metadata and the charged

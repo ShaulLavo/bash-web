@@ -744,8 +744,8 @@ mod tests {
             let state = State::default().shared();
             state
                 .borrow_mut()
-                .variables
-                .insert("x".into(), "7".repeat(1000));
+                .assign_parameter("x".into(), "7".repeat(1000))
+                .unwrap();
             let cancel = Cancel::new();
             let mut empty = Work::new(100_000, 0, 1);
             assert!(matches!(
@@ -757,7 +757,7 @@ mod tests {
                 evaluate("x", &state, &cancel, 999, &mut bounded).await,
                 Err(Error::Status(2))
             ));
-            assert_eq!(state.borrow().variables["x"].len(), 1000);
+            assert_eq!(state.borrow().bindings()["x"].len(), 1000);
             let mut fuel = Work::new(1, 1_000_000, 1);
             assert!(matches!(
                 evaluate("1+2", &state, &cancel, 4096, &mut fuel).await,
@@ -784,12 +784,12 @@ mod tests {
         });
         for _ in 0..100 {
             ex.drive(1);
-            if observed.borrow().variables.contains_key("x") {
+            if observed.borrow().bindings().contains_key("x") {
                 break;
             }
         }
         assert_eq!(
-            observed.borrow().variables.get("x").map(String::as_str),
+            observed.borrow().bindings().get("x").map(String::as_str),
             Some("9")
         );
         assert!(
@@ -798,7 +798,7 @@ mod tests {
         );
         cancel.cancel();
         assert_eq!(finish(&ex, job), 130);
-        assert_eq!(observed.borrow().variables["x"], "9");
+        assert_eq!(observed.borrow().bindings()["x"], "9");
     }
 
     #[test]
@@ -806,8 +806,14 @@ mod tests {
         let ex = Executor::new();
         let job = ex.spawn(async {
             let state = State::default().shared();
-            state.borrow_mut().variables.insert("x".into(), "y".into());
-            state.borrow_mut().variables.insert("y".into(), "x".into());
+            state
+                .borrow_mut()
+                .assign_parameter("x".into(), "y".into())
+                .unwrap();
+            state
+                .borrow_mut()
+                .assign_parameter("y".into(), "x".into())
+                .unwrap();
             let cancel = Cancel::new();
             let mut work = Work::new(1_000_000, 1_000_000, 1);
             assert!(matches!(

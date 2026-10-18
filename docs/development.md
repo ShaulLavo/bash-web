@@ -170,8 +170,48 @@ function entry resets structural depth only (256), while a new task also resets
 eval reader depth (16). Retained sources share their text and allocation owner
 through stored functions and descendant contexts. Test-only poll/drop/call
 measurements share one executor-owned thread-local observer; memory observations
-stay with the storage budget. Binding restoration and the parsing facade are
-later plan steps, not part of this move.
+stay with the storage budget. Parsing orchestration remains above these types.
+
+### Binding ownership
+
+| Area | Classification | Local source and reason |
+| --- | --- | --- |
+| Binding storage and scope restoration | Original local ownership adapters; no newly copied upstream code | `state.rs` owns scalar/attribute/nameref/function/positional/local writes and every restoration guard. `state/bindings_tests.rs` pins the distinct lifecycle policies. |
+
+The binding move starts from local bash-web
+`163386141175458cf9d265e70e92d0c5074333dc`, especially the interpreter's
+original `BuiltinPrefixFrame` and the state's existing `PrefixFrame` and
+`FunctionFrame`. The unchanged Bashkit-derived expansion rules retain their
+separate classification in `sources.lock.json` and the notices.
+
+Callers request checked parameter assignment, declarations, temporary binding
+scopes, function scopes, subshell snapshots, startup environment initialization
+or execution-result publication. Read views borrow immutable raw storage: they
+must not dereference namerefs, format dynamic parameters or substitute special
+parameter values. No mutable-map accessor is available, including to fixtures.
+Fixture setup now uses state operations; it is not a production write path.
+
+One `state::PrefixFrame` restores temporary scalar bindings, but its policies
+are intentionally different. Expansion saves stay in state so completed RHS
+assignments update only the last expansion frame's saved binding. Installation
+checks scalar targets and readonly state, and direct IFS prefixes restore their
+cached classification and separator on drop. Builtin replay saves stay with the
+guard, outside subshell snapshots; replay does not recheck readonly state or
+refresh/restore IFS caches. Builtin attribute and nameref side effects survive
+scalar restoration. Its dynamic-clock suspension restores only the hook that
+the guard actually suspended. All asynchronous admission precedes replay;
+later per-entry admission failures still unwind already installed bindings.
+
+`FunctionFrame` remains distinct: its temporary prefix scope sits below its
+local-declaration scope, and it owns positional restoration, local export and
+nameref restoration, storage tickets and function-return IFS refresh. Drop
+restores synchronously without cancellation checks. Assignment-only expansion
+commit still admits aggregate positive local-ticket growth before changing any
+binding owner. The standalone CLI replaces startup scalar bindings and inserts
+an absent non-exported PATH; the browser adapter extends default bindings and
+exports the retained default IFS without inventing PATH. Execution status,
+pipeline status and async identity are published separately at their existing
+phases, not assigned as ordinary scalar strings.
 
 ## Repository layout
 
