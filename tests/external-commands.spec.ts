@@ -45,7 +45,6 @@ test("external bun executes through normal command lookup", async ({ page }) => 
 });
 
 test("printf octal escapes produce exact bytes for an external guest", async ({ page }) => {
-  test.fixme(true, "Pending plan 004 printf escapes unit: octal escapes are not implemented.");
   await open(page);
   await command(page, `printf 'hi\\000\\377\\r\\n' | test-guest bytes`);
   await output(page, "BYTES:104,105,0,255,13,10");
