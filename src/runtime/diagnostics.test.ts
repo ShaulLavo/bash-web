@@ -74,8 +74,13 @@ test("snapshot does not hide invalid process directories", (context) => {
   const transport = createWorkerProcessTransport({ capacity: 8 });
   const observation = observeRoot(runtime, transport, new SharedArrayBuffer(8));
   context.after(() => observation.retired());
-  transport.directory = new SharedArrayBuffer(7);
+  const directory = transport.directory;
+  let reads = 0;
+  Object.defineProperty(transport, "directory", {
+    get: () => (++reads === 1 ? directory : new SharedArrayBuffer(7)),
+  });
   assert.throws(() => runtimeSnapshot(runtime), TypeError);
+  assert.equal(reads, 2, "invalid state lookup must escape the per-entry collection guard");
 });
 
 for (const retire of [false, true]) {
