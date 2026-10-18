@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.55",
+  "version": "0.0.56",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -94,11 +94,11 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.1",
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#afe9cc1f3f93ea84929903e5a55854dbfd973448",
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#33ece68f9f484d99b8a57a675de71d847e248051",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#afe9cc1f3f93ea84929903e5a55854dbfd973448"
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#33ece68f9f484d99b8a57a675de71d847e248051"
   },
   "overrides": {
     "esbuild": "0.28.2"
@@ -108,7 +108,7 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "waffle@0.0.47": true
+    "waffle@0.0.50": true
   },
   "trustedDependencies": [
     "waffle",

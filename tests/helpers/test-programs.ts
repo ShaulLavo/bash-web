@@ -75,6 +75,19 @@ export async function registerTestPrograms(
     module: new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])),
     cooperative: true,
   });
+  // Metadata succeeds, but the real registry rejects loading before the adapter can run.
+  signal?.throwIfAborted();
+  markStartup(onStartupStage, "test-lazy-start-failure-bin-write-requested");
+  await runtime.filesystem.writeFile("/bin/test-lazy-start-failure", new Uint8Array());
+  markStartup(onStartupStage, "test-lazy-start-failure-bin-write-resolved");
+  signal?.throwIfAborted();
+  runtime.registerProgram("/bin/test-lazy-start-failure", {
+    adapter: "bash-web:preview1",
+    module() {
+      throw new WebAssembly.CompileError("review loader failure");
+    },
+    cooperative: true,
+  });
   signal?.throwIfAborted();
   markStartup(onStartupStage, "test-filesystem-drain-requested");
   await runtime.filesystem.drain();
