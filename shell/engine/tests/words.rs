@@ -1,5 +1,7 @@
 //! Word cases adapted from the pinned Bashkit sources in sources.lock.json.
 //! The fixture observes argv directly, without relying on printf's format rules.
+#[cfg(not(feature = "acceptance-utilities"))]
+mod support;
 use futures::FutureExt;
 use shell_engine::{
     Limits, Session,
@@ -52,6 +54,8 @@ impl Rig {
         fds.insert(1, out);
         fds.insert(2, err);
         shell.set_descriptors(fds).unwrap();
+        #[cfg(not(feature = "acceptance-utilities"))]
+        support::register_utilities(&host, &fs, false);
         Self {
             ex,
             shell,
@@ -116,6 +120,7 @@ impl Drop for Rig {
         panic!("fixture shutdown did not finish");
     }
 }
+
 fn check(source: &str, expected: &[&[&str]]) {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run(source), 0, "{source}");

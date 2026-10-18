@@ -2920,6 +2920,15 @@ fn dispatch_simple_command(
     )
 }
 
+fn omitted_command_reason(name: &str) -> Option<String> {
+    let capability = commands::lookup(name)?.omitted_capability()?;
+    Some(format!(
+        "command not found (bash-web {}; omitted capability: {})",
+        commands::build_name(),
+        capability.name()
+    ))
+}
+
 async fn dispatch_simple_command_body(
     prepared: PreparedCommand,
     state: SharedState,
@@ -3145,15 +3154,7 @@ async fn dispatch_simple_command_body(
                 } else {
                     b"command not found".as_slice()
                 };
-                let omitted = commands::lookup(&name)
-                    .and_then(commands::Command::omitted_capability)
-                    .map(|capability| {
-                        format!(
-                            "command not found (bash-web {}; omitted capability: {})",
-                            commands::build_name(),
-                            capability.name()
-                        )
-                    });
+                let omitted = omitted_command_reason(&name);
                 command_builtin::execution_failure(
                     &fds,
                     &context,
@@ -4145,10 +4146,12 @@ mod residual_review_tests {
     #[test]
     fn residual_review_successful_process_substitution_transfers_nested_residual() {
         let rig = Harness::new();
-        assert_eq!(
-            rig.run("cat <(x=$(inherit >/dev/null); echo READY); wait \"$!\""),
-            0
-        );
+        let source = if cfg!(feature = "acceptance-utilities") {
+            r#"cat <(x=$(inherit >/dev/null); echo READY); wait "$!""#
+        } else {
+            r#"consume() { while IFS= read -r line; do printf '%s\n' "$line"; done < "$1"; }; consume <(x=$(inherit >/dev/null); echo READY); wait "$!""#
+        };
+        assert_eq!(rig.run(source), 0);
         assert_eq!(rig.output.bytes(), b"READY\n");
         assert_eq!(
             rig.host.inner.active_count(),

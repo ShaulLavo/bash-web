@@ -1266,10 +1266,15 @@ fn runtime_pipeline_builtins_external_and_fs_share_descriptor_namespace() {
         Limits::default(),
     );
     session.set_descriptors(runtime.stdio().unwrap()).unwrap();
+    let script = if cfg!(feature = "acceptance-utilities") {
+        "printf first | runtime-cat | runtime-cat | cat > /result; runtime-cat < /result 3>&1; emit | runtime-cat | runtime-cat"
+    } else {
+        "consume() { IFS= read -r value; printf '%s' \"$value\"; }; printf first | runtime-cat | runtime-cat | consume > /result; runtime-cat < /result 3>&1; emit | runtime-cat | runtime-cat"
+    };
     let job = session
         // `cat` is an engine builtin. Use a distinct fake executable so these
         // stages really cross ProcessHost; retain a builtin consumer as well.
-        .start("printf first | runtime-cat | runtime-cat | cat > /result; runtime-cat < /result 3>&1; emit | runtime-cat | runtime-cat")
+        .start(script)
         .unwrap();
     assert_eq!(finish(&executor, &runtime, job), 0);
     let mut expected = b"first".to_vec();
@@ -1585,9 +1590,12 @@ fn external_after_builtin_pipeline_starts_a_fresh_runtime_job() {
         Limits::default(),
     );
     session.set_descriptors(runtime.stdio().unwrap()).unwrap();
-    let job = session
-        .start("emit | cat > /complete; runtime-cat < /complete")
-        .unwrap();
+    let script = if cfg!(feature = "acceptance-utilities") {
+        "emit | cat > /complete; runtime-cat < /complete"
+    } else {
+        "consume() { while IFS= read -r value; do printf '%s\\n' \"$value\"; done; }; emit | consume > /complete; runtime-cat < /complete"
+    };
+    let job = session.start(script).unwrap();
     assert_eq!(finish(&executor, &runtime, job), 0);
     assert_eq!(fake.output.bytes(), b"runtime bytes\n".repeat(64));
     assert_eq!(fake.requests.borrow().len(), 2);
@@ -1868,6 +1876,7 @@ fn sigint_registration_calls_runtime_with_handle_not_ignore() {
 }
 
 #[test]
+#[cfg(feature = "acceptance-utilities")]
 fn runtime_mkdir_uses_shared_filesystem_and_grep_reads_created_directory() {
     let (executor, fake, runtime) = setup();
     let session = Session::new(
@@ -2398,7 +2407,17 @@ fn interrupt_and_shutdown_drain_live_capture_and_blocked_input_writers() {
 fn runtime_for_globs_stream_names_and_close_directory_descriptors() {
     let (executor, fake, runtime) = setup();
     let session = runtime_session(&executor, &runtime);
-    let job = session.start("mkdir -p /tmp/runtime-glob; cd /tmp/runtime-glob; : >b.txt; : >a.txt; shopt -s nullglob; for f in *.missing *.txt; do echo \"$f\"; done").unwrap();
+    #[cfg(not(feature = "acceptance-utilities"))]
+    fake.fs.mkdir("/tmp/runtime-glob", true).unwrap();
+    let setup = if cfg!(feature = "acceptance-utilities") {
+        "mkdir -p /tmp/runtime-glob; "
+    } else {
+        ""
+    };
+    let source = format!(
+        r#"{setup}cd /tmp/runtime-glob; : >b.txt; : >a.txt; shopt -s nullglob; for f in *.missing *.txt; do echo "$f"; done"#
+    );
+    let job = session.start(&source).unwrap();
     assert_eq!(finish(&executor, &runtime, job), 0);
     assert_eq!(fake.output.bytes(), b"a.txt\nb.txt\n");
     assert!(fake.directories.borrow().is_empty());
@@ -3123,7 +3142,12 @@ fn fork_failure_subshell_status_is_254_but_outer_reader_continues() {
 fn subshell_pipeline_interrupt_preserves_foreground_group_and_stops_all_stages() {
     let (executor, fake, runtime) = setup();
     let session = runtime_session(&executor, &runtime);
-    let foreground = session.start("( sleep; true ) | cat").unwrap();
+    let source = if cfg!(feature = "acceptance-utilities") {
+        "( sleep; true ) | cat"
+    } else {
+        "consume() { while IFS= read -r value; do :; done; }; ( sleep; true ) | consume"
+    };
+    let foreground = session.start(source).unwrap();
     drive_until_spawn(&executor, &runtime, &fake, 1);
     assert_eq!(
         runtime.0.groups.borrow().len(),

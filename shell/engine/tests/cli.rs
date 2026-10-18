@@ -38,8 +38,13 @@ fn cli_printf_reuses_formats_after_field_splitting() {
 
 #[test]
 fn cli_drains_both_bounded_streams() {
+    let source = if cfg!(feature = "acceptance-utilities") {
+        "seq 20000 >&2; printf done"
+    } else {
+        "for ((i=1;i<=20000;i++)); do printf '%s\\n' \"$i\" >&2; done; printf done"
+    };
     let output = Command::new(env!("CARGO_BIN_EXE_shell-engine"))
-        .args(["-c", "seq 20000 >&2; printf done"])
+        .args(["-c", source])
         .output()
         .unwrap();
     assert!(output.status.success());
@@ -63,11 +68,22 @@ fn cli_installs_shared_compatibility_helpers_and_environment() {
 
 #[test]
 fn cli_system_mount_cannot_create_path_candidates() {
-    for source in [
+    let full_sources = [
         "mkdir -p /usr/local/bin; printf data > /usr/local/bin/probe; PATH=/usr/local/bin; probe",
         "mkdir -p /usr/local/bin; cat > /usr/local/bin/probe <<'EOF'\ndata\nEOF\nPATH=/usr/local/bin; printf input | probe",
         "mkdir -p /usr/local/bin; cat > /usr/local/bin/probe <<'EOF'\ndata\nEOF\nPATH=/usr/local/bin probe",
-    ] {
+    ];
+    let lite_sources = [
+        "printf data >/usr/bin/probe; PATH=/usr/bin; probe",
+        "printf '%s' data >/usr/bin/probe; PATH=/usr/bin; printf input | probe",
+        "printf '%s' data >/usr/bin/probe; PATH=/usr/bin probe",
+    ];
+    let sources = if cfg!(feature = "acceptance-utilities") {
+        full_sources
+    } else {
+        lite_sources
+    };
+    for source in sources {
         let output = Command::new(env!("CARGO_BIN_EXE_shell-engine"))
             .args(["-c", source])
             .output()
@@ -78,6 +94,7 @@ fn cli_system_mount_cannot_create_path_candidates() {
 }
 
 #[test]
+#[cfg(feature = "acceptance-utilities")]
 fn cli_system_mount_is_read_only_without_freezing_writable_paths() {
     let source = "mkdir -p /usr/local/bin; printf system > /usr/local/bin/probe; test ! -f /usr/local/bin/probe || exit 9; printf changed > /usr/bin/argv.py; test ! -s /usr/bin/argv.py || exit 8; mkdir -p /tmp/bin /usr-local/bin; printf tmp > /tmp/bin/probe; printf sibling > /usr-local/bin/probe; printf local > probe; cat /tmp/bin/probe /usr-local/bin/probe probe; PATH=.; probe";
     let output = Command::new(env!("CARGO_BIN_EXE_shell-engine"))
@@ -139,4 +156,18 @@ fn cli_virtual_working_directory_exists_for_file_predicates() {
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(output.stdout, b"ready");
     assert!(output.stderr.is_empty());
+}
+
+#[cfg(not(feature = "acceptance-utilities"))]
+#[test]
+fn lite_cli_system_mount_and_writable_siblings_need_no_optional_utilities() {
+    let source = "printf system >/usr/bin/probe; test ! -e /usr/bin/probe || exit 9; printf changed >/usr/bin/argv.py; test ! -s /usr/bin/argv.py || exit 8; printf 'tmp\\n' >/tmp/probe; printf 'sibling\\n' > /usr-local/probe; printf 'local\\n' >local-probe; for file in /tmp/probe /usr-local/probe local-probe; do IFS= read -r value < \"$file\"; printf '%s' \"$value\"; done; PATH=.; local-probe";
+    let output = Command::new(env!("CARGO_BIN_EXE_shell-engine"))
+        .args(["-c", source])
+        .env("PWD", "/usr-local")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(126));
+    assert_eq!(output.stdout, b"tmpsiblinglocal");
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("omitted capability"));
 }

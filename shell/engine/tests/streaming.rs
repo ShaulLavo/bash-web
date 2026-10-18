@@ -1,6 +1,8 @@
 //! The seven scenarios from pipelines.acceptance.spec.ts adapted to the real
 //! engine and an explicitly in-process ProcessHost. These do NOT claim browser,
 //! Bun, transport interruption or shared-filesystem acceptance for step 1.
+#[cfg(not(feature = "acceptance-utilities"))]
+mod support;
 use futures::FutureExt;
 use shell_engine::{
     Limits, Session,
@@ -62,6 +64,8 @@ impl Rig {
             written,
         };
         value.register();
+        #[cfg(not(feature = "acceptance-utilities"))]
+        support::register_utilities(&value.host, &value.fs, true);
         value
     }
     fn register(&self) {
@@ -316,6 +320,7 @@ impl Rig {
         panic!("missing {text}: {}", self.text());
     }
 }
+
 impl Drop for Rig {
     fn drop(&mut self) {
         self.shell.interrupt();
@@ -939,7 +944,12 @@ fn rejected_pipeline_and_background_publish_failure_status() {
 #[test]
 fn grep_streams_matching_lines_before_producer_exit() {
     let rig = Rig::new();
-    let job = rig.start("ticker | grep tick | cat");
+    let source = if cfg!(feature = "acceptance-utilities") {
+        "ticker | grep tick | cat"
+    } else {
+        "ticker | filter tick | cat"
+    };
+    let job = rig.start(source);
     rig.until("tick 0\n");
     assert!(!job.is_finished());
     rig.ticks[0].cancel();
@@ -953,7 +963,12 @@ fn grep_streams_matching_lines_before_producer_exit() {
 #[test]
 fn grep_unmatched_pipeline_is_cancellable_and_preserves_session() {
     let rig = Rig::new();
-    let job = rig.start("secret=kept; ticker | copy | grep unmatched; echo BAD_AFTER_INTERRUPT");
+    let source = if cfg!(feature = "acceptance-utilities") {
+        "secret=kept; ticker | copy | grep unmatched; echo BAD_AFTER_INTERRUPT"
+    } else {
+        "secret=kept; ticker | copy | filter unmatched; echo BAD_AFTER_INTERRUPT"
+    };
+    let job = rig.start(source);
     for _ in 0..100 {
         rig.ex.drive(128);
     }
@@ -967,6 +982,7 @@ fn grep_unmatched_pipeline_is_cancellable_and_preserves_session() {
 }
 
 #[test]
+#[cfg(feature = "acceptance-utilities")]
 fn grep_options_match_gnu_subset_and_statuses() {
     for (script, status, expected) in [
         (
@@ -1013,6 +1029,7 @@ fn grep_options_match_gnu_subset_and_statuses() {
 }
 
 #[test]
+#[cfg(feature = "acceptance-utilities")]
 fn grep_files_counts_prefixes_quiet_error_priority_and_exact_bytes() {
     let rig = Rig::new();
     rig.fs.write_file("/home/guest/first", b"a\nx\na").unwrap();
@@ -1037,6 +1054,7 @@ fn grep_files_counts_prefixes_quiet_error_priority_and_exact_bytes() {
 }
 
 #[test]
+#[cfg(feature = "acceptance-utilities")]
 fn grep_quiet_returns_before_eof_and_closes_reader() {
     let rig = Rig::new();
     let job = rig.start("ticker | grep -q tick");
@@ -1053,6 +1071,7 @@ fn grep_quiet_returns_before_eof_and_closes_reader() {
 }
 
 #[test]
+#[cfg(feature = "acceptance-utilities")]
 fn grep_streams_more_than_one_mib_and_propagates_broken_pipe() {
     let rig = Rig::new();
     assert_eq!(rig.run("seq 1 400000 | grep -E '^[0-9]+$' | count"), 0);
@@ -1067,6 +1086,7 @@ fn grep_streams_more_than_one_mib_and_propagates_broken_pipe() {
 }
 
 #[test]
+#[cfg(feature = "acceptance-utilities")]
 fn grep_record_and_regex_admission_are_bounded() {
     let rig = Rig::with_limits(Limits {
         line_bytes: 4,
@@ -1094,6 +1114,7 @@ fn mkdir_nested_function_pipeline_inherits_unexported_state_and_cwd() {
 }
 
 #[test]
+#[cfg(feature = "acceptance-utilities")]
 fn mkdir_parents_existing_files_and_failures() {
     let rig = Rig::new();
     assert_eq!(
@@ -1117,7 +1138,12 @@ fn mkdir_parents_existing_files_and_failures() {
 #[test]
 fn grep_always_ready_unmatched_input_still_observes_cancellation() {
     let rig = Rig::new();
-    let job = rig.start("seq 1 1000000000000 | grep unmatched");
+    let source = if cfg!(feature = "acceptance-utilities") {
+        "seq 1 1000000000000 | grep unmatched"
+    } else {
+        "seq 1 1000000000000 | filter unmatched"
+    };
+    let job = rig.start(source);
     for _ in 0..100 {
         rig.ex.drive(128);
     }
@@ -1129,6 +1155,7 @@ fn grep_always_ready_unmatched_input_still_observes_cancellation() {
 }
 
 #[test]
+#[cfg(feature = "acceptance-utilities")]
 fn grep_basic_anchors_only_at_bre_branch_boundaries() {
     // GNU grep observations: internal ^/$ are literal in BRE, but escaped
     // groups and alternation establish new branch-start/end anchor positions.

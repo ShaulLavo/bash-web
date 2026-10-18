@@ -16,7 +16,6 @@ use crate::{
     state::{SharedState, State, absolute},
 };
 use shell_parser::parser::{Word, WordPart};
-use std::fmt::Write as _;
 
 /// Bashkit's is_decl_keyword starts with the command's syntax, not the name
 /// produced by expansion. Quoting also prevents declaration-keyword syntax.

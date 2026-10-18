@@ -28,6 +28,7 @@
     "test:shell:wasi:lite": "BASH_WEB_BUILD=lite node scripts/test-shell-wasi.ts",
     "check:capabilities": "node scripts/check-shell-capabilities.ts",
     "test:build-presets": "node --test scripts/test-shell-build.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts",
+    "typecheck:build-presets": "tsc --ignoreConfig --noEmit --strict --skipLibCheck --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/shell-build.ts scripts/check-shell-capabilities.ts scripts/test-shell-build.ts scripts/wasi-build.ts scripts/test-shell-wasi.ts scripts/test-wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts",
     "test:shell:wasi": "node scripts/test-shell-wasi.ts",
     "test:shell:scoreboard": "node --test scripts/test-shell-scoreboard*.mjs scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-bash-compat*.mjs",
     "compat:shell": "BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell node scripts/bash-compat.mjs",
@@ -77,7 +78,10 @@
     "check:layers": "node scripts/check-layers.ts",
     "test:check-layers": "node --test scripts/test-check-layers.ts",
     "typecheck:layers": "tsc --ignoreConfig --noEmit --strict --skipLibCheck --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-layers.ts scripts/test-check-layers.ts",
-    "compat": "npm run compat:shell"
+    "compat": "npm run compat:shell",
+    "build:shell:full": "BASH_WEB_BUILD=full node scripts/build-shell.ts",
+    "test:shell:full": "cargo test --locked --manifest-path shell/Cargo.toml --workspace --no-default-features --features full --target-dir .build/shell/full -j2",
+    "test:shell:wasi:full": "BASH_WEB_BUILD=full node scripts/test-shell-wasi.ts"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",

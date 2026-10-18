@@ -63,6 +63,33 @@ npm run test:rust
 npm run test:shell:wasi
 ```
 
+The shell has two explicit Cargo build presets. `Full` is the default and keeps
+the acceptance-only `cat`, `grep`, `mkdir` and `seq` stand-ins; `Lite` omits
+that optional `acceptance-utilities` capability and its `regex` dependency.
+Build and test them in separate target directories:
+
+```sh
+npm run build:shell:full
+npm run test:shell:full
+npm run build:shell:lite
+npm run test:shell:lite
+npm run test:shell:wasi:full
+npm run test:shell:wasi:lite
+```
+
+Lite does not remove shell syntax. The Thompson matcher behind `[[ =~ ]]`
+remains in both presets. An omitted utility has no internal handler, so normal
+function and `command` precedence still apply, then ordinary PATH lookup runs;
+without an external executable it reports the omitted capability and exits 127.
+No syntax capability is omitted today. A future optional syntax capability must
+fail with status 2 and a diagnostic naming its capability and effective build.
+`set` and `shopt` cannot enable compiled-out capabilities.
+The capability matrix also checks that only Full contains the `regex` dependency
+closure. The preimplementation ablation measured Full at **2,881,948 raw /
+834,431 gzip-9** bytes and the acceptance-utilities omission at **1,810,845 /
+527,284**, a saving of **1,071,103 / 307,147** bytes. Those are selection
+measurements; each release build records its own final raw and compressed sizes.
+
 Build and check the browser integration separately:
 
 ```sh
@@ -126,7 +153,8 @@ source locations and a source digest in `docs/evidence/engine-layers.json`.
 Neither violation count may increase, and a new violating edge cannot replace
 an old one even at the same count. This is a lexical check, not Rust alias or
 macro resolution and not proof that optional capabilities compile separately.
-See [plan 006](../plans/006-engine-boundaries.md) for the graph and that later gate.
+See [plan 006](../plans/006-engine-boundaries.md) for the graph and separate
+Full/Lite compile-and-test matrix.
 
 After editing engine sources, refresh and commit their exact evidence together:
 
@@ -279,14 +307,16 @@ These are intentionally different views, not one generic builtin predicate:
 - Special/regular builtin class is descriptive metadata, not a new precedence,
   persistence or POSIX-mode rule. Declaration status overlaps both classes.
   Acceptance `cat`, `grep`, `mkdir` and `seq` are stand-ins, not shell builtins.
-  They retain internal dispatch while query lookup searches PATH for all four.
-- Heredoc errors retain their different historical view: `cat`/`seq` use the
+  Full retains their internal dispatch while query lookup searches PATH for all four.
+  Lite removes their handlers but keeps ordinary external lookup.
+- In Full, heredoc errors retain their different historical view: `cat`/`seq` use the
   command-local error context, while `grep`/`mkdir` use the shell error context.
   Functions still take precedence in that view, before command-wrapper unwrapping.
 - Queries still choose keyword, function, reportable builtin, then PATH. Keyword
   visibility does not claim syntax support: `select`, `time` and `coproc` are
   explicitly unsupported execution syntax. Core/acceptance availability describes
-  the current full build; it introduces no Cargo features, Lite filters or options.
+  the current full build. Step 6 adds compile-time capability filtering through
+  this same view, without changing shell options or query precedence.
 - The interpreter retains early direct `exec`, wrapper parsing/function bypass,
   function frames, and `let`/`eval` phases. Prefix restoration, status/diagnostics,
   PATH admission, cancellation and lazy expansion remain with their old owners.
@@ -297,6 +327,13 @@ pin every old view independently, including absent names, handler ownership,
 class/capability relationships and the differing stand-in exclusions. Original
 engine controls passed against the unchanged baseline before extraction and pin
 query output, declaration syntax, heredoc scope and function/prefix behavior.
+
+The Full/Lite adapter is original local build and capability plumbing. Cargo
+feature selection lives in `shell/engine/Cargo.toml` and the existing build
+helpers, while test-only external fixtures keep Lite's pipeline, filesystem,
+redirection, cancellation, PATH and state contracts covered without shipping
+placeholder utilities. The omitted family is optional, not core; no syntax is
+omitted, and missing operations follow the ordinary external-command route.
 
 ## Repository layout
 

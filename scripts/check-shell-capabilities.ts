@@ -6,7 +6,16 @@ import { shellBuild, shellFeatures } from "./shell-build.ts";
 const build = shellBuild();
 const tree = execFileSync(
   "cargo",
-  ["tree", "--locked", "--manifest-path", "shell/Cargo.toml", "-p", "shell-engine", "--prefix", "none"].concat(shellFeatures(build)),
+  [
+    "tree",
+    "--locked",
+    "--manifest-path",
+    "shell/Cargo.toml",
+    "-p",
+    "shell-engine",
+    "--prefix",
+    "none",
+  ].concat(shellFeatures(build)),
   { cwd: resolve(import.meta.dirname, ".."), encoding: "utf8" },
 );
 const regex = tree.split("\n").filter((line) => /^regex(?:-automata|-syntax)? v/.test(line));

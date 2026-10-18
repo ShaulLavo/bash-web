@@ -389,6 +389,7 @@ fn cancellation_before_a_later_unbound_read_has_no_partial_dispatch_or_diagnosti
 }
 
 #[test]
+#[cfg(feature = "acceptance-utilities")]
 fn failed_command_local_heredoc_readers_discard_their_parameter_effects() {
     for (command, status) in [("cat", "127"), ("", "1"), ("value=kept", "1")] {
         for body in ["${x:=changed}$missing", "${x:=changed}${missing:?oops}"] {
@@ -407,6 +408,7 @@ fn failed_command_local_heredoc_readers_discard_their_parameter_effects() {
 }
 
 #[test]
+#[cfg(feature = "acceptance-utilities")]
 fn command_local_heredoc_arithmetic_failure_does_not_discard_the_caller_read_unit() {
     for command in ["cat", "", "value=kept"] {
         let rig = Rig::new(Limits::default());
@@ -420,6 +422,38 @@ fn command_local_heredoc_arithmetic_failure_does_not_discard_the_caller_read_uni
 }
 
 #[test]
+fn missing_command_heredoc_does_not_discard_the_caller_read_unit() {
+    for (command, status) in [("missing-command", "127"), ("", "1"), ("value=kept", "1")] {
+        for body in ["${x:=changed}$missing", "${x:=changed}${missing:?oops}"] {
+            let rig = Rig::new(Limits::default());
+            let source = format!(
+                "unset x; set -u\n{command} <<EOF\n{body}\nEOF\nargs \"$?\" \"${{x-unset}}\"\n"
+            );
+            assert_eq!(rig.run(&source), 0, "{source}");
+            assert_eq!(*rig.calls.borrow(), [vec![status, "unset"]], "{source}");
+            assert!(rig.output.bytes().is_empty(), "{source}");
+            assert!(!rig.errors.bytes().is_empty(), "{source}");
+            assert_eq!(rig.host.active_count(), 0);
+            assert_eq!(rig.host.retained_count(), 0);
+        }
+    }
+}
+
+#[test]
+fn missing_command_heredoc_arithmetic_failure_does_not_discard_the_caller_read_unit() {
+    for command in ["missing-command", "", "value=kept"] {
+        let rig = Rig::new(Limits::default());
+        let source = format!(
+            "unset x\n{command} <<EOF; args \"$?\" \"${{x-unset}}\"\n${{x:=changed}}$((1/0))\nEOF\n"
+        );
+        assert_eq!(rig.run(&source), 0, "{source}");
+        assert_eq!(*rig.calls.borrow(), [vec!["1", "unset"]], "{source}");
+        assert!(rig.output.bytes().is_empty(), "{source}");
+    }
+}
+
+#[test]
+#[cfg(feature = "acceptance-utilities")]
 fn successful_command_local_heredocs_share_state_only_within_their_reader() {
     let rig = Rig::new(Limits::default());
     assert_eq!(

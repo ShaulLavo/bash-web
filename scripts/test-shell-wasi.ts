@@ -12,8 +12,10 @@ import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 const root = resolve(import.meta.dirname, "..");
 const build = shellBuild();
 const cargoEnv = wasiBuildEnvironment(root, shellTargetDirectory(root, build));
-const cargo = (args: readonly string[], options: import("node:child_process").ExecFileSyncOptions = {}) =>
-  execFileSync("cargo", args, { cwd: root, stdio: "inherit", env: cargoEnv, ...options });
+const cargo = (
+  args: readonly string[],
+  options: import("node:child_process").ExecFileSyncOptions = {},
+) => execFileSync("cargo", args, { cwd: root, stdio: "inherit", env: cargoEnv, ...options });
 const manifest = ["--locked", "--manifest-path", "shell/Cargo.toml"];
 const env = {
   ...cargoEnv,
@@ -70,13 +72,7 @@ cargo(
     "-j2",
   ]),
 );
-const metadata: { target_directory: string } = JSON.parse(String(
-  cargo(["metadata"].concat(manifest, ["--format-version", "1", "--no-deps"]), {
-    stdio: "pipe",
-    encoding: "utf8",
-  }),
-));
-const wasm = resolve(metadata.target_directory, "wasm32-wasip1/release/shell-engine.wasm");
+const wasm = resolve(shellTargetDirectory(root, build), "wasm32-wasip1/release/shell-engine.wasm");
 verifyWasiGuest(wasm);
 const output = execFileSync(
   "wasmtime",
@@ -95,7 +91,11 @@ const separate = invoke("printf out; printf err >&2; exit 7");
 assert.equal(separate.status, 7);
 assert.equal(separate.stdout.toString(), "out");
 assert.equal(separate.stderr.toString(), "err");
-const longErrors = invoke("for ((i=1;i<=20000;i++)); do printf '%s\n' \"$i\" >&2; done; printf done; exit 7");
+const longErrors = invoke(
+  build === "full"
+    ? "seq 20000 >&2; printf done; exit 7"
+    : "for ((i=1;i<=20000;i++)); do printf '%s\n' \"$i\" >&2; done; printf done; exit 7",
+);
 assert.equal(longErrors.status, 7);
 assert.equal(longErrors.stdout.toString(), "done");
 assert.ok(longErrors.stderr.toString().endsWith("20000\n"));

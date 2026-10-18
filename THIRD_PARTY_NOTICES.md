@@ -490,6 +490,16 @@ exact source hash, adapted behaviors and original bounded descriptor/regex
 adapters. The accompanying `mkdir` implementation and filesystem ABI bindings
 are original, not a copied upstream utility.
 
+The `acceptance-utilities` Cargo feature and the Full/Lite presets in
+`shell/engine/Cargo.toml`, `scripts/shell-build.ts`, `scripts/wasi-build.ts` and
+`scripts/test-shell-wasi.ts` are original local build adapters. Full retains the
+four acceptance stand-ins and their direct `regex` dependency; Lite omits that
+optional family while retaining the original Thompson `[[ =~ ]]` matcher. Lite
+test fixtures register external programs only to preserve core PATH, pipeline,
+filesystem, redirection and cancellation coverage; they are not production
+utility implementations. No new upstream source, source-lock entry or license
+payload is introduced by the build split.
+
 ## Browser integration port
 
 The browser shell facade, bounded terminal bridge, shell-specific worker/guest
