@@ -10,7 +10,7 @@
   "counts": {
     "oils": {
       "total": 2492,
-      "passed": 949,
+      "passed": 951,
       "skipped": 810,
       "categories": {
         "Quoting and word splitting": {
@@ -55,7 +55,7 @@
         },
         "Conditionals, test, [[ ]] and case": {
           "total": 164,
-          "passed": 122,
+          "passed": 124,
           "skipped": 18
         },
         "Grammar, functions and control flow": {
@@ -3269,7 +3269,7 @@
 {"id":"oils:builtin-bracket:268","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:builtin-bracket:280","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-bracket:294","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"needs-commands","outcome":"skip"},
-{"id":"oils:builtin-bracket:319","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"c3RhdHVzPTIK","stderr":"L3Vzci9iaW4vYmFzaDogWzogLXQ6IHVuc3VwcG9ydGVkIHByZWRpY2F0ZQo="}},
+{"id":"oils:builtin-bracket:319","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-bracket:325","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-bracket:331","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-bracket:345","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"pass"},
@@ -3282,7 +3282,7 @@
 {"id":"oils:builtin-bracket:506","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-bracket:529","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-bracket:534","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"needs-commands","outcome":"skip"},
-{"id":"oils:builtin-bracket:554","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"c3RhdHVzPTIK","stderr":"L3Vzci9iaW4vYmFzaDogdGVzdDogLXQ6IHVuc3VwcG9ydGVkIHByZWRpY2F0ZQo="}},
+{"id":"oils:builtin-bracket:554","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-bracket:564","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-bracket:572","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"c3RhdHVzPTEK","stderr":""}},
 {"id":"oils:builtin-bracket:579","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"pass"},
