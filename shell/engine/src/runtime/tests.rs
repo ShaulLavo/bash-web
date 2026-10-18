@@ -97,6 +97,15 @@ impl Fake {
             output,
         })
     }
+    fn retained_child(&self, pid: u32) -> Result<std::cell::Ref<'_, FakeChild>, i32> {
+        let child =
+            std::cell::Ref::filter_map(self.children.borrow(), |children| children.get(&pid))
+                .map_err(|_| 12)?;
+        if child.collected.get() || self.reaped_jobs.borrow().contains(&child.job) {
+            return Err(12);
+        }
+        Ok(child)
+    }
     fn child_status(&self, pid: u32) -> Option<i32> {
         self.children
             .borrow()
@@ -365,11 +374,7 @@ impl Abi for Fake {
             .ok_or(71)
     }
     fn start_status(&self, pid: u32) -> Result<i32, i32> {
-        let children = self.children.borrow();
-        let child = children.get(&pid).ok_or(12)?;
-        if child.collected.get() || self.reaped_jobs.borrow().contains(&child.job) {
-            return Err(12);
-        }
+        let child = self.retained_child(pid)?;
         match child.startup.get() {
             None => Err(AGAIN),
             Some(Ok(())) => Ok(0),
@@ -379,11 +384,7 @@ impl Abi for Fake {
     }
 
     fn wait(&self, pid: u32) -> Result<WaitResult, i32> {
-        let children = self.children.borrow();
-        let child = children.get(&pid).ok_or(12)?;
-        if child.collected.get() || self.reaped_jobs.borrow().contains(&child.job) {
-            return Err(12);
-        }
+        let child = self.retained_child(pid)?;
         let status = child.status.get().ok_or(AGAIN)?;
         child.collected.set(true);
         Ok(status)
