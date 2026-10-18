@@ -24,7 +24,7 @@ pub(super) async fn run(
     work: &mut Work,
 ) -> Outcome {
     match evaluate(expression, state, fds, context, work).await {
-        Ok(value) => Outcome::status(i32::from(!value)),
+        Ok(status) => Outcome::status(status),
         Err(error) => expansion_failure(error.into(), fds, context).await,
     }
 }
@@ -64,7 +64,7 @@ fn evaluate<'a>(
     fds: &'a Descriptors,
     context: &'a Context,
     work: &'a mut Work,
-) -> ResultFuture<'a, bool> {
+) -> ResultFuture<'a, i32> {
     arithmetic::admitted(work, move |work| async move {
         let mut stack = Vec::new();
         let mut current = expression;
@@ -98,16 +98,16 @@ fn evaluate<'a>(
             while let Some(continuation) = stack.pop() {
                 work.checkpoint(&context.cancel).await?;
                 match continuation {
-                    Continuation::Not => value = !value,
+                    Continuation::Not => value = i32::from(value == 0),
                     Continuation::Group => {}
                     Continuation::And(rest) | Continuation::Or(rest) => {
                         let select_next = match continuation {
-                            Continuation::And(_) => value,
-                            Continuation::Or(_) => !value,
+                            Continuation::And(_) => value == 0,
+                            Continuation::Or(_) => value != 0,
                             _ => unreachable!("logical continuation"),
                         };
                         if select_next && let Some((next, rest)) = rest.split_first() {
-                            let continuation = if value {
+                            let continuation = if value == 0 {
                                 Continuation::And(rest)
                             } else {
                                 Continuation::Or(rest)
@@ -130,31 +130,52 @@ async fn predicate(
     fds: &Descriptors,
     context: &Context,
     work: &mut Work,
-) -> Result<bool, Error> {
+) -> Result<i32, Error> {
     match expression {
-        TestExpr::Word(word) => Ok(!scalar(word, state, context, work).await?.is_empty()),
+        TestExpr::Word(word) => Ok(i32::from(
+            scalar(word, state, context, work).await?.is_empty(),
+        )),
         TestExpr::Unary { operator, operand } => {
             let value = scalar(operand, state, context, work).await?;
-            match operator.as_str() {
-                "-n" => Ok(!value.is_empty()),
-                "-z" => Ok(value.is_empty()),
-                _ => {
-                    if !builtins::test::is_unary(operator) {
-                        return Err(2.into());
-                    }
-                    let table = descriptors(fds, context, work).await?;
-                    builtins::test::unary(operator, &value, state, &table, context, work)
-                        .await
-                        .map_err(Into::into)
-                }
-            }
+            unary(operator, &value, state, fds, context, work).await
         }
         TestExpr::Binary {
             left,
             operator,
             right,
-        } => binary(left, operator, right, state, fds, context, work).await,
+        } => binary(left, operator, right, state, fds, context, work)
+            .await
+            .map(|value| i32::from(!value)),
         _ => unreachable!("logical nodes handled by continuation traversal"),
+    }
+}
+
+async fn unary(
+    operator: &str,
+    value: &str,
+    state: &SharedState,
+    fds: &Descriptors,
+    context: &Context,
+    work: &mut Work,
+) -> Result<i32, Error> {
+    match operator {
+        "-n" => return Ok(i32::from(value.is_empty())),
+        "-z" => return Ok(i32::from(!value.is_empty())),
+        _ => {}
+    }
+    if !builtins::test::is_unary(operator) {
+        return Err(2.into());
+    }
+    let table = descriptors(fds, context, work).await?;
+    match builtins::test::unary(operator, value, state, &table, context, work).await {
+        Ok(value) => Ok(i32::from(!value)),
+        Err(builtins::test::UnaryError::Status(status)) => Err(status.into()),
+        Err(builtins::test::UnaryError::Integer) => {
+            builtins::test::integer_diagnostic("[[", value, &table, context).await?;
+            // Bash's malformed -t status participates in !/&&/||. Other unary
+            // failures remain expansion errors, as before.
+            Ok(2)
+        }
     }
 }
 

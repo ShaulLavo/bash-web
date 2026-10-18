@@ -205,19 +205,54 @@ fn descriptor_predicates_reject_files_missing_and_closed_fds_without_errors() {
 }
 
 #[test]
+fn unrelated_descriptor_predicate_capability_errors_stay_unchanged() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("test -f /dev/stdin"), 2);
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: test: -f: unsupported predicate\n"
+    );
+    assert_eq!(rig.run("[[ ! -f /dev/stdin ]]"), 2);
+}
+
+#[test]
 fn terminal_descriptor_integer_syntax_and_errors_match_bash() {
-    for value in ["-0", "+0", "00", " \t0\n", "-1", "2147483648", "4294967296", "9223372036854775807", "-9223372036854775808"] {
+    for value in [
+        "-0",
+        "+0",
+        "00",
+        " \t0\n",
+        "-1",
+        "2147483648",
+        "4294967296",
+        "9223372036854775807",
+        "-9223372036854775808",
+    ] {
         status(&["-t", value], 1);
     }
-    for value in ["", "nope", "/dev/fd/0", "0x0", "1+0", "9223372036854775808", "-9223372036854775809"] {
+    for value in [
+        "",
+        "nope",
+        "/dev/fd/0",
+        "0x0",
+        "1+0",
+        "9223372036854775808",
+        "-9223372036854775809",
+    ] {
         let rig = Rig::new(Limits::default());
         assert_eq!(rig.run(&expression(&["-t", value])), 2);
-        assert_eq!(rig.errors.bytes(), format!("/usr/bin/bash: test: {value}: integer expected\n").as_bytes());
+        assert_eq!(
+            rig.errors.bytes(),
+            format!("/usr/bin/bash: test: {value}: integer expected\n").as_bytes()
+        );
     }
     status(&["-t"], 0);
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("[ ! -t nope ]"), 2);
-    assert_eq!(rig.errors.bytes(), b"/usr/bin/bash: [: nope: integer expected\n");
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: [: nope: integer expected\n"
+    );
 }
 
 #[test]

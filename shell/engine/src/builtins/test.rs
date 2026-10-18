@@ -6,7 +6,7 @@ use crate::{
     executor::Cancel,
     expand::Work,
     interpreter::{Context, Outcome},
-    io::{FdTable, FileKind, FileMetadata, IoError, MAX_PATH_BYTES},
+    io::{DescriptorKind, Endpoint, FdTable, FileKind, FileMetadata, IoError, MAX_PATH_BYTES},
     state::{SharedState, State},
 };
 use std::cmp::Ordering;
@@ -337,7 +337,7 @@ fn is_binary(operator: &str) -> bool {
 }
 async fn predicate<'a>(
     operator: &'a str,
-    operand: &str,
+    operand: &'a str,
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
@@ -345,19 +345,70 @@ async fn predicate<'a>(
 ) -> Result<bool, Failure<'a>> {
     unary(operator, operand, state, fds, context, work)
         .await
-        .map_err(|status| {
-            if status == 2 {
-                Failure::Unsupported(operator)
-            } else {
-                Failure::Status(status)
-            }
+        .map_err(|error| match error {
+            UnaryError::Integer => Failure::Integer(operand),
+            UnaryError::Status(2) => Failure::Unsupported(operator),
+            UnaryError::Status(status) => Failure::Status(status),
         })
+}
+
+pub(crate) enum UnaryError {
+    Status(i32),
+    Integer,
+}
+impl From<i32> for UnaryError {
+    fn from(status: i32) -> Self {
+        Self::Status(status)
+    }
+}
+
+pub(crate) async fn integer_diagnostic(
+    name: &str,
+    operand: &str,
+    fds: &FdTable,
+    context: &Context,
+) -> Result<(), i32> {
+    diagnose(name, Failure::Integer(operand), fds, context).await
+}
+
+pub(crate) async fn unary(
+    operator: &str,
+    operand: &str,
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<bool, UnaryError> {
+    if operator != "-t" {
+        return unary_value(operator, operand, state, fds, context, work)
+            .await
+            .map_err(UnaryError::Status);
+    }
+    let fd = decimal(operand, &context.cancel, work)
+        .await?
+        .ok_or(UnaryError::Integer)?;
+    let Ok(fd) = u32::try_from(fd) else {
+        return Ok(false);
+    };
+    let Some(endpoint) = fds.get(fd) else {
+        return Ok(false);
+    };
+    descriptor_is(&endpoint, DescriptorKind::Terminal).map_err(UnaryError::Status)
+}
+
+fn descriptor_is(endpoint: &Endpoint, expected: DescriptorKind) -> Result<bool, i32> {
+    match endpoint.descriptor_kind() {
+        Ok(kind) => Ok(kind == expected),
+        Err(IoError::BadDescriptor) => Ok(false),
+        Err(IoError::Cancelled) => Err(130),
+        Err(_) => Err(2),
+    }
 }
 
 /// Shared with [[ ]]. File predicates use real host metadata, never open/read
 /// probes (which misclassify directories and can block on FIFOs/devices).
 /// Optional metadata that the host cannot supply is a capability error.
-pub(crate) async fn unary(
+async fn unary_value(
     operator: &str,
     operand: &str,
     state: &SharedState,
@@ -396,11 +447,13 @@ pub(crate) async fn unary(
                 _ => false,
             })
         }
-        "-t" => Err(2), // The endpoint API does not expose terminal attributes.
         operator if is_unary(operator) => {
             if let Some(endpoint) = crate::interpreter::device_endpoint(operand, fds) {
-                if endpoint.is_err() {
+                let Ok(endpoint) = endpoint else {
                     return Ok(false);
+                };
+                if operator == "-p" {
+                    return descriptor_is(&endpoint, DescriptorKind::Pipe);
                 }
                 return if matches!(operator, "-a" | "-e") {
                     Ok(true)

@@ -429,6 +429,24 @@ not excluded. Shell-owned terminal-ring, terminal-metadata and output-transform
 unit regressions remain here; Bun host-slot, nested-Bun and guest-libc internals
 belong to the external guest package rather than copied owner-internal suites.
 
+### Descriptor predicates
+
+The shared `test`, `[` and `[[ ]]` unary predicates query open descriptions.
+`-p /dev/stdin`, `/dev/stdout` and `/dev/fd/N` recognize both shell-local pipe
+ends and transported runtime pipe ends. `-t N` recognizes terminal descriptors.
+Closed or missing descriptors are false. Decimal operands accept surrounding
+ASCII whitespace and a sign; malformed or signed-64-bit-overflow operands report
+`integer expected` and status 2. For `[[ ]]`, that status participates in logical
+negation and short circuiting. Other predicate capability errors are unchanged.
+
+The guest calls Waffle's `runtime_proc.fd_kind` on the endpoint's physical handle,
+not its logical shell binding. It does not read, reopen, duplicate or retain the
+endpoint. Category 0 is other/unknown, never FIFO. Preview1's filetype decoding and
+unrelated filesystem predicates are unchanged. Native endpoint/mock tests check
+payload, EOF and private-handle routing; `runtime-shell.spec.ts` separately covers
+real WASI children, both transported pipe ends, remaps, runtime terminals, files,
+closed handles, diagnostics, and worker/pipe retirement.
+
 ### Pending external-program coverage
 
 Four Bun-specific cases explicitly skip while the public package surface is

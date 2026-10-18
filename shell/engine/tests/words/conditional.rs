@@ -150,7 +150,11 @@ fn conditional_terminal_integer_error_is_a_logical_status_not_expansion_failure(
     ] {
         let rig = Rig::new(Limits::default());
         assert_eq!(rig.run(source), expected, "{source}");
-        let errors = if diagnostic { "/usr/bin/bash: [[: nope: integer expected\n" } else { "" };
+        let errors = if diagnostic {
+            "/usr/bin/bash: [[: nope: integer expected\n"
+        } else {
+            ""
+        };
         assert_eq!(rig.errors.bytes(), errors.as_bytes(), "{source}");
     }
 }

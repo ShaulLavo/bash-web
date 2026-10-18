@@ -127,6 +127,102 @@ function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+// Each child is a separately instantiated WASI shell. These are transported
+// RuntimeEndpoint descriptors, not the native engine's in-memory pipe fixture.
+const descriptorForms = [
+  { name: "test", predicate: (value: string) => `test ${value}` },
+  { name: "bracket", predicate: (value: string) => `[ ${value} ]` },
+  { name: "conditional", predicate: (value: string) => `[[ ${value} ]]` },
+];
+
+for (const form of descriptorForms) {
+  test(`descriptor kinds survive transported pipes, ${form.name}`, async ({ page }) => {
+    const baseline = await open(page);
+    const read = [
+      `${form.predicate("-p /dev/stdin")}; echo READ_STDIN:$?`,
+      `${form.predicate("-p /dev/fd/0")}; echo READ_FD:$?`,
+      `exec 3<&0; exec 0<&-`,
+      `${form.predicate("-p /dev/fd/3")}; echo READ_REMAP:$?`,
+      `${form.predicate("-t 3")}; echo READ_TTY:$?`,
+      `cat <&3; exec 3<&-`,
+      `${form.predicate("-p /dev/fd/3")}; echo READ_CLOSED:$?`,
+    ].join("; ");
+    const write = [
+      `${form.predicate("-p /dev/stdout")}; echo WRITE_STDOUT:$? >&2`,
+      `${form.predicate("-p /dev/fd/1")}; echo WRITE_FD:$? >&2`,
+      `exec 3>&1; exec 1>&-`,
+      `${form.predicate("-p /dev/fd/3")}; echo WRITE_REMAP:$? >&2`,
+      `${form.predicate("-t 3")}; echo WRITE_TTY:$? >&2`,
+      `printf 'PIPE_PAYLOAD\\n' >&3; exec 3>&-`,
+      `${form.predicate("-p /dev/fd/3")}; echo WRITE_CLOSED:$? >&2`,
+    ].join("; ");
+    await command(page, `printf 'PIPE_PAYLOAD\\n' | /programs/shell-engine.wasm -c ${shellQuote(read)}; /programs/shell-engine.wasm -c ${shellQuote(write)} | cat; echo DESCRIPTOR_DONE:$?`);
+    for (const marker of ["READ_STDIN:0", "READ_FD:0", "READ_REMAP:0", "READ_TTY:1", "READ_CLOSED:1", "WRITE_STDOUT:0", "WRITE_FD:0", "WRITE_REMAP:0", "WRITE_TTY:1", "WRITE_CLOSED:1", "DESCRIPTOR_DONE:0"]) {
+      await output(page, marker);
+    }
+    await ready(page);
+    const lines = await page.evaluate(() => window.bashWeb!.readLines().map((line) => line.trim()));
+    expect(lines.filter((line) => line === "PIPE_PAYLOAD")).toHaveLength(2);
+    await expect.poll(() => page.workers().length).toBe(baseline);
+    await expect.poll(() => page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0].pipes)).toBe(0);
+  });
+}
+
+test("descriptor kinds distinguish actual runtime terminals, files and invalid handles", async ({ page }) => {
+  const baseline = await open(page);
+  await command(page, `test-guest fd-kinds 0 1 2 99; printf 'RAW_PAYLOAD\\n' | { test-guest fd-kinds 0 3 3<&0; cat; }; { test-guest fd-kinds 1 3 3>&1; printf 'RAW_PAYLOAD\\n'; } | cat; : > descriptor-file; test-guest fd-kinds 3 3< descriptor-file`);
+  for (const marker of ["FD_KIND:0:2", "FD_KIND:1:2", "FD_KIND:2:2", "FD_KIND:99:-8", "FD_KIND:0:1", "FD_KIND:1:1", "FD_KIND:3:1", "FD_KIND:3:3"]) {
+    await output(page, marker);
+  }
+  await ready(page);
+  const rawLines = await page.evaluate(() => window.bashWeb!.readLines().map((line) => line.trim()));
+  expect(rawLines.filter((line) => line === "RAW_PAYLOAD")).toHaveLength(2);
+  const predicates = descriptorForms.flatMap((form) => [
+    `${form.predicate("-p /dev/stdin")}; echo ${form.name}_TERMINAL_PIPE:$?`,
+    `${form.predicate("-t 0")}; echo ${form.name}_TERMINAL_TTY:$?`,
+    `${form.predicate("-p /dev/fd/3")} 3< descriptor-file; echo ${form.name}_FILE_PIPE:$?`,
+    `${form.predicate("-t 3")} 3< descriptor-file; echo ${form.name}_FILE_TTY:$?`,
+    `${form.predicate("-t 99")}; echo ${form.name}_CLOSED_TTY:$?`,
+  ]);
+  await command(page, `/programs/shell-engine.wasm -c ${shellQuote(predicates.join("; "))}; rm descriptor-file`);
+  for (const form of descriptorForms) {
+    for (const suffix of ["TERMINAL_PIPE:1", "TERMINAL_TTY:0", "FILE_PIPE:1", "FILE_TTY:1", "CLOSED_TTY:1"]) {
+      await output(page, `${form.name}_${suffix}`);
+    }
+  }
+  await ready(page);
+  await expect.poll(() => page.workers().length).toBe(baseline);
+  await expect.poll(() => page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0].pipes)).toBe(0);
+});
+
+test("terminal operand errors keep Bash conditional status and short circuiting", async ({ page }) => {
+  const baseline = await open(page);
+  const source = [
+    "test -t '-0'; echo SIGNED_TTY:$?",
+    "[ -t ' +00 ' ]; echo PADDED_TTY:$?",
+    "[[ -t 4294967296 ]]; echo WIDE_FD:$?",
+    "test ! -t nope; echo TEST_ERROR:$?",
+    "[ ! -t nope ]; echo BRACKET_ERROR:$?",
+    "[[ -t nope ]]; echo CONDITIONAL_ERROR:$?",
+    "[[ ! -t nope ]]; echo NOT_ERROR:$?",
+    "[[ -t nope || yes ]]; echo OR_ERROR:$?",
+    "[[ -t nope && yes ]]; echo AND_ERROR:$?",
+    "[[ yes || -t skipped ]]; echo SKIPPED_ERROR:$?",
+    "test -t 9223372036854775808; echo OVERFLOW_ERROR:$?",
+  ].join("; ");
+  await command(page, `/programs/shell-engine.wasm -c ${shellQuote(source)}`);
+  for (const marker of ["SIGNED_TTY:0", "PADDED_TTY:0", "WIDE_FD:1", "TEST_ERROR:2", "BRACKET_ERROR:2", "CONDITIONAL_ERROR:2", "NOT_ERROR:0", "OR_ERROR:0", "AND_ERROR:2", "SKIPPED_ERROR:0", "OVERFLOW_ERROR:2"]) {
+    await output(page, marker);
+  }
+  await ready(page);
+  const lines = await page.evaluate(() => window.bashWeb!.readLines().map((line) => line.trim()));
+  expect(lines.filter((line) => line === "/usr/bin/bash: [[: nope: integer expected")).toHaveLength(4);
+  expect(lines).toContain("/usr/bin/bash: test: nope: integer expected");
+  expect(lines).toContain("/usr/bin/bash: [: nope: integer expected");
+  expect(lines.some((line) => line.includes("skipped: integer expected"))).toBe(false);
+  await expect.poll(() => page.workers().length).toBe(baseline);
+});
+
 const preopenGuests = ["shell-engine", "test-guest", "test-spin"] as const;
 const preopenLayouts = [
   { name: "persistent fd 3", extraFds: [], nested: false },

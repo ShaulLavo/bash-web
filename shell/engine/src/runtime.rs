@@ -3,7 +3,10 @@
 //! preview1 path_open, runtime pipes and inherited stdio share one namespace.
 use crate::{
     executor::{Cancel, Executor, JoinHandle},
-    io::{Endpoint, FdTable, FileMetadata, FileSystem, HostEndpoint, IoError, OpenOptions},
+    io::{
+        DescriptorKind, Endpoint, FdTable, FileMetadata, FileSystem, HostEndpoint, IoError,
+        OpenOptions,
+    },
     process::{GroupId, ProcessError, ProcessHost, ProcessId, SpawnRequest},
 };
 use futures::{
@@ -27,6 +30,18 @@ use std::{
 mod wasi;
 #[cfg(target_os = "wasi")]
 pub use wasi::WasiAbi;
+
+/// Decode runtime_proc's append-only descriptor categories, not Preview1 types.
+#[cfg(any(target_os = "wasi", test))]
+fn decode_descriptor_kind(kind: u32) -> DescriptorKind {
+    match kind {
+        1 => DescriptorKind::Pipe,
+        2 => DescriptorKind::Terminal,
+        3 => DescriptorKind::Regular,
+        4 => DescriptorKind::Directory,
+        _ => DescriptorKind::Other,
+    }
+}
 
 /// Decode preview1's fixed 64-byte filestat record without relying on Rust
 /// layout/alignment. Preview1 exposes no Unix mode, owner or effective access
@@ -160,6 +175,7 @@ pub trait Abi {
     fn kill(&self, pid: u32, signal: i32) -> Result<(), i32>;
     fn kill_job(&self, job: u32, signal: i32) -> Result<(), i32>;
     fn pipe(&self) -> Result<(u32, u32), i32>;
+    fn fd_kind(&self, fd: u32) -> Result<DescriptorKind, i32>;
     fn dup(&self, fd: u32) -> Result<u32, i32>;
     fn close(&self, fd: u32);
     /// One preview1 directory operation. Existing directories (never files)
@@ -680,6 +696,9 @@ impl Drop for RuntimeEndpoint {
 impl HostEndpoint for RuntimeEndpoint {
     fn runtime_fd(&self) -> Option<u32> {
         Some(self.fd)
+    }
+    fn descriptor_kind(&self) -> Result<DescriptorKind, IoError> {
+        self.runtime.0.abi.fd_kind(self.fd).map_err(io_error)
     }
     fn read<'a>(&'a self, output: &'a mut [u8]) -> LocalBoxFuture<'a, Result<usize, IoError>> {
         async move {
