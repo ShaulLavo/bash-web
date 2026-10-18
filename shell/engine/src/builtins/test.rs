@@ -384,6 +384,7 @@ pub(crate) async fn unary(
             .await
             .map_err(UnaryError::Status);
     }
+    step(context, work).await?;
     let fd = decimal(operand, &context.cancel, work)
         .await?
         .ok_or(UnaryError::Integer)?;
