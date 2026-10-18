@@ -6,15 +6,51 @@ import { createRuntimeTerminalCodec } from "waffle/browser/runtime-terminals";
 import { DescriptorTable } from "waffle/core/descriptors";
 import { createFilesystemIdentity } from "waffle/fs/protocol";
 import { ProcessIdentityAllocator } from "waffle/proc/identity";
-import { PipeController } from "waffle/proc/pipes";
+import { PipeController, type PipeEndpoint } from "waffle/proc/pipes";
 import { ExecutableRegistry } from "waffle/proc/registry";
 import { ProcessTable } from "waffle/proc/table";
+import type { ProcessExit } from "waffle/proc/types";
 import {
   createWorkerProcessTransport,
   WorkerProcessClient,
   type WorkerProcessMessage,
 } from "waffle/proc/worker-client";
 import { createWorkerPipeCodec } from "waffle/proc/worker-pipes";
+
+async function verifyRuntimeChild(
+  parent: WorkerProcessClient,
+  pid: number,
+  {
+    output,
+    reader,
+    errors,
+    failure,
+    outcome,
+    notices,
+    broker,
+  }: {
+    output: readonly string[];
+    reader: PipeEndpoint;
+    errors: readonly unknown[];
+    failure: WebAssembly.CompileError;
+    outcome: ProcessExit;
+    notices: readonly WorkerProcessMessage[];
+    broker: BrowserProcessBroker;
+  },
+): Promise<void> {
+  const parentPid = parent.pid;
+  assert.equal(parent.startStatus(parentPid, pid), 45);
+  assert.equal(output.join(""), "", "runtime_proc child emitted generic terminal bytes");
+  assert.equal(reader.tryRead([new Uint8Array(1024)]), 0, "child stderr must reach clean EOF");
+  assert.equal(errors.length, 1, "the host retains exactly one full diagnostic");
+  assert.ok(errors[0] instanceof Error);
+  assert.equal(errors[0].cause, failure, "the host must retain the original compile failure");
+  assert.ok(errors[0].stack);
+  const job = parent.jobOf(pid);
+  assert.deepEqual(parent.wait(parentPid, pid), outcome, "process cleanup must be confirmed");
+  assert.ok(parent.waitJob(parentPid, job), "job cleanup must be confirmed");
+  for (const notice of notices.slice(1)) await broker.runtimeMessage(notice, parentPid);
+}
 
 for (const mode of ["runtime-terminal", "runtime-pipe", "host-root"] as const) {
   test(`lazy loader diagnostic ownership: ${mode}`, async () => {
@@ -134,21 +170,15 @@ for (const mode of ["runtime-terminal", "runtime-pipe", "host-root"] as const) {
         status: null,
       });
       if (parent) {
-        assert.equal(parent.startStatus(parentPid, pid), 45);
-        assert.equal(output.join(""), "", "runtime_proc child emitted generic terminal bytes");
-        assert.equal(
-          reader.tryRead([new Uint8Array(1024)]),
-          0,
-          "child stderr must reach clean EOF",
-        );
-        assert.equal(errors.length, 1, "the host retains exactly one full diagnostic");
-        assert.ok(errors[0] instanceof Error);
-        assert.equal(errors[0].cause, failure, "the host must retain the original compile failure");
-        assert.ok(errors[0].stack);
-        const job = parent.jobOf(pid);
-        assert.deepEqual(parent.wait(parentPid, pid), outcome, "process cleanup must be confirmed");
-        assert.ok(parent.waitJob(parentPid, job), "job cleanup must be confirmed");
-        for (const notice of notices.slice(1)) await broker.runtimeMessage(notice, parentPid);
+        await verifyRuntimeChild(parent, pid, {
+          output,
+          reader,
+          errors,
+          failure,
+          outcome,
+          notices,
+          broker,
+        });
       } else {
         assert.equal(broker.transportFor(pid), undefined);
         assert.equal(table.get(pid)!.parentPid, parentPid);
