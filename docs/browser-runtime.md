@@ -340,10 +340,11 @@ establish Safari behavior. Safari still requires verification on an actual Mac.
 
 ### Migrated browser scope
 
-The current Playwright listing (`playwright test --list`) contains 106 unique
-cases configured once for Chromium and once for Firefox: 212 configured
-executions. This is configuration inventory, not final browser acceptance
-evidence; a configured or runnable case is not a passing result.
+The current Playwright listing (`playwright test --list`) contains 108 unique
+cases configured once for Chromium and once for Firefox: 216 configured
+executions, with 200 runnable executions and 16 unchanged configured skips. This is
+configuration inventory, not final browser acceptance evidence; a configured or
+runnable case is not a passing result.
 
 | Suite                               | Configured cases | Runnable cases | Missing public Bun API | Original known failures | New engine/Waffle pending |
 | ----------------------------------- | ---------------: | -------------: | ---------------------: | ----------------------: | ------------------------: |
@@ -351,11 +352,11 @@ evidence; a configured or runnable case is not a passing result.
 | External commands                   |               26 |             24 |                      2 |                       0 |                         0 |
 | Pipelines                           |               19 |             18 |                      1 |                       0 |                         0 |
 | Runtime                             |               38 |             34 |                      1 |                       3 |                         0 |
-| Startup diagnostics                 |                3 |              3 |                      0 |                       0 |                         0 |
-| Storage lifecycle                   |                6 |              6 |                      0 |                       0 |                         0 |
+| Startup diagnostics                 |                4 |              4 |                      0 |                       0 |                         0 |
+| Storage lifecycle                   |                7 |              7 |                      0 |                       0 |                         0 |
 | Worker assets and renderer fallback |                2 |              2 |                      0 |                       0 |                         0 |
-| **Unique cases**                    |          **106** |         **98** |                  **4** |                   **3** |                     **1** |
-| **Chromium + Firefox executions**   |          **212** |        **196** |                  **8** |                   **6** |                     **2** |
+| **Unique cases**                    |          **108** |        **100** |                  **4** |                   **3** |                     **1** |
+| **Chromium + Firefox executions**   |          **216** |        **200** |                  **8** |                   **6** |                     **2** |
 
 The `command` and byte-exact `printf` external-guest cases are runnable following
 the functions and printf units.
