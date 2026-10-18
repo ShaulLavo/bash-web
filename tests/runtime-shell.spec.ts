@@ -172,9 +172,11 @@ for (const form of descriptorForms) {
       `printf 'PIPE_PAYLOAD\\n' >&3; exec 3>&-`,
       `${form.predicate("-p /dev/fd/3")}; echo WRITE_CLOSED:$? >&2`,
     ].join("; ");
+    // Independent stdout/stderr writes can interleave within a terminal line.
+    // Drain the real pipe to a file, then display its exact bytes after stderr.
     await command(
       page,
-      `printf 'PIPE_PAYLOAD\\n' | /programs/shell-engine.wasm -c ${shellQuote(read)}; /programs/shell-engine.wasm -c ${shellQuote(write)} | cat; echo DESCRIPTOR_DONE:$?`,
+      `printf 'PIPE_PAYLOAD\\n' | /programs/shell-engine.wasm -c ${shellQuote(read)}; /programs/shell-engine.wasm -c ${shellQuote(write)} | cat > descriptor-payload; echo DESCRIPTOR_DONE:$?; cat descriptor-payload; rm descriptor-payload`,
     );
     const lines = await descriptorOutput(page, [
       "READ_STDIN:0",

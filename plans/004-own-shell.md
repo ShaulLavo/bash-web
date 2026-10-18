@@ -220,7 +220,7 @@ predicate capability/status behavior stay unchanged.
 - **Approved later malformed-`-t` negation follow-up.** GNU Bash 5.3.15 returns 2
   for `[[ ! ! -t nope ]]`, but 1 for `[[ ! ( ! -t nope ) ]]`; the native engine
   currently returns 1 for both. Reproduced with `/usr/bin/bash --noprofile
-  --norc -c '<source>'` and the existing native conditional test at `c06539d`.
+--norc -c '<source>'` and the existing native conditional test at `c06539d`.
   Both Bash forms diagnose the evaluated operand with stderr open. The existing
   test now uses the grouped spelling for its status-1 assertion. Direct repeated
   negation needs its own evaluator/oracle treatment; this closed-stderr repair
@@ -234,6 +234,18 @@ predicate capability/status behavior stay unchanged.
   Chromium cases and 127 runtime/terminal host tests passed on UpCloud. The WASI
   build is from `afce126`, with identical production Rust/host code; `8238cf5`
   only extracted shared browser assertions to remove new duplicate clones.
+- Required CI at `9a96117` passed layers, shell and quality, including 1,138
+  native and 1,123 executed WASI tests. Frozen replay gained only
+  `oils:builtin-bracket:319` and `oils:builtin-bracket:554`, reaching 951/955/1341
+  with zero lost or newly failing cases. Raise only those two verified pass
+  memberships; oracle, case, skip and exclusion identities stay unchanged.
+- That historical browser run passed 222 cases with the exact 16 inherited
+  skips, but two Firefox pipe fixtures exposed an unsupported line-ordering
+  assumption: child stderr and downstream stdout interleaved as
+  `WRITE_CLOSED:1PIPE_PAYLOAD`. The fixture now drains the actual output pipe to
+  a file before displaying its bytes. It keeps every exact marker, both payloads,
+  pipeline-status and EOF/worker/pipe-retirement checks, without substring
+  matching, retries, longer deadlines or skips. Final-head CI remains pending.
 - Also at `8238cf5`, 263 native library and 544 word tests, wasm32-wasip1 type
   checking, Clippy, Rust formatting, TypeScript checks, lint, formatting, unused
   code and both strict duplicate gates passed without baseline/exclusion changes.
