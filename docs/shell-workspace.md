@@ -110,8 +110,12 @@ Its `ProcessHost` registers only the original `argv.py` and `printenv.py` fixtur
 commands shared by the compatibility engines. It never launches host processes.
 The two helpers stream through the same bounded descriptors.
 
-`compat:shell` uses `own-shell` in frozen-oracle mode. It builds only that engine
-and runs the fixed builtins-only cases from the committed GNU bash fixture.
+`compat:shell` uses `own-shell` in frozen-oracle mode and runs the fixed
+builtins-only cases from the committed GNU bash fixture. Since plan 006 step 6 it
+runs the production `shell-runtime` guest on Waffle's Node runtime, with the
+utility add-ons and the `argv.py`/`printenv.py` fixtures as separate registered
+programs (see [development](development.md)); this standalone CLI is no longer
+its instrument.
 It needs Node 26.7.0, the Rust toolchain, the installed Waffle dependency and
 the [WASI build prerequisites](getting-started.md#build-and-test), but no
 installed bash, submodules, corpus downloads or other engines. Set

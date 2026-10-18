@@ -262,12 +262,16 @@ for scoring. Oils keeps its subject categories; the secondary corpora use their
 source file paths as categories. All skipped cases stay in the fixture and in the
 result. The exact scored denominator is `total - skipped` in each count group.
 
-CI uses Node 26.7.0 and `node:wasi` to run only those selected cases against the
-release `wasm32-wasip1` CLI. Each case gets a fresh memory filesystem with no host
-preopens and only the two fixture process programs. There is a 10-second timeout
-and a 4 MiB combined output ceiling per case. A crash or timeout fails that case;
-it never silently becomes a skip. The CLI drains both output pipes between
-executor turns; it does not collect program output until exit. Browser transport, shared filesystem behavior and cold-start measurement remain
+CI uses Node 26.7.0 and Waffle's Node runtime to run only those selected cases
+against the release `shell-runtime` guest. Each case gets a fresh Runtime and
+filesystem with the baseline's tree (working directory, `/dev`, `/usr/bin`,
+`/usr/local/bin`, `/bin`), the two fixture programs and, for the candidate, the
+four utility add-ons, all as separate registered guests on Waffle's process path.
+stdout and stderr are raw separate streams, never a terminal sink. There is a
+10-second timeout and a 4 MiB combined output ceiling per case. A crash or
+timeout fails that case; it never silently becomes a skip. The fixed oracle's
+`environment` record still names the former `node:wasi` standalone instrument:
+its digest is part of the frozen oracle, so it is unchanged. Browser transport, shared filesystem behavior and cold-start measurement remain
 host/product concerns. This package verifies the shell program and its
 runtime boundary; it does not replace the browser host.
 
