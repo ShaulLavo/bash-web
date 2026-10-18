@@ -88,14 +88,14 @@ function startStorageWait(
     clearTimeout(timeout);
     timeout = undefined;
   };
-  const finish = (error?: unknown) => {
+  const finish = (...failure: [] | [unknown]) => {
     if (settled) return;
     settled = true;
     clearGuard();
     signal.removeEventListener("abort", abort);
     unobserve();
     unobserveLock();
-    if (error !== undefined) return reject(error);
+    if (failure.length) return reject(failure[0]);
     markStartup(options.onStartupStage, "storage-wait-resolved");
     resolve();
   };

@@ -486,6 +486,37 @@ test("the storage await resolves independently of registration and preserves run
   assert.deepEqual(snapshot.pending, ["runtime-lease-requested"]);
 });
 
+for (const notification of ["initial", "later"] as const) {
+  test(`storage rejects undefined thrown by the ${notification} state observer`, async (context) => {
+    context.mock.timers.enable({ apis: ["setTimeout"] });
+    const fixture = storageWorker(context);
+    const { runtime, worker } = fixture.create();
+    const diagnostics = createStartupDiagnostics(1);
+    const opening = waitForStorage(runtime, new AbortController().signal, {
+      onStartupStage: diagnostics.observe,
+      onState(state) {
+        if (notification === "initial" || state.status === "waiting") throw undefined;
+      },
+    });
+    const rejected = assert.rejects(opening, (reason: unknown) => {
+      assert.equal(reason, undefined);
+      return true;
+    });
+    if (notification === "later") worker.state("waiting");
+    await rejected;
+    assert.equal(
+      runtime.filesystem.state.status,
+      notification === "initial" ? "opening" : "waiting",
+    );
+    assert.equal(diagnostics.snapshot().stages["storage-wait-resolved"], undefined);
+    assert.deepEqual(diagnostics.snapshot().pending, ["storage-wait-requested"]);
+    assert.equal(runtime.filesystem.onStateChange, undefined);
+    assert.equal(runtime.disposed, false);
+    assert.equal(worker.disposalRequested, false);
+    context.mock.timers.tick(STORAGE_READY_TIMEOUT_MS * 2);
+  });
+}
+
 test("storage markers ignore thrown, rejected and never-settling diagnostic observers", async (context) => {
   const fixture = storageWorker(context);
   const { runtime, worker } = fixture.create();
