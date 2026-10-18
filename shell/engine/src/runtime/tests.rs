@@ -276,13 +276,13 @@ impl Abi for Fake {
         let startup_gate = self.startup_gate.borrow().clone();
         let failure_cleanup_gate = self.failure_cleanup_gate.borrow().clone();
         self.executor.spawn(async move {
-            if let Some(gate) = startup_gate {
-                if cancel.run(gate.cancelled()).await.is_err() {
-                    startup.set(Some(Err(11)));
-                    drop(fds);
-                    status.set(Some(WaitResult::Signaled(signal.get())));
-                    return;
-                }
+            if let Some(gate) = startup_gate
+                && cancel.run(gate.cancelled()).await.is_err()
+            {
+                startup.set(Some(Err(11)));
+                drop(fds);
+                status.set(Some(WaitResult::Signaled(signal.get())));
+                return;
             }
             startup.set(Some(match outcome {
                 Some(WaitResult::StartFailed(errno)) => Err(errno),
