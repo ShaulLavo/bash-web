@@ -1,0 +1,176 @@
+# Development and architecture
+
+`bash-web` is a WASM-first bash-compatible shell: a Rust parser and shell
+engine, a browser embedding adapter, and standalone verification. Its original
+shell commits, fixtures, oracle observations, and compatibility harness are
+preserved.
+
+The shell is a WASM program, not a browser runtime. The separate
+[`waffle`](https://github.com/ShaulLavo/waffle) package owns filesystem, process,
+pipe, and page lifecycle services. Create **one runtime per page**, then pass it
+to each shell. The shell adapter imports Waffle; it does not vendor a runtime or
+create a second runtime behind the application's back. Applications register
+external programs with their runtime; the shell does not register Bun or other
+programs implicitly.
+
+```ts
+import { createRuntime } from "waffle";
+import { createShell } from "bash-web";
+
+// Serve the bundled Waffle filesystem worker at this application-owned URL.
+const runtime = createRuntime({
+  filesystem: { workerURL: new URL("/fs-worker.js", location.href) },
+});
+try {
+  const shell = await createShell({ runtime, script: "printf 'hello\\n'" });
+  try {
+    const result = await shell.done;
+    console.log(result.code);
+  } finally {
+    await shell.dispose();
+  }
+} finally {
+  await runtime.dispose();
+}
+```
+
+This is a browser/bundler entry, not a Node shell launcher. Serve the shell
+and guest assets with the isolation headers described in
+[Browser integration](browser-runtime.md). Omitting `script` starts the
+persistent interactive editor; the host connects the shell's terminal byte
+bridge to its UI. Terminal rendering and demo controls live in `src/browser/`,
+separate from the shell facade.
+
+`waffle` is a **required peer dependency**, pinned to the published Git commit
+`ba968a6f86468d03394792a3e9c447dfc713c279`:
+`git+https://github.com/ShaulLavo/waffle.git#ba968a6f86468d03394792a3e9c447dfc713c279`.
+The development dependency uses the same pin so local builds and tests exercise
+the same runtime applications supply.
+
+## Build and test
+
+Prerequisites are Node 26.7.0, npm, Rust 1.98.1 through rustup, and
+wasmtime for WASI tests. The frozen compatibility oracle requires exactly
+Node 26.7.0; CI and standalone verification use that version.
+
+```sh
+git clone https://github.com/ShaulLavo/bash-web.git
+cd bash-web
+rustup toolchain install 1.98.1 --profile minimal --component rustfmt --target wasm32-wasip1
+npm ci
+npm run build:shell
+npm run test:rust
+npm run test:shell:wasi
+```
+
+Build and check the browser integration separately:
+
+```sh
+npm run test:browser:package
+npm run build:browser
+npm run typecheck:browser
+npm run test:runtime:terminal
+npm run test:browser
+```
+
+Browser tests require the Playwright browsers used by their configured projects.
+The browser build publishes the real `shell-runtime.wasm` at
+`/programs/shell-engine.wasm` and bundled JavaScript workers at
+`dist/shell-worker.js` and `dist/fs-worker.js`. The filesystem worker is built
+from Waffle's public `waffle/browser/fs-worker` entry; applications own its served
+URL and pass it to `createRuntime`. The browser shell is not the stand-in CLI. This package
+contains no Bun launcher, runtime implementation, guest binary, or guest-license
+payload. Bun-specific browser cases remain pending until the external package
+publishes the required installer/worker APIs and verified guest descriptor; see
+[the current boundary and limitations](browser-runtime.md).
+
+The shell-only CI also runs the native and WASI suites, size ceiling,
+scoreboard runner tests, generator source tests and fixed fixture replays.
+Run the individual shell fuzz replays with the `:ci` scripts in
+`package.json`; they use only the committed generator and fixture bytes.
+
+The frozen compatibility score can be replayed without downloading corpora,
+installing GNU Bash, or installing browser assets. The full compatibility CI job
+also runs sandbox and transport tests, which require bubblewrap and Python 3:
+
+```sh
+BASH_COMPAT_BASE_REF=$(git rev-parse HEAD) npm run compat:shell
+```
+
+For explicit maintenance capture, prepare the pinned corpus sources only with
+`npm run prepare:shell-corpus`. That command verifies archive checksums and
+does not build an engine. Capture itself requires Linux, GNU Bash 5.3.15,
+bubblewrap, Python's standard library, and the `yaml` package.
+
+## Engine layer gate
+
+Run the lexical dependency checks without building Rust or changing frozen
+compatibility data:
+
+```sh
+npm run test:check-layers
+npm run typecheck:layers
+LAYERS_BASE_REF=$(git rev-parse origin/main) npm run check:layers
+```
+
+`LAYERS_BASE_REF` (or `--base-ref`) must be an immutable full commit SHA.
+CI fetches complete history and selects the PR base SHA, the pre-push main SHA,
+or the merge-base with main for another branch's push. Its lightweight layer
+job must pass before any Rust or browser build job starts. `npm run compat`
+is an alias for `npm run compat:shell`; it still uses the frozen oracle.
+
+The checker scans every engine Rust source regardless of platform or feature
+configuration. It records separate production and test-only edges, violations,
+source locations and a source digest in `docs/evidence/engine-layers.json`.
+Neither violation count may increase, and a new violating edge cannot replace
+an old one even at the same count. This is a lexical check, not Rust alias or
+macro resolution and not proof that optional capabilities compile separately.
+See [plan 006](../plans/006-engine-boundaries.md) for the graph and that later gate.
+
+After editing engine sources, refresh and commit their exact evidence together:
+
+```sh
+LAYERS_BASE_REF=$(git rev-parse origin/main) npm run check:layers -- --record
+```
+
+Recording cannot bypass the committed-HEAD or immutable-target ratchet. A normal
+merge can carry unchanged evidence from a parent while combining newer sources.
+The checker verifies the identical parent evidence against that parent's sources,
+rescans the merge, and ratchets it against the verified parent before permitting
+a refresh. It never substitutes the old source digest or old counts for merged
+sources. Changed merge evidence must match exactly; ordinary source commits with
+stale evidence are rejected, as are tampered parent or immutable-target records.
+A target predating the first evidence file is scanned from its immutable sources.
+
+## Repository layout
+
+- `shell/` contains the parser and WASI shell engine.
+- `src/shell.ts` exposes the runtime-injected browser shell API.
+- `src/runtime/` contains guest/worker embedding adapters that import Waffle.
+- `src/browser/` contains the terminal demo and page-level UI concerns.
+- `tests/` contains browser acceptance tests.
+- `scripts/` contains browser build helpers, the shell runner, scoreboard,
+  provenance checks, and differential generators.
+- `scripts/fixtures/` contains frozen generator inputs; do not regenerate them
+  during ordinary maintenance.
+- `docs/evidence/` contains frozen oracle, baseline, and classification data.
+- `docs/extraction/` preserves the shell extraction's commit mapping and records.
+- `plans/004-own-shell.md` records the approved shell work, and
+  `plans/005-bash-web-packaging.md` records the package boundary.
+
+The pinned source revisions, archive checksums, and implementation
+classifications are in [`sources.lock.json`](../sources.lock.json). Keep the
+generated `dist/THIRD_PARTY_NOTICES.txt` with distributions; shell-only notices
+can be regenerated with `npm run notices:shell`. See
+[Third-party notices](../THIRD_PARTY_NOTICES.md) and the
+[browser source provenance](browser-runtime.md#source-provenance) for the
+browser adapters, peer runtime, and terminal notices.
+
+## Host boundary
+
+A shell owns shell semantics and its own process handle. It borrows the page's
+runtime; closing a shell must not dispose that runtime or unrelated shells.
+The page owns runtime disposal. Waffle owns shared services and their teardown;
+terminal rendering, browser controls, and asset serving remain host concerns.
+Browser acceptance complements the frozen shell scoreboard and never replaces
+or regenerates its oracle, baseline, classifications, or generator fixtures.

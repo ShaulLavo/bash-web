@@ -2,9 +2,11 @@ import { createShell, runtimeSnapshot, SharedBridge, type Shell } from "../index
 import { control } from "../bridge";
 import type { Runtime } from "waffle";
 import { waitForStorage } from "./storage";
+import type { StartupObserver } from "../runtime/startup-diagnostics";
 
 export type SessionOptions = {
   runtime: Runtime;
+  onStartupStage?: StartupObserver;
   /** Cancels pending startup and the session, without disposing the borrowed runtime. */
   signal?: AbortSignal;
   cols: number;
@@ -120,6 +122,7 @@ export class BrowserSession {
       runtime: this.options.runtime,
       terminal: this.bridge,
       signal: this.admission.signal,
+      onStartupStage: this.options.onStartupStage,
     }));
     if (this.disposed) throw new Error("Shell startup was cancelled.");
     this.shell = shell;

@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.45",
+  "version": "0.0.48",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -50,12 +50,15 @@
     "fuzz:shell-functions": "node scripts/fuzz-shell-functions.ts",
     "test:fuzz-shell-functions": "node --test scripts/test-fuzz-shell-functions.ts",
     "fuzz:shell-functions:ci": "node scripts/fuzz-shell-functions.ts --replay scripts/fixtures/shell-functions-seed-1.json --replay scripts/fixtures/shell-functions-seed-42.json",
+    "fuzz:shell-path": "node scripts/fuzz-shell-path.ts",
+    "test:fuzz-shell-path": "node --test scripts/test-fuzz-shell-path.ts",
+    "fuzz:shell-path:ci": "node scripts/fuzz-shell-path.ts --replay scripts/fixtures/shell-path-seed-1.json --replay scripts/fixtures/shell-path-seed-42.json",
     "sources:browser": "node scripts/sources.mjs",
     "build:shell:browser": "node scripts/build-shell-browser.mjs",
     "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:test-guest && npm run notices:browser && vite build && node scripts/finish-build.mjs",
     "typecheck:browser": "tsc --noEmit",
     "test:browser": "playwright test",
-    "test:runtime:terminal": "node scripts/test-runtime-terminal.mjs",
+    "test:runtime:terminal": "node --expose-gc scripts/test-runtime-terminal.mjs",
     "notices:browser": "npm run notices:shell && node scripts/browser-notices.mjs",
     "serve": "node dist/serve.mjs",
     "verify:browser": "npm run test:browser:package && npm run build:browser && npm run typecheck:browser && npm run test:runtime:terminal && npm run test:browser",
@@ -65,7 +68,11 @@
     "build:test-guest": "node scripts/build-test-guest.mjs",
     "fuzz:shell-printf": "node scripts/fuzz-shell-printf.ts",
     "test:fuzz-shell-printf": "node --test scripts/test-fuzz-shell-printf.ts",
-    "fuzz:shell-printf:ci": "node scripts/fuzz-shell-printf.ts --replay scripts/fixtures/shell-printf-seed-1.json --replay scripts/fixtures/shell-printf-seed-42.json"
+    "fuzz:shell-printf:ci": "node scripts/fuzz-shell-printf.ts --replay scripts/fixtures/shell-printf-seed-1.json --replay scripts/fixtures/shell-printf-seed-42.json",
+    "check:layers": "node scripts/check-layers.ts",
+    "test:check-layers": "node --test scripts/test-check-layers.ts",
+    "typecheck:layers": "tsc --ignoreConfig --noEmit --strict --skipLibCheck --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-layers.ts scripts/test-check-layers.ts",
+    "compat": "npm run compat:shell"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",

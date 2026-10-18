@@ -283,7 +283,7 @@ fn prefix_rhs_failure_is_fatal_even_when_the_command_has_a_heredoc() {
     }
     let rig = Rig::new(Limits::default());
     let observed = rig.calls.clone();
-    rig.host.register("observe", move |request, _| {
+    rig.host.register("/home/guest/observe", move |request, _| {
         let observed = observed.clone();
         async move {
             observed.borrow_mut().push(vec![

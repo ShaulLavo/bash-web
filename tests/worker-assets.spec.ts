@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers/browser-test";
 import { startupReady } from "./helpers/readiness.ts";
 
 test("production startup loads an emitted Waffle filesystem worker", async ({ page, request }) => {

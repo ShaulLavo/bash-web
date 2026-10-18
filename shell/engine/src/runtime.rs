@@ -117,6 +117,25 @@ impl PollEvent {
         }
     }
 }
+/// The runtime_proc waits share one eight-byte little-endian terminal record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WaitResult {
+    Exited(i32),
+    Signaled(i32),
+    StartFailed(i32),
+}
+impl WaitResult {
+    pub fn decode(bytes: [u8; 8]) -> Result<Self, i32> {
+        let kind = u32::from_le_bytes(bytes[..4].try_into().unwrap());
+        let value = i32::from_le_bytes(bytes[4..].try_into().unwrap());
+        match kind {
+            0 => Ok(Self::Exited(value)),
+            1 => Ok(Self::Signaled(value)),
+            2 => Ok(Self::StartFailed(value)),
+            _ => Err(28),
+        }
+    }
+}
 /// Injectable boundary keeps native engine tests independent of WASM imports.
 /// Errnos are positive WASI errnos here; the WASM adapter decodes negative results.
 /// `wait_job` confirms descendant teardown and reaps runtime-owned tombstones.
@@ -124,11 +143,14 @@ pub trait Abi {
     /// The embedder's initial logical bindings, excluding private directory preopens
     /// and descriptors subsequently allocated by this guest.
     fn inherited_fds(&self) -> Vec<u32>;
+    fn access_start(&self, path: &str, cwd: &str) -> Result<u32, i32>;
+    fn access_take(&self, request: u32) -> Result<(), i32>;
+    fn access_cancel(&self, request: u32);
     fn spawn(&self, request: &RuntimeSpawn) -> Result<u32, i32>;
     fn job_of(&self, pid: u32) -> Result<u32, i32>;
-    fn wait(&self, pid: u32) -> Result<i32, i32>;
+    fn wait(&self, pid: u32) -> Result<WaitResult, i32>;
     /// Nonblocking runtime wait_job with NOHANG=1. EAGAIN until all members exit.
-    fn wait_job(&self, job: u32) -> Result<i32, i32>;
+    fn wait_job(&self, job: u32) -> Result<WaitResult, i32>;
     fn kill(&self, pid: u32, signal: i32) -> Result<(), i32>;
     fn kill_job(&self, job: u32, signal: i32) -> Result<(), i32>;
     fn pipe(&self) -> Result<(u32, u32), i32>;
@@ -282,7 +304,7 @@ fn input_future_bytes<F>(_: &impl FnOnce(Endpoint, Endpoint, Cancel) -> F) -> us
 struct Child {
     group: GroupId,
     job: Option<u32>,
-    status: Cell<Option<i32>>,
+    status: Cell<Option<Result<i32, i32>>>,
 }
 struct State {
     abi: Rc<dyn Abi>,
@@ -337,6 +359,39 @@ impl Runtime {
             id,
             token: None,
         }
+    }
+    fn access_future(
+        &self,
+        path: String,
+        cwd: String,
+    ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        let runtime = self.clone();
+        async move {
+            let request = runtime
+                .0
+                .abi
+                .access_start(&path, &cwd)
+                .map_err(ProcessError::Runtime)?;
+            let guard = AccessGuard {
+                runtime: runtime.clone(),
+                request,
+                retired: Cell::new(false),
+            };
+            loop {
+                match runtime.0.abi.access_take(request) {
+                    Ok(()) => {
+                        guard.retired.set(true);
+                        return Ok(());
+                    }
+                    Err(AGAIN) => runtime.ready(5, request).await,
+                    Err(errno) => {
+                        guard.retired.set(true);
+                        return Err(ProcessError::Runtime(errno));
+                    }
+                }
+            }
+        }
+        .boxed_local()
     }
     /// Drive only BETWEEN executor turns. With timeout 0 this never blocks;
     /// timeout -1 parks until host readiness or a signal. No task calls poll.
@@ -558,6 +613,20 @@ impl Runtime {
         Ok(fd)
     }
 }
+struct AccessGuard {
+    runtime: Runtime,
+    request: u32,
+    retired: Cell<bool>,
+}
+impl Drop for AccessGuard {
+    fn drop(&mut self) {
+        if !self.retired.get() {
+            self.runtime.0.abi.access_cancel(self.request);
+            self.retired.set(true);
+        }
+    }
+}
+
 struct Ready {
     runtime: Runtime,
     kind: u32,
@@ -755,6 +824,13 @@ fn io_error(errno: i32) -> IoError {
     }
 }
 impl ProcessHost for Runtime {
+    fn access(
+        &self,
+        path: String,
+        cwd: String,
+    ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        self.access_future(path, cwd)
+    }
     fn allocate_group(&self) -> GroupId {
         self.group(false)
     }
@@ -790,12 +866,9 @@ impl ProcessHost for Runtime {
             .filter(|group| !group.closing)
             .map(|group| group.background)
             .ok_or(ProcessError::GroupClosed(request.group))?;
-        let executable = request
-            .argv
-            .first()
-            .cloned()
-            .filter(|name| !name.is_empty())
-            .ok_or_else(|| ProcessError::UnknownCommand(String::new()))?;
+        if request.executable.is_empty() {
+            return Err(ProcessError::UnknownCommand(String::new()));
+        }
         let mut inputs = Vec::new();
         let mut fds = Vec::new();
         fds.try_reserve_exact(request.fds.iter().count())
@@ -826,7 +899,7 @@ impl ProcessHost for Runtime {
             }
         }
         let spec = RuntimeSpawn {
-            executable,
+            executable: request.executable,
             argv: request.argv,
             env: request.env,
             cwd: request.cwd,
@@ -905,16 +978,21 @@ impl ProcessHost for Runtime {
             let child = child.ok_or(ProcessError::UnknownProcess(pid))?;
             loop {
                 if let Some(status) = child.status.get() {
-                    return Ok(status);
+                    return status.map_err(ProcessError::StartFailed);
                 }
                 match runtime.0.abi.wait(pid as u32) {
-                    Ok(status) => {
+                    Ok(result) => {
+                        let status = match result {
+                            WaitResult::Exited(code) => Ok(code),
+                            WaitResult::Signaled(signal) => Ok(128 + signal),
+                            WaitResult::StartFailed(errno) => Err(errno),
+                        };
                         child.status.set(Some(status));
                         runtime.0.children.borrow_mut().remove(&pid);
                         if let Some(job) = child.job {
                             let _ = runtime.try_reap_job(child.group, job);
                         }
-                        return Ok(status);
+                        return status.map_err(ProcessError::StartFailed);
                     }
                     Err(AGAIN) => runtime.ready(2, pid as u32).await,
                     Err(errno) => return Err(ProcessError::Runtime(errno)),
@@ -965,7 +1043,14 @@ impl ProcessHost for Runtime {
             .collect();
         Box::pin(async move {
             for result in futures::future::join_all(direct).await {
-                result?;
+                // A typed startup failure is a consumed terminal child result,
+                // not a failure to observe/reap that child. `wait(pid)` reports
+                // it to the command; group waits own only lifecycle cleanup.
+                if let Err(error) = result
+                    && !matches!(error, ProcessError::StartFailed(_))
+                {
+                    return Err(error);
+                }
             }
             Ok(())
         })
@@ -1076,7 +1161,11 @@ impl ProcessHost for Runtime {
                     // children and jobs before releasing the logical group.
                 } else {
                     for result in futures::future::join_all(batch).await {
-                        result?;
+                        if let Err(error) = result
+                            && !matches!(error, ProcessError::StartFailed(_))
+                        {
+                            return Err(error);
+                        }
                     }
                 }
             }

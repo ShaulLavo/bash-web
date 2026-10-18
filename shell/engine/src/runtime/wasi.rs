@@ -2,6 +2,18 @@
 use super::*;
 #[link(wasm_import_module = "runtime_proc")]
 unsafe extern "C" {
+    #[link_name = "access_start"]
+    fn proc_access_start(
+        path_ptr: *const u8,
+        path_len: usize,
+        cwd_ptr: *const u8,
+        cwd_len: usize,
+        mode: i32,
+    ) -> i32;
+    #[link_name = "access_take"]
+    fn proc_access_take(request: u32) -> i32;
+    #[link_name = "access_cancel"]
+    fn proc_access_cancel(request: u32) -> i32;
     #[link_name = "spawn"]
     fn proc_spawn(ptr: *const u8, length: usize) -> i32;
     #[link_name = "job_of"]
@@ -9,7 +21,7 @@ unsafe extern "C" {
     #[link_name = "wait"]
     fn proc_wait(pid: u32, output: *mut u8) -> i32;
     #[link_name = "wait_job"]
-    fn proc_wait_job(job: u32, flags: u32, status: *mut i32) -> i32;
+    fn proc_wait_job(job: u32, flags: u32, output: *mut u8) -> i32;
     #[link_name = "kill"]
     fn proc_kill(pid: u32, signal: i32) -> i32;
     #[link_name = "kill_job"]
@@ -112,6 +124,15 @@ impl WasiAbi {
     }
 }
 impl Abi for WasiAbi {
+    fn access_start(&self, path: &str, cwd: &str) -> Result<u32, i32> {
+        result(unsafe { proc_access_start(path.as_ptr(), path.len(), cwd.as_ptr(), cwd.len(), 1) })
+    }
+    fn access_take(&self, request: u32) -> Result<(), i32> {
+        result(unsafe { proc_access_take(request) }).map(|_| ())
+    }
+    fn access_cancel(&self, request: u32) {
+        let _ = unsafe { proc_access_cancel(request) };
+    }
     fn inherited_fds(&self) -> Vec<u32> {
         self.inherited.clone()
     }
@@ -122,21 +143,15 @@ impl Abi for WasiAbi {
     fn job_of(&self, pid: u32) -> Result<u32, i32> {
         result(unsafe { proc_job_of(pid) })
     }
-    fn wait(&self, pid: u32) -> Result<i32, i32> {
+    fn wait(&self, pid: u32) -> Result<WaitResult, i32> {
         let mut bytes = [0; 8];
         result(unsafe { proc_wait(pid, bytes.as_mut_ptr()) })?;
-        let kind = u32::from_le_bytes(bytes[..4].try_into().unwrap());
-        let code = i32::from_le_bytes(bytes[4..].try_into().unwrap());
-        match kind {
-            0 => Ok(code),
-            1 => Ok(128 + code),
-            _ => Err(28),
-        }
+        WaitResult::decode(bytes)
     }
-    fn wait_job(&self, job: u32) -> Result<i32, i32> {
-        let mut status = 0;
-        result(unsafe { proc_wait_job(job, 1, &mut status) })?;
-        Ok(status)
+    fn wait_job(&self, job: u32) -> Result<WaitResult, i32> {
+        let mut bytes = [0; 8];
+        result(unsafe { proc_wait_job(job, 1, bytes.as_mut_ptr()) })?;
+        WaitResult::decode(bytes)
     }
     fn kill(&self, pid: u32, signal: i32) -> Result<(), i32> {
         result(unsafe { proc_kill(pid, signal) }).map(|_| ())

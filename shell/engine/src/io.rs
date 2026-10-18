@@ -294,6 +294,13 @@ impl Drop for Open {
 /// offsets. A separate filesystem open creates an independent offset.
 #[derive(Clone)]
 pub struct Endpoint(Rc<Open>);
+/// Observing an open description must not keep its pipe reader/writer alive.
+pub(crate) struct WeakEndpoint(Weak<Open>);
+impl WeakEndpoint {
+    pub(crate) fn upgrade(&self) -> Option<Endpoint> {
+        self.0.upgrade().map(Endpoint)
+    }
+}
 pub fn pipe() -> (Endpoint, Endpoint) {
     let pipe = Rc::new(Pipe {
         state: RefCell::new(PipeState {
@@ -310,6 +317,9 @@ pub fn pipe() -> (Endpoint, Endpoint) {
     )
 }
 impl Endpoint {
+    pub(crate) fn downgrade(&self) -> WeakEndpoint {
+        WeakEndpoint(Rc::downgrade(&self.0))
+    }
     pub(crate) fn host_owner(&self) -> Option<Weak<dyn HostEndpoint>> {
         match self.0.as_ref() {
             Open::Host(host) => Some(Rc::downgrade(host)),
@@ -749,6 +759,20 @@ impl MemoryFs {
             }
         }
         create(path, parents)
+    }
+    pub fn set_executable(&self, path: &str, executable: bool) -> Result<(), IoError> {
+        let file = self
+            .0
+            .borrow()
+            .files
+            .get(path)
+            .cloned()
+            .ok_or(IoError::NotFound)?;
+        let mut metadata = file.metadata.get();
+        metadata.executable = Some(executable);
+        metadata.mode = Some(if executable { 0o755 } else { 0o600 });
+        file.metadata.set(metadata);
+        Ok(())
     }
     pub fn read_file(&self, path: &str) -> Result<Vec<u8>, IoError> {
         let fs = self.0.borrow();

@@ -25,10 +25,10 @@ function filesystemOptions(): SharedFilesystemOptions {
 }
 
 mountBrowser({
-  acquireRuntime(): BrowserRuntimeLease {
-    const runtime = createRuntime({ filesystem: filesystemOptions() });
+  acquireRuntime(onStartupStage): BrowserRuntimeLease {
+    const runtime = createRuntime({ filesystem: filesystemOptions(), onStartupStage });
     const registration = new AbortController();
-    const ready = registerTestPrograms(runtime, registration.signal);
+    const ready = registerTestPrograms(runtime, registration.signal, onStartupStage);
     let disposing: Promise<void> | undefined;
     return {
       runtime,

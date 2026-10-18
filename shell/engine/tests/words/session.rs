@@ -53,6 +53,13 @@ impl ProcessHost for ParseInterruptHost {
         self.probes.set(probes);
         probes >= self.interrupt_at.get()
     }
+    fn access(
+        &self,
+        path: String,
+        cwd: String,
+    ) -> futures::future::LocalBoxFuture<'static, Result<(), ProcessError>> {
+        self.inner.access(path, cwd)
+    }
     fn spawn(&self, request: SpawnRequest) -> Result<ProcessId, ProcessError> {
         self.inner.spawn(request)
     }
