@@ -27,7 +27,7 @@ pub struct Limits {
     pub source_bytes: usize,
     /// Command name + arguments + assignment names, '=' and values, in bytes.
     pub expansion_bytes: usize,
-    /// Temporary PATH/cwd/candidate storage, separate from command-word bytes.
+    /// Live PATH/cwd/candidate/request storage, separate from command-word bytes.
     pub path_bytes: usize,
     /// All words, including command name and assignments (no empty AST placeholder).
     pub arguments: usize,
@@ -3188,7 +3188,8 @@ async fn dispatch_simple_command_body(
         }
         return Ok(Outcome::status(126));
     }
-    let executable = {
+    let (executable, _executable_storage) = {
+        let mut lookup = command_builtin::LookupWork::new(context.limits());
         // External prefix values already form the request environment. Lookup
         // reads its last PATH binding directly; installing a builtin frame here
         // would mutate shell state and double-charge exact argv boundaries.
@@ -3196,16 +3197,23 @@ async fn dispatch_simple_command_body(
             .iter()
             .rev()
             .find_map(|(key, value)| (key == "PATH").then_some(value.as_str()));
-        match command_builtin::executable(&name, &state, default_path, path_override, &context)
-            .await?
+        match command_builtin::executable(
+            &name,
+            &state,
+            default_path,
+            path_override,
+            &context,
+            &mut lookup,
+        )
+        .await?
         {
             command_builtin::Resolution::Executable(path) => {
                 // Keep the original path walk intact for the host. Lexically
                 // removing file/../ before spawn could bypass ENOTDIR checks.
-                path
+                path.into_parts()
             }
             command_builtin::Resolution::NonExecutable(path, reason) => {
-                command_builtin::execution_failure(&fds, &context, &path, reason).await?;
+                command_builtin::execution_failure(&fds, &context, &path.text, reason).await?;
                 return Ok(Outcome::status(126));
             }
             command_builtin::Resolution::Missing => {

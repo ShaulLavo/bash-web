@@ -118,10 +118,69 @@ async fn output(fds: &Descriptors, context: &Context, bytes: &[u8]) -> Result<()
         .map_err(|error| error.status())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct PathStorage {
+    _local: eval::StorageAllocation,
+    _global: eval::Allocation,
+}
+
+pub(super) struct PathString {
+    pub(super) text: String,
+    storage: PathStorage,
+}
+impl PathString {
+    pub(super) fn into_parts(self) -> (String, PathStorage) {
+        (self.text, self.storage)
+    }
+}
+
+/// PATH has its own live-byte ceiling, independent from argv admission. Scan
+/// fuel is cumulative for the whole command; string tickets refund on drop and
+/// also reserve the session-wide execution budget before each allocation.
+pub(super) struct LookupWork {
+    storage: eval::StorageBudget,
+    scan: expand::Work,
+}
+impl LookupWork {
+    pub(super) fn new(limits: &Limits) -> Self {
+        Self {
+            storage: eval::StorageBudget::new(limits.path_bytes),
+            scan: expand::Work::new(limits.path_bytes.saturating_add(limits.arguments), 0, 0),
+        }
+    }
+    fn admit(&self, bytes: usize, context: &Context) -> Result<PathStorage, i32> {
+        let local = self.storage.admit(bytes)?;
+        let global = context.evaluation.admit_execution(bytes)?;
+        Ok(PathStorage {
+            _local: local,
+            _global: global,
+        })
+    }
+    fn copy(&self, text: &str, context: &Context) -> Result<PathString, i32> {
+        let storage = self.admit(text.len(), context)?;
+        Ok(PathString {
+            text: text.to_owned(),
+            storage,
+        })
+    }
+    fn join(&self, prefix: &str, name: &str, context: &Context) -> Result<PathString, i32> {
+        let separator = if prefix.ends_with('/') { "" } else { "/" };
+        let bytes = prefix
+            .len()
+            .checked_add(separator.len())
+            .and_then(|bytes| bytes.checked_add(name.len()))
+            .ok_or(2)?;
+        let storage = self.admit(bytes, context)?;
+        let mut text = String::with_capacity(bytes);
+        text.push_str(prefix);
+        text.push_str(separator);
+        text.push_str(name);
+        Ok(PathString { text, storage })
+    }
+}
+
 pub(super) enum Resolution {
-    Executable(String),
-    NonExecutable(String, &'static [u8]),
+    Executable(PathString),
+    NonExecutable(PathString, &'static [u8]),
     Missing,
 }
 
@@ -134,21 +193,13 @@ pub(super) async fn executable(
     default_path: bool,
     path_override: Option<&str>,
     context: &Context,
+    work: &mut LookupWork,
 ) -> Result<Resolution, i32> {
-    // Command-word limits describe argv, not the cwd and host-request copies
-    // needed to locate it. A distinct bounded ledger keeps exact argv boundary
-    // behavior while admitting all PATH storage and cooperative scan work.
-    let limits = context.limits();
-    let mut work = expand::Work::new(
-        limits.path_bytes.saturating_add(limits.arguments),
-        limits.path_bytes,
-        0,
-    );
     if name.is_empty() {
         return Ok(Resolution::Missing);
     }
     let explicit = name.contains('/');
-    let (cwd, path, path_unset) = {
+    let (cwd, path, path_unset, _snapshot_storage) = {
         let state = state.borrow();
         let environment_path = path_override.or_else(|| state.scalar_parameter("PATH"));
         let path_unset = environment_path.is_none() && !default_path;
@@ -160,9 +211,8 @@ pub(super) async fn executable(
         } else {
             environment_path.unwrap_or(".")
         };
-        work.admit_storage(cwd_storage(&state.cwd, path)?)
-            .map_err(admission_status)?;
-        (state.cwd.clone(), path.to_owned(), path_unset)
+        let storage = work.admit(cwd_storage(&state.cwd, path)?, context)?;
+        (state.cwd.clone(), path.to_owned(), path_unset, storage)
     };
     let mut entries = path.split(':');
     let mut non_executable = None;
@@ -173,8 +223,7 @@ pub(super) async fn executable(
     let mut directory_before_fallback = false;
     loop {
         let candidate = if explicit {
-            work.admit_storage(name.len()).map_err(admission_status)?;
-            name.to_owned()
+            work.copy(name, context)?
         } else {
             let Some(directory) = entries.next() else {
                 return Ok(if directory_before_fallback {
@@ -192,45 +241,47 @@ pub(super) async fn executable(
             } else {
                 directory
             };
-            let separator = if prefix.ends_with('/') { "" } else { "/" };
-            let bytes = prefix
-                .len()
-                .checked_add(name.len())
-                .and_then(|bytes| bytes.checked_add(separator.len()))
-                .ok_or(2)?;
-            work.admit_storage(bytes).map_err(admission_status)?;
-            format!("{prefix}{separator}{name}")
+            work.join(prefix, name, context)?
         };
-        for _ in candidate.bytes() {
-            work.checkpoint(&context.cancel)
+        for _ in candidate.text.bytes() {
+            work.scan
+                .checkpoint(&context.cancel)
                 .await
                 .map_err(admission_status)?;
         }
-        // Owned copies cross the host boundary; one request at a time, retired
-        // before advancing to the next PATH component.
-        work.admit_storage(cwd_storage(&cwd, &candidate)?)
-            .map_err(admission_status)?;
-        let result = context
-            .cancel
-            .run(context.core.host.access(candidate.clone(), cwd.clone()))
-            .await
-            .map_err(|_| context.cancel_status())?;
+        // Both owned copies are admitted before crossing the host boundary.
+        // Retire their tickets with the completed/cancelled request, not after
+        // the whole search. A retained fallback keeps its own separate ticket.
+        let result = {
+            let _request_storage = work.admit(cwd_storage(&cwd, &candidate.text)?, context)?;
+            context
+                .cancel
+                .run(
+                    context
+                        .core
+                        .host
+                        .access(candidate.text.clone(), cwd.clone()),
+                )
+                .await
+                .map_err(|_| context.cancel_status())?
+        };
         match result {
             Ok(()) => return Ok(Resolution::Executable(candidate)),
             Err(ProcessError::Runtime(errno @ (2 | 31 | 44))) => {
-                // X_OK failures alone cannot distinguish directories, denied
-                // ancestors and unregistered regular files. Metadata classifies
-                // only the failure; it NEVER establishes executable admission.
-                let bytes = cwd_storage(&cwd, &candidate)?.checked_add(1).ok_or(2)?;
-                work.admit_storage(bytes).map_err(admission_status)?;
-                let absolute = if candidate.starts_with('/') {
-                    candidate.clone()
+                // Metadata only classifies failure; it NEVER admits execution.
+                // Absolute candidates can be borrowed without another copy.
+                let absolute = if candidate.text.starts_with('/') {
+                    None
                 } else {
-                    format!("{cwd}/{candidate}")
+                    Some(work.join(&cwd, &candidate.text, context)?)
                 };
+                let path = absolute
+                    .as_ref()
+                    .map(|path| path.text.as_str())
+                    .unwrap_or(&candidate.text);
                 let metadata = context
                     .cancel
-                    .run(context.fs().stat(&absolute, true))
+                    .run(context.fs().stat(path, true))
                     .await
                     .map_err(|_| context.cancel_status())?;
                 match metadata {
@@ -287,6 +338,7 @@ pub(super) async fn query(
     work: &mut expand::Work,
 ) -> Result<Outcome, i32> {
     let mut found = args.is_empty();
+    let mut lookup = LookupWork::new(context.limits());
     for name in args {
         for _ in name.bytes() {
             work.checkpoint(&context.cancel)
@@ -369,7 +421,15 @@ pub(super) async fn query(
             )
             .await?;
         } else {
-            let resolution = executable(name, state, options.default_path, None, context).await?;
+            let resolution = executable(
+                name,
+                state,
+                options.default_path,
+                None,
+                context,
+                &mut lookup,
+            )
+            .await?;
             let path = match resolution {
                 Resolution::Executable(path) => path,
                 Resolution::NonExecutable(_, _) if name.contains('/') => {
@@ -390,27 +450,26 @@ pub(super) async fn query(
                     continue;
                 }
             };
-            let display_path = if options.verbose && !name.contains('/') && !path.starts_with('/') {
-                let state = state.borrow();
-                let cwd = &state.cwd;
-                // Bash removes only the initial ./, preserving remaining PATH
-                // spelling such as dir/../other or dir/.
-                let relative = path.strip_prefix("./").unwrap_or(&path);
-                work.admit_storage(cwd_storage(cwd, relative)?.checked_add(1).ok_or(2)?)
-                    .map_err(admission_status)?;
-                let separator = if cwd.ends_with('/') { "" } else { "/" };
-                format!("{cwd}{separator}{relative}")
-            } else {
-                path
-            };
+            let display_path =
+                if options.verbose && !name.contains('/') && !path.text.starts_with('/') {
+                    let state = state.borrow();
+                    // Remove only the initial ./; retain remaining PATH spelling.
+                    let relative = path.text.strip_prefix("./").unwrap_or(&path.text);
+                    lookup.join(&state.cwd, relative, context)?
+                } else {
+                    path
+                };
             if options.verbose {
                 output(fds, context, name.as_bytes()).await?;
                 output(fds, context, b" is ").await?;
             }
-            output(fds, context, display_path.as_bytes()).await?;
+            output(fds, context, display_path.text.as_bytes()).await?;
             output(fds, context, b"\n").await?;
         }
         found = true;
     }
     Ok(Outcome::status(i32::from(!found)))
 }
+
+#[cfg(test)]
+mod tests;
