@@ -195,7 +195,7 @@
           "revision": "8d3d416aa9cb23718ed3487a33d0b06e8e373672",
           "paths": ["web/src/runner.ts", "web/src/subprocess-broker.ts"]
         },
-        "changes": "Delegate launch to the published Waffle service.launchWorker with a retained terminal consumer and controller quiesce/revoke/stop hooks. Waffle owns generic worker lifecycle, admission and descriptor transport; no generic broker implementation is retained."
+        "changes": "Delegate launch to the published Waffle service.launchWorker with a retained terminal consumer and controller quiesce/revoke/stop hooks. The shell-owned startFailed policy suppresses only the generic host startup message: the waiting shell emits the command diagnostic through its captured fd2, while Waffle retains typed outcomes and cleanup. Waffle owns generic worker lifecycle, admission and descriptor transport; no generic broker implementation is retained."
       },
       {
         "classification": "Original package entry, observational diagnostics and targeted regressions",

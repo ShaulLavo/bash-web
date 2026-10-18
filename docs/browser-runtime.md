@@ -55,11 +55,16 @@ never calls `createRuntime`, creates a hidden runtime, or takes ownership of the
 runtime the application passed in.
 
 A shell's `done` promise reports its exit code and any launch/runtime diagnostic.
-`interrupt()` addresses that shell's foreground execution; it must not terminate
-unrelated background jobs or other shells sharing the runtime. `await dispose()` stops
-that shell and joins its locally observed shell-adapter worker cleanup. This does
-not guarantee physical cleanup of descendants launched through foreign adapters;
-a generic root-scoped runtime teardown join remains approved follow-up work.
+For a failed executable start, the shell adapter owns the command-specific
+diagnostic and inherited fd 2 lifetime; Waffle still owns the typed startup
+outcome, cleanup fence and worker stop, but does not add a second generic startup
+message for this adapter. Guest stderr after entry and post-start failures remain
+ordinary worker output and failures. `interrupt()` addresses that shell's foreground
+execution; it must not terminate unrelated background jobs or other shells sharing
+the runtime. `await dispose()` stops that shell and joins its locally observed
+shell-adapter worker cleanup. This does not guarantee physical cleanup of descendants
+launched through foreign adapters; a generic root-scoped runtime teardown join remains
+approved follow-up work.
 `diagnostics()` observes the shell, while
 `runtimeSnapshot(runtime)` from the package root synchronously observes the
 shared runtime without creating a process service. The application remains
