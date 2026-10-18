@@ -103,9 +103,8 @@ test("pipeline Ctrl+C stops every stage and its children", async ({ page }) => {
   await open(page);
   await command(
     page,
-    // Each complete marker must be one write: concurrent echo builtins may interleave
-    // their argument and newline writes without violating terminal byte ordering.
-    "export KEEP=kept; { printf 'PRODUCER_READY\\n' >&2; test-guest yes tick; } | { printf 'CONSUMER_READY\\n' >&2; test-guest cat; } | grep unmatched; echo BAD_AFTER_INTERRUPT",
+    // Keep concurrent protocol markers on the guest's single-write byte path.
+    "export KEEP=kept; { test-guest emit $'PRODUCER_READY\\n' >&2; test-guest yes tick; } | { test-guest emit $'CONSUMER_READY\\n' >&2; test-guest cat; } | grep unmatched; echo BAD_AFTER_INTERRUPT",
   );
   await output(page, "PRODUCER_READY");
   await output(page, "CONSUMER_READY");
@@ -179,11 +178,18 @@ test("slow downstream applies bounded backpressure", async ({ page }) => {
   await open(page);
   await command(page, "test-guest produce 80 65536 97 | test-guest delayed-count 2000 DRAINED");
   await output(page, "READER_WAITING");
+  await output(page, "WRITTEN:0");
   await page.waitForTimeout(200);
   const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
   expect(lines).not.toContain("WRITTEN:79");
   expect(await page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("running");
   await output(page, "DRAINED:5242880:1");
+  const completedLines = await page.evaluate(() =>
+    window.bashWeb?.readLines().map((line) => line.trim()),
+  );
+  expect(completedLines).toEqual(
+    expect.arrayContaining(Array.from({ length: 80 }, (_, index) => `WRITTEN:${index}`)),
+  );
   await ready(page);
   await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
 });
