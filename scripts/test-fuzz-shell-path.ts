@@ -43,8 +43,8 @@ const parent = "/work/tmp/bash-web-path-20261018";
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const fixturePath = "shell-path-seed-1.json";
 const fixtureHashes = {
-  "shell-path-seed-1.json": "77415efecfe9baabfa75a229e186564305164313c5dc57e9fcf202b1f2e52153",
-  "shell-path-seed-42.json": "aa197cf4bcc2fd9c6f703ced1d3efd82a59bf87f92786f43d5674aaa435978c6",
+  "shell-path-seed-1.json": "8e2dd2e724115eab948323f96a666c324e75b6568ec14dd7625cf9fb7c824f52",
+  "shell-path-seed-42.json": "bd39648125366d3113072487be0d604a9dd1a77fc8c86dd767cca097b0f506dd",
 };
 // Frozen before the manifest validator changed any harness source identity.
 // These independently pin every case and Bash observation, excluding metadata.
@@ -244,6 +244,9 @@ test("manifest schema and limits reject the whole input before filesystem mutati
     { path: "", kind: "file", mode: 0o600 },
     { path: "x".repeat(manifestLimits.pathBytes + 1), kind: "file", mode: 0o600 },
     { path: "é".repeat(manifestLimits.pathBytes / 2 + 1), kind: "file", mode: 0o600 },
+    { path: "\ud800", kind: "file", mode: 0o600 },
+    { path: "\ud801", kind: "file", mode: 0o600 },
+    { path: "\udfff", kind: "file", mode: 0o600 },
     { path: "first", kind: "file", mode: 0o600 },
     { path: "first/child", kind: "file", mode: 0o600 },
     { path: "missing/child", kind: "file", mode: 0o600 },

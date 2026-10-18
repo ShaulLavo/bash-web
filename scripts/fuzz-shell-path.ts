@@ -86,6 +86,7 @@ export function validateManifest(value: unknown): asserts value is typeof fixtur
     keys(node, ["path", "kind", "mode", "marker", "status"]);
     if (
       typeof node.path !== "string" ||
+      !node.path.isWellFormed() ||
       Buffer.byteLength(node.path) > manifestLimits.pathBytes ||
       !node.path ||
       /[\x00-\x1f\x7f]/.test(node.path) ||
