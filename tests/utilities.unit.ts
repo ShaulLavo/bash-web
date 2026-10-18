@@ -15,6 +15,7 @@ function fixture(context: TestContext) {
   const fetched: string[] = [];
   const previousFetch = globalThis.fetch;
   let failFetch = false;
+  let registrationFailure: Error | undefined;
   globalThis.fetch = async (input: RequestInfo | URL) => {
     fetched.push(String(input));
     if (failFetch) return new Response(null, { status: 503 });
@@ -32,6 +33,11 @@ function fixture(context: TestContext) {
     },
     registerProgram(path: string, program: Program) {
       assert.ok(files.has(path), "the executable entry exists before registration");
+      if (registrationFailure) {
+        const error = registrationFailure;
+        registrationFailure = undefined;
+        throw error;
+      }
       if (programs.has(path)) throw new Error(`Program already registered: ${path}`);
       programs.set(path, program);
       return () => programs.delete(path);
@@ -58,6 +64,10 @@ function fixture(context: TestContext) {
   };
   return {
     runtime: runtime as unknown as Runtime,
+    filesystem: runtime.filesystem,
+    failNextRegistration(error: Error) {
+      registrationFailure = error;
+    },
     files,
     adapters,
     programs,
@@ -157,4 +167,67 @@ test("a directory at the executable path is a conflict", async (context) => {
   filesystem.lookup = async () => ({ kind: "dir" });
   await assert.rejects(installGrep(state.runtime), UtilityConflictError);
   assert.equal(state.files.size + state.programs.size + state.adapters.size, 0);
+});
+
+function pausedRollback(state: ReturnType<typeof fixture>, failure: Error) {
+  const entered = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  let drains = 0;
+  state.failNextRegistration(failure);
+  state.filesystem.drain = async () => {
+    if (++drains !== 2) return;
+    entered.resolve();
+    await resume.promise;
+  };
+  return { entered: entered.promise, resume: resume.resolve };
+}
+
+test("rollback reserves its path until cleanup settles, then a fresh install keeps its marker", async (context) => {
+  const state = fixture(context);
+  const failure = new Error("registration failed");
+  const pause = pausedRollback(state, failure);
+  const first = installCat(state.runtime);
+  const rejected = assert.rejects(first, (error) => error === failure);
+  await pause.entered;
+  try {
+    await assert.rejects(installCat(state.runtime), UtilityConflictError);
+    assert.equal(state.programs.size + state.adapters.size, 0);
+  } finally {
+    pause.resume();
+    await rejected;
+  }
+  const fresh = await installCat(state.runtime);
+  assert.ok(state.files.has(fresh.executable));
+  assert.ok(state.programs.has(fresh.executable));
+  await fresh.dispose();
+});
+
+test("failed rollback preserves both errors and releases its reservation after settlement", async (context) => {
+  const state = fixture(context);
+  const failure = new Error("registration failed");
+  const cleanup = new Error("rollback drain failed");
+  const pause = pausedRollback(state, failure);
+  const drain = state.filesystem.drain;
+  let drains = 0;
+  state.filesystem.drain = async () => {
+    await drain();
+    if (++drains === 2) throw cleanup;
+  };
+  const first = installCat(state.runtime);
+  const rejected = assert.rejects(first, (error) => {
+    assert.ok(error instanceof AggregateError);
+    assert.deepEqual(error.errors, [failure, cleanup]);
+    return true;
+  });
+  await pause.entered;
+  try {
+    await assert.rejects(installCat(state.runtime), UtilityConflictError);
+  } finally {
+    pause.resume();
+    await rejected;
+  }
+  state.filesystem.drain = async () => {};
+  const fresh = await installCat(state.runtime);
+  assert.ok(state.files.has(fresh.executable));
+  await fresh.dispose();
 });

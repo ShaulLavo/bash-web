@@ -94,6 +94,46 @@ async function removeOwnedMarker(runtime: Runtime, path: string, marker: Uint8Ar
   await runtime.filesystem.drain();
 }
 
+async function rollbackUtility(
+  runtime: Runtime,
+  path: string,
+  marker: Uint8Array,
+  created: boolean,
+  release: () => void,
+  error: unknown,
+): Promise<never> {
+  const errors = [error];
+  try {
+    release();
+  } catch (cleanup) {
+    errors.push(cleanup);
+  }
+  if (created) {
+    await runtime.filesystem.drain().catch((cleanup: unknown) => errors.push(cleanup));
+    await removeOwnedMarker(runtime, path, marker).catch((cleanup: unknown) =>
+      errors.push(cleanup),
+    );
+  }
+  if (errors.length > 1) throw new AggregateError(errors, `Utility rollback failed: ${path}`);
+  throw error;
+}
+
+async function disposeUtility(
+  runtime: Runtime,
+  path: string,
+  marker: Uint8Array,
+  created: boolean,
+  release: () => void,
+  owned: Set<string>,
+): Promise<void> {
+  try {
+    release();
+    if (created) await removeOwnedMarker(runtime, path, marker);
+  } finally {
+    owned.delete(path);
+  }
+}
+
 function parentDirectory(path: string): string {
   return path.slice(0, path.lastIndexOf("/")) || "/";
 }
@@ -143,30 +183,17 @@ export async function installUtility(
       }),
     );
   } catch (error) {
-    release();
-    owned.delete(path);
-    if (!created) throw error;
     try {
-      // Consume the queued failure before an independent rollback attempt.
-      await runtime.filesystem.drain().catch(() => {});
-      await removeOwnedMarker(runtime, path, marker);
-    } catch (cleanup) {
-      throw new AggregateError([error, cleanup], `Utility rollback failed: ${path}`);
+      return await rollbackUtility(runtime, path, marker, created, release, error);
+    } finally {
+      owned.delete(path);
     }
-    throw error;
   }
   let disposal: Promise<void> | undefined;
   return {
     executable: path,
     dispose() {
-      disposal ??= (async () => {
-        release();
-        try {
-          if (created) await removeOwnedMarker(runtime, path, marker);
-        } finally {
-          owned.delete(path);
-        }
-      })();
+      disposal ??= disposeUtility(runtime, path, marker, created, release, owned);
       return disposal;
     },
   };
