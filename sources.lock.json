@@ -68,12 +68,12 @@
   },
   "waffle": {
     "repository": "https://github.com/ShaulLavo/waffle",
-    "revision": "afe9cc1f3f93ea84929903e5a55854dbfd973448",
+    "revision": "33ece68f9f484d99b8a57a675de71d847e248051",
     "package": "waffle",
-    "version": "0.0.47",
-    "specifier": "git+https://github.com/ShaulLavo/waffle.git#afe9cc1f3f93ea84929903e5a55854dbfd973448",
+    "version": "0.0.50",
+    "specifier": "git+https://github.com/ShaulLavo/waffle.git#33ece68f9f484d99b8a57a675de71d847e248051",
     "license": "MIT",
-    "strategy": "Required peer imported by the JavaScript shell adapter; exact same Git pin used as development dependency for browser builds and tests. One application-created runtime per page owns shared services. No runtime source tree is vendored. Waffle owns lowest-free preopen placement and the single wasi-libc scanner patch; every locally built WASI guest final-links the patched sysroot."
+    "strategy": "Required peer imported by the JavaScript shell adapter; exact same Git pin used as development dependency for browser builds and tests. One application-created runtime per page owns shared services. No runtime source tree is vendored. Waffle reports runtime_proc startup failures only through typed parent outcomes and full host diagnostics, without child-stdio bytes even before adapter entry. Host-root reporting stays unchanged. Waffle owns lowest-free preopen placement and the single wasi-libc scanner patch; every locally built WASI guest final-links the patched sysroot."
   },
   "wasiLibc": {
     "classification": "Port, external shared patch; no copied implementation in bash-web",
@@ -195,7 +195,7 @@
           "revision": "8d3d416aa9cb23718ed3487a33d0b06e8e373672",
           "paths": ["web/src/runner.ts", "web/src/subprocess-broker.ts"]
         },
-        "changes": "Delegate launch to the published Waffle service.launchWorker with a retained terminal consumer and controller quiesce/revoke/stop hooks. The shell-owned startFailed policy suppresses only the generic host startup message: the waiting shell emits the command diagnostic through its captured fd2, while Waffle retains typed outcomes and cleanup. Waffle owns generic worker lifecycle, admission and descriptor transport; no generic broker implementation is retained."
+        "changes": "Delegate launch to the published Waffle service.launchWorker with a retained terminal consumer and controller quiesce/revoke/stop hooks. The explicit startFailed adapter policy remains for host-initiated spawns, where removing it changes the default generic writer. Runtime_proc children are independently quiet at every startup stage under Waffle; the waiting shell emits the command diagnostic through captured fd2, while Waffle retains full host errors, typed outcomes and cleanup. Waffle owns generic worker lifecycle, admission and descriptor transport; no generic broker implementation is retained."
       },
       {
         "classification": "Original package entry, observational diagnostics and targeted regressions",
@@ -206,9 +206,10 @@
           "src/runtime/terminal.test.ts",
           "src/runtime/shell-host.test.ts",
           "src/runtime/worker.test.ts",
-          "src/runtime/child-status.test.ts"
+          "src/runtime/child-status.test.ts",
+          "src/runtime/lazy-start.test.ts"
         ],
-        "changes": "Export the runtime-injected shell facade and synchronous borrowed-service observations, including global/root droppedTerminalBytes visibility rather than a lossless foreign-adapter claim. Manual pipe observers reclaim closed entries on a 100 ms sweep and clear the timer when their root retires, without relay/disposal ownership. Original diagnostics regressions verify the closed getter runs autonomously before any snapshot and root retirement stops the timer. Original targeted regressions cover terminal streams, cancelable startup, explicit post-fetch-failure admission retry, typed child startup status, memory telemetry and locally observed shell-worker cleanup; they do not guarantee foreign-adapter physical teardown. No hidden runtime/service or copied upstream suite."
+        "changes": "Export the runtime-injected shell facade and synchronous borrowed-service observations, including global/root droppedTerminalBytes visibility rather than a lossless foreign-adapter claim. Manual pipe observers reclaim closed entries on a 100 ms sweep and clear the timer when their root retires, without relay/disposal ownership. Original diagnostics regressions verify the closed getter runs autonomously before any snapshot and root retirement stops the timer. Original targeted regressions cover terminal streams, cancelable startup, explicit post-fetch-failure admission retry, typed child startup status, real runtime-message lazy-loader terminal/pipe silence with full host diagnostics and unchanged host-root reporting, memory telemetry and locally observed shell-worker cleanup; they do not guarantee foreign-adapter physical teardown. No hidden runtime/service or copied upstream suite."
       },
       {
         "classification": "Original prototype build helpers, adapted here",

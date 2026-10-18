@@ -483,8 +483,8 @@ test("abort after worker admission waits for its fence and physical stop", async
   assert.equal(host.runtime.disposed, false);
 });
 
-for (const mode of ["startup", "without-hook", "post-start", "exit126", "exit127"] as const) {
-  test(`real broker preserves shell diagnostic ownership: ${mode}`, async (testContext) => {
+for (const mode of ["host-policy", "host-default", "post-start", "exit126", "exit127"] as const) {
+  test(`real host broker preserves adapter diagnostic policy: ${mode}`, async (testContext) => {
     const host = fixture(testContext);
     registerShell(host.runtime, host.options);
     const adapter = host.adapters.get("bash-web:preview1")!;
@@ -530,9 +530,10 @@ for (const mode of ["startup", "without-hook", "post-start", "exit126", "exit127
             const startFailed = controller.startFailed!;
             broker.registerController(pid, {
               ...controller,
-              // Deliberately bypass the adapter policy to exercise the real generic writer.
+              // This host spawn has no runtime_proc parent; bypass policy to prove its
+              // unchanged generic writer still runs, unlike an admitted runtime child.
               startFailed:
-                mode === "without-hook"
+                mode === "host-default"
                   ? undefined
                   : (error, active) => {
                       assert.equal(error, startupError);
@@ -583,7 +584,7 @@ for (const mode of ["startup", "without-hook", "post-start", "exit126", "exit127
       await supervisor.start(pid);
       assert.deepEqual(errors, []);
       assert.deepEqual(events, ["controller", "launch"]);
-      const startup = mode === "startup" || mode === "without-hook";
+      const startup = mode === "host-policy" || mode === "host-default";
       if (!startup) assert.equal(launched.started(), true);
       const stderr = launched.descriptors.get(2)!.resource;
       assert.ok(stderr.kind === "terminal");
@@ -606,13 +607,13 @@ for (const mode of ["startup", "without-hook", "post-start", "exit126", "exit127
       );
       assert.deepEqual(
         events,
-        mode === "startup"
+        mode === "host-policy"
           ? ["controller", "launch", "startup-diagnostic"]
           : ["controller", "launch"],
       );
       assert.equal(
         output.join(""),
-        mode === "without-hook"
+        mode === "host-default"
           ? `GUEST_STDERR\nruntime: process start failed: ${String(startupError)}\n`
           : "GUEST_STDERR\n",
       );
