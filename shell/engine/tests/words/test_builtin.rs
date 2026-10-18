@@ -189,6 +189,38 @@ fn virtual_descriptor_existence_uses_current_redirections() {
 }
 
 #[test]
+fn descriptor_pipe_queries_preserve_local_payload_and_release_writers() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run(r#"{ test -p /dev/stdout; echo $? >&2; [ -p /dev/fd/1 ]; echo $? >&2; [[ -p /dev/fd/3 ]] 3>&1; echo $? >&2; printf 'payload\n'; } | { test -p /dev/stdin; echo $?; [ -p /dev/fd/0 ]; echo $?; [[ -p /dev/fd/3 ]] 3<&0; echo $?; IFS= read -r line; echo "$line"; IFS= read -r line; echo $?; }"#), 0);
+    assert_eq!(rig.output.bytes(), b"0\n0\n0\npayload\n1\n");
+    assert_eq!(rig.errors.bytes(), b"0\n0\n0\n");
+}
+
+#[test]
+fn descriptor_predicates_reject_files_missing_and_closed_fds_without_errors() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("test -p /dev/stdin; echo $?; [ -p /dev/fd/3 ] 3> full; echo $?; [[ -p /dev/fd/3 ]] 3>&-; echo $?; test -t 0; echo $?; [ -t 3 ] 3> full; echo $?; [[ -t 3 ]] 3>&-; echo $?"), 0);
+    assert_eq!(rig.output.bytes(), b"1\n1\n1\n1\n1\n1\n");
+    assert!(rig.errors.bytes().is_empty());
+}
+
+#[test]
+fn terminal_descriptor_integer_syntax_and_errors_match_bash() {
+    for value in ["-0", "+0", "00", " \t0\n", "-1", "2147483648", "4294967296", "9223372036854775807", "-9223372036854775808"] {
+        status(&["-t", value], 1);
+    }
+    for value in ["", "nope", "/dev/fd/0", "0x0", "1+0", "9223372036854775808", "-9223372036854775809"] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(&expression(&["-t", value])), 2);
+        assert_eq!(rig.errors.bytes(), format!("/usr/bin/bash: test: {value}: integer expected\n").as_bytes());
+    }
+    status(&["-t"], 0);
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("[ ! -t nope ]"), 2);
+    assert_eq!(rig.errors.bytes(), b"/usr/bin/bash: [: nope: integer expected\n");
+}
+
+#[test]
 fn logical_operators_and_grouping_preserve_precedence_and_eager_errors() {
     for (arguments, expected) in [
         (&["x", "-o", "", "-a", ""][..], 0),
