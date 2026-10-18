@@ -97,7 +97,7 @@
     },
     "brush-suite": {
       "total": 2894,
-      "passed": 953,
+      "passed": 954,
       "skipped": 1006,
       "categories": {
         "and_or": {
@@ -657,7 +657,7 @@
         },
         "well_known_vars": {
           "total": 28,
-          "passed": 1,
+          "passed": 2,
           "skipped": 9
         },
         "word_expansion/arrays": {
@@ -704,7 +704,7 @@
     },
     "bashkit-suite": {
       "total": 3835,
-      "passed": 1328,
+      "passed": 1339,
       "skipped": 1613,
       "categories": {
         "alias": {
@@ -1019,7 +1019,7 @@
         },
         "bashbox-script-file": {
           "total": 9,
-          "passed": 1,
+          "passed": 2,
           "skipped": 6
         },
         "bashbox-secure-http-client": {
@@ -1379,7 +1379,7 @@
         },
         "eval-bugs": {
           "total": 4,
-          "passed": 1,
+          "passed": 2,
           "skipped": 2
         },
         "eval-syntax-error": {
@@ -1539,7 +1539,7 @@
         },
         "jobs": {
           "total": 13,
-          "passed": 6,
+          "passed": 8,
           "skipped": 4
         },
         "join": {
@@ -1774,7 +1774,7 @@
         },
         "script-exec": {
           "total": 14,
-          "passed": 3,
+          "passed": 10,
           "skipped": 3
         },
         "seq": {
@@ -7185,7 +7185,7 @@
 {"id":"brush-suite:variables:10","corpus":"brush-suite","category":"variables","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"W2Jhc2VdCltiYXNlXQo=","stderr":""}},
 {"id":"brush-suite:variables:11","corpus":"brush-suite","category":"variables","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":""}},
 {"id":"brush-suite:variables:12","corpus":"brush-suite","category":"variables","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"W10K","stderr":""}},
-{"id":"brush-suite:well_known_vars:1","corpus":"brush-suite","category":"well_known_vars","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"UEFUSCBpcyBub3Qgc2V0IG9yIGlzIGVtcHR5Cg==","stderr":""}},
+{"id":"brush-suite:well_known_vars:1","corpus":"brush-suite","category":"well_known_vars","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:well_known_vars:2","corpus":"brush-suite","category":"well_known_vars","kind":"needs-commands","outcome":"skip"},
 {"id":"brush-suite:well_known_vars:3","corpus":"brush-suite","category":"well_known_vars","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"RVVJRDogClVJRDogCkJBU0hQSUQgPT0gXCQkOiAgMgpCQVNIX0FSR1YwID09ICQwOiAgMQpNQUNIVFlQRSA9PSAke0JBU0hfVkVSU0lORk9bNV06ICAyCg==","stderr":""}},
 {"id":"brush-suite:well_known_vars:4","corpus":"brush-suite","category":"well_known_vars","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"cHJlZml4PW90aGVyOgo=","stderr":""}},
@@ -8301,7 +8301,7 @@
 {"id":"bashkit-suite:bashbox-rmdir:5","corpus":"bashkit-suite","category":"bashbox-rmdir","kind":"needs-commands","outcome":"skip"},
 {"id":"bashkit-suite:bashbox-script-file:5","corpus":"bashkit-suite","category":"bashbox-script-file","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:bashbox-script-file:12","corpus":"bashkit-suite","category":"bashbox-script-file","kind":"needs-commands","outcome":"skip"},
-{"id":"bashkit-suite:bashbox-script-file:19","corpus":"bashkit-suite","category":"bashbox-script-file","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"MTI3Cg==","stderr":""}},
+{"id":"bashkit-suite:bashbox-script-file:19","corpus":"bashkit-suite","category":"bashbox-script-file","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:bashbox-script-file:26","corpus":"bashkit-suite","category":"bashbox-script-file","kind":"needs-commands","outcome":"skip"},
 {"id":"bashkit-suite:bashbox-script-file:34","corpus":"bashkit-suite","category":"bashbox-script-file","kind":"needs-commands","outcome":"skip"},
 {"id":"bashkit-suite:bashbox-script-file:42","corpus":"bashkit-suite","category":"bashbox-script-file","kind":"needs-commands","outcome":"skip"},
@@ -9575,7 +9575,7 @@
 {"id":"bashkit-suite:eval-bugs:1","corpus":"bashkit-suite","category":"eval-bugs","kind":"needs-commands","outcome":"skip"},
 {"id":"bashkit-suite:eval-bugs:10","corpus":"bashkit-suite","category":"eval-bugs","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:eval-bugs:24","corpus":"bashkit-suite","category":"eval-bugs","kind":"needs-commands","outcome":"skip"},
-{"id":"bashkit-suite:eval-bugs:35","corpus":"bashkit-suite","category":"eval-bugs","kind":"builtins-only","outcome":"fail","actual":{"status":127,"stdout":"","stderr":""}},
+{"id":"bashkit-suite:eval-bugs:35","corpus":"bashkit-suite","category":"eval-bugs","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:eval-syntax-error:1","corpus":"bashkit-suite","category":"eval-syntax-error","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:eval-syntax-error:11","corpus":"bashkit-suite","category":"eval-syntax-error","kind":"needs-commands","outcome":"skip"},
 {"id":"bashkit-suite:eval-syntax-error:18","corpus":"bashkit-suite","category":"eval-syntax-error","kind":"needs-commands","outcome":"skip"},
@@ -9958,11 +9958,11 @@
 {"id":"bashkit-suite:jobs:21","corpus":"bashkit-suite","category":"jobs","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:jobs:30","corpus":"bashkit-suite","category":"jobs","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:jobs:37","corpus":"bashkit-suite","category":"jobs","outcome":"skip","excluded":"bash output is not deterministic"},
-{"id":"bashkit-suite:jobs:52","corpus":"bashkit-suite","category":"jobs","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"Y29kZT0xMjcK","stderr":""}},
+{"id":"bashkit-suite:jobs:52","corpus":"bashkit-suite","category":"jobs","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:jobs:61","corpus":"bashkit-suite","category":"jobs","kind":"builtins-only","outcome":"fail","actual":{"status":1,"stdout":"azk9MTI3CmludD0xMjcK","stderr":"a2lsbDogaW52YWxpZCBzaWduYWwK"}},
 {"id":"bashkit-suite:jobs:77","corpus":"bashkit-suite","category":"jobs","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:jobs:84","corpus":"bashkit-suite","category":"jobs","kind":"needs-commands","outcome":"skip"},
-{"id":"bashkit-suite:jobs:98","corpus":"bashkit-suite","category":"jobs","kind":"builtins-only","outcome":"fail","actual":{"status":1,"stdout":"WzFdKyAgRXhpdCAxMjcgICAgICAgICAgICAgICAgICAgc2xlZXAgMgo=","stderr":""}},
+{"id":"bashkit-suite:jobs:98","corpus":"bashkit-suite","category":"jobs","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:jobs:108","corpus":"bashkit-suite","category":"jobs","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:jobs:118","corpus":"bashkit-suite","category":"jobs","outcome":"skip","excluded":"bash output is not deterministic"},
 {"id":"bashkit-suite:jobs:131","corpus":"bashkit-suite","category":"jobs","kind":"needs-commands","outcome":"skip"},
@@ -10529,15 +10529,15 @@
 {"id":"bashkit-suite:replace_pattern_limit:4","corpus":"bashkit-suite","category":"replace_pattern_limit","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:replace_pattern_limit:12","corpus":"bashkit-suite","category":"replace_pattern_limit","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:replace_pattern_limit:20","corpus":"bashkit-suite","category":"replace_pattern_limit","kind":"builtins-only","outcome":"pass"},
-{"id":"bashkit-suite:script-exec:1","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"fail","actual":{"status":127,"stdout":"","stderr":""}},
-{"id":"bashkit-suite:script-exec:11","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"fail","actual":{"status":127,"stdout":"","stderr":""}},
-{"id":"bashkit-suite:script-exec:21","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"fail","actual":{"status":127,"stdout":"","stderr":""}},
-{"id":"bashkit-suite:script-exec:31","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"fail","actual":{"status":127,"stdout":"","stderr":""}},
-{"id":"bashkit-suite:script-exec:41","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"MTI3Cg==","stderr":""}},
+{"id":"bashkit-suite:script-exec:1","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"pass"},
+{"id":"bashkit-suite:script-exec:11","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"pass"},
+{"id":"bashkit-suite:script-exec:21","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"pass"},
+{"id":"bashkit-suite:script-exec:31","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"pass"},
+{"id":"bashkit-suite:script-exec:41","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:script-exec:52","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"fail","actual":{"status":127,"stdout":"","stderr":""}},
 {"id":"bashkit-suite:script-exec:61","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"pass"},
-{"id":"bashkit-suite:script-exec:70","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"MTI3Cg==","stderr":""}},
-{"id":"bashkit-suite:script-exec:80","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"fail","actual":{"status":127,"stdout":"","stderr":""}},
+{"id":"bashkit-suite:script-exec:70","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"pass"},
+{"id":"bashkit-suite:script-exec:80","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:script-exec:95","corpus":"bashkit-suite","category":"script-exec","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:script-exec:107","corpus":"bashkit-suite","category":"script-exec","kind":"needs-commands","outcome":"skip"},
 {"id":"bashkit-suite:script-exec:119","corpus":"bashkit-suite","category":"script-exec","kind":"needs-commands","outcome":"skip"},
