@@ -300,7 +300,8 @@ pub(super) async fn executable(
                     Err(io::IoError::NotDirectory) if explicit => {
                         return Ok(Resolution::NonExecutable(candidate, b"Not a directory"));
                     }
-                    Err(_) if explicit && errno != 44 => {
+                    Err(io::IoError::NotFound) if errno == 44 => {}
+                    Err(_) if explicit => {
                         let reason = if errno == 31 {
                             b"Is a directory".as_slice()
                         } else {

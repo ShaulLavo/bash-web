@@ -39,11 +39,14 @@ impl ReadOnlyMount {
         let mut resolved = String::with_capacity(path.len());
         resolved.push('/');
         for component in path.split('/').skip(1) {
+            if component.is_empty() {
+                continue;
+            }
             if self.denied_directories.contains(&resolved) {
                 return Err(IoError::Runtime(2)); // WASI EACCES
             }
             match component {
-                "" | "." => {}
+                "." => {}
                 ".." => {
                     let index = resolved.rfind('/').unwrap();
                     resolved.truncate(index.max(1));

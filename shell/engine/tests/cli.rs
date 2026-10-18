@@ -113,7 +113,7 @@ fn cli_fixture_denied_traversal_is_hidden_from_lookup_metadata() {
         ("PATH=blocked:plain; command -v tool", 0, "plain/tool\n"),
         ("PATH=blocked:plain; tool", 126, ""),
         (
-            "test ! -e blocked/tool && test ! -e blocked/../plain/tool && test ! -e ./blocked//tool && test -e plain/tool && printf checked",
+            "test -e blocked && test -e blocked/ && test -e blocked// && test ! -e blocked/. && test ! -e blocked/.. && test ! -e blocked/tool && test ! -e blocked/../plain/tool && test ! -e ./blocked//tool && test -e plain/tool && printf checked",
             0,
             "checked",
         ),
