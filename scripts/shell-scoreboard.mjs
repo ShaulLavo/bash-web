@@ -111,7 +111,7 @@ export function compareScores(base, next, { requireMembership = false } = {}) {
       `stale candidate baseline: update pass membership for ${changed.join(", ")}`,
     );
   }
-  return { ok: Object.values(corpora).every((row) => row.after >= row.before), corpora };
+  return { ok: Object.values(corpora).every((row) => row.lost.length === 0), corpora };
 }
 
 export function validateScore(oracle, score) {
