@@ -639,6 +639,8 @@ test("an accumulating consumer cannot make the shell or transport buffer its inp
 }) => {
   const baselineWorkers = await open(page);
   const before = await page.evaluate(() => window.bashWeb!.runtimeSnapshot()!);
+  // Both seq and the accumulating consumer are external guests, one child slot each.
+  const externalPipelineProcesses = 2;
   const baseMemory = before.roots[0].memoryBytes;
   let peakShell = baseMemory;
   let peakPipes = 0;
@@ -666,11 +668,25 @@ test("an accumulating consumer cannot make the shell or transport buffer its inp
   await ready(page);
   expect(peakShell - baseMemory).toBeLessThanOrEqual(8 * 1024 * 1024);
   expect(peakPipes).toBeLessThanOrEqual(2);
-  expect(peakSlots - before.roots[0].retainedSlots).toBeLessThanOrEqual(1);
+  expect(peakSlots - before.roots[0].retainedSlots).toBe(externalPipelineProcesses);
   await expect.poll(() => page.workers().length).toBe(baselineWorkers);
   await expect
     .poll(() => page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0].pipes))
     .toBe(0);
+  await expect
+    .poll(() => page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0].retainedSlots))
+    .toBe(before.roots[0].retainedSlots);
+  await test.info().attach("pipeline-retention", {
+    body: JSON.stringify({
+      externalPipelineProcesses,
+      baseline: before.roots[0],
+      peakShell,
+      peakPipes,
+      peakSlots,
+      after: await page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0]),
+    }),
+    contentType: "application/json",
+  });
 });
 
 test("a slow terminal applies backpressure without growing the shell or output queue", async ({
