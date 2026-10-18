@@ -7,7 +7,7 @@ import {
   waitForShellReady,
   type ReadinessObservation,
   type ReadinessPoll,
-} from "./helpers/readiness.ts";
+} from "./helpers/readiness-policy.ts";
 import { STORAGE_READY_TIMEOUT_MS } from "../src/browser/storage.ts";
 
 function clock(storageReadyAt: number, shellReadyAt: number) {
