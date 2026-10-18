@@ -62,6 +62,9 @@ pub(crate) enum Flow {
     Normal,
     Exit,
     Abort,
+    // Unlike isolated errexit, a failed fork aborts the invoking reader even
+    // when it happened in a non-last stage of a pipeline.
+    SpawnFailed,
     Return,
     Break(usize),
     Continue(usize),
@@ -95,6 +98,12 @@ enum DiagnosticStderr {
     Inherited,
     Redirected(Option<io::Endpoint>),
 }
+
+enum WeakStderr {
+    Open(io::WeakEndpoint),
+    Closed,
+}
+
 struct CommandError {
     error: expand::Error,
     stderr: DiagnosticStderr,
@@ -256,6 +265,7 @@ pub(crate) struct Context {
     lifetime: (Cancel, Rc<Cell<Option<i32>>>),
     signal: Rc<Cell<Option<i32>>>,
     pub group: GroupId,
+    invocation_group: GroupId,
     scope: Scope,
     parameter_error_status: i32,
     compound_child: bool,
@@ -402,7 +412,8 @@ impl Context {
         });
         self.scope.forward_to(parent_scope);
     }
-    async fn finish_group(&self, processes: &mut ProcessGroup, code: i32) -> i32 {
+    async fn finish_group(&self, processes: &mut ProcessGroup, outcome: Outcome) -> i32 {
+        let code = outcome.code;
         let finished = self.cancel.run(processes.complete()).await;
         match finished {
             Ok(Ok(cleanup)) => {
@@ -418,7 +429,13 @@ impl Context {
             Err(_) => processes
                 .terminate(self.stop_signal())
                 .await
-                .map(|_| self.cancel_status())
+                .map(|_| {
+                    if outcome.flow == Flow::SpawnFailed {
+                        code
+                    } else {
+                        self.cancel_status()
+                    }
+                })
                 .unwrap_or(1),
         }
     }
@@ -723,6 +740,7 @@ impl Session {
             cancel,
             signal,
             group,
+            invocation_group: group,
             scope: Scope::new(0),
             parameter_error_status: 127,
             compound_child: false,
@@ -751,7 +769,7 @@ impl Session {
             if result.flow == Flow::Exit {
                 context.core.exit_requested.set(true);
             }
-            let code = context.finish_group(&mut processes, result.code).await;
+            let code = context.finish_group(&mut processes, result).await;
             state.borrow_mut().status = code;
             code
         });
@@ -1073,6 +1091,9 @@ async fn script_sequence(
             continue;
         }
         result = execute(command, state.clone(), fds.clone(), context.clone()).await;
+        if result.flow == Flow::SpawnFailed {
+            return result;
+        }
         if context.cancel.is_cancelled() {
             return Outcome::status(130);
         }
@@ -1087,7 +1108,10 @@ async fn script_sequence(
         }
         if result.flow == Flow::DiscardReadUnit {
             discarded_line = end_line;
-        } else if matches!(result.flow, Flow::Exit | Flow::Abort | Flow::Return) {
+        } else if matches!(
+            result.flow,
+            Flow::Exit | Flow::Abort | Flow::SpawnFailed | Flow::Return
+        ) {
             break;
         }
     }
@@ -1119,6 +1143,9 @@ async fn sequence_body(
         if result.flow != Flow::Normal || context.cancel.is_cancelled() {
             break;
         }
+    }
+    if result.flow == Flow::SpawnFailed {
+        return result;
     }
     if context.cancel.is_cancelled() {
         return Outcome::status(130);
@@ -1346,6 +1373,12 @@ async fn pipeline_command(
     // shared last-stage control flow aborts the submitted reader. Publish the
     // complete ordered result before taking any of those early exits.
     state.borrow_mut().pipestatus = codes;
+    if let Some(result) = results
+        .iter()
+        .find(|result| result.flow == Flow::SpawnFailed)
+    {
+        return *result;
+    }
     if (count == 1 || share_last) && results.last().unwrap().flow != Flow::Normal {
         return *results.last().unwrap();
     }
@@ -1580,6 +1613,9 @@ async fn while_command(
             condition_cache.as_ref(),
         )
         .await;
+        if test.flow == Flow::SpawnFailed {
+            return test;
+        }
         if context.cancel.is_cancelled() {
             return Outcome::status(130);
         }
@@ -2033,38 +2069,47 @@ async fn subshell(
         Err(error) => return expansion_failure(error.into(), &fds, &context).await,
     };
     let parent_scope = context.scope.clone();
-    let child_context = context.isolated();
+    // A subshell is an isolated Bash execution scope: a fatal fork failure
+    // aborts this command without changing the foreground job's process group.
+    // The outer reader still forwards its own cancellation into this token.
+    let child_cancel = context.cancel.child();
+    let child_context = Context {
+        cancel: child_cancel.clone(),
+        ..context.isolated()
+    };
     let child_fds = Rc::new(RefCell::new(fds.borrow().clone()));
     drop(fds);
-    let result =
-        context
-            .core
-            .executor
-            .spawn(async move {
-                work.substitutions = Some(Substitutions {
-                    context: child_context.clone(),
-                    fds: child_fds.clone(),
-                    process_fds: None,
-                });
-                let result =
-                    match command_redirects(&redirs, &child, child_fds, &child_context, &mut work)
-                        .await
-                    {
-                        Ok(fds) => {
-                            work.substitutions = None;
-                            let body_context = Context {
-                                parameter_error_status: 1,
-                                compound_child: false,
-                                ..child_context.clone()
-                            };
-                            sequence(commands, child, fds, body_context).await
-                        }
-                        Err(outcome) => outcome,
+    let child = context.core.executor.spawn(async move {
+        work.substitutions = Some(Substitutions {
+            context: child_context.clone(),
+            fds: child_fds.clone(),
+            process_fds: None,
+        });
+        let result =
+            match command_redirects(&redirs, &child, child_fds, &child_context, &mut work).await {
+                Ok(fds) => {
+                    drop(work.substitutions.take());
+                    let body_context = Context {
+                        parameter_error_status: 1,
+                        compound_child: false,
+                        ..child_context.clone()
                     };
-                child_context.finish_scope(parent_scope).await;
-                result
-            })
-            .await;
+                    sequence(commands, child, fds, body_context).await
+                }
+                Err(outcome) => outcome,
+            };
+        child_context.finish_scope(parent_scope).await;
+        result
+    });
+    let child_join = child.clone();
+    let result = match context.cancel.run(child).await {
+        Ok(result) => result,
+        Err(_) => {
+            child_cancel.cancel();
+            let _ = child_join.await;
+            Outcome::status(context.cancel_status())
+        }
+    };
     Outcome::status(result.code)
 }
 
@@ -2235,6 +2280,7 @@ async fn launch_background(
         cancel: cancel.clone(),
         signal: signal.clone(),
         group,
+        invocation_group: group,
         scope: Scope::new(context.core.allocate_id()),
         parameter_error_status: context.child_error_status(&command),
         compound_child: matches!(command, Command::Compound(..)),
@@ -2249,9 +2295,7 @@ async fn launch_background(
             .with_signal(child_context.signal.clone());
         let result = execute(command, child, fds, child_context.clone()).await;
         child_context.finish_scope(parent_scope).await;
-        child_context
-            .finish_group(&mut processes, result.code)
-            .await
+        child_context.finish_group(&mut processes, result).await
     });
     context.core.jobs.borrow_mut().insert(
         job,
@@ -2445,7 +2489,9 @@ impl Substitutions {
                     context.cleanup_jobs().await;
                 }
                 context.finish_scope(parent_scope).await;
-                let code = if context.cancel.is_cancelled() {
+                let code = if result.flow == Flow::SpawnFailed {
+                    result.code
+                } else if context.cancel.is_cancelled() {
                     context.cancel_status()
                 } else {
                     result.code
@@ -2453,7 +2499,9 @@ impl Substitutions {
                 // EOF releases capture, while this registered supervisor keeps
                 // cleanup ownership of any host descendants still running.
                 let _ = complete.send(code);
-                context.finish_group(&mut processes, code).await
+                context
+                    .finish_group(&mut processes, Outcome { code, ..result })
+                    .await
             };
             // The parent's cancellation reaches the body through its own
             // token; the body still unwinds normally and reports its status.
@@ -2581,7 +2629,7 @@ impl Substitutions {
                 let result = sequence(commands, child, fds, context.clone()).await;
                 let _ = context.wait_jobs(None, true).await;
                 context.finish_scope(parent_scope).await;
-                context.finish_group(&mut processes, result.code).await
+                context.finish_group(&mut processes, result).await
             };
             let forward = async {
                 parent.cancelled().await;
@@ -2831,8 +2879,12 @@ async fn simple_command(
     }
     // Even a saved stderr can alias a pipe reader. Release all diagnostic-only
     // ownership before dispatch, so a child's close can deliver EPIPE promptly.
+    let parent_stderr = match original_fds.borrow().get(2) {
+        Some(stderr) => WeakStderr::Open(stderr.downgrade()),
+        None => WeakStderr::Closed,
+    };
     drop(original_fds);
-    dispatch_simple_command(prepared, state, context)
+    dispatch_simple_command(prepared, state, context, parent_stderr)
         .await
         .unwrap_or_else(Outcome::status)
 }
@@ -2996,15 +3048,20 @@ fn dispatch_simple_command(
     prepared: PreparedCommand,
     state: SharedState,
     context: Context,
+    parent_stderr: WeakStderr,
 ) -> eval::Frame<'static, Result<Outcome, i32>> {
     let evaluation = context.evaluation.clone();
-    evaluation.frame(dispatch_simple_command_body(prepared, state, context), Err)
+    evaluation.frame(
+        dispatch_simple_command_body(prepared, state, context, parent_stderr),
+        Err,
+    )
 }
 
 async fn dispatch_simple_command_body(
     prepared: PreparedCommand,
     state: SharedState,
     context: Context,
+    parent_stderr: WeakStderr,
 ) -> Result<Outcome, i32> {
     let PreparedCommand {
         argv,
@@ -3232,37 +3289,65 @@ async fn dispatch_simple_command_body(
         (s.environment(), s.cwd.clone())
     };
     env.extend(assigned);
+    let command = name.clone();
     let mut argv = vec![name];
     argv.extend(args);
-    let pid = context
-        .core
-        .host
-        .spawn(SpawnRequest {
-            executable,
-            argv,
-            env,
-            cwd,
-            fds: fds.borrow().clone(),
-            group: context.group,
-            parent: None,
-        })
-        .map_err(|error| match error {
-            ProcessError::UnknownCommand(_) | ProcessError::Runtime(44) => 127,
-            ProcessError::Runtime(_) => 126,
-            _ => 2,
-        })?;
+    let pid = context.core.host.spawn(SpawnRequest {
+        executable,
+        argv,
+        env,
+        cwd,
+        fds: fds.borrow().clone(),
+        group: context.group,
+        parent: None,
+    });
+    let pid = match pid {
+        Ok(pid) => pid,
+        Err(ProcessError::Runtime(errno @ (6 | 29 | 48))) => {
+            return external_wait_failure(
+                ProcessError::StartFailed(errno),
+                &command,
+                WeakStderr::Closed,
+                parent_stderr,
+                &context,
+            )
+            .await;
+        }
+        Err(ProcessError::ProcessLimit) => {
+            return external_wait_failure(
+                ProcessError::StartFailed(6),
+                &command,
+                WeakStderr::Closed,
+                parent_stderr,
+                &context,
+            )
+            .await;
+        }
+        Err(ProcessError::UnknownCommand(_) | ProcessError::Runtime(44)) => return Err(127),
+        Err(ProcessError::Runtime(_)) => return Err(126),
+        Err(_) => return Err(2),
+    };
     // The child owns its inherited descriptors. Shell-side stage copies must
     // not keep a closed child reader/writer alive while waiting for its exit.
+    let stderr = match fds.borrow().get(2) {
+        Some(stderr) => WeakStderr::Open(stderr.downgrade()),
+        None => WeakStderr::Closed,
+    };
     drop(fds);
     match context.cancel.run(context.core.host.wait(pid)).await {
-        Ok(result) => Ok(Outcome::status(result.map_err(|_| 1)?)),
+        Ok(Ok(status)) => Ok(Outcome::status(status)),
+        Ok(Err(error)) => {
+            external_wait_failure(error, &command, stderr, parent_stderr, &context).await
+        }
         Err(_) => {
             // Signal inherited members before waiting/reaping the direct child;
             // it may be the last live direct stage but not the last group member.
-            let _ = context
-                .core
-                .host
-                .kill_group(context.group, context.stop_signal());
+            if context.group != context.invocation_group || context.lifetime.0.is_cancelled() {
+                let _ = context
+                    .core
+                    .host
+                    .kill_group(context.group, context.stop_signal());
+            }
             context
                 .core
                 .host
@@ -3272,6 +3357,47 @@ async fn dispatch_simple_command_body(
             Err(context.cancel_status())
         }
     }
+}
+
+async fn external_wait_failure(
+    error: ProcessError,
+    command: &str,
+    stderr: WeakStderr,
+    parent_stderr: WeakStderr,
+    context: &Context,
+) -> Result<Outcome, i32> {
+    let ProcessError::StartFailed(errno) = error else {
+        return Err(1);
+    };
+    let fork = matches!(errno, 6 | 29 | 48);
+    let operation = if fork { "fork" } else { command };
+    // Bash reports fork failure in the parent, before command redirections.
+    // Exec failures use the child's stderr when that open description survives.
+    // Until start_status-scoped ownership is integrated, a dead weak reference
+    // falls back to shell stderr rather than retaining a pipeline endpoint and
+    // preventing EOF. See plan004's approved start-status follow-up.
+    let stderr = match if fork { parent_stderr } else { stderr } {
+        WeakStderr::Closed => None,
+        WeakStderr::Open(stderr) => stderr
+            .upgrade()
+            .or_else(|| context.core.descriptors.borrow().get(2)),
+    };
+    if let Some(stderr) = stderr {
+        let diagnostic = format!("/usr/bin/bash: {operation}: {error}\n");
+        let _ = stderr
+            .write_all(diagnostic.as_bytes(), &context.cancel)
+            .await;
+    }
+    if fork {
+        // A failed fork abandons this reader, not just its pipeline stage.
+        // Existing invocation cancellation owns peers and substitutions.
+        context.cancel.cancel();
+        return Ok(Outcome {
+            code: 254,
+            flow: Flow::SpawnFailed,
+        });
+    }
+    Ok(Outcome::status(if errno == 44 { 127 } else { 126 }))
 }
 
 #[inline(never)]
@@ -3703,6 +3829,7 @@ mod scope_tests {
             cancel: Cancel::new(),
             signal: Rc::new(Cell::new(None)),
             group,
+            invocation_group: group,
             scope: Scope::new(0),
             parameter_error_status: 127,
             compound_child: false,
@@ -4105,6 +4232,7 @@ mod residual_review_tests {
             let core = self.session().core.clone();
             let cancel = Cancel::new();
             let signal = Rc::new(Cell::new(None));
+            let group = self.host.allocate_group();
             Context {
                 evaluation: eval::Scope::new(
                     &core.limits,
@@ -4116,7 +4244,8 @@ mod residual_review_tests {
                 lifetime: (cancel.clone(), signal.clone()),
                 cancel,
                 signal,
-                group: self.host.allocate_group(),
+                group,
+                invocation_group: group,
                 scope: Scope::new(0),
                 parameter_error_status: 127,
                 compound_child: false,
