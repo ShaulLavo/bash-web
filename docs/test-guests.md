@@ -93,8 +93,11 @@ The shell uses existing `read`, `test`, and `printf` operations, not an engine-s
 probe. Rust probes use ordinary libc-backed filesystem and descriptor operations;
 they neither search preopens themselves nor call `runtime_proc` for their I/O.
 
-These paths require libc to discover root after an occupied non-preopen fd 3;
-stock libc's first-BADF termination cannot satisfy them. The matrix adds
+The two Rust std fixture guests require libc to discover root after an occupied
+non-preopen fd 3; stock libc's first-BADF termination cannot satisfy their probes.
+The browser shell instead uses its original direct-WASI filesystem adapter.
+The final-artifact verifier distinguishes these paths by scanner calls or exact
+original-adapter import indices; see [the proof](wasi-libc.md#build-and-artifact-verification). The matrix adds
 15 original cases (four writable layouts and one input layout per guest), each
 configured in Chromium and Firefox: 30 configured executions, not a passing
 result until browser verification completes. Existing unrelated Bun

@@ -1,9 +1,12 @@
 # Guest libc and build provenance
 
-Every WASI guest built here uses the libc scanner supplied by the pinned Waffle
-checkout, including the standalone shell CLI, browser shell, Rust WASI tests,
-scoreboard builds, and the original `test-guest`/`test-spin` fixtures. Native
-builds are unaffected. External Bun payloads are not built here and remain
+Every WASI build here selects the patched sysroot supplied by the pinned Waffle
+checkout for compilation and final linking. Not every artifact retains libc's
+filesystem scanner: the standalone shell CLI uses its in-memory fixture
+filesystem, while the browser shell uses an original Rust WASI adapter. The
+`test-guest`/`test-spin` fixtures use Rust std filesystem operations and require
+the real patched libc scanner. Native builds are unaffected. External Bun
+payloads are not built here and remain
 [separate pending coverage](browser-runtime.md#pending-external-program-coverage).
 
 ## Classified overview
@@ -12,19 +15,19 @@ builds are unaffected. External Bun payloads are not built here and remain
 means code written here to call that boundary, not a copied upstream implementation.
 **External dependency** identifies code maintained in Waffle, not vendored here.
 
-| Source or component                                                 | Class                     | Change and owner                                                                                                            |
-| ------------------------------------------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| [wasi-libc preopen scanner](#wasi-libc-preopen-scanner)             | Port, external dependency | Waffle's single `patches/wasi-libc/preopen-scan.patch` lets discovery skip open non-preopens; no local patch copy.          |
-| [Waffle placement and libc builder](#waffle-placement-and-builder)  | External dependency       | Waffle reserves inherited targets, places preopens, and builds the shared patched sysroot.                                  |
-| [Shell guest adapters and probes](#shell-guest-adapters-and-probes) | Original adapter          | Shell-specific imports and ordinary Rust filesystem/descriptor probes; no second preopen scanner or descriptor renumbering. |
-| [Build and artifact verification](#build-and-artifact-verification) | Original adapter          | All Rust WASI build routes select the same final-link sysroot; release publication checks final scanner code.               |
+| Source or component                                                 | Class                     | Change and owner                                                                                                         |
+| ------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| [wasi-libc preopen scanner](#wasi-libc-preopen-scanner)             | Port, external dependency | Waffle's single `patches/wasi-libc/preopen-scan.patch` lets discovery skip open non-preopens; no local patch copy.       |
+| [Waffle placement and libc builder](#waffle-placement-and-builder)  | External dependency       | Waffle reserves inherited targets, places preopens, and builds the shared patched sysroot.                               |
+| [Shell guest adapters and probes](#shell-guest-adapters-and-probes) | Original adapter          | Original direct-WASI shell imports and libc-backed Rust fixture probes; no descriptor renumbering.                       |
+| [Build and artifact verification](#build-and-artifact-verification) | Original adapter          | All Rust WASI build routes select the same final-link sysroot; verify scanner calls or original shell import identities. |
 
 ## wasi-libc preopen scanner
 
 Upstream: [`WebAssembly/wasi-libc`, `libc-bottom-half/sources/preopens.c`](https://github.com/WebAssembly/wasi-libc/blob/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/libc-bottom-half/sources/preopens.c),
 revision `2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13`, shipped by wasi-sdk **34.0**.
 The change lives only in Waffle's
-[`patches/wasi-libc/preopen-scan.patch`](https://github.com/ShaulLavo/waffle/blob/4087eae447fc536b6c0a78e5f14b8049be11c467/patches/wasi-libc/preopen-scan.patch).
+[`patches/wasi-libc/preopen-scan.patch`](https://github.com/ShaulLavo/waffle/blob/f2bb4bbb727fcf74f4ad1c2792e7aea6bbac2d18/patches/wasi-libc/preopen-scan.patch).
 
 Unmodified libc stops on the first `fd_prestat_get` `BADF`. WASI truthfully
 returns `BADF` for an open inherited descriptor that is not a preopen, so an
@@ -36,9 +39,9 @@ and does not invent successful prestat metadata or a `NOTSUP` workaround.
 
 ## Waffle placement and builder
 
-Waffle **0.0.37** is pinned to
-`4087eae447fc536b6c0a78e5f14b8049be11c467` for both the required peer and the
-development dependency. Its [`docs/wasi-libc.md`](https://github.com/ShaulLavo/waffle/blob/4087eae447fc536b6c0a78e5f14b8049be11c467/docs/wasi-libc.md)
+Waffle **0.0.38** is pinned to
+`f2bb4bbb727fcf74f4ad1c2792e7aea6bbac2d18` for both the required peer and the
+development dependency. Its [`docs/wasi-libc.md`](https://github.com/ShaulLavo/waffle/blob/f2bb4bbb727fcf74f4ad1c2792e7aea6bbac2d18/docs/wasi-libc.md)
 is the shared contract; bash-web does not fork it.
 
 Before guest instantiation, Waffle reserves every inherited target and places
@@ -58,8 +61,11 @@ setsid and GNU timeout; bash-web's cache serialization also needs flock. See
 
 `src/runtime/guest-imports.ts` and `src/runtime/worker.ts` remain original shell
 adapters over Waffle's public worker/WASI APIs. Descriptor placement belongs to
-Waffle, discovery belongs to libc, and shell semantics belong to the Rust engine.
-These adapters do not translate literal fd 3 or fabricate a root preopen.
+Waffle. The original `shell/engine/src/runtime/wasi.rs` adapter discovers root
+through its direct Preview1 imports, bounded by the inherited-binding count
+rather than a sparse high descriptor. libc discovers preopens for guests using
+libc-backed path I/O. Neither path translates literal fd 3 or fabricates a root
+preopen; the shell adapter is not a copied or replacement libc scanner.
 
 `tests/guest/src/{main.rs,bin/test-spin.rs}` contain original libc-backed
 filesystem and descriptor probes. The shell guest uses its existing `read`,
@@ -86,12 +92,20 @@ and supplies `--target=wasm32-wasip1` and `--sysroot=<patched-sysroot>` to the
 **final link**, as well as C compilation. Merely compiling against patched
 headers while linking stock SDK or Rust-bundled libc is not sufficient.
 
-The original `scripts/verify-wasi-guests.ts` inspects final Wasm artifacts:
-`__wasilibc_populate_preopens` must call both `__wasi_fd_prestat_get` and
-`__wasi_fd_fdstat_get`. Checking imports alone cannot distinguish the stock
-scanner. It also checks the unshared 256 MiB memory maximum. Guest builds keep
-the function-name section for this proof; fixture builds strip debug info,
-not names. Build helpers verify release artifacts before publishing them.
+The original `scripts/verify-wasi-guests.ts` inspects final Wasm artifacts.
+When `__wasilibc_populate_preopens` is retained, it must call both
+`__wasi_fd_prestat_get` and `__wasi_fd_fdstat_get`; checking imports alone cannot
+distinguish the stock scanner. This is the real scanner proof for both Rust std
+test guests. Scanner-free artifacts are accepted only when filesystem imports
+are absent (the fixture CLI) or each retained `fd_prestat_*`/`path_*` function
+import has the exact index named `shell_engine::runtime::wasi::<import>` (the
+original browser-shell adapter). Missing scanner names alone are not proof of
+safe dead-stripping: unexplained filesystem imports fail verification.
+
+The verifier also checks the unshared 256 MiB memory maximum. Guest builds keep
+the function-name section for these proofs; fixture builds strip debug info,
+not names. Release build and archived scoreboard-migration paths run the
+artifact verifier; browser/test helpers verify before publishing their assets.
 
 ## Output and cleanup ownership
 
