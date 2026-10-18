@@ -2,6 +2,7 @@
 //! are original adapters except the explicitly attributed grep subset. The full
 //! utility/compatibility work is still deferred.
 mod grep;
+mod printf;
 pub(crate) mod test;
 use crate::{
     executor::Budget,
@@ -199,52 +200,7 @@ pub(crate) async fn run(
             }
             write(&fds, b"\n", &context).await?;
         }
-        "printf" => {
-            let format = args.first().ok_or(2)?;
-            let mut index = 1;
-            let mut budget = Budget::default();
-            loop {
-                let mut chars = format.chars();
-                let mut buffer = String::new();
-                let mut consumed = false;
-                // Stream each format pass instead of creating an unbounded result buffer.
-                while let Some(ch) = chars.next() {
-                    budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-                    match ch {
-                        '%' => match chars.next() {
-                            Some('s' | 'd') => {
-                                write(&fds, buffer.as_bytes(), &context).await?;
-                                buffer.clear();
-                                let arg = args.get(index).map(String::as_str).unwrap_or("");
-                                index += 1;
-                                consumed = true;
-                                write(&fds, arg.as_bytes(), &context).await?;
-                            }
-                            Some('%') => buffer.push('%'),
-                            _ => return Err(2),
-                        },
-                        '\\' => buffer.push(match chars.next() {
-                            Some('n') => '\n',
-                            Some('r') => '\r',
-                            Some('t') => '\t',
-                            Some('\\') => '\\',
-                            _ => return Err(2),
-                        }),
-                        _ => buffer.push(ch),
-                    }
-                    if buffer.len() >= 4096 {
-                        write(&fds, buffer.as_bytes(), &context).await?;
-                        buffer.clear();
-                    }
-                }
-                write(&fds, buffer.as_bytes(), &context).await?;
-                // Bash repeats a format that consumes arguments, but a format with
-                // no consuming conversion is emitted only once.
-                if !consumed || index >= args.len() {
-                    break;
-                }
-            }
-        }
+        "printf" => printf::run(&args, &state, &fds, &context, work).await?,
         "cat" => {
             if args.is_empty() {
                 copy(endpoint(&fds, 0)?, &fds, &context).await?;

@@ -108,6 +108,9 @@ pub struct FileMetadata {
 }
 
 pub const PIPE_CAPACITY: usize = 32 * 1024;
+const PIPE_BUF: usize = 4096;
+// The fixed-capacity internal pipe must always be able to admit an atomic write.
+const _: () = assert!(PIPE_BUF <= PIPE_CAPACITY);
 pub const MAX_MEMORY_FILES: usize = 1024;
 pub const MAX_PATH_BYTES: usize = 4096;
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -431,7 +434,15 @@ impl Endpoint {
                     if state.readers == 0 {
                         return Err(IoError::BrokenPipe);
                     }
-                    let count = input.len().min(PIPE_CAPACITY - state.bytes.len());
+                    let available = PIPE_CAPACITY - state.bytes.len();
+                    // A request within PIPE_BUF is admitted only as a whole. This
+                    // is the shell's atomic-write boundary: printf records must not
+                    // become partial writes merely because the pipe is under pressure.
+                    let count = if input.len() <= PIPE_BUF && available < input.len() {
+                        0
+                    } else {
+                        input.len().min(available)
+                    };
                     if count != 0 {
                         state.bytes.extend(&input[..count]);
                         Some(count)
@@ -1054,7 +1065,10 @@ mod tests {
         let mut buf = [0; 3];
         assert_eq!(read.read(&mut buf).now_or_never(), Some(Ok(3)));
         assert_eq!(buf, [7; 3]);
-        assert_eq!(write.write(&[1; 8]).now_or_never(), Some(Ok(3)));
+        assert_eq!(
+            write.write(&vec![1; PIPE_BUF + 1]).now_or_never(),
+            Some(Ok(3))
+        );
         drop(write);
         let mut all = vec![0; PIPE_CAPACITY];
         assert_eq!(read.read(&mut all).now_or_never(), Some(Ok(PIPE_CAPACITY)));
@@ -1062,6 +1076,133 @@ mod tests {
         drop(duplicate);
         assert_eq!(read.read(&mut buf).now_or_never(), Some(Ok(0)));
     }
+    #[test]
+    fn competing_small_pipe_writes_are_atomic_under_capacity_pressure() {
+        let (read, write) = pipe();
+        let prefix_len = PIPE_CAPACITY - (PIPE_BUF - 1);
+        let prefix = vec![b'P'; prefix_len];
+        assert_eq!(write.write(&prefix).now_or_never(), Some(Ok(prefix_len)));
+
+        let first = vec![b'A'; PIPE_BUF];
+        let second = vec![b'B'; PIPE_BUF];
+        let executor = Executor::new();
+        let first_writer = {
+            let write = write.clone();
+            let record = first.clone();
+            executor.spawn(async move { write.write_all(&record, &Cancel::new()).await })
+        };
+        let second_writer = {
+            let write = write.clone();
+            let record = second.clone();
+            executor.spawn(async move { write.write_all(&record, &Cancel::new()).await })
+        };
+
+        // Establish pressure before making room. The old implementation lets
+        // the first writer consume the final PIPE_BUF - 1 bytes here, queuing
+        // a split record before the reader can make progress.
+        executor.drive(8);
+        assert!(!first_writer.is_finished());
+        assert!(!second_writer.is_finished());
+
+        let mut observed_prefix = vec![0; prefix_len];
+        assert_eq!(
+            read.read(&mut observed_prefix).now_or_never(),
+            Some(Ok(prefix_len))
+        );
+        assert_eq!(observed_prefix, prefix);
+
+        let mut tail = Vec::with_capacity(PIPE_BUF * 2);
+        for _ in 0..16 {
+            executor.drive(32);
+            let buffered = match read.0.as_ref() {
+                Open::PipeRead(pipe) => pipe.state.borrow().bytes.len(),
+                _ => unreachable!(),
+            };
+            if buffered != 0 {
+                let mut chunk = vec![0; PIPE_CAPACITY];
+                let count = read.read(&mut chunk).now_or_never().unwrap().unwrap();
+                tail.extend_from_slice(&chunk[..count]);
+            }
+            if first_writer.is_finished() && second_writer.is_finished() && buffered == 0 {
+                break;
+            }
+        }
+
+        assert_eq!(first_writer.now_or_never(), Some(Ok(())));
+        assert_eq!(second_writer.now_or_never(), Some(Ok(())));
+        let mut first_order = first.clone();
+        first_order.extend_from_slice(&second);
+        let mut second_order = second;
+        second_order.extend_from_slice(&first);
+        assert!(tail == first_order || tail == second_order);
+    }
+
+    #[test]
+    fn blocked_small_pipe_writes_remove_only_their_own_cancelled_or_dropped_waiter() {
+        for cancelled in [false, true] {
+            let (read, write) = pipe();
+            let prefix = vec![b'P'; PIPE_CAPACITY - 1];
+            assert_eq!(write.write(&prefix).now_or_never(), Some(Ok(prefix.len())));
+            let Open::PipeRead(pipe) = read.0.as_ref() else {
+                unreachable!()
+            };
+            let cancel = Cancel::new();
+            let record = [b'A'; PIPE_BUF];
+            let mut abandoned = Box::pin(write.write_cancelled(&record, &cancel));
+            let peer = write.clone();
+            let mut pending = Box::pin(peer.write(b"BC"));
+            let waker = noop_waker();
+            let mut context = Context::from_waker(&waker);
+            for _ in 0..100 {
+                assert!(abandoned.as_mut().poll(&mut context).is_pending());
+                assert!(pending.as_mut().poll(&mut context).is_pending());
+                assert_eq!(pipe.writable.waiter_count(), 2);
+                assert_eq!(pipe.state.borrow().bytes.len(), prefix.len());
+            }
+            if cancelled {
+                cancel.cancel();
+                assert_eq!(
+                    abandoned.as_mut().poll(&mut context),
+                    Poll::Ready(Err(IoError::Cancelled))
+                );
+            }
+            drop(abandoned);
+            assert_eq!(pipe.writable.waiter_count(), 1);
+
+            let mut output = vec![0; PIPE_CAPACITY];
+            assert_eq!(
+                read.read(&mut output).now_or_never(),
+                Some(Ok(prefix.len()))
+            );
+            assert_eq!(&output[..prefix.len()], prefix);
+            assert_eq!(pending.as_mut().poll(&mut context), Poll::Ready(Ok(2)));
+            drop(pending);
+            assert_eq!(pipe.writable.waiter_count(), 0);
+            assert_eq!(read.read(&mut output).now_or_never(), Some(Ok(2)));
+            assert_eq!(&output[..2], b"BC");
+        }
+    }
+
+    #[test]
+    fn blocked_small_pipe_write_reports_last_reader_close() {
+        let (read, write) = pipe();
+        let duplicate = read.clone();
+        assert_eq!(
+            write.write(&vec![0; PIPE_CAPACITY - 1]).now_or_never(),
+            Some(Ok(PIPE_CAPACITY - 1))
+        );
+        let executor = Executor::new();
+        let writer = executor.spawn(async move { write.write(b"AB").await });
+        executor.drive(8);
+        assert!(!writer.is_finished());
+        drop(read);
+        executor.drive(8);
+        assert!(!writer.is_finished());
+        drop(duplicate);
+        executor.drive(8);
+        assert_eq!(writer.now_or_never(), Some(Err(IoError::BrokenPipe)));
+    }
+
     #[test]
     fn empty_io_and_epipe_last_reader() {
         let (read, write) = pipe();

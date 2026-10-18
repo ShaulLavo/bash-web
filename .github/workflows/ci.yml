@@ -63,6 +63,8 @@ jobs:
       - run: ulimit -c 0; npm run fuzz:shell-functions:ci -- --shell .build/shell/release/shell-engine
       - run: ulimit -c 0; npm run test:fuzz-shell-path
       - run: ulimit -c 0; npm run fuzz:shell-path:ci -- --shell .build/shell/release/shell-engine
+      - run: ulimit -c 0; npm run test:fuzz-shell-printf
+      - run: ulimit -c 0; npm run fuzz:shell-printf:ci -- --shell .build/shell/release/shell-engine
 
   own-shell-compatibility:
     runs-on: ubuntu-latest

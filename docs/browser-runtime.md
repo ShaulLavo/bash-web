@@ -242,14 +242,15 @@ evidence; a configured or runnable case is not a passing result.
 | Suite | Configured cases | Runnable cases | Missing public Bun API | Original known failures | New engine/Waffle pending |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Shell | 12 | 11 | 0 | 0 | 1 |
-| External commands | 25 | 22 | 2 | 0 | 1 |
+| External commands | 25 | 23 | 2 | 0 | 0 |
 | Pipelines | 19 | 18 | 1 | 0 | 0 |
 | Runtime | 23 | 19 | 1 | 3 | 0 |
 | Worker assets and renderer fallback | 2 | 2 | 0 | 0 | 0 |
-| **Unique cases** | **81** | **72** | **4** | **3** | **2** |
-| **Chromium + Firefox executions** | **162** | **144** | **8** | **6** | **4** |
+| **Unique cases** | **81** | **73** | **4** | **3** | **1** |
+| **Chromium + Firefox executions** | **162** | **146** | **8** | **6** | **2** |
 
-The `command` external-guest case is runnable following the functions unit.
+The `command` and byte-exact `printf` external-guest cases are runnable following
+the functions and printf units.
 Six formerly pending external-command cases are now enabled by Waffle #10 at
 `ba968a6f86468d03394792a3e9c447dfc713c279` and the shell's asynchronous executable
 access/PATH-search unit:
@@ -271,15 +272,14 @@ The registration helper's unit regressions separately check canonical-only keys,
 caller-created markers before guest registration, and cancellation during marker
 creation. Enabling a case is not evidence that it has passed a browser run.
 
-The two remaining engine pending cases and their exact reason strings are:
+The remaining engine pending case and its exact reason string is:
 
 | Case | Reason |
 | --- | --- |
 | `$$` and `BASHPID` report a stable PID and the shell stays alive | `Pending plan 004 $$/BASHPID runtime identity unit: the engine needs an authoritative PID hook.` |
-| `printf` octal escapes produce exact bytes for an external guest | `Pending plan 004 printf escapes unit: octal escapes are not implemented.` |
 
-The original four Bun API skips remain separate from those two engine pending
-cases, and the three inherited known-failure fixmes remain unchanged.
+The original four Bun API skips remain separate from the remaining engine pending
+case, and the three inherited known-failure fixmes remain unchanged.
 
 Generic WASI guests exercise pipeline/capture/substitution, terminal and binary
 transport, cancellation, write order, raw-terminal handoff, memory, and nested
