@@ -339,6 +339,22 @@ impl State {
         self.positional = args;
         Ok(())
     }
+    /// Drop shifted argument strings while retaining the actual Vec capacity.
+    /// Failed shifts do not change either the positional frame or its ticket.
+    pub(crate) fn shift_positional(&mut self, count: usize) -> Result<(), i32> {
+        if count > self.positional.len() {
+            return Err(1);
+        }
+        self.positional.drain(..count);
+        if let Some(memory) = &self.positional_memory {
+            memory
+                .borrow_mut()
+                .resize(positional_bytes(&self.positional)?)
+                .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)?;
+        }
+        Ok(())
+    }
+
     fn reserve_local_value(&self, name: &str, bytes: usize) -> Result<(), i32> {
         if let Some(local) = self.locals.iter().rev().find_map(|frame| frame.get(name))
             && let Some(memory) = &local.memory
@@ -804,10 +820,12 @@ impl State {
             0
         };
         let bytes = value.as_ref().map_or(inherited_bytes, String::len);
+        // Validate readonly bindings before changing an existing ticket. A
+        // rejected declaration must leave both its value and charge untouched.
+        self.save_local(&name, bytes)?;
         if already_local && value.is_some() {
             self.reserve_local_value(&name, bytes)?;
         }
-        self.save_local(&name, bytes)?;
         let inherited = if !already_local && prefix && value.is_none() {
             self.locals
                 .last()
@@ -2214,5 +2232,35 @@ mod tests {
         assert_eq!(memory.observation().0, before);
         drop(outer);
         assert_eq!(memory.observation().0, 0);
+    }
+    #[test]
+    fn review_readonly_local_redeclaration_keeps_original_value_and_memory_ticket() {
+        use crate::interpreter::eval::StorageBudget;
+        for replacement in [20_000, 4096, 0] {
+            let memory = StorageBudget::new(16_384);
+            let state = State::with_memory(memory.clone()).shared();
+            let frame = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+            state
+                .borrow_mut()
+                .local("x".into(), "x".repeat(2048))
+                .unwrap();
+            state.borrow_mut().readonly("x".into(), None).unwrap();
+            let before = memory.observation().0;
+            assert_eq!(
+                state
+                    .borrow_mut()
+                    .declare_local("x".into(), Some("y".repeat(replacement))),
+                Err(1),
+                "readonly error takes priority over memory admission"
+            );
+            assert_eq!(state.borrow().parameter("x"), "x".repeat(2048));
+            assert_eq!(
+                memory.observation().0,
+                before,
+                "rejected declaration cannot grow or shrink the live ticket"
+            );
+            drop(frame);
+            assert_eq!(memory.observation().0, 0);
+        }
     }
 }

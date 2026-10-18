@@ -1074,8 +1074,13 @@ async fn script_sequence(
             return Outcome::status(130);
         }
         if result.flow == Flow::Resource {
-            return function_failure(&fds, &context, b"function live-memory limit exceeded", 2)
-                .await;
+            return abort_diagnostic(
+                &fds,
+                &context,
+                b"shell live-execution memory limit exceeded",
+                2,
+            )
+            .await;
         }
         if result.flow == Flow::DiscardReadUnit {
             discarded_line = end_line;
@@ -1116,7 +1121,13 @@ async fn sequence_body(
         return Outcome::status(130);
     }
     if result.flow == Flow::Resource {
-        return function_failure(&fds, &context, b"function live-memory limit exceeded", 2).await;
+        return abort_diagnostic(
+            &fds,
+            &context,
+            b"shell live-execution memory limit exceeded",
+            2,
+        )
+        .await;
     }
     result
 }
@@ -1322,25 +1333,28 @@ async fn pipeline_command(
     drop(fds);
     drop(previous);
     let results = join_all(tasks).await;
-    if (count == 1 || share_last) && results.last().unwrap().flow != Flow::Normal {
-        return *results.last().unwrap();
-    }
-    if results.iter().any(|result| result.flow == Flow::Resource) {
-        return Outcome::status(eval::RESOURCE_STATUS);
-    }
     let codes: Vec<_> = results.iter().map(|r| r.code).collect();
     let mut code = if state.borrow().pipefail {
         codes.iter().rev().copied().find(|&n| n != 0).unwrap_or(0)
     } else {
         *codes.last().unwrap()
     };
+    // Every joined stage has a public status, even when a resource failure or
+    // shared last-stage control flow aborts the submitted reader. Publish the
+    // complete ordered result before taking any of those early exits.
+    state.borrow_mut().pipestatus = codes;
+    if (count == 1 || share_last) && results.last().unwrap().flow != Flow::Normal {
+        return *results.last().unwrap();
+    }
+    if results.iter().any(|result| result.flow == Flow::Resource) {
+        return Outcome::status(eval::RESOURCE_STATUS);
+    }
     if pipeline.negated {
         code = i32::from(code == 0);
     }
     if context.cancel.is_cancelled() {
         code = 130;
     }
-    state.borrow_mut().pipestatus = codes;
     Outcome::status(code)
 }
 
@@ -2956,7 +2970,7 @@ async fn prepare_simple_command_body(
     })
 }
 
-async fn function_failure(
+async fn abort_diagnostic(
     fds: &Descriptors,
     context: &Context,
     message: &[u8],
@@ -3051,7 +3065,7 @@ async fn dispatch_simple_command_body(
             } else {
                 2
             };
-            return Ok(function_failure(
+            return Ok(abort_diagnostic(
                 &fds,
                 &context,
                 b"maximum function nesting level exceeded",
@@ -3072,7 +3086,7 @@ async fn dispatch_simple_command_body(
         let call_storage = match context.evaluation.admit_execution(copied_bytes) {
             Ok(storage) => storage,
             Err(_) => {
-                return Ok(function_failure(
+                return Ok(abort_diagnostic(
                     &fds,
                     &context,
                     b"function live-memory limit exceeded",
@@ -3094,7 +3108,7 @@ async fn dispatch_simple_command_body(
         let mut frame = match FunctionFrame::enter(state.clone(), args, limit) {
             Ok(frame) => frame,
             Err(_) => {
-                return Ok(function_failure(
+                return Ok(abort_diagnostic(
                     &fds,
                     &context,
                     b"function live-memory limit exceeded",
@@ -4568,6 +4582,253 @@ mod function_measurements {
         assert_eq!(host.active_count(), 0);
         assert_eq!(host.retained_count(), 0);
         assert_eq!(session.core.execution_storage.observation().0, 0);
+    }
+
+    fn finish_review(ex: &Executor, job: JoinHandle<i32>) -> i32 {
+        for _ in 0..100_000 {
+            ex.drive(64);
+            if job.is_finished() {
+                break;
+            }
+        }
+        job.now_or_never()
+            .expect("bounded review control completes")
+    }
+
+    #[test]
+    fn review_shift_refunds_dropped_strings_but_keeps_vector_allocation() {
+        let ex = Executor::new();
+        let host = crate::process::InProcessHost::new(ex.clone());
+        let session = Session::new(
+            ex.clone(),
+            Rc::new(host),
+            Rc::new(io::MemoryFs::new(1024)),
+            Limits::default(),
+        );
+        assert_eq!(
+            finish_review(
+                &ex,
+                session
+                    .start(&format!(
+                        "set -- '{}' '{}' c",
+                        "a".repeat(4096),
+                        "b".repeat(2048)
+                    ))
+                    .unwrap()
+            ),
+            0
+        );
+        let before = session.core.execution_storage.observation().0;
+        let capacity = session.state.borrow().positional.capacity();
+        let vector_bytes = capacity * std::mem::size_of::<String>();
+        let strings: Vec<_> = session
+            .state
+            .borrow()
+            .positional
+            .iter()
+            .map(String::capacity)
+            .collect();
+        assert_eq!(before, vector_bytes + strings.iter().sum::<usize>());
+        for (command, status) in [("shift 4", 1), ("shift bad", 2)] {
+            assert_eq!(finish_review(&ex, session.start(command).unwrap()), status);
+            assert_eq!(session.core.execution_storage.observation().0, before);
+            assert_eq!(session.state.borrow().positional.len(), 3);
+        }
+        for (command, released) in [
+            ("shift", strings[0]),
+            ("shift 1", strings[1]),
+            ("shift 0", 0),
+            ("shift", strings[2]),
+        ] {
+            let before = session.core.execution_storage.observation().0;
+            assert_eq!(finish_review(&ex, session.start(command).unwrap()), 0);
+            assert_eq!(
+                session.core.execution_storage.observation().0,
+                before - released,
+                "{command} only refunds dropped string capacities"
+            );
+            assert_eq!(session.state.borrow().positional.capacity(), capacity);
+        }
+        assert_eq!(session.core.execution_storage.observation().0, vector_bytes);
+        assert_eq!(finish_review(&ex, session.start("set --").unwrap()), 0);
+        // set's argv vector may have spare capacity after removing '--'. Keep
+        // the actual empty vector allocation charged until replaced/dropped.
+        assert_eq!(
+            session.core.execution_storage.observation().0,
+            session.state.borrow().positional.capacity() * std::mem::size_of::<String>()
+        );
+    }
+
+    #[test]
+    fn review_shift_releases_memory_for_nested_call_and_later_session_start() {
+        let ex = Executor::new();
+        let host = crate::process::InProcessHost::new(ex.clone());
+        let session = Session::new(
+            ex.clone(),
+            Rc::new(host),
+            Rc::new(io::MemoryFs::new(1024)),
+            Limits {
+                execution_bytes: 160 * 1024,
+                ..Limits::default()
+            },
+        );
+        session
+            .state
+            .borrow_mut()
+            .variables
+            .insert("payload".into(), "x".repeat(64 * 1024));
+        assert_eq!(finish_review(&ex, session.start("seen=0; g() { local x=$payload; seen=$((seen+1)); }; f() { shift; g; }; f \"$payload\"").unwrap()), 0);
+        assert_eq!(session.state.borrow().variables["seen"], "1");
+        assert!(session.state.borrow().positional.is_empty());
+        assert_eq!(session.core.execution_storage.observation().0, 0);
+        assert_eq!(
+            finish_review(&ex, session.start("f \"$payload\"").unwrap()),
+            0
+        );
+        assert_eq!(session.state.borrow().variables["seen"], "2");
+        assert_eq!(session.core.execution_storage.observation().0, 0);
+        assert_eq!(ex.drive(64).pending, 0);
+    }
+
+    #[test]
+    fn review_resource_pipeline_publishes_stage_codes_before_unwinding_and_recovers() {
+        for (lastpipe, failed_first, negated) in [
+            (false, false, false),
+            (false, true, false),
+            (true, false, false),
+            (true, true, false),
+            (false, false, true),
+            (false, true, true),
+            (true, false, true),
+            (true, true, true),
+        ] {
+            let ex = Executor::new();
+            let host = crate::process::InProcessHost::new(ex.clone());
+            let limit = 256 * 1024;
+            let session = Session::new(
+                ex.clone(),
+                Rc::new(host.clone()),
+                Rc::new(io::MemoryFs::new(1024)),
+                Limits {
+                    execution_bytes: limit,
+                    ..Limits::default()
+                },
+            );
+            let budget = session.core.execution_storage.clone();
+            let pressure = Rc::new(RefCell::new(None));
+            let retained = pressure.clone();
+            host.register("consume", move |_, _| {
+                // Other live work takes the free pool after both stages have
+                // launched, forcing the simple set stage's admission to fail.
+                let remaining = limit - budget.observation().0;
+                *retained.borrow_mut() = Some(budget.admit(remaining - 2048).unwrap());
+                async { 7 }.boxed_local()
+            });
+            session.state.borrow_mut().lastpipe = lastpipe;
+            session.state.borrow_mut().pipestatus = vec![91, 92];
+            let stage = format!("set -- '{}'", "x".repeat(32 * 1024));
+            let source = if failed_first {
+                format!("{stage} | consume; continued=yes")
+            } else {
+                format!("consume | {stage}; continued=yes")
+            };
+            let source = if negated {
+                format!("! {source}")
+            } else {
+                source
+            };
+            assert_eq!(finish_review(&ex, session.start(&source).unwrap()), 2);
+            assert_eq!(session.state.borrow().status, 2);
+            assert!(pressure.borrow().is_some());
+            assert_eq!(
+                session.state.borrow().pipestatus,
+                if failed_first { vec![2, 7] } else { vec![7, 2] },
+                "lastpipe={lastpipe}, failed_first={failed_first}"
+            );
+            assert!(!session.state.borrow().variables.contains_key("continued"));
+            pressure.borrow_mut().take();
+            assert_eq!(
+                finish_review(&ex, session.start("recovered=yes").unwrap()),
+                0
+            );
+            assert_eq!(session.state.borrow().variables["recovered"], "yes");
+            assert_eq!(session.state.borrow().pipestatus, [0]);
+            assert_eq!(session.core.execution_storage.observation().0, 0);
+            assert_eq!(host.active_count(), 0);
+            assert_eq!(host.retained_count(), 0);
+            assert_eq!(ex.drive(64).pending, 0);
+        }
+    }
+
+    #[test]
+    fn review_live_execution_diagnostics_do_not_invent_function_context() {
+        for (assignment_only, nested) in
+            [(false, false), (true, false), (false, true), (true, true)]
+        {
+            let ex = Executor::new();
+            let host = crate::process::InProcessHost::new(ex.clone());
+            let limit = 256 * 1024;
+            let session = Session::new(
+                ex.clone(),
+                Rc::new(host.clone()),
+                Rc::new(io::MemoryFs::new(1024)),
+                Limits {
+                    execution_bytes: limit,
+                    ..Limits::default()
+                },
+            );
+            let (error, errors) = io::capture(4096);
+            let mut fds = FdTable::default();
+            fds.insert(1, io::Endpoint::null());
+            fds.insert(2, error);
+            session.set_descriptors(fds).unwrap();
+            session
+                .state
+                .borrow_mut()
+                .variables
+                .insert("payload".into(), "x".repeat(64 * 1024));
+            let pressure = Rc::new(RefCell::new(None));
+            let retained = pressure.clone();
+            let budget = session.core.execution_storage.clone();
+            host.register("consume", move |_, _| {
+                let remaining = limit - budget.observation().0;
+                *retained.borrow_mut() = Some(budget.admit(remaining - 32 * 1024).unwrap());
+                async { 0 }.boxed_local()
+            });
+            let command = if assignment_only {
+                "x=$payload"
+            } else {
+                "set -- \"$payload\""
+            };
+            let source = if nested {
+                format!(
+                    "f() {{ local saved=inner; consume; {command}; continued=yes; }}; f; continued=yes"
+                )
+            } else {
+                format!("consume; {command}; continued=yes")
+            };
+            assert_eq!(
+                finish_review(&ex, session.start(&source).unwrap()),
+                2,
+                "assignment={assignment_only}, nested={nested}"
+            );
+            let diagnostic = String::from_utf8(errors.bytes()).unwrap();
+            assert!(
+                diagnostic.contains("live-execution memory limit exceeded"),
+                "{diagnostic}"
+            );
+            assert!(!diagnostic.contains("function"), "{diagnostic}");
+            assert!(!session.state.borrow().variables.contains_key("continued"));
+            pressure.borrow_mut().take();
+            assert_eq!(
+                finish_review(&ex, session.start("recovered=yes").unwrap()),
+                0
+            );
+            assert!(!session.state.borrow().variables.contains_key("saved"));
+            assert_eq!(session.core.execution_storage.observation().0, 0);
+            assert_eq!(host.retained_count(), 0);
+            assert_eq!(ex.drive(64).pending, 0);
+        }
     }
 
     #[test]

@@ -416,11 +416,7 @@ pub(crate) async fn run(
                 });
             }
             let count = usize::try_from(count).map_err(|_| 1)?;
-            let mut state = state.borrow_mut();
-            if count > state.positional.len() {
-                return Err(1);
-            }
-            state.positional.drain(..count);
+            state.borrow_mut().shift_positional(count)?;
         }
         "jobs" => {
             if !args.is_empty() {

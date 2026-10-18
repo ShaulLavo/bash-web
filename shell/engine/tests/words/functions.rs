@@ -285,7 +285,7 @@ fn live_memory_exhaustion_is_explicit_and_refunds_frames_for_recovery() {
     assert!(
         String::from_utf8(rig.errors.bytes())
             .unwrap()
-            .contains("live-memory limit exceeded")
+            .contains("memory limit exceeded")
     );
     assert!(rig.calls.borrow().is_empty());
     assert_eq!(
