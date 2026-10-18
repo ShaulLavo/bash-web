@@ -27,9 +27,9 @@ extern "C" {
     #[link_name = "spawn"]
     fn proc_spawn(data: *const u8, length: usize) -> i32;
     #[link_name = "wait"]
-    fn proc_wait(pid: u32, output: *mut i32) -> i32;
+    fn proc_wait(pid: u32, output: *mut u8) -> i32;
     #[link_name = "wait_job"]
-    fn proc_wait_job(job: u32, flags: u32, output: *mut i32) -> i32;
+    fn proc_wait_job(job: u32, flags: u32, output: *mut u8) -> i32;
     #[link_name = "job_of"]
     fn proc_job_of(pid: u32) -> i32;
     #[link_name = "kill"]
@@ -247,6 +247,17 @@ fn spawn_request(executable: &str, args: &[String]) -> String {
     format!("{{\"executable\":{},\"argv\":[{argv}],\"env\":{{{env}}},\"cwd\":{},\"job\":0,\"fds\":[{{\"child\":0,\"parent\":0}},{{\"child\":1,\"parent\":1}},{{\"child\":2,\"parent\":2}}]}}", quote(executable), quote(&cwd()))
 }
 
+fn wait_status(bytes: [u8; 8]) -> io::Result<i32> {
+    let kind = u32::from_le_bytes(bytes[..4].try_into().unwrap());
+    let value = i32::from_le_bytes(bytes[4..].try_into().unwrap());
+    match kind {
+        0 => Ok(value),
+        1 => Ok(128 + value),
+        2 => Err(io::Error::from_raw_os_error(value)),
+        _ => Err(io::Error::from_raw_os_error(28)),
+    }
+}
+
 fn spawn_wait(request: &str, kill: Option<(u64, u32)>) -> Result<i32> {
     let pid = checked(unsafe { proc_spawn(request.as_ptr(), request.len()) })? as u32;
     let job = checked(unsafe { proc_job_of(pid) })? as u32;
@@ -254,7 +265,7 @@ fn spawn_wait(request: &str, kill: Option<(u64, u32)>) -> Result<i32> {
         sleep(milliseconds)?;
         checked(unsafe { proc_kill(pid, signal) })?;
     }
-    let mut result = [0i32; 2];
+    let mut result = [0u8; 8];
     loop {
         checkpoint();
         let value = unsafe { proc_wait(pid, result.as_mut_ptr()) };
@@ -267,13 +278,10 @@ fn spawn_wait(request: &str, kill: Option<(u64, u32)>) -> Result<i32> {
     }
     // Child completion alone does not reap the owned job or establish descendant
     // quiescence. Use the ABI's job wait before returning to the shell.
-    let mut job_status = 0i32;
-    checked(unsafe { proc_wait_job(job, 0, &mut job_status) })?;
-    Ok(if result[0] == 0 {
-        result[1]
-    } else {
-        128 + result[1]
-    })
+    let mut job_result = [0u8; 8];
+    checked(unsafe { proc_wait_job(job, 0, job_result.as_mut_ptr()) })?;
+    wait_status(job_result)?;
+    Ok(wait_status(result)?)
 }
 
 fn run(args: &[String]) -> Result<i32> {

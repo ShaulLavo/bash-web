@@ -131,6 +131,7 @@ impl WaitResult {
         match kind {
             0 => Ok(Self::Exited(value)),
             1 => Ok(Self::Signaled(value)),
+            2 => Ok(Self::StartFailed(value)),
             _ => Err(28),
         }
     }
@@ -144,9 +145,9 @@ pub trait Abi {
     fn inherited_fds(&self) -> Vec<u32>;
     fn spawn(&self, request: &RuntimeSpawn) -> Result<u32, i32>;
     fn job_of(&self, pid: u32) -> Result<u32, i32>;
-    fn wait(&self, pid: u32) -> Result<i32, i32>;
+    fn wait(&self, pid: u32) -> Result<WaitResult, i32>;
     /// Nonblocking runtime wait_job with NOHANG=1. EAGAIN until all members exit.
-    fn wait_job(&self, job: u32) -> Result<i32, i32>;
+    fn wait_job(&self, job: u32) -> Result<WaitResult, i32>;
     fn kill(&self, pid: u32, signal: i32) -> Result<(), i32>;
     fn kill_job(&self, job: u32, signal: i32) -> Result<(), i32>;
     fn pipe(&self) -> Result<(u32, u32), i32>;
@@ -300,7 +301,7 @@ fn input_future_bytes<F>(_: &impl FnOnce(Endpoint, Endpoint, Cancel) -> F) -> us
 struct Child {
     group: GroupId,
     job: Option<u32>,
-    status: Cell<Option<i32>>,
+    status: Cell<Option<Result<i32, i32>>>,
 }
 struct State {
     abi: Rc<dyn Abi>,
@@ -923,16 +924,21 @@ impl ProcessHost for Runtime {
             let child = child.ok_or(ProcessError::UnknownProcess(pid))?;
             loop {
                 if let Some(status) = child.status.get() {
-                    return Ok(status);
+                    return status.map_err(ProcessError::StartFailed);
                 }
                 match runtime.0.abi.wait(pid as u32) {
-                    Ok(status) => {
+                    Ok(result) => {
+                        let status = match result {
+                            WaitResult::Exited(code) => Ok(code),
+                            WaitResult::Signaled(signal) => Ok(128 + signal),
+                            WaitResult::StartFailed(errno) => Err(errno),
+                        };
                         child.status.set(Some(status));
                         runtime.0.children.borrow_mut().remove(&pid);
                         if let Some(job) = child.job {
                             let _ = runtime.try_reap_job(child.group, job);
                         }
-                        return Ok(status);
+                        return status.map_err(ProcessError::StartFailed);
                     }
                     Err(AGAIN) => runtime.ready(2, pid as u32).await,
                     Err(errno) => return Err(ProcessError::Runtime(errno)),
