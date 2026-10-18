@@ -20,6 +20,9 @@ import {
   healthy,
   matches,
   matrixCases,
+  manifestLimits,
+  parseManifest,
+  validateManifest,
   maxGeneratedCount,
   optionsFor,
   outputLimit,
@@ -40,8 +43,14 @@ const parent = "/work/tmp/bash-web-path-20261018";
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const fixturePath = "shell-path-seed-1.json";
 const fixtureHashes = {
-  "shell-path-seed-1.json": "d15abb7e0ecc14b8df8dc2d33ddbaa8a24c494ba45bc646d25f66d20be59a139",
-  "shell-path-seed-42.json": "975b32686d50019595a1ae9e6df6da5688c91b8d83b500256cfaef438134b309",
+  "shell-path-seed-1.json": "77415efecfe9baabfa75a229e186564305164313c5dc57e9fcf202b1f2e52153",
+  "shell-path-seed-42.json": "aa197cf4bcc2fd9c6f703ced1d3efd82a59bf87f92786f43d5674aaa435978c6",
+};
+// Frozen before the manifest validator changed any harness source identity.
+// These independently pin every case and Bash observation, excluding metadata.
+const frozenCaseHashes = {
+  "shell-path-seed-1.json": "eb1e52ed72dc626c8e974c2edd481dd97e766bd8d465ec1bbb640ffd7bb9c77a",
+  "shell-path-seed-42.json": "641771a57e8156ee0b9cf5b7081f08bf979396b2452e2b349be2338ff3af47af",
 };
 const observation = (patch = {}) => ({
   status: 0,
@@ -223,6 +232,102 @@ test("portable manifest uses bounded owned nodes, exact permissions and explicit
   }
   removeSandbox(fixture);
   assert.equal(existsSync(fixture), false);
+});
+
+test("manifest schema and limits reject the whole input before filesystem mutation", (t) => {
+  const cwd = scratch(t);
+  const valid = {
+    schema: 1,
+    nodes: [{ path: "first", kind: "file", mode: 0o755, marker: "ok", status: 7 }],
+  };
+  const invalidNodes = [
+    { path: "", kind: "file", mode: 0o600 },
+    { path: "x".repeat(manifestLimits.pathBytes + 1), kind: "file", mode: 0o600 },
+    { path: "é".repeat(manifestLimits.pathBytes / 2 + 1), kind: "file", mode: 0o600 },
+    { path: "first", kind: "file", mode: 0o600 },
+    { path: "first/child", kind: "file", mode: 0o600 },
+    { path: "missing/child", kind: "file", mode: 0o600 },
+    null,
+    {},
+    { path: "invalid", kind: "link", mode: 0o755 },
+    { path: "invalid", kind: "file", mode: -1 },
+    { path: "invalid", kind: "file", mode: 0o1000 },
+    { path: "invalid", kind: "file", mode: 1.5 },
+    { path: "invalid", kind: "file", mode: 0o755, unknown: true },
+    { path: "invalid", kind: "directory", mode: 0o755, marker: "ok", status: 7 },
+  ].concat(
+    ["/absolute", "../escape", "a/../escape", "a//b", "a/./b", "trailing/", "nul\0", "line\n"].map(
+      (path) => ({ path, kind: "file", mode: 0o600 }),
+    ),
+    [
+      { marker: "ok" },
+      { status: 7 },
+      { marker: null, status: null },
+      { marker: "ok", status: 0 },
+      { marker: "ok", status: 256 },
+      { marker: "ok", status: 1.5 },
+      { marker: "", status: 7 },
+      { marker: "bad\nmarker", status: 7 },
+      { marker: "x".repeat(manifestLimits.markerBytes + 1), status: 7 },
+    ].map((program) => ({ path: "invalid", kind: "file", mode: 0o755, ...program })),
+  );
+  for (const node of invalidNodes) {
+    const manifest = { ...valid, nodes: valid.nodes.concat([node]) };
+    assert.throws(() => provision(cwd, JSON.stringify(manifest)), undefined, JSON.stringify(node));
+    assert.deepEqual(readdirSync(cwd), [], "no earlier valid node may be created");
+  }
+  for (const manifest of [
+    null,
+    [],
+    {},
+    { ...valid, schema: 2 },
+    { ...valid, unknown: 1 },
+    { ...valid, nodes: {} },
+  ])
+    assert.throws(() => validateManifest(manifest));
+  const full = {
+    schema: 1,
+    nodes: Array.from({ length: manifestLimits.nodes }, (_, index) => ({
+      path: "file-" + index,
+      kind: "file",
+      mode: 0o600,
+    })),
+  };
+  assert.deepEqual(parseManifest(JSON.stringify(full)), full);
+  assert.throws(
+    () =>
+      parseManifest(
+        JSON.stringify({
+          ...full,
+          nodes: full.nodes.concat([{ path: "overflow", kind: "file", mode: 0o600 }]),
+        }),
+      ),
+    /oversized/,
+  );
+  const empty = JSON.stringify({ schema: 1, nodes: [] });
+  assert.deepEqual(parseManifest(empty.padEnd(manifestLimits.bytes, " ")), {
+    schema: 1,
+    nodes: [],
+  });
+  assert.throws(() => parseManifest(empty.padEnd(manifestLimits.bytes + 1, " ")), /oversized/);
+  assert.throws(
+    () => parseManifest(" ".repeat(manifestLimits.bytes) + "not JSON"),
+    /oversized/,
+    "raw bound precedes JSON parsing",
+  );
+  assert.throws(() => parseManifest("{"), /JSON/);
+  validateManifest({
+    schema: 1,
+    nodes: [
+      {
+        path: "x".repeat(manifestLimits.pathBytes),
+        kind: "file",
+        mode: 0o755,
+        marker: "x".repeat(manifestLimits.markerBytes),
+        status: 255,
+      },
+    ],
+  });
 });
 
 test("all transitive harness sources are pinned and raw bytes/status stay strict", () => {
@@ -414,6 +519,11 @@ test("every captured seed includes the full fixed matrix and all seeded observat
     const bytes = readFileSync(new URL("./fixtures/" + name, import.meta.url));
     assert.equal(createHash("sha256").update(bytes).digest("hex"), fixtureHashes[name]);
     const fixture = JSON.parse(bytes.toString("utf8"));
+    assert.equal(
+      createHash("sha256").update(JSON.stringify(fixture.cases)).digest("hex"),
+      frozenCaseHashes[name],
+      "harness metadata updates must not change frozen cases or observations",
+    );
     const cases = validateFixture(name, fixture, { ...options, count: defaultCount });
     assert.equal(cases.length, matrixCases().length + defaultCount);
     assert.equal(fixture.provenance, "oracle-only");

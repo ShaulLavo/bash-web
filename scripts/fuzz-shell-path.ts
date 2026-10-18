@@ -61,6 +61,74 @@ export const filesystem: FixtureNode[] = [
 ];
 export const fixtureEnvironmentKey = "BASH_WEB_PATH_FIXTURE";
 export const fixtureManifest = { schema: 1, nodes: filesystem };
+// Shared wire-contract limits; the Rust consumer enforces the same limits before
+// copying strings, growing its node list, or touching its virtual filesystem.
+export const manifestLimits = { bytes: 32768, nodes: 128, pathBytes: 256, markerBytes: 64 };
+export function validateManifest(value: unknown): asserts value is typeof fixtureManifest {
+  const object = (item: unknown): item is Record<string, unknown> =>
+    item !== null && typeof item === "object" && !Array.isArray(item);
+  const keys = (item: Record<string, unknown>, allowed: readonly string[]) => {
+    if (Object.keys(item).some((key) => !allowed.includes(key)))
+      throw new Error("unknown fixture field");
+  };
+  if (!object(value)) throw new Error("invalid fixture manifest");
+  keys(value, ["schema", "nodes"]);
+  if (
+    value.schema !== 1 ||
+    !Array.isArray(value.nodes) ||
+    value.nodes.length > manifestLimits.nodes
+  )
+    throw new Error("unsupported or oversized fixture manifest");
+  const directories = new Set<string>();
+  const paths = new Set<string>();
+  for (const node of value.nodes) {
+    if (!object(node)) throw new Error("invalid fixture node");
+    keys(node, ["path", "kind", "mode", "marker", "status"]);
+    if (
+      typeof node.path !== "string" ||
+      Buffer.byteLength(node.path) > manifestLimits.pathBytes ||
+      !node.path ||
+      /[\x00-\x1f\x7f]/.test(node.path) ||
+      node.path.split("/").some((part) => !part || part === "." || part === "..") ||
+      paths.has(node.path)
+    )
+      throw new Error("invalid or duplicate fixture path");
+    const slash = node.path.lastIndexOf("/");
+    if (slash >= 0 && !directories.has(node.path.slice(0, slash)))
+      throw new Error("fixture parent must be an earlier directory");
+    if (
+      !["directory", "file"].includes(node.kind as string) ||
+      !Number.isInteger(node.mode) ||
+      (node.mode as number) < 0 ||
+      (node.mode as number) > 0o777
+    )
+      throw new Error("invalid fixture kind or mode");
+    const program = Object.hasOwn(node, "marker") || Object.hasOwn(node, "status");
+    if (
+      program &&
+      (node.kind !== "file" ||
+        typeof node.marker !== "string" ||
+        !/^[a-zA-Z0-9_-]+$/.test(node.marker) ||
+        Buffer.byteLength(node.marker) > manifestLimits.markerBytes ||
+        !Number.isInteger(node.status) ||
+        (node.status as number) < 1 ||
+        (node.status as number) > 255)
+    )
+      throw new Error("invalid fixture program");
+    paths.add(node.path);
+    if (node.kind === "directory") directories.add(node.path);
+  }
+}
+export function parseManifest(raw: string) {
+  if (typeof raw !== "string" || Buffer.byteLength(raw) > manifestLimits.bytes)
+    throw new Error("oversized fixture JSON");
+  const manifest: unknown = JSON.parse(raw);
+  validateManifest(manifest);
+  return manifest;
+}
+validateManifest(fixtureManifest);
+export const fixtureManifestJson = JSON.stringify(fixtureManifest);
+parseManifest(fixtureManifestJson);
 export const environment = {
   locale: "C",
   path: "/usr/bin:/bin",
@@ -459,8 +527,10 @@ export function coverage(cases) {
     queries: unique((item) => item.query).filter((item) => item !== undefined),
   };
 }
-export function provision(sandbox: string) {
-  for (const node of filesystem) {
+export function provision(sandbox: string, raw = fixtureManifestJson) {
+  // Reject the complete wire document before creating even the first node.
+  const manifest = parseManifest(raw);
+  for (const node of manifest.nodes) {
     const path = resolve(sandbox, node.path);
     if (node.kind === "directory") mkdirSync(path, { recursive: true });
     else
@@ -472,7 +542,7 @@ export function provision(sandbox: string) {
         { mode: node.mode },
       );
   }
-  for (const node of filesystem.toReversed()) chmodSync(resolve(sandbox, node.path), node.mode);
+  for (const node of manifest.nodes.toReversed()) chmodSync(resolve(sandbox, node.path), node.mode);
 }
 export function removeSandbox(sandbox: string) {
   // Restore the searchable ancestor before recursive removal, even after failure.
@@ -501,7 +571,7 @@ export async function run(bin: string, script: string, options) {
         PWD: sandbox,
         LC_ALL: "C",
         LANG: "C",
-        [fixtureEnvironmentKey]: JSON.stringify(fixtureManifest),
+        [fixtureEnvironmentKey]: fixtureManifestJson,
       },
     });
     const chunks = { stdout: [], stderr: [] };

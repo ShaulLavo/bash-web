@@ -18,9 +18,14 @@ fn main() {
     }
     let executor = Executor::new();
     let host = InProcessHost::new(executor.clone());
-    compat::register(&host);
     let fs = MemoryFs::new(16 * 1024 * 1024);
+    compat::register(&host, &fs);
     let cwd = std::env::var("PWD").ok();
+    let fixture = std::env::var_os("BASH_WEB_PATH_FIXTURE");
+    if fixture.is_some() && cwd.is_none() {
+        eprintln!("cannot install path fixture without PWD");
+        std::process::exit(2);
+    }
     // The standalone host selects a virtual cwd from its environment. Create
     // that directory in its own filesystem before exposing it to the shell.
     if let Some(cwd) = cwd.as_deref() {
@@ -28,8 +33,12 @@ fn main() {
             eprintln!("cannot create virtual working directory: {error:?}");
             std::process::exit(error.status());
         }
-        if let Ok(raw) = std::env::var("BASH_WEB_PATH_FIXTURE") {
-            if let Err(error) = compat::register_fixture(&host, &fs, cwd, &raw) {
+        if let Some(raw) = fixture {
+            let Some(raw) = raw.to_str() else {
+                eprintln!("cannot install path fixture: invalid UTF-8");
+                std::process::exit(2);
+            };
+            if let Err(error) = compat::register_fixture(&host, &fs, cwd, raw) {
                 eprintln!("cannot install path fixture: {error}");
                 std::process::exit(2);
             }
@@ -46,6 +55,12 @@ fn main() {
         let mut state = state.borrow_mut();
         state.variables = std::env::vars().collect();
         state.exported = state.variables.keys().cloned().collect();
+        // Like Bash startup, an absent inherited PATH gets a non-exported
+        // default. A later `unset PATH` still means a cwd-only lookup.
+        state
+            .variables
+            .entry("PATH".into())
+            .or_insert_with(|| "/usr/bin:/bin".into());
         if let Some(cwd) = cwd {
             state.cwd = cwd;
         }
