@@ -21,20 +21,30 @@ const INDENT_AMOUNT: usize = 4;
 /// Bash's text for `type NAME` / `declare -f NAME`: `name () \n{ \n...\n}`.
 pub fn function_string(name: &str, body: &Command) -> String {
     let mut p = Printer::default();
-    if is_reserved_word(name) {
-        p.out.push_str("function ");
-    }
-    p.out.push_str(name);
-    p.out.push_str(" () \n");
-    p.inside_function_def += 1;
-    p.out.push_str("{ \n");
-    p.indentation += INDENT_AMOUNT;
-    let func_redirects = p.print_function_body(body);
-    p.print_deferred_if_any("");
-    p.indentation -= INDENT_AMOUNT;
-    p.inside_function_def -= 1;
-    p.close_function(func_redirects);
+    p.print_function(name, body);
     p.out.into_string()
+}
+
+/// Render the same function layout as [`function_string`] while admitting
+/// output, traversal and reconstruction through the caller's shared quotas.
+/// No function body is copied or evaluated.
+pub fn function_string_bounded(
+    name: &str,
+    body: &Command,
+    fuel: &Cell<usize>,
+    max_fuel: usize,
+    execution_budget: Option<&ExecutionBudget>,
+) -> Result<String> {
+    let quota = Rc::new(PrintQuota {
+        fuel,
+        max_fuel,
+        execution_budget,
+        failure: RefCell::new(None),
+    });
+    quota.charge(0);
+    let mut printer = Printer::with_quota(quota);
+    printer.print_function(name, body);
+    printer.finish()
 }
 
 fn is_reserved_word(name: &str) -> bool {
@@ -196,6 +206,25 @@ struct Printer<'a> {
 }
 
 impl<'a> Printer<'a> {
+    fn print_function(&mut self, name: &str, body: &Command) {
+        if self.failed() {
+            return;
+        }
+        if is_reserved_word(name) {
+            self.out.push_str("function ");
+        }
+        self.out.push_str(name);
+        self.out.push_str(" () \n");
+        self.inside_function_def += 1;
+        self.out.push_str("{ \n");
+        self.indentation += INDENT_AMOUNT;
+        let redirects = self.print_function_body(body);
+        self.print_deferred_if_any("");
+        self.indentation -= INDENT_AMOUNT;
+        self.inside_function_def -= 1;
+        self.close_function(redirects);
+    }
+
     fn with_quota(quota: Rc<PrintQuota<'a>>) -> Self {
         Self {
             out: Output::bounded(quota),

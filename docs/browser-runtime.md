@@ -209,20 +209,20 @@ evidence; a configured or runnable case is not a passing result.
 | Suite | Configured cases | Runnable cases | Missing public Bun API | Original known failures | New engine/Waffle pending |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Shell | 12 | 11 | 0 | 0 | 1 |
-| External commands | 20 | 10 | 2 | 0 | 8 |
+| External commands | 20 | 11 | 2 | 0 | 7 |
 | Pipelines | 19 | 18 | 1 | 0 | 0 |
 | Runtime | 23 | 19 | 1 | 3 | 0 |
 | Worker assets and renderer fallback | 2 | 2 | 0 | 0 | 0 |
-| **Unique cases** | **76** | **60** | **4** | **3** | **9** |
-| **Chromium + Firefox executions** | **152** | **120** | **8** | **6** | **18** |
+| **Unique cases** | **76** | **61** | **4** | **3** | **8** |
+| **Chromium + Firefox executions** | **152** | **122** | **8** | **6** | **16** |
 
-The nine new pending cases and their exact reason strings are:
+The `command` external-guest case is now runnable following the functions unit.
+The eight remaining engine/Waffle pending cases and their exact reason strings are:
 
 | Case | Reason |
 | --- | --- |
 | `$$` and `BASHPID` report a stable PID and the shell stays alive | `Pending plan 004 $$/BASHPID runtime identity unit: the engine needs an authoritative PID hook.` |
 | `printf` octal escapes produce exact bytes for an external guest | `Pending plan 004 printf escapes unit: octal escapes are not implemented.` |
-| `command` builtin launches a registered external WASI guest | `Pending plan 004 command unit in the functions PR: command is not implemented.` |
 | Unregistered files fail with 126 | `Pending Waffle #10 live-file admission plus plan 004 PATH-search unit: unregistered PATH files must map to 126.` |
 | Relative executable lookup | `Pending Waffle #10 path admission plus plan 004 PATH-search unit: relative executable paths must resolve against cwd.` |
 | Dot-segment executable lookup | `Pending Waffle #10 path admission plus plan 004 PATH-search unit: relative executable paths must resolve against cwd.` |
@@ -230,7 +230,7 @@ The nine new pending cases and their exact reason strings are:
 | Deleted registered executable | `Pending Waffle #10 live-file admission plus plan 004 PATH-search unit: missing and deleted files must fail without execution.` |
 | Registered directory replacement | `Pending Waffle #10 live-file admission: a registered directory must fail with 126 without execution.` |
 
-The original four Bun API skips remain separate from the nine new engine/Waffle
+The original four Bun API skips remain separate from the eight remaining engine/Waffle
 pending cases, and the three inherited known-failure fixmes remain unchanged.
 
 Generic WASI guests exercise pipeline/capture/substitution, terminal and binary

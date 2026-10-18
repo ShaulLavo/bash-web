@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.41",
+  "version": "0.0.42",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -47,6 +47,9 @@
     "fuzz:shell-job-lifetime": "node scripts/fuzz-shell-job-lifetime.mjs",
     "test:fuzz-shell-job-lifetime": "node --test scripts/test-fuzz-shell-job-lifetime.mjs",
     "fuzz:shell-job-lifetime:ci": "node scripts/fuzz-shell-job-lifetime.mjs --replay scripts/fixtures/shell-job-lifetime-seed-1.json --replay scripts/fixtures/shell-job-lifetime-seed-42.json",
+    "fuzz:shell-functions": "node scripts/fuzz-shell-functions.ts",
+    "test:fuzz-shell-functions": "node --test scripts/test-fuzz-shell-functions.ts",
+    "fuzz:shell-functions:ci": "node scripts/fuzz-shell-functions.ts --replay scripts/fixtures/shell-functions-seed-1.json --replay scripts/fixtures/shell-functions-seed-42.json",
     "sources:browser": "node scripts/sources.mjs",
     "build:shell:browser": "node scripts/build-shell-browser.mjs",
     "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:test-guest && npm run notices:browser && vite build && node scripts/finish-build.mjs",

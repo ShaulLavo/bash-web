@@ -37,7 +37,7 @@ mod tokens;
 pub use ast::*;
 pub use budget::{BudgetError, validate as validate_budget};
 pub use lexer::{Lexer, SpannedToken};
-pub use print_cmd::{command_string, function_string};
+pub use print_cmd::{command_string, function_string, function_string_bounded};
 pub(crate) use print_cmd::word_text;
 pub use span::{Position, Span};
 pub use subst_scan::{Step as CommandBoundaryStep, SubstScanner as CommandBoundaryScanner};

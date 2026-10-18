@@ -356,6 +356,16 @@
     "changeLog": [
       {
         "paths": [
+          "shell/parser/src/parser/print_cmd.rs",
+          "shell/parser/src/parser/mod.rs",
+          "shell/parser/tests/command_print.rs"
+        ],
+        "classification": "Original public bounded function-layout adapter over the existing owned Bash-layout printer; no additional upstream implementation copied. GNU Bash 5.3.15 supplies command -V observations.",
+        "change": "Expose function_string_bounded using the same PrintQuota, cooperative traversal, reconstruction admission and deferred-heredoc handling as bounded command labels. Share the pre-existing function layout between bounded and unbounded entries. Add allocation-before-copy, work/cancellation/timeout and layout-parity controls without changing upstream assertions.",
+        "reason": "Function-aware command -V reporting needs Bash function formatting without an unbounded function_string allocation. Reuse the existing printer instead of reparsing or copying retained function ASTs."
+      },
+      {
+        "paths": [
           "shell/parser/src/parser/ast.rs",
           "shell/parser/src/parser/mod.rs",
           "shell/parser/src/parser/budget.rs",
@@ -1420,5 +1430,39 @@
     "stack": "Isolate large command constructors and nonrecursive expansion/assignment clauses outside recursive poll frames. Replace the existing FutureExt::map evaluation wrapper with a safely pin-projected wrapper that owns the same live allocation guard, admits its concrete size before boxing, and releases admission on readiness or cancellation. No parser, execution, storage or stack limits increase; native/WASI regressions execute deepest admitted if/for/arithmetic-for nesting.",
     "gate": "New original deterministic control-flow generator and seed1/42 oracle fixtures only; existing generators and fixtures remain byte-identical. Each seed has 1,848 structured plus 600 generated cases at depths 0-3. Oracle-only capture is explicit; strict replay rejects unsupported results and status/stdout mismatches. Process groups and per-observation cwd scratch are task-owned and cleaned before exit.",
     "prerequisites": "Original shopt state/query/printing supports inherit_errexit, extglob and nullglob, preserving snapshots and conditional command-substitution errexit inheritance; extglob matching remains unsupported. For-list-only quote-aware pathname expansion uses incremental directory readers, bounded admitted buffers and cancellation-safe descriptor guards; legacy argv expansion is unchanged. EPOCHREALTIME reads dynamic wall time, preserves unset-disable state in snapshots and uses six fractional decimal digits."
+  },
+  "shellFunctions": {
+    "classification": "Original function-frame, dynamic scalar binding, positional, call-policy, lastpipe and command-lookup adapters; GNU Bash 5.3.15 is a behavior oracle, not copied implementation.",
+    "paths": [
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/executor.rs",
+      "shell/engine/src/expand.rs",
+      "shell/engine/src/interpreter.rs",
+      "shell/engine/src/interpreter/command_builtin.rs",
+      "shell/engine/src/interpreter/eval.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/tests/words.rs",
+      "shell/engine/tests/words/command.rs",
+      "shell/engine/tests/words/functions.rs",
+      "scripts/fuzz-shell-functions.ts",
+      "scripts/test-fuzz-shell-functions.ts",
+      "scripts/fixtures/shell-functions-seed-1.json",
+      "scripts/fixtures/shell-functions-seed-42.json"
+    ],
+    "frames": "Ordinary function calls share caller state through existing separately scheduled tasks and LIFO RAII restoration of positional parameters, locals and temporary exported prefix bindings. Builtins own argument/status semantics, state owns dynamic binding restoration and positional mutation, and dispatch owns prefix scope, function-bypass lookup and call admission. Snapshots preserve isolated subshell/background/pipeline state; lastpipe changes only the final pipeline stage when job-control monitoring is disabled.",
+    "admission": "Retain the executor task boundary instead of increasing native/WASI stacks. Reset structural execution depth at function entry while preserving parser/eval nesting guards. Replace the accidental default function-depth ceiling with explicit configured/FUNCNEST policy only alongside session-wide lifetime-bound admission for live copied ASTs, argument/positional strings, saved bindings and growing locals. Nested calls unwind deepest-first through bare JoinHandles under cancellation, dropped observers and shutdown.",
+    "gate": "Original deterministic functions grammar with separate seeds 1 and 42. Strict replay compares healthy exit status and exact stdout bytes; stderr is retained unchanged as diagnostic evidence, not equality-gated. No runtime mismatch exemptions or unit-only exclusions. Declaration listing, integer/append attributes and local -I prerequisites are deliberately outside this family and recorded for plan unit 6; plain value/readonly/export controls remain. Native/WASI tests cover 512 actual ordinary/completed-eval entries and unwinds, cancellation with a live peer, admission exhaustion/recovery and synchronous poll/drop stack measurements.",
+    "localHarnessProvenance": {
+      "baseRevision": "0630e1d8011edab6d3351192361c25adaca21c90",
+      "adapted": [
+        "scripts/fuzz-shell-job-lifetime.mjs",
+        "scripts/test-fuzz-shell-job-lifetime.mjs"
+      ],
+      "importedUnchanged": [
+        "scripts/fuzz-shell-control-flow.mjs",
+        "scripts/shell-process-group.mjs"
+      ],
+      "reason": "Reuse owned record/replay/validation/CLI scaffolding, without-replacement LCG and process-group cleanup controls; new grammar and observations are original. No external upstream code copied or adapted."
+    }
   }
 }

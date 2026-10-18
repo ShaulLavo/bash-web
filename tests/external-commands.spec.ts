@@ -72,10 +72,6 @@ test("external pipes preserve binary bytes, EOF, and backpressure in both direct
 });
 
 test("command builtin launches a registered external WASI guest", async ({ page }) => {
-  test.fixme(
-    true,
-    "Pending plan 004 command unit in the functions PR: command is not implemented.",
-  );
   await open(page);
   await command(page, `command /bin/test-guest emit $'COMMAND_OK\\n'`);
   await output(page, "COMMAND_OK");
