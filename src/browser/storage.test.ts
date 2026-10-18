@@ -5,7 +5,7 @@ import type { FilesystemConnection } from "waffle/fs/protocol";
 import { FilesystemService } from "waffle/fs/service";
 import { MemoryBackend } from "waffle/fs/backend";
 import { BrowserSession } from "./session";
-import { waitForStorage } from "./storage";
+import { STORAGE_READY_TIMEOUT_MS, waitForStorage } from "./storage";
 
 function storageWorker(context: TestContext) {
   const previousWorker = globalThis.Worker;
@@ -202,6 +202,70 @@ test("concurrent storage waiters detach without replacing the owner's observer",
   await second;
   assert.equal(runtime.filesystem.onStateChange, owner);
 });
+
+test("initial storage opening has a separate generous readiness bound", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const fixture = storageWorker(context);
+  const { runtime, worker } = fixture.create({ filesystem: { storage: "opfs" } });
+  let failed = false;
+  const opening = waitForStorage(runtime, new AbortController().signal);
+  const rejected = assert
+    .rejects(opening, /Browser storage did not become ready within 60 seconds/)
+    .then(() => {
+      failed = true;
+    });
+  context.mock.timers.tick(STORAGE_READY_TIMEOUT_MS - 1);
+  await Promise.resolve();
+  assert.equal(failed, false);
+  context.mock.timers.tick(1);
+  await rejected;
+  assert.equal(runtime.filesystem.onStateChange, undefined);
+  assert.equal(runtime.disposed, false, "the runtime still belongs to its application");
+  assert.equal(worker.disposalRequested, false);
+});
+
+test("ownership waiting disarms the opening guard without starting the shell guard", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const fixture = storageWorker(context);
+  const { runtime, worker } = fixture.create({ filesystem: { storage: "opfs" } });
+  let ready = false;
+  const opening = waitForStorage(runtime, new AbortController().signal).then(() => {
+    ready = true;
+  });
+  context.mock.timers.tick(1000);
+  worker.state("waiting");
+  context.mock.timers.tick(STORAGE_READY_TIMEOUT_MS * 3);
+  await Promise.resolve();
+  assert.equal(ready, false);
+  assert.equal(runtime.filesystem.state.status, "waiting");
+  worker.state("ready");
+  await opening;
+});
+
+for (const outcome of ["ready", "cancelled"] as const)
+  test(`storage ${outcome} removes its opening timer and observer`, async (context) => {
+    context.mock.timers.enable({ apis: ["setTimeout"] });
+    const fixture = storageWorker(context);
+    const { runtime, worker } = fixture.create({ filesystem: { storage: "opfs" } });
+    const clear = context.mock.method(globalThis, "clearTimeout");
+    const controller = new AbortController();
+    const opening = waitForStorage(runtime, controller.signal);
+    if (outcome === "ready") {
+      worker.state("ready");
+      await opening;
+    } else {
+      controller.abort(new Error("Host left during opening"));
+      await assert.rejects(opening, /Host left during opening/);
+    }
+    assert.equal(
+      clear.mock.callCount(),
+      1,
+      "the scheduled timer must be cleared, not merely ignored later",
+    );
+    assert.notEqual(clear.mock.calls[0].arguments[0], undefined);
+    assert.equal(runtime.filesystem.onStateChange, undefined);
+    context.mock.timers.tick(STORAGE_READY_TIMEOUT_MS * 2);
+  });
 
 test("storage defaults are forwarded unchanged and OPFS takeover is rejected", async (context) => {
   const fixture = storageWorker(context);

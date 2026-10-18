@@ -8,6 +8,9 @@ type Observation = {
 };
 const observations = new WeakMap<Runtime, Observation>();
 
+/** Separate from the shell guard; slow first-use browser storage has its own budget. */
+export const STORAGE_READY_TIMEOUT_MS = 60000;
+
 function observeStorage(runtime: Runtime, listener: Listener): () => void {
   const filesystem = runtime.filesystem;
   let observation = observations.get(runtime);
@@ -44,10 +47,13 @@ export function waitForStorage(
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     let unobserve = () => {};
     const finish = (error?: unknown) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timeout);
+      timeout = undefined;
       signal.removeEventListener("abort", abort);
       unobserve();
       if (error === undefined) resolve();
@@ -56,6 +62,13 @@ export function waitForStorage(
     const abort = () => finish(signal.reason);
     const receive = (state: SharedFilesystemState) => {
       if (settled) return;
+      if (state.status === "waiting") {
+        // Another tab may own storage indefinitely. The typed state intentionally stays
+        // waiting through recovery too; resuming a recovery budget needs the lock-acquired
+        // startup milestone rather than guessing ownership from elapsed time.
+        clearTimeout(timeout);
+        timeout = undefined;
+      }
       try {
         onState?.(state);
       } catch (error) {
@@ -77,6 +90,13 @@ export function waitForStorage(
     }
     unobserve = observeStorage(runtime, receive);
     signal.addEventListener("abort", abort, { once: true });
-    receive(runtime.filesystem.state);
+    const initial = runtime.filesystem.state;
+    if (initial.status === "opening") {
+      timeout = setTimeout(
+        () => finish(new Error("Browser storage did not become ready within 60 seconds.")),
+        STORAGE_READY_TIMEOUT_MS,
+      );
+    }
+    receive(initial);
   });
 }
