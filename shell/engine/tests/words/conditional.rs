@@ -160,6 +160,54 @@ fn conditional_terminal_integer_error_is_a_logical_status_not_expansion_failure(
 }
 
 #[test]
+fn conditional_terminal_negation_keeps_direct_parity_and_group_boundaries() {
+    for (expression, expected, diagnostic) in [
+        ("! ! -t nope", 2, true),
+        ("! ! ! -t nope", 0, true),
+        ("! ! ! ! -t nope", 2, true),
+        ("! ( ! -t nope )", 1, true),
+        ("! ! ( -t nope )", 2, true),
+        ("! ( ! ! -t nope )", 0, true),
+        ("! ! ( ! -t nope )", 0, true),
+        ("! ( ! ( ! -t nope ) )", 0, true),
+        ("! ! -t nope && yes", 2, true),
+        ("! ! -t nope || yes", 0, true),
+        ("! ! -t nope || ''", 1, true),
+        ("yes && ! ! -t nope", 2, true),
+        ("'' || ! ! -t nope", 2, true),
+        ("yes || ! ! -t skipped", 0, false),
+        ("'' && ! ! -t skipped", 1, false),
+        ("! ( ! -t nope ) && yes", 1, true),
+        ("! ( ! -t nope ) || yes", 0, true),
+        ("! ! yes", 0, false),
+        ("! ! ''", 1, false),
+        ("! ! ! yes", 1, false),
+        ("! ! ! ''", 0, false),
+        ("! ! ! ! yes", 0, false),
+        ("! ! ! ! ''", 1, false),
+    ] {
+        terminal_negation(expression, expected, diagnostic);
+    }
+}
+
+fn terminal_negation(expression: &str, expected: i32, diagnostic: bool) {
+    for closed in [false, true] {
+        let rig = Rig::new(Limits::default());
+        let redirect = if closed { " 2>&-" } else { "" };
+        let source = format!("[[ {expression} ]]{redirect}");
+        assert_eq!(rig.run(&source), expected, "{source}");
+        let errors = if diagnostic && !closed {
+            "/usr/bin/bash: [[: nope: integer expected\n"
+        } else {
+            ""
+        };
+        assert_eq!(rig.errors.bytes(), errors.as_bytes(), "{source}");
+        assert!(rig.output.bytes().is_empty(), "{source}");
+        assert!(rig.calls.borrow().is_empty(), "{source}");
+    }
+}
+
+#[test]
 fn conditional_resource_rejection_does_not_dispatch_a_selected_command() {
     let rig = Rig::new(Limits {
         expansion_bytes: 64,

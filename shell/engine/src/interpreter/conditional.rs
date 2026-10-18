@@ -5,6 +5,7 @@ use super::{Context, Descriptors, Outcome, expansion_failure};
 use crate::{
     arithmetic, builtins,
     exec::ResultFuture,
+    executor::Cancel,
     expand::{self, Error, Work},
     io::{Endpoint, FdTable},
     state::SharedState,
@@ -98,7 +99,9 @@ fn evaluate<'a>(
             while let Some(continuation) = stack.pop() {
                 work.checkpoint(&context.cancel).await?;
                 match continuation {
-                    Continuation::Not => value = i32::from(value == 0),
+                    Continuation::Not => {
+                        value = negate(value, &mut stack, &context.cancel, work).await?;
+                    }
                     Continuation::Group => {}
                     Continuation::And(rest) | Continuation::Or(rest) => {
                         let select_next = match continuation {
@@ -121,6 +124,27 @@ fn evaluate<'a>(
             }
             return Ok(value);
         }
+    })
+}
+
+// Direct ! operators toggle one inversion; groups and logical nodes start a
+// separate inversion. Keep each admitted frame's work/cancellation checkpoint.
+async fn negate(
+    value: i32,
+    stack: &mut Vec<Continuation<'_>>,
+    cancel: &Cancel,
+    work: &mut Work,
+) -> Result<i32, Error> {
+    let mut inverted = true;
+    while matches!(stack.last(), Some(Continuation::Not)) {
+        work.checkpoint(cancel).await?;
+        stack.pop();
+        inverted = !inverted;
+    }
+    Ok(if inverted {
+        i32::from(value == 0)
+    } else {
+        value
     })
 }
 
@@ -344,6 +368,7 @@ async fn compare(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::FutureExt;
 
     #[test]
     fn continuation_storage_is_admitted_before_vector_growth() {
@@ -368,6 +393,26 @@ mod tests {
         ));
         assert_eq!(stack.len(), 4);
         assert_eq!(stack.capacity(), 4);
+    }
+
+    #[test]
+    fn consecutive_negations_checkpoint_every_admitted_frame() {
+        let cancel = Cancel::new();
+        let mut stack = vec![Continuation::Not, Continuation::Not];
+        let mut work = Work::new(1, 0, 1);
+        assert!(matches!(
+            negate(2, &mut stack, &cancel, &mut work).now_or_never(),
+            Some(Err(Error::Status(2)))
+        ));
+        assert_eq!(stack.len(), 1);
+
+        let mut work = Work::new(1, 0, 1);
+        cancel.cancel();
+        assert!(matches!(
+            negate(2, &mut stack, &cancel, &mut work).now_or_never(),
+            Some(Err(Error::Status(130)))
+        ));
+        assert_eq!(stack.len(), 1);
     }
 
     #[test]
