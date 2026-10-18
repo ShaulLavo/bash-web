@@ -47,7 +47,7 @@ fn main() {
     let session = Session::new(
         executor.clone(),
         Rc::new(host),
-        Rc::new(fs),
+        Rc::new(compat::ReadOnlyMount::new(fs, "/usr")),
         Limits::default(),
     );
     {

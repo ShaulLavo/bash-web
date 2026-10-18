@@ -1,14 +1,91 @@
 //! Original fixture commands matching the compatibility harness's Python helpers.
 //! Output goes through bounded descriptors, including for a long argument list.
-use futures::FutureExt;
+use futures::{FutureExt, future::LocalBoxFuture};
 use serde::Deserialize;
 use shell_engine::{
     executor::{Budget, Cancel},
-    io::{Endpoint, MemoryFs},
+    io::{Directory, Endpoint, FileKind, FileMetadata, FileSystem, IoError, MemoryFs, OpenOptions},
     process::{InProcessHost, SpawnRequest},
 };
 
+/// Standalone-only mount policy matching the oracle's read-only system tree.
+/// Provision helper files before mounting; writable cwd/tmp stay ordinary MemoryFs.
+/// FileSystem callers supply absolute paths resolved against the shell's cwd.
+pub struct ReadOnlyMount {
+    inner: MemoryFs,
+    root: &'static str,
+}
+impl ReadOnlyMount {
+    pub fn new(inner: MemoryFs, root: &'static str) -> Self {
+        assert!(root.starts_with('/') && !root.ends_with('/'));
+        Self { inner, root }
+    }
+    fn contains(&self, path: &str) -> bool {
+        path == self.root
+            || path
+                .strip_prefix(self.root)
+                .is_some_and(|rest| rest.starts_with('/'))
+    }
+}
+impl FileSystem for ReadOnlyMount {
+    fn mkdir<'a>(
+        &'a self,
+        path: &'a str,
+        parents: bool,
+    ) -> LocalBoxFuture<'a, Result<(), IoError>> {
+        async move {
+            if self.contains(path) {
+                match self.inner.stat(path, true) {
+                    Ok(metadata) if metadata.kind == FileKind::Directory && parents => Ok(()),
+                    Ok(_) => Err(IoError::AlreadyExists),
+                    Err(_) => Err(IoError::Runtime(69)), // WASI EROFS
+                }
+            } else {
+                self.inner.mkdir(path, parents)
+            }
+        }
+        .boxed_local()
+    }
+    fn stat<'a>(
+        &'a self,
+        path: &'a str,
+        follow_symlinks: bool,
+    ) -> LocalBoxFuture<'a, Result<FileMetadata, IoError>> {
+        async move {
+            let mut metadata = self.inner.stat(path, follow_symlinks)?;
+            if self.contains(path) {
+                metadata.writable = Some(false);
+            }
+            Ok(metadata)
+        }
+        .boxed_local()
+    }
+    fn open_dir<'a>(
+        &'a self,
+        path: &'a str,
+    ) -> LocalBoxFuture<'a, Result<std::rc::Rc<dyn Directory>, IoError>> {
+        FileSystem::open_dir(&self.inner, path)
+    }
+    fn open<'a>(
+        &'a self,
+        path: &'a str,
+        options: &'a OpenOptions,
+    ) -> LocalBoxFuture<'a, Result<Endpoint, IoError>> {
+        async move {
+            if self.contains(path)
+                && (options.write || options.create || options.truncate || options.append)
+            {
+                return Err(IoError::Runtime(69)); // WASI EROFS
+            }
+            self.inner.open(path, options)
+        }
+        .boxed_local()
+    }
+}
+
 pub fn register(host: &InProcessHost, fs: &MemoryFs) {
+    fs.mkdir("/usr/local/bin", true)
+        .expect("fixture system directory");
     fs.mkdir("/usr/bin", true)
         .expect("fixture helper directory");
     for path in ["/usr/bin/argv.py", "/usr/bin/printenv.py"] {
@@ -349,6 +426,90 @@ mod tests {
     use super::*;
     use serde_json::json;
     use shell_engine::{executor::Executor, io::IoError};
+
+    #[test]
+    fn read_only_mount_preserves_reads_and_rejects_all_mutating_opens() {
+        let fs = MemoryFs::new(4096);
+        fs.mkdir("/usr/local/bin", true).unwrap();
+        fs.write_file("/usr/local/bin/tool", b"original").unwrap();
+        let mounted = ReadOnlyMount::new(fs.clone(), "/usr");
+        for options in [
+            OpenOptions {
+                write: true,
+                ..OpenOptions::default()
+            },
+            OpenOptions {
+                create: true,
+                ..OpenOptions::default()
+            },
+            OpenOptions {
+                write: true,
+                truncate: true,
+                ..OpenOptions::default()
+            },
+            OpenOptions {
+                write: true,
+                append: true,
+                ..OpenOptions::default()
+            },
+        ] {
+            for path in ["/usr/local/bin/tool", "/usr/local/bin/new"] {
+                assert!(matches!(
+                    mounted.open(path, &options).now_or_never(),
+                    Some(Err(IoError::Runtime(69)))
+                ));
+            }
+        }
+        assert_eq!(fs.read_file("/usr/local/bin/tool").unwrap(), b"original");
+        assert_eq!(fs.stat("/usr/local/bin/new", true), Err(IoError::NotFound));
+        assert!(
+            mounted
+                .open("/usr/local/bin/tool", &OpenOptions::default())
+                .now_or_never()
+                .unwrap()
+                .is_ok()
+        );
+        assert!(
+            mounted
+                .open_dir("/usr/local/bin")
+                .now_or_never()
+                .unwrap()
+                .is_ok()
+        );
+        assert_eq!(
+            mounted
+                .stat("/usr/local/bin/tool", true)
+                .now_or_never()
+                .unwrap()
+                .unwrap()
+                .writable,
+            Some(false)
+        );
+        assert_eq!(
+            mounted.mkdir("/usr/local/bin", true).now_or_never(),
+            Some(Ok(()))
+        );
+        assert_eq!(
+            mounted.mkdir("/usr/local/bin/new", true).now_or_never(),
+            Some(Err(IoError::Runtime(69)))
+        );
+        assert_eq!(
+            mounted.mkdir("/usr-local/bin", true).now_or_never(),
+            Some(Ok(()))
+        );
+        assert_eq!(mounted.mkdir("/tmp/bin", true).now_or_never(), Some(Ok(())));
+        let write = OpenOptions {
+            write: true,
+            create: true,
+            ..OpenOptions::default()
+        };
+        for path in ["/usr-local/bin/tool", "/tmp/bin/tool", "/home/guest/tool"] {
+            assert!(
+                mounted.open(path, &write).now_or_never().unwrap().is_ok(),
+                "{path}"
+            );
+        }
+    }
 
     fn file(path: &str) -> serde_json::Value {
         json!({"path": path, "kind": "file", "mode": 384})

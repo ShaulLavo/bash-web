@@ -62,6 +62,34 @@ fn cli_installs_shared_compatibility_helpers_and_environment() {
 }
 
 #[test]
+fn cli_system_mount_cannot_create_path_candidates() {
+    for source in [
+        "mkdir -p /usr/local/bin; printf data > /usr/local/bin/probe; PATH=/usr/local/bin; probe",
+        "mkdir -p /usr/local/bin; cat > /usr/local/bin/probe <<'EOF'\ndata\nEOF\nPATH=/usr/local/bin; printf input | probe",
+        "mkdir -p /usr/local/bin; cat > /usr/local/bin/probe <<'EOF'\ndata\nEOF\nPATH=/usr/local/bin probe",
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_shell-engine"))
+            .args(["-c", source])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(127), "{source}");
+        assert!(output.stdout.is_empty());
+    }
+}
+
+#[test]
+fn cli_system_mount_is_read_only_without_freezing_writable_paths() {
+    let source = "mkdir -p /usr/local/bin; printf system > /usr/local/bin/probe; test ! -f /usr/local/bin/probe || exit 9; printf changed > /usr/bin/argv.py; test ! -s /usr/bin/argv.py || exit 8; mkdir -p /tmp/bin /usr-local/bin; printf tmp > /tmp/bin/probe; printf sibling > /usr-local/bin/probe; printf local > probe; cat /tmp/bin/probe /usr-local/bin/probe probe; PATH=.; probe";
+    let output = Command::new(env!("CARGO_BIN_EXE_shell-engine"))
+        .args(["-c", source])
+        .env("PWD", "/home/fixture")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(126));
+    assert_eq!(output.stdout, b"tmpsiblinglocal");
+}
+
+#[test]
 fn cli_virtual_working_directory_exists_for_file_predicates() {
     let output = Command::new(env!("CARGO_BIN_EXE_shell-engine"))
         .args(["-c", "test -d . && [[ -d $PWD ]] && printf ready"])
