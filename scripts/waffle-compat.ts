@@ -59,17 +59,14 @@ async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: t
   // through their executable entries, exactly as the shell starts any program.
   const adapter = "bash-web-compat:fixture";
   const workerUrl = new URL("child.mjs", nodeDirectory).href;
-  runtime.registerAdapter(adapter, (context, service) =>
-    waffle.launchTerminalWorker<RuntimeWorkerRequest>(runtime, service, context, {
+  runtime.registerAdapter(adapter, (context, service) => {
+    const { argv, cwd, env } = context.request;
+    const request = { module: context.module, args: argv, env: { ...env, PWD: cwd } };
+    return waffle.launchTerminalWorker<RuntimeWorkerRequest>(runtime, service, context, {
       workerUrl,
-      request: {
-        module: context.module,
-        args: context.request.argv,
-        env: { ...context.request.env, PWD: context.request.cwd },
-        interruptible: context.interruptible,
-      },
-    }),
-  );
+      request: { ...request, interruptible: context.interruptible },
+    });
+  });
   for (const [name, file] of fixtures) {
     const path = `/usr/bin/${name}`;
     await runtime.filesystem.writeFile(path, new Uint8Array());

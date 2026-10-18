@@ -1,7 +1,16 @@
 {
   // Package exports, HTML, Vite/Playwright config and package scripts are discovered by Knip.
   // These roots are loaded dynamically by the runtime-test driver and compatibility pool.
-  "entry": ["src/{runtime,browser}/*.test.ts", "tests/*.unit.ts", "scripts/bash-compat-worker.mjs"],
+  // The Node compatibility instrument bundles its API and worker roots by path.
+  "entry": [
+    "src/{runtime,browser}/*.test.ts",
+    "tests/*.unit.ts",
+    "scripts/bash-compat-worker.mjs",
+    "scripts/waffle-node-api.ts",
+    "scripts/waffle-root-worker.ts",
+    "scripts/waffle-child-worker.ts",
+    "scripts/node-worker-thread.ts",
+  ],
   "project": ["src/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}", "scripts/**/*.{ts,mjs}"],
   // Ghostty is a pinned source alias outside our graph. It consumes the hotkeys tarball.
   // The duplicate-check driver spawns the pinned jscpd executable by path.

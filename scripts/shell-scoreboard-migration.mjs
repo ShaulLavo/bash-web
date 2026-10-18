@@ -1,10 +1,17 @@
 // Internal launcher: no baseline or binary inputs. The target commit supplies the scorer and source.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { migrationEnvironment, migrationEvidence, oraclePath } from "./shell-scoreboard-base.mjs";
+import {
+  assertInstrumentChanges,
+  baseBranchBaseline,
+  instrumentMigrationEvidence,
+  migrationEnvironment,
+  migrationEvidence,
+  oraclePath,
+} from "./shell-scoreboard-base.mjs";
 import {
   bytesDigest,
   compareScores,
@@ -59,6 +66,137 @@ function run(command, args, cwd, extraEnv = {}) {
   });
 }
 
+const cargoBuild = (args, cwd, targetDir) =>
+  run(
+    "cargo",
+    ["build", "--locked", "--release", "--target", "wasm32-wasip1"].concat(args, ["-j2"]),
+    cwd,
+    { ...wasiCargoEnvironment(root, targetDir, env), CARGO_INCREMENTAL: "0" },
+  );
+const verify = (path) =>
+  run(
+    process.execPath,
+    [fileURLToPath(new URL("./verify-wasi-guests.ts", import.meta.url)), path],
+    root,
+  );
+
+// Build what the target's recorded instrument scores: the standalone CLI for the
+// former node:wasi replay, or the shell-runtime guest plus fixture guests and the
+// harness bundle for the Waffle Node harness.
+async function buildTarget(checkout, targetDir, runner) {
+  const [prepareCommand, prepareArgs] = wasiSysrootCommand(root);
+  await run(prepareCommand, prepareArgs, root);
+  const manifest = ["--manifest-path", "shell/Cargo.toml"];
+  const release = resolve(targetDir, "wasm32-wasip1/release");
+  // Targets recorded before the Waffle harness (any other runner) used the standalone CLI.
+  if (runner !== "waffle-node") {
+    await cargoBuild(
+      manifest.concat(["-p", "shell-engine", "--bin", "shell-engine"]),
+      checkout,
+      targetDir,
+    );
+    await verify(resolve(release, "shell-engine.wasm"));
+    return { wasm: resolve(release, "shell-engine.wasm") };
+  }
+  await cargoBuild(
+    manifest.concat([
+      "-p",
+      "shell-engine",
+      "--bin",
+      "shell-runtime",
+      "-p",
+      "shell-compat-fixtures",
+    ]),
+    checkout,
+    targetDir,
+  );
+  for (const name of ["shell-runtime", "argv-py", "printenv-py"])
+    await verify(resolve(release, `${name}.wasm`));
+  // The target scorer bundles its harness from the shared dependency install.
+  await symlink(resolve(root, "node_modules"), resolve(checkout, "node_modules"), "dir");
+  await run(process.execPath, ["scripts/build-node-harness.ts"], checkout);
+  return { wasm: resolve(release, "shell-runtime.wasm"), fixtures: release };
+}
+
+// A private scratch with the immutable target's archived files and its own Cargo target.
+// The caller's finally block removes it once its consumers have stopped.
+async function targetCheckout(kind, paths) {
+  const scratchRoot = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
+  await mkdir(scratchRoot, { recursive: true });
+  const scratch = await mkdtemp(resolve(scratchRoot, `audit-${kind}-migration-`));
+  const checkout = resolve(scratch, "target");
+  const archive = resolve(scratch, "target.tar");
+  await mkdir(checkout);
+  await run("git", ["archive", "--format=tar", `--output=${archive}`, ref].concat(paths), root);
+  await run("tar", ["-xf", archive, "-C", checkout], scratch);
+  await rm(archive);
+  return { scratch, checkout, targetDir: resolve(scratch, "cargo-target") };
+}
+
+// The one authorized instrument transition: the target's own shell, scored once by
+// the candidate's new instrument, must differ from the target's committed old-instrument
+// baseline by exactly the receipt's classified cases.
+async function rescoreUnderCandidateInstrument(candidate) {
+  const { baseline, receipt } = instrumentMigrationEvidence(root, ref, candidate);
+  const { scratch, checkout, targetDir } = await targetCheckout("instrument", [
+    "shell",
+    "rust-toolchain.toml",
+  ]);
+  try {
+    await cargoBuild(
+      ["--manifest-path", "shell/Cargo.toml", "-p", "shell-engine", "--bin", "shell-runtime"],
+      checkout,
+      targetDir,
+    );
+    const release = resolve(targetDir, "wasm32-wasip1/release");
+    const wasm = resolve(release, "shell-runtime.wasm");
+    await verify(wasm);
+    // The fixture guests belong to the candidate instrument, built from its own crate.
+    await cargoBuild(
+      ["--manifest-path", resolve(root, "shell/Cargo.toml"), "-p", "shell-compat-fixtures"],
+      root,
+      targetDir,
+    );
+    for (const name of ["argv-py", "printenv-py"]) await verify(resolve(release, `${name}.wasm`));
+    await run(process.execPath, ["scripts/build-node-harness.ts"], root);
+    const binaryHash = bytesDigest(await readFile(wasm));
+    const output = resolve(scratch, "target-under-candidate-instrument.json");
+    await run(process.execPath, ["scripts/bash-compat.mjs"], root, {
+      BASH_COMPAT_MODE: "frozen",
+      BASH_COMPAT_ENGINES: "own-shell",
+      BASH_COMPAT_JOBS: process.env.BASH_COMPAT_JOBS ?? "4",
+      BASH_COMPAT_TIMEOUT_MS: String(candidate.environment.timeoutMs),
+      BASH_COMPAT_SKIP_BUILD: "1",
+      BASH_COMPAT_RECORD: "1", // Collection only: explicit validation and comparisons follow below.
+      BASH_COMPAT_SHELL_WASM: wasm,
+      BASH_COMPAT_FIXTURE_DIR: release,
+      BASH_COMPAT_OUT: output,
+      BASH_COMPAT_SCRATCH: scratch,
+    });
+    assert.equal(
+      bytesDigest(await readFile(wasm)),
+      binaryHash,
+      "target binary changed while scoring",
+    );
+    const rescored = JSON.parse(await readFile(output, "utf8"));
+    validateScore(candidate, rescored);
+    assertInstrumentChanges(baseline, rescored, receipt);
+    console.error(
+      `[instrument-migration-proof] ${JSON.stringify({
+        baseRef: ref,
+        engineSha256: binaryHash,
+        from: receipt.from.environment,
+        to: receipt.to.environment,
+        changes: receipt.changes.length,
+      })}`,
+    );
+    return rescored;
+  } finally {
+    assert.equal(children.size, 0, `target processes remain; scratch retained at ${scratch}`);
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
 async function migrate() {
   assert.equal(
     process.argv.length,
@@ -68,52 +206,19 @@ async function migrate() {
   const candidateBytes = await readFile(resolve(root, oraclePath));
   const candidate = JSON.parse(candidateBytes);
   verifyOracle(candidate);
-  const { pins, oracle, baseline } = migrationEvidence(root, ref, candidate);
   const candidatePins = JSON.parse(await readFile(resolve(root, "sources.lock.json"), "utf8"));
   assert.equal(
     candidatePins.shellScoreboard.oracleSha256,
     bytesDigest(candidateBytes),
     "candidate oracle checksum",
   );
+  if (baseBranchBaseline(root, ref)?.identity.oracle === candidate.identity.oracle)
+    return rescoreUnderCandidateInstrument(candidate);
+  const { pins, oracle, baseline } = migrationEvidence(root, ref, candidate);
   assert.notEqual(candidate.identity.oracle, oracle.identity.oracle, "oracle did not change");
-  const scratchRoot = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
-  await mkdir(scratchRoot, { recursive: true });
-  const scratch = await mkdtemp(resolve(scratchRoot, "audit-oracle-migration-"));
+  const { scratch, checkout, targetDir } = await targetCheckout("oracle", []);
   try {
-    const checkout = resolve(scratch, "target");
-    const targetDir = resolve(scratch, "cargo-target");
-    const archive = resolve(scratch, "target.tar");
-    await mkdir(checkout);
-    await run("git", ["archive", "--format=tar", `--output=${archive}`, ref], root);
-    await run("tar", ["-xf", archive, "-C", checkout], scratch);
-    await rm(archive);
-    const [prepareCommand, prepareArgs] = wasiSysrootCommand(root);
-    await run(prepareCommand, prepareArgs, root);
-    await run(
-      "cargo",
-      [
-        "build",
-        "--locked",
-        "--release",
-        "--target",
-        "wasm32-wasip1",
-        "--manifest-path",
-        "shell/Cargo.toml",
-        "-p",
-        "shell-engine",
-        "--bin",
-        "shell-engine",
-        "-j2",
-      ],
-      checkout,
-      { ...wasiCargoEnvironment(root, targetDir, env), CARGO_INCREMENTAL: "0" },
-    );
-    const wasm = resolve(targetDir, "wasm32-wasip1/release/shell-engine.wasm");
-    await run(
-      process.execPath,
-      [fileURLToPath(new URL("./verify-wasi-guests.ts", import.meta.url)), wasm],
-      root,
-    );
+    const { wasm, fixtures } = await buildTarget(checkout, targetDir, oracle.environment.runner);
     const binaryHash = bytesDigest(await readFile(wasm));
     const score = async (label) => {
       const output = resolve(scratch, `${label}.json`);
@@ -125,6 +230,7 @@ async function migrate() {
         BASH_COMPAT_SKIP_BUILD: "1",
         BASH_COMPAT_RECORD: "1", // Collection only: explicit validation and comparisons follow below.
         BASH_COMPAT_SHELL_WASM: wasm,
+        ...(fixtures ? { BASH_COMPAT_FIXTURE_DIR: fixtures } : {}),
         BASH_COMPAT_OUT: output,
         BASH_COMPAT_SCRATCH: scratch,
       });

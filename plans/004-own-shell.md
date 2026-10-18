@@ -1287,3 +1287,46 @@ foreground/background EOF-ack controls remain covered. PR #21 separately adopted
 Waffle 0.0.50 and covered lazy-loader quiet-start reporting. This historical item
 is not another open assignment; later reader-cancellation, filesystem/device
 and external Bun work remain separate.
+
+## Follow-up: real-runtime scoreboard differences
+
+Status: Approved (2026-10-18). The frozen replay moved from the standalone `node:wasi`/`InProcessHost` runner to the Waffle Node harness at main `9f0bf6a88ebba236a5db9ac3ca6fbe364632db9e` (see [the receipt](../docs/evidence/own-shell-instrument-migration.json)). These ten cases passed only under the old fake host and fail on the real runtime; each item fixes a real-runtime difference from Bash, and its cases then rejoin the ratcheted baseline.
+
+### R1. File permission predicates on the runtime filesystem
+
+Answer `-k`, `-r`, `-w` (and the related `-u`/`-g`/`-x` family) from runtime metadata, or the documented Bash fallback, instead of an unsupported-predicate error.
+
+- `bashkit-suite:test-operators:32`: Bash status 0, stdout `readable\n`; ours status 2, stdout ``, stderr `/usr/bin/bash: [: -r: unsupported predicate\n`.
+- `bashkit-suite:test-operators:40`: Bash status 0, stdout `writable\n`; ours status 2, stdout ``, stderr `/usr/bin/bash: [: -w: unsupported predicate\n`.
+- `oils:builtin-bracket:280`: Bash status 0, stdout `status=1\nstatus=1\n`; ours status 0, stdout `status=2\nstatus=2\n`, stderr `/usr/bin/bash: test: -k: unsupported predicate\n/usr/bin/bash: test: -k: unsupported predicate\n`.
+
+### R2. Background jobs at `-c` exit
+
+Let `shell-runtime -c` exit without cancelling still-running background jobs, as Bash does; their output must drain to the inherited descriptors.
+
+- `oils:shell-grammar:17`: Bash status 0, stdout `word word\n`; ours status 0, stdout `word`.
+- `oils:shell-grammar:23`: Bash status 0, stdout `word_a\nword_b\n`; ours status 0, stdout `word_a\nword_b`.
+
+### R3. Reading a directory
+
+Map reading a directory descriptor to Bash's status 1 (EISDIR) on the runtime filesystem.
+
+- `oils:builtin-read:794`: Bash status 0, stdout `status=1\n`; ours status 0, stdout `status=2\n`.
+
+### R4. `/proc/self`
+
+Decide and implement a minimal `/proc/self` (at least `comm`) or record it as an explicit unsupported host feature with Bash-compatible failure.
+
+- `bashkit-suite:proc-self:57`: Bash status 0, stdout ``; ours status 0, stdout `denied\n`.
+
+### R5. Read-only `/usr` in the compatibility instrument
+
+Give the Waffle Node instrument the oracle sandbox's read-only `/usr` (needs a Waffle read-only mount or equivalent), so these cases measure the shell rather than the instrument.
+
+- `bashkit-suite:script-exec:132`: Bash status 127, stdout ``; ours status 126, stdout ``, stderr `/usr/bin/bash: chmod: command not found\n/usr/bin/bash: /usr/local/bin/my-tool: Permission denied\n`.
+- `bashkit-suite:script-exec:95`: Bash status 127, stdout ``; ours status 126, stdout ``, stderr `/usr/bin/bash: chmod: command not found\n/usr/bin/bash: /usr/local/bin/myutil: Permission denied\n`.
+- `bashkit-suite:subprocess-isolation:126`: Bash status 127, stdout ``; ours status 126, stdout ``, stderr `/usr/bin/bash: chmod: command not found\n/usr/bin/bash: /usr/local/bin/check-isolation: Permission denied\n`.
+
+### R6. Ambiguous redirect diagnostics
+
+`oils:var-sub:24` (`echo hi > "$@"` with two words) now passes on stdout and status, but only because `_tmp` is missing: Bash reports an ambiguous redirect. Diagnose multi-word redirect targets as Bash does; the stdout/status score cannot show this.

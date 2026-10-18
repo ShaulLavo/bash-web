@@ -56,7 +56,12 @@ pub fn printenv_lines(
 ) -> Vec<u8> {
     let mut lines = Vec::new();
     for name in names {
-        lines.extend_from_slice(environment.get(name).map_or("None", String::as_str).as_bytes());
+        lines.extend_from_slice(
+            environment
+                .get(name)
+                .map_or("None", String::as_str)
+                .as_bytes(),
+        );
         lines.push(b'\n');
     }
     lines
@@ -76,7 +81,9 @@ pub async fn emit(fds: &FdTable, bytes: &[u8], cancel: &Cancel) -> i32 {
 
 /// Run one helper over Waffle's runtime_proc descriptors and patched libc root preopen.
 #[cfg(target_os = "wasi")]
-pub fn guest_main(helper: fn(&[String], &std::collections::BTreeMap<String, String>) -> Vec<u8>) -> ! {
+pub fn guest_main(
+    helper: fn(&[String], &std::collections::BTreeMap<String, String>) -> Vec<u8>,
+) -> ! {
     use futures::FutureExt;
     use shell_engine::{
         executor::Executor,
@@ -100,14 +107,18 @@ pub fn guest_main(helper: fn(&[String], &std::collections::BTreeMap<String, Stri
         }
         let turn = executor.drive(64);
         if !job.is_finished() {
-            runtime.poll(if turn.runnable { 0 } else { -1 }).expect("poll");
+            runtime
+                .poll(if turn.runnable { 0 } else { -1 })
+                .expect("poll");
         }
     }
     std::process::exit(job.now_or_never().unwrap());
 }
 
 #[cfg(not(target_os = "wasi"))]
-pub fn guest_main(_helper: fn(&[String], &std::collections::BTreeMap<String, String>) -> Vec<u8>) -> ! {
+pub fn guest_main(
+    _helper: fn(&[String], &std::collections::BTreeMap<String, String>) -> Vec<u8>,
+) -> ! {
     eprintln!("this fixture requires wasm32-wasip1 and a runtime_proc host");
     std::process::exit(2);
 }
@@ -118,8 +129,15 @@ mod tests {
 
     #[test]
     fn argv_matches_the_standalone_fixture_repr() {
-        let arguments = ["a", "b c", "it's", "say \"hi\" it's", "tab\tnl\n\\", "\u{1}é"]
-            .map(String::from);
+        let arguments = [
+            "a",
+            "b c",
+            "it's",
+            "say \"hi\" it's",
+            "tab\tnl\n\\",
+            "\u{1}é",
+        ]
+        .map(String::from);
         assert_eq!(
             String::from_utf8(argv_line(&arguments)).unwrap(),
             "['a', 'b c', \"it's\", 'say \"hi\" it\\'s', 'tab\\tnl\\n\\\\', '\\x01\\xc3\\xa9']\n"

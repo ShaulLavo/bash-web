@@ -1,0 +1,371 @@
+{
+  "schema": 1,
+  "purpose": "One-time authorized transition of the frozen own-shell replay from the standalone node:wasi/InProcessHost runner to the Waffle Node harness. Bash observations, case set, sources and schema are unchanged.",
+  "target": "9f0bf6a88ebba236a5db9ac3ca6fbe364632db9e",
+  "from": {
+    "runner": "node:wasi",
+    "environment": "507eb1db0221423576b1a0daba7d79a7b2bc3fbbac1a5d86af3a00bc65b29e6a",
+    "counts": {
+      "oils": 951,
+      "brush-suite": 955,
+      "bashkit-suite": 1341
+    }
+  },
+  "to": {
+    "runner": "waffle-node",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "counts": {
+      "oils": 948,
+      "brush-suite": 956,
+      "bashkit-suite": 1339
+    }
+  },
+  "unchanged": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "classification": {
+    "a": 10,
+    "b": 6
+  },
+  "changes": [
+    {
+      "id": "bashkit-suite:proc-self:57",
+      "change": "lost",
+      "class": "a",
+      "reason": "No /proc/self exists on the runtime filesystem, so writing /proc/self/comm fails; the old pass came only from the in-memory filesystem creating files without parent directories.",
+      "bash": {
+        "status": 0,
+        "stdout": ""
+      },
+      "oldInstrument": {
+        "outcome": "pass",
+        "status": 0,
+        "stdout": ""
+      },
+      "realRuntime": {
+        "outcome": "fail",
+        "status": 0,
+        "stdout": "denied\n"
+      },
+      "plan": "plans/004-own-shell.md#follow-up-real-runtime-scoreboard-differences R4"
+    },
+    {
+      "id": "bashkit-suite:script-exec:132",
+      "change": "lost",
+      "class": "a",
+      "reason": "Same writable-/usr difference (126 instead of 127).",
+      "bash": {
+        "status": 127,
+        "stdout": ""
+      },
+      "oldInstrument": {
+        "outcome": "pass",
+        "status": 127,
+        "stdout": ""
+      },
+      "realRuntime": {
+        "outcome": "fail",
+        "status": 126,
+        "stdout": "",
+        "stderr": "/usr/bin/bash: chmod: command not found\n/usr/bin/bash: /usr/local/bin/my-tool: Permission denied\n"
+      },
+      "plan": "plans/004-own-shell.md#follow-up-real-runtime-scoreboard-differences R5"
+    },
+    {
+      "id": "bashkit-suite:script-exec:95",
+      "change": "lost",
+      "class": "a",
+      "reason": "The oracle's sandbox mounts /usr read-only; Waffle's filesystem has no read-only mount, so the script is created and fails as non-executable (126) instead of not found (127).",
+      "bash": {
+        "status": 127,
+        "stdout": ""
+      },
+      "oldInstrument": {
+        "outcome": "pass",
+        "status": 127,
+        "stdout": ""
+      },
+      "realRuntime": {
+        "outcome": "fail",
+        "status": 126,
+        "stdout": "",
+        "stderr": "/usr/bin/bash: chmod: command not found\n/usr/bin/bash: /usr/local/bin/myutil: Permission denied\n"
+      },
+      "plan": "plans/004-own-shell.md#follow-up-real-runtime-scoreboard-differences R5"
+    },
+    {
+      "id": "bashkit-suite:subprocess-isolation:126",
+      "change": "lost",
+      "class": "a",
+      "reason": "Same writable-/usr difference (126 instead of 127).",
+      "bash": {
+        "status": 127,
+        "stdout": ""
+      },
+      "oldInstrument": {
+        "outcome": "pass",
+        "status": 127,
+        "stdout": ""
+      },
+      "realRuntime": {
+        "outcome": "fail",
+        "status": 126,
+        "stdout": "",
+        "stderr": "/usr/bin/bash: chmod: command not found\n/usr/bin/bash: /usr/local/bin/check-isolation: Permission denied\n"
+      },
+      "plan": "plans/004-own-shell.md#follow-up-real-runtime-scoreboard-differences R5"
+    },
+    {
+      "id": "bashkit-suite:test-operators:32",
+      "change": "lost",
+      "class": "a",
+      "reason": "test -r is unsupported on the runtime filesystem (no access metadata through preview1).",
+      "bash": {
+        "status": 0,
+        "stdout": "readable\n"
+      },
+      "oldInstrument": {
+        "outcome": "pass",
+        "status": 0,
+        "stdout": "readable\n"
+      },
+      "realRuntime": {
+        "outcome": "fail",
+        "status": 2,
+        "stdout": "",
+        "stderr": "/usr/bin/bash: [: -r: unsupported predicate\n"
+      },
+      "plan": "plans/004-own-shell.md#follow-up-real-runtime-scoreboard-differences R1"
+    },
+    {
+      "id": "bashkit-suite:test-operators:40",
+      "change": "lost",
+      "class": "a",
+      "reason": "test -w is unsupported on the runtime filesystem (no access metadata through preview1).",
+      "bash": {
+        "status": 0,
+        "stdout": "writable\n"
+      },
+      "oldInstrument": {
+        "outcome": "pass",
+        "status": 0,
+        "stdout": "writable\n"
+      },
+      "realRuntime": {
+        "outcome": "fail",
+        "status": 2,
+        "stdout": "",
+        "stderr": "/usr/bin/bash: [: -w: unsupported predicate\n"
+      },
+      "plan": "plans/004-own-shell.md#follow-up-real-runtime-scoreboard-differences R1"
+    },
+    {
+      "id": "oils:builtin-bracket:280",
+      "change": "lost",
+      "class": "a",
+      "reason": "The runtime filesystem exposes no Unix mode bits, so test -k is an unsupported predicate (status 2); the old in-memory filesystem answered it.",
+      "bash": {
+        "status": 0,
+        "stdout": "status=1\nstatus=1\n"
+      },
+      "oldInstrument": {
+        "outcome": "pass",
+        "status": 0,
+        "stdout": "status=1\nstatus=1\n"
+      },
+      "realRuntime": {
+        "outcome": "fail",
+        "status": 0,
+        "stdout": "status=2\nstatus=2\n",
+        "stderr": "/usr/bin/bash: test: -k: unsupported predicate\n/usr/bin/bash: test: -k: unsupported predicate\n"
+      },
+      "plan": "plans/004-own-shell.md#follow-up-real-runtime-scoreboard-differences R1"
+    },
+    {
+      "id": "oils:builtin-read:794",
+      "change": "lost",
+      "class": "a",
+      "reason": "read from a directory reports status 2 on the runtime filesystem instead of Bash's status 1 (EISDIR mapping).",
+      "bash": {
+        "status": 0,
+        "stdout": "status=1\n"
+      },
+      "oldInstrument": {
+        "outcome": "pass",
+        "status": 0,
+        "stdout": "status=1\n"
+      },
+      "realRuntime": {
+        "outcome": "fail",
+        "status": 0,
+        "stdout": "status=2\n"
+      },
+      "plan": "plans/004-own-shell.md#follow-up-real-runtime-scoreboard-differences R3"
+    },
+    {
+      "id": "oils:shell-grammar:17",
+      "change": "lost",
+      "class": "a",
+      "reason": "shell-runtime's -c exit cancels a still-running background job, truncating its output; Bash leaves it to finish.",
+      "bash": {
+        "status": 0,
+        "stdout": "word word\n"
+      },
+      "oldInstrument": {
+        "outcome": "pass",
+        "status": 0,
+        "stdout": "word word\n"
+      },
+      "realRuntime": {
+        "outcome": "fail",
+        "status": 0,
+        "stdout": "word"
+      },
+      "plan": "plans/004-own-shell.md#follow-up-real-runtime-scoreboard-differences R2"
+    },
+    {
+      "id": "oils:shell-grammar:23",
+      "change": "lost",
+      "class": "a",
+      "reason": "Same background-job cancellation at -c exit: the last job's newline is lost.",
+      "bash": {
+        "status": 0,
+        "stdout": "word_a\nword_b\n"
+      },
+      "oldInstrument": {
+        "outcome": "pass",
+        "status": 0,
+        "stdout": "word_a\nword_b\n"
+      },
+      "realRuntime": {
+        "outcome": "fail",
+        "status": 0,
+        "stdout": "word_a\nword_b"
+      },
+      "plan": "plans/004-own-shell.md#follow-up-real-runtime-scoreboard-differences R2"
+    },
+    {
+      "id": "bashkit-suite:bashbox-filesystem-backends-integration:5",
+      "change": "gained",
+      "class": "b",
+      "reason": "Fake-host artifact: the in-memory filesystem created ro/new without a parent directory; the real filesystem fails like Bash.",
+      "bash": {
+        "status": 0,
+        "stdout": "1\n"
+      },
+      "oldInstrument": {
+        "outcome": "fail",
+        "status": 0,
+        "stdout": "0\n"
+      },
+      "realRuntime": {
+        "outcome": "pass",
+        "status": 0,
+        "stdout": "1\n"
+      }
+    },
+    {
+      "id": "bashkit-suite:bashbox-interpreter-builtins:281",
+      "change": "gained",
+      "class": "b",
+      "reason": "Fake-host artifact: /no/such/dir/f was created without parents in memory; the real filesystem fails like Bash.",
+      "bash": {
+        "status": 0,
+        "stdout": "1\n"
+      },
+      "oldInstrument": {
+        "outcome": "fail",
+        "status": 0,
+        "stdout": "0\n"
+      },
+      "realRuntime": {
+        "outcome": "pass",
+        "status": 0,
+        "stdout": "1\n"
+      }
+    },
+    {
+      "id": "bashkit-suite:pipes-redirects:411",
+      "change": "gained",
+      "class": "b",
+      "reason": "Fake-host artifact: &> /no/such/dir/f was created without parents in memory; the real filesystem fails like Bash.",
+      "bash": {
+        "status": 0,
+        "stdout": "status 1\n"
+      },
+      "oldInstrument": {
+        "outcome": "fail",
+        "status": 0,
+        "stdout": "status 0\n"
+      },
+      "realRuntime": {
+        "outcome": "pass",
+        "status": 0,
+        "stdout": "status 1\n"
+      }
+    },
+    {
+      "id": "bashkit-suite:stderr-redirect-fidelity:132",
+      "change": "gained",
+      "class": "b",
+      "reason": "Fake-host artifact: /proc/naopode was created without parents in memory; the real filesystem fails like Bash.",
+      "bash": {
+        "status": 0,
+        "stdout": "rc=1\nabsent\nmkdir failed\ntouch failed\n"
+      },
+      "oldInstrument": {
+        "outcome": "fail",
+        "status": 0,
+        "stdout": "rc=0\nabsent\nmkdir failed\ntouch failed\n"
+      },
+      "realRuntime": {
+        "outcome": "pass",
+        "status": 0,
+        "stdout": "rc=1\nabsent\nmkdir failed\ntouch failed\n"
+      }
+    },
+    {
+      "id": "brush-suite:ifs:26",
+      "change": "gained",
+      "class": "b",
+      "reason": "Fake-host artifact: the standalone CLI's environment setup replaced the shell's default IFS, so $IFS printed empty; the runtime entry keeps Bash's default IFS.",
+      "bash": {
+        "status": 0,
+        "stdout": "a:b:c\nAfter: [ \t\n]\n"
+      },
+      "oldInstrument": {
+        "outcome": "fail",
+        "status": 0,
+        "stdout": "a:b:c\nAfter: []\n"
+      },
+      "realRuntime": {
+        "outcome": "pass",
+        "status": 0,
+        "stdout": "a:b:c\nAfter: [ \t\n]\n"
+      }
+    },
+    {
+      "id": "oils:var-sub:24",
+      "change": "gained",
+      "class": "b",
+      "reason": "Fake-host artifact: the in-memory filesystem created _tmp/var-sub1 without its parent, so the redirect succeeded; on a real filesystem it fails with status 1 like Bash (Bash's reason is an ambiguous redirect; see R6).",
+      "bash": {
+        "status": 1,
+        "stdout": ""
+      },
+      "oldInstrument": {
+        "outcome": "fail",
+        "status": 0,
+        "stdout": ""
+      },
+      "realRuntime": {
+        "outcome": "pass",
+        "status": 1,
+        "stdout": ""
+      }
+    }
+  ]
+}
