@@ -82,7 +82,8 @@
     "quality": "npm run sources:browser && npm run build:worker && npm run quality:js && npm run check:rust",
     "quality:js": "npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates",
     "build:browser:assets": "npm run notices:browser && vite build && node scripts/finish-build.mjs",
-    "test:ci": "node --test scripts/test-ci-inputs.ts"
+    "test:ci": "node --test scripts/test-ci-inputs.ts scripts/test-prepare-wasi-tests.ts",
+    "prepare:wasi-tests": "node scripts/prepare-wasi-tests.ts .build/ci-native/wasi-tests"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",

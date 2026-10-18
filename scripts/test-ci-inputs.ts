@@ -31,6 +31,9 @@ for (const path of [
   "scripts/test-wasi-build.ts",
   "scripts/verify-wasi-guests.ts",
   "scripts/test-verify-wasi-guests.ts",
+  "shell/engine/tests/fixtures/example.json",
+  "scripts/prepare-wasi-tests.ts",
+  "scripts/test-prepare-wasi-tests.ts",
 ]) {
   test(`${path} invalidates native checks and binaries`, () => {
     assert.notEqual(

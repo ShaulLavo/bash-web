@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const nativePaths =
-  /^(shell\/.*\.(rs|toml|lock)|tests\/guest\/.*\.(rs|toml|lock)|\.cargo\/.*|rust-toolchain\.toml|\.github\/.*|scripts\/(ci-inputs|test-ci-inputs|wasi-build|test-wasi-build|verify-wasi-guests|test-verify-wasi-guests|build-shell|build-shell-browser|build-test-guest|test-shell-wasi|check-rust-quality|check-shell-parser)\.(ts|mjs))$/;
+  /^((shell|tests\/guest)\/(?!.*(\.md|\/LICENSE)$).*|\.cargo\/.*|rust-toolchain\.toml|\.github\/.*|scripts\/(ci-inputs|test-ci-inputs|prepare-wasi-tests|test-prepare-wasi-tests|wasi-build|test-wasi-build|verify-wasi-guests|test-verify-wasi-guests|build-shell|build-shell-browser|build-test-guest|test-shell-wasi|check-rust-quality|check-shell-parser)\.(ts|mjs))$/;
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -51,7 +51,13 @@ export function ciInputs(revision: string) {
         object(pkg.devDependencies).waffle,
         Object.fromEntries(
           Object.entries(object(pkg.scripts)).filter(([key]) =>
-            ["build:shell", "test:shell:wasi", "check:rust", "build:test-guest"].includes(key),
+            [
+              "build:shell",
+              "test:shell:wasi",
+              "check:rust",
+              "build:test-guest",
+              "prepare:wasi-tests",
+            ].includes(key),
           ),
         ),
       ),

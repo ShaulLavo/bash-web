@@ -7,9 +7,17 @@ import { resolve } from "node:path";
 import { brotliCompressSync, constants } from "node:zlib";
 import { wasiBuildEnvironment } from "./wasi-build.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
+import { wasiTestTargets } from "./prepare-wasi-tests.ts";
 
 const root = resolve(import.meta.dirname, "..");
-const cargoEnv = wasiBuildEnvironment(root, process.env.CARGO_TARGET_DIR ?? ".build/shell");
+const prebuilt = process.argv[2] === "--prebuilt" ? process.argv[3] : undefined;
+assert.ok(
+  process.argv.length === 2 || (prebuilt && process.argv.length === 4),
+  "Use --prebuilt <artifact directory> or no arguments",
+);
+const cargoEnv = prebuilt
+  ? process.env
+  : wasiBuildEnvironment(root, process.env.CARGO_TARGET_DIR ?? ".build/shell");
 const cargo = (args, options = {}) =>
   execFileSync("cargo", args, { cwd: root, stdio: "inherit", env: cargoEnv, ...options });
 const manifest = ["--locked", "--manifest-path", "shell/Cargo.toml"];
@@ -18,61 +26,38 @@ const env = {
   CARGO_TARGET_WASM32_WASIP1_RUNNER:
     process.env.CARGO_TARGET_WASM32_WASIP1_RUNNER || "wasmtime run",
 };
-cargo(
-  ["test"].concat(manifest, [
-    "--target",
-    "wasm32-wasip1",
-    "-p",
-    "shell-parser",
-    "--lib",
-    "--test",
-    "api",
-    "--test",
-    "conditional",
-    "--test",
-    "command_print",
-    "-j2",
-    "--",
-    "--test-threads=1",
-  ]),
-  { env },
-);
-cargo(
-  ["test"].concat(manifest, [
-    "--target",
-    "wasm32-wasip1",
-    "-p",
-    "shell-engine",
-    "--lib",
-    "--test",
-    "streaming",
-    "--test",
-    "terminal_display",
-    "--test",
-    "words",
-    "-j2",
-    "--",
-    "--test-threads=1",
-  ]),
-  { env },
-);
-cargo(
-  ["build"].concat(manifest, [
-    "--target",
-    "wasm32-wasip1",
-    "-p",
-    "shell-engine",
-    "--release",
-    "-j2",
-  ]),
-);
-const metadata = JSON.parse(
-  cargo(["metadata"].concat(manifest, ["--format-version", "1", "--no-deps"]), {
-    stdio: "pipe",
-    encoding: "utf8",
-  }),
-);
-const wasm = resolve(metadata.target_directory, "wasm32-wasip1/release/shell-engine.wasm");
+let wasm;
+if (prebuilt) {
+  wasm = resolve(prebuilt, "shell-engine.wasm");
+} else {
+  for (const targets of wasiTestTargets) {
+    cargo(
+      ["test"].concat(manifest, ["--target", "wasm32-wasip1"], targets, [
+        "-j2",
+        "--",
+        "--test-threads=1",
+      ]),
+      { env },
+    );
+  }
+  cargo(
+    ["build"].concat(manifest, [
+      "--target",
+      "wasm32-wasip1",
+      "-p",
+      "shell-engine",
+      "--release",
+      "-j2",
+    ]),
+  );
+  const metadata = JSON.parse(
+    cargo(["metadata"].concat(manifest, ["--format-version", "1", "--no-deps"]), {
+      stdio: "pipe",
+      encoding: "utf8",
+    }),
+  );
+  wasm = resolve(metadata.target_directory, "wasm32-wasip1/release/shell-engine.wasm");
+}
 verifyWasiGuest(wasm);
 const output = execFileSync(
   "wasmtime",
