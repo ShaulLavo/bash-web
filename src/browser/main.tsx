@@ -9,6 +9,12 @@ import type {
 import terminalWasmUrl from "ghostty-webgpu/ghostty-vt.wasm?url";
 import terminalBridgeUrl from "ghostty-webgpu/bridge.wasm?url";
 import { BrowserSession } from "./session";
+import {
+  createStartupDiagnostics,
+  markStartup,
+  type StartupObserver,
+  type StartupSnapshot,
+} from "../runtime/startup-diagnostics";
 import { createRuntime, type Runtime } from "waffle";
 import filesystemWorkerUrl from "../../.build/browser/fs-worker.js?url";
 import { TerminalNewlines } from "../index";
@@ -28,6 +34,7 @@ interface BrowserTestAccess {
     cols: number;
     rows: number;
     firstFrameMs: number | undefined;
+    startup: StartupSnapshot;
   };
   metrics(): BrowserSession["metrics"] | undefined;
   outputTimings(): readonly TerminalOutputTiming[];
@@ -122,7 +129,7 @@ export type BrowserRuntimeLease = {
 };
 export type BrowserHostOptions =
   | { runtime: Runtime; acquireRuntime?: never }
-  | { runtime?: never; acquireRuntime?: () => BrowserRuntimeLease };
+  | { runtime?: never; acquireRuntime?: (onStartupStage?: StartupObserver) => BrowserRuntimeLease };
 
 /** An app-supplied runtime is borrowed; a factory lease keeps cleanup with its owner. */
 export function mountBrowser(options: BrowserHostOptions = {}): void {
@@ -142,6 +149,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
     let subscriptions: GhosttyWebGpuTerminalSubscription[] = [];
     let outputTimings: TerminalOutputTiming[] = [];
     let generation = 0;
+    let diagnostics = createStartupDiagnostics(generation);
     let firstFrameMs: number | undefined;
     let startedAt = 0;
     let hasOutput = false;
@@ -153,6 +161,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
     };
 
     function stop() {
+      diagnostics.stop();
       generation++;
       subscriptions.forEach((subscription) => subscription.dispose());
       subscriptions = [];
@@ -255,6 +264,8 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       if (!host || handle.signal.aborted) return;
       const stopped = stop();
       const expectedGeneration = generation;
+      const currentDiagnostics = (diagnostics = createStartupDiagnostics(expectedGeneration));
+      const onStartupStage = currentDiagnostics.observe;
       state = "starting";
       error = undefined;
       warning = undefined;
@@ -266,10 +277,14 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       startedAt = performance.now();
       render();
       try {
+        markStartup(onStartupStage, "previous-stop-requested");
         await stopped;
+        markStartup(onStartupStage, "previous-stop-resolved");
         if (generation !== expectedGeneration || handle.signal.aborted) return;
         checkCapabilities();
+        markStartup(onStartupStage, "terminal-open-requested");
         const current = await openTerminal(host);
+        markStartup(onStartupStage, "terminal-open-resolved");
         if (generation !== expectedGeneration || handle.signal.aborted) {
           current.dispose();
           return;
@@ -278,23 +293,30 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         performance.mark("bash:terminal-opened");
         if (current.textarea) current.textarea.disabled = true;
         wireTerminal(current, expectedGeneration);
+        markStartup(onStartupStage, "runtime-lease-requested");
         let lease: BrowserRuntimeLease;
         if (options.runtime) {
           lease = { runtime: options.runtime, ready: Promise.resolve(), dispose: async () => {} };
         } else if (options.acquireRuntime) {
-          lease = options.acquireRuntime();
+          lease = options.acquireRuntime(onStartupStage);
         } else {
-          const owned = createRuntime({ filesystem: { workerURL: filesystemWorkerUrl } });
+          const owned = createRuntime({
+            filesystem: { workerURL: filesystemWorkerUrl },
+            onStartupStage,
+          });
           lease = { runtime: owned, ready: Promise.resolve(), dispose: () => owned.dispose() };
         }
         // The owner must make lease disposal idempotent, including during preparation.
         disposeRuntime = () => lease.dispose();
         await lease.ready;
+        markStartup(onStartupStage, "runtime-lease-resolved");
         if (generation !== expectedGeneration || handle.signal.aborted) {
           await lease.dispose();
           return;
         }
-        await createSession(current, lease.runtime, expectedGeneration);
+        markStartup(onStartupStage, "session-create-requested");
+        await createSession(current, lease.runtime, expectedGeneration, onStartupStage);
+        markStartup(onStartupStage, "session-create-resolved");
       } catch (cause) {
         fail(cause, expectedGeneration);
       }
@@ -304,6 +326,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       current: Terminal,
       pageRuntime: Runtime,
       expectedGeneration: number,
+      onStartupStage: StartupObserver,
     ) {
       const grid = current.appearance.grid;
       // Newline conversion belongs only at the final display sink, never in pipes or files.
@@ -313,6 +336,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       startup = controller;
       const pending = BrowserSession.create({
         runtime: pageRuntime,
+        onStartupStage,
         signal: controller.signal,
         trace: query.get("trace") === "1",
         startupTimeoutMs: startupTimeoutMs(),
@@ -387,6 +411,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
           cols: terminal?.appearance.grid.columns ?? 0,
           rows: terminal?.appearance.grid.rows ?? 0,
           firstFrameMs,
+          startup: diagnostics.snapshot(),
         }),
         metrics: () => session?.metrics,
         runtimeSnapshot: () => session?.runtimeSnapshot(),

@@ -21,7 +21,7 @@ unsafe extern "C" {
     #[link_name = "wait"]
     fn proc_wait(pid: u32, output: *mut u8) -> i32;
     #[link_name = "wait_job"]
-    fn proc_wait_job(job: u32, flags: u32, status: *mut i32) -> i32;
+    fn proc_wait_job(job: u32, flags: u32, output: *mut u8) -> i32;
     #[link_name = "kill"]
     fn proc_kill(pid: u32, signal: i32) -> i32;
     #[link_name = "kill_job"]
@@ -143,21 +143,15 @@ impl Abi for WasiAbi {
     fn job_of(&self, pid: u32) -> Result<u32, i32> {
         result(unsafe { proc_job_of(pid) })
     }
-    fn wait(&self, pid: u32) -> Result<i32, i32> {
+    fn wait(&self, pid: u32) -> Result<WaitResult, i32> {
         let mut bytes = [0; 8];
         result(unsafe { proc_wait(pid, bytes.as_mut_ptr()) })?;
-        let kind = u32::from_le_bytes(bytes[..4].try_into().unwrap());
-        let code = i32::from_le_bytes(bytes[4..].try_into().unwrap());
-        match kind {
-            0 => Ok(code),
-            1 => Ok(128 + code),
-            _ => Err(28),
-        }
+        WaitResult::decode(bytes)
     }
-    fn wait_job(&self, job: u32) -> Result<i32, i32> {
-        let mut status = 0;
-        result(unsafe { proc_wait_job(job, 1, &mut status) })?;
-        Ok(status)
+    fn wait_job(&self, job: u32) -> Result<WaitResult, i32> {
+        let mut bytes = [0; 8];
+        result(unsafe { proc_wait_job(job, 1, bytes.as_mut_ptr()) })?;
+        WaitResult::decode(bytes)
     }
     fn kill(&self, pid: u32, signal: i32) -> Result<(), i32> {
         result(unsafe { proc_kill(pid, signal) }).map(|_| ())

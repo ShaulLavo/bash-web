@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/browser-test";
 
 async function open(page: Page) {
   await page.goto("/?test=1&renderer=canvas");
