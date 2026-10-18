@@ -4,7 +4,7 @@
 //! Scalar trims and replacements use basic patterns; admitted for-word lists
 //! also expand pathname patterns through the shell filesystem.
 use crate::{
-    executor::{Budget, Cancel},
+    executor::Cancel,
     state::{SharedState, State},
 };
 use futures::FutureExt;
@@ -23,106 +23,7 @@ mod positional;
 mod replacement;
 use std::{borrow::Cow, collections::BTreeSet};
 
-/// Fatal parameter errors remain distinct from ordinary unsupported/limit errors.
-/// The interpreter supplies the shell environment's status and diagnostic line.
-pub(crate) enum Error {
-    Status(i32),
-    /// A scalar write could not resolve its reference within the supported
-    /// depth. Unlike an ordinary nonzero command, it ends this reader unit.
-    AssignmentDepth,
-    SpecialAssignment {
-        name: String,
-        line: Option<usize>,
-    },
-    Readonly {
-        name: String,
-        line: Option<usize>,
-        expansion: bool,
-    },
-    Arithmetic {
-        message: &'static str,
-        line: Option<usize>,
-        expansion: bool,
-    },
-    ShellBoundary {
-        stage: ShellBoundaryStage,
-        line: Option<usize>,
-    },
-    BadSubstitution {
-        message: &'static str,
-        line: Option<usize>,
-    },
-    Indirect {
-        name: String,
-        unset: bool,
-        line: Option<usize>,
-    },
-    Unbound {
-        name: String,
-        line: Option<usize>,
-    },
-    Parameter {
-        name: String,
-        message: String,
-        line: Option<usize>,
-    },
-}
-#[derive(Clone, Copy)]
-pub(crate) enum ShellBoundaryStage {
-    Word,
-    Expansion,
-}
-impl Error {
-    pub(crate) fn in_expansion(self) -> Self {
-        match self {
-            Self::Readonly { name, line, .. } => Self::Readonly {
-                name,
-                line,
-                expansion: true,
-            },
-            Self::Arithmetic { message, line, .. } => Self::Arithmetic {
-                message,
-                line,
-                expansion: true,
-            },
-            other => other,
-        }
-    }
-    pub(crate) fn at_line(self, line: Option<usize>) -> Self {
-        match self {
-            Self::SpecialAssignment { name, .. } => Self::SpecialAssignment { name, line },
-            Self::Readonly {
-                name, expansion, ..
-            } => Self::Readonly {
-                name,
-                line,
-                expansion,
-            },
-            Self::Arithmetic {
-                message, expansion, ..
-            } => Self::Arithmetic {
-                message,
-                expansion,
-                line,
-            },
-            Self::ShellBoundary { stage, .. } => Self::ShellBoundary { stage, line },
-            Self::BadSubstitution { message, .. } => Self::BadSubstitution { message, line },
-            Self::Parameter { name, message, .. } => Self::Parameter {
-                name,
-                message,
-                line,
-            },
-            Self::Indirect { name, unset, .. } => Self::Indirect { name, unset, line },
-            Self::Unbound { name, .. } => Self::Unbound { name, line },
-            status => status,
-        }
-    }
-}
-impl From<i32> for Error {
-    fn from(code: i32) -> Self {
-        Self::Status(code)
-    }
-}
+pub(crate) use crate::exec::{Error, ShellBoundaryStage};
 
 pub(crate) async fn admit_assignment(
     state: &SharedState,
@@ -143,16 +44,10 @@ pub(crate) async fn admit_assignment(
     result
 }
 
-/// Command-wide work accounting, including words that disappear and empty list
-/// elements. The caller supplies source + expansion + argument capacity as the
-/// step ceiling; every character, element and part also yields cooperatively.
-/// Diagnostics share the remaining command field capacity with argv/declarations.
+/// Expansion policy and command-substitution runner over neutral admission.
+/// Keep feature state inline and preserve its lifetime through the whole command.
 pub(crate) struct Work {
-    remaining: usize,
-    budget: Budget,
-    parse_remaining: usize,
-    storage_remaining: usize,
-    fields_remaining: usize,
+    execution: crate::exec::Work,
     arithmetic_depth: usize,
     arithmetic_names: Vec<(String, u64)>,
     pub(crate) arithmetic_writes: u64,
@@ -161,14 +56,21 @@ pub(crate) struct Work {
     /// Status of the last command substitution this command ran.
     pub(crate) substitution_status: Option<i32>,
 }
+impl std::ops::Deref for Work {
+    type Target = crate::exec::Work;
+    fn deref(&self) -> &Self::Target {
+        &self.execution
+    }
+}
+impl std::ops::DerefMut for Work {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.execution
+    }
+}
 impl Work {
     pub(crate) fn new(steps: usize, storage: usize, fields: usize) -> Self {
         Self {
-            remaining: steps,
-            budget: Budget::default(),
-            parse_remaining: steps,
-            storage_remaining: storage,
-            fields_remaining: fields,
+            execution: crate::exec::Work::new(steps, storage, fields),
             arithmetic_depth: 0,
             arithmetic_names: Vec::new(),
             arithmetic_writes: 0,
@@ -196,15 +98,14 @@ impl Work {
             if self.arithmetic_names[index].0 == name
                 && self.arithmetic_names[index].1 == self.arithmetic_writes
             {
-                return crate::arithmetic::fault("expression recursion level exceeded", self);
+                return crate::exec::fault("expression recursion level exceeded", self);
             }
         }
         if self.arithmetic_names.len() == self.arithmetic_names.capacity() {
             let capacity = self.arithmetic_names.capacity().saturating_mul(2).max(1);
-            self.admit_storage(
-                (capacity - self.arithmetic_names.capacity())
-                    * std::mem::size_of::<(String, u64)>(),
-            )?;
+            let bytes = (capacity - self.arithmetic_names.capacity())
+                * std::mem::size_of::<(String, u64)>();
+            self.admit_storage(bytes)?;
             self.arithmetic_names
                 .try_reserve_exact(capacity - self.arithmetic_names.len())
                 .map_err(|_| Error::Status(2))?;
@@ -216,49 +117,6 @@ impl Work {
     }
     pub(crate) fn leave_scalar_arithmetic(&mut self) {
         self.arithmetic_names.pop();
-    }
-    pub(crate) fn admit_storage(&mut self, bytes: usize) -> Result<(), Error> {
-        if bytes > self.storage_remaining {
-            return Err(2.into());
-        }
-        self.storage_remaining -= bytes;
-        Ok(())
-    }
-    pub(crate) fn storage_left(&self) -> usize {
-        self.storage_remaining
-    }
-    /// Return storage admitted for a temporary once it has been dropped. Only
-    /// freed memory: retained values stay charged for the whole command.
-    fn release_storage(&mut self, bytes: usize) {
-        self.storage_remaining = self.storage_remaining.saturating_add(bytes);
-    }
-    pub(crate) fn consume_scalar_field(&mut self) {
-        self.fields_remaining = self.fields_remaining.saturating_sub(1);
-    }
-    async fn admit_parse(&mut self, bytes: usize, cancel: &Cancel) -> Result<(), Error> {
-        if bytes > self.parse_remaining {
-            return Err(2.into());
-        }
-        self.parse_remaining -= bytes;
-        // Reserve cumulative parser work before its synchronous, nonrecursive
-        // scalar-token call. No parser fuel/fallback is relied on for admission.
-        for _ in 0..bytes.saturating_mul(8) {
-            self.checkpoint(cancel).await?;
-        }
-        Ok(())
-    }
-    pub(crate) async fn checkpoint(&mut self, cancel: &Cancel) -> Result<(), Error> {
-        if cancel.is_cancelled() {
-            return Err(130.into());
-        }
-        if self.remaining == 0 {
-            return Err(2.into());
-        }
-        self.remaining -= 1;
-        self.budget
-            .checkpoint(cancel)
-            .await
-            .map_err(|_| Error::Status(130))
     }
 }
 
@@ -967,7 +825,7 @@ impl Expansion<'_> {
         quoted: bool,
         scalar: bool,
         depth: usize,
-    ) -> crate::arithmetic::ArithmeticFuture<'a, ()> {
+    ) -> crate::exec::ResultFuture<'a, ()> {
         self.part_frame(move |expansion| async move {
             if !scalar && !quoted {
                 Ifs::admit_access(state, expansion.cancel, expansion.work).await?;
@@ -1136,7 +994,7 @@ impl Expansion<'_> {
     fn part_frame<'a, F>(
         &'a mut self,
         build: impl FnOnce(&'a mut Self) -> F,
-    ) -> crate::arithmetic::ArithmeticFuture<'a, ()>
+    ) -> crate::exec::ResultFuture<'a, ()>
     where
         F: std::future::Future<Output = Result<(), Error>> + 'a,
     {
@@ -1364,7 +1222,7 @@ impl Expansion<'_> {
                     .checked_sub(usize::try_from(length.unsigned_abs()).unwrap_or(usize::MAX))
                 {
                     Some(end) if end >= start => end,
-                    _ => return crate::arithmetic::fault("substring expression < 0", self.work),
+                    _ => return crate::exec::fault("substring expression < 0", self.work),
                 }
             } else {
                 start

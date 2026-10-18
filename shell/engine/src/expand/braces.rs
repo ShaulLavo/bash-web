@@ -440,7 +440,8 @@ pub(super) async fn variants(
         }
     }
     if !has_open {
-        work.release_storage(start.saturating_sub(work.storage_left()));
+        let released = start.saturating_sub(work.storage_left());
+        work.release_storage(released);
         return Ok(None);
     }
     // Ordinary words need neither a piece vector nor a second owned spelling.
@@ -507,7 +508,8 @@ pub(super) async fn variants(
         cursor = end;
     }
     if !has_braces {
-        work.release_storage(start.saturating_sub(work.storage_left()));
+        let released = start.saturating_sub(work.storage_left());
+        work.release_storage(released);
         return Ok(None);
     }
     let mut variants = Vec::new();

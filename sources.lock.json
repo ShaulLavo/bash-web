@@ -1069,6 +1069,20 @@
     ],
     "verification": "Focused Bash 5.3.15 C.UTF-8 controls; runtime and corpus deltas must be established by the coordinator after integration. Fixed oracle, baselines, scores and versions unchanged."
   },
+  "shellExecution": {
+    "classification": "Original shared execution ownership and admission, extracted from locally maintained engine adapters; no additional upstream implementation copied.",
+    "baseRevision": "2c6ad634dacbd109d0a45c978cb98dc39e0a3a9d",
+    "localPaths": [
+      "shell/engine/src/exec.rs",
+      "shell/engine/src/executor.rs",
+      "shell/engine/src/interpreter/eval.rs",
+      "shell/engine/src/expand.rs",
+      "shell/engine/src/arithmetic.rs",
+      "shell/engine/src/ast_copy.rs",
+      "shell/engine/src/state.rs"
+    ],
+    "strategy": "Move storage budgets/allocations and retained source ownership, pin-projected active frame admission, neutral command work, shared fault metadata and async result types down into exec. Keep Limits/Flow/Outcome, diagnostic formatting, eval parsing/orchestration and concrete substitution/arithmetic policy above it. The inline expansion Work sidecar dereferences neutral exec Work; state and AST admission borrow the latter directly. Active execution frames refund on Poll::Ready or cancellation; feature future storage remains cumulative. One test-only stack observer lives in executor and is shared by exec/state/interpreter. Existing depth resets, fresh parser input budgets/probes, sentinel -1000 versus ordinary status 2/cancellation 130 and retained Rc source lifetimes are unchanged. Bashkit-derived grammar, expansion and slice semantics retain their separate pinned classifications."
+  },
   "shellArithmetic": {
     "repository": "https://github.com/everruns/bashkit",
     "revision": "491c3281f668b76d64b15210b8f5d7bf97244be0",
@@ -1100,6 +1114,7 @@
       }
     ],
     "localPaths": [
+      "shell/engine/src/exec.rs",
       "shell/engine/src/arithmetic.rs",
       "shell/engine/src/expand.rs",
       "shell/engine/src/expand/operand.rs",
@@ -1107,7 +1122,7 @@
       "shell/engine/tests/words/arithmetic.rs",
       "shell/engine/src/expand/positional.rs"
     ],
-    "strategy": "Stream tokens over borrowed source, parse with bounded async precedence climbing, admit exact boxed future frames and all scalar snapshots/storage before growth, and share command Work across arithmetic and expansions. Every unbounded lexing, digit, parse, snapshot, substring and recursion loop checkpoints cancellation and cooperative Budget. Exponentiation uses at most63 wrapping-squaring steps. Recursive scalar cycles are arithmetic domain errors; parser depth/work/storage exhaustion remains status2 and cancellation130. Writes immediately use State::assign_parameter rather than the upstream overlay, preserving completed effects across errors/cancellation and respecting prefix frames. Shell dollar expansion precedes arithmetic evaluation; let receives already shell-expanded arguments and never expands literal dollars twice. Domain/syntax errors abort expansion environments with status1; (( )) and let retain ordinary status1 without aborting later commands. Nested expansion errors preserve fatal control. Scalar slices resolve source before arithmetic, skip expressions for unset values, skip length when start is out of range, and use signed bounded range calculations. UTF-8 locales count scalar characters; C/POSIX count bytes, rejecting output that cannot be represented as valid UTF-8. Source snapshots do not spend emitted-output bytes. An original admitted shell-grammar validation adapter reproduces Bash slice-word <(...)/>(...) lexical boundary checks without executing substitutions. GNU Bash5.3 observations correct upstream eager slice lengths and compound assignment self-write ordering. Original tests cover semantics, admission, explicit failures, cooperative cancellation and retained state. Review regressions preserve terminating recursive identifiers by pairing active names with the generation of actual scalar value changes; unchanged assignments do not hide cycles. Arithmetic and substring writes invalidate enclosing IFS caches. Nested arithmetic scanning treats selected or skipped braced operands as opaque lexical regions, and selected substrings accept the same scalar positional/special targets as top-level slices. Original native/WASI depth regressions exercise each recursive scalar form through the deepest accepted level and its first explicit resource rejection. Positional @ slices preserve empty fields, include configurable shell_name at offset zero, and admit each selected element before copying. Arithmetic and readonly expansion failures discard the current read unit and resume at the next top-level newline. Special scalar substring snapshots admit decimal storage before formatting. Scalar operand depth is explicitly capped at 16 and exercised through its boundary on native and WASI.",
+    "strategy": "Shared ResultFuture, Error/ShellBoundaryStage and the charged arithmetic fault constructor now live in original exec.rs admission machinery; scalar arithmetic recursion policy and exact cumulative future-size admission remain feature adapters. No grammar or operator implementation moves into exec. Stream tokens over borrowed source, parse with bounded async precedence climbing, admit exact boxed future frames and all scalar snapshots/storage before growth, and share command Work across arithmetic and expansions. Every unbounded lexing, digit, parse, snapshot, substring and recursion loop checkpoints cancellation and cooperative Budget. Exponentiation uses at most63 wrapping-squaring steps. Recursive scalar cycles are arithmetic domain errors; parser depth/work/storage exhaustion remains status2 and cancellation130. Writes immediately use State::assign_parameter rather than the upstream overlay, preserving completed effects across errors/cancellation and respecting prefix frames. Shell dollar expansion precedes arithmetic evaluation; let receives already shell-expanded arguments and never expands literal dollars twice. Domain/syntax errors abort expansion environments with status1; (( )) and let retain ordinary status1 without aborting later commands. Nested expansion errors preserve fatal control. Scalar slices resolve source before arithmetic, skip expressions for unset values, skip length when start is out of range, and use signed bounded range calculations. UTF-8 locales count scalar characters; C/POSIX count bytes, rejecting output that cannot be represented as valid UTF-8. Source snapshots do not spend emitted-output bytes. An original admitted shell-grammar validation adapter reproduces Bash slice-word <(...)/>(...) lexical boundary checks without executing substitutions. GNU Bash5.3 observations correct upstream eager slice lengths and compound assignment self-write ordering. Original tests cover semantics, admission, explicit failures, cooperative cancellation and retained state. Review regressions preserve terminating recursive identifiers by pairing active names with the generation of actual scalar value changes; unchanged assignments do not hide cycles. Arithmetic and substring writes invalidate enclosing IFS caches. Nested arithmetic scanning treats selected or skipped braced operands as opaque lexical regions, and selected substrings accept the same scalar positional/special targets as top-level slices. Original native/WASI depth regressions exercise each recursive scalar form through the deepest accepted level and its first explicit resource rejection. Positional @ slices preserve empty fields, include configurable shell_name at offset zero, and admit each selected element before copying. Arithmetic and readonly expansion failures discard the current read unit and resume at the next top-level newline. Special scalar substring snapshots admit decimal storage before formatting. Scalar operand depth is explicitly capped at 16 and exercised through its boundary on native and WASI.",
     "protectedSourceReview": {
       "classification": "Original arithmetic-source scanner context and focused regression controls in the owned engine adapter; no additional upstream implementation consulted or copied. Existing Bashkit parser/arithmetic attribution and all pins remain unchanged.",
       "paths": [
@@ -1361,6 +1376,7 @@
   "shellControlFlow": {
     "classification": "Original structured execution, argv test, conditional, filesystem metadata/directory, no-capture ERE and dynamic-time adapters; GNU Bash 5.3.15 is a behavior oracle, not copied implementation.",
     "paths": [
+      "shell/engine/src/exec.rs",
       "shell/engine/src/interpreter.rs",
       "shell/engine/src/interpreter/control.rs",
       "shell/engine/src/interpreter/conditional.rs",
@@ -1396,6 +1412,7 @@
   "shellFunctions": {
     "classification": "Original function-frame, dynamic scalar binding, positional, call-policy, lastpipe and command-lookup adapters; GNU Bash 5.3.15 is a behavior oracle, not copied implementation.",
     "paths": [
+      "shell/engine/src/exec.rs",
       "shell/engine/src/builtins.rs",
       "shell/engine/src/executor.rs",
       "shell/engine/src/expand.rs",

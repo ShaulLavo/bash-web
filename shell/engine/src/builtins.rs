@@ -944,7 +944,7 @@ async fn declarations(
             let result = nameref_declaration(&key, value, local, state, context, work).await;
             status |= i32::from(result.is_err());
             if let Err(code) = result
-                && matches!(code, 2 | crate::interpreter::eval::RESOURCE_STATUS)
+                && matches!(code, 2 | crate::exec::RESOURCE_STATUS)
             {
                 return Err(code);
             }
@@ -965,7 +965,7 @@ async fn declarations(
             key
         };
         let result = apply_declaration(name, &key, value, &mut state.borrow_mut());
-        if result == Err(crate::interpreter::eval::RESOURCE_STATUS) {
+        if result == Err(crate::exec::RESOURCE_STATUS) {
             return result.map(|()| Outcome::status(0));
         }
         if result.is_ok() {

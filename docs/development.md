@@ -42,8 +42,8 @@ bridge to its UI. Terminal rendering and demo controls live in `src/browser/`,
 separate from the shell facade.
 
 `waffle` is a **required peer dependency**, pinned to the published Git commit
-`ba968a6f86468d03394792a3e9c447dfc713c279`:
-`git+https://github.com/ShaulLavo/waffle.git#ba968a6f86468d03394792a3e9c447dfc713c279`.
+`4f07d191c0c8d6047800031c3a803f67d6954572`:
+`git+https://github.com/ShaulLavo/waffle.git#4f07d191c0c8d6047800031c3a803f67d6954572`.
 The development dependency uses the same pin so local builds and tests exercise
 the same runtime applications supply.
 
@@ -142,6 +142,36 @@ a refresh. It never substitutes the old source digest or old counts for merged
 sources. Changed merge evidence must match exactly; ordinary source commits with
 stale evidence are rejected, as are tampered parent or immutable-target records.
 A target predating the first evidence file is scanned from its immutable sources.
+
+### Shared execution ownership
+
+`exec` owns storage budgets and allocation guards, retained `Rc` source text,
+execution scopes and frames, neutral command `Work`, shared `Error` metadata,
+`ResultFuture`, and the charged arithmetic fault constructor. It imports only
+`executor` internally. `state` and `ast_copy` borrow `exec::Work` directly.
+Expansion keeps an inline wrapper with arithmetic recursion/name/write policy
+and its concrete substitution runner; `Deref`/`DerefMut` borrow neutral admission
+without a new trait, generic parameter or allocation.
+
+There are two intentionally different frame policies. `Scope::frame` admits the
+exact pin-projected wrapper size from the session's **active** execution budget
+and returns its allocation immediately on readiness or cancellation. Arithmetic's
+small feature adapter admits the exact future size from command Work's
+**cumulative** storage budget, without refunding completed frames. Do not replace
+the pin projection with `FutureExt::map`: recursive polling would reserve large
+per-level scratch frames. `RESOURCE_STATUS` remains the internal -1000 sentinel;
+only the interpreter maps it to resource flow and public status 2. Ordinary
+status 2 and cancellation 130 remain distinct.
+
+`Limits`, `Flow`, `Outcome`, diagnostics, eval source-shape accounting and parser
+orchestration remain in the interpreter. Low scopes take only `source_bytes`,
+issue a fresh parser budget for each input and preserve interrupt probes. A
+function entry resets structural depth only (256), while a new task also resets
+eval reader depth (16). Retained sources share their text and allocation owner
+through stored functions and descendant contexts. Test-only poll/drop/call
+measurements share one executor-owned thread-local observer; memory observations
+stay with the storage budget. Binding restoration and the parsing facade are
+later plan steps, not part of this move.
 
 ## Repository layout
 
