@@ -10,6 +10,7 @@ const readJson = async (path) => JSON.parse(await readFile(resolve(root, path), 
 const pkg = await readJson("package.json");
 const lock = await readJson("package-lock.json");
 const sources = await readJson("sources.lock.json");
+const bunLock = await readFile(resolve(root, "bun.lock"), "utf8");
 
 test("browser entry uses one required immutable Waffle peer and matching development install", () => {
   const peer = pkg.peerDependencies.waffle;
@@ -22,6 +23,9 @@ test("browser entry uses one required immutable Waffle peer and matching develop
   assert.equal(lock.packages[""].devDependencies.waffle, peer);
   assert.equal(lock.packages["node_modules/waffle"].resolved, peer);
   assert.equal(lock.packages["node_modules/waffle"].version, sources.waffle.version);
+  assert.ok(pkg.trustedDependencies.includes("waffle"));
+  assert.ok(bunLock.includes(peer));
+  assert.ok(bunLock.includes('"trustedDependencies"'));
   assert.equal(pkg.allowScripts?.[`waffle@${sources.waffle.version}`], true);
   assert.equal(pkg.exports["."], "./src/index.ts");
   assert.equal(pkg.exports["./shell"], "./src/shell.ts");

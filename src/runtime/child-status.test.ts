@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { DescriptorTable } from "waffle/core/descriptors";
 import type { FileSystem } from "waffle/core/filesystem";
 import { ProcessABI } from "waffle/proc/abi";
+import { controlStore } from "waffle/proc/control";
 import { claimOutcome } from "waffle/proc/outcome";
 import {
   confirmWorkerProcessJob,
@@ -31,7 +32,7 @@ for (const [errno, status] of [
         if (message.operation !== "spawn") return;
         const state = workerProcessState(message.transport);
         claimOutcome(state.signals.outcome, { kind: "start-failed", code: errno });
-        Atomics.store(state.confirmed, 0, 1);
+        controlStore(state.confirmed, 0, 1);
         confirmWorkerProcessJob(message.transport);
       },
     });

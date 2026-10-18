@@ -68,12 +68,24 @@
   },
   "waffle": {
     "repository": "https://github.com/ShaulLavo/waffle",
-    "revision": "c458a488bba70855c27a2921c2665c7150ef2090",
+    "revision": "4087eae447fc536b6c0a78e5f14b8049be11c467",
     "package": "waffle",
-    "version": "0.0.26",
-    "specifier": "git+https://github.com/ShaulLavo/waffle.git#c458a488bba70855c27a2921c2665c7150ef2090",
+    "version": "0.0.37",
+    "specifier": "git+https://github.com/ShaulLavo/waffle.git#4087eae447fc536b6c0a78e5f14b8049be11c467",
     "license": "MIT",
-    "strategy": "Required peer imported by the JavaScript shell adapter; exact same Git pin used as development dependency for browser builds and tests. One application-created runtime per page owns shared services. No runtime source tree is vendored."
+    "strategy": "Required peer imported by the JavaScript shell adapter; exact same Git pin used as development dependency for browser builds and tests. One application-created runtime per page owns shared services. No runtime source tree is vendored. Waffle owns lowest-free preopen placement and the single wasi-libc scanner patch; every locally built WASI guest final-links the patched sysroot."
+  },
+  "wasiLibc": {
+    "classification": "Port, external shared patch; no copied implementation in bash-web",
+    "repository": "https://github.com/WebAssembly/wasi-libc",
+    "revision": "2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13",
+    "upstreamPath": "libc-bottom-half/sources/preopens.c",
+    "sdk": "wasi-sdk 34.0",
+    "patchOwner": "waffle",
+    "patchPath": "node_modules/waffle/patches/wasi-libc/preopen-scan.patch",
+    "builder": "node_modules/waffle/scripts/build-wasi-libc.sh",
+    "changes": "After prestat BADF, query fdstat: continue past an open non-preopen, stop at a genuinely absent fd, preserve fatal handling of other errors. Every local WASI guest uses the owned patched sysroot at final link; Rust self-contained libc is disabled.",
+    "documentation": "docs/wasi-libc.md"
   },
   "browserRuntime": {
     "sourceRepository": "ShaulLavo/brush-web (retired prototype; no retained dependency or required external link)",
@@ -105,46 +117,30 @@
           "src/runtime/terminal-admission.ts",
           "src/runtime/limits.ts"
         ],
-        "changes": "Require the actual page-owned Waffle Runtime instead of a structural startProcess peer; remove execution-profile/reference-engine coupling; keep terminal/preopen/shell-ABI wiring and bounded transport. No runtime creation or external-program registry in the shell facade."
+        "changes": "Require the actual page-owned Waffle Runtime instead of a structural startProcess peer; remove execution-profile/reference-engine coupling; keep terminal/shell-ABI wiring and bounded transport; delete local preopen placement and prestat overrides. No runtime creation or external-program registry in the shell facade."
       },
       {
         "classification": "Adapted bounded terminal stream, via prototype",
         "upstreamRepository": "https://github.com/ShaulLavo/bun-wasm",
         "upstreamRevision": "8d3d416aa9cb23718ed3487a33d0b06e8e373672",
-        "upstreamPaths": [
-          "web/src/runtime-terminals.ts"
-        ],
-        "sourcePaths": [
-          "src/runtime/runtime-terminals.ts"
-        ],
-        "destinationPaths": [
-          "src/runtime/runtime-terminals.ts"
-        ],
+        "upstreamPaths": ["web/src/runtime-terminals.ts"],
+        "sourcePaths": ["src/runtime/runtime-terminals.ts"],
+        "destinationPaths": ["src/runtime/runtime-terminals.ts"],
         "changes": "Retain only the bounded createBridgeTerminal stream adapter. Remove the local terminal/descriptor codec; use the published Waffle codec and runtime-owned transport."
       },
       {
         "classification": "Original prototype terminal input policy, restored in the shell adapter",
-        "sourcePaths": [
-          "src/wasi-host.ts"
-        ],
-        "destinationPaths": [
-          "src/runtime/runtime-terminals.ts"
-        ],
+        "sourcePaths": ["src/wasi-host.ts"],
+        "destinationPaths": ["src/runtime/runtime-terminals.ts"],
         "changes": "Restore the predecessor's cooked carriage-return/newline input handling while preserving raw editor bytes through the existing bounded bridge. Do not import its generic WASI host; a full runtime-owned tty discipline remains an approved Waffle terminal-endpoint follow-up."
       },
       {
         "classification": "Adapted Bun root lifecycle with original shell-host integration, via prototype",
         "upstreamRepository": "https://github.com/ShaulLavo/bun-wasm",
         "upstreamRevision": "8d3d416aa9cb23718ed3487a33d0b06e8e373672",
-        "upstreamPaths": [
-          "web/src/runner.ts"
-        ],
-        "sourcePaths": [
-          "src/runtime/browser-runtime.ts"
-        ],
-        "destinationPaths": [
-          "src/runtime/shell-host.ts"
-        ],
+        "upstreamPaths": ["web/src/runner.ts"],
+        "sourcePaths": ["src/runtime/browser-runtime.ts"],
+        "destinationPaths": ["src/runtime/shell-host.ts"],
         "changes": "Retain shell-specific launch/outcome fencing. Remove the prototype runtime owner and external-program registry; borrow the supplied Waffle filesystem, identities and process service. Shared services and disposal remain Waffle-owned."
       },
       {
@@ -181,12 +177,7 @@
       },
       {
         "classification": "Original prototype browser build/test host configuration, adapted here",
-        "sourcePaths": [
-          "playwright.config.ts",
-          "vite.config.ts",
-          "tsconfig.json",
-          "index.html"
-        ],
+        "sourcePaths": ["playwright.config.ts", "vite.config.ts", "tsconfig.json", "index.html"],
         "destinationPaths": [
           "playwright.config.ts",
           "vite.config.ts",
@@ -197,20 +188,12 @@
       },
       {
         "classification": "Original shared-terminal worker launcher assembled from existing prototype adapters",
-        "sourcePaths": [
-          "src/runtime/browser-runtime.ts",
-          "src/runtime/subprocess-broker.ts"
-        ],
-        "destinationPaths": [
-          "src/runtime/worker-launcher.ts"
-        ],
+        "sourcePaths": ["src/runtime/browser-runtime.ts", "src/runtime/subprocess-broker.ts"],
+        "destinationPaths": ["src/runtime/worker-launcher.ts"],
         "referenceLineage": {
           "repository": "https://github.com/ShaulLavo/bun-wasm",
           "revision": "8d3d416aa9cb23718ed3487a33d0b06e8e373672",
-          "paths": [
-            "web/src/runner.ts",
-            "web/src/subprocess-broker.ts"
-          ]
+          "paths": ["web/src/runner.ts", "web/src/subprocess-broker.ts"]
         },
         "changes": "Delegate launch to the published Waffle service.launchWorker with a retained terminal consumer and controller quiesce/revoke/stop hooks. Waffle owns generic worker lifecycle, admission and descriptor transport; no generic broker implementation is retained."
       },
@@ -243,50 +226,30 @@
       },
       {
         "classification": "Original prototype server and build-output helpers, imported/adapted here",
-        "sourcePaths": [
-          "scripts/serve.mjs",
-          "scripts/finish-build.mjs"
-        ],
-        "destinationPaths": [
-          "scripts/serve.mjs",
-          "scripts/finish-build.mjs"
-        ],
+        "sourcePaths": ["scripts/serve.mjs", "scripts/finish-build.mjs"],
+        "destinationPaths": ["scripts/serve.mjs", "scripts/finish-build.mjs"],
         "changes": "Retain the server isolation behavior; adapt final output handling to preserve both prebundled shell-worker.js and fs-worker.js after the browser build clears dist. The filesystem worker is built from Waffle's public package entry, not copied source. No external program payload is included."
       },
       {
         "classification": "Original browser notice aggregator",
-        "destinationPaths": [
-          "scripts/browser-notices.mjs"
-        ],
+        "destinationPaths": ["scripts/browser-notices.mjs"],
         "changes": "New integration code collecting shell, peer/npm and terminal notices for the browser distribution. No Bun guest/runtime/license payload or additional upstream implementation copied."
       },
       {
         "classification": "Original prototype browser CI sequence, adapted here",
-        "sourcePaths": [
-          ".github/workflows/ci.yml"
-        ],
-        "destinationPaths": [
-          ".github/workflows/ci.yml"
-        ],
+        "sourcePaths": [".github/workflows/ci.yml"],
+        "destinationPaths": [".github/workflows/ci.yml"],
         "changes": "Add the own-shell browser build/type/terminal/acceptance sequence while removing reference-engine build steps and using the pinned Waffle peer. Existing standalone shell/scoreboard/generator gates remain separate."
       },
       {
         "classification": "Original prototype terminal and guest-adapter unit regressions, adapted here",
-        "sourcePaths": [
-          "src/runtime/terminal.test.ts",
-          "src/runtime/guest-imports.test.ts"
-        ],
-        "destinationPaths": [
-          "tests/terminal.unit.ts",
-          "tests/guest-imports.unit.ts"
-        ],
+        "sourcePaths": ["src/runtime/terminal.test.ts", "src/runtime/guest-imports.test.ts"],
+        "destinationPaths": ["tests/terminal.unit.ts", "tests/guest-imports.unit.ts"],
         "changes": "Retain shell-owned bounded-ring/admission/terminal metadata cases and update public runtime imports. Bun host-slot and real-guest libc internals are not copied into this shell package; those tests belong to the external guest package."
       },
       {
         "classification": "Original browser packaging regression tests",
-        "destinationPaths": [
-          "scripts/test-browser-package.mjs"
-        ],
+        "destinationPaths": ["scripts/test-browser-package.mjs"],
         "changes": "New tests verify peer/development/source-lock pin agreement and absence of copied runtime/Bun implementation sources or Bun guest/license payloads. No upstream regression suite copied."
       },
       {
@@ -300,33 +263,23 @@
       },
       {
         "classification": "Original shell-specific worker executor, adapted from prototype shell integration",
-        "sourcePaths": [
-          "src/runtime/worker.ts"
-        ],
-        "destinationPaths": [
-          "src/runtime/worker.ts"
-        ],
+        "sourcePaths": ["src/runtime/worker.ts"],
+        "destinationPaths": ["src/runtime/worker.ts"],
         "referenceLineage": {
           "repository": "https://github.com/ShaulLavo/bun-wasm",
           "revision": "8d3d416aa9cb23718ed3487a33d0b06e8e373672",
-          "paths": [
-            "web/src/worker.ts"
-          ]
+          "paths": ["web/src/worker.ts"]
         },
         "changes": "Reduce the earlier shell integration to a small WorkerExecutor passed to published waffle/browser/worker bootstrap. Retain only shell imports/phase/memory observations. Generic WASI/descriptor/process/pipe/signal setup and worker cleanup belong to Waffle; no runtime implementation is copied."
       },
       {
         "classification": "Original shell worker asset builder",
-        "destinationPaths": [
-          "scripts/build-worker.mjs"
-        ],
+        "destinationPaths": ["scripts/build-worker.mjs"],
         "changes": "Bundle the shell WorkerExecutor and Waffle's public waffle/browser/fs-worker entry into .build/browser/{shell-worker,fs-worker}.js and stable dist/{shell-worker,fs-worker}.js assets. Package prepare/browser build emits both; the adapted final browser-output step restores both after Vite. The application passes its emitted filesystem URL through createRuntime({filesystem:{workerURL}}). No runtime source tree is vendored or raw TypeScript worker contract required."
       },
       {
         "classification": "Original production worker-asset and renderer regressions",
-        "destinationPaths": [
-          "tests/worker-assets.spec.ts"
-        ],
+        "destinationPaths": ["tests/worker-assets.spec.ts"],
         "changes": "Check emitted filesystem-worker startup and stable JavaScript worker URLs, plus a usable Canvas terminal when WebGPU exposes no available adapter. New original tests, not copied upstream cases; listing inventory is not passing browser evidence."
       },
       {
@@ -628,7 +581,11 @@
         "reason": "The brace seed 1/42 acceptance failures retained the correct arithmetic source in the parser but lost its protection in the engine's later operand scanner. These controls keep that parser/engine contract explicit without changing the shared boundary grammar or accepting source-text special cases. The engine repair is classified under shellArithmetic.protectedSourceReview."
       },
       {
-        "paths": ["shell/parser/src/parser/print_cmd.rs", "shell/parser/src/parser/mod.rs", "shell/parser/tests/command_print.rs"],
+        "paths": [
+          "shell/parser/src/parser/print_cmd.rs",
+          "shell/parser/src/parser/mod.rs",
+          "shell/parser/tests/command_print.rs"
+        ],
         "classification": "Original public adapter for the existing bounded command printer in the owned Bashkit-derived parser. No additional upstream implementation copied; GNU Bash 5.3.15 supplies job-label observations only.",
         "change": "Expose bounded canonical command rendering for shell job labels through the existing parser printer. Stream bounded simple commands, word lists and redirects instead of collecting intermediate strings; admit normalization and heredoc storage before allocation. Retain all command variants, quote-aware word rendering, shared work/cancellation admission and output-byte limits. Add direct printer API, bounded/unbounded parity and Bash-observed multiline job-label controls without removing upstream assertions.",
         "reason": "A job label must represent its actual shell command, including compound and pipeline commands, rather than a simple-command-only special case or an unbounded reconstructed string. Reusing the existing typed bounded printer keeps display formatting separate from execution and shell job membership."
