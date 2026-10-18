@@ -55,22 +55,43 @@ export function verifyWasiGuest(
   sdk = process.env.WASI_SDK_PATH ?? "/work/cache/wasi-sdk-34.0-x86_64-linux",
 ) {
   const bytes = readFileSync(path);
-  const names = functionNames(new WebAssembly.Module(bytes));
+  const module = new WebAssembly.Module(bytes);
+  const names = functionNames(module);
   const scanner = "__wasilibc_populate_preopens";
-  assert.ok(names.has(scanner), `${path}: final guest has no libc scanner`);
-  const disassembly = execFileSync(
-    resolve(sdk, "bin/llvm-objdump"),
-    [`--disassemble-symbols=${scanner}`, path],
-    { encoding: "utf8" },
-  );
-  for (const syscall of ["__wasi_fd_prestat_get", "__wasi_fd_fdstat_get"]) {
-    const index = names.get(syscall);
-    assert.notEqual(index, undefined, `${path}: missing ${syscall}`);
-    assert.match(
-      disassembly,
-      new RegExp(`\\bcall\\s+${index}(?:\\s|$)`),
-      `${path}: libc scanner does not call ${syscall}; stock libc may have been linked`,
+  const hasScanner = names.has(scanner);
+  if (hasScanner) {
+    const disassembly = execFileSync(
+      resolve(sdk, "bin/llvm-objdump"),
+      [`--disassemble-symbols=${scanner}`, path],
+      { encoding: "utf8" },
     );
+    for (const syscall of ["__wasi_fd_prestat_get", "__wasi_fd_fdstat_get"]) {
+      const index = names.get(syscall);
+      assert.notEqual(index, undefined, `${path}: missing ${syscall}`);
+      assert.match(
+        disassembly,
+        new RegExp(`\\bcall\\s+${index}(?:\\s|$)`),
+        `${path}: libc scanner does not call ${syscall}; stock libc may have been linked`,
+      );
+    }
+  } else {
+    // The CLI uses its fixture filesystem; the browser shell has its original
+    // Rust WASI adapter. Neither needs libc path I/O. Permit deadstripping only
+    // when path/prestat imports are absent or provably belong to that adapter,
+    // never when a stripped libc scanner could be hiding behind those imports.
+    const functions = WebAssembly.Module.imports(module).filter(
+      (entry) => entry.kind === "function",
+    );
+    for (let index = 0; index < functions.length; index++) {
+      const entry = functions[index];
+      if (entry.module !== "wasi_snapshot_preview1" || !/^(fd_prestat_|path_)/.test(entry.name))
+        continue;
+      assert.equal(
+        names.get(`shell_engine::runtime::wasi::${entry.name}`),
+        index,
+        `${path}: filesystem imports remain but libc scanner is missing`,
+      );
+    }
   }
   const reader = new Reader(bytes);
   reader.slice(8); // Magic/version were already validated by WebAssembly.Module.
@@ -87,7 +108,9 @@ export function verifyWasiGuest(
     cappedMemory = true;
   }
   assert.ok(cappedMemory, `${path}: no capped guest memory found`);
-  console.log(`Verified patched preopen scanner and 256 MiB cap: ${path}`);
+  console.log(
+    `Verified ${hasScanner ? "patched preopen scanner" : "no retained libc filesystem code"} and 256 MiB cap: ${path}`,
+  );
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

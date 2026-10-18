@@ -19,7 +19,13 @@ execFileSync(
     "--bins",
     "-j2",
   ],
-  { cwd: root, env: wasiBuildEnvironment(root, target), stdio: "inherit" },
+  {
+    cwd: root,
+    // Keep the Wasm name section for the final scanner-code proof, while still
+    // discarding debug information. This overrides the fixture's strip=true.
+    env: { ...wasiBuildEnvironment(root, target), CARGO_PROFILE_RELEASE_STRIP: "debuginfo" },
+    stdio: "inherit",
+  },
 );
 const directory = resolve(root, "public/programs");
 await mkdir(directory, { recursive: true });

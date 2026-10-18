@@ -19,20 +19,27 @@ const section = (kind: number, body: number[]) => [kind].concat(integer(body.len
 
 // Original minimal modules for the verifier only; production artifacts are also
 // inspected by every build entrypoint. The disassembler is a controlled stand-in.
-function moduleBytes(maximum: number) {
+function moduleBytes(maximum: number, withNames = true, adapter = false) {
   const imports = [2].concat(
     ...["fd_prestat_get", "fd_fdstat_get"].map((name) =>
       text("wasi_snapshot_preview1").concat(text(name), [0, 0]),
     ),
   );
-  const names = [3].concat(
-    [0],
-    text("__wasi_fd_prestat_get"),
-    [1],
-    text("__wasi_fd_fdstat_get"),
-    [2],
-    text("__wasilibc_populate_preopens"),
-  );
+  const names = adapter
+    ? [2].concat(
+        [0],
+        text("shell_engine::runtime::wasi::fd_prestat_get"),
+        [1],
+        text("shell_engine::runtime::wasi::fd_fdstat_get"),
+      )
+    : [3].concat(
+        [0],
+        text("__wasi_fd_prestat_get"),
+        [1],
+        text("__wasi_fd_fdstat_get"),
+        [2],
+        text("__wasilibc_populate_preopens"),
+      );
   return new Uint8Array(
     [0, 97, 115, 109, 1, 0, 0, 0].concat(
       section(1, [1, 0x60, 0, 0]),
@@ -40,7 +47,7 @@ function moduleBytes(maximum: number) {
       section(3, [1, 0]),
       section(5, [1, 1, 1].concat(integer(maximum))),
       section(10, [1, 6, 0, 0x10, 0, 0x10, 1, 0x0b]),
-      section(0, text("name").concat(section(1, names))),
+      withNames ? section(0, text("name").concat(section(1, names))) : [],
     ),
   );
 }
@@ -83,4 +90,28 @@ test("verifier rejects final guest memory cap drift", () => {
   fixture((path, sdk) => {
     assert.throws(() => verifyWasiGuest(path, sdk), /guest memory cap changed/);
   }, 65536);
+});
+
+test("deadstripped libc is accepted only when no filesystem imports remain", () => {
+  fixture((path, sdk) => {
+    writeFileSync(
+      path,
+      new Uint8Array(
+        [0, 97, 115, 109, 1, 0, 0, 0].concat(section(5, [1, 1, 1].concat(integer(4096)))),
+      ),
+    );
+    verifyWasiGuest(path, sdk);
+    writeFileSync(path, moduleBytes(4096, false));
+    assert.throws(
+      () => verifyWasiGuest(path, sdk),
+      /filesystem imports remain but libc scanner is missing/,
+    );
+  });
+});
+
+test("direct Rust adapter imports prove scanner omission without hiding libc", () => {
+  fixture((path, sdk) => {
+    writeFileSync(path, moduleBytes(4096, true, true));
+    verifyWasiGuest(path, sdk);
+  });
 });
