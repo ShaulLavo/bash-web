@@ -1,4 +1,3 @@
-// Temporary native-input CI timing probe.
 //! Shared, opt-in libc/preopen regression probe for both original WASI guests.
 
 use std::fs;
