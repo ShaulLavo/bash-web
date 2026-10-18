@@ -79,6 +79,7 @@ function startStorageWait(
   reject: (error: unknown) => void,
 ): void {
   let settled = false;
+  let waitedForOwnership = false;
   let recovering = false;
   let timeout: ReturnType<typeof setTimeout> | undefined;
   let unobserve = () => {};
@@ -100,7 +101,7 @@ function startStorageWait(
   };
   const abort = () => finish(signal.reason);
   const acquired = (at: number) => {
-    if (settled || recovering) return;
+    if (settled || recovering || !waitedForOwnership) return;
     recovering = true;
     clearGuard();
     timeout = setTimeout(
@@ -111,7 +112,10 @@ function startStorageWait(
   const receive = (state: SharedFilesystemState) => {
     if (settled) return;
     // Waffle stays typed waiting during recovery; only the actual grant starts that budget.
-    if (state.status === "waiting" && !recovering) clearGuard();
+    if (state.status === "waiting" && !recovering) {
+      waitedForOwnership = true;
+      clearGuard();
+    }
     try {
       options.onState?.(state);
     } catch (error) {

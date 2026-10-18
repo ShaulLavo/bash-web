@@ -81,12 +81,14 @@ admission. `opening` and `waiting` are not shell failures: the host shows
 storage is ready. The observer preserves an existing `onStateChange` callback
 and detaches its own listener after readiness, cancellation or failure. The
 shell's 60-second startup timeout begins **after** storage is ready. Initial
-`opening` has its own separate 60-second guard; expiry reports “Browser storage
-did not become ready within 60 seconds.” Entering `waiting` disarms that guard.
+`opening` has its own separate total 60-second guard; expiry reports “Browser storage
+did not become ready within 60 seconds.” A lock grant without ownership waiting does
+not extend this initial budget. Entering `waiting` disarms that guard.
 Waiting may last indefinitely while another tab owns the workspace, and the typed
-state remains `waiting` through recovery. The passive `filesystem-lock-acquired`
-milestone starts a fresh 60-second active-recovery guard, separate from both opening
-and shell startup. Repeated waiting states or milestones cannot erase or extend it.
+state remains `waiting` through recovery. After ownership waiting, the passive
+`filesystem-lock-acquired` milestone starts a fresh 60-second active-recovery guard,
+separate from both opening and shell startup. Repeated waiting states or milestones
+cannot erase or extend it.
 Expiry reports “Browser storage recovery did not finish within 60 seconds.”
 Ownership release normally lets the same runtime recover and continue without a
 reload. Readiness, failure, disposal and cancellation clear both guards and detach

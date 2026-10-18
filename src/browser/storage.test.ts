@@ -371,23 +371,42 @@ test("a queued ownership wait gets a fresh recovery budget only after the lock g
   assert.deepEqual(diagnostics.snapshot().pending, ["storage-wait-requested"]);
 });
 
-test("lock acquisition replaces a nearly spent opening budget, even before waiting", async (context) => {
+test("lock acquisition without ownership waiting preserves the total opening budget", async (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const fixture = storageWorker(context);
   const startup = createStorageStartup();
   const { runtime } = fixture.create();
   const opening = waitForStorage(runtime, new AbortController().signal, { startup });
-  let failed = false;
-  const rejected = assert.rejects(opening, /storage recovery/).then(() => {
-    failed = true;
+  let failure: unknown;
+  const completed = opening.catch((error: unknown) => {
+    failure = error;
   });
   context.mock.timers.tick(STORAGE_READY_TIMEOUT_MS - 1000);
   startup.observe("filesystem-lock-acquired", 1);
-  context.mock.timers.tick(STORAGE_READY_TIMEOUT_MS - 1);
+  context.mock.timers.tick(999);
   await Promise.resolve();
-  assert.equal(failed, false);
+  assert.equal(failure, undefined);
   context.mock.timers.tick(1);
+  await Promise.resolve();
+  assert.match(String(failure), /Browser storage did not become ready within 60 seconds/);
+  await completed;
+  assert.equal(runtime.filesystem.onStateChange, undefined);
+});
+
+test("a replayed lock grant without ownership waiting keeps the opening guard", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const fixture = storageWorker(context);
+  const startup = createStorageStartup();
+  const { runtime } = fixture.create();
+  startup.observe("filesystem-lock-acquired", 1);
+  const opening = waitForStorage(runtime, new AbortController().signal, { startup });
+  const rejected = assert.rejects(
+    opening,
+    /Browser storage did not become ready within 60 seconds/,
+  );
+  context.mock.timers.tick(STORAGE_READY_TIMEOUT_MS);
   await rejected;
+  assert.equal(runtime.filesystem.onStateChange, undefined);
 });
 
 test("a lock grant preceding subscription retains its elapsed recovery time", async (context) => {
