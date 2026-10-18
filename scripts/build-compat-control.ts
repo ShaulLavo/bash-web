@@ -7,7 +7,10 @@ import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 import { shellTargetDirectory, wasiBuildEnvironment, wasiTarget } from "./wasi-build.ts";
 
 const root = resolve(import.meta.dirname, "..");
-const reference = process.argv[2] ?? "c81f3b57e861835bc6390b32ecfc4544627c1729";
+const reference = process.argv[2];
+if (!reference || !/^[a-f0-9]{40}$/.test(reference)) {
+  throw new Error("Pass an immutable full commit SHA to build:compat-control");
+}
 const sha = execFileSync("git", ["rev-parse", "--verify", `${reference}^{commit}`], {
   cwd: root,
   encoding: "utf8",
