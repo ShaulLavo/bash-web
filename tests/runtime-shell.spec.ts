@@ -104,7 +104,7 @@ test("nonstandard inherited descriptors share file offsets and redirected stdout
 }) => {
   test.fixme(
     true,
-    "Known Bun guest limitation: pinned wasi-libc aborts on NOTSUP while discovering a root preopen relocated after inherited fd 3; the guest libc must skip occupied non-preopen descriptors.",
+    "External Bun guest payload is not rebuilt here; it must link Waffle's patched libc preopen scanner before inherited-descriptor filesystem coverage can run.",
   );
   await open(page);
   await file(page, "descriptor-data", "shared-offset");
@@ -120,7 +120,7 @@ test("nonstandard inherited descriptors share file offsets and redirected stdout
 test("an inherited fd 3 does not replace the filesystem root preopen", async ({ page }) => {
   test.fixme(
     true,
-    "Known Bun guest limitation: pinned wasi-libc aborts on NOTSUP while discovering a root preopen relocated after inherited fd 3; the guest libc must skip occupied non-preopen descriptors.",
+    "External Bun guest payload is not rebuilt here; it must link Waffle's patched libc preopen scanner before inherited-descriptor filesystem coverage can run.",
   );
   await open(page);
   await file(page, "preopen-data", "ROOT_PREOPEN_OK");
