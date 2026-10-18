@@ -1,7 +1,8 @@
-use super::{Context, Descriptors, Flow, Outcome, parse_failure, parse_shell, script_sequence};
+use super::{Context, Descriptors, Flow, Outcome, parse_failure, script_sequence};
 use crate::{
     exec::{JoinedSource, Scope, StorageAllocation},
     executor::Budget,
+    parse,
     state::SharedState,
 };
 use futures::future::{Either, ready};
@@ -154,7 +155,8 @@ async fn run_body(
         Err(code) => return Outcome::status(code),
     };
     let parser = context.parser_budget();
-    let (script, failure) = match parse_shell(source.text(), context.limits(), &parser) {
+    let (script, failure) = match parse::eval(source.text(), context.limits().source_bytes, &parser)
+    {
         Ok(parsed) => parsed,
         Err(_)
             if matches!(

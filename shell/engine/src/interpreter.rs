@@ -5,6 +5,7 @@ use crate::{
     executor::{Budget, Cancel, Executor, JoinHandle, yield_now},
     expand,
     io::{self, FdTable, FileSystem, OpenOptions},
+    parse::{self, ParseFailure},
     process::{GroupId, ProcessError, ProcessGroup, ProcessHost, SpawnRequest},
     state::{FunctionFrame, PrefixFrame, SharedState, State, StoredFunction, absolute},
 };
@@ -715,8 +716,8 @@ impl Session {
             self.core.execution_storage.clone(),
         );
         let parser = evaluation.parser_budget(Some(Rc::new(move || parser_cancel.probe_now())));
-        let (script, failure) =
-            parse_shell(source, &self.core.limits, &parser).map_err(|error| {
+        let (script, failure) = parse::script(source, self.core.limits.source_bytes, &parser)
+            .map_err(|error| {
                 if error == "request cancelled" {
                     StartError::Interrupted
                 } else {
@@ -972,63 +973,6 @@ impl Drop for ForegroundGuard {
     fn drop(&mut self) {
         self.0.foreground.borrow_mut().take();
     }
-}
-
-/// Where parsing stopped. Bash reads and runs a script one complete line at
-/// a time, so the commands on earlier lines still run first.
-enum ParseFailure {
-    /// A command substitution body that does not parse (status 127).
-    Word(usize),
-    /// Any other syntax error (status 2).
-    Syntax { message: String, line: usize },
-}
-
-struct ParsedScript {
-    commands: Vec<Command>,
-    command_end_lines: Vec<usize>,
-}
-
-/// Parse shell source the way the script reader and `eval` do. Resource
-/// limits are errors; a syntax error keeps the complete lines before it.
-fn parse_shell(
-    source: &str,
-    limits: &Limits,
-    budget: &shell_parser::limits::ExecutionBudget,
-) -> Result<(ParsedScript, Option<ParseFailure>), String> {
-    if source.len() > limits.source_bytes {
-        return Err("shell source limit exceeded".into());
-    }
-    let parser_limits = shell_parser::limits::ExecutionLimits {
-        max_input_bytes: limits.source_bytes,
-        ..Default::default()
-    };
-    let (script, error) = Parser::with_limits_and_timeout(
-        source,
-        parser_limits.max_ast_depth,
-        parser_limits.max_parser_operations,
-        Some(parser_limits.parser_timeout),
-    )
-    .with_execution_budget(budget.clone())
-    // The whole script is parsed before aliases it defines exist, so the
-    // top level stays lenient; substitution bodies get bash's grammar.
-    .with_strict_substitution_bodies()
-    .parse_recovering();
-    budget.check().map_err(|error| error.to_string())?;
-    let failure = match error {
-        None => None,
-        Some(shell_parser::Error::ShellWord { line }) => Some(ParseFailure::Word(line)),
-        Some(shell_parser::Error::Parse { message, line, .. }) => {
-            Some(ParseFailure::Syntax { message, line })
-        }
-        Some(error) => return Err(error.to_string()),
-    };
-    Ok((
-        ParsedScript {
-            commands: script.commands,
-            command_end_lines: script.command_end_lines,
-        },
-        failure,
-    ))
 }
 
 /// Report where parsing stopped, after the commands before it ran. A bad
@@ -2732,14 +2676,13 @@ async fn retain_declaration_syntax(
     let source = source
         .get(simple.span.start.offset..simple.span.end.offset)
         .ok_or(2)?;
-    let mut lexer = Lexer::new(source);
-    lexer.set_capture_raw(true);
+    let mut tokens = parse::declaration_tokens(source);
     let mut assignments = simple.assignments.len();
     let mut words = std::iter::once(&mut simple.name).chain(simple.args.iter_mut());
     let mut target = words.next();
     let mut redirect_operand = false;
     let mut budget = Budget::default();
-    while let Some(token) = lexer.next_spanned_token() {
+    while let Some(token) = tokens.next() {
         budget.checkpoint(cancel).await.map_err(|_| 130)?;
         let Some(raw) = token.raw else {
             let spelling = &source[token.span.start.offset..token.span.end.offset];

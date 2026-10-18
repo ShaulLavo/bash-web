@@ -1,19 +1,15 @@
 //! Scalar operand quote handling adapted from Bashkit's operand_word and
 //! parse_marked_operand. Unlike upstream, protection never enters string data.
 use super::{Error, Work};
-use crate::executor::Cancel;
+pub(super) use crate::parse::OPERAND_DEPTH as MAX_DEPTH;
+use crate::{
+    executor::Cancel,
+    parse::{self, OPERAND_TOKEN_BYTES as MAX_TOKEN_BYTES},
+};
 use shell_parser::parser::parameter_scan::{ParameterScan, Step};
-use shell_parser::parser::{ParameterOp, Parser, WordPart};
+use shell_parser::parser::{ParameterOp, WordPart};
 use std::borrow::Cow;
 
-// Keep scalar expansion/parser recursion below the native test-thread stack
-// limit. The parser's general hard cap is intentionally higher for scripts,
-// but scalar operands are reparsed from nested futures and need a smaller
-// bound so malformed/deep operands return status 2 instead of overflowing.
-pub(super) const MAX_DEPTH: usize = 16;
-// Each synchronous parser call receives one admitted scalar token. Large
-// literal runs stream through the scanner without entering the parser.
-const MAX_TOKEN_BYTES: usize = 4096;
 // The boundary scanner keeps a frame per open `$(`/quote, the current
 // keyword and here-document delimiter and line text: linear in input.
 const SCANNER_BASE: usize = 2048;
@@ -295,17 +291,14 @@ impl<'a> Scanner<'a> {
         // Their parser paths retain nested operands as raw text, never recursively
         // parsing scripts. The byte cap also bounds lexer and fallback allocation.
         let part = if token.starts_with("${") {
-            Parser::parse_parameter_token_with_limits(
+            parse::lazy_parameter(
                 token,
-                MAX_DEPTH,
-                MAX_TOKEN_BYTES * 16,
                 self.outer_quoted || self.quote == Quote::Double,
                 self.quote != Quote::Double && (self.pattern || self.pattern_source),
             )
             .map_err(|_| Error::from(2))?
         } else {
-            let word =
-                Parser::parse_word_string_with_limits(token, MAX_DEPTH, MAX_TOKEN_BYTES * 16);
+            let word = parse::lazy_variable(token);
             let mut parts = word.parts.into_iter();
             let part = parts.next().ok_or(2)?;
             if parts.next().is_some() {
@@ -455,7 +448,7 @@ impl<'a> Scanner<'a> {
         work.admit_parse(body.len().saturating_add(2), cancel)
             .await?;
         admit_syntax(body, work)?;
-        match backtick_part(body).map_err(|_| Error::Status(2))? {
+        match parse::backtick_body(body).map_err(|_| Error::Status(2))? {
             WordPart::CommandSubstitution(commands) => {
                 Ok(WordPart::ProcessSubstitution { commands, is_input })
             }
@@ -504,7 +497,7 @@ impl<'a> Scanner<'a> {
         let token_parse = body.len().saturating_add(2);
         work.admit_parse(token_parse, cancel).await?;
         admit_syntax(&body, work)?;
-        backtick_part(&body).map_err(|_| Error::Status(2))
+        parse::backtick_body(&body).map_err(|_| Error::Status(2))
     }
 }
 
@@ -638,7 +631,7 @@ pub(super) fn indirect_operator(operator: &ParameterOp) -> bool {
 async fn substitution(token: &str, work: &mut Work, cancel: &Cancel) -> Result<WordPart, Error> {
     work.admit_parse(token.len(), cancel).await?;
     admit_syntax(token, work)?;
-    substitution_part(token).map_err(|_| Error::Status(2))
+    parse::substitution_token(token).map_err(|_| Error::Status(2))
 }
 /// AST storage for parsed shell text, as for reparsed brace words: owned
 /// text and lexical metadata scale with bytes, nodes with syntax characters.
@@ -657,24 +650,6 @@ fn admit_syntax(text: &str, work: &mut Work) -> Result<(), Error> {
             .saturating_add(512),
     )
 }
-// Keep the parser's synchronous frames out of the recursive expansion future.
-#[inline(never)]
-fn substitution_part(token: &str) -> shell_parser::Result<WordPart> {
-    Parser::parse_substitution_token_with_limits(
-        token,
-        shell_parser::limits::ExecutionLimits::default().max_ast_depth,
-        token.len().saturating_add(3).saturating_mul(16),
-    )
-}
-#[inline(never)]
-fn backtick_part(body: &str) -> shell_parser::Result<WordPart> {
-    Parser::parse_backtick_body_with_limits(
-        body,
-        shell_parser::limits::ExecutionLimits::default().max_ast_depth,
-        body.len().saturating_add(3).saturating_mul(16),
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
