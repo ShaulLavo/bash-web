@@ -44,7 +44,7 @@ pub(super) async fn run(
         }
     }
     // Printer stays inline in this future, which is owned by the interpreter's
-    // dispatch execution frame. eval::Scope::frame admits its complete future
+    // dispatch execution frame. crate::exec::Scope::frame admits its complete future
     // size (including the fixed output buffer) before boxing, and refunds it on
     // completion or drop. A separate 4096-byte ticket would double-charge it.
     // Admit the complete repeated output and work before the first write, so

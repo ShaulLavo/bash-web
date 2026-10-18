@@ -33,6 +33,14 @@ GNU bash executable code is not included. Keep these notices and licenses with
 copies of the fixture. The new CLI's fixture helpers and replay/comparison scripts
 are original code; no additional upstream implementation is ported.
 
+The shared execution module `shell/engine/src/exec.rs` is original engine
+admission and ownership machinery extracted from the local interpreter,
+expansion and arithmetic adapters. It owns shared fault metadata and the charged
+arithmetic-fault constructor, not Bashkit's arithmetic grammar or operators.
+The neutral work wrapper introduces no new copied upstream code; the existing
+Bashkit-derived expansion and arithmetic classifications and licenses still apply.
+Test stack instrumentation now lives in the original executor.
+
 The shell's first word-expansion area is separately adapted from Bashkit at
 `491c3281f668b76d64b15210b8f5d7bf97244be0` (MIT, Copyright 2024–2026 Everruns).
 Implementation sources are `crates/bashkit/src/interpreter/expansion.rs`

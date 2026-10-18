@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "d09434c210027bc62a168b601d035adb84337e71ff34b5cb7e76930a6d404299",
+    "engineSourceSha256": "5723a6692f8301a639d8fc56428175aab4995a4971871f6d1e8b89d7b92883f4",
     "binaryBuild": null
   },
   "contract": {
@@ -189,7 +189,9 @@
     {
       "name": "exec",
       "kind": "layer",
-      "files": []
+      "files": [
+        "shell/engine/src/exec.rs"
+      ]
     },
     {
       "name": "executor",
@@ -296,11 +298,21 @@
   "edges": [
     {
       "source": "arithmetic",
-      "target": "executor",
+      "target": "exec",
       "scope": "production",
       "location": {
         "path": "shell/engine/src/arithmetic.rs",
         "line": 6,
+        "column": 12
+      }
+    },
+    {
+      "source": "arithmetic",
+      "target": "executor",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/arithmetic.rs",
+        "line": 7,
         "column": 5
       }
     },
@@ -310,7 +322,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/arithmetic.rs",
-        "line": 7,
+        "line": 8,
         "column": 14
       }
     },
@@ -320,8 +332,18 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/arithmetic.rs",
-        "line": 8,
+        "line": 9,
         "column": 13
+      }
+    },
+    {
+      "source": "ast_copy",
+      "target": "exec",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/ast_copy.rs",
+        "line": 4,
+        "column": 12
       }
     },
     {
@@ -330,18 +352,18 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/ast_copy.rs",
-        "line": 4,
+        "line": 5,
         "column": 5
       }
     },
     {
-      "source": "ast_copy",
-      "target": "expand",
+      "source": "builtins",
+      "target": "exec",
       "scope": "production",
       "location": {
-        "path": "shell/engine/src/ast_copy.rs",
-        "line": 5,
-        "column": 14
+        "path": "shell/engine/src/builtins.rs",
+        "line": 947,
+        "column": 39
       }
     },
     {
@@ -395,13 +417,23 @@
       }
     },
     {
+      "source": "exec",
+      "target": "executor",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/exec.rs",
+        "line": 3,
+        "column": 23
+      }
+    },
+    {
       "source": "expand",
       "target": "arithmetic",
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 199,
-        "column": 24
+        "line": 923,
+        "column": 29
       }
     },
     {
@@ -410,8 +442,18 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 1040,
+        "line": 898,
         "column": 17
+      }
+    },
+    {
+      "source": "expand",
+      "target": "exec",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/expand.rs",
+        "line": 26,
+        "column": 30
       }
     },
     {
@@ -421,7 +463,7 @@
       "location": {
         "path": "shell/engine/src/expand.rs",
         "line": 7,
-        "column": 16
+        "column": 5
       }
     },
     {
@@ -430,7 +472,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 160,
+        "line": 55,
         "column": 38
       }
     },
@@ -470,7 +512,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 1661,
+        "line": 1660,
         "column": 33
       }
     },
@@ -482,6 +524,16 @@
         "path": "shell/engine/src/interpreter.rs",
         "line": 4,
         "column": 17
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "exec",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 81,
+        "column": 30
       }
     },
     {
@@ -606,32 +658,22 @@
     },
     {
       "source": "state",
-      "target": "executor",
+      "target": "exec",
       "scope": "production",
       "location": {
         "path": "shell/engine/src/state.rs",
         "line": 4,
-        "column": 5
+        "column": 12
       }
     },
     {
       "source": "state",
-      "target": "expand",
+      "target": "executor",
       "scope": "production",
       "location": {
         "path": "shell/engine/src/state.rs",
         "line": 5,
-        "column": 14
-      }
-    },
-    {
-      "source": "state",
-      "target": "interpreter",
-      "scope": "production",
-      "location": {
-        "path": "shell/engine/src/state.rs",
-        "line": 61,
-        "column": 31
+        "column": 5
       }
     },
     {
@@ -640,7 +682,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/arithmetic.rs",
-        "line": 723,
+        "line": 712,
         "column": 17
       }
     },
@@ -650,7 +692,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/arithmetic.rs",
-        "line": 723,
+        "line": 712,
         "column": 37
       }
     },
@@ -695,13 +737,13 @@
       }
     },
     {
-      "source": "executor",
-      "target": "interpreter",
+      "source": "exec",
+      "target": "executor",
       "scope": "testOnly",
       "location": {
-        "path": "shell/engine/src/executor.rs",
-        "line": 126,
-        "column": 9
+        "path": "shell/engine/src/exec.rs",
+        "line": 44,
+        "column": 13
       }
     },
     {
@@ -750,8 +792,18 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 2789,
+        "line": 2647,
         "column": 21
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "exec",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 3820,
+        "column": 25
       }
     },
     {
@@ -759,8 +811,8 @@
       "target": "executor",
       "scope": "testOnly",
       "location": {
-        "path": "shell/engine/src/interpreter/conditional/regex.rs",
-        "line": 566,
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 5031,
         "column": 17
       }
     },
@@ -780,7 +832,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3807,
+        "line": 3806,
         "column": 17
       }
     },
@@ -790,7 +842,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3807,
+        "line": 3806,
         "column": 31
       }
     },
@@ -886,7 +938,17 @@
     },
     {
       "source": "state",
-      "target": "interpreter",
+      "target": "exec",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/state.rs",
+        "line": 2037,
+        "column": 27
+      }
+    },
+    {
+      "source": "state",
+      "target": "executor",
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
@@ -895,69 +957,18 @@
       }
     }
   ],
-  "violations": [
-    {
-      "source": "ast_copy",
-      "target": "expand",
-      "scope": "production",
-      "location": {
-        "path": "shell/engine/src/ast_copy.rs",
-        "line": 5,
-        "column": 14
-      }
-    },
-    {
-      "source": "state",
-      "target": "expand",
-      "scope": "production",
-      "location": {
-        "path": "shell/engine/src/state.rs",
-        "line": 5,
-        "column": 14
-      }
-    },
-    {
-      "source": "state",
-      "target": "interpreter",
-      "scope": "production",
-      "location": {
-        "path": "shell/engine/src/state.rs",
-        "line": 61,
-        "column": 31
-      }
-    },
-    {
-      "source": "executor",
-      "target": "interpreter",
-      "scope": "testOnly",
-      "location": {
-        "path": "shell/engine/src/executor.rs",
-        "line": 126,
-        "column": 9
-      }
-    },
-    {
-      "source": "state",
-      "target": "interpreter",
-      "scope": "testOnly",
-      "location": {
-        "path": "shell/engine/src/state.rs",
-        "line": 1291,
-        "column": 9
-      }
-    }
-  ],
+  "violations": [],
   "issues": [],
   "counts": {
     "production": {
-      "edges": 34,
-      "violations": 3
+      "edges": 38,
+      "violations": 0
     },
     "testOnly": {
-      "edges": 26,
-      "violations": 2
+      "edges": 28,
+      "violations": 0
     },
-    "violations": 5,
+    "violations": 0,
     "inventoryIssues": 0
   },
   "capabilities": {
