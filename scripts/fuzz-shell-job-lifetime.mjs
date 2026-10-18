@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { encode, decode, validateResultBytes } from "./fuzz-shell-results.ts";
 // Original bounded builtin-only job observation grammar. External inherited
 // descendants are exercised by RuntimeAbi controls, not simulated by this gate.
 import { execFileSync, spawnSync } from "node:child_process";
@@ -62,6 +63,7 @@ const queue = "/work/tmp/wave-heavy/run.sh";
 export const sourceFiles = [
   "fuzz-shell-job-lifetime.mjs",
   "fuzz-shell-control-flow.mjs",
+  "fuzz-shell-results.ts",
   "shell-process-group.mjs",
 ];
 export const sourceHashes = () =>
@@ -187,19 +189,7 @@ export function optionsFor(args) {
   if (options.count > maxGeneratedCount) throw new Error(`invalid count (0..${maxGeneratedCount})`);
   return options;
 }
-const encode = (result) => ({
-  status: result.status,
-  signal: result.signal,
-  timedOut: result.timedOut,
-  error: result.error,
-  stdoutBase64: result.stdout.toString("base64"),
-  stderrBase64: result.stderr.toString("base64"),
-});
-const decode = (result) => ({
-  ...result,
-  stdout: Buffer.from(result.stdoutBase64, "base64"),
-  stderr: Buffer.from(result.stderrBase64, "base64"),
-});
+
 export function validateFixture(path, fixture, options) {
   if (
     fixture.schema !== 1 ||
@@ -238,14 +228,7 @@ export function validateFixture(path, fixture, options) {
       throw new Error("fixture case differs at " + index);
     if (!entry?.bash || !healthy(entry.bash))
       throw new Error("invalid fixture process result at " + index);
-    let bytes = 0;
-    for (const key of ["stdoutBase64", "stderrBase64"]) {
-      const value = entry.bash[key];
-      if (typeof value !== "string" || Buffer.from(value, "base64").toString("base64") !== value)
-        throw new Error("invalid fixture bytes at " + index);
-      bytes += Buffer.from(value, "base64").length;
-    }
-    if (bytes > outputLimit) throw new Error("fixture output limit exceeded at " + index);
+    validateResultBytes(entry.bash, outputLimit, index);
   }
   return cases;
 }
@@ -342,9 +325,9 @@ async function main() {
       const result = await execute(cases, options, shell);
       reports.push({ seed: options.seed, bash, ...result });
       const recordPath = options.record ?? options.recordOracle;
+      if (recordPath && result.counts.MISMATCH)
+        throw new Error("refusing candidate-verified recording with differences");
       if (recordPath) {
-        if (result.counts.MISMATCH)
-          throw new Error("refusing candidate-verified recording with differences");
         const fixture = {
           schema: 1,
           sourceHash: fingerprint(),
@@ -376,7 +359,7 @@ async function main() {
             ? "bash-self-control"
             : "live",
       shell: options.recordOracle ? null : shell,
-      reports: reports.map(({ results, ...report }) => report),
+      reports: reports.map(({ results: _results, ...report }) => report),
     };
     const text = JSON.stringify(report, null, 2) + "\n";
     if (options.output) {

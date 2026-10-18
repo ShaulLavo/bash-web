@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "ead8dd902b754dc259ea68938a253afb85901db3235cf2cbe4781f6486a035e2",
+    "engineSourceSha256": "1ed4d7eea03065917e313523b74e1741176d1472736462c88208671d7532e7b6",
     "binaryBuild": null
   },
   "contract": {
@@ -410,7 +410,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 1040,
+        "line": 1068,
         "column": 17
       }
     },
@@ -640,7 +640,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/arithmetic.rs",
-        "line": 723,
+        "line": 720,
         "column": 17
       }
     },
@@ -650,7 +650,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/arithmetic.rs",
-        "line": 723,
+        "line": 720,
         "column": 37
       }
     },
@@ -750,7 +750,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 2789,
+        "line": 2860,
         "column": 21
       }
     },
@@ -760,7 +760,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter/conditional/regex.rs",
-        "line": 566,
+        "line": 562,
         "column": 17
       }
     },
@@ -770,7 +770,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter/conditional/regex.rs",
-        "line": 566,
+        "line": 562,
         "column": 37
       }
     },
@@ -800,7 +800,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter/conditional/regex.rs",
-        "line": 566,
+        "line": 562,
         "column": 45
       }
     },
@@ -820,7 +820,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/process.rs",
-        "line": 993,
+        "line": 995,
         "column": 20
       }
     },
@@ -830,7 +830,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/process.rs",
-        "line": 1042,
+        "line": 1044,
         "column": 13
       }
     },
@@ -840,7 +840,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/process.rs",
-        "line": 612,
+        "line": 614,
         "column": 21
       }
     },

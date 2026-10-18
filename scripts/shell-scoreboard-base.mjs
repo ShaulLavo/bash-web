@@ -25,7 +25,7 @@ export function migrationEnvironment() {
   );
 }
 
-export function baseFile(root, ref, path) {
+function baseFile(root, ref, path) {
   assert.match(ref, /^[a-f0-9]{40}$/, "BASH_COMPAT_BASE_REF must be a full commit SHA");
   const env = { ...process.env, GIT_NO_REPLACE_OBJECTS: "1" };
   assert.equal(

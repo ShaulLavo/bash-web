@@ -293,10 +293,9 @@
         "classification": "Original browser acceptance harness with source-built generic guests and explicit missing external launcher capability",
         "destinationPaths": [
           "tests/browser-main.ts",
-          "tests/helpers/test-programs.ts",
-          "tests/helpers/bun-fixture.ts"
+          "tests/helpers/test-programs.ts"
         ],
-        "changes": "Create the page-owned Waffle runtime and own its source-guest lease. Register compiled test-guest with cooperative:true and source-admitted/instrumented test-spin through the existing shell adapter on that same runtime; no runtime or ABI-host implementation is copied. An original injected-installer fixture specifies future public installBunAdapters(runtime,{workerUrl,wasmUrl?}) composition and idempotent cleanup without importing or depending on unpublished code. No Bun host package, guest payload, licenses or implementation source is included; four genuinely Bun-specific cases remain skipped until the published installer/worker and verified guest descriptor exist, separately from three original known-failure cases."
+        "changes": "Create the page-owned Waffle runtime and own its source-guest lease. Register compiled test-guest with cooperative:true and source-admitted/instrumented test-spin through the existing shell adapter on that same runtime; no runtime or ABI-host implementation is copied. The documented public installBunAdapters(runtime,{workerUrl,wasmUrl?}) contract specifies future composition and cleanup without depending on unpublished code; the unused executable placeholder was removed. No Bun host package, guest payload, licenses or implementation source is included; four genuinely Bun-specific cases remain skipped until the published installer/worker and verified guest descriptor exist, separately from three original known-failure cases."
       },
       {
         "classification": "Original shell-specific worker executor, adapted from prototype shell integration",
@@ -632,6 +631,14 @@
         "classification": "Original public adapter for the existing bounded command printer in the owned Bashkit-derived parser. No additional upstream implementation copied; GNU Bash 5.3.15 supplies job-label observations only.",
         "change": "Expose bounded canonical command rendering for shell job labels through the existing parser printer. Stream bounded simple commands, word lists and redirects instead of collecting intermediate strings; admit normalization and heredoc storage before allocation. Retain all command variants, quote-aware word rendering, shared work/cancellation admission and output-byte limits. Add direct printer API, bounded/unbounded parity and Bash-observed multiline job-label controls without removing upstream assertions.",
         "reason": "A job label must represent its actual shell command, including compound and pipeline commands, rather than a simple-command-only special case or an unbounded reconstructed string. Reusing the existing typed bounded printer keeps display formatting separate from execution and shell job membership."
+      },
+      {
+        "paths": [
+          "src/parser/mod.rs",
+          "src/parser/print_cmd.rs"
+        ],
+        "change": "Remove unreachable internal helpers and duplicate printer wrappers; derive default printer state.",
+        "reason": "Keep the owned parser warning-free under all-target Clippy without suppressing dead code. Test-only printer entrypoints retain their coverage."
       }
     ],
     "removedUpstreamTests": [

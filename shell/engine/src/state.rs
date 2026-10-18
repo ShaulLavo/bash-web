@@ -1059,7 +1059,7 @@ fn snapshot_node_bytes<T>() -> Result<usize, Error> {
     std::mem::size_of::<(String, T)>()
         .checked_add(std::mem::size_of::<usize>())
         .and_then(|slot| slot.checked_mul(16))
-        .ok_or_else(|| Error::Status(2))
+        .ok_or(Error::Status(2))
 }
 
 async fn snapshot_map<T: SnapshotValue>(

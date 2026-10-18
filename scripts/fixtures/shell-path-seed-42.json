@@ -1,9 +1,10 @@
 {
   "schema": 1,
-  "sourceHash": "127961bc34f6aeb84c8f5ad0551ce6789bea87d78e4055fa65f382eacddb7195",
+  "sourceHash": "6ee9adc92c24078f65cdc9c577bffa305bb14670b4b051babc3f9b914e058c74",
   "sourceHashes": {
-    "fuzz-shell-path.ts": "950d42f93fd773dcec42c9c4f59dddd22d488c53502a5e148b5c1c8fa48d0d82",
-    "fuzz-shell-control-flow.mjs": "73e8b6576345caede2a60d910130296dfdf8e8bbfd32b6dd279692704b0a5586",
+    "fuzz-shell-path.ts": "8f71ec0a56b0c5524fa6b7d7c2685a5c04d0b9581492d134e5dff59b851b263d",
+    "fuzz-shell-control-flow.mjs": "5053098732f2336af6d683e6ed31a679d8d68ebcac844c3034283d21c087c1af",
+    "fuzz-shell-results.ts": "7c244b9267b9427c08c1cc7d1bcdc43525e7e14f85b92839ae33541c1ff03954",
     "shell-process-group.mjs": "577f8be074a4ca5751b161d306445645a4dac9b4fa97ca73abf8195635e58205"
   },
   "seed": 42,

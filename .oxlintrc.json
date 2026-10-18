@@ -1,0 +1,37 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "oxc"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "no-unused-vars": [
+      "error",
+      {
+        "ignoreRestSiblings": true
+      }
+    ],
+    "no-debugger": "error",
+    "no-eval": "error",
+    "eqeqeq": ["error", "always"],
+    "typescript/no-explicit-any": "error",
+    "max-depth": ["error", 3],
+    "complexity": [
+      "error",
+      {
+        "max": 30,
+        "variant": "modified"
+      }
+    ],
+    "no-restricted-globals": [
+      "error",
+      {
+        "name": "name",
+        "message": "Use a declared local name or explicit window.name; ambient browser name can hide a parameter rename."
+      }
+    ]
+  },
+  "env": {
+    "builtin": true
+  }
+}

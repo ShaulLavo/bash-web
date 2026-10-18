@@ -86,15 +86,15 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
       preservePreopenDiscovery(imports, wasi.descriptors, preopen);
       // Sample the guest's allocation at host boundaries without retaining any guest
       // memory view across memory.grow. This telemetry is not an allocation quota.
-      if (sample || bridge)
-        for (const namespace of Object.values(imports))
-          for (const [name, value] of Object.entries(namespace)) {
-            if (typeof value === "function")
-              namespace[name] = (...args: number[]) => {
-                sampleMemory();
-                return value(...args);
-              };
-          }
+      if (!sample && !bridge) return;
+      for (const namespace of Object.values(imports))
+        for (const [name, value] of Object.entries(namespace)) {
+          if (typeof value === "function")
+            namespace[name] = (...args: number[]) => {
+              sampleMemory();
+              return value(...args);
+            };
+        }
     },
     instantiated({ instance }) {
       memory =

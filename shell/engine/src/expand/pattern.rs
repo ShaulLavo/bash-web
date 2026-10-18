@@ -416,13 +416,13 @@ impl Pattern {
     pub(super) async fn change_case(
         &mut self,
         value: &str,
-        upper: bool,
-        all: bool,
+        mode: (bool, bool),
         locale: case::Locale,
         max_bytes: usize,
         work: &mut Work,
         cancel: &Cancel,
     ) -> Result<String, Error> {
+        let (upper, all) = mode;
         if !locale.utf8() {
             self.require_ascii(work, cancel).await?;
         }
@@ -687,7 +687,7 @@ mod tests {
             let mut work = Work::new(32, storage, 2);
             let cancel = Cancel::new();
             let result = pattern
-                .change_case("a", true, true, case::Locale::C, 8, &mut work, &cancel)
+                .change_case("a", (true, true), case::Locale::C, 8, &mut work, &cancel)
                 .now_or_never()
                 .expect("small mapping finishes in one turn");
             if storage == 8 {

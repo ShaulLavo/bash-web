@@ -67,7 +67,7 @@ const sameAll = (first, second) =>
   first.stderr === second.stderr &&
   Boolean(first.timeout) === Boolean(second.timeout) &&
   Boolean(first.outputLimit) === Boolean(second.outputLimit);
-const observed = new Array(eligible.length);
+const observed = Array.from({ length: eligible.length });
 let workers = [];
 try {
   const helpers = resolve(scratch, "helpers");

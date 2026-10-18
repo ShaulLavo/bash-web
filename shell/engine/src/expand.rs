@@ -759,6 +759,30 @@ impl Captured {
     }
 }
 
+#[derive(Clone, Copy)]
+struct OperandContext<'a> {
+    state: &'a SharedState,
+    quoted: bool,
+    scalar: bool,
+    depth: usize,
+}
+
+#[derive(Clone, Copy)]
+struct TransformContext<'a> {
+    state: &'a SharedState,
+    protected: bool,
+    depth: usize,
+}
+
+#[derive(Clone, Copy)]
+struct ExpansionOptions {
+    max_bytes: usize,
+    max_fields: usize,
+    max_raw: usize,
+    scalar: bool,
+    admitted: bool,
+}
+
 struct Expansion<'a> {
     segments: Segments,
     captured: Option<Captured>,
@@ -993,10 +1017,12 @@ impl Expansion<'_> {
                         operator,
                         operand,
                         *colon_variant,
-                        state,
-                        quoted,
-                        scalar,
-                        depth,
+                        OperandContext {
+                            state,
+                            quoted,
+                            scalar,
+                            depth,
+                        },
                         None,
                     )
                     .await;
@@ -1019,10 +1045,12 @@ impl Expansion<'_> {
                         operator.as_ref(),
                         operand,
                         *colon_variant,
-                        state,
-                        quoted,
-                        scalar,
-                        depth,
+                        OperandContext {
+                            state,
+                            quoted,
+                            scalar,
+                            depth,
+                        },
                     )
                     .await;
             }
@@ -1303,9 +1331,9 @@ impl Expansion<'_> {
         // Resolve the source before arithmetic side effects. An unset scalar
         // skips both expressions; an out-of-range start skips the length.
         self.require_bound(name, state).await?;
-        let (value, utf8) = {
+        let present = {
             let s = state.borrow();
-            let present = if operand::scalar_name(name) {
+            if operand::scalar_name(name) {
                 s.scalar_is_set(name)
             } else if matches!(name, "?" | "#") {
                 true
@@ -1314,13 +1342,15 @@ impl Expansion<'_> {
                     .ok()
                     .and_then(|n| n.checked_sub(1))
                     .is_some_and(|n| n < s.positional.len())
-            };
-            if !present {
-                drop(s);
-                return self
-                    .segment("", Protection::expansion(protected, state), protected)
-                    .await;
             }
+        };
+        if !present {
+            return self
+                .segment("", Protection::expansion(protected, state), protected)
+                .await;
+        }
+        let (value, utf8) = {
+            let s = state.borrow();
             let value = substring_snapshot(&s, name, self.raw_remaining, self.work)?;
             let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
                 .iter()
@@ -1447,12 +1477,15 @@ impl Expansion<'_> {
         operator: &ParameterOp,
         operand: &str,
         colon: bool,
-        state: &SharedState,
-        quoted: bool,
-        scalar: bool,
-        depth: usize,
+        context: OperandContext<'_>,
         error_pointer: Option<&str>,
     ) -> Result<(), Error> {
+        let OperandContext {
+            state,
+            quoted,
+            scalar,
+            depth,
+        } = context;
         self.slice_boundaries(operand).await?;
         if error_pointer.is_none() && !operand::parameter_name(name) || depth >= operand::MAX_DEPTH
         {
@@ -1487,9 +1520,11 @@ impl Expansion<'_> {
                     pattern,
                     replacement,
                     matches!(operator, ParameterOp::ReplaceAll { .. }),
-                    state,
-                    scalar || quoted,
-                    depth,
+                    TransformContext {
+                        state,
+                        protected: scalar || quoted,
+                        depth,
+                    },
                 )
                 .await;
         }
@@ -1498,9 +1533,11 @@ impl Expansion<'_> {
                 .trim(
                     name,
                     operand,
-                    state,
-                    scalar || quoted,
-                    depth,
+                    TransformContext {
+                        state,
+                        protected: scalar || quoted,
+                        depth,
+                    },
                     prefix,
                     longest,
                 )
@@ -1511,7 +1548,17 @@ impl Expansion<'_> {
                 return Err(2.into());
             }
             return self
-                .change_case(name, operand, state, scalar || quoted, depth, upper, all)
+                .change_case(
+                    name,
+                    operand,
+                    TransformContext {
+                        state,
+                        protected: scalar || quoted,
+                        depth,
+                    },
+                    upper,
+                    all,
+                )
                 .await;
         }
         let replacement = match operator {
@@ -1529,17 +1576,7 @@ impl Expansion<'_> {
         };
         if absent && matches!(operator, ParameterOp::AssignDefault | ParameterOp::Error) {
             return self
-                .effect_operand(
-                    name,
-                    operator,
-                    operand,
-                    colon,
-                    state,
-                    quoted,
-                    scalar,
-                    depth,
-                    error_pointer,
-                )
+                .effect_operand(name, operator, operand, colon, context, error_pointer)
                 .await;
         }
         if replacement != absent {
@@ -1566,12 +1603,15 @@ impl Expansion<'_> {
         &mut self,
         name: &str,
         source: &str,
-        state: &SharedState,
-        protected: bool,
-        depth: usize,
+        context: TransformContext<'_>,
         prefix: bool,
         longest: bool,
     ) -> Result<(), Error> {
+        let TransformContext {
+            state,
+            protected,
+            depth,
+        } = context;
         self.work.checkpoint(self.cancel).await?;
         // Resolve before operand side effects. Admit storage and work before
         // snapshotting, and release the state borrow before any suspension.
@@ -1642,12 +1682,15 @@ impl Expansion<'_> {
         &mut self,
         name: &str,
         source: &str,
-        state: &SharedState,
-        protected: bool,
-        depth: usize,
+        context: TransformContext<'_>,
         upper: bool,
         all: bool,
     ) -> Result<(), Error> {
+        let TransformContext {
+            state,
+            protected,
+            depth,
+        } = context;
         self.work.checkpoint(self.cancel).await?;
         let (value, present) = {
             let s = state.borrow();
@@ -1674,8 +1717,7 @@ impl Expansion<'_> {
         let result = pattern
             .change_case(
                 &value,
-                upper,
-                all,
+                (upper, all),
                 locale,
                 self.raw_remaining,
                 self.work,
@@ -1691,12 +1733,15 @@ impl Expansion<'_> {
         operator: &ParameterOp,
         source: &str,
         colon: bool,
-        state: &SharedState,
-        quoted: bool,
-        scalar: bool,
-        depth: usize,
+        context: OperandContext<'_>,
         error_pointer: Option<&str>,
     ) -> Result<(), Error> {
+        let OperandContext {
+            state,
+            quoted,
+            scalar,
+            depth,
+        } = context;
         // Reserve target/diagnostic bytes before copying either name or value.
         let diagnostic_bytes =
             error_pointer.map_or(name.len(), |pointer| pointer.len().saturating_add(1));
@@ -2156,14 +2201,17 @@ async fn expand_one(
     word: &Word,
     state: &SharedState,
     cancel: &Cancel,
-    max_bytes: usize,
-    max_fields: usize,
-    max_raw: usize,
+    options: ExpansionOptions,
     raw_remaining: &mut usize,
-    scalar: bool,
-    admitted: bool,
     work: &mut Work,
 ) -> Result<Vec<String>, Error> {
+    let ExpansionOptions {
+        max_bytes,
+        max_fields,
+        max_raw,
+        scalar,
+        admitted,
+    } = options;
     let mut expansion = Expansion {
         segments: Segments {
             account_storage: admitted,
@@ -2219,8 +2267,7 @@ async fn expand_one(
             fields.out,
             fields.protections,
             state,
-            max_bytes,
-            max_fields,
+            (max_bytes, max_fields),
             raw_remaining,
             expansion.work,
             cancel,
@@ -2235,13 +2282,16 @@ async fn expand(
     word: &Word,
     state: &SharedState,
     cancel: &Cancel,
-    max_bytes: usize,
-    max_fields: usize,
-    max_raw: usize,
-    scalar: bool,
-    admitted: bool,
+    options: ExpansionOptions,
     work: &mut Work,
 ) -> Result<Vec<String>, Error> {
+    let ExpansionOptions {
+        max_bytes,
+        max_fields,
+        max_raw,
+        scalar,
+        ..
+    } = options;
     let variants = if scalar || !braces::has_candidate(word) {
         None
     } else {
@@ -2249,19 +2299,7 @@ async fn expand(
     };
     let mut raw_remaining = max_raw;
     let Some(variants) = variants else {
-        return expand_one(
-            word,
-            state,
-            cancel,
-            max_bytes,
-            max_fields,
-            max_raw,
-            &mut raw_remaining,
-            scalar,
-            admitted,
-            work,
-        )
-        .await;
+        return expand_one(word, state, cancel, options, &mut raw_remaining, work).await;
     };
     let mut values = Vec::new();
     // Usually one field per spelling; more fields still grow by doubling.
@@ -2349,12 +2387,12 @@ async fn expand(
             &parsed,
             state,
             cancel,
-            bytes_remaining,
-            max_fields.saturating_sub(values.len()),
-            max_raw,
+            ExpansionOptions {
+                max_bytes: bytes_remaining,
+                max_fields: max_fields.saturating_sub(values.len()),
+                ..options
+            },
             &mut raw_remaining,
-            scalar,
-            admitted,
             work,
         )
         .await?;
@@ -2437,7 +2475,17 @@ pub(crate) async fn fields(
 ) -> Result<Vec<String>, Error> {
     work.fields_remaining = work.fields_remaining.min(max_fields);
     let values = expand(
-        word, state, cancel, max_bytes, max_fields, max_raw, false, false, work,
+        word,
+        state,
+        cancel,
+        ExpansionOptions {
+            max_bytes,
+            max_fields,
+            max_raw,
+            scalar: false,
+            admitted: false,
+        },
+        work,
     )
     .await?;
     work.fields_remaining = work.fields_remaining.saturating_sub(values.len());
@@ -2458,7 +2506,17 @@ pub(crate) async fn fields_admitted(
     work.checkpoint(cancel).await?;
     work.fields_remaining = work.fields_remaining.min(max_fields);
     let values = expand(
-        word, state, cancel, max_bytes, max_fields, max_raw, false, true, work,
+        word,
+        state,
+        cancel,
+        ExpansionOptions {
+            max_bytes,
+            max_fields,
+            max_raw,
+            scalar: false,
+            admitted: true,
+        },
+        work,
     )
     .await?;
     work.fields_remaining = work.fields_remaining.saturating_sub(values.len());
@@ -2475,7 +2533,20 @@ pub(crate) async fn word(
     max_raw: usize,
     work: &mut Work,
 ) -> Result<String, Error> {
-    let values = expand(word, state, cancel, max, 1, max_raw, true, false, work).await?;
+    let values = expand(
+        word,
+        state,
+        cancel,
+        ExpansionOptions {
+            max_bytes: max,
+            max_fields: 1,
+            max_raw,
+            scalar: true,
+            admitted: false,
+        },
+        work,
+    )
+    .await?;
     Ok(values.into_iter().next().unwrap_or_default())
 }
 

@@ -137,6 +137,30 @@ const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const edgeKey = (edge: Edge) => `${edge.scope}:${edge.source}->${edge.target}`;
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 
+function blockCommentEnd(source: string, start: number): number {
+  let depth = 1;
+  let i = start;
+  while (i < source.length && depth) {
+    if (source.startsWith("/*", i)) {
+      depth++;
+      i += 2;
+    } else if (source.startsWith("*/", i)) {
+      depth--;
+      i += 2;
+    } else i++;
+  }
+  assert.equal(depth, 0, "unterminated Rust block comment");
+  return i;
+}
+function stringEnd(source: string, start: number): number {
+  let i = start;
+  while (i < source.length) {
+    if (source[i] === "\\") i += 2;
+    else if (source[i++] === '"') return i;
+  }
+  assert.fail("unterminated Rust string");
+}
+
 /** Tokenize just enough Rust to keep literal/comment text out of dependency paths. */
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -153,18 +177,7 @@ function tokenize(source: string): Token[] {
       continue;
     }
     if (source.startsWith("/*", i)) {
-      let depth = 1;
-      i += 2;
-      while (i < source.length && depth) {
-        if (source.startsWith("/*", i)) {
-          depth++;
-          i += 2;
-        } else if (source.startsWith("*/", i)) {
-          depth--;
-          i += 2;
-        } else i++;
-      }
-      assert.equal(depth, 0, "unterminated Rust block comment");
+      i = blockCommentEnd(source, i + 2);
       continue;
     }
     const raw = /^(?:br|cr|r)(#*)"/.exec(source.slice(i));
@@ -177,16 +190,7 @@ function tokenize(source: string): Token[] {
     }
     const string = /^(?:b|c)?"/.exec(source.slice(i));
     if (string) {
-      i += string[0].length;
-      let closed = false;
-      while (i < source.length) {
-        if (source[i] === "\\") i += 2;
-        else if (source[i++] === '"') {
-          closed = true;
-          break;
-        }
-      }
-      assert.ok(closed, "unterminated Rust string");
+      i = stringEnd(source, i + string[0].length);
       tokens.push({ text: "<literal>", offset: start });
       continue;
     }
@@ -380,6 +384,76 @@ function scanFile(file: SourceFile, inheritedTestOnly: boolean, policy: Policy):
       }
     } else addPath(path, context, testOnly, first);
   }
+  function attributeAt(i: number) {
+    if (tokens[i].text !== "#" || !["[", "!"].includes(tokens[i + 1]?.text)) return;
+    const inner = tokens[i + 1]?.text === "!";
+    const open = i + (inner ? 2 : 1);
+    if (tokens[open]?.text !== "[") return { close: i, inner, guarded: false };
+    const close = pairs.get(open);
+    assert.ok(close !== undefined);
+    const body = tokens.slice(open + 1, close);
+    const guarded =
+      body[0]?.text === "test" ||
+      (body[0]?.text === "cfg" && cfgWithoutTest(body.slice(2, -1)) === false);
+    if (
+      body[0]?.text === "path" ||
+      (body[0]?.text === "cfg_attr" && body.some((token) => token.text === "path"))
+    )
+      issue(i, "#[path] modules are outside the conventional file-module contract");
+    return { close, inner, guarded };
+  }
+  function startsItem(i: number) {
+    return ["fn", "struct", "enum", "union", "trait", "impl", "type", "const", "static"].some(
+      (name) => keyword(i, name) && (name !== "fn" || identifier.test(tokens[i + 1]?.text ?? "")),
+    );
+  }
+  function isItemPrefix(i: number) {
+    return (
+      ["pub", "unsafe", "async", "extern", "default"].some((name) => keyword(i, name)) ||
+      (tokens[i].text === "(" && keyword(i - 1, "pub")) ||
+      (tokens[i].text === "<literal>" && keyword(i - 1, "extern"))
+    );
+  }
+  function declareModule(i: number, context: readonly string[], testOnly: boolean) {
+    if (!keyword(i, "mod") || !identifier.test(tokens[i + 1]?.text ?? "")) return;
+    const name = tokens[i + 1].text;
+    const nested = context.concat([name]);
+    const locationAt = location(i + 1);
+    result.declarations.push({ name: nested.join("::"), testOnly, location: locationAt });
+    if (
+      !context.length &&
+      !Object.hasOwn(graph, name) &&
+      !rootInlineModules[source]?.includes(name)
+    )
+      result.issues.push({
+        kind: "unknown-module",
+        module: name,
+        location: locationAt,
+        detail: "top-level module is absent from the allowed graph",
+      });
+    if (tokens[i + 2]?.text !== "{") return;
+    const close = pairs.get(i + 2);
+    assert.ok(close !== undefined);
+    return { close, nested };
+  }
+  function scanPath(i: number, end: number, context: readonly string[], testOnly: boolean) {
+    const text = tokens[i].text;
+    if (
+      !["crate", "self", "super"].includes(text) ||
+      tokens[i + 1]?.text !== "::" ||
+      tokens[i - 1]?.text === "::"
+    )
+      return;
+    const path = [text];
+    let cursor = i + 2;
+    while (cursor < end && identifier.test(tokens[cursor].text)) {
+      path.push(tokens[cursor].text);
+      cursor++;
+      if (tokens[cursor]?.text !== "::") break;
+      cursor++;
+    }
+    addPath(path, context, testOnly, i);
+  }
   function walk(start: number, end: number, context: readonly string[], inherited: boolean) {
     let testOnly = inherited;
     let pendingTest = false;
@@ -389,81 +463,32 @@ function scanFile(file: SourceFile, inheritedTestOnly: boolean, policy: Policy):
     for (let i = start; i < end; i++) {
       const text = tokens[i].text;
       // Attributes belong to the next item, not to the following item as well.
-      if (text === "#" && ["[", "!"].includes(tokens[i + 1]?.text)) {
-        const inner = tokens[i + 1]?.text === "!";
-        const open = i + (inner ? 2 : 1);
-        if (tokens[open]?.text !== "[") continue;
-        const close = pairs.get(open);
-        assert.ok(close !== undefined);
-        const body = tokens.slice(open + 1, close);
-        const guarded =
-          body[0]?.text === "test" ||
-          (body[0]?.text === "cfg" && cfgWithoutTest(body.slice(2, -1)) === false);
-        if (
-          body[0]?.text === "path" ||
-          (body[0]?.text === "cfg_attr" && body.some((token) => token.text === "path"))
-        )
-          issue(i, "#[path] modules are outside the conventional file-module contract");
-        if (inner) testOnly ||= guarded;
-        else pendingTest ||= guarded;
-        i = close;
+      const attribute = attributeAt(i);
+      if (attribute) {
+        if (attribute.inner) testOnly ||= attribute.guarded;
+        else pendingTest ||= attribute.guarded;
+        i = attribute.close;
         continue;
       }
       const activeTest = testOnly || pendingTest;
       // Commas separate fields/variants, but not the generic parameters or
       // where predicates in an item's header. Recognize items only at a fresh
       // boundary; fn items also require a name, unlike fn(...) pointer types.
-      if (
-        itemStart &&
-        ["fn", "struct", "enum", "union", "trait", "impl", "type", "const", "static"].some(
-          (name) =>
-            keyword(i, name) && (name !== "fn" || identifier.test(tokens[i + 1]?.text ?? "")),
-        )
-      )
-        itemHeader = true;
-      if (
-        !itemHeader &&
-        !["pub", "unsafe", "async", "extern", "default"].some((name) => keyword(i, name)) &&
-        !(text === "(" && keyword(i - 1, "pub")) &&
-        !(text === "<literal>" && keyword(i - 1, "extern"))
-      )
-        itemStart = false;
+      if (itemStart && startsItem(i)) itemHeader = true;
+      if (!itemHeader && !isItemPrefix(i)) itemStart = false;
       if (itemHeader) {
         if (text === "<") genericDepth++;
         else if (text === ">" && genericDepth > 0 && tokens[i - 1]?.text !== "-") genericDepth--;
       }
       if (text === "include" && tokens[i + 1]?.text === "!")
         issue(i, "include! source requires explicit scanner support");
-      if (keyword(i, "mod") && identifier.test(tokens[i + 1]?.text ?? "")) {
-        const name = tokens[i + 1].text;
-        const nested = context.concat([name]);
-        const locationAt = location(i + 1);
-        result.declarations.push({
-          name: nested.join("::"),
-          testOnly: activeTest,
-          location: locationAt,
-        });
-        if (
-          !context.length &&
-          !Object.hasOwn(graph, name) &&
-          !rootInlineModules[source]?.includes(name)
-        ) {
-          result.issues.push({
-            kind: "unknown-module",
-            module: name,
-            location: locationAt,
-            detail: "top-level module is absent from the allowed graph",
-          });
-        }
-        if (tokens[i + 2]?.text === "{") {
-          const close = pairs.get(i + 2);
-          assert.ok(close !== undefined);
-          walk(i + 3, close, nested, activeTest);
-          i = close;
-          pendingTest = false;
-          itemStart = true;
-          continue;
-        }
+      const module = declareModule(i, context, activeTest);
+      if (module) {
+        walk(i + 3, module.close, module.nested, activeTest);
+        i = module.close;
+        pendingTest = false;
+        itemStart = true;
+        continue;
       }
       if (keyword(i, "use")) {
         let close = i + 1;
@@ -474,21 +499,7 @@ function scanFile(file: SourceFile, inheritedTestOnly: boolean, policy: Policy):
         itemStart = true;
         continue;
       }
-      if (
-        ["crate", "self", "super"].includes(text) &&
-        tokens[i + 1]?.text === "::" &&
-        tokens[i - 1]?.text !== "::"
-      ) {
-        const path = [text];
-        let cursor = i + 2;
-        while (cursor < end && identifier.test(tokens[cursor].text)) {
-          path.push(tokens[cursor].text);
-          cursor++;
-          if (tokens[cursor]?.text !== "::") break;
-          cursor++;
-        }
-        addPath(path, context, activeTest, i);
-      }
+      scanPath(i, end, context, activeTest);
       const close = pairs.get(i);
       if (close !== undefined) {
         walk(i + 1, close, context, activeTest);
@@ -691,6 +702,25 @@ function storedPolicy(value: unknown): Policy {
     rootReexports: Object.fromEntries(reexports),
   };
 }
+function verifyInheritedEvidence(
+  root: string,
+  ref: string,
+  label: string,
+  scan: ReturnType<typeof scanSources>,
+) {
+  const parents = git(root, ["rev-list", "--parents", "-n", "1", ref]).trim().split(" ").slice(1);
+  if (parents.length <= 1) return false;
+  const blob = git(root, ["ls-tree", ref, "--", evidencePath]);
+  let inherited = false;
+  for (const parent of parents) {
+    if (git(root, ["ls-tree", parent, "--", evidencePath]) !== blob) continue;
+    const parentScan = committedScan(root, parent, `${label} inherited parent`);
+    assertRatchet(scan, parentScan, `${label} merged sources`);
+    inherited = true;
+  }
+  return inherited;
+}
+
 function committedScan(root: string, ref: string, label: string): Evidence {
   assert.match(ref, /^[a-f0-9]{40}$/, `${label} must be a full commit SHA`);
   assert.equal(
@@ -715,20 +745,7 @@ function committedScan(root: string, ref: string, label: string): Evidence {
       // evidence: verify the identical parent blob, then ratchet the merge's
       // actual sources against that verified parent. Ordinary stale commits and
       // evidence edited in the merge still fail closed.
-      const parents = git(root, ["rev-list", "--parents", "-n", "1", ref])
-        .trim()
-        .split(" ")
-        .slice(1);
-      const blob = git(root, ["ls-tree", ref, "--", evidencePath]);
-      let inherited = false;
-      if (parents.length > 1) {
-        for (const parent of parents) {
-          if (git(root, ["ls-tree", parent, "--", evidencePath]) !== blob) continue;
-          const parentScan = committedScan(root, parent, `${label} inherited parent`);
-          assertRatchet(scan, parentScan, `${label} merged sources`);
-          inherited = true;
-        }
-      }
+      const inherited = verifyInheritedEvidence(root, ref, label, scan);
       if (!inherited)
         assert.deepEqual(
           evidence,

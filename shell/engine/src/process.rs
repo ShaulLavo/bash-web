@@ -8,6 +8,9 @@ use futures::{
     FutureExt,
     future::{LocalBoxFuture, WeakShared},
 };
+type WaitFuture = LocalBoxFuture<'static, Result<(), ProcessError>>;
+type WaitRegistry = RefCell<BTreeMap<GroupId, WeakShared<WaitFuture>>>;
+
 use std::{
     cell::{Cell, RefCell},
     collections::{BTreeMap, BTreeSet},
@@ -173,8 +176,7 @@ struct HostState {
     children: RefCell<BTreeMap<ProcessId, Child>>,
     // Only unreaped groups have entries; true means reject new descendants.
     groups: RefCell<BTreeMap<GroupId, bool>>,
-    waits:
-        RefCell<BTreeMap<GroupId, WeakShared<LocalBoxFuture<'static, Result<(), ProcessError>>>>>,
+    waits: WaitRegistry,
     next: Cell<ProcessId>,
     next_group: Cell<GroupId>,
 }
@@ -348,7 +350,7 @@ impl ProcessHost for InProcessHost {
             .borrow()
             .get(&key)
             .cloned()
-            .ok_or_else(|| ProcessError::UnknownCommand(name))?;
+            .ok_or(ProcessError::UnknownCommand(name))?;
         let group = request.group;
         let parent = request.parent;
         if self.0.groups.borrow().get(&group) == Some(&true) {

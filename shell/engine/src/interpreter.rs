@@ -2051,7 +2051,7 @@ async fn subshell(
                         .await
                     {
                         Ok(fds) => {
-                            work.substitutions = None;
+                            work.substitutions.take();
                             let body_context = Context {
                                 parameter_error_status: 1,
                                 compound_child: false,
@@ -3587,7 +3587,7 @@ async fn redirects(
                     .shared(),
             );
         }
-        let target_reader = reader_status.and_then(|_| reader_state.as_ref());
+        let target_reader = reader_status.and(reader_state.as_ref());
         let target = redirect_target(redirect, state, context, work, target_reader)
             .await
             .map_err(|error| {

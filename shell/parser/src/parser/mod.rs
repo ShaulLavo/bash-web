@@ -38,7 +38,6 @@ pub use ast::*;
 pub use budget::{BudgetError, validate as validate_budget};
 pub use lexer::{Lexer, SpannedToken};
 pub use print_cmd::{command_string, function_string, function_string_bounded};
-pub(crate) use print_cmd::word_text;
 pub use span::{Position, Span};
 pub use subst_scan::{Step as CommandBoundaryStep, SubstScanner as CommandBoundaryScanner};
 
@@ -288,17 +287,6 @@ impl<'a> Parser<'a> {
         self.lexer.set_track_plain(options.aliases.is_some());
         self.lexer.set_extglob_bang(options.extglob);
         self.options = options;
-    }
-
-    /// Count lines from `line` (text taken from later in a larger source).
-    pub(crate) fn starting_at_line(mut self, line: usize) -> Self {
-        let shift = line.saturating_sub(1);
-        if shift > 0 {
-            self.lexer.shift_lines(shift);
-            self.current_span.start.line += shift;
-            self.current_span.end.line += shift;
-        }
-        self
     }
 
     /// Expand an alias named by the current word, if it is one: its value
@@ -639,22 +627,6 @@ impl<'a> Parser<'a> {
                 error: format!("syntax error while looking for matching `)' at line {line}"),
             }),
         }
-    }
-
-    /// Prompt reparses must charge the same request budget as their caller.
-    pub(crate) fn parse_prompt_body(
-        input: &str,
-        max_depth: usize,
-        max_fuel: usize,
-        budget: crate::limits::ExecutionBudget,
-    ) -> Result<Word> {
-        let parser =
-            Parser::with_limits(input, max_depth, max_fuel).with_execution_budget(budget.clone());
-        let word = parser.parse_word(heredoc_body_escapes(input));
-        // Word parsing can turn child parse errors into literal text. A poisoned
-        // request must still fail closed rather than continue with that fallback.
-        budget.check()?;
-        Ok(word)
     }
 
     /// Create a parse error with the current position. A grammar error
@@ -3324,16 +3296,6 @@ impl<'a> Parser<'a> {
             result.push((current, is_quoted));
         }
         result
-    }
-
-    fn strip_quotes(s: &str) -> &str {
-        if s.len() >= 2
-            && ((s.starts_with('"') && s.ends_with('"'))
-                || (s.starts_with('\'') && s.ends_with('\'')))
-        {
-            return &s[1..s.len() - 1];
-        }
-        s
     }
 
     /// Find the assignment operator, ignoring `=` characters inside array subscripts.

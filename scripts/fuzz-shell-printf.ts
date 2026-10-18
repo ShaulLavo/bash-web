@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { validateResultBytes } from "./fuzz-shell-results.ts";
 // Original bounded printf-escape grammar. Fixture/CLI scaffolding adapts the
 // job-lifetime generator at 0630e1d; raw process helpers are imported unchanged.
 import { execFileSync, spawnSync } from "node:child_process";
@@ -23,6 +24,15 @@ import {
 } from "./fuzz-shell-control-flow.mjs";
 
 export { healthy, matches, outputLimit, run };
+import {
+  encode,
+  decode,
+  type FuzzFixture,
+  type FuzzOptions,
+  type RecordedCase,
+} from "./fuzz-shell-results.ts";
+type Case = ReturnType<typeof generateCases>[number];
+
 export const defaultCount = 128;
 export const defaultTimeoutMs = 2000;
 export const modes = ["format", "percent-b"];
@@ -292,6 +302,7 @@ const queue = "/work/platform-production/heavy/current/run.js";
 export const sourceFiles = [
   "fuzz-shell-printf.ts",
   "fuzz-shell-control-flow.mjs",
+  "fuzz-shell-results.ts",
   "shell-process-group.mjs",
 ];
 export const sourceHashes = () =>
@@ -347,23 +358,24 @@ export function render(spec: Spec) {
         : "printf '%b' " + quote("A" + spec.value + "Z");
     return localeAssignments[spec.variant] + "; " + body + "; " + statusTail;
   }
-  if (spec.family === "generated") {
-    if (
-      !generatedModes.includes(spec.mode) ||
-      spec.variant < 0 ||
-      spec.variant >= generatedSuffixes.length ||
-      !/^\\x[0-9a-f]{2}$/.test(spec.value)
-    )
-      throw new Error("invalid printf specification");
-    const value = "generated:" + spec.value + generatedSuffixes[spec.variant] + ":end";
-    let body;
-    if (spec.mode === "format") body = "printf " + quote(value);
-    else if (spec.mode === "percent-b") body = "printf '%b' " + quote(value);
-    else if (spec.mode === "format-repeat") body = "printf " + quote(value + "%s;") + " one two";
-    else body = "printf '%b:%s;' " + quote(value) + " one " + quote(value) + " two";
-    return body + "; " + statusTail;
-  }
+  if (spec.family === "generated") return renderGenerated(spec);
   throw new Error("invalid printf specification");
+}
+function renderGenerated(spec: Spec) {
+  if (
+    !generatedModes.includes(spec.mode) ||
+    spec.variant < 0 ||
+    spec.variant >= generatedSuffixes.length ||
+    !/^\\x[0-9a-f]{2}$/.test(spec.value)
+  )
+    throw new Error("invalid printf specification");
+  const value = "generated:" + spec.value + generatedSuffixes[spec.variant] + ":end";
+  let body;
+  if (spec.mode === "format") body = "printf " + quote(value);
+  else if (spec.mode === "percent-b") body = "printf '%b' " + quote(value);
+  else if (spec.mode === "format-repeat") body = "printf " + quote(value + "%s;") + " one two";
+  else body = "printf '%b:%s;' " + quote(value) + " one " + quote(value) + " two";
+  return body + "; " + statusTail;
 }
 function makeCase(id: string, spec: Spec) {
   return { id, ...spec, tags: [spec.family, "mode=" + spec.mode], script: render(spec) };
@@ -435,8 +447,8 @@ export function generateCases(seed: number, count = defaultCount) {
   }
   return result;
 }
-export function coverage(cases) {
-  const unique = (key: string) => Array.from(new Set(cases.map((item) => item[key]))).sort();
+export function coverage(cases: readonly Case[]) {
+  const unique = (key: keyof Case) => Array.from(new Set(cases.map((item) => item[key]))).sort();
   return { families: unique("family"), modes: unique("mode") };
 }
 export function optionsFor(args: string[]) {
@@ -444,20 +456,7 @@ export function optionsFor(args: string[]) {
   if (options.count > maxGeneratedCount) throw new Error(`invalid count (0..${maxGeneratedCount})`);
   return options;
 }
-const encode = (result) => ({
-  status: result.status,
-  signal: result.signal,
-  timedOut: result.timedOut,
-  error: result.error,
-  stdoutBase64: result.stdout.toString("base64"),
-  stderrBase64: result.stderr.toString("base64"),
-});
-const decode = (result) => ({
-  ...result,
-  stdout: Buffer.from(result.stdoutBase64, "base64"),
-  stderr: Buffer.from(result.stderrBase64, "base64"),
-});
-export function validateFixture(path, fixture, options) {
+export function validateFixture(path: string, fixture: FuzzFixture<Case>, options: FuzzOptions) {
   if (
     fixture.schema !== 1 ||
     fixture.sourceHash !== fingerprint() ||
@@ -495,20 +494,18 @@ export function validateFixture(path, fixture, options) {
       throw new Error("fixture case differs at " + index);
     if (!entry?.bash || !healthy(entry.bash))
       throw new Error("invalid fixture process result at " + index);
-    let bytes = 0;
-    for (const key of ["stdoutBase64", "stderrBase64"]) {
-      const value = entry.bash[key];
-      if (typeof value !== "string" || Buffer.from(value, "base64").toString("base64") !== value)
-        throw new Error("invalid fixture bytes at " + index);
-      bytes += Buffer.from(value, "base64").length;
-    }
-    if (bytes > outputLimit) throw new Error("fixture output limit exceeded at " + index);
+    validateResultBytes(entry.bash, outputLimit, index);
   }
   return cases;
 }
-export async function execute(cases, options, shell, recorded) {
+export async function execute<T extends { id: string; family: string; script: string }>(
+  cases: readonly T[],
+  options: Pick<FuzzOptions, "cwd" | "timeoutMs" | "interrupted" | "record" | "recordOracle">,
+  shell: string,
+  recorded?: readonly Pick<RecordedCase<T>, "bash">[],
+) {
   const counts = { MATCH: 0, MISMATCH: 0 };
-  const byFamily = {};
+  const byFamily: Record<string, { MATCH: number; MISMATCH: number }> = {};
   const mismatches = [];
   const results = [];
   for (const [index, item] of cases.entries()) {
@@ -573,7 +570,7 @@ async function main() {
     const reports = [];
     if (options.replays.length) {
       const inputs = options.replays.map((path) => {
-        const fixture = JSON.parse(readFileSync(path, "utf8"));
+        const fixture: FuzzFixture<Case> = JSON.parse(readFileSync(path, "utf8"));
         return { path, fixture, cases: validateFixture(path, fixture, options) };
       });
       for (const { path, fixture, cases } of inputs)
@@ -594,9 +591,9 @@ async function main() {
       const result = await execute(cases, options, shell);
       reports.push({ seed: options.seed, bash, ...result });
       const recordPath = options.record ?? options.recordOracle;
+      if (recordPath && result.counts.MISMATCH)
+        throw new Error("refusing candidate-verified recording with differences");
       if (recordPath) {
-        if (result.counts.MISMATCH)
-          throw new Error("refusing candidate-verified recording with differences");
         const fixture = {
           schema: 1,
           sourceHash: fingerprint(),
@@ -628,7 +625,7 @@ async function main() {
             ? "bash-self-control"
             : "live",
       shell: options.recordOracle ? null : shell,
-      reports: reports.map(({ results, ...report }) => report),
+      reports: reports.map(({ results: _results, ...report }) => report),
     };
     const text = JSON.stringify(report, null, 2) + "\n";
     if (options.output) {

@@ -1,7 +1,7 @@
 // Acceptance/demo composition. Bun cases remain individually pending until bun-wasm
 // publishes installBunAdapters(runtime, { workerUrl }) and bun-wasm/worker.
-// Then compose createBunRuntimeLease from ./helpers/bun-fixture using that installer
-// and import workerUrl from "bun-wasm/worker?worker&url". No old guest is substituted.
+// Compose the installer with the page-owned runtime and import workerUrl from
+// "bun-wasm/worker?worker&url". No old guest is substituted.
 import { createRuntime } from "waffle";
 import { mountBrowser, type BrowserRuntimeLease } from "../src/browser/main";
 import { registerTestPrograms } from "./helpers/test-programs";

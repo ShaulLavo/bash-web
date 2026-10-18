@@ -417,23 +417,25 @@ export function boundaryCases(seed) {
   const selected = [];
   // Complete cross product, independent of random sampling and --count. Keep
   // this separate from the original seeded stream so no old case is displaced.
-  for (const feature of features)
-    for (const context of boundaryContexts)
-      for (let depth = 0; depth <= 3; depth++) {
-        let child = feature;
-        for (let level = 0; level < depth; level++) child = { kind: "boundary-nest", child };
-        child = { kind: "boundary-context", context, child };
-        const guarded = { kind: "boundary-guard", child };
-        const children = [guarded, { kind: "list", children: [atom("a"), atom("b")] }];
-        const reversed = random.next() % 2;
-        if (reversed) children.reverse();
-        const node = { kind: "concat", children };
-        const closingId =
-          feature.closings && feature.closings !== 2 ? `-closings-${feature.closings}` : "";
-        const id = `boundary-${feature.form}-${feature.protection ?? feature.body}-${feature.opener}-${feature.open ? "open" : "closed"}-${context}-${depth}${closingId}`;
-        for (const mode of modes) cases.push(makeCase(`${id}-${mode}`, node, mode));
-        selected.push({ id, child, reversed });
-      }
+  const combinations = features.flatMap((feature) =>
+    boundaryContexts.map((context) => ({ feature, context })),
+  );
+  for (const { feature, context } of combinations)
+    for (let depth = 0; depth <= 3; depth++) {
+      let child = feature;
+      for (let level = 0; level < depth; level++) child = { kind: "boundary-nest", child };
+      child = { kind: "boundary-context", context, child };
+      const guarded = { kind: "boundary-guard", child };
+      const children = [guarded, { kind: "list", children: [atom("a"), atom("b")] }];
+      const reversed = random.next() % 2;
+      if (reversed) children.reverse();
+      const node = { kind: "concat", children };
+      const closingId =
+        feature.closings && feature.closings !== 2 ? `-closings-${feature.closings}` : "";
+      const id = `boundary-${feature.form}-${feature.protection ?? feature.body}-${feature.opener}-${feature.open ? "open" : "closed"}-${context}-${depth}${closingId}`;
+      for (const mode of modes) cases.push(makeCase(`${id}-${mode}`, node, mode));
+      selected.push({ id, child, reversed });
+    }
   // The same exercises without the guard, after every guarded case so the
   // original stream keeps its order: command bodies now run in each context.
   for (const { id, child, reversed } of selected) {
@@ -551,7 +553,7 @@ function coverage(cases) {
   };
 }
 
-export function validateFixture(path, fixture, options) {
+function validateFixtureIdentity(path, fixture, options) {
   if (fixture.schema !== 1 || fixture.sourceHash !== fingerprint())
     throw new Error("stale brace fixture hash/schema");
   if (!oracleVersion.test(fixture.bash ?? "")) throw new Error("fixture Bash version differs");
@@ -567,6 +569,10 @@ export function validateFixture(path, fixture, options) {
   const filenameSeed = /seed-(\d+)\.json$/.exec(path);
   if (filenameSeed && Number(filenameSeed[1]) !== fixture.seed)
     throw new Error("fixture filename seed differs");
+}
+
+export function validateFixture(path, fixture, options) {
+  validateFixtureIdentity(path, fixture, options);
   const cases = generateCases(fixture.seed, fixture.count);
   if (JSON.stringify(fixture.coverage) !== JSON.stringify(coverage(cases)))
     throw new Error("fixture coverage differs");
@@ -818,7 +824,7 @@ function main() {
       timeoutMs: options.timeoutMs,
       shell,
       recordPending: Boolean(options.record && reports.some((item) => item.counts.MISMATCH)),
-      reports: reports.map(({ results, ...item }) => item),
+      reports: reports.map(({ results: _results, ...item }) => item),
     };
     const text = JSON.stringify(report, null, 2) + "\n";
     if (options.output) writeFileSync(options.output, text);

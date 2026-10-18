@@ -13,7 +13,8 @@
     "jsxImportSource": "remix/component",
     "paths": {
       "ghostty-webgpu": ["./.sources/ghostty-webgpu/src/index.ts"]
-    }
+    },
+    "allowJs": true
   },
-  "include": ["src", "tests", "vite.config.ts", "playwright.config.ts"]
+  "include": ["src", "tests", "vite.config.ts", "playwright.config.ts", "scripts/**/*.ts"]
 }

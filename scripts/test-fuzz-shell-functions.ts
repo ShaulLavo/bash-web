@@ -30,11 +30,15 @@ import {
   variants,
 } from "./fuzz-shell-functions.ts";
 
+import type { FuzzFixture, RecordedCase } from "./fuzz-shell-results.ts";
+type Case = ReturnType<typeof generateCases>[number];
+type Fixture = FuzzFixture<Case>;
+
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const path = "shell-functions-seed-1.json";
-const fixtureHashes = {
-  1: "acc5119daed7bebfea33affce1a67be24aab3fdd7c60b13eb6ca0db96df2f067",
-  42: "2d770eb0266b14f701fc1f8789b1cad79ba5836a7c73633efddcaf6fb881f553",
+const fixtureHashes: Record<string, string> = {
+  1: "30a63172f071c9ffc08348bf9c7e41fa59ee2c8a18245c91712298ef8434c7c0",
+  42: "5bf569081490a4d4833794a7a5302d078bb371768ecdc07c51ba8c42d1c4d24a",
 };
 const observation = (patch = {}) => ({
   status: 0,
@@ -45,7 +49,7 @@ const observation = (patch = {}) => ({
   stderr: Buffer.alloc(0),
   ...patch,
 });
-function fixtureFor() {
+function fixtureFor(): Fixture {
   const cases = generateCases(1, 0);
   return {
     schema: 1,
@@ -133,7 +137,10 @@ test("finite deterministic functions grammar keeps fixed cases separate from see
   assert.throws(() => generateCases(1, maxGeneratedCount + 1), /count/);
   assert.throws(() => render({ family: "local", variant: "unknown", value: "" }), /specification/);
   assert.throws(
-    () => render({ family: "local", variant: "dynamic", value: undefined }),
+    () =>
+      render(
+        Object.assign({ family: "local", variant: "dynamic", value: "" }, { value: undefined }),
+      ),
     /specification/,
   );
 });
@@ -149,8 +156,11 @@ test("fixed matrix covers every scalar unit dimension without inert value paddin
         valueVariants.has(family + "/" + variant) ? values : [values[0]],
       );
     }
-  const script = (family, variant) =>
-    cases.find((item) => item.family === family && item.variant === variant).script;
+  const script = (family: string, variant: string) => {
+    const item = cases.find((item) => item.family === family && item.variant === variant);
+    assert.ok(item, `${family}/${variant} must exist`);
+    return item.script;
+  };
   assert.ok(script("local", "dynamic").includes('local x="$fn_value"; g;'));
   assert.ok(script("local", "redeclaration").includes("local x;"));
   assert.ok(script("local", "export").includes('local -x x="$fn_value";'));
@@ -178,6 +188,7 @@ test("all transitive process-runner sources participate in fixture identity", ()
   assert.deepEqual(sourceFiles, [
     "fuzz-shell-functions.ts",
     "fuzz-shell-control-flow.mjs",
+    "fuzz-shell-results.ts",
     "shell-process-group.mjs",
   ]);
   for (const [name, hash] of Object.entries(sourceHashes()))
@@ -222,7 +233,7 @@ test("strict status/stdout health rejects unsupported, timeout and partial-outpu
 
 test("fixture validation rejects every identity and unhealthy-observation mutation", () => {
   assert.deepEqual(validateFixture(path, fixtureFor(), options), matrixCases());
-  const mutations = [
+  const mutations: ((fixture: Fixture) => unknown)[] = [
     (f) => f.schema++,
     (f) => (f.sourceHash = "stale"),
     (f) => (f.sourceHashes["fuzz-shell-functions.ts"] = "stale"),
@@ -348,7 +359,7 @@ for (const seed of [1, 42])
       fixtureHashes[seed],
       "frozen oracle content requires explicit identity review",
     );
-    const fixture = JSON.parse(bytes.toString("utf8"));
+    const fixture: Fixture = JSON.parse(bytes.toString("utf8"));
     validateFixture(fixturePath.pathname, fixture, { ...options, count: defaultCount });
     assert.equal(fixture.provenance, "oracle-only");
     assert.equal(fixture.cases.length, matrixCases().length + defaultCount);
@@ -356,14 +367,20 @@ for (const seed of [1, 42])
       new Set(fixture.cases.map((entry) => entry.case.script)).size,
       fixture.cases.length,
     );
-    const pick = (family, variant, value = values[0]) =>
-      fixture.cases.find(
+    const pick = (family: string, variant: string, value = values[0]) => {
+      const entry = fixture.cases.find(
         (entry) =>
           entry.case.family === family &&
           entry.case.variant === variant &&
           entry.case.value === value,
       );
-    const stdout = (entry) => Buffer.from(entry.bash.stdoutBase64, "base64").toString();
+      assert.ok(entry, `${family}/${variant} must exist`);
+      return entry;
+    };
+    const stdout = (entry: RecordedCase<Case> | undefined) => {
+      assert.ok(entry, "requested frozen observation must exist");
+      return Buffer.from(entry.bash.stdoutBase64, "base64").toString();
+    };
     assert.equal(
       stdout(pick("local", "dynamic", "a b")),
       "g=<a b>\nf=<changed>\nouter=<outer>\nstatus=0\n",
@@ -429,7 +446,7 @@ for (const seed of [1, 42])
       ["wrapped", 2],
       ["plus", 0],
       ["large", 255],
-    ]) {
+    ] as const) {
       const entry = pick("return", variant);
       assert.equal(entry.bash.status, status);
       assert.equal(stdout(entry), `status=${status}\n`);

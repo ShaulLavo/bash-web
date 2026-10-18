@@ -109,20 +109,22 @@ test("fixed matrix covers every control family and requested dimension at depths
         cases.some((item) => item.family === family && item.depth === depth),
         family + " " + depth,
       );
-  for (const context of errexitContexts)
-    for (const depth of depths)
-      for (const failure of ["false", "return7"])
-        for (const finalFailure of [false, true])
-          assert.ok(
-            cases.some(
-              (item) =>
-                item.family === "errexit" &&
-                item.context === context &&
-                item.depth === depth &&
-                item.failure === failure &&
-                item.finalFailure === finalFailure,
-            ),
-          );
+  const combinations = errexitContexts.flatMap((context) =>
+    depths.map((depth) => ({ context, depth })),
+  );
+  for (const { context, depth } of combinations)
+    for (const failure of ["false", "return7"])
+      for (const finalFailure of [false, true])
+        assert.ok(
+          cases.some(
+            (item) =>
+              item.family === "errexit" &&
+              item.context === context &&
+              item.depth === depth &&
+              item.failure === failure &&
+              item.finalFailure === finalFailure,
+          ),
+        );
   for (const verb of ["break", "continue"])
     for (const loops of [1, 2, 3])
       for (const level of ["1", "2", "3", "4", "0", "-1", "bad", "1 2"])

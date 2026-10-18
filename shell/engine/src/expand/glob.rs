@@ -252,12 +252,11 @@ async fn matches(
     protection: &[bool],
     cwd: &str,
     fs: &Rc<dyn FileSystem>,
-    max_bytes: usize,
-    max_fields: usize,
-    raw: usize,
+    limits: (usize, usize, usize),
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<Vec<String>, Error> {
+    let (max_bytes, max_fields, raw) = limits;
     let mut prefixes = Vec::new();
     admit_vec_slot(&mut prefixes, work)?;
     prefixes.push(String::new());
@@ -466,12 +465,12 @@ pub(super) async fn expand_fields(
     fields: Vec<String>,
     protections: Vec<Vec<bool>>,
     state: &SharedState,
-    max_bytes: usize,
-    max_fields: usize,
+    limits: (usize, usize),
     raw_remaining: &mut usize,
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<Vec<String>, Error> {
+    let (max_bytes, max_fields) = limits;
     let fs = work.substitutions.as_ref().ok_or(2)?.filesystem();
     let (nullglob, extglob) = {
         let state = state.borrow();
@@ -505,9 +504,11 @@ pub(super) async fn expand_fields(
             &protection,
             &cwd,
             &fs,
-            max_bytes.saturating_sub(bytes),
-            max_fields.saturating_sub(output.len()),
-            *raw_remaining,
+            (
+                max_bytes.saturating_sub(bytes),
+                max_fields.saturating_sub(output.len()),
+                *raw_remaining,
+            ),
             work,
             cancel,
         )
@@ -577,9 +578,7 @@ mod tests {
                     &[false; 5],
                     "/",
                     &fs,
-                    bytes,
-                    fields,
-                    raw,
+                    (bytes, fields, raw),
                     &mut work,
                     &cancel
                 )),
@@ -593,9 +592,7 @@ mod tests {
                 &[false; 5],
                 "/",
                 &fs,
-                1024,
-                16,
-                1024,
+                (1024, 16, 1024),
                 &mut work,
                 &cancel
             ))
@@ -678,9 +675,7 @@ mod tests {
             &[false],
             "/",
             &fs,
-            1024,
-            16,
-            1024,
+            (1024, 16, 1024),
             &mut work,
             &cancel,
         ));
@@ -714,9 +709,7 @@ mod tests {
             &[false; 5],
             "/",
             &fs,
-            65536,
-            1024,
-            65536,
+            (65536, 1024, 65536),
             &mut work,
             &cancel,
         ));

@@ -46,19 +46,19 @@ const openerText = {
   arithmetic: { fused: "$((", spaced: "$(( " },
   process: { fused: "<(", spaced: "<( " },
   "process-subshell": { fused: "<((", spaced: "<(( " },
-  backtick: { fused: "\`", spaced: "\`" },
+  backtick: { fused: "`", spaced: "`" },
 };
 
 const heredocBodies = [
   ["heredoc-plain", ": <<EOF\nplain\nEOF"],
-  ["heredoc-quoted", ": <<'EOF'\n$(ignored) \"quoted\" \${v} \`tick\`\nEOF"],
-  ["heredoc-escaped", ": <<\\EOF\n$(ignored) \${v} \`tick\`\nEOF"],
+  ["heredoc-quoted", ": <<'EOF'\n$(ignored) \"quoted\" ${v} `tick`\nEOF"],
+  ["heredoc-escaped", ": <<\\EOF\n$(ignored) ${v} `tick`\nEOF"],
   ["heredoc-dash", ": <<-EOF\n\tindented\n\tEOF"],
   ["heredoc-delim-command", ": <<'D$(q)'\nbody\nD$(q)"],
   ["heredoc-delim-quote", ": <<'D\"q'\nbody\nD\"q"],
   ["heredoc-delim-escape", ": <<'D\\\\q'\nbody\nD\\\\q"],
-  ["heredoc-delim-param", ": <<'D\${q}'\nbody\nD\${q}"],
-  ["heredoc-delim-backtick", ": <<'D\`q\`'\nbody\nD\`q\`"],
+  ["heredoc-delim-param", ": <<'D${q}'\nbody\nD${q}"],
+  ["heredoc-delim-backtick", ": <<'D`q`'\nbody\nD`q`"],
   ["heredoc-continuation", ": <<EO\\\nF\nbody\nEOF"],
   ["heredoc-close-same", ": <<EOF\nbody\nEOF)"],
   ["heredoc-close-next", ": <<EOF\nbody\nEOF\n)"],
@@ -134,7 +134,7 @@ function signalSource(kill, observation) {
   const print = observation === "kill" ? "kill" : "wait";
   const observed =
     observation === "kill" ? `${kill}; ${value}=$?; wait %1` : `${kill}; wait %1; ${value}=$?`;
-  return `${finiteSignalJob} ${observed}; printf '${print}=%s\\n' \"$${value}\"`;
+  return `${finiteSignalJob} ${observed}; printf '${print}=%s\\n' "$${value}"`;
 }
 
 const fixedSources = [
@@ -142,7 +142,7 @@ const fixedSources = [
   ["fixed-command-nested", "$(printf '%s' $(printf '%s' ok))"],
   ["fixed-process-valid", "<(printf '%s' ok)"],
   ["fixed-process-arithmetic", "<((printf '%s' ok))"],
-  ["fixed-backtick-valid", "\`printf '%s' ok\`"],
+  ["fixed-backtick-valid", "`printf '%s' ok`"],
   ["fixed-heredoc-parse", "$( : <<EOF\nbody\nEOF\n)"],
   ["fixed-heredoc-parse-only", "$(false; : <<EOF\n$(bad)\nEOF\n)"],
   ["fixed-case-parse", "$(case x in (x) :;; esac)"],
@@ -245,10 +245,10 @@ export function spelling(node) {
   if (node.kind === "raw" || node.kind === "body") return node.text;
   if (node.kind === "boundary") {
     const prefix = openerText[node.opener][node.spacing];
-    const suffix = node.opener === "backtick" ? "\`" : ")".repeat(node.closings);
+    const suffix = node.opener === "backtick" ? "`" : ")".repeat(node.closings);
     return prefix + spelling(node.body) + suffix;
   }
-  if (node.kind === "guard") return "\${present:-" + spelling(node.child) + "}";
+  if (node.kind === "guard") return "${present:-" + spelling(node.child) + "}";
   if (node.kind === "context") return spelling(node.child);
   throw new Error("unknown substitution node " + node.kind);
 }
@@ -272,11 +272,11 @@ function renderContext(context, raw) {
   const setup = "v=present; unset u; present=guard";
   let expression = raw;
   if (context === "double") expression = '"' + raw + '"';
-  if (context === "default-set") expression = '"\${v:-' + raw + '}"';
-  if (context === "default-unset") expression = '"\${v:-' + raw + '}"';
+  if (context === "default-set") expression = '"${v:-' + raw + '}"';
+  if (context === "default-unset") expression = '"${v:-' + raw + '}"';
   if (context === "arithmetic") expression = '"$((0 + ' + raw + '))"';
-  if (context === "command") expression = "\"\${present:-$(printf '%s' " + raw + ')}"';
-  if (context === "process") expression = "\"\${present:-<(printf '%s' " + raw + ')}"';
+  if (context === "command") expression = "\"${present:-$(printf '%s' " + raw + ')}"';
+  if (context === "process") expression = "\"${present:-<(printf '%s' " + raw + ')}"';
   const unset = context === "default-unset" ? "unset v; " : "";
   return (
     setup +
@@ -349,29 +349,31 @@ export function boundaryCases(seed) {
     "closed-list",
     "closed-valid-function",
   ]);
-  for (const body of bodies.filter((entry) => variants.has(entry.id)))
-    for (const opener of boundaryOpeners)
-      for (const context of boundaryContexts)
-        for (const closings of boundaryClosings.filter((value) => value !== 2)) {
-          const spacing = boundarySpellings[(closings + body.id.length) % 2];
-          const node = boundaryNode(opener, spacing, closings, body);
-          cases.push(
-            makeCase(
-              "boundary-extra-" +
-                body.id +
-                "-" +
-                opener +
-                "-" +
-                spacing +
-                "-" +
-                closings +
-                "-" +
-                context,
-              node,
+  const combinations = bodies
+    .filter((entry) => variants.has(entry.id))
+    .flatMap((body) => boundaryOpeners.map((opener) => ({ body, opener })));
+  for (const { body, opener } of combinations)
+    for (const context of boundaryContexts)
+      for (const closings of boundaryClosings.filter((value) => value !== 2)) {
+        const spacing = boundarySpellings[(closings + body.id.length) % 2];
+        const node = boundaryNode(opener, spacing, closings, body);
+        cases.push(
+          makeCase(
+            "boundary-extra-" +
+              body.id +
+              "-" +
+              opener +
+              "-" +
+              spacing +
+              "-" +
+              closings +
+              "-" +
               context,
-            ),
-          );
-        }
+            node,
+            context,
+          ),
+        );
+      }
   return cases;
 }
 
@@ -486,7 +488,7 @@ export function coverage(cases) {
   };
 }
 
-export function validateFixture(path, fixture, options) {
+function validateFixtureIdentity(path, fixture, options) {
   if (fixture.schema !== 1 || fixture.sourceHash !== fingerprint())
     throw new Error("stale substitution fixture hash/schema");
   if (!oracleVersion.test(fixture.bash ?? "")) throw new Error("fixture Bash version differs");
@@ -502,6 +504,10 @@ export function validateFixture(path, fixture, options) {
   const filenameSeed = /seed-(\d+)\.json$/.exec(path);
   if (filenameSeed && Number(filenameSeed[1]) !== fixture.seed)
     throw new Error("fixture filename seed differs");
+}
+
+export function validateFixture(path, fixture, options) {
+  validateFixtureIdentity(path, fixture, options);
   const cases = generateCases(fixture.seed, fixture.count);
   if (JSON.stringify(fixture.coverage) !== JSON.stringify(coverage(cases)))
     throw new Error("fixture coverage differs");
@@ -726,11 +732,11 @@ function main() {
       const cases = generateCases(options.seed, options.count);
       const result = execute(cases, options, shell, bashBin);
       reports = [{ seed: options.seed, bash, ...result }];
+      if (options.record && result.counts.MISMATCH !== 0)
+        throw new Error(
+          "Refusing to record " + result.counts.MISMATCH + " substitution mismatches",
+        );
       if (options.record) {
-        if (result.counts.MISMATCH !== 0)
-          throw new Error(
-            "Refusing to record " + result.counts.MISMATCH + " substitution mismatches",
-          );
         const fixture = {
           schema: 1,
           sourceHash: fingerprint(),
@@ -763,7 +769,7 @@ function main() {
       timeoutMs: options.timeoutMs,
       shell,
       mismatchOutput: mismatchOutputPath,
-      reports: reports.map(({ results, ...item }) => item),
+      reports: reports.map(({ results: _results, ...item }) => item),
     };
     const text = JSON.stringify(report, null, 2) + "\n";
     if (options.output) {
