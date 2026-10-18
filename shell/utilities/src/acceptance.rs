@@ -1,28 +1,26 @@
-//! Original acceptance stand-ins, compiled only with acceptance-utilities.
-use super::{endpoint, grep, write};
-use crate::{
-    commands::Utility,
+//! Original cat, mkdir and seq implementations extracted from bash-web 81205d0.
+use super::{Context, Utility, endpoint, grep, write};
+use shell_engine::{
     executor::Budget,
-    interpreter::{Context, Outcome},
     io::{Endpoint, FdTable, OpenOptions},
-    state::{SharedState, absolute},
+    state::absolute,
 };
 use std::fmt::Write as _;
 
-pub(super) async fn run(
+pub(crate) async fn run(
     utility: Utility,
     args: Vec<String>,
-    state: &SharedState,
+    cwd: &str,
     fds: &FdTable,
     context: &Context,
-) -> Result<Outcome, i32> {
+) -> Result<i32, i32> {
     match utility {
-        Utility::Cat => cat(args, state, fds, context).await?,
-        Utility::Grep => return grep::run(args, state, fds, context).await,
-        Utility::Mkdir => return mkdir(args, state, fds, context).await,
+        Utility::Cat => cat(args, cwd, fds, context).await?,
+        Utility::Grep => return grep::run(args, cwd, fds, context).await,
+        Utility::Mkdir => return mkdir(args, cwd, fds, context).await,
         Utility::Seq => seq(&args, fds, context).await?,
     }
-    Ok(Outcome::status(0))
+    Ok(0)
 }
 
 async fn copy(input: Endpoint, fds: &FdTable, context: &Context) -> Result<(), i32> {
@@ -41,30 +39,20 @@ async fn copy(input: Endpoint, fds: &FdTable, context: &Context) -> Result<(), i
     }
 }
 
-async fn cat(
-    args: Vec<String>,
-    state: &SharedState,
-    fds: &FdTable,
-    context: &Context,
-) -> Result<(), i32> {
+async fn cat(args: Vec<String>, cwd: &str, fds: &FdTable, context: &Context) -> Result<(), i32> {
     if args.is_empty() {
         return copy(endpoint(fds, 0)?, fds, context).await;
     }
     for path in args {
-        cat_path(&path, state, fds, context).await?;
+        cat_path(&path, cwd, fds, context).await?;
     }
     Ok(())
 }
-async fn cat_path(
-    path: &str,
-    state: &SharedState,
-    fds: &FdTable,
-    context: &Context,
-) -> Result<(), i32> {
-    if let Some(input) = crate::interpreter::device_endpoint(path, fds) {
+async fn cat_path(path: &str, cwd: &str, fds: &FdTable, context: &Context) -> Result<(), i32> {
+    if let Some(input) = super::device_endpoint(path, fds) {
         return copy(input?, fds, context).await;
     }
-    let path = absolute(&state.borrow().cwd, path);
+    let path = absolute(cwd, path);
     let options = OpenOptions::default();
     let input = context
         .cancel
@@ -74,12 +62,7 @@ async fn cat_path(
         .map_err(|e| e.status())?;
     copy(input, fds, context).await
 }
-async fn mkdir(
-    args: Vec<String>,
-    state: &SharedState,
-    fds: &FdTable,
-    context: &Context,
-) -> Result<Outcome, i32> {
+async fn mkdir(args: Vec<String>, cwd: &str, fds: &FdTable, context: &Context) -> Result<i32, i32> {
     let mut parents = false;
     let mut operands = Vec::new();
     let mut options = true;
@@ -102,7 +85,7 @@ async fn mkdir(
         let path = if operand.is_empty() {
             String::new()
         } else {
-            absolute(&state.borrow().cwd, &operand)
+            absolute(cwd, &operand)
         };
         let result = context
             .cancel
@@ -115,11 +98,11 @@ async fn mkdir(
         status = 1;
         mkdir_error(&operand, error, fds, context).await?;
     }
-    Ok(Outcome::status(status))
+    Ok(status)
 }
 async fn mkdir_error(
     operand: &str,
-    error: crate::io::IoError,
+    error: shell_engine::io::IoError,
     fds: &FdTable,
     context: &Context,
 ) -> Result<(), i32> {

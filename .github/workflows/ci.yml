@@ -131,7 +131,6 @@ jobs:
     timeout-minutes: 20
     env:
       RUSTUP_TOOLCHAIN: 1.98.1
-      BASH_WEB_BUILD: ${{ matrix.build }}
       CARGO_TARGET_DIR: .build/shell
     steps:
       - uses: actions/checkout@v4
@@ -151,18 +150,18 @@ jobs:
           workspaces: shell -> ../.build/shell
       - uses: ./.github/actions/wasi-sdk
       - run: npm ci --ignore-scripts
-      - run: npm run test:build-presets
-      - run: npm run typecheck:build-presets
+      - run: npm run test:guest-build
+      - run: npm run typecheck:guest-build
       - run: RUSTUP_TOOLCHAIN=1.98.1 cargo fmt --manifest-path shell/Cargo.toml --all --check
-      - name: Native ${{ matrix.build }} tests
+      - name: Native core tests
         run: >-
           RUSTUP_TOOLCHAIN=1.98.1 cargo test --locked --manifest-path shell/Cargo.toml
-          --workspace --no-default-features --features ${{ matrix.build }}
-          --target-dir "$CARGO_TARGET_DIR/native-${{ matrix.build }}" -j2 --no-fail-fast
-      - name: Capability dependency proof (${{ matrix.build }})
+          --workspace
+          --target-dir "$CARGO_TARGET_DIR/native-core" -j2 --no-fail-fast
+      - name: Capability dependency proof (core)
         run: RUSTUP_TOOLCHAIN=1.98.1 node scripts/check-shell-capabilities.ts
-      - name: Patched WASI ${{ matrix.build }} tests and release size
-        run: ulimit -c 0; npm run test:shell:wasi:${{ matrix.build }}
+      - name: Patched WASI core tests and release size
+        run: ulimit -c 0; npm run test:shell:wasi
         env:
           CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime run -W max-memory-size=268435456
 
@@ -214,6 +213,7 @@ jobs:
           bwrap --unshare-all --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 --proc /proc --dev /dev -- /usr/bin/true
       - run: npm run test:shell:scoreboard
       - run: npm run build:shell
+      - run: npm run build:utilities
       - run: npm run compat:shell
         env:
           BASH_COMPAT_OUT: ${{ runner.temp }}/own-shell-current.json

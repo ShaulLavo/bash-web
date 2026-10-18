@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.55",
+  "version": "0.0.56",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -17,21 +17,20 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./shell": "./src/shell.ts"
+    "./shell": "./src/shell.ts",
+    "./utilities/cat": "./src/utilities/cat.ts",
+    "./utilities/grep": "./src/utilities/grep.ts",
+    "./utilities/mkdir": "./src/utilities/mkdir.ts",
+    "./utilities/seq": "./src/utilities/seq.ts"
   },
   "scripts": {
     "format:check": "oxfmt --check scripts shell src tests package.json vite.config.ts playwright.config.ts tsconfig.json .oxlintrc.json .knip.jsonc quality docs/code-quality.md '!scripts/fixtures/**/*.json'",
     "test:rust": "node scripts/check-shell-parser.mjs && cargo fmt --manifest-path shell/Cargo.toml --all --check && cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2",
     "build:shell": "node scripts/build-shell.ts",
-    "build:shell:lite": "BASH_WEB_BUILD=lite node scripts/build-shell.ts",
-    "test:shell:lite": "cargo test --locked --manifest-path shell/Cargo.toml --workspace --no-default-features --features lite --target-dir .build/shell/lite -j2",
-    "test:shell:wasi:lite": "BASH_WEB_BUILD=lite node scripts/test-shell-wasi.ts",
     "check:capabilities": "node scripts/check-shell-capabilities.ts",
-    "test:build-presets": "node --test scripts/test-shell-build.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts",
-    "typecheck:build-presets": "tsc --ignoreConfig --noEmit --strict --skipLibCheck --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/shell-build.ts scripts/check-shell-capabilities.ts scripts/test-shell-build.ts scripts/wasi-build.ts scripts/test-shell-wasi.ts scripts/test-wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts",
     "test:shell:wasi": "node scripts/test-shell-wasi.ts",
-    "test:shell:scoreboard": "node --test scripts/test-shell-scoreboard*.mjs scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-bash-compat*.mjs",
-    "compat:shell": "BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell node scripts/bash-compat.mjs",
+    "test:shell:scoreboard": "npm run build:node-harness && node --test scripts/test-shell-scoreboard*.mjs scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-bash-compat*.mjs",
+    "compat:shell": "npm run build:node-harness && BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell BASH_COMPAT_UTILITY_DIR=${CARGO_TARGET_DIR:-.build/shell}/wasm32-wasip1/release node scripts/bash-compat.mjs",
     "prepare:shell-corpus": "node scripts/prepare-shell-corpus.mjs",
     "fuzz:shell-braces": "node scripts/fuzz-shell-braces.mjs",
     "test:fuzz-shell-braces": "node --test scripts/test-fuzz-shell-braces.mjs",
@@ -61,7 +60,7 @@
     "fuzz:shell-path:ci": "node scripts/fuzz-shell-path.ts --replay scripts/fixtures/shell-path-seed-1.json --replay scripts/fixtures/shell-path-seed-42.json",
     "sources:browser": "node scripts/sources.mjs",
     "build:shell:browser": "node scripts/build-shell-browser.mjs",
-    "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:test-guest && npm run notices:browser && vite build && node scripts/finish-build.mjs",
+    "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:utilities && npm run build:test-guest && npm run notices:browser && vite build && node scripts/finish-build.mjs",
     "typecheck:browser": "tsc --noEmit",
     "test:browser": "playwright test",
     "test:runtime:terminal": "node --expose-gc scripts/test-runtime-terminal.mjs",
@@ -79,16 +78,18 @@
     "test:check-layers": "node --test scripts/test-check-layers.ts",
     "typecheck:layers": "tsc --ignoreConfig --noEmit --strict --skipLibCheck --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-layers.ts scripts/test-check-layers.ts",
     "compat": "npm run compat:shell",
-    "build:shell:full": "BASH_WEB_BUILD=full node scripts/build-shell.ts",
-    "test:shell:full": "cargo test --locked --manifest-path shell/Cargo.toml --workspace --no-default-features --features full --target-dir .build/shell/full -j2",
-    "test:shell:wasi:full": "BASH_WEB_BUILD=full node scripts/test-shell-wasi.ts",
     "lint": "oxlint --config .oxlintrc.json --deny-warnings src scripts tests vite.config.ts playwright.config.ts",
     "typecheck": "tsc --noEmit",
     "check:unused": "knip --config .knip.jsonc --treat-config-hints-as-errors",
     "check:duplicates": "node scripts/check-duplicates.mjs",
     "check:rust": "node scripts/check-rust-quality.mjs",
     "test:quality-gates": "node --test scripts/test-quality-gates.mjs",
-    "quality": "npm run sources:browser && npm run build:worker && npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates && npm run check:rust"
+    "quality": "npm run sources:browser && npm run build:worker && npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates && npm run check:rust",
+    "build:shell:core": "node scripts/build-shell.ts",
+    "build:utilities": "node scripts/build-utilities.ts",
+    "build:node-harness": "node scripts/build-node-harness.ts",
+    "test:guest-build": "node --test scripts/test-shell-build.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts",
+    "typecheck:guest-build": "tsc --ignoreConfig --noEmit --strict --skipLibCheck --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/shell-build.ts scripts/check-shell-capabilities.ts scripts/test-shell-build.ts scripts/wasi-build.ts scripts/test-shell-wasi.ts scripts/test-wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",

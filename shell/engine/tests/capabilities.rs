@@ -6,7 +6,6 @@ use shell_engine::{
     io::{Capture, Endpoint, FdTable, MemoryFs, capture},
     process::InProcessHost,
 };
-#[cfg(not(feature = "acceptance-utilities"))]
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -95,18 +94,8 @@ fn both_builds_keep_query_membership_distinct_from_internal_utility_dispatch() {
     assert!(rig.errors.bytes().is_empty());
 }
 
-#[cfg(feature = "acceptance-utilities")]
 #[test]
-fn full_retains_all_four_acceptance_standins() {
-    let rig = Rig::new();
-    assert_eq!(rig.run("mkdir directory; printf 'one\\ntwo\\n' > directory/input; cat directory/input | grep two; seq 2"), 0);
-    assert_eq!(rig.output.bytes(), b"two\n1\n2\n");
-    assert!(rig.errors.bytes().is_empty());
-}
-
-#[cfg(not(feature = "acceptance-utilities"))]
-#[test]
-fn lite_missing_utilities_are_127_not_placeholders_and_do_not_change_options() {
+fn core_missing_utilities_are_127_not_placeholders_and_do_not_change_options() {
     let rig = Rig::new();
     for name in ["cat", "grep", "mkdir", "seq"] {
         assert_eq!(rig.run(&format!("set -u; shopt -s nullglob; {name}")), 127);
@@ -114,18 +103,12 @@ fn lite_missing_utilities_are_127_not_placeholders_and_do_not_change_options() {
     }
     let errors = String::from_utf8(rig.errors.bytes()).unwrap();
     assert_eq!(errors.matches("command not found").count(), 8);
-    assert_eq!(
-        errors
-            .matches("bash-web Lite; omitted capability: acceptance-utilities")
-            .count(),
-        8
-    );
+    assert!(!errors.contains("omitted capability"));
     assert!(rig.output.bytes().is_empty());
 }
 
-#[cfg(not(feature = "acceptance-utilities"))]
 #[test]
-fn lite_uses_ordinary_external_resolution_prefixes_functions_and_queries() {
+fn core_uses_ordinary_external_resolution_prefixes_functions_and_queries() {
     let rig = Rig::new();
     let calls = Rc::new(RefCell::new(Vec::new()));
     for name in ["cat", "grep", "mkdir", "seq"] {
@@ -159,9 +142,8 @@ fn lite_uses_ordinary_external_resolution_prefixes_functions_and_queries() {
     assert_eq!(output.matches(" is /utilities/").count(), 4);
 }
 
-#[cfg(not(feature = "acceptance-utilities"))]
 #[test]
-fn lite_external_utility_heredocs_keep_command_local_scope_and_function_errors() {
+fn core_external_utility_heredocs_keep_command_local_scope_and_function_errors() {
     for name in ["cat", "grep", "mkdir", "seq"] {
         let rig = Rig::new();
         rig.host
@@ -200,7 +182,6 @@ fn lite_external_utility_heredocs_keep_command_local_scope_and_function_errors()
     }
 }
 
-#[cfg(not(feature = "acceptance-utilities"))]
 async fn copy_heredoc(
     request: shell_engine::process::SpawnRequest,
     cancel: shell_engine::executor::Cancel,

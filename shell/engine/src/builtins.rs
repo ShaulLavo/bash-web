@@ -1,10 +1,4 @@
-//! Small streaming builtins needed by the engine acceptance gate. Utilities here
-//! are original adapters except the explicitly attributed grep subset. The full
-//! utility/compatibility work is still deferred.
-#[cfg(feature = "acceptance-utilities")]
-mod acceptance;
-#[cfg(feature = "acceptance-utilities")]
-mod grep;
+//! Bash builtins. External commands are installed by the embedding runtime.
 mod printf;
 pub(crate) mod test;
 use crate::{
@@ -154,10 +148,6 @@ pub(crate) async fn run(
             write(&fds, b"\n", &context).await?;
         }
         Builtin::Printf => printf::run(&args, &state, &fds, &context, work).await?,
-        #[cfg(feature = "acceptance-utilities")]
-        Builtin::AcceptanceUtility(utility) => {
-            return acceptance::run(utility, args, &state, &fds, &context).await;
-        }
         Builtin::Read => {
             let mut fd = 0;
             let mut name = None;

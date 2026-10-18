@@ -41,7 +41,7 @@ function fixture(outputSize = 2) {
       section(1, [3, 0x60, 4, 0x7f, 0x7f, 0x7f, 0x7f, 1, 0x7f, 0x60, 1, 0x7f, 0, 0x60, 0, 0]),
       section(2, imports),
       section(3, [1, 2]),
-      section(5, [1, 0, 1]),
+      section(5, [1, 0].concat(leb(Math.ceil((outputSize + 32) / 65536)))),
       section(7, [2].concat(string("memory"), [2, 0], string("_start"), [0, 2])),
       section(10, [1].concat(leb(body.length), body)),
       section(11, [1, 0, 0x41, 0, 0x0b].concat(leb(data.length), Array.from(data))),

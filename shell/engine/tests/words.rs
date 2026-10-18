@@ -1,6 +1,5 @@
 //! Word cases adapted from the pinned Bashkit sources in sources.lock.json.
 //! The fixture observes argv directly, without relying on printf's format rules.
-#[cfg(not(feature = "acceptance-utilities"))]
 mod support;
 use futures::FutureExt;
 use shell_engine::{
@@ -54,7 +53,6 @@ impl Rig {
         fds.insert(1, out);
         fds.insert(2, err);
         shell.set_descriptors(fds).unwrap();
-        #[cfg(not(feature = "acceptance-utilities"))]
         support::register_utilities(&host, &fs, false);
         Self {
             ex,

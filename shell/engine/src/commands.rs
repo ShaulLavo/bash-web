@@ -8,8 +8,6 @@ pub(crate) enum Builtin {
     False,
     Echo,
     Printf,
-    #[cfg(feature = "acceptance-utilities")]
-    AcceptanceUtility(Utility),
     Read,
     Declaration,
     Cd,
@@ -27,26 +25,6 @@ pub(crate) enum Builtin {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Utility {
-    Cat,
-    Grep,
-    Mkdir,
-    Seq,
-}
-impl Utility {
-    const fn handler(self) -> Option<Handler> {
-        #[cfg(feature = "acceptance-utilities")]
-        {
-            Some(Handler::Builtin(Builtin::AcceptanceUtility(self)))
-        }
-        #[cfg(not(feature = "acceptance-utilities"))]
-        {
-            None
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Handler {
     Builtin(Builtin),
     Command,
@@ -59,7 +37,6 @@ pub(crate) enum Handler {
 pub(crate) enum Class {
     SpecialBuiltin,
     RegularBuiltin,
-    AcceptanceUtility,
     Keyword,
 }
 
@@ -69,39 +46,9 @@ pub(crate) enum Declaration {
     AssignmentOperands,
 }
 
-/// Compile-time ownership, independent of mutable shell options.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Capability {
-    Core,
-    AcceptanceUtilities,
-}
-
-impl Capability {
-    const fn included(self) -> bool {
-        match self {
-            Self::Core => true,
-            Self::AcceptanceUtilities => cfg!(feature = "acceptance-utilities"),
-        }
-    }
-    pub(crate) const fn name(self) -> &'static str {
-        match self {
-            Self::Core => "core",
-            Self::AcceptanceUtilities => "acceptance-utilities",
-        }
-    }
-}
-
-pub(crate) const fn build_name() -> &'static str {
-    if cfg!(feature = "acceptance-utilities") {
-        "Full"
-    } else {
-        "Lite"
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Availability {
-    Included(Capability),
+    Included,
     UnsupportedSyntax,
 }
 
@@ -123,16 +70,8 @@ pub(crate) struct Command {
 impl Command {
     pub(crate) fn handler(&self) -> Option<Handler> {
         match self.availability {
-            Availability::Included(capability) if capability.included() => self.handler,
-            Availability::Included(_) => None,
+            Availability::Included => self.handler,
             Availability::UnsupportedSyntax => None,
-        }
-    }
-
-    pub(crate) fn omitted_capability(&self) -> Option<Capability> {
-        match self.availability {
-            Availability::Included(capability) if !capability.included() => Some(capability),
-            _ => None,
         }
     }
 
@@ -141,14 +80,13 @@ impl Command {
         self.class == Class::Keyword
     }
 
-    /// Stand-ins execute internally but `command -v/-V` must still search PATH.
+    /// Builtin query metadata is independent of PATH lookup.
     pub(crate) fn query_builtin(&self) -> bool {
         matches!(self.class, Class::SpecialBuiltin | Class::RegularBuiltin)
             && self.handler().is_some()
     }
 
-    /// This deliberately differs from query_builtin: grep/mkdir retain shell
-    /// heredoc errors, while cat/seq retain command-local heredoc errors.
+    /// Builtin heredoc errors belong to the shell. External errors are command-local.
     pub(crate) fn shell_heredoc_errors(&self) -> bool {
         self.heredoc_errors == HeredocErrors::Shell && self.handler().is_some()
     }
@@ -164,7 +102,7 @@ const fn core(
         name,
         class,
         declaration,
-        availability: Availability::Included(Capability::Core),
+        availability: Availability::Included,
         handler: Some(handler),
         heredoc_errors: HeredocErrors::Shell,
     }
@@ -188,16 +126,6 @@ const fn declaration(name: &'static str, class: Class) -> Command {
         Handler::Builtin(Builtin::Declaration),
     )
 }
-const fn utility(name: &'static str, utility: Utility, heredoc_errors: HeredocErrors) -> Command {
-    Command {
-        name,
-        class: Class::AcceptanceUtility,
-        declaration: Declaration::Ordinary,
-        availability: Availability::Included(Capability::AcceptanceUtilities),
-        handler: utility.handler(),
-        heredoc_errors,
-    }
-}
 const fn keyword(name: &'static str, availability: Availability) -> Command {
     Command {
         name,
@@ -218,10 +146,6 @@ static COMMANDS: &[Command] = &[
     regular("false", Builtin::False),
     regular("echo", Builtin::Echo),
     regular("printf", Builtin::Printf),
-    utility("cat", Utility::Cat, HeredocErrors::CommandLocal),
-    utility("grep", Utility::Grep, HeredocErrors::Shell),
-    utility("mkdir", Utility::Mkdir, HeredocErrors::Shell),
-    utility("seq", Utility::Seq, HeredocErrors::CommandLocal),
     regular("read", Builtin::Read),
     declaration("export", Class::SpecialBuiltin),
     declaration("local", Class::RegularBuiltin),
@@ -257,27 +181,27 @@ static COMMANDS: &[Command] = &[
         Declaration::Ordinary,
         Handler::Let,
     ),
-    keyword("if", Availability::Included(Capability::Core)),
-    keyword("then", Availability::Included(Capability::Core)),
-    keyword("else", Availability::Included(Capability::Core)),
-    keyword("elif", Availability::Included(Capability::Core)),
-    keyword("fi", Availability::Included(Capability::Core)),
-    keyword("case", Availability::Included(Capability::Core)),
-    keyword("esac", Availability::Included(Capability::Core)),
-    keyword("for", Availability::Included(Capability::Core)),
+    keyword("if", Availability::Included),
+    keyword("then", Availability::Included),
+    keyword("else", Availability::Included),
+    keyword("elif", Availability::Included),
+    keyword("fi", Availability::Included),
+    keyword("case", Availability::Included),
+    keyword("esac", Availability::Included),
+    keyword("for", Availability::Included),
     keyword("select", Availability::UnsupportedSyntax),
-    keyword("while", Availability::Included(Capability::Core)),
-    keyword("until", Availability::Included(Capability::Core)),
-    keyword("do", Availability::Included(Capability::Core)),
-    keyword("done", Availability::Included(Capability::Core)),
-    keyword("in", Availability::Included(Capability::Core)),
-    keyword("function", Availability::Included(Capability::Core)),
+    keyword("while", Availability::Included),
+    keyword("until", Availability::Included),
+    keyword("do", Availability::Included),
+    keyword("done", Availability::Included),
+    keyword("in", Availability::Included),
+    keyword("function", Availability::Included),
     keyword("time", Availability::UnsupportedSyntax),
-    keyword("{", Availability::Included(Capability::Core)),
-    keyword("}", Availability::Included(Capability::Core)),
-    keyword("!", Availability::Included(Capability::Core)),
-    keyword("[[", Availability::Included(Capability::Core)),
-    keyword("]]", Availability::Included(Capability::Core)),
+    keyword("{", Availability::Included),
+    keyword("}", Availability::Included),
+    keyword("!", Availability::Included),
+    keyword("[[", Availability::Included),
+    keyword("]]", Availability::Included),
     keyword("coproc", Availability::UnsupportedSyntax),
 ];
 

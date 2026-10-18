@@ -1424,3 +1424,13 @@ mod tests {
         assert_eq!(read.read(&mut bytes).now_or_never(), Some(Ok(0)));
     }
 }
+
+pub fn device_endpoint(path: &str, fds: &FdTable) -> Option<Result<Endpoint, i32>> {
+    let fd = match path {
+        "/dev/stdin" => 0,
+        "/dev/stdout" => 1,
+        "/dev/stderr" => 2,
+        _ => path.strip_prefix("/dev/fd/")?.parse::<u32>().ok()?,
+    };
+    Some(fds.get(fd).ok_or(1))
+}

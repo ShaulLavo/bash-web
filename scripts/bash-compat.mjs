@@ -63,7 +63,7 @@ const engines = {
     modulePath: resolve(
       root,
       process.env.BASH_COMPAT_SHELL_WASM ??
-        `${process.env.CARGO_TARGET_DIR ?? ".build/shell"}/wasm32-wasip1/release/shell-engine.wasm`,
+        `${process.env.CARGO_TARGET_DIR ?? ".build/shell"}/wasm32-wasip1/release/shell-runtime.wasm`,
     ),
   },
 };
@@ -742,6 +742,7 @@ class Pool {
         engine: this.engine.startsWith("bashkit") ? "bashkit" : this.engine,
         modulePath: engines[this.engine].modulePath,
         scratch,
+        utilityDirectory: process.env.BASH_COMPAT_UTILITY_DIR,
         tmp: virtualTmp,
         home: virtualHome,
         env: { HOME: virtualHome, TMP: virtualTmp, SH: "bash", LC_ALL: "C.UTF-8" },

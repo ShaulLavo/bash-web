@@ -5,13 +5,12 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
-import { shellBuild, shellFeatures, shellTargetDirectory } from "./shell-build.ts";
+import { shellTargetDirectory } from "./shell-build.ts";
 import { wasiBuildEnvironment } from "./wasi-build.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
 const root = resolve(import.meta.dirname, "..");
-const build = shellBuild();
-const cargoEnv = wasiBuildEnvironment(root, shellTargetDirectory(root, build));
+const cargoEnv = wasiBuildEnvironment(root, shellTargetDirectory(root));
 const cargo = (
   args: readonly string[],
   options: import("node:child_process").ExecFileSyncOptions = {},
@@ -42,7 +41,7 @@ cargo(
   { env },
 );
 cargo(
-  ["test"].concat(manifest, shellFeatures(build), [
+  ["test"].concat(manifest, [
     "--target",
     "wasm32-wasip1",
     "-p",
@@ -63,7 +62,7 @@ cargo(
   { env },
 );
 cargo(
-  ["build"].concat(manifest, shellFeatures(build), [
+  ["build"].concat(manifest, [
     "--target",
     "wasm32-wasip1",
     "-p",
@@ -72,7 +71,7 @@ cargo(
     "-j2",
   ]),
 );
-const wasm = resolve(shellTargetDirectory(root, build), "wasm32-wasip1/release/shell-engine.wasm");
+const wasm = resolve(shellTargetDirectory(root), "wasm32-wasip1/release/shell-engine.wasm");
 verifyWasiGuest(wasm);
 const output = execFileSync(
   "wasmtime",
@@ -92,9 +91,7 @@ assert.equal(separate.status, 7);
 assert.equal(separate.stdout.toString(), "out");
 assert.equal(separate.stderr.toString(), "err");
 const longErrors = invoke(
-  build === "full"
-    ? "seq 20000 >&2; printf done; exit 7"
-    : "for ((i=1;i<=20000;i++)); do printf '%s\n' \"$i\" >&2; done; printf done; exit 7",
+  "for ((i=1;i<=20000;i++)); do printf '%s\n' \"$i\" >&2; done; printf done; exit 7",
 );
 assert.equal(longErrors.status, 7);
 assert.equal(longErrors.stdout.toString(), "done");
@@ -110,6 +107,6 @@ const compressed = brotliCompressSync(bytes, {
   params: { [constants.BROTLI_PARAM_QUALITY]: 11 },
 });
 console.log(
-  `Shell ${build} release WASI: ${bytes.length} bytes raw; ${gzipSync(bytes, { level: 9 }).length} bytes gzip-9; ${compressed.length} bytes brotli-11`,
+  `Shell core release WASI: ${bytes.length} bytes raw; ${gzipSync(bytes, { level: 9 }).length} bytes gzip-9; ${compressed.length} bytes brotli-11`,
 );
 assert.ok(compressed.length <= 1_000_000, "shell core exceeds Brush's 1.0 MB brotli guardrail");
