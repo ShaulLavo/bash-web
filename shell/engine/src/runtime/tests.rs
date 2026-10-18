@@ -810,7 +810,7 @@ fn typed_start_failure_first_group_consumer_releases_cleanup_reservation() {
 }
 
 #[test]
-fn typed_start_failure_status_and_expired_stderr_fallback() {
+fn typed_start_failure_keeps_redirected_stderr_until_diagnostic() {
     for (errno, status, message) in [
         (48, 254, "fork: Cannot allocate memory"),
         (6, 254, "fork: Resource temporarily unavailable"),
@@ -838,12 +838,14 @@ fn typed_start_failure_status_and_expired_stderr_fallback() {
                 .unwrap(),
         );
         assert_eq!(code, if status == 254 { 254 } else { 0 }, "errno {errno}");
-        assert_eq!(
-            error_output.bytes(),
-            format!("/usr/bin/bash: {message}\n").as_bytes(),
-            "errno {errno}"
-        );
-        assert!(fake.fs.read_file("/failure").unwrap().is_empty());
+        let diagnostic = format!("/usr/bin/bash: {message}\n");
+        if status == 254 {
+            assert_eq!(error_output.bytes(), diagnostic.as_bytes(), "errno {errno}");
+            assert!(fake.fs.read_file("/failure").unwrap().is_empty());
+        } else {
+            assert!(error_output.bytes().is_empty(), "errno {errno}");
+            assert_eq!(fake.fs.read_file("/failure").unwrap(), diagnostic.as_bytes(), "errno {errno}");
+        }
         let expected = if status == 254 {
             String::new()
         } else {
@@ -857,6 +859,24 @@ fn typed_start_failure_status_and_expired_stderr_fallback() {
             0
         );
         shutdown_session(&executor, &runtime, &fake, session);
+    }
+}
+
+#[test]
+fn start_failure_pipeline_delivers_diagnostic_before_eof() {
+    for (errno, code) in [(44, 127), (2, 126), (45, 126)] {
+        let (executor, fake, runtime) = setup();
+        fake.outcomes.borrow_mut().insert("/startup-tool".into(), WaitResult::StartFailed(errno));
+        let (stderr, parent_output) = io::capture(4096);
+        fake.fds.borrow_mut().insert(2, stderr);
+        let session = runtime_session(&executor, &runtime);
+        let command = "/startup-tool 2>&1 | runtime-cat; printf 'status:%s:%s\\n' \"$?\" \"${PIPESTATUS[*]}\"";
+        let status = finish(&executor, &runtime, session.start(command).unwrap());
+        let output = fake.output.bytes();
+        shutdown_session(&executor, &runtime, &fake, session);
+        assert_eq!(status, 0);
+        assert!(parent_output.bytes().is_empty(), "diagnostic escaped redirected pipe");
+        assert_eq!(output, format!("/usr/bin/bash: /startup-tool: {}\nstatus:0:{code} 0\n", ProcessError::StartFailed(errno)).as_bytes());
     }
 }
 
