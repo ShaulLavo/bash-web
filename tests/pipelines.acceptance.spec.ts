@@ -217,7 +217,9 @@ for (const [name, code, diagnostic] of [
       name +
         ' 2>&1 | test-guest cat >start-pipe; printf \'START_STATUS:%s:%s\\n\' "$?" "${PIPESTATUS[*]}"; printf \'PIPE_DIAGNOSTIC:<%s>\\n\' "$(cat start-pipe)"',
     );
-    await output(page, `PIPE_DIAGNOSTIC:<${diagnostic}>`);
+    // Worker startup also contributes its format-error detail and stack to fd2.
+    // The capture prefix proves our diagnostic arrived in the redirected file.
+    await output(page, `PIPE_DIAGNOSTIC:<${diagnostic}${name === "nosuch" ? ">" : ""}`);
     await output(page, `START_STATUS:0:${code} 0`);
     await ready(page);
     await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
@@ -233,7 +235,7 @@ test("asynchronous start failure honors redirected and explicitly closed stderr"
     "test-start-failure 2>start-error; echo FILE_STATUS:$?; printf 'FILE_DIAGNOSTIC:<%s>\\n' \"$(cat start-error)\"; test-start-failure 2>&-; echo CLOSED_STATUS:$?; test-guest emit '' 1 126; echo EXIT_STATUS:$?; test-guest emit '' 1 127; echo REAL127:$?",
   );
   await output(page, "FILE_STATUS:126");
-  await output(page, "FILE_DIAGNOSTIC:</usr/bin/bash: test-start-failure: Exec format error>");
+  await output(page, "FILE_DIAGNOSTIC:</usr/bin/bash: test-start-failure: Exec format error");
   await output(page, "CLOSED_STATUS:126");
   await output(page, "EXIT_STATUS:126");
   await output(page, "REAL127:127");

@@ -793,7 +793,7 @@ fn child_start_readiness_is_non_consuming_and_precedes_terminal_cleanup() {
                 .0
                 .waiters
                 .borrow()
-                .iter()
+                .values()
                 .any(|waiter| waiter.kind == 6)
         );
         gate.cancel();
