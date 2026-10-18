@@ -483,8 +483,11 @@ the prototype source above. The current `src/runtime/worker.ts` is a small
 original shell-specific `WorkerExecutor` passed to the published
 `waffle/browser/worker` bootstrap; it retains only shell imports/phase/memory
 observations, not generic runtime setup or cleanup. The adapted
-`src/runtime/runtime-terminals.ts` retains only the bounded
-`createBridgeTerminal` stream; Waffle owns the terminal/descriptor codec.
+`src/runtime/runtime-terminals.ts` retains the bounded
+`createBridgeTerminal` stream and restores the original prototype
+`src/wasi-host.ts` cooked-input policy without importing that generic WASI host.
+This is a bounded local adapter, not a full cross-worker tty discipline; Waffle
+owns the terminal/descriptor codec and the planned terminal endpoint.
 
 The root lifecycle fencing from Bun's `web/src/runner.ts` passed through
 prototype `src/runtime/browser-runtime.ts` into `src/runtime/shell-host.ts`.

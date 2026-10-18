@@ -48,6 +48,7 @@ export class BrowserSession {
   private failed = false;
   private queued: Uint8Array[] = [];
   private queuedBytes = 0;
+  private pendingDiscard = false;
   private pendingInputTime = 0;
   private renderPending = false;
   private startupReject: ((reason: unknown) => void) | undefined;
@@ -142,8 +143,13 @@ export class BrowserSession {
       this.queuedBytes = 0;
       this.pendingInputTime = 0;
       this.renderPending = false;
+      // Block terminal reads before signalling the guest. If an inherited reader
+      // currently owns the input lock, the barrier keeps it from consuming stale
+      // bytes while the next pump retries the bounded discard.
+      this.bridge.interrupt();
+      this.pendingDiscard = !this.bridge.discardInput();
+      if (!this.pendingDiscard) this.bridge.resumeInput();
       if (this.shell) this.shell.interrupt();
-      else this.bridge.interrupt();
       this.phase = -1;
       this.options.onState("interrupting");
       return;
@@ -180,6 +186,7 @@ export class BrowserSession {
     clearTimeout(this.timer);
     this.queued = [];
     this.queuedBytes = 0;
+    this.pendingDiscard = false;
     return (this.disposal = (async () => {
       // createShell guarantees rejected admission has completed its own cleanup.
       // A facade that wins the cancellation race is still ours to dispose and await.
@@ -212,6 +219,11 @@ export class BrowserSession {
     void this.dispose();
   }
   private flushInput() {
+    if (this.pendingDiscard) {
+      if (!this.bridge.discardInput()) return;
+      this.pendingDiscard = false;
+      this.bridge.resumeInput();
+    }
     if (this.bridge.cancelled()) return;
     while (this.queued.length) {
       const bytes = this.queued[0];

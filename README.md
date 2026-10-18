@@ -49,8 +49,9 @@ the same runtime applications supply.
 
 ## Build and test
 
-Prerequisites are Node 26.7 or newer, npm, Rust 1.98.1 through rustup, and
-wasmtime for WASI tests.
+Prerequisites are Node 26.7.0, npm, Rust 1.98.1 through rustup, and
+wasmtime for WASI tests. The frozen compatibility oracle requires exactly
+Node 26.7.0; CI and standalone verification use that version.
 
 ```sh
 git clone https://github.com/ShaulLavo/bash-web.git

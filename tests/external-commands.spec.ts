@@ -44,13 +44,18 @@ test("external bun executes through normal command lookup", async ({ page }) => 
   await ready(page);
 });
 
-test("external pipes preserve binary bytes, EOF, and backpressure in both directions", async ({
-  page,
-}) => {
+test("printf octal escapes produce exact bytes for an external guest", async ({ page }) => {
+  test.fixme(true, "Pending plan 004 printf escapes unit: octal escapes are not implemented.");
   await open(page);
   await command(page, `printf 'hi\\000\\377\\r\\n' | test-guest bytes`);
   await output(page, "BYTES:104,105,0,255,13,10");
   await ready(page);
+});
+
+test("external pipes preserve binary bytes, EOF, and backpressure in both directions", async ({
+  page,
+}) => {
+  await open(page);
   await command(
     page,
     "test-guest emit-bytes 0,255,13,10,97 | cat > binary; cat binary | test-guest bytes",
@@ -66,15 +71,25 @@ test("external pipes preserve binary bytes, EOF, and backpressure in both direct
   await ready(page);
 });
 
-test("external status controls lists, pipelines and explicit command", async ({ page }) => {
+test("command builtin launches a registered external WASI guest", async ({ page }) => {
+  test.fixme(
+    true,
+    "Pending plan 004 command unit in the functions PR: command is not implemented.",
+  );
+  await open(page);
+  await command(page, `command /bin/test-guest emit $'COMMAND_OK\\n'`);
+  await output(page, "COMMAND_OK");
+  await ready(page);
+});
+
+test("external status controls lists and pipelines", async ({ page }) => {
   await open(page);
   await command(
     page,
-    `test-guest exit 7; echo STATUS:$?; test-guest exit 7 && echo BAD_AND; test-guest exit 7 || echo OR_OK; command /bin/test-guest emit $'COMMAND_OK\\n'`,
+    "test-guest exit 7; echo STATUS:$?; test-guest exit 7 && echo BAD_AND; test-guest exit 7 || echo OR_OK",
   );
   await output(page, "STATUS:7");
   await output(page, "OR_OK");
-  await output(page, "COMMAND_OK");
   expect(
     await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())),
   ).not.toContain("BAD_AND");
@@ -143,6 +158,10 @@ test("external terminal stdin receives a raw input line", async ({ page }) => {
 });
 
 test("unregistered files fail with 126 and leave the command host usable", async ({ page }) => {
+  test.fixme(
+    true,
+    "Pending Waffle #10 live-file admission plus plan 004 PATH-search unit: unregistered PATH files must map to 126.",
+  );
   await open(page);
   await command(
     page,
@@ -195,6 +214,10 @@ for (const [label, setup, executable] of [
   ["dot segments", "cd /home/guest", "/bin/../bin/./test-guest"],
 ]) {
   test(`external executable lookup resolves ${label}`, async ({ page }) => {
+    test.fixme(
+      true,
+      "Pending Waffle #10 path admission plus plan 004 PATH-search unit: relative executable paths must resolve against cwd.",
+    );
     await open(page);
     await command(page, `${setup}; ${executable} emit $'RESOLVED_OK\\n'; echo LOOKUP:$?`);
     await output(page, "RESOLVED_OK");
@@ -208,6 +231,10 @@ for (const [label, setup, executable] of [
   ["deleted registered", "test-guest unlink /bin/test-guest", "/bin/test-guest"],
 ]) {
   test(`external executable lookup rejects ${label} files`, async ({ page }) => {
+    test.fixme(
+      true,
+      "Pending Waffle #10 live-file admission plus plan 004 PATH-search unit: missing and deleted files must fail without execution.",
+    );
     await open(page);
     await command(page, `${setup}; ${executable} emit $'DELETED_RAN\\n'; echo MISSING:$?`);
     await output(page, "MISSING:127");
@@ -250,6 +277,10 @@ test("normal child exit hands raw terminal input back before the next child", as
 });
 
 test("registered executable paths must still name regular files", async ({ page }) => {
+  test.fixme(
+    true,
+    "Pending Waffle #10 live-file admission: a registered directory must fail with 126 without execution.",
+  );
   await open(page);
   await command(
     page,

@@ -45,6 +45,42 @@ test("shared terminal input and output stay bounded, wrap and preserve binary by
   assert.equal(bridge.buffer.byteLength, 64 + INPUT_CAPACITY + OUTPUT_CAPACITY);
 });
 
+test("cancelled terminal input drops queued bytes after a contended lock releases", () => {
+  const bridge = new SharedBridge();
+  assert.equal(bridge.send(Uint8Array.of(65, 66)), true);
+  Atomics.store(bridge.state, control.inputLock, 1);
+  assert.equal(bridge.discardInput(), false);
+  assert.equal(bridge.availableInput(), 2);
+  Atomics.store(bridge.state, control.inputLock, 0);
+  assert.equal(bridge.discardInput(), true);
+  assert.equal(bridge.availableInput(), 0);
+  assert.equal(bridge.tryRead([new Uint8Array(1)]), -6);
+});
+
+test("running shell reads terminal CR and CRLF as one LF while editor stays byte-exact", () => {
+  const bridge = new SharedBridge();
+  const input = createBridgeTerminal(bridge.buffer, 0);
+  const editorBytes = Uint8Array.of(13, 10);
+  bridge.send(editorBytes);
+  const editorRead = new Uint8Array(editorBytes.length);
+  assert.equal(input.tryRead!([editorRead]), editorBytes.length);
+  assert.deepEqual(editorRead, editorBytes);
+
+  Atomics.store(bridge.state, control.phase, 2);
+  const commandBytes = Uint8Array.of(116, 101, 115, 116, 13, 10);
+  bridge.send(commandBytes);
+  const commandRead = new Uint8Array(commandBytes.length);
+  assert.equal(input.tryRead!([commandRead]), 5);
+  assert.deepEqual(commandRead.subarray(0, 5), Uint8Array.of(116, 101, 115, 116, 10));
+
+  bridge.send(Uint8Array.of(13));
+  const splitCr = new Uint8Array(1);
+  assert.equal(input.tryRead!([splitCr]), 1);
+  assert.deepEqual(splitCr, Uint8Array.of(10));
+  bridge.send(Uint8Array.of(10));
+  assert.equal(input.tryRead!([new Uint8Array(1)]), -6);
+});
+
 test("terminal admission is released even when a guest operation throws", async () => {
   const admission = createTerminalAdmission();
   assert.throws(

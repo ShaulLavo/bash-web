@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import type { ProcessService, Runtime, RuntimeConsumer } from "waffle";
 import type { RuntimeRootOptions, WorkerLaunchOptions } from "waffle/browser/process-broker";
-import type { ProcessContext } from "waffle/proc/types";
+import type { ChildExitEvent, ProcessContext } from "waffle/proc/types";
 import type { ShellWorkerRequest } from "./worker";
 import {
   connectFilesystemIdentity,
@@ -38,6 +38,7 @@ function fixture(
   failConstructor = false,
   startFailure?: 2 | 13,
   holdStart = false,
+  programFailures = 0,
 ) {
   const previousWorker = globalThis.Worker;
   const previousFetch = globalThis.fetch;
@@ -55,6 +56,7 @@ function fixture(
     requestPosted = resolve;
   });
   const rootStatuses: number[] = [];
+  const exitListeners = new Set<(event: ChildExitEvent) => void>();
   const events: string[] = [];
   let disposed = false;
   let borrowedAfterDispose = 0;
@@ -69,7 +71,13 @@ function fixture(
   const service = {
     async ready() {
       live();
-      return { table: new Map() };
+      return {
+        table: new Map(),
+        onChildExit(listener: (event: ChildExitEvent) => void) {
+          exitListeners.add(listener);
+          return () => exitListeners.delete(listener);
+        },
+      };
     },
     async adoptRuntimeRoot(transport: WorkerProcessTransport, options: RuntimeRootOptions) {
       live();
@@ -137,9 +145,17 @@ function fixture(
     registerAdapter(name: string, adapter: Parameters<Runtime["registerAdapter"]>[1]) {
       live();
       adapters.set(name, adapter);
+      return () => {
+        if (adapters.get(name) === adapter) adapters.delete(name);
+      };
     },
     registerProgram() {
       live();
+      if (programFailures) {
+        programFailures--;
+        throw new Error("Program registration refused");
+      }
+      return () => {};
     },
     retainConsumer(consumer: RuntimeConsumer) {
       live();
@@ -222,6 +238,7 @@ function fixture(
     posted,
     rootStatuses,
     roots,
+    exitListeners,
     events,
     get borrowedAfterDispose() {
       return borrowedAfterDispose;
@@ -269,6 +286,67 @@ test("later shell admissions retry a failed shared fetch without invalidating a 
   await second.dispose();
   assert.equal(host.consumers.size, 0);
   assert.equal(host.runtime.disposed, false);
+});
+
+test("page disposal cancels a shell stalled before executable fetch completes", async (context) => {
+  const host = fixture(context);
+  let complete!: (response: Response) => void;
+  globalThis.fetch = () =>
+    new Promise((resolve) => {
+      complete = resolve;
+    });
+  const pending = createShell(host.options);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(host.consumers.size, 1);
+  const disposed = host.runtime.dispose();
+  await assert.rejects(pending, /Runtime is disposed/);
+  await disposed;
+  assert.equal(host.consumers.size, 0);
+  // The fetch belongs to the embedding and may settle after the runtime fence.
+  complete(new Response(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0)));
+});
+
+test("failed program registration releases the adapter lease for a later retry", (context) => {
+  const host = fixture(context, false, undefined, false, 1);
+  assert.throws(() => registerShell(host.runtime, host.options), /Program registration refused/);
+  assert.equal(host.adapters.size, 0);
+  assert.doesNotThrow(() => registerShell(host.runtime, host.options));
+  assert.equal(host.adapters.size, 1);
+});
+
+test("a later shell retries failed filesystem initialization", async (context) => {
+  const host = fixture(context);
+  const mkdirp = host.runtime.filesystem.mkdirp;
+  let attempts = 0;
+  host.runtime.filesystem.mkdirp = async (...args) => {
+    if (++attempts === 1) throw new Error("Recoverable filesystem initialization failure");
+    await mkdirp(...args);
+  };
+  await assert.rejects(createShell(host.options), /Recoverable filesystem initialization failure/);
+  assert.equal(host.consumers.size, 0);
+  assert.equal(host.requests.length, 0);
+  const shell = await createShell(host.options);
+  assert.equal(attempts, 5);
+  assert.equal(host.requests.length, 1);
+  await shell.dispose();
+  assert.equal(host.consumers.size, 0);
+});
+
+test("supervisor completion settles a root without a repeating page timer", async (context) => {
+  const host = fixture(context);
+  const timers = context.mock.method(globalThis, "setTimeout");
+  const shell = await createShell(host.options);
+  assert.equal(timers.mock.calls.length, 0, "idle roots must not start a polling timer");
+  assert.equal(host.exitListeners.size, 1);
+  const root = host.roots.get(shell.process.pid)!;
+  const state = workerProcessState(root.transport);
+  const result = claimOutcome(state.signals.outcome, { kind: "signaled", code: 9 });
+  for (const listener of host.exitListeners)
+    listener({ pid: state.pid, parentPid: 0, job: state.job, result });
+  assert.equal((await shell.done).code, 137);
+  await shell.dispose();
+  assert.equal(host.exitListeners.size, 0);
+  assert.equal(host.terminated, 1);
 });
 
 test("internal adapter registration is reusable without fetching assets or admitting a shell", (context) => {

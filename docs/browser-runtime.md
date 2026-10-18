@@ -87,8 +87,13 @@ lossless. The [approved follow-up](../plans/005-bash-web-packaging.md#approved-f
 requires synchronous accepted-byte/EAGAIN semantics and root-scoped teardown.
 
 Diagnostics attach manual pipe observers without taking relay, endpoint or
-disposal ownership. Closed observations are reclaimed on a 100 ms sweep rather
-than waiting for another snapshot; retiring the root clears its timer.
+disposal ownership. Their pipe counts cover requests observed from the shell
+root, not every descendant's pipes: Waffle handles child-worker process messages
+internally, so nested shell-created pipes are not included. A zero count is not
+proof that the entire process tree has no live pipes. Closed observations are
+reclaimed on a 100 ms sweep rather than waiting for another snapshot; retiring
+the root clears its timer. The [approved introspection follow-up](../plans/005-bash-web-packaging.md#approved-follow-up-runtime-owned-process-and-pipe-introspection)
+will replace message-derived pipe counts with Waffle-owned read-only snapshots.
 
 The browser host cancels and joins pending shell admission on startup timeout or
 session disposal, without disposing a borrowed runtime. It explicitly falls back
@@ -195,29 +200,44 @@ establish Safari behavior. Safari still requires verification on an actual Mac.
 
 ### Migrated browser scope
 
-The source suite contains 97 distinct cases. This port keeps 71 and adds three
-original cases: generic nested-spawn/stdin, emitted worker assets, and Canvas
-fallback when WebGPU has no adapter. The current Playwright listing contains 74
-cases configured once for Chromium and once for Firefox (148 configured
-executions, not 148 distinct semantic cases). This is configuration inventory,
-not final browser acceptance evidence; a configured or runnable case is not a
-passing result.
+The current Playwright listing (`playwright test --list`) contains 76 unique
+cases configured once for Chromium and once for Firefox: 152 configured
+executions. This is configuration inventory, not final browser acceptance
+evidence; a configured or runnable case is not a passing result.
 
-| Suite | Configured cases | Runnable cases | Missing public Bun API | Original known failures |
-| --- | ---: | ---: | ---: | ---: |
-| Shell | 12 | 12 | 0 | 0 |
-| External commands | 18 | 16 | 2 | 0 |
-| Pipelines | 19 | 18 | 1 | 0 |
-| Runtime | 23 | 19 | 1 | 3 |
-| Worker assets and renderer fallback | 2 | 2 | 0 | 0 |
-| **Unique cases** | **74** | **67** | **4** | **3** |
-| **Chromium + Firefox executions** | **148** | **134** | **8** | **6** |
+| Suite | Configured cases | Runnable cases | Missing public Bun API | Original known failures | New engine/Waffle pending |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Shell | 12 | 11 | 0 | 0 | 1 |
+| External commands | 20 | 10 | 2 | 0 | 8 |
+| Pipelines | 19 | 18 | 1 | 0 | 0 |
+| Runtime | 23 | 19 | 1 | 3 | 0 |
+| Worker assets and renderer fallback | 2 | 2 | 0 | 0 | 0 |
+| **Unique cases** | **76** | **60** | **4** | **3** | **9** |
+| **Chromium + Firefox executions** | **152** | **120** | **8** | **6** | **18** |
+
+The nine new pending cases and their exact reason strings are:
+
+| Case | Reason |
+| --- | --- |
+| `$$` and `BASHPID` report a stable PID and the shell stays alive | `Pending plan 004 $$/BASHPID runtime identity unit: the engine needs an authoritative PID hook.` |
+| `printf` octal escapes produce exact bytes for an external guest | `Pending plan 004 printf escapes unit: octal escapes are not implemented.` |
+| `command` builtin launches a registered external WASI guest | `Pending plan 004 command unit in the functions PR: command is not implemented.` |
+| Unregistered files fail with 126 | `Pending Waffle #10 live-file admission plus plan 004 PATH-search unit: unregistered PATH files must map to 126.` |
+| Relative executable lookup | `Pending Waffle #10 path admission plus plan 004 PATH-search unit: relative executable paths must resolve against cwd.` |
+| Dot-segment executable lookup | `Pending Waffle #10 path admission plus plan 004 PATH-search unit: relative executable paths must resolve against cwd.` |
+| Missing relative executable | `Pending Waffle #10 live-file admission plus plan 004 PATH-search unit: missing and deleted files must fail without execution.` |
+| Deleted registered executable | `Pending Waffle #10 live-file admission plus plan 004 PATH-search unit: missing and deleted files must fail without execution.` |
+| Registered directory replacement | `Pending Waffle #10 live-file admission: a registered directory must fail with 126 without execution.` |
+
+The original four Bun API skips remain separate from the nine new engine/Waffle
+pending cases, and the three inherited known-failure fixmes remain unchanged.
 
 Generic WASI guests exercise pipeline/capture/substitution, terminal and binary
 transport, cancellation, write order, raw-terminal handoff, memory, and nested
 spawn/stdin contracts. These are generic shell/runtime tests, not Bun support.
 The additional original nested-spawn case checks inherited pipeline input and
-status, actual child completion, worker cleanup, and zero remaining root pipes.
+status, actual child completion, worker cleanup, and zero remaining observed
+root-created pipes. That last assertion does not inspect descendant-created pipes.
 
 The 26 source exclusions are explicit scope differences, not newly passing
 coverage:
@@ -301,7 +321,7 @@ engines, or vendored `@bun-wasm/runtime` tree.
 | Original shared-terminal launcher | Prototype `src/runtime/{browser-runtime.ts,subprocess-broker.ts}` → `src/runtime/worker-launcher.ts` | Delegate launch to Waffle's `service.launchWorker`, retaining a terminal consumer and wiring controller quiesce/revoke/stop hooks. Waffle owns generic lifecycle and process/descriptor transport. The earlier source broker derives from Bun `web/src/subprocess-broker.ts` at `8d3d416…`; no generic broker is retained here. |
 | Original package entry, diagnostics, and targeted regressions | `src/index.ts`, `src/runtime/diagnostics.ts`, `src/runtime/{diagnostics.test.ts,terminal.test.ts,shell-host.test.ts}` | Export the shell facade and borrowed observations, including dropped-terminal-byte counters. Manual pipe observations reclaim closed entries on a 100 ms sweep without relay/disposal ownership; retiring a root clears its timer. Original diagnostics regressions check the closed getter before any snapshot and verify root retirement stops the timer. New original regressions cover terminal streams, cancelable startup/admission retry and locally scoped cleanup, not foreign-adapter teardown guarantees or copied upstream suites. |
 | Shell-specific worker executor | Prototype `src/runtime/worker.ts` → `src/runtime/worker.ts`; earlier integration lineage: Bun `web/src/worker.ts` | Reduce the imported shell integration to a small original `WorkerExecutor` passed to the published `waffle/browser/worker` bootstrap. Keep shell imports/phase/memory observations only; Waffle owns generic WASI/descriptor/process/pipe/signal setup and worker cleanup. No generic runtime implementation is copied. |
-| Adapted bounded terminal stream | Bun `web/src/runtime-terminals.ts` → `src/runtime/runtime-terminals.ts` via the prototype | Retain only `createBridgeTerminal`, the bounded shared-terminal stream adapter. Remove the local descriptor/terminal codec: Waffle owns that codec and transport. |
+| Adapted bounded terminal stream and original prototype input policy | Bun `web/src/runtime-terminals.ts` → `src/runtime/runtime-terminals.ts` via the prototype; original prototype `src/wasi-host.ts` cooked-input policy | Retain `createBridgeTerminal`, the bounded shared-terminal stream adapter, and restore cooked carriage-return/newline handling while preserving raw editor input. Local CRLF state is shared by endpoints referencing the same buffer wrapper in one worker, not a generic cross-worker tty discipline. Remove the local descriptor/terminal codec: Waffle owns that codec and transport. |
 | Original external-program acceptance harness | `tests/browser-main.ts` and `tests/helpers/{test-programs.ts,bun-fixture.ts}` | The page owns the shared runtime and source-guest lease. Register the compiled cooperative `test-guest` and source-admitted/instrumented `test-spin` through the existing shell adapter on that same runtime, without copying runtime or ABI-host implementations. The injected Bun installer contract exposes the missing public capability explicitly; four genuinely Bun-specific cases remain skipped, with no Bun dependency or payload. The generic production host knows no specific programs. |
 | Original browser host and regressions | Prototype `src/{main.tsx,session.ts,style.css,shell-terminal-output.test.ts}` → `src/browser/{main.tsx,session.ts,style.css,terminal-output.test.ts}`; `tests/{pipelines.acceptance,runtime-shell,external-commands,shell}.spec.ts` | Keep renderer and page controls outside the shell facade and remove reference-engine UI. Reuse the root library's `TerminalNewlines` rather than copying a second transformer into the page. Tests exercise the real shell asset and preserve explicit pending external-program cases; they do not replace frozen shell evidence. |
 | Original prototype terminal/guest-adapter unit regressions, adapted | Prototype `src/runtime/{terminal.test.ts,guest-imports.test.ts}` → `tests/{terminal.unit.ts,guest-imports.unit.ts}` | Retain shell-owned bounded-ring/admission/terminal metadata cases with public Waffle APIs. Bun host-slot and real-guest libc internals remain external-package tests, not copied shell-library suites. |

@@ -103,7 +103,9 @@ test("pipeline Ctrl+C stops every stage and its children", async ({ page }) => {
   await open(page);
   await command(
     page,
-    "export KEEP=kept; { echo PRODUCER_READY >&2; test-guest yes tick; } | { echo CONSUMER_READY >&2; test-guest cat; } | grep unmatched; echo BAD_AFTER_INTERRUPT",
+    // Each complete marker must be one write: concurrent echo builtins may interleave
+    // their argument and newline writes without violating terminal byte ordering.
+    "export KEEP=kept; { printf 'PRODUCER_READY\\n' >&2; test-guest yes tick; } | { printf 'CONSUMER_READY\\n' >&2; test-guest cat; } | grep unmatched; echo BAD_AFTER_INTERRUPT",
   );
   await output(page, "PRODUCER_READY");
   await output(page, "CONSUMER_READY");

@@ -32,9 +32,13 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
   let checkActive = () => {};
   let preopen = 3;
   let memory: WebAssembly.Memory | undefined;
+  const bridge = request.terminal ? new SharedBridge(request.terminal) : undefined;
   const sample = request.memoryUsage ? new BigInt64Array(request.memoryUsage) : undefined;
   const sampleMemory = () => {
-    if (sample && memory) Atomics.store(sample, 0, BigInt(memory.buffer.byteLength));
+    if (!memory) return;
+    const bytes = memory.buffer.byteLength;
+    if (sample) Atomics.store(sample, 0, BigInt(bytes));
+    if (bridge) Atomics.store(bridge.state, control.memory, bytes);
   };
   const endpoint = (target: 0 | 1 | 2) => {
     if (!terminal) throw new Error("Shared terminal descriptor has no admitted destination");
@@ -82,7 +86,7 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
       preservePreopenDiscovery(imports, wasi.descriptors, preopen);
       // Sample the guest's allocation at host boundaries without retaining any guest
       // memory view across memory.grow. This telemetry is not an allocation quota.
-      if (sample)
+      if (sample || bridge)
         for (const namespace of Object.values(imports))
           for (const [name, value] of Object.entries(namespace)) {
             if (typeof value === "function")
@@ -96,11 +100,7 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
       memory =
         instance.exports.memory instanceof WebAssembly.Memory ? instance.exports.memory : undefined;
       sampleMemory();
-      if (request.terminal && memory) {
-        const bridge = new SharedBridge(request.terminal);
-        Atomics.store(bridge.state, control.memory, memory.buffer.byteLength);
-        Atomics.store(bridge.state, control.phase, 1);
-      }
+      if (bridge && memory) Atomics.store(bridge.state, control.phase, 1);
     },
     beforeFinish: sampleMemory,
     run: preview1Executor.run,

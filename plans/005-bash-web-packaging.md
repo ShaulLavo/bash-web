@@ -102,9 +102,40 @@ capability with explicit accepted-byte/EAGAIN semantics before `fd_write`
 returns. The preferred shape is a runtime-owned finite shared terminal endpoint
 (or existing pipe endpoint plus preserved web-terminal provenance) in the
 terminal token, with worker-side write admission and wake-up; a `void`
-`postMessage` callback or an unbounded page queue is not sufficient. The same
-follow-up should provide a per-runtime-root teardown join that fences active
+`postMessage` callback or an unbounded page queue is not sufficient. This endpoint
+also owns proper terminal input discipline: cooked readers receive ICRNL
+(carriage-return to newline translation) and canonical echo, while the shell's
+line editor can request raw passthrough. Bash-web restores its predecessor's
+terminal-host behavior in a bounded local adapter, not a full tty. Its per-worker
+CRLF state does not span cloned buffer wrappers: add a regression that splits a
+CRLF pair across a reader handoff between workers and require one cooked newline
+from the runtime-owned endpoint. This local restoration is not a substitute for
+that endpoint. The same follow-up should provide
+a per-runtime-root teardown join that fences active
 and reserved descendants, late accepted launches, controller stops, and
 physical handles while excluding unrelated roots. Until those public contracts
 land, bash-web does not claim lossless foreign-adapter output or full physical
 teardown of descendants; its shell-owned cleanup is tracked locally.
+
+## Approved follow-up: runtime-owned process and pipe introspection
+
+Expose read-only process and pipe snapshots from Waffle, the owner of both
+tables. Its supervisor already exposes `table`; consumers should not need to
+observe or intercept worker messages to reconstruct runtime state. The snapshot
+must distinguish live pipes, process ownership and descendant membership without
+retaining endpoints, pumping relays, or changing disposal authority.
+
+The current limitation is exact: at Waffle `c458a488`,
+`browser/process-broker.ts:330` consumes child `runtime-proc` messages and returns
+without calling `WorkerLaunchOptions.onMessage`. Bash-web's
+`src/runtime/diagnostics.ts:99` therefore observes root-shell pipe requests, but
+not pipe requests created inside a nested shell worker. A root snapshot can
+report zero observed pipes while a descendant still owns a live pipe. Existing
+zero-pipe browser assertions are limited to the observed root-created pipes;
+they do not establish whole-tree pipe cleanup.
+
+Add a Waffle regression that holds a nested worker's pipe live, verifies its
+appearance in the read-only runtime snapshot with the correct process/root
+identity, then closes both ends and verifies its removal. Bash-web can consume
+that snapshot after the API lands. Do not add a message-spying hook or a second
+pipe registry in the shell adapter to fill this debug-telemetry gap.

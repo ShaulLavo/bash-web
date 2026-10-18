@@ -13,6 +13,7 @@ import {
 
 type TerminalTarget = 0 | 1 | 2;
 const AGAIN = -6;
+const lineStates = new WeakMap<SharedArrayBuffer, { skipLineFeed: boolean }>();
 
 export function createBridgeTerminal(
   buffer: SharedArrayBuffer,
@@ -23,15 +24,57 @@ export function createBridgeTerminal(
   attachTerminal(admission, buffer);
   const bridge = new SharedBridge(buffer);
   const notification = new Int32Array(buffer, control.wake * 4, 1);
+  const lineState = lineStates.get(buffer) ?? { skipLineFeed: false };
+  lineStates.set(buffer, lineState);
   const tryRead = (chunks: readonly Uint8Array[]) => {
     checkActive();
-    return terminalSection(admission, () =>
-      Atomics.load(bridge.state, control.phase) === 4
-        ? -29
-        : target === 0
-          ? bridge.tryRead(chunks)
-          : -8,
-    );
+    return terminalSection(admission, () => {
+      const phase = Atomics.load(bridge.state, control.phase);
+      if (phase === 4) return -29;
+      if (target !== 0) return -8;
+      if (bridge.cancelled()) return AGAIN;
+      // This bounded browser-terminal adapter deliberately keeps the interactive
+      // editor raw so it can handle CR/LF and redraw itself. Once a command is
+      // running, shell builtins read from the same terminal as a cooked line
+      // stream. CR (and CRLF within this admitted stream) is one LF; this is not
+      // a general Waffle TTY discipline, and pipes/files remain byte-exact because
+      // they never use this endpoint.
+      if (phase !== 2) {
+        lineState.skipLineFeed = false;
+        return bridge.tryRead(chunks);
+      }
+      const length = chunks.reduce((total, chunk) => total + chunk.length, 0);
+      if (!length) return 0;
+      const raw = new Uint8Array(length);
+      const count = bridge.tryRead([raw]);
+      if (count <= 0) return count;
+      let written = 0;
+      let destination = 0;
+      for (let index = 0; index < count; index++) {
+        const byte = raw[index];
+        if (lineState.skipLineFeed && byte === 10) {
+          lineState.skipLineFeed = false;
+          continue;
+        }
+        lineState.skipLineFeed = byte === 13;
+        const normalized = byte === 13 ? 10 : byte;
+        while (destination < chunks.length && written === chunks[destination].length) {
+          destination++;
+          written = 0;
+        }
+        if (destination === chunks.length) break;
+        chunks[destination][written++] = normalized;
+      }
+      const output = chunks
+        .slice(0, destination + 1)
+        .reduce(
+          (total, _chunk, index) => total + (index < destination ? chunks[index].length : written),
+          0,
+        );
+      // A split CRLF can consume the LF while producing no byte. Signal the
+      // normal retry path instead of exposing a false EOF to the stream caller.
+      return output || (count > 0 ? AGAIN : count);
+    });
   };
   const tryWrite = (chunks: readonly Uint8Array[]) => {
     checkActive();

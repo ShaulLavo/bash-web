@@ -151,6 +151,7 @@ export function runtimeSnapshot(runtime: Runtime) {
             liveProcesses: live.length,
             liveJobs: new Set(live.map((record) => record.job)).size,
             retainedSlots: slots.length,
+            // Root-message observations only, not a descendant-wide pipe census.
             pipes: root.pipes.size,
             pipeCapacity: runtimePipeOptions.capacity,
             pipeMaxReaders: runtimePipeOptions.maxReaders,

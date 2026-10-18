@@ -71,6 +71,22 @@ export class SharedBridge {
     Atomics.store(this.state, control.inputRead, read + bytes.length);
     return bytes;
   }
+  /** Drops bytes already queued for a cancelled foreground line without touching output. */
+  discardInput(): boolean {
+    if (Atomics.compareExchange(this.state, control.inputLock, 0, 1) !== 0) return false;
+    try {
+      Atomics.store(this.state, control.inputRead, Atomics.load(this.state, control.inputWrite));
+      this.signal();
+      return true;
+    } finally {
+      Atomics.store(this.state, control.inputLock, 0);
+      Atomics.notify(this.state, control.inputLock);
+    }
+  }
+  resumeInput(): void {
+    Atomics.store(this.state, control.cancel, 0);
+    this.signal();
+  }
   // Immediate, bounded I/O for runtime_proc. Multiple guest processes can inherit this terminal.
   // A contended endpoint returns EAGAIN rather than waiting on the page or another guest.
   tryRead(chunks: readonly Uint8Array[]): number {
@@ -119,6 +135,7 @@ export class SharedBridge {
       return total;
     } finally {
       Atomics.store(this.state, control.outputLock, 0);
+      Atomics.notify(this.state, control.outputLock);
     }
   }
   drain(limit = 32768): Uint8Array {
@@ -141,18 +158,27 @@ export class SharedBridge {
     return offset;
   }
   private writeChunk(bytes: Uint8Array): number {
-    const read = Atomics.load(this.state, control.outputRead);
-    const write = Atomics.load(this.state, control.outputWrite);
-    const free = this.output.length - ((write - read) >>> 0);
-    if (!free && this.cancelled()) return -1;
-    if (!free) {
-      Atomics.wait(this.state, control.outputRead, read, 100);
+    if (Atomics.compareExchange(this.state, control.outputLock, 0, 1) !== 0) {
+      Atomics.wait(this.state, control.outputLock, 1, 1);
       return 0;
     }
-    const length = Math.min(free, bytes.length);
-    copyIntoRing(this.output, write, bytes.subarray(0, length));
-    Atomics.store(this.state, control.outputWrite, write + length);
-    return length;
+    try {
+      const read = Atomics.load(this.state, control.outputRead);
+      const write = Atomics.load(this.state, control.outputWrite);
+      const free = this.output.length - ((write - read) >>> 0);
+      if (!free && this.cancelled()) return -1;
+      if (!free) {
+        Atomics.wait(this.state, control.outputRead, read, 100);
+        return 0;
+      }
+      const length = Math.min(free, bytes.length);
+      copyIntoRing(this.output, write, bytes.subarray(0, length));
+      Atomics.store(this.state, control.outputWrite, write + length);
+      return length;
+    } finally {
+      Atomics.store(this.state, control.outputLock, 0);
+      Atomics.notify(this.state, control.outputLock);
+    }
   }
 }
 function copyIntoRing(ring: Uint8Array, index: number, bytes: Uint8Array) {

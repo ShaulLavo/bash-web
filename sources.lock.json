@@ -123,6 +123,16 @@
         "changes": "Retain only the bounded createBridgeTerminal stream adapter. Remove the local terminal/descriptor codec; use the published Waffle codec and runtime-owned transport."
       },
       {
+        "classification": "Original prototype terminal input policy, restored in the shell adapter",
+        "sourcePaths": [
+          "src/wasi-host.ts"
+        ],
+        "destinationPaths": [
+          "src/runtime/runtime-terminals.ts"
+        ],
+        "changes": "Restore the predecessor's cooked carriage-return/newline input handling while preserving raw editor bytes through the existing bounded bridge. Do not import its generic WASI host; a full runtime-owned tty discipline remains an approved Waffle terminal-endpoint follow-up."
+      },
+      {
         "classification": "Adapted Bun root lifecycle with original shell-host integration, via prototype",
         "upstreamRepository": "https://github.com/ShaulLavo/bun-wasm",
         "upstreamRevision": "8d3d416aa9cb23718ed3487a33d0b06e8e373672",

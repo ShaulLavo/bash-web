@@ -67,26 +67,34 @@ export function registerShell(runtime: Runtime, options: ShellOptions): Registra
     }
     return loaded;
   };
-  runtime.registerAdapter("bash-web:preview1", (context, service) =>
-    launchTerminalWorker<ShellWorkerRequest>(runtime, service, context, {
-      workerUrl,
-      request: {
-        module: context.module,
-        args: context.request.argv,
-        env: { ...context.request.env, PWD: context.request.cwd },
-        interruptible: context.interruptible,
-        memoryUsage: new SharedArrayBuffer(8),
-      },
-      wake() {},
-    }),
-  );
-  // This package's own cooperative Rust guest checks the runtime signal ABI. Foreign
-  // programs are registered by their packages, using the runtime's admission rules.
-  runtime.registerProgram(executable, {
-    adapter: "bash-web:preview1",
-    module: () => module().then((value) => value.module),
-    cooperative: true,
-  });
+  let removeAdapter: (() => void) | undefined;
+  let removeProgram: (() => void) | undefined;
+  try {
+    removeAdapter = runtime.registerAdapter("bash-web:preview1", (context, service) =>
+      launchTerminalWorker<ShellWorkerRequest>(runtime, service, context, {
+        workerUrl,
+        request: {
+          module: context.module,
+          args: context.request.argv,
+          env: { ...context.request.env, PWD: context.request.cwd },
+          interruptible: context.interruptible,
+          memoryUsage: new SharedArrayBuffer(8),
+        },
+        wake() {},
+      }),
+    );
+    // This package's own cooperative Rust guest checks the runtime signal ABI. Foreign
+    // programs are registered by their packages, using the runtime's admission rules.
+    removeProgram = runtime.registerProgram(executable, {
+      adapter: "bash-web:preview1",
+      module: () => module().then((value) => value.module),
+      cooperative: true,
+    });
+  } catch (error) {
+    removeProgram?.();
+    removeAdapter?.();
+    throw error;
+  }
   let initialized: Promise<void> | undefined;
   const registration: Registration = {
     wasmUrl,
@@ -95,13 +103,19 @@ export function registerShell(runtime: Runtime, options: ShellOptions): Registra
       return module();
     },
     get initialized() {
-      return (initialized ??= (async () => {
+      if (initialized) return initialized;
+      const attempt = (async () => {
         for (const directory of ["/home/guest", "/tmp", "/bin", "/programs"])
           await runtime.filesystem.mkdirp(directory);
         if (!(await runtime.filesystem.lookup(executable)))
           await runtime.filesystem.writeFile(executable, new Uint8Array());
         await runtime.filesystem.drain();
-      })());
+      })();
+      initialized = attempt;
+      void attempt.catch(() => {
+        if (initialized === attempt) initialized = undefined;
+      });
+      return attempt;
     },
   };
   registrations.set(runtime, registration);
@@ -151,7 +165,7 @@ export async function startShell(
   let retired = false;
   let physicallyStopped: Promise<void> | undefined;
   let cleanup: Promise<void> | undefined;
-  let watcher: ReturnType<typeof setTimeout> | undefined;
+  let unobserveExit = () => {};
   let release = () => {};
   let resolveDone!: (result: RuntimeExit) => void;
   const done = new Promise<RuntimeExit>((resolve) => {
@@ -189,7 +203,7 @@ export async function startShell(
   };
   const physicallyStop = () =>
     (physicallyStopped ??= (async () => {
-      clearTimeout(watcher);
+      unobserveExit();
       await quiesceTerminal(admission);
       worker?.terminate();
       filesystem.port.close();
@@ -231,6 +245,7 @@ export async function startShell(
   };
   const revoke = () => {
     revokeTerminal(admission);
+    rejectAbort(new Error("Runtime is disposed"));
     finish({ code: 137, error: "Runtime was disposed" }, false, 9);
   };
   try {
@@ -262,8 +277,23 @@ export async function startShell(
     // Admission may already own this transport when its promise settles. Join it before
     // observing cancellation so cleanup cannot race a late broker acceptance.
     options.signal?.throwIfAborted();
-    observeSupervisor(runtime, await pending(() => service!.ready()));
+    const supervisor = await pending(() => service!.ready());
+    observeSupervisor(runtime, supervisor);
     if (runtime.disposed) throw new Error("Runtime is disposed");
+    // Waffle already owns process completion. Observe its exit event instead of
+    // running a second page timer for every idle shell root.
+    unobserveExit = supervisor.onChildExit((event) => {
+      if (event.pid !== state.pid) return;
+      if (event.result.kind === "signaled")
+        finish({ code: event.result.status }, false, event.result.code);
+      else finish({ code: waitStatus(event.result) }, false);
+    });
+    const settled = readOutcome(state.signals.outcome);
+    if (settled?.kind === "signaled") {
+      finish({ code: settled.status }, false, settled.code);
+      await clean();
+      throw new Error("Shell stopped before worker startup");
+    }
     worker = new Worker(registration.workerUrl, { type: "module" });
     worker.onmessage = ({ data: message }: MessageEvent<RuntimeWorkerMessage>) => {
       if (runtime.disposed) return;
@@ -322,15 +352,6 @@ export async function startShell(
       memoryUsage: memory,
     };
     worker.postMessage(request, [filesystem.port]);
-    const watch = () => {
-      if (finished || runtime.disposed) return;
-      watcher = setTimeout(() => {
-        const result = readOutcome(state.signals.outcome);
-        if (result?.kind === "signaled") finish({ code: result.status }, false, result.code);
-        else watch();
-      }, 4);
-    };
-    watch();
     await pending(() => started);
     return {
       pid: state.pid,
