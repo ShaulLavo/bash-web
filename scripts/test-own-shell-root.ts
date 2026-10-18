@@ -15,6 +15,27 @@ const waffle = (await import(
 type ProcessService = Awaited<ReturnType<Runtime["processes"]>>;
 type Supervisor = Awaited<ReturnType<ProcessService["ready"]>>;
 
+function createRootRuntime() {
+  return waffle.createRuntime({
+    filesystem: {
+      workerURL: new URL("../.build/node/fs.mjs", import.meta.url),
+      persistence: false,
+    },
+  });
+}
+
+async function runFixture(runtime: Runtime, output: Buffer[]) {
+  return runRoot(
+    runtime,
+    waffle,
+    await WebAssembly.compile(fixture(2)),
+    { modulePath: "", tmp: "/", env: {}, fixtureDirectory: "" },
+    "fixture",
+    (_fd, bytes) => output.push(Buffer.from(bytes)),
+    () => {},
+  );
+}
+
 function rootWorker(OriginalWorker: typeof Worker, configure: (worker: Worker) => void) {
   return class extends OriginalWorker {
     constructor(url: string | URL, options?: WorkerOptions) {
@@ -57,12 +78,7 @@ function killRootOnStart(worker: Worker, service: ProcessService, supervisor: Su
 test("root completion waits for queued output before acknowledging ordinary exit", async () => {
   installNodeWorkers();
   const OriginalWorker = globalThis.Worker;
-  const runtime = waffle.createRuntime({
-    filesystem: {
-      workerURL: new URL("../.build/node/fs.mjs", import.meta.url),
-      persistence: false,
-    },
-  });
+  const runtime = createRootRuntime();
   let unobserve = () => {};
   try {
     const service = await runtime.processes();
@@ -77,15 +93,7 @@ test("root completion waits for queued output before acknowledging ordinary exit
       queueRootMessages(worker, supervisor, () => (observedBeforeDelivery = rootExitObserved)),
     );
     Object.defineProperty(globalThis, "Worker", { value: QueuedRootWorker, configurable: true });
-    const status = await runRoot(
-      runtime,
-      waffle,
-      await WebAssembly.compile(fixture(2)),
-      { modulePath: "", tmp: "/", env: {}, fixtureDirectory: "" },
-      "fixture",
-      (_fd, bytes) => output.push(Buffer.from(bytes)),
-      () => {},
-    );
+    const status = await runFixture(runtime, output);
     assert.equal(status, 7);
     assert.equal(
       observedBeforeDelivery,
@@ -105,12 +113,7 @@ test("root completion waits for queued output before acknowledging ordinary exit
 test("a signaled root settles without an ordinary worker acknowledgement", async () => {
   installNodeWorkers();
   const OriginalWorker = globalThis.Worker;
-  const runtime = waffle.createRuntime({
-    filesystem: {
-      workerURL: new URL("../.build/node/fs.mjs", import.meta.url),
-      persistence: false,
-    },
-  });
+  const runtime = createRootRuntime();
   try {
     const service = await runtime.processes();
     const supervisor = await service.ready();
@@ -119,15 +122,7 @@ test("a signaled root settles without an ordinary worker acknowledgement", async
     );
     Object.defineProperty(globalThis, "Worker", { value: UnstartedRootWorker, configurable: true });
     const output: Buffer[] = [];
-    const status = await runRoot(
-      runtime,
-      waffle,
-      await WebAssembly.compile(fixture(2)),
-      { modulePath: "", tmp: "/", env: {}, fixtureDirectory: "" },
-      "fixture",
-      (_fd, bytes) => output.push(Buffer.from(bytes)),
-      () => {},
-    );
+    const status = await runFixture(runtime, output);
     assert.equal(status, 137);
     assert.equal(output.length, 0);
   } finally {
