@@ -1,11 +1,13 @@
 import { createShell, runtimeSnapshot, SharedBridge, type Shell } from "../index";
 import { control } from "../bridge";
 import type { Runtime } from "waffle";
+import { waitForStorage, type StorageStartup } from "./storage";
 import type { StartupObserver } from "../runtime/startup-diagnostics";
 
 export type SessionOptions = {
   runtime: Runtime;
   onStartupStage?: StartupObserver;
+  storageStartup?: StorageStartup;
   /** Cancels pending startup and the session, without disposing the borrowed runtime. */
   signal?: AbortSignal;
   cols: number;
@@ -80,6 +82,14 @@ export class BrowserSession {
     try {
       session.resize(options.cols, options.rows);
       options.onState("starting");
+      if (options.runtime.filesystem.state.status !== "ready") {
+        await waitForStorage(options.runtime, session.admission.signal, {
+          startup: options.storageStartup,
+          onStartupStage: options.onStartupStage,
+          onState: (state) => options.onState(state.status === "waiting" ? "waiting" : "starting"),
+        });
+      }
+      session.admission.signal.throwIfAborted();
       let timeout: ReturnType<typeof setTimeout> | undefined;
       const failure = new Promise<never>((_resolve, reject) => {
         session.startupReject = reject;

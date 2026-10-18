@@ -32,6 +32,7 @@ function pendingRuntime(context: TestContext) {
       };
     },
     filesystem: {
+      state: { status: "ready" },
       mkdirp: () => initialization,
       async lookup() {
         return true;

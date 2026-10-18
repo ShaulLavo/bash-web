@@ -13,7 +13,7 @@ TypeScript entry and its worker imports. Install the required `waffle` peer at
 the exact pin in `package.json`:
 
 ```text
-git+https://github.com/ShaulLavo/waffle.git#ba968a6f86468d03394792a3e9c447dfc713c279
+git+https://github.com/ShaulLavo/waffle.git#8bfc767d6097cf3c741092328573460a3047d114
 ```
 
 The package's development dependency uses that same published commit. There
@@ -66,6 +66,65 @@ shared runtime without creating a process service. The application remains
 responsible for `await runtime.dispose()` once the shared runtime is no longer
 needed.
 
+## Storage ownership, waiting and disposal
+
+The application owns storage selection and the runtime lifetime; Waffle owns
+storage locks, recovery and filesystem workers. The demo's `mountBrowser` borrows
+`{ runtime }` without disposing it, or accepts an `acquireRuntime()` factory
+returning `{ runtime, ready, dispose }`. A factory lease owns its preparation
+and must provide idempotent, awaited disposal even if preparation is still
+pending. Without either option, the demo creates and owns one runtime.
+
+`src/browser/storage.ts` observes `runtime.filesystem.state` before shell
+admission. `opening` and `waiting` are not shell failures: the host shows
+“Waiting for another tab to release storage…” and keeps input disabled until
+storage is ready. The observer preserves an existing `onStateChange` callback
+and detaches its own listener after readiness, cancellation or failure. The
+shell's 60-second startup timeout begins **after** storage is ready. Initial
+`opening` has its own separate total 60-second guard; expiry reports “Browser storage
+did not become ready within 60 seconds.” A lock grant without ownership waiting does
+not extend this initial budget. Entering `waiting` disarms that guard.
+Waiting may last indefinitely while another tab owns the workspace, and the typed
+state remains `waiting` through recovery. After ownership waiting, the passive
+`filesystem-lock-acquired` milestone starts a fresh 60-second active-recovery guard,
+separate from both opening and shell startup. Repeated waiting states or milestones
+cannot erase or extend it.
+Expiry reports “Browser storage recovery did not finish within 60 seconds.”
+Ownership release normally lets the same runtime recover and continue without a
+reload. Readiness, failure, disposal and cancellation clear both guards and detach
+the milestone listener. Storage `failed`/`disposed` states are terminal, not a fallback
+to empty storage.
+
+The demo installs `createStorageStartup()` before creating its owned runtime or
+calling its runtime factory, so even a grant before the consumer subscribes retains
+its recovery budget. A borrowed runtime that is still opening needs its owner to
+create that signal before runtime construction, forward `onStartupStage` to its
+`observe` callback, and pass the same signal as `mountBrowser({ runtime, storageStartup })`.
+A borrowed ready runtime needs no startup signal. The guard measures elapsed time
+from local receipt of acquisition; worker timestamps are forwarded unchanged to
+diagnostics, not compared against another realm's clock.
+
+`storage-wait-requested` and `storage-wait-resolved` describe only this consumer's
+storage-readiness await. They remain distinct from `runtime-lease` preparation,
+which also joins caller registration, and from all existing runtime milestones.
+They are fixed, passive diagnostics: observers cannot delay startup or reject it,
+and callbacks from a stopped generation cannot contaminate the next start.
+
+Backend contention policy belongs to the runtime owner, not the shell. At the
+pinned Waffle revision, OPFS waits and rejects takeover; IndexedDB defaults to
+takeover with optional `whenBusy: "wait"`. See Waffle's
+[storage ownership contract](https://github.com/ShaulLavo/waffle/blob/8bfc767d6097cf3c741092328573460a3047d114/docs/storage.md).
+
+Restart/stop cancels admission, joins pending session creation and awaits
+`BrowserSession.dispose()` before releasing an owned lease or creating its
+replacement. Session disposal stops only the shell and removes local observers;
+it does not dispose a borrowed runtime. The owner must `await runtime.dispose()`
+when its final consumer stops, including while waiting for storage: Waffle then
+cancels queued filesystem work and joins worker cleanup/ownership release.
+Do not treat a shell exit or an unawaited dispose call as that ownership fence.
+Pending IndexedDB opens can be cancelled under either busy policy. Restart awaits that
+cleanup before acquiring its replacement runtime, including after the opening guard expires.
+
 ## Terminal and host responsibilities
 
 The root package exports the shell facade and terminal bridge helpers. The
@@ -104,6 +163,12 @@ Waffle owns filesystem authority, process records, descriptors, pipes, signals,
 and lifecycle fences. Shell-specific files in `src/runtime/` connect those APIs
 to the shell guest, including inherited descriptors, terminal access, and shell
 phase notifications. Their location does not make them a copied runtime package.
+Waffle places preopens in the lowest free descriptors before instantiation and
+preserves inherited numbers literally. All WASI builds select the shared patched
+sysroot; the Rust std test guests retain its libc scanner, while the browser
+shell uses its original direct-WASI adapter and the fixture CLI needs no
+filesystem scanner. No shell adapter relocates preopens or supplies synthetic
+prestat metadata. See [guest libc and build provenance](wasi-libc.md).
 
 ## Serve the assets
 
@@ -240,14 +305,17 @@ same page-owned Waffle runtime and obtain its guest through the external
 package's verified descriptor. Bun guest identity, payload, licenses and
 integrity verification belong to that external package, not the shell library.
 
-The expected external contract is `installBunAdapters(runtime, { workerUrl,
-wasmUrl? })`. The page's lease must own installer cleanup and its single runtime's
-disposal. The unused placeholder fixture was removed; no executable adapter is
-maintained for unpublished exports.
+`tests/helpers/bun-fixture.ts` records the expected composition contract through
+an injected `installBunAdapters(runtime, { workerUrl, wasmUrl? })` function. Its
+lease owns installer cleanup and the single runtime's disposal. This is an
+original test fixture, not an implementation or a claim that those package
+exports are already published.
 
 ## Build and verify
 
-From a checkout with `npm ci` completed, run:
+Install the [build prerequisites](getting-started.md#build-and-test), including
+wasi-sdk 34.0, CMake and Ninja for the shared patched-libc sysroot. From a checkout
+with `npm ci` completed, run:
 
 ```sh
 npm run test:browser:package
@@ -272,20 +340,23 @@ establish Safari behavior. Safari still requires verification on an actual Mac.
 
 ### Migrated browser scope
 
-The current Playwright listing (`playwright test --list`) contains 82 unique
-cases configured once for Chromium and once for Firefox: 164 configured
-executions. This is configuration inventory, not final browser acceptance
-evidence; a configured or runnable case is not a passing result.
+The current Playwright listing (`playwright test --list`) contains 108 unique
+cases configured once for Chromium and once for Firefox: 216 configured
+executions, with 200 runnable executions and 16 unchanged configured skips. This is
+configuration inventory, not final browser acceptance evidence; a configured or
+runnable case is not a passing result.
 
-| Suite | Configured cases | Runnable cases | Missing public Bun API | Original known failures | New engine/Waffle pending |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Shell | 12 | 11 | 0 | 0 | 1 |
-| External commands | 26 | 24 | 2 | 0 | 0 |
-| Pipelines | 19 | 18 | 1 | 0 | 0 |
-| Runtime | 23 | 19 | 1 | 3 | 0 |
-| Worker assets and renderer fallback | 2 | 2 | 0 | 0 | 0 |
-| **Unique cases** | **82** | **74** | **4** | **3** | **1** |
-| **Chromium + Firefox executions** | **164** | **148** | **8** | **6** | **2** |
+| Suite                               | Configured cases | Runnable cases | Missing public Bun API | Original known failures | New engine/Waffle pending |
+| ----------------------------------- | ---------------: | -------------: | ---------------------: | ----------------------: | ------------------------: |
+| Shell                               |               12 |             11 |                      0 |                       0 |                         1 |
+| External commands                   |               26 |             24 |                      2 |                       0 |                         0 |
+| Pipelines                           |               19 |             18 |                      1 |                       0 |                         0 |
+| Runtime                             |               38 |             34 |                      1 |                       3 |                         0 |
+| Startup diagnostics                 |                4 |              4 |                      0 |                       0 |                         0 |
+| Storage lifecycle                   |                7 |              7 |                      0 |                       0 |                         0 |
+| Worker assets and renderer fallback |                2 |              2 |                      0 |                       0 |                         0 |
+| **Unique cases**                    |          **108** |        **100** |                  **4** |                   **3** |                     **1** |
+| **Chromium + Firefox executions**   |          **216** |        **200** |                  **8** |                   **6** |                     **2** |
 
 The `command` and byte-exact `printf` external-guest cases are runnable following
 the functions and printf units.
@@ -293,14 +364,14 @@ Six formerly pending external-command cases are now enabled by Waffle #10 at
 `ba968a6f86468d03394792a3e9c447dfc713c279` and the shell's asynchronous executable
 access/PATH-search unit:
 
-| Activated case | Contract now exercised |
-| --- | --- |
+| Activated case                   | Contract now exercised                                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | Unregistered files fail with 126 | Existing regular files require a program registration; the command host remains usable after rejection. |
-| Relative executable lookup | Explicit `./test-guest` resolves against the shell's current directory. |
-| Dot-segment executable lookup | A live filesystem walk resolves `/bin/../bin/./test-guest` to its canonical registration. |
-| Missing relative executable | A missing explicit path fails with 127 without starting a guest. |
-| Deleted registered executable | Deleting a registered marker prevents execution and produces 127. |
-| Registered directory replacement | Replacing a registered marker with a directory prevents execution and produces 126. |
+| Relative executable lookup       | Explicit `./test-guest` resolves against the shell's current directory.                                 |
+| Dot-segment executable lookup    | A live filesystem walk resolves `/bin/../bin/./test-guest` to its canonical registration.               |
+| Missing relative executable      | A missing explicit path fails with 127 without starting a guest.                                        |
+| Deleted registered executable    | Deleting a registered marker prevents execution and produces 127.                                       |
+| Registered directory replacement | Replacing a registered marker with a directory prevents execution and produces 126.                     |
 
 Six additional original cases exercise PATH candidate skipping and relative/empty
 components; denied-versus-missing search status and recovery; regular-file
@@ -313,8 +384,8 @@ creation. Enabling a case is not evidence that it has passed a browser run.
 
 The remaining engine pending case and its exact reason string is:
 
-| Case | Reason |
-| --- | --- |
+| Case                                                             | Reason                                                                                           |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `$$` and `BASHPID` report a stable PID and the shell stays alive | `Pending plan 004 $$/BASHPID runtime identity unit: the engine needs an authoritative PID hook.` |
 
 The original four Bun API skips remain separate from the remaining engine pending
@@ -326,6 +397,11 @@ spawn/stdin contracts. These are generic shell/runtime tests, not Bun support.
 The additional original nested-spawn case checks inherited pipeline input and
 status, actual child completion, worker cleanup, and zero remaining observed
 root-created pipes. That last assertion does not inspect descendant-created pipes.
+The [inherited-descriptor matrix](test-guests.md#inherited-descriptor-browser-regression-gate)
+adds 15 original runtime cases across the rebuilt shell and both test guests:
+filesystem read/create/readback with persistent fd 3, sparse bindings 10–12,
+occupied fds 3–9, nested shell inheritance, and per-guest `3<&0` input. These
+30 configured browser executions are independent of the external Bun fixmes.
 
 The 26 source exclusions are explicit scope differences, not newly passing
 coverage:
@@ -362,14 +438,15 @@ configured for Chromium and Firefox (six known-failure executions, not six
 different defects). Their original limitations remain relevant after the public
 launcher is available:
 
-- **Bun nonstandard inherited descriptors and shared file offsets:** the pinned
-  guest libc can stop at occupied fd 3 instead of finding the relocated root
-  preopen. This prevents the intended real-Bun descriptor assertions in both
-  browsers; shell-only inherited-descriptor controls remain separate.
-- **Bun fd-3 root-preopen discovery:** the truthful WASI NOTSUP response for an
-  occupied non-preopen descriptor makes the pinned libc abort before the next
-  root preopen. Both browser executions await a guest-libc correction rather
-  than fabricated successful preopen metadata.
+- **Bun nonstandard inherited descriptors and shared file offsets:** the external
+  Bun payload must be rebuilt and verified with the shared patched-libc scanner
+  before these real-Bun assertions can run. bash-web does not build that payload;
+  passing its own guests' descriptor matrix would not establish Bun behavior.
+- **Bun fd-3 root-preopen discovery:** the external guest has the same rebuild and
+  publication prerequisite. Current Waffle returns `BADF` for open non-preopens;
+  patched libc distinguishes them from holes with `fd_fdstat_get`. This is not
+  a local `NOTSUP` or adapter-relocation limitation. Both Bun executions remain
+  explicitly pending external-package delivery, without synthetic metadata.
 - **Ctrl+C of Bun.spawn descendants without killing unrelated background work:**
   the legacy guest descendant path still needs shared process/job admission and
   confirmed cooperative cleanup. Both browser executions remain pending; a root
@@ -402,27 +479,31 @@ upstream identity while changing the shared-runtime boundary to the required
 Waffle peer. It does not import the prototype's old Brush host, comparison
 engines, or vendored `@bun-wasm/runtime` tree.
 
-| Classification | Source and destination | Local changes and reason |
-| --- | --- | --- |
-| Original embedding adapters, imported and maintained here | Prototype `src/{shell.ts,bridge.ts,shell-terminal-output.ts}` and `src/runtime/{guest-imports.ts,terminal-admission.ts,limits.ts}` | Inject the actual Waffle runtime; retain bounded terminal transport, newline handling, truthful preopen/control imports, launch-binding enumeration, and process-local terminal admission. The facade does not create a runtime or register Bun. These are original adapters, not a copied upstream shell interpreter. |
-| Adapted root lifecycle with original shell-host integration | Bun `web/src/runner.ts` → prototype `src/runtime/browser-runtime.ts` → `src/runtime/shell-host.ts` | Retain shell-specific launch/outcome fencing; replace the prototype's runtime owner and program registry with the application-supplied Waffle runtime. Shared lifecycle authority belongs to Waffle. |
-| Original shared-terminal launcher | Prototype `src/runtime/{browser-runtime.ts,subprocess-broker.ts}` → `src/runtime/worker-launcher.ts` | Delegate launch to Waffle's `service.launchWorker`, retaining a terminal consumer and wiring controller quiesce/revoke/stop hooks. Waffle owns generic lifecycle and process/descriptor transport. The earlier source broker derives from Bun `web/src/subprocess-broker.ts` at `8d3d416…`; no generic broker is retained here. |
-| Original package entry, diagnostics, and targeted regressions | `src/index.ts`, `src/runtime/diagnostics.ts`, `src/runtime/{diagnostics.test.ts,terminal.test.ts,shell-host.test.ts,worker.test.ts,child-status.test.ts}` | Export the shell facade and borrowed observations, including dropped-terminal-byte counters. Manual pipe observations reclaim closed entries on a 100 ms sweep without relay/disposal ownership; retiring a root clears its timer. Original diagnostics regressions check the closed getter before any snapshot and verify root retirement stops the timer. New original regressions cover terminal streams, cancelable startup/admission retry, typed child startup status, memory telemetry and locally scoped cleanup, not foreign-adapter teardown guarantees or copied upstream suites. |
-| Shell-specific worker executor | Prototype `src/runtime/worker.ts` → `src/runtime/worker.ts`; earlier integration lineage: Bun `web/src/worker.ts` | Reduce the imported shell integration to a small original `WorkerExecutor` passed to the published `waffle/browser/worker` bootstrap. Keep shell imports/phase/memory observations only; Waffle owns generic WASI/descriptor/process/pipe/signal setup and worker cleanup. No generic runtime implementation is copied. |
-| Adapted bounded terminal stream and original prototype input policy | Bun `web/src/runtime-terminals.ts` → `src/runtime/runtime-terminals.ts` via the prototype; original prototype `src/wasi-host.ts` cooked-input policy | Retain `createBridgeTerminal`, the bounded shared-terminal stream adapter, and restore cooked carriage-return/newline handling while preserving raw editor input. Local CRLF state is shared by endpoints referencing the same buffer wrapper in one worker, not a generic cross-worker tty discipline. Remove the local descriptor/terminal codec: Waffle owns that codec and transport. |
-| Original external-program acceptance harness | `tests/browser-main.ts` and `tests/helpers/test-programs.ts` | The page owns the shared runtime and source-guest lease. Register the compiled cooperative `test-guest` and source-admitted/instrumented `test-spin` only at canonical absolute paths after writing their marker files, through the existing shell adapter on that same runtime, without copying runtime or ABI-host implementations. Bare commands exercise shell PATH search, not registry-only aliases. The documented Bun installer contract exposes the missing public capability explicitly; four genuinely Bun-specific cases remain skipped, with no Bun dependency or payload. The generic production host knows no specific programs. |
-| Original browser host and regressions | Prototype `src/{main.tsx,session.ts,style.css,shell-terminal-output.test.ts}` → `src/browser/{main.tsx,session.ts,style.css,terminal-output.test.ts}`; `tests/{pipelines.acceptance,runtime-shell,external-commands,shell}.spec.ts` | Keep renderer and page controls outside the shell facade and remove reference-engine UI. Reuse the root library's `TerminalNewlines` rather than copying a second transformer into the page. Tests exercise the real shell asset and preserve explicit pending external-program cases; they do not replace frozen shell evidence. |
-| Original prototype terminal/guest-adapter unit regressions, adapted | Prototype `src/runtime/{terminal.test.ts,guest-imports.test.ts}` → `tests/{terminal.unit.ts,guest-imports.unit.ts}` | Retain shell-owned bounded-ring/admission/terminal metadata cases with public Waffle APIs. Bun host-slot and real-guest libc internals remain external-package tests, not copied shell-library suites. |
-| Original browser configuration, adapted | Prototype `playwright.config.ts`, `vite.config.ts`, `tsconfig.json`, `index.html`, and the browser sequence in `.github/workflows/ci.yml` → the same destinations | Build/serve/test the own-shell page with the required Waffle peer; drop reference-engine setup without replacing existing standalone shell gates. |
-| Original prototype build helpers, adapted | Prototype `scripts/{sources.mjs,build-shell-browser.mjs,test-runtime-terminal.mjs}` → the same destinations | Preserve terminal/archive verification, remove Brush submodule setup and Bun payload handling, build the local shell runtime directly, and select the new adapter unit paths. |
-| Original prototype server/build-output helpers, imported/adapted | Prototype `scripts/{serve.mjs,finish-build.mjs}` → the same destinations | Retain server isolation; preserve the prebundled shell worker after the browser build clears its output. |
-| Original bundled worker builder | `scripts/build-worker.mjs` | Emit `.build/browser/{shell-worker,fs-worker}.js` and stable `dist/{shell-worker,fs-worker}.js` from the shell-specific executor and Waffle's public filesystem-worker entry. Restore both after Vite; the app supplies the filesystem URL to its runtime. No copied runtime source or raw TypeScript worker contract. |
-| Original worker-asset and renderer regressions | `tests/worker-assets.spec.ts` | Check that production startup loads one emitted filesystem worker, stable worker URLs serve JavaScript, and a browser with no available WebGPU adapter opens a usable Canvas terminal. These are new original tests, not imported suite cases. |
-| Original source-built test guests and builder | `tests/guest/{Cargo.toml,Cargo.lock,README.md,src/main.rs,src/bin/test-spin.rs}` and `scripts/build-test-guest.mjs` | Build `test-guest` for cooperative generic process-ABI exercises and `test-spin` with only WASI imports and a genuine no-checkpoint CPU loop to exercise source interrupt admission. JSON encoding, ABI callers and thin WASI/preopen wrappers are original. Publish ignored test assets, not Bun substitutes or shell-library program payloads. |
-| Original browser notice aggregator | `scripts/browser-notices.mjs` | New distribution integration collecting shell, terminal, peer and npm notices; no additional upstream code copied. |
-| Original browser packaging regressions | `scripts/test-browser-package.mjs` | Verify peer/development/lock pin identity and the absence of copied runtime/Bun implementation sources or Bun payloads before the browser build; no upstream tests copied. |
-| External shared runtime, not vendored | Waffle `ba968a6f86468d03394792a3e9c447dfc713c279` | Required peer plus identical development pin. The application imports the single `createRuntime` from Waffle's package root. |
-| Pinned terminal source | Ghostty WebGPU source/archive pin under `terminal` in `sources.lock.json` | Retain the existing terminal source revision/archive checksum and its included WASM notices; do not substitute an unpinned terminal build. |
+| Classification                                                      | Source and destination                                                                                                                                                                                                              | Local changes and reason                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Original embedding adapters, imported and maintained here           | Prototype `src/{shell.ts,bridge.ts,shell-terminal-output.ts}` and `src/runtime/{guest-imports.ts,terminal-admission.ts,limits.ts}`                                                                                                  | Inject the actual Waffle runtime; retain bounded terminal transport, newline handling, truthful preopen/control imports, launch-binding enumeration, and process-local terminal admission. The facade does not create a runtime or register Bun. These are original adapters, not a copied upstream shell interpreter.                                                                                                                                                                                                                                                                                                                        |
+| Adapted root lifecycle with original shell-host integration         | Bun `web/src/runner.ts` → prototype `src/runtime/browser-runtime.ts` → `src/runtime/shell-host.ts`                                                                                                                                  | Retain shell-specific launch/outcome fencing; replace the prototype's runtime owner and program registry with the application-supplied Waffle runtime. Shared lifecycle authority belongs to Waffle.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Original shared-terminal launcher                                   | Prototype `src/runtime/{browser-runtime.ts,subprocess-broker.ts}` → `src/runtime/worker-launcher.ts`                                                                                                                                | Delegate launch to Waffle's `service.launchWorker`, retaining a terminal consumer and wiring controller quiesce/revoke/stop hooks. Waffle owns generic lifecycle and process/descriptor transport. The earlier source broker derives from Bun `web/src/subprocess-broker.ts` at `8d3d416…`; no generic broker is retained here.                                                                                                                                                                                                                                                                                                               |
+| Original package entry, diagnostics, and targeted regressions       | `src/index.ts`, `src/runtime/diagnostics.ts`, `src/runtime/{diagnostics.test.ts,terminal.test.ts,shell-host.test.ts,worker.test.ts,child-status.test.ts}`                                                                           | Export the shell facade and borrowed observations, including dropped-terminal-byte counters. Manual pipe observations reclaim closed entries on a 100 ms sweep without relay/disposal ownership; retiring a root clears its timer. Original diagnostics regressions check the closed getter before any snapshot and verify root retirement stops the timer. New original regressions cover terminal streams, cancelable startup/admission retry, typed child startup status, memory telemetry and locally scoped cleanup, not foreign-adapter teardown guarantees or copied upstream suites.                                                  |
+| Shell-specific worker executor                                      | Prototype `src/runtime/worker.ts` → `src/runtime/worker.ts`; earlier integration lineage: Bun `web/src/worker.ts`                                                                                                                   | Reduce the imported shell integration to a small original `WorkerExecutor` passed to the published `waffle/browser/worker` bootstrap. Keep shell imports/phase/memory observations only; Waffle owns generic WASI/descriptor/process/pipe/signal setup and worker cleanup. No generic runtime implementation is copied.                                                                                                                                                                                                                                                                                                                       |
+| Adapted bounded terminal stream and original prototype input policy | Bun `web/src/runtime-terminals.ts` → `src/runtime/runtime-terminals.ts` via the prototype; original prototype `src/wasi-host.ts` cooked-input policy                                                                                | Retain `createBridgeTerminal`, the bounded shared-terminal stream adapter, and restore cooked carriage-return/newline handling while preserving raw editor input. Local CRLF state is shared by endpoints referencing the same buffer wrapper in one worker, not a generic cross-worker tty discipline. Remove the local descriptor/terminal codec: Waffle owns that codec and transport.                                                                                                                                                                                                                                                     |
+| Original external-program acceptance harness                        | `tests/browser-main.ts` and `tests/helpers/{test-programs.ts,bun-fixture.ts}`                                                                                                                                                       | The page owns the shared runtime and source-guest lease. Register the compiled cooperative `test-guest` and source-admitted/instrumented `test-spin` only at canonical absolute paths after writing their marker files, through the existing shell adapter on that same runtime, without copying runtime or ABI-host implementations. Bare commands exercise shell PATH search, not registry-only aliases. The injected Bun installer contract exposes the missing public capability explicitly; four genuinely Bun-specific cases remain skipped, with no Bun dependency or payload. The generic production host knows no specific programs. |
+| Original browser host and regressions                               | Prototype `src/{main.tsx,session.ts,style.css,shell-terminal-output.test.ts}` → `src/browser/{main.tsx,session.ts,style.css,terminal-output.test.ts}`; `tests/{pipelines.acceptance,runtime-shell,external-commands,shell}.spec.ts` | Keep renderer and page controls outside the shell facade and remove reference-engine UI. Reuse the root library's `TerminalNewlines` rather than copying a second transformer into the page. Tests exercise the real shell asset and preserve explicit pending external-program cases; they do not replace frozen shell evidence.                                                                                                                                                                                                                                                                                                             |
+| Original consumer storage-readiness adapter                         | `src/browser/storage.ts`, `src/browser/{session.ts,main.tsx}`, and `tests/browser-main.ts`                                                                                                                                          | Observe Waffle ownership/recovery states before shell admission, guard initial opening separately from shell startup, preserve existing observers, and cancel local waits. Borrow app runtimes or accept owner-supplied leases; await session and owned-lease disposal on restart/stop. No storage backend, ownership lock or persistence implementation copied.                                                                                                                                                                                                                                                                              |
+| Original prototype terminal/guest-adapter unit regressions, adapted | Prototype `src/runtime/{terminal.test.ts,guest-imports.test.ts}` → `tests/{terminal.unit.ts,guest-imports.unit.ts}`                                                                                                                 | Retain shell-owned bounded-ring/admission/terminal metadata cases with public Waffle APIs. Bun host-slot and real-guest libc internals remain external-package tests, not copied shell-library suites.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Original browser configuration, adapted                             | Prototype `playwright.config.ts`, `vite.config.ts`, `tsconfig.json`, `index.html`, and the browser sequence in `.github/workflows/ci.yml` → the same destinations                                                                   | Build/serve/test the own-shell page with the required Waffle peer; drop reference-engine setup without replacing existing standalone shell gates.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Original prototype build helpers, adapted                           | Prototype `scripts/{sources.mjs,build-shell-browser.mjs,test-runtime-terminal.mjs}` → the same destinations                                                                                                                         | Preserve terminal/archive verification, remove Brush submodule setup and Bun payload handling, build the local shell runtime directly, and select the new adapter unit paths.                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Original prototype server/build-output helpers, imported/adapted    | Prototype `scripts/{serve.mjs,finish-build.mjs}` → the same destinations                                                                                                                                                            | Retain server isolation; preserve the prebundled shell worker after the browser build clears its output.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Original bundled worker builder                                     | `scripts/build-worker.mjs`                                                                                                                                                                                                          | Emit `.build/browser/{shell-worker,fs-worker}.js` and stable `dist/{shell-worker,fs-worker}.js` from the shell-specific executor and Waffle's public filesystem-worker entry. Restore both after Vite; the app supplies the filesystem URL to its runtime. No copied runtime source or raw TypeScript worker contract.                                                                                                                                                                                                                                                                                                                        |
+| Original worker-asset and renderer regressions                      | `tests/worker-assets.spec.ts`                                                                                                                                                                                                       | Check that production startup loads one emitted filesystem worker, stable worker URLs serve JavaScript, and a browser with no available WebGPU adapter opens a usable Canvas terminal. These are new original tests, not imported suite cases.                                                                                                                                                                                                                                                                                                                                                                                                |
+| Original source-built test guests and builder                       | `tests/guest/{Cargo.toml,Cargo.lock,README.md,src/main.rs,src/bin/test-spin.rs}` and `scripts/build-test-guest.mjs`                                                                                                                 | Build `test-guest` for cooperative generic process-ABI exercises and `test-spin` with only WASI imports and a genuine no-checkpoint CPU loop to exercise source interrupt admission. JSON encoding, ABI callers and finite libc-backed filesystem/literal-descriptor probes are original. Link both against Waffle's patched sysroot and verify final scanner code; publish ignored test assets, not Bun substitutes or shell-library program payloads.                                                                                                                                                                                       |
+| Shared wasi-libc port, maintained externally                        | Upstream `libc-bottom-half/sources/preopens.c` at wasi-libc `2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13` (wasi-sdk 34.0); Waffle `patches/wasi-libc/preopen-scan.patch`                                                               | Consume Waffle's single patch and builder, never a local copy. Skip occupied non-preopens via fdstat, stop at the first hole and preserve fatal errors; see the [classified ledger](wasi-libc.md).                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Original WASI build and final-artifact tooling                      | `scripts/{wasi-build.ts,verify-wasi-guests.ts,build-shell.ts}`, shell/browser/test/scoreboard build callers, and `.cargo/config.toml`                                                                                               | Select the shared patched sysroot for every Rust WASI compile/final link with self-contained libc disabled; prove patched scanner calls or original Rust WASI import identities and check the 256 MiB memory maximum in final artifacts, including archived scoreboard-migration builds. No upstream builder implementation copied.                                                                                                                                                                                                                                                                                                           |
+| Original inherited-descriptor browser regression matrix             | `tests/runtime-shell.spec.ts` and `tests/guest/src/{main.rs,bin/test-spin.rs}`                                                                                                                                                      | Check filesystem access alongside literal inherited fd 3, sparse/occupied layouts, nested shells and input inheritance for every rebuilt guest. Existing shell operations through the original Rust WASI adapter and ordinary libc-backed fixture probes, not external Bun evidence.                                                                                                                                                                                                                                                                                                                                                          |
+| Original browser notice aggregator                                  | `scripts/browser-notices.mjs`                                                                                                                                                                                                       | New distribution integration collecting shell, terminal, peer and npm notices; no additional upstream code copied.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Original browser packaging regressions                              | `scripts/test-browser-package.mjs`                                                                                                                                                                                                  | Verify peer/development/lock pin identity and the absence of copied runtime/Bun implementation sources or Bun payloads before the browser build; no upstream tests copied.                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| External shared runtime, not vendored                               | Waffle `8bfc767d6097cf3c741092328573460a3047d114`                                                                                                                                                                                   | Required peer plus identical development pin. The application imports the single `createRuntime` from Waffle's package root.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Pinned terminal source                                              | Ghostty WebGPU source/archive pin under `terminal` in `sources.lock.json`                                                                                                                                                           | Retain the existing terminal source revision/archive checksum and its included WASM notices; do not substitute an unpinned terminal build.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 Exact pins, checksums, import mappings, classifications, and reasons are recorded
 under `waffle` and `browserRuntime` in
@@ -451,7 +532,7 @@ Browser test failures print pending stages and attach the full snapshot as
 `browser-startup-diagnostics`. Shell embeddings may supply `onStartupStage` to
 `createShell` for the same non-blocking observations. Observer throws and rejected
 returns are ignored; observers are never awaited. Observers must not abort or start/stop
-shell or runtime control, matching [Waffle's passive observer contract](https://github.com/ShaulLavo/waffle/blob/4f07d191c0c8d6047800031c3a803f67d6954572/docs/runtime-startup.md).
+shell or runtime control, matching [Waffle's passive observer contract](https://github.com/ShaulLavo/waffle/blob/8bfc767d6097cf3c741092328573460a3047d114/docs/runtime-startup.md).
 No polling or history is kept by the observer hook.
 An absent marker means unobserved, not pending. In particular, a borrowed runtime
 or cached shell registration may have completed work before observation began.

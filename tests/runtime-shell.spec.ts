@@ -1,12 +1,11 @@
 import { test, expect, type Page } from "./helpers/browser-test";
+import { ready, startupReady } from "./helpers/readiness.ts";
 
 test.setTimeout(60000);
-async function ready(page: Page) {
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
-}
+
 async function open(page: Page) {
   await page.goto("/?test=1&renderer=canvas&engine=own-shell");
-  await ready(page);
+  await startupReady(page);
   expect(await page.evaluate(() => window.bashWeb?.snapshot().engine)).toBe("own-shell");
   await page.locator("textarea").focus();
   return page.workers().length;
@@ -38,7 +37,7 @@ async function file(page: Page, path: string, source: string) {
 
 test("own shell is the default engine", async ({ page }) => {
   await page.goto("/?test=1&renderer=canvas");
-  await ready(page);
+  await startupReady(page);
   expect(await page.evaluate(() => window.bashWeb?.snapshot().engine)).toBe("own-shell");
 });
 
@@ -97,7 +96,7 @@ test("nonstandard inherited descriptors share file offsets and redirected stdout
 }) => {
   test.fixme(
     true,
-    "Known Bun guest limitation: pinned wasi-libc aborts on NOTSUP while discovering a root preopen relocated after inherited fd 3; the guest libc must skip occupied non-preopen descriptors.",
+    "External Bun guest payload is not rebuilt here; it must link Waffle's patched libc preopen scanner before inherited-descriptor filesystem coverage can run.",
   );
   await open(page);
   await file(page, "descriptor-data", "shared-offset");
@@ -113,7 +112,7 @@ test("nonstandard inherited descriptors share file offsets and redirected stdout
 test("an inherited fd 3 does not replace the filesystem root preopen", async ({ page }) => {
   test.fixme(
     true,
-    "Known Bun guest limitation: pinned wasi-libc aborts on NOTSUP while discovering a root preopen relocated after inherited fd 3; the guest libc must skip occupied non-preopen descriptors.",
+    "External Bun guest payload is not rebuilt here; it must link Waffle's patched libc preopen scanner before inherited-descriptor filesystem coverage can run.",
   );
   await open(page);
   await file(page, "preopen-data", "ROOT_PREOPEN_OK");
@@ -121,6 +120,96 @@ test("an inherited fd 3 does not replace the filesystem root preopen", async ({ 
   await output(page, "ROOT_PREOPEN_OK");
   await ready(page);
 });
+
+// These are rebuilt here with Waffle's patched libc. The unrelated external Bun
+// guest above is not built by this repository and must not stand in for coverage.
+function shellQuote(value: string) {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+const preopenGuests = ["shell-engine", "test-guest", "test-spin"] as const;
+const preopenLayouts = [
+  { name: "persistent fd 3", extraFds: [], nested: false },
+  { name: "fd 3 and sparse bindings 10–12", extraFds: [10, 11, 12], nested: false },
+  { name: "all bindings 3–9", extraFds: [4, 5, 6, 7, 8, 9], nested: false },
+  { name: "nested shell inheritance", extraFds: [], nested: true },
+];
+
+function preopenInvocation(
+  guest: (typeof preopenGuests)[number],
+  marker: string,
+  extraFds: readonly number[],
+  inputBinding = false,
+) {
+  if (guest !== "shell-engine") {
+    const mode = inputBinding ? "preopen-input" : "preopen-probe";
+    return `/bin/${guest} ${mode} /preopen-input /preopen-result ${marker} ${extraFds.join(" ")}`;
+  }
+  // Exercise the built shell through its existing absolute-path filesystem
+  // operations, not a new engine probe or an adapter-side preopen lookup.
+  const operations = [
+    "IFS= read -r value </preopen-input",
+    'test "$value" = ROOT_PREOPEN_DATA',
+    `printf '${marker}:FILESYSTEM\\n' >/preopen-result`,
+    "IFS= read -r value </preopen-result",
+    `test "$value" = ${marker}:FILESYSTEM`,
+  ];
+  if (inputBinding) {
+    operations.push(
+      "IFS= read -r value <&3",
+      'test "$value" = ROOT_PREOPEN_DATA',
+      `printf '${marker}:FD3_INPUT\\n'`,
+    );
+  } else {
+    operations.push(`printf '${marker}:FD3\\n' >&3`);
+    for (const fd of extraFds) operations.push(`printf '${marker}:FD${fd}\\n' >&${fd}`);
+  }
+  return `/programs/shell-engine.wasm -c ${shellQuote(operations.join(" && "))}`;
+}
+
+for (const guest of preopenGuests) {
+  for (const layout of preopenLayouts) {
+    test(`${guest} keeps filesystem access and literal fd 3 with ${layout.name}`, async ({
+      page,
+    }) => {
+      const baseline = await open(page);
+      const marker = `PREOPEN_${guest.replaceAll("-", "_")}`;
+      await command(page, "printf 'ROOT_PREOPEN_DATA\\n' >/preopen-input; exec 3>/preopen-fd");
+      await ready(page);
+      let invocation = preopenInvocation(guest, marker, layout.extraFds);
+      if (layout.nested) invocation = `/programs/shell-engine.wasm -c ${shellQuote(invocation)}`;
+      const bindings = layout.extraFds.map((fd) => `${fd}>&3`).join(" ");
+      await command(page, `${invocation} ${bindings}; printf 'PREOPEN_STATUS:%s\\n' "$?"`);
+      await output(page, "PREOPEN_STATUS:0");
+      await ready(page);
+      await command(page, "cat /preopen-result; cat /preopen-fd; exec 3>&-");
+      await output(page, `${marker}:FILESYSTEM`);
+      await output(page, `${marker}:FD3`);
+      for (const fd of layout.extraFds) await output(page, `${marker}:FD${fd}`);
+      await ready(page);
+      await expect.poll(() => page.workers().length).toBe(baseline);
+    });
+  }
+
+  test(`${guest} discovers the filesystem root with cmd 3<&0`, async ({ page }) => {
+    const baseline = await open(page);
+    const marker = `PREOPEN_INPUT_${guest.replaceAll("-", "_")}`;
+    await command(page, "printf 'ROOT_PREOPEN_DATA\\n' >/preopen-input");
+    await ready(page);
+    const invocation = preopenInvocation(guest, marker, [], true);
+    await command(
+      page,
+      `${invocation} </preopen-input 3<&0; printf 'PREOPEN_INPUT_STATUS:%s\\n' "$?"`,
+    );
+    await output(page, `${marker}:FD3_INPUT`);
+    await output(page, "PREOPEN_INPUT_STATUS:0");
+    await ready(page);
+    await command(page, "cat /preopen-result");
+    await output(page, `${marker}:FILESYSTEM`);
+    await ready(page);
+    await expect.poll(() => page.workers().length).toBe(baseline);
+  });
+}
 
 test("builtins and runtime shell children preserve arbitrary descriptors and the root preopen", async ({
   page,

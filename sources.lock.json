@@ -68,12 +68,24 @@
   },
   "waffle": {
     "repository": "https://github.com/ShaulLavo/waffle",
-    "revision": "4f07d191c0c8d6047800031c3a803f67d6954572",
+    "revision": "8bfc767d6097cf3c741092328573460a3047d114",
     "package": "waffle",
-    "version": "0.0.34",
-    "specifier": "git+https://github.com/ShaulLavo/waffle.git#4f07d191c0c8d6047800031c3a803f67d6954572",
+    "version": "0.0.43",
+    "specifier": "git+https://github.com/ShaulLavo/waffle.git#8bfc767d6097cf3c741092328573460a3047d114",
     "license": "MIT",
-    "strategy": "Required peer imported by the JavaScript shell adapter; exact same Git pin used as development dependency for browser builds and tests. One application-created runtime per page owns shared services. No runtime source tree is vendored."
+    "strategy": "Required peer imported by the JavaScript shell adapter; exact same Git pin used as development dependency for browser builds and tests. One application-created runtime per page owns shared services. No runtime source tree is vendored. Waffle owns lowest-free preopen placement and the single wasi-libc scanner patch; every locally built WASI guest final-links the patched sysroot."
+  },
+  "wasiLibc": {
+    "classification": "Port, external shared patch; no copied implementation in bash-web",
+    "repository": "https://github.com/WebAssembly/wasi-libc",
+    "revision": "2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13",
+    "upstreamPath": "libc-bottom-half/sources/preopens.c",
+    "sdk": "wasi-sdk 34.0",
+    "patchOwner": "waffle",
+    "patchPath": "node_modules/waffle/patches/wasi-libc/preopen-scan.patch",
+    "builder": "node_modules/waffle/scripts/build-wasi-libc.sh",
+    "changes": "After prestat BADF, query fdstat: continue past an open non-preopen, stop at a genuinely absent fd, preserve fatal handling of other errors. Every local WASI guest uses the owned patched sysroot at final link; Rust self-contained libc is disabled.",
+    "documentation": "docs/wasi-libc.md"
   },
   "browserRuntime": {
     "sourceRepository": "ShaulLavo/brush-web (retired prototype; no retained dependency or required external link)",
@@ -105,7 +117,7 @@
           "src/runtime/terminal-admission.ts",
           "src/runtime/limits.ts"
         ],
-        "changes": "Require the actual page-owned Waffle Runtime instead of a structural startProcess peer; remove execution-profile/reference-engine coupling; keep terminal/preopen/shell-ABI wiring and bounded transport. No runtime creation or external-program registry in the shell facade."
+        "changes": "Require the actual page-owned Waffle Runtime instead of a structural startProcess peer; remove execution-profile/reference-engine coupling; keep terminal/shell-ABI wiring and bounded transport; delete local preopen placement and prestat overrides. No runtime creation or external-program registry in the shell facade."
       },
       {
         "classification": "Adapted bounded terminal stream, via prototype",

@@ -24,6 +24,7 @@ const startupOperations = [
   "previous-stop",
   "terminal-open",
   "runtime-lease",
+  "storage-wait",
   "session-create",
   "test-guests-fetch",
   "test-guest-fetch",

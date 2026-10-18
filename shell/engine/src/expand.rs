@@ -1158,7 +1158,7 @@ impl Expansion<'_> {
         self.work.admit_parse(body.len(), self.cancel).await?;
         self.work
             .admit_storage(body.len().saturating_mul(512).saturating_add(2048))?;
-        match slice_shell_grammar(body) {
+        match crate::parse::substitution_grammar(body) {
             Ok(_) => Ok(()),
             Err(error) if shell_parser_budget_error(&error) => Err(2.into()),
             Err(_) => {
@@ -1959,21 +1959,6 @@ fn bounded(value: Cow<'_, str>, max: usize) -> Result<String, Error> {
     }
     Ok(value.into_owned())
 }
-// Keep the large synchronous parser frame out of every recursive expansion
-// future. Its input, depth, work and allocation bounds are admitted by caller.
-#[inline(never)]
-fn slice_shell_grammar(source: &str) -> Result<(), shell_parser::error::Error> {
-    shell_parser::parser::Parser::with_limits_and_options(
-        source,
-        operand::MAX_DEPTH,
-        4096 * 16,
-        shell_parser::parser::ParseOptions::default(),
-    )
-    .with_substitution_body()
-    .parse()
-    .map(|_| ())
-}
-
 fn shell_parser_budget_error(error: &shell_parser::error::Error) -> bool {
     matches!(error, shell_parser::error::Error::ResourceLimit(_))
 }
@@ -2227,14 +2212,7 @@ async fn expand(
                 .saturating_add(syntax.saturating_mul(4).saturating_mul(slot))
                 .saturating_add(512),
         )?;
-        let parsed = shell_parser::parser::Parser::parse_expanded_word_with_limits(
-            &variant,
-            // Brace spelling removes syntax; it must not impose the lower
-            // recursive operand-evaluation cap on already-accepted lazy text.
-            shell_parser::limits::ExecutionLimits::default().max_ast_depth,
-            variant.len().saturating_add(3).saturating_mul(16),
-        )
-        .map_err(|error| match error {
+        let parsed = crate::parse::generated_word(&variant).map_err(|error| match error {
             shell_parser::Error::ResourceLimit(_) => Error::Status(2),
             _ => Error::BadSubstitution {
                 message: "invalid generated word",

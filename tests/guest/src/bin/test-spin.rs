@@ -4,7 +4,18 @@
 use std::io::{self, Write};
 
 fn main() {
-    if let Some(marker) = std::env::args().nth(1) {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if matches!(
+        args.first().map(String::as_str),
+        Some("preopen-probe" | "preopen-input")
+    ) {
+        if let Err(error) = test_guest::preopen_probe(&args) {
+            eprintln!("test-spin: {error}");
+            std::process::exit(2);
+        }
+        return;
+    }
+    if let Some(marker) = args.first() {
         let mut stdout = io::stdout().lock();
         writeln!(stdout, "{marker}").expect("write marker");
         stdout.flush().expect("flush marker");

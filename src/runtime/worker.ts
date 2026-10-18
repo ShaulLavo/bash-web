@@ -9,11 +9,7 @@ import {
   type RuntimeWorkerRequest,
 } from "waffle/browser/worker";
 import { SharedBridge, control } from "../bridge";
-import {
-  preservePreopenDiscovery,
-  preserveRootPreopen,
-  shellTerminalImports,
-} from "./guest-imports";
+import { shellTerminalImports } from "./guest-imports";
 import { createBridgeTerminal } from "./runtime-terminals";
 import { createTerminalAdmission, type TerminalAdmission } from "./terminal-admission";
 import type { ShellWorkerData } from "./worker-launcher";
@@ -30,7 +26,6 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
   const admission =
     request.terminalAdmission ?? data?.terminalAdmission ?? createTerminalAdmission();
   let checkActive = () => {};
-  let preopen = 3;
   let memory: WebAssembly.Memory | undefined;
   const bridge = request.terminal ? new SharedBridge(request.terminal) : undefined;
   const sample = request.memoryUsage ? new BigInt64Array(request.memoryUsage) : undefined;
@@ -77,13 +72,8 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
     spawnData: () => ({ shellTerminal: terminal, terminalAdmission: createTerminalAdmission() }),
     beforeBindings({ wasi }) {
       if (!request.terminal) for (const fd of [0, 1, 2]) wasi.descriptors.close(fd);
-      preopen = preserveRootPreopen(
-        wasi.descriptors,
-        request.runtimeProcess?.bindings.map((binding) => binding.fd) ?? [],
-      );
     },
-    imports(imports, { wasi }) {
-      preservePreopenDiscovery(imports, wasi.descriptors, preopen);
+    imports(imports) {
       // Sample the guest's allocation at host boundaries without retaining any guest
       // memory view across memory.grow. This telemetry is not an allocation quota.
       if (!sample && !bridge) return;
