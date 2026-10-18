@@ -32,6 +32,14 @@ class Reader {
   }
 }
 
+function readFunctionNameSubsection(data: Reader, names: Map<string, number>) {
+  const count = data.integer();
+  for (let index = 0; index < count; index++) {
+    const functionIndex = data.integer();
+    names.set(new TextDecoder().decode(data.slice(data.integer())), functionIndex);
+  }
+}
+
 function functionNames(module: WebAssembly.Module) {
   const names = new Map<string, number>();
   for (const section of WebAssembly.Module.customSections(module, "name")) {
@@ -40,11 +48,7 @@ function functionNames(module: WebAssembly.Module) {
       const kind = reader.integer();
       const data = new Reader(reader.slice(reader.integer()));
       if (kind !== 1) continue;
-      const count = data.integer();
-      for (let index = 0; index < count; index++) {
-        const functionIndex = data.integer();
-        names.set(new TextDecoder().decode(data.slice(data.integer())), functionIndex);
-      }
+      readFunctionNameSubsection(data, names);
     }
   }
   return names;
