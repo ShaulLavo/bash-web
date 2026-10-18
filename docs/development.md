@@ -47,6 +47,45 @@ separate from the shell facade.
 The development dependency uses the same pin so local builds and tests exercise
 the same runtime applications supply.
 
+## Install external utilities
+
+The core entry imports no utilities. `cat`, `grep`, `mkdir`, and `seq` each have
+an independent `bash-web/utilities/<name>` entry and WASM program. Install only
+what your application needs on the same Runtime that you pass to `createShell`:
+
+```ts
+import { installCat } from "bash-web/utilities/cat";
+
+const cat = await installCat(runtime);
+try {
+	const shell = await createShell({ runtime, script: "printf hello | cat" });
+	try {
+		await shell.done;
+	} finally {
+		await shell.dispose();
+	}
+} finally {
+	await cat.dispose();
+}
+```
+
+The other entries export `installGrep`, `installMkdir`, and `installSeq`.
+Installers register `/bin/<name>` without fetching, compiling, or starting a
+worker. The first spawn loads the guest. Supply `wasmUrl` and `workerUrl` when
+bundling changes asset URLs, or supply a compiled `module` or lazy module loader.
+The worker URL identifies this package's `dist/shell-worker.js`.
+
+A foreign executable entry or duplicate installation raises
+`UtilityConflictError`. Disposal releases that installation's registrations and
+removes its executable marker only if the installation created it and its bytes
+remain unchanged. Stop the utility's processes before disposing its installation.
+The application still owns the Runtime.
+
+Without an installed or otherwise registered program, ordinary PATH lookup
+returns status 127. Shell-language features remain in the core. Only `grep`
+uses the `regex` crate. Each utility carries guest glue, so installing all four
+can cost more than the former combined shell.
+
 ## Build and test
 
 Prerequisites are Node 26.7.0, npm, Rust 1.98.1 through rustup, and
@@ -287,15 +326,15 @@ These are intentionally different views, not one generic builtin predicate:
   Parser-owned compound-array declaration grammar remains separate and unchanged.
 - Special/regular builtin class is descriptive metadata, not a new precedence,
   persistence or POSIX-mode rule. Declaration status overlaps both classes.
-  Acceptance `cat`, `grep`, `mkdir` and `seq` are stand-ins, not shell builtins.
-  They retain internal dispatch while query lookup searches PATH for all four.
-- Heredoc errors retain their different historical view: `cat`/`seq` use the
-  command-local error context, while `grep`/`mkdir` use the shell error context.
-  Functions still take precedence in that view, before command-wrapper unwrapping.
+  `cat`, `grep`, `mkdir` and `seq` are external programs, absent from builtin
+  metadata and dispatch. Queries and execution both use ordinary PATH lookup.
+- Builtin heredoc errors belong to the shell; external-command errors use the
+  command-local context. Functions take precedence before command-wrapper
+  unwrapping.
 - Queries still choose keyword, function, reportable builtin, then PATH. Keyword
   visibility does not claim syntax support: `select`, `time` and `coproc` are
-  explicitly unsupported execution syntax. Core/acceptance availability describes
-  the current full build; it introduces no Cargo features, Lite filters or options.
+  explicitly unsupported execution syntax. Availability distinguishes included
+  core commands from unsupported syntax, without build presets or feature filters.
 - The interpreter retains early direct `exec`, wrapper parsing/function bypass,
   function frames, and `let`/`eval` phases. Prefix restoration, status/diagnostics,
   PATH admission, cancellation and lazy expansion remain with their old owners.
@@ -303,7 +342,7 @@ These are intentionally different views, not one generic builtin predicate:
 
 The catalogue has no dependencies on feature modules. Original membership tests
 pin every old view independently, including absent names, handler ownership,
-class/capability relationships and the differing stand-in exclusions. Original
+class/availability relationships and the external-command exclusions. Original
 engine controls passed against the unchanged baseline before extraction and pin
 query output, declaration syntax, heredoc scope and function/prefix behavior.
 
