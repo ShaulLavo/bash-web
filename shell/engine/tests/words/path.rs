@@ -196,6 +196,100 @@ fn wide_immediately_ready_path_search_yields_and_interrupts_without_spawn_probes
 }
 
 #[test]
+fn resolved_executable_preserves_the_invoked_argv_zero() {
+    let rig = path_rig();
+    let observed = Rc::new(RefCell::new(Vec::new()));
+    let calls = observed.clone();
+    rig.host.register("/home/guest/probe", move |request, _| {
+        calls.borrow_mut().push(request.argv);
+        async { 0 }.boxed_local()
+    });
+    rig.variable("PATH", "/home/guest");
+    for (source, invoked) in [
+        ("probe ARG", "probe"),
+        ("command probe ARG", "probe"),
+        ("./probe ARG", "./probe"),
+        ("command ./probe ARG", "./probe"),
+        ("/home/guest/probe ARG", "/home/guest/probe"),
+    ] {
+        assert_eq!(rig.run(source), 0, "{source}");
+        assert_eq!(
+            observed.borrow().last().unwrap(),
+            &[invoked, "ARG"],
+            "{source}"
+        );
+        assert_eq!(rig.host.retained_count(), 0);
+    }
+}
+
+#[test]
+fn nameref_prefix_path_uses_resolved_binding_without_changing_the_caller() {
+    let rig = path_rig();
+    assert_eq!(rig.run("PATH=a; declare -n p=PATH; p=b probe ARG"), 9);
+    assert_eq!(rig.run("p=b command probe ARG"), 9);
+    assert_eq!(rig.run("probe"), 7);
+    assert_eq!(rig.run("p=b command -v probe"), 0);
+    assert_eq!(String::from_utf8(rig.output.bytes()).unwrap(), "b/probe\n");
+    assert_eq!(rig.run("test \"$PATH:$p\" = a:a"), 0);
+}
+
+#[test]
+fn prefix_named_path_resolves_its_nameref_target_instead_of_overriding_search() {
+    let rig = path_rig();
+    assert_eq!(
+        rig.run("unset PATH; other=a; declare -n PATH=other; PATH=b probe ARG"),
+        7
+    );
+    assert_eq!(rig.run("PATH=b command probe ARG"), 7);
+    assert_eq!(rig.run("probe"), 7);
+    assert_eq!(rig.run("PATH=b command -v probe"), 0);
+    assert_eq!(String::from_utf8(rig.output.bytes()).unwrap(), "b/probe\n");
+    assert_eq!(rig.run("test \"$PATH:$other\" = a:a"), 0);
+}
+
+#[test]
+fn external_environment_contains_the_resolved_prefix_bindings() {
+    let rig = path_rig();
+    let observed = Rc::new(RefCell::new(Vec::new()));
+    for (directory, status) in [("a", 7), ("b", 9)] {
+        let calls = observed.clone();
+        rig.host.register(
+            format!("/home/guest/{directory}/probe"),
+            move |request, _| {
+                calls.borrow_mut().push(request.env);
+                async move { status }.boxed_local()
+            },
+        );
+    }
+    assert_eq!(rig.run("PATH=a; declare -n p=PATH; p=b probe"), 9);
+    assert_eq!(
+        observed
+            .borrow()
+            .last()
+            .unwrap()
+            .get("PATH")
+            .map(String::as_str),
+        Some("b")
+    );
+    assert!(!observed.borrow().last().unwrap().contains_key("p"));
+    assert_eq!(
+        rig.run("unset -n p; unset PATH; other=a; declare -n PATH=other; PATH=b probe"),
+        7
+    );
+    assert_eq!(
+        observed
+            .borrow()
+            .last()
+            .unwrap()
+            .get("other")
+            .map(String::as_str),
+        Some("b")
+    );
+    assert!(!observed.borrow().last().unwrap().contains_key("PATH"));
+    assert_eq!(rig.run("test \"$PATH:$other\" = a:a"), 0);
+}
+
+#[test]
 fn explicit_denied_traversal_is_non_runnable_even_without_stat_visibility() {
     let rig = path_rig();
     rig.host

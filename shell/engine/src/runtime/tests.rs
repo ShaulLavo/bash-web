@@ -507,6 +507,7 @@ fn shutdown_session(executor: &Executor, runtime: &Runtime, fake: &Fake, session
 }
 fn request(runtime: &Runtime, name: &str, group: GroupId) -> SpawnRequest {
     SpawnRequest {
+        executable: name.into(),
         argv: vec![name.into()],
         env: BTreeMap::new(),
         cwd: "/home/guest".into(),
@@ -529,6 +530,29 @@ fn finish<T: Clone + 'static>(
     }
     panic!("fake runtime failed to finish");
 }
+#[test]
+fn spawn_forwards_resolved_executable_separately_from_original_argv_zero() {
+    let (executor, fake, runtime) = setup();
+    let group = runtime.allocate_group();
+    let mut spec = request(&runtime, "/home/guest/done", group);
+    spec.argv = vec!["done".into(), "ARG".into()];
+    let pid = runtime.spawn(spec).unwrap();
+    assert_eq!(
+        fake.requests.borrow().last().unwrap().executable,
+        "/home/guest/done"
+    );
+    assert_eq!(fake.requests.borrow().last().unwrap().argv, ["done", "ARG"]);
+    assert_eq!(
+        finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
+        Ok(0)
+    );
+    assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
+    assert!(runtime.0.groups.borrow().is_empty());
+    assert!(runtime.0.waiters.borrow().is_empty());
+    assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
+    assert_eq!(executor.drive(64).pending, 0);
+}
+
 #[test]
 fn preview1_filestat_decodes_native_widths_and_preserves_missing_capabilities() {
     use crate::io::FileKind;

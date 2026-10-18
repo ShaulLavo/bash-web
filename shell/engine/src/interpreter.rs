@@ -3188,7 +3188,7 @@ async fn dispatch_simple_command_body(
         }
         return Ok(Outcome::status(126));
     }
-    {
+    let executable = {
         // External prefix values already form the request environment. Lookup
         // reads its last PATH binding directly; installing a builtin frame here
         // would mutate shell state and double-charge exact argv boundaries.
@@ -3196,30 +3196,29 @@ async fn dispatch_simple_command_body(
             .iter()
             .rev()
             .find_map(|(key, value)| (key == "PATH").then_some(value.as_str()));
-        name =
-            match command_builtin::executable(&name, &state, default_path, path_override, &context)
-                .await?
-            {
-                command_builtin::Resolution::Executable(path) => {
-                    // Keep the original path walk intact for the host. Lexically
-                    // removing file/../ before spawn could bypass ENOTDIR checks.
-                    path
-                }
-                command_builtin::Resolution::NonExecutable(path, reason) => {
-                    command_builtin::execution_failure(&fds, &context, &path, reason).await?;
-                    return Ok(Outcome::status(126));
-                }
-                command_builtin::Resolution::Missing => {
-                    let reason = if name.contains('/') {
-                        b"No such file or directory".as_slice()
-                    } else {
-                        b"command not found".as_slice()
-                    };
-                    command_builtin::execution_failure(&fds, &context, &name, reason).await?;
-                    return Ok(Outcome::status(127));
-                }
-            };
-    }
+        match command_builtin::executable(&name, &state, default_path, path_override, &context)
+            .await?
+        {
+            command_builtin::Resolution::Executable(path) => {
+                // Keep the original path walk intact for the host. Lexically
+                // removing file/../ before spawn could bypass ENOTDIR checks.
+                path
+            }
+            command_builtin::Resolution::NonExecutable(path, reason) => {
+                command_builtin::execution_failure(&fds, &context, &path, reason).await?;
+                return Ok(Outcome::status(126));
+            }
+            command_builtin::Resolution::Missing => {
+                let reason = if name.contains('/') {
+                    b"No such file or directory".as_slice()
+                } else {
+                    b"command not found".as_slice()
+                };
+                command_builtin::execution_failure(&fds, &context, &name, reason).await?;
+                return Ok(Outcome::status(127));
+            }
+        }
+    };
     let (mut env, cwd) = {
         let s = state.borrow();
         (s.environment(), s.cwd.clone())
@@ -3231,6 +3230,7 @@ async fn dispatch_simple_command_body(
         .core
         .host
         .spawn(SpawnRequest {
+            executable,
             argv,
             env,
             cwd,
@@ -3407,7 +3407,14 @@ async fn assignments(
             return Err(2.into());
         }
         if !commit {
-            assigned.push((name, value.to_owned()));
+            // PrefixFrame applied the assignment through its nameref. Preserve
+            // that effective binding in the temporary environment, not the
+            // source alias (which may itself be named PATH).
+            let target = state.scalar_target(&name)?.ok_or(2)?;
+            if target != name {
+                work.admit_storage(target.len())?;
+            }
+            assigned.push((state.assignment_name(name)?, value.to_owned()));
         }
     }
     if commit {
@@ -4045,7 +4052,8 @@ mod residual_review_tests {
                     let host = weak.upgrade().unwrap();
                     async move {
                         request.parent = Some(host.direct.borrow()[&request.group]);
-                        request.argv = vec!["/home/guest/sleep".into()];
+                        request.executable = "/home/guest/sleep".into();
+                        request.argv = vec!["sleep".into()];
                         host.spawn(request).unwrap();
                         0
                     }
@@ -4479,7 +4487,8 @@ mod residual_review_tests {
         let context = rig.context();
         rig.host
             .spawn(SpawnRequest {
-                argv: vec!["/home/guest/inherit".into()],
+                executable: "/home/guest/inherit".into(),
+                argv: vec!["inherit".into()],
                 env: BTreeMap::new(),
                 cwd: "/".into(),
                 fds: rig.session().core.descriptors.borrow().clone(),

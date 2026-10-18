@@ -835,7 +835,8 @@ fn interrupt_after_ast_completion_reaps_lingering_group_descendant() {
             let host = weak_host.upgrade().unwrap();
             let spawned = spawned.clone();
             async move {
-                req.argv = vec!["/home/guest/hold".into()];
+                req.executable = "/home/guest/hold".into();
+                req.argv = vec!["hold".into()];
                 // The host boundary supplies the process group, not the caller pid.
                 // Membership must keep this process under the foreground lifetime.
                 spawned.set(Some(host.spawn(req).unwrap()));

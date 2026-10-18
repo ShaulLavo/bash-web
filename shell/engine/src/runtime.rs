@@ -847,12 +847,9 @@ impl ProcessHost for Runtime {
             .filter(|group| !group.closing)
             .map(|group| group.background)
             .ok_or(ProcessError::GroupClosed(request.group))?;
-        let executable = request
-            .argv
-            .first()
-            .cloned()
-            .filter(|name| !name.is_empty())
-            .ok_or_else(|| ProcessError::UnknownCommand(String::new()))?;
+        if request.executable.is_empty() {
+            return Err(ProcessError::UnknownCommand(String::new()));
+        }
         let mut inputs = Vec::new();
         let mut fds = Vec::new();
         fds.try_reserve_exact(request.fds.iter().count())
@@ -883,7 +880,7 @@ impl ProcessHost for Runtime {
             }
         }
         let spec = RuntimeSpawn {
-            executable,
+            executable: request.executable,
             argv: request.argv,
             env: request.env,
             cwd: request.cwd,

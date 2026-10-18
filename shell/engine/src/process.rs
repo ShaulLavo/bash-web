@@ -70,6 +70,8 @@ fn access_path(
 
 #[derive(Clone)]
 pub struct SpawnRequest {
+    /// Executable selected by lookup, independent of the caller's argv[0] spelling.
+    pub executable: String,
     pub argv: Vec<String>,
     pub env: BTreeMap<String, String>,
     pub cwd: String,
@@ -330,7 +332,7 @@ impl ProcessHost for InProcessHost {
         if self.retained_count() >= 4096 {
             return Err(ProcessError::ProcessLimit);
         }
-        let name = request.argv.first().cloned().unwrap_or_default();
+        let name = request.executable.clone();
         let key = access_path(
             &request.cwd,
             &name,
@@ -611,7 +613,8 @@ mod tests {
     use futures::FutureExt;
     fn request(name: &str, group: GroupId) -> SpawnRequest {
         SpawnRequest {
-            argv: vec![format!("/home/guest/{name}")],
+            executable: format!("/home/guest/{name}"),
+            argv: vec![name.into()],
             env: BTreeMap::new(),
             cwd: "/".into(),
             fds: FdTable::default(),
@@ -643,6 +646,7 @@ mod tests {
                 Some(Err(ProcessError::Runtime(44)))
             );
             let mut req = request("unused", 1);
+            req.executable = path.into();
             req.argv = vec![path.into()];
             assert!(matches!(
                 host.spawn(req),
@@ -653,6 +657,7 @@ mod tests {
         assert_eq!(host.retained_count(), 0);
         host.register_access("/one/tool", "/", Err(2));
         let mut req = request("unused", 1);
+        req.executable = "/one/tool".into();
         req.argv = vec!["/one/tool".into()];
         assert_eq!(host.spawn(req), Err(ProcessError::Runtime(2)));
         assert_eq!(calls.get(), 0);
@@ -678,6 +683,7 @@ mod tests {
                 Some(Err(ProcessError::Runtime(errno)))
             );
             let mut req = request("unused", 1);
+            req.executable = path.into();
             req.argv = vec![path.into()];
             assert_eq!(host.spawn(req), Err(ProcessError::Runtime(errno)));
         }
@@ -1064,7 +1070,8 @@ mod tests {
                     .map(|(&pid, _)| pid)
                     .unwrap();
                 req.parent = Some(parent);
-                req.argv = vec!["/home/guest/linger".into()];
+                req.executable = "/home/guest/linger".into();
+                req.argv = vec!["linger".into()];
                 host.spawn(req).unwrap();
                 7
             }

@@ -316,10 +316,7 @@ fn command_bypasses_functions_reports_names_and_retains_external_prefixes_and_st
         37
     );
     assert!(rig.output.bytes().is_empty());
-    assert_eq!(
-        observed.borrow()[0].0,
-        ["/home/guest/external", "one", "two"]
-    );
+    assert_eq!(observed.borrow()[0].0, ["external", "one", "two"]);
     assert_eq!(
         observed.borrow()[0].1.get("x").map(String::as_str),
         Some("temporary")
