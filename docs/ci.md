@@ -56,6 +56,10 @@ Rust source or test input to check invalidation and the warm toolchain/SDK/Cargo
 caches. Do not compare a first cache fill with a warm baseline without identifying
 that difference. GitHub-hosted runner timings vary.
 
+Elapsed time spans the first job start to the last job finish. Summed job time
+adds every job duration. Shared producers can reduce summed job time while
+lengthening the critical path of a native change.
+
 The existing `shell` check aggregates every job with `always()`. A failed,
 cancelled or skipped prerequisite fails this check instead of turning a required
 check into a successful skip. Its regression test checks the complete dependency
