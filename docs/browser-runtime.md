@@ -160,9 +160,29 @@ Waffle registration keys are canonical absolute file paths, such as `/bin/tool`;
 keys such as `tool`, `/bin/./tool`, and `/bin//tool` are rejected. The caller
 creates the regular file with `runtime.filesystem.writeFile` before executing it.
 A zero-byte marker is sufficient: registration supplies the program source or
-module and does not create, replace, or delete filesystem entries. The
-[README example](../README.md) shows caller-owned installation. Removing a
-registration leaves its file behind but makes it non-runnable.
+module and does not create, replace, or delete filesystem entries. Removing a registration leaves its file behind but makes it non-runnable.
+
+Register external programs at canonical absolute paths and create their regular
+files yourself. For example, an integration that supplies its own Waffle guest
+launcher and WASM bytes can install `/bin/tool` on the page's existing runtime:
+
+```ts
+import type { GuestLauncher, Runtime } from "waffle";
+
+async function registerTool(runtime: Runtime, launch: GuestLauncher, source: Uint8Array) {
+  runtime.registerAdapter("tool:preview1", launch);
+  await runtime.filesystem.mkdirp("/bin");
+  await runtime.filesystem.writeFile("/bin/tool", new Uint8Array());
+  runtime.registerProgram("/bin/tool", { adapter: "tool:preview1", source });
+}
+```
+
+The marker contents are not the program: Waffle loads the registered source.
+The shell's default `PATH=/bin` finds `tool`; do not register a bare `tool` alias.
+Registration does not create or preserve the marker. Deleting it prevents future
+execution; an existing file without a registration, or a directory, is not
+runnable. See [lookup details](#optional-external-programs)
+for lookup and exit-status behavior.
 
 The shell, not Waffle spawn, searches `PATH` for bare commands. It queries each
 candidate's live executable access asynchronously, without loading the module,
@@ -243,7 +263,7 @@ between peer/development/source-lock pins and the absence of copied runtime/Bun
 implementation sources, Bun guest binaries, and Bun guest license payloads. Install the
 Playwright browsers selected by the browser test configuration before running
 browser acceptance. The shell-only build, Rust/WASI tests, and frozen
-compatibility replay remain separate gates; see [the README](../README.md).
+compatibility replay remain separate gates; see [development and architecture](development.md#build-and-test).
 
 Browser acceptance covers real worker execution and terminal transport. It is
 not a new frozen compatibility score or permission to regenerate oracle data.
