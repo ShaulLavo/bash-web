@@ -13,6 +13,7 @@ use super::raw::heredoc_eof_from_raw;
 use crate::error::{Error, Result};
 use crate::limits::ExecutionBudget;
 use std::cell::{Cell, RefCell};
+use std::fmt::Write as _;
 use std::rc::Rc;
 
 const INDENT_AMOUNT: usize = 4;
@@ -76,6 +77,7 @@ enum Conn {
 struct HereDoc {
     body: String,
     eof: String,
+    prepaid: bool,
 }
 
 struct PrintQuota<'a> {
@@ -166,6 +168,20 @@ impl<'a> Output<'a> {
     }
 }
 
+impl std::fmt::Write for Output<'_> {
+    fn write_str(&mut self, text: &str) -> std::fmt::Result {
+        if self
+            .quota
+            .as_ref()
+            .is_some_and(|quota| !quota.charge(text.len()))
+        {
+            return Err(std::fmt::Error);
+        }
+        self.text.push_str(text);
+        Ok(())
+    }
+}
+
 struct Printer<'a> {
     out: Output<'a>,
     indentation: usize,
@@ -205,6 +221,527 @@ impl<'a> Printer<'a> {
             .quota
             .as_ref()
             .is_some_and(|quota| quota.failure.borrow().is_some())
+    }
+}
+
+impl<'a> Printer<'a> {
+    fn preflight(&self, bytes: usize) -> bool {
+        self.out.quota.as_ref().is_none_or(|quota| {
+            if !quota.charge(0) {
+                return false;
+            }
+            if quota.fuel.get() >= bytes {
+                true
+            } else {
+                let _ = quota.charge(bytes);
+                false
+            }
+        })
+    }
+
+    fn print_word(&mut self, word: &Word) {
+        if self.quota().is_none() {
+            let text = self.word_text(word);
+            self.out.push_str(&text);
+            return;
+        }
+        let _ = self.stream_word(word);
+    }
+
+    fn stream_word(&mut self, word: &Word) -> std::fmt::Result {
+        if let Some(raw) = &word.raw {
+            return self.stream_normalized_raw(raw);
+        }
+        let mut quoted_literals = word.quoted;
+        if quoted_literals {
+            for part in &word.parts {
+                if !self.out.quota.as_ref().unwrap().charge(1) {
+                    return Err(std::fmt::Error);
+                }
+                if !matches!(part, WordPart::Literal(_)) {
+                    quoted_literals = false;
+                    break;
+                }
+            }
+        }
+        if quoted_literals {
+            self.out.write_char('\'')?;
+            for part in &word.parts {
+                let WordPart::Literal(text) = part else {
+                    unreachable!()
+                };
+                for ch in text.chars() {
+                    if ch == '\'' {
+                        self.out.write_str("'\\''")?;
+                    } else {
+                        self.out.write_char(ch)?;
+                    }
+                }
+            }
+            self.out.write_char('\'')
+        } else {
+            self.stream_parts(word)
+        }
+    }
+
+    fn stream_commands(&mut self, commands: &[Command]) -> std::fmt::Result {
+        // A substitution has fresh layout state, but writes into the same sink.
+        let mut child = Self::default();
+        std::mem::swap(&mut child.out, &mut self.out);
+        child.print_list(commands);
+        child.print_deferred_if_any("");
+        std::mem::swap(&mut child.out, &mut self.out);
+        if self.failed() {
+            Err(std::fmt::Error)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn stream_normalized_raw(&mut self, raw: &str) -> std::fmt::Result {
+        let mut in_single = false;
+        let mut in_double = false;
+        let mut i = 0;
+        while let Some(ch) = raw[i..].chars().next() {
+            if self.failed() {
+                return Err(std::fmt::Error);
+            }
+            i += ch.len_utf8();
+            match ch {
+                '\'' if !in_double => {
+                    in_single = !in_single;
+                    self.out.write_char(ch)?;
+                }
+                '"' if !in_single => {
+                    in_double = !in_double;
+                    self.out.write_char(ch)?;
+                }
+                '$' if !in_single && !in_double && raw[i..].starts_with('\'') => {
+                    // The existing ANSI decoder allocates. Admit its source a
+                    // character at a time before it sees a bounded slice.
+                    let body_start = i + 1;
+                    let mut end = body_start;
+                    let mut escaped = false;
+                    while let Some(next) = raw[end..].chars().next() {
+                        let bytes = next.len_utf8();
+                        if !self.out.quota.as_ref().unwrap().charge(bytes) {
+                            return Err(std::fmt::Error);
+                        }
+                        end += bytes;
+                        if next == '\'' && !escaped {
+                            break;
+                        }
+                        escaped = next == '\\' && !escaped;
+                    }
+                    match super::lexer::Lexer::decode_ansi_c_body(&raw[body_start..end]) {
+                        Some((text, used)) => {
+                            self.out.write_char('\'')?;
+                            if !self.preflight(text.len()) {
+                                return Err(std::fmt::Error);
+                            }
+                            for piece in text.split_inclusive('\'') {
+                                if let Some(before) = piece.strip_suffix('\'') {
+                                    self.out.write_str(before)?;
+                                    self.out.write_str("'\\''")?;
+                                } else {
+                                    self.out.write_str(piece)?;
+                                }
+                            }
+                            self.out.write_char('\'')?;
+                            i = body_start + used;
+                        }
+                        None => self.out.write_char(ch)?,
+                    }
+                }
+                '$' if !in_single && !in_double && raw[i..].starts_with('"') => {
+                    if !self.out.quota.as_ref().unwrap().charge(1) {
+                        return Err(std::fmt::Error);
+                    }
+                }
+                '\\' if !in_single => {
+                    if raw[i..].starts_with('\n') {
+                        if !self.out.quota.as_ref().unwrap().charge(2) {
+                            return Err(std::fmt::Error);
+                        }
+                        i += 1;
+                    } else {
+                        self.out.write_char(ch)?;
+                        if let Some(next) = raw[i..].chars().next() {
+                            self.out.write_char(next)?;
+                            i += next.len_utf8();
+                        }
+                    }
+                }
+                _ => self.out.write_char(ch)?,
+            }
+        }
+        Ok(())
+    }
+
+    fn stream_parts(&mut self, word: &Word) -> std::fmt::Result {
+        for part in &word.parts {
+            if !self.out.quota.as_ref().unwrap().charge(1) {
+                return Err(std::fmt::Error);
+            }
+            match part {
+                WordPart::Literal(s) => write!(self.out, "{}", s)?,
+                WordPart::Variable(name) => write!(self.out, "${}", name)?,
+                WordPart::BadSubstitution(text) => write!(self.out, "{}", text)?,
+                // Printed as shell text (re-parsed by alias expansion);
+                // never `Debug` (TM-INF-022).
+                WordPart::CommandSubstitution(cmd) => {
+                    self.out.write_str("$(")?;
+                    self.stream_commands(cmd)?;
+                    self.out.write_char(')')?;
+                }
+                WordPart::UnparsedCommandSubstitution { source, .. } => {
+                    write!(self.out, "$({})", source)?
+                }
+                WordPart::ArithmeticExpansion(expr) => write!(self.out, "$(({}))", expr)?,
+                WordPart::ParameterExpansion {
+                    name,
+                    operator,
+                    operand,
+                    colon_variant,
+                } => match operator {
+                    ParameterOp::UseDefault => {
+                        let c = if *colon_variant { ":" } else { "" };
+                        write!(self.out, "${{{}{}-{}}}", name, c, operand)?
+                    }
+                    ParameterOp::AssignDefault => {
+                        let c = if *colon_variant { ":" } else { "" };
+                        write!(self.out, "${{{}{}={}}}", name, c, operand)?
+                    }
+                    ParameterOp::UseReplacement => {
+                        let c = if *colon_variant { ":" } else { "" };
+                        write!(self.out, "${{{}{}+{}}}", name, c, operand)?
+                    }
+                    ParameterOp::Error => {
+                        let c = if *colon_variant { ":" } else { "" };
+                        write!(self.out, "${{{}{}?{}}}", name, c, operand)?
+                    }
+                    ParameterOp::RemovePrefixShort => {
+                        write!(self.out, "${{{}#{}}}", name, operand)?
+                    }
+                    ParameterOp::RemovePrefixLong => {
+                        write!(self.out, "${{{}##{}}}", name, operand)?
+                    }
+                    ParameterOp::RemoveSuffixShort => {
+                        write!(self.out, "${{{}%{}}}", name, operand)?
+                    }
+                    ParameterOp::RemoveSuffixLong => {
+                        write!(self.out, "${{{}%%{}}}", name, operand)?
+                    }
+                    ParameterOp::ReplaceFirst {
+                        pattern,
+                        replacement,
+                    } => write!(self.out, "${{{}/{}/{}}}", name, pattern, replacement)?,
+                    ParameterOp::ReplaceAll {
+                        pattern,
+                        replacement,
+                    } => write!(self.out, "${{{}///{}/{}}}", name, pattern, replacement)?,
+                    ParameterOp::UpperFirst => write!(self.out, "${{{}^{}}}", name, operand)?,
+                    ParameterOp::UpperAll => write!(self.out, "${{{}^^{}}}", name, operand)?,
+                    ParameterOp::LowerFirst => write!(self.out, "${{{},{}}}", name, operand)?,
+                    ParameterOp::LowerAll => write!(self.out, "${{{},,{}}}", name, operand)?,
+                    ParameterOp::ToggleFirst => write!(self.out, "${{{}~{}}}", name, operand)?,
+                    ParameterOp::ToggleAll => write!(self.out, "${{{}~~{}}}", name, operand)?,
+                },
+                WordPart::Length(name) => write!(self.out, "${{#{}}}", name)?,
+                WordPart::ArrayAccess { name, index } => {
+                    write!(self.out, "${{{}[{}]}}", name, index)?
+                }
+                WordPart::ArrayLength(name) => write!(self.out, "${{#{}[@]}}", name)?,
+                WordPart::ArrayIndices { name, star } => write!(
+                    self.out,
+                    "${{!{}[{}]}}",
+                    name,
+                    if *star { '*' } else { '@' }
+                )?,
+                WordPart::Substring {
+                    name,
+                    offset,
+                    length,
+                } => {
+                    if let Some(len) = length {
+                        write!(self.out, "${{{}:{}:{}}}", name, offset, len)?
+                    } else {
+                        write!(self.out, "${{{}:{}}}", name, offset)?
+                    }
+                }
+                WordPart::IndirectExpansion {
+                    name,
+                    operator,
+                    operand,
+                    colon_variant,
+                } => {
+                    if let Some(op) = operator {
+                        let c = if *colon_variant { ":" } else { "" };
+                        let op_char = match op {
+                            ParameterOp::UseDefault => "-",
+                            ParameterOp::AssignDefault => "=",
+                            ParameterOp::UseReplacement => "+",
+                            ParameterOp::Error => "?",
+                            _ => "",
+                        };
+                        write!(self.out, "${{!{}{}{}{}}}", name, c, op_char, operand)?
+                    } else {
+                        write!(self.out, "${{!{}}}", name)?
+                    }
+                }
+                WordPart::IndirectSuffix { name, suffix } => {
+                    write!(self.out, "${{!{name}{suffix}}}")?
+                }
+                WordPart::PrefixMatch { prefix, star } => write!(
+                    self.out,
+                    "${{!{}{}}}",
+                    prefix,
+                    if *star { '*' } else { '@' }
+                )?,
+                WordPart::UnparsedProcessSubstitution { source, is_input } => write!(
+                    self.out,
+                    "{}({})",
+                    if *is_input { "<" } else { ">" },
+                    source
+                )?,
+                WordPart::ProcessSubstitution { commands, is_input } => {
+                    self.out.write_str(if *is_input { "<(" } else { ">(" })?;
+                    self.stream_commands(commands)?;
+                    self.out.write_char(')')?;
+                }
+                WordPart::Transformation { name, operator } => {
+                    write!(self.out, "${{{}@{}}}", name, operator)?
+                }
+                WordPart::CompoundAssignment {
+                    name,
+                    append,
+                    elements,
+                } => {
+                    let op = if *append { "+=" } else { "=" };
+                    write!(self.out, "{}{}(", name, op)?;
+                    for (i, element) in elements.iter().enumerate() {
+                        if i > 0 {
+                            write!(self.out, " ")?;
+                        }
+                        self.stream_parts(element)?;
+                    }
+                    write!(self.out, ")")?
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn print_words(&mut self, words: &[Word], separator: &str) {
+        for (index, word) in words.iter().enumerate() {
+            if index != 0 {
+                self.out.push_str(separator);
+            }
+            self.print_word(word);
+            if self.failed() {
+                return;
+            }
+        }
+    }
+
+    fn print_assignment(&mut self, assignment: &Assignment) {
+        self.out.push_str(&assignment.name);
+        if let Some(index) = &assignment.index {
+            self.out.push('[');
+            self.out.push_str(index);
+            self.out.push(']');
+        }
+        self.out
+            .push_str(if assignment.append { "+=" } else { "=" });
+        match &assignment.value {
+            AssignmentValue::Scalar(word) => self.print_word(word),
+            AssignmentValue::Array(elements) => {
+                self.out.push('(');
+                self.print_words(elements, " ");
+                self.out.push(')');
+            }
+        }
+    }
+
+    fn print_simple_bounded(&mut self, sc: &SimpleCommand) {
+        let mut has_word = false;
+        for assignment in &sc.assignments {
+            if self.failed() {
+                return;
+            }
+            if has_word {
+                self.out.push(' ');
+            }
+            self.print_assignment(assignment);
+            has_word = true;
+        }
+        let mut name = Self::with_quota(self.quota().unwrap());
+        let _ = name.stream_word(&sc.name);
+        if name.failed() {
+            return;
+        }
+        let name = name.out.into_string();
+        if !(name.is_empty() && sc.name.raw.is_none()) {
+            if has_word {
+                self.out.push(' ');
+            }
+            if self.failed() {
+                return;
+            }
+            self.out.text.push_str(&name);
+            has_word = true;
+        }
+        for word in &sc.args {
+            if self.failed() {
+                return;
+            }
+            if has_word {
+                self.out.push(' ');
+            }
+            self.print_word(word);
+            has_word = true;
+        }
+        if !sc.redirects.is_empty() {
+            if has_word {
+                self.out.push(' ');
+            }
+            self.print_redirection_list(sc.redirects.as_slice());
+        }
+    }
+
+    fn print_redirections_bounded(&mut self, redirects: &[Redirect]) {
+        let mut heredocs = Vec::new();
+        self.was_heredoc = false;
+        for (index, redirect) in redirects.iter().enumerate() {
+            if index != 0 {
+                self.out.push(' ');
+            }
+            if matches!(
+                redirect.kind,
+                RedirectKind::HereDoc | RedirectKind::HereDocStrip
+            ) {
+                let delim = redirect.heredoc_delim.as_deref().unwrap_or_default();
+                let mut delimiter = Self::with_quota(self.quota().unwrap());
+                let _ = delimiter.stream_normalized_raw(delim);
+                if delimiter.failed() {
+                    return;
+                }
+                let normalized_delim = delimiter.out.into_string();
+                self.print_redirector(redirect, 0);
+                self.out
+                    .push_str(if redirect.kind == RedirectKind::HereDocStrip {
+                        "<<-"
+                    } else {
+                        "<<"
+                    });
+                if self.failed() {
+                    return;
+                }
+                self.out.text.push_str(&normalized_delim);
+                // The delimiter is already admitted, so quote removal cannot
+                // allocate more text than that bounded source.
+                let eof = if normalized_delim.starts_with('\'') {
+                    heredoc_eof_from_raw(&normalized_delim).0
+                } else {
+                    normalized_delim
+                };
+                if !self.out.quota.as_ref().unwrap().charge(eof.len()) {
+                    return;
+                }
+                let body = if let Some(raw) = redirect.target.raw.as_deref() {
+                    if !self.out.quota.as_ref().unwrap().charge(raw.len()) {
+                        return;
+                    }
+                    raw.to_owned()
+                } else {
+                    let mut child = Self::with_quota(self.quota().unwrap());
+                    let _ = child.stream_word(&redirect.target);
+                    if child.failed() {
+                        return;
+                    }
+                    child.out.into_string()
+                };
+                heredocs.push(HereDoc {
+                    body,
+                    eof,
+                    prepaid: true,
+                });
+            } else {
+                self.print_redirect_bounded(redirect);
+            }
+        }
+        if heredocs.is_empty() {
+            return;
+        }
+        if self.printing_connection > 0 {
+            self.deferred.extend(heredocs);
+        } else {
+            self.print_heredoc_bodies(&heredocs);
+        }
+    }
+
+    fn print_redirector(&mut self, redirect: &Redirect, default_fd: i32) {
+        if let Some(var) = &redirect.fd_var {
+            let _ = write!(self.out, "{{{var}}}");
+        } else if let Some(fd) = redirect.fd
+            && fd != default_fd
+        {
+            let _ = write!(self.out, "{fd}");
+        }
+    }
+
+    fn print_redirect_bounded(&mut self, redirect: &Redirect) {
+        let default_fd = if matches!(
+            redirect.kind,
+            RedirectKind::Input
+                | RedirectKind::HereString
+                | RedirectKind::ReadWrite
+                | RedirectKind::DupInput
+        ) {
+            0
+        } else {
+            1
+        };
+        if redirect.kind == RedirectKind::OutputBoth {
+            self.out.push_str("&> ");
+            self.print_word(&redirect.target);
+            return;
+        }
+        if redirect.kind == RedirectKind::DupOutput {
+            let mut target = Self::with_quota(self.quota().unwrap());
+            let _ = target.stream_word(&redirect.target);
+            if target.failed() {
+                return;
+            }
+            let target = target.out.into_string();
+            let default_fd = redirect.fd_var.is_none() && redirect.fd.is_none_or(|fd| fd == 1);
+            let word_target = !target.starts_with(['-', '$'])
+                && !target.chars().next().is_some_and(|ch| ch.is_ascii_digit());
+            if default_fd && word_target {
+                self.out.push_str("&> ");
+            } else {
+                self.print_redirector(redirect, 1);
+                self.out.push_str(">&");
+            }
+            if !self.failed() {
+                self.out.text.push_str(&target);
+            }
+            return;
+        }
+        let suffix = match redirect.kind {
+            RedirectKind::Output => "> ",
+            RedirectKind::Clobber => ">| ",
+            RedirectKind::Append => ">> ",
+            RedirectKind::Input => "< ",
+            RedirectKind::HereString => "<<< ",
+            RedirectKind::ReadWrite => "<> ",
+            RedirectKind::DupInput => "<&",
+            RedirectKind::DupOutput => ">&",
+            RedirectKind::HereDoc | RedirectKind::HereDocStrip | RedirectKind::OutputBoth => return,
+        };
+        self.print_redirector(redirect, default_fd);
+        self.out.push_str(suffix);
+        self.print_word(&redirect.target);
     }
 }
 
@@ -293,8 +830,16 @@ impl<'a> Printer<'a> {
     fn print_heredoc_bodies(&mut self, docs: &[HereDoc]) {
         self.out.push('\n');
         for doc in docs {
-            self.out.push_str(&doc.body);
-            self.out.push_str(&doc.eof);
+            if self.failed() {
+                return;
+            }
+            if doc.prepaid {
+                self.out.text.push_str(&doc.body);
+                self.out.text.push_str(&doc.eof);
+            } else {
+                self.out.push_str(&doc.body);
+                self.out.push_str(&doc.eof);
+            }
             self.out.push('\n');
         }
     }
@@ -308,9 +853,7 @@ impl<'a> Printer<'a> {
             [] => self.make(None),
             [only] => self.make(Some(only)),
             [first, rest @ ..] => {
-                let rest: Vec<(Conn, Option<&Command>)> =
-                    rest.iter().map(|c| (Conn::Semi, Some(c))).collect();
-                self.make_connection(first, &rest);
+                self.make_connection(first, rest.iter().map(|c| (Conn::Semi, Some(c))));
             }
         }
     }
@@ -323,6 +866,14 @@ impl<'a> Printer<'a> {
         let Some(cmd) = cmd else {
             return;
         };
+        if self
+            .out
+            .quota
+            .as_ref()
+            .is_some_and(|quota| !quota.charge(1))
+        {
+            return;
+        }
         if self.skip_this_indent > 0 {
             self.skip_this_indent -= 1;
         } else {
@@ -341,32 +892,26 @@ impl<'a> Printer<'a> {
                         self.make(Some(only));
                     }
                     [first, rest @ ..] => {
-                        let rest: Vec<(Conn, Option<&Command>)> =
-                            rest.iter().map(|c| (Conn::Pipe, Some(c))).collect();
-                        self.connection_body(first, &rest);
+                        self.connection_body(first, rest.iter().map(|c| (Conn::Pipe, Some(c))));
                     }
                 }
             }
             Command::List(list) => {
-                let rest: Vec<(Conn, Option<&Command>)> = list
-                    .rest
-                    .iter()
-                    .map(|(op, c)| {
-                        let conn = match op {
-                            ListOperator::And => Conn::And,
-                            ListOperator::Or => Conn::Or,
-                            ListOperator::Semicolon => Conn::Semi,
-                            ListOperator::Background => Conn::Amp,
-                        };
-                        let second = if is_empty_placeholder(c) {
-                            None
-                        } else {
-                            Some(c)
-                        };
-                        (conn, second)
-                    })
-                    .collect();
-                self.connection_body(&list.first, &rest);
+                let rest = list.rest.iter().map(|(op, c)| {
+                    let conn = match op {
+                        ListOperator::And => Conn::And,
+                        ListOperator::Or => Conn::Or,
+                        ListOperator::Semicolon => Conn::Semi,
+                        ListOperator::Background => Conn::Amp,
+                    };
+                    let second = if is_empty_placeholder(c) {
+                        None
+                    } else {
+                        Some(c)
+                    };
+                    (conn, second)
+                });
+                self.connection_body(&list.first, rest);
             }
             Command::Compound(cc, redirects) => {
                 self.print_compound(cc);
@@ -380,7 +925,11 @@ impl<'a> Printer<'a> {
     }
 
     /// A connection chain, as an indented command of its own.
-    fn make_connection(&mut self, first: &Command, rest: &[(Conn, Option<&Command>)]) {
+    fn make_connection<'cmd>(
+        &mut self,
+        first: &Command,
+        rest: impl IntoIterator<Item = (Conn, Option<&'cmd Command>)>,
+    ) {
         if self.skip_this_indent > 0 {
             self.skip_this_indent -= 1;
         } else {
@@ -391,7 +940,11 @@ impl<'a> Printer<'a> {
 
     /// The `cm_connection` case, flattened over a left-associative chain:
     /// each link ends like bash's nested connection (deferred heredocs).
-    fn connection_body(&mut self, first: &Command, rest: &[(Conn, Option<&Command>)]) {
+    fn connection_body<'cmd>(
+        &mut self,
+        first: &Command,
+        rest: impl IntoIterator<Item = (Conn, Option<&'cmd Command>)>,
+    ) {
         if self.failed() {
             return;
         }
@@ -399,17 +952,20 @@ impl<'a> Printer<'a> {
         self.printing_connection += 1;
         self.make(Some(first));
         for (conn, second) in rest {
+            if self.failed() {
+                return;
+            }
             match conn {
                 Conn::Amp | Conn::Pipe => {
-                    let s = if *conn == Conn::Amp { " &" } else { " |" };
+                    let s = if conn == Conn::Amp { " &" } else { " |" };
                     self.print_deferred_heredocs(s);
-                    if *conn != Conn::Amp || second.is_some() {
+                    if conn != Conn::Amp || second.is_some() {
                         self.out.push(' ');
                         self.skip_this_indent += 1;
                     }
                 }
                 Conn::And | Conn::Or => {
-                    let s = if *conn == Conn::And { " && " } else { " || " };
+                    let s = if conn == Conn::And { " && " } else { " || " };
                     self.print_deferred_heredocs(s);
                     if second.is_some() {
                         self.skip_this_indent += 1;
@@ -440,7 +996,7 @@ impl<'a> Printer<'a> {
                     }
                 }
             }
-            self.make(*second);
+            self.make(second);
             self.print_deferred_if_any("");
         }
         self.printing_connection -= 1;
@@ -551,6 +1107,10 @@ impl<'a> Printer<'a> {
     }
 
     fn print_simple(&mut self, sc: &SimpleCommand) {
+        if self.quota().is_some() {
+            self.print_simple_bounded(sc);
+            return;
+        }
         let mut words: Vec<String> = Vec::new();
         for a in &sc.assignments {
             words.push(self.assignment_text(a));
@@ -570,6 +1130,10 @@ impl<'a> Printer<'a> {
     }
 
     fn print_redirection_list(&mut self, redirects: &[Redirect]) {
+        if self.quota().is_some() {
+            self.print_redirections_bounded(redirects);
+            return;
+        }
         let mut heredocs = Vec::new();
         self.was_heredoc = false;
         for (i, r) in redirects.iter().enumerate() {
@@ -597,6 +1161,7 @@ impl<'a> Printer<'a> {
                         .clone()
                         .unwrap_or_else(|| self.reconstruct_word(&r.target)),
                     eof,
+                    prepaid: false,
                 });
             } else {
                 let text = self.redirection_text(r);
@@ -627,11 +1192,7 @@ impl<'a> Printer<'a> {
                 self.out.push_str(" in ");
                 match &f.words {
                     Some(words) => {
-                        let w: Vec<String> = words
-                            .iter()
-                            .map(|word| self.word_text(word))
-                            .collect();
-                        self.out.push_str(&w.join(" "));
+                        self.print_words(words, " ");
                     }
                     None => self.out.push_str("\"$@\""),
                 }
@@ -641,24 +1202,27 @@ impl<'a> Printer<'a> {
                 self.out.push_str("select ");
                 self.out.push_str(&f.variable);
                 self.out.push_str(" in ");
-                let w: Vec<String> = f
-                    .words
-                    .iter()
-                    .map(|word| self.word_text(word))
-                    .collect();
-                self.out.push_str(&w.join(" "));
+                self.print_words(&f.words, " ");
                 self.loop_body_after_head(&f.body);
             }
             CompoundCommand::ArithmeticFor(f) => {
-                let parts: Vec<String> = match &f.raw {
-                    Some(raw) => raw.iter().map(|p| arith_for_part(p)).collect(),
-                    None => [&f.init, &f.condition, &f.step]
-                        .iter()
-                        .map(|p| arith_for_part(p))
-                        .collect(),
-                };
                 self.out.push_str("for ((");
-                self.out.push_str(&parts.join("; "));
+                let parts = f
+                    .raw
+                    .as_ref()
+                    .map(|raw| [&raw[0], &raw[1], &raw[2]])
+                    .unwrap_or([&f.init, &f.condition, &f.step]);
+                for (index, part) in parts.into_iter().enumerate() {
+                    if index > 0 {
+                        self.out.push_str("; ");
+                    }
+                    let trimmed = part.trim_start();
+                    self.out.push_str(if trimmed.trim().is_empty() {
+                        "1"
+                    } else {
+                        trimmed
+                    });
+                }
                 self.out.push_str("))");
                 self.newline("do\n");
                 self.indentation += INDENT_AMOUNT;
@@ -672,20 +1236,17 @@ impl<'a> Printer<'a> {
             CompoundCommand::Until(w) => self.print_until_or_while("until", &w.condition, &w.body),
             CompoundCommand::Case(c) => {
                 self.out.push_str("case ");
-                let word = self.word_text(&c.word);
-                self.out.push_str(&word);
+                self.print_word(&c.word);
                 self.out.push_str(" in ");
                 self.indentation += INDENT_AMOUNT;
                 for (index, item) in c.cases.iter().enumerate() {
                     if !(self.printing_comsub && index == 0) {
                         self.newline("");
                     }
-                    let pats: Vec<String> = item
-                        .patterns
-                        .iter()
-                        .map(|word| self.word_text(word))
-                        .collect();
-                    self.out.push_str(&pats.join(" | "));
+                    if self.failed() {
+                        return;
+                    }
+                    self.print_words(&item.patterns, " | ");
                     self.out.push_str(")\n");
                     self.indentation += INDENT_AMOUNT;
                     self.print_list(&item.commands);
@@ -762,23 +1323,23 @@ impl<'a> Printer<'a> {
         match expression {
             TestExpr::Word(word) => {
                 self.out.push_str("-n ");
-                self.out.push_str(&self.word_text(word));
+                self.print_word(word);
             }
             TestExpr::Unary { operator, operand } => {
                 self.out.push_str(operator);
                 self.out.push(' ');
-                self.out.push_str(&self.word_text(operand));
+                self.print_word(operand);
             }
             TestExpr::Binary {
                 left,
                 operator,
                 right,
             } => {
-                self.out.push_str(&self.word_text(left));
+                self.print_word(left);
                 self.out.push(' ');
                 self.out.push_str(operator);
                 self.out.push(' ');
-                self.out.push_str(&self.word_text(right));
+                self.print_word(right);
             }
             TestExpr::Not(child) => {
                 self.out.push_str("! ");
@@ -1072,7 +1633,10 @@ fn reconstruct_word(w: &Word) -> String {
 
 /// Render a shell job's command with the existing Bash command printer. Every
 /// printed byte charges both the output ceiling and the caller's request budget;
-/// nested substitutions share the quota. This does not execute or expand words.
+/// AST traversal, discarded source and ANSI-decoding work also consume fuel.
+/// Word parts write
+/// through the quota before allocating output, and nested substitutions share it.
+/// This does not execute or expand words.
 pub fn command_string(
     command: &Command,
     fuel: &Cell<usize>,
@@ -1085,6 +1649,7 @@ pub fn command_string(
         execution_budget,
         failure: RefCell::new(None),
     });
+    quota.charge(0);
     let mut printer = Printer::with_quota(quota);
     printer.make(Some(command));
     printer.print_deferred_if_any("");
@@ -1251,6 +1816,57 @@ mod job_command_tests {
             ("{ true; false; }", "{ true; false; }"),
             ("(true;false)", "( true; false )"),
             ("true &", "true &"),
+        ] {
+            assert_eq!(render(source, 4096).unwrap(), expected, "{source}");
+        }
+    }
+
+    fn render_unbounded(source: &str) -> String {
+        let script = Parser::new(source).parse().unwrap();
+        let mut printer = Printer::default();
+        printer.make(Some(&script.commands[0]));
+        printer.print_deferred_if_any("");
+        printer.out.into_string()
+    }
+
+    #[test]
+    fn bounded_labels_match_unbounded_printer() {
+        for source in [
+            "A='a b' echo 'x y' > out 2>&1",
+            "echo hi <<'EOF'\nbody\nEOF",
+            "for x in 'a b' c; do echo $x; done",
+            "case a in a) echo yes;; b) echo no;;& esac",
+            "if true; then echo yes; else echo no; fi",
+            "echo $(printf '%s' nested) <(printf '%s' process)",
+        ] {
+            assert_eq!(
+                render(source, 4096).unwrap(),
+                render_unbounded(source),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn job_labels_keep_bash_multiline_compound_layout() {
+        for (source, expected) in [
+            (
+                "if true; then echo yes; else false; fi",
+                "if true; then\n    echo yes;\nelse\n    false;\nfi",
+            ),
+            (
+                "for x in a b; do echo $x; done",
+                "for x in a b;\ndo\n    echo $x;\ndone",
+            ),
+            ("while false; do :; done", "while false; do\n    :;\ndone"),
+            (
+                "case a in a) :;; esac",
+                "case a in \n    a)\n        :\n    ;;\nesac",
+            ),
+            (
+                "for ((x=0; x<2; x++)); do :; done",
+                "for ((x=0; x<2; x++))\ndo\n    :;\ndone",
+            ),
         ] {
             assert_eq!(render(source, 4096).unwrap(), expected, "{source}");
         }

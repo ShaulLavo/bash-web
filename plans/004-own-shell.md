@@ -258,6 +258,32 @@ fallback.
    8. Traps (`EXIT`, `ERR`, `DEBUG`, `RETURN`, signals) and aliases.
    9. Process substitution `<(…)` `>(…)` and coprocesses, as live descriptors, never captured text.
    10. Job control builtins: `jobs`, `fg`, `bg`, `wait`, `kill`, `disown`.
+       - **Approved follow-up, GNU Bash 5.3.15 observations (2026-10-18).**
+         Keep the inherited-foreground lifetime PR narrow; implement these observation
+         and selector rules in this job-builtins unit. Against native head `55e5a16`,
+         `block() { while :; do :; done; }; block & jobs | while IFS= read -r line; do printf '%s\n' "$line"; done; kill %1; wait %1`
+         prints a Running row in Bash but none in the engine (both final statuses 143).
+         Direct `jobs | cat` and `command jobs | cat` inherit the parent's observation;
+         ordinary `(jobs)`, `{ jobs; } | cat`, a function stage, `builtin jobs | cat`
+         and `eval jobs | cat` do not. Command substitutions inherit observations:
+         `x=$(jobs)`, `x=$(jobs; :)` and `x=$(show)` with `show() { jobs; }` print
+         parent rows in Bash, unlike the current engine. Parent function calls already
+         see the live table. Add detached observer records, not join/cancel/group authority.
+       - Captured observations are frozen: a Running row stays Running inside the
+         observer after the real job exits, while the parent later reports Done.
+         Completed-unreported rows display once per observer; local retirement must
+         not retire the parent's row. Already-waited/notified or parent-retired rows
+         do not display. Preserve job numbers and +/- markers, including local async
+         numbering after inherited jobs. Oracle rows include `[1]+  Exit 1                     false`
+         and mixed `[1]-  Running                    block &` / `[2]+  Exit 1                     false`.
+       - Broader selectors remain separate from observation: command-substitution
+         `kill -0 %1` succeeds while its ordinary-subshell equivalent fails;
+         command-substitution `wait %1` returns 255 versus 127 in an ordinary subshell.
+         Test with a live parent `block &`, and always kill/wait that owned child.
+         `jobs >&-` returns 0 in Bash even with running/completed rows and retires a
+         completed row; the lifetime PR fixes only the confirmed empty/no-emission
+         eager-stdout defect. Cover actual-output closed stdout here. All probes
+         were bounded, process-group supervised and cleaned; no fixture is retained.
 
 4. **Utilities.** Commands that don't change shell state are separate WASI programs started through the process host, starting with a uutils multicall binary plus `grep`, `sed`, `awk` and `jq`. Measure spawn cost per command (brush-web measured about 18 ms per warm child). Where loops make it hurt, add in-process versions of the hottest tools (`cat`, `head`, `tr`, `wc`, `grep`) as tasks on the engine's streaming descriptors. The "cases needing external commands" rows of `npm run compat` track this.
 

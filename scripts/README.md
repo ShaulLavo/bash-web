@@ -185,7 +185,9 @@ and fixtures are not regenerated as part of this gate.
 `npm run fuzz:shell-job-lifetime -- --shell PATH --seed 1` compares 240
 builtin-only cases with GNU Bash 5.3.15: 144 fixed controls and 96 seeded cases.
 The matrix crosses 12 wait/status/notification families, root/function/subshell
-scopes, and four exit statuses. It covers repeated numeric and percent waits,
+scopes, and four fixed exit statuses. Each seed adds 96 unique scripts using
+non-matrix statuses across 0–255; all 240 scripts are distinct within the seed.
+It covers repeated numeric and percent waits,
 bare wait, pipeline status, child ownership, one-shot `jobs` completion, and
 completed-job signal selectors. Completion barriers use direct-child existence
 checks rather than timing sleeps. Job descriptions are normalized to their state;

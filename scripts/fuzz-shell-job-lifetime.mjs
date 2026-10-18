@@ -41,6 +41,10 @@ export const families = [
   "jobs-one-shot",
   "kill-completed",
 ];
+export const generatedStatuses = Array.from({ length: 256 }, (_, status) => status).filter(
+  (status) => !statuses.includes(status),
+);
+export const maxGeneratedCount = families.length * scopes.length * generatedStatuses.length;
 export const environment = {
   locale: "C",
   path: "/usr/bin:/bin",
@@ -82,7 +86,9 @@ export function render(spec) {
   if (
     !families.includes(spec.family) ||
     !scopes.includes(spec.scope) ||
-    !statuses.includes(spec.status)
+    !Number.isInteger(spec.status) ||
+    spec.status < 0 ||
+    spec.status > 255
   )
     throw new Error("invalid job-lifetime specification");
   const spawn = `(exit ${spec.status}) & jl_pid=$!`;
@@ -105,10 +111,10 @@ export function render(spec) {
       body = `true | (exit ${spec.status}) & jl_pid=$!; ${waitPid}; ${printStatus("pipeline")}; ${waitPid}`;
       break;
     case "wait-empty":
-      body = `wait; ${printStatus("empty")}; wait`;
+      body = `wait; ${printStatus("empty")}; ${spawn}; ${waitPid}; ${printStatus("child")}; wait`;
       break;
     case "wait-unknown":
-      body = `wait 2147483647 2>/dev/null; ${printStatus("unknown-pid")}; wait %9 2>/dev/null`;
+      body = `${spawn}; ${waitPid}; wait 2147483647 2>/dev/null; ${printStatus("unknown-pid")}; ${waitPid}; ${printStatus("remembered")}; wait %9 2>/dev/null`;
       break;
     case "nested-parent-status":
       body = `${spawn}; ( ${waitPid} 2>/dev/null; ${printStatus("not-own-child")} ); ${waitPid}`;
@@ -149,20 +155,27 @@ export function matrixCases() {
 export function generateCases(seed, count = defaultCount) {
   if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff)
     throw new Error("invalid uint32 seed");
-  if (!Number.isSafeInteger(count) || count < 0 || count > 10000)
-    throw new Error("invalid count (0..10000)");
+  if (!Number.isSafeInteger(count) || count < 0 || count > maxGeneratedCount)
+    throw new Error(`invalid count (0..${maxGeneratedCount})`);
   let state = seed >>> 0;
   const next = () => (state = (Math.imul(state, 1664525) + 1013904223) >>> 0);
-  const pick = (items) => items[(next() >>> 8) % items.length];
+  // Sample semantic tuples without replacement. Non-matrix byte statuses make
+  // every generated script new, not just a fresh id on an existing observation.
+  const available = Array.from({ length: maxGeneratedCount }, (_, index) => index);
   const result = matrixCases();
-  for (let index = 0; index < count; index++)
+  for (let index = 0; index < count; index++) {
+    const selected = next() % available.length;
+    const tuple = available[selected];
+    available[selected] = available[available.length - 1];
+    available.pop();
     result.push(
       makeCase("generated-" + index, {
-        family: pick(families),
-        scope: pick(scopes),
-        status: pick(statuses),
+        family: families[Math.floor(tuple / (scopes.length * generatedStatuses.length))],
+        scope: scopes[Math.floor(tuple / generatedStatuses.length) % scopes.length],
+        status: generatedStatuses[tuple % generatedStatuses.length],
       }),
     );
+  }
   return result;
 }
 export function coverage(cases) {
@@ -170,7 +183,9 @@ export function coverage(cases) {
   return { families: unique("family"), scopes: unique("scope"), statuses: unique("status") };
 }
 export function optionsFor(args) {
-  return sharedOptionsFor(["--count", String(defaultCount)].concat(args));
+  const options = sharedOptionsFor(["--count", String(defaultCount)].concat(args));
+  if (options.count > maxGeneratedCount) throw new Error(`invalid count (0..${maxGeneratedCount})`);
+  return options;
 }
 const encode = (result) => ({
   status: result.status,

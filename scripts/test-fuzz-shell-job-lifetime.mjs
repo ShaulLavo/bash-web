@@ -10,9 +10,11 @@ import {
   families,
   fingerprint,
   generateCases,
+  generatedStatuses,
   healthy,
   matches,
   matrixCases,
+  maxGeneratedCount,
   optionsFor,
   outputLimit,
   render,
@@ -67,7 +69,12 @@ test("generation is deterministic, independently seeded, finite and builtin-only
     assert.deepEqual(cases, generateCases(seed));
     assert.equal(cases.length, matrixCases().length + defaultCount);
     assert.equal(new Set(cases.map((item) => item.id)).size, cases.length);
+    assert.equal(new Set(cases.map((item) => item.script)).size, cases.length);
     assert.deepEqual(cases.slice(0, matrixCases().length), matrixCases());
+    for (const item of cases.slice(matrixCases().length)) {
+      assert.ok(generatedStatuses.includes(item.status));
+      assert.ok(!statuses.includes(item.status));
+    }
     assert.ok(cases.length < 300);
     for (const item of cases) {
       assert.equal(item.script, render(item));
@@ -89,6 +96,32 @@ test("generation is deterministic, independently seeded, finite and builtin-only
   assert.throws(() => generateCases(-1), /seed/);
   assert.throws(() => generateCases(1, 10001), /count/);
   assert.throws(() => render({ family: "unknown", scope: "top", status: 0 }), /specification/);
+});
+
+test("generated stream has substantive cross-seed diversity and a finite unique capacity", () => {
+  const stream = (seed) => generateCases(seed).slice(matrixCases().length);
+  const first = stream(1);
+  const second = stream(42);
+  const firstScripts = new Set(first.map((item) => item.script));
+  assert.ok(second.filter((item) => firstScripts.has(item.script)).length < 8);
+  assert.ok(new Set(first.map((item) => item.status)).size > 60);
+  assert.ok(new Set(second.map((item) => item.status)).size > 60);
+  assert.deepEqual(
+    generatedStatuses,
+    Array.from({ length: 256 }, (_, status) => status).filter(
+      (status) => !statuses.includes(status),
+    ),
+  );
+  assert.equal(maxGeneratedCount, 9072);
+  const complete = generateCases(1, maxGeneratedCount);
+  assert.equal(complete.length, 9216);
+  assert.equal(new Set(complete.map((item) => item.script)).size, complete.length);
+  assert.throws(() => generateCases(1, maxGeneratedCount + 1), /count/);
+  assert.throws(() => optionsFor(["--count", String(maxGeneratedCount + 1)]), /count/);
+  for (const status of [-1, 1.5, 256, NaN, undefined])
+    assert.throws(() => render({ family: "wait-pid", scope: "top", status }), /specification/);
+  for (const status of [0, 2, 128, 255])
+    assert.ok(render({ family: "wait-pid", scope: "top", status }).includes(`exit ${status}`));
 });
 
 test("fixed matrix covers every family, scope and status without scheduler-order output", () => {
@@ -218,6 +251,12 @@ test("fixture validation rejects source, oracle, environment, grammar and proces
       f.cases[0].case.tags.push("skip");
     },
     (f) => {
+      f.cases[0].case.status = 256;
+    },
+    (f) => {
+      f.cases[1] = structuredClone(f.cases[0]);
+    },
+    (f) => {
       f.cases[0].bash.status = null;
     },
     (f) => {
@@ -273,6 +312,9 @@ for (const seed of [1, 42])
     const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
     validateFixture(fixturePath.pathname, fixture, { ...options, count: defaultCount });
     assert.equal(fixture.provenance, "oracle-only");
+    assert.equal(new Set(fixture.cases.map((entry) => entry.case.script)).size, 240);
+    assert.equal(fixture.cases.slice(matrixCases().length).length, defaultCount);
+    assert.ok(new Set(fixture.cases.map((entry) => entry.case.status)).size > statuses.length);
     for (const entry of fixture.cases) {
       const item = entry.case;
       const stdout = Buffer.from(entry.bash.stdoutBase64, "base64").toString();
@@ -287,6 +329,10 @@ for (const seed of [1, 42])
         );
       if (item.family === "wait-all")
         assert.equal(stdout, "all=0\nforgotten-pid=127\nstatus=127\n");
+      if (item.family === "wait-empty")
+        assert.equal(stdout, `empty=0\nchild=${item.status}\nstatus=0\n`);
+      if (item.family === "wait-unknown")
+        assert.equal(stdout, `unknown-pid=127\nremembered=${item.status}\nstatus=127\n`);
       if (item.family === "jobs-one-shot")
         assert.equal(
           stdout,

@@ -42,9 +42,12 @@ It is not a new browser shell or a replacement external-command host.
   full-subtree cleanup barriers; termination and shutdown signal and drain every
   descendant. Individual waits preserve direct exit status and pipefail rules.
   Runtime job handles remain separately reachable for group signals until actual
-  membership empties, and already-empty jobs are reaped during direct waits so
-  long sequential commands do not accumulate job history. A later foreground
-  invocation never inherits an earlier invocation's lingering signal targets.
+  membership empties. Direct waits and bounded admission-time sweeps reap empty
+  jobs; independent residual jobs drain concurrently so a lingering member cannot
+  retain later completed jobs. Already-complete cleanup creates no executor task.
+  Teardown signals the owned group snapshot before awaiting any task or reaper.
+  A later foreground invocation never inherits an earlier invocation's lingering
+  signal targets or has its host interrupt consumed by an old residual monitor.
   Broken pipe is an I/O error: an unhandled writer returns 141; a guest that
   handles EPIPE retains its chosen exit code.
 
@@ -79,7 +82,7 @@ numbers, browser worker transport or shared-memory layout are frozen here.
 | Expanded command                   | 1 MiB, at most 65,536 fields including command name and assignments                                                                                                           |
 | Expansion work                     | Per command: source-byte + expansion-byte + argument capacity in character/part/element steps; cooperative yield every 64 steps; intermediate word bytes also capped at 1 MiB |
 | `read` line                        | 64 KiB, explicit failure                                                                                                                                                      |
-| Pipeline / jobs / function nesting | 128 stages / 128 retained shell jobs / 128 function frames                                                                                                                          |
+| Pipeline / jobs / function nesting | 128 stages / 128 retained shell jobs / 128 function frames                                                                                                                    |
 | Eval readers / execution chain     | 16 active readers / 256 execution levels, shared admission and explicit rejection                                                                                             |
 
 Residual host processes/runtime jobs share the 4,096-entry process admission

@@ -319,12 +319,10 @@ impl ProcessHost for InProcessHost {
     fn detach_group(&self, group: GroupId) -> JoinHandle<Result<(), ProcessError>> {
         // Reap already-empty groups synchronously; a pending drain remains
         // shared and is then driven by the host-owned executor task.
-        let ready = self.wait_group(group).now_or_never();
-        let wait = match ready {
-            Some(result) => futures::future::ready(result).boxed_local(),
-            None => self.wait_group(group),
-        };
-        self.0.executor.spawn(wait)
+        match self.wait_group(group).now_or_never() {
+            Some(result) => JoinHandle::ready(result),
+            None => self.0.executor.spawn(self.wait_group(group)),
+        }
     }
     fn wait_group(&self, group: GroupId) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
         // Observers share a drain, but the cache must not own a future that
@@ -527,6 +525,22 @@ mod tests {
         assert!(guard.terminated);
         drop(guard);
         assert_eq!(host.retained_count(), 0);
+    }
+    #[test]
+    fn empty_detach_completes_without_scheduling_a_task() {
+        let executor = Executor::new();
+        let host = InProcessHost::new(executor.clone());
+        for _ in 0..256 {
+            let group = host.allocate_group();
+            let cleanup = host.detach_group(group);
+            assert!(cleanup.is_finished());
+            assert_eq!(cleanup.now_or_never(), Some(Ok(())));
+        }
+        let drive = executor.drive(1024);
+        assert_eq!(drive.polls, 0);
+        assert_eq!(drive.pending, 0);
+        assert!(host.0.groups.borrow().is_empty());
+        assert!(host.0.waits.borrow().is_empty());
     }
     #[test]
     fn dropping_wait_observers_does_not_retain_inprocess_host() {
