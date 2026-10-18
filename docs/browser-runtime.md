@@ -13,7 +13,7 @@ TypeScript entry and its worker imports. Install the required `waffle` peer at
 the exact pin in `package.json`:
 
 ```text
-git+https://github.com/ShaulLavo/waffle.git#c458a488bba70855c27a2921c2665c7150ef2090
+git+https://github.com/ShaulLavo/waffle.git#ba968a6f86468d03394792a3e9c447dfc713c279
 ```
 
 The package's development dependency uses that same published commit. There
@@ -153,6 +153,39 @@ registry of its own. A host can use Bun's guest adapter and guest binary as a
 separate integration. Every registered executable must resolve to its actual
 program, not to the shell binary as a placeholder.
 
+Waffle registration keys are canonical absolute file paths, such as `/bin/tool`;
+keys such as `tool`, `/bin/./tool`, and `/bin//tool` are rejected. The caller
+creates the regular file with `runtime.filesystem.writeFile` before executing it.
+A zero-byte marker is sufficient: registration supplies the program source or
+module and does not create, replace, or delete filesystem entries. The
+[README example](../README.md) shows caller-owned installation. Removing a
+registration leaves its file behind but makes it non-runnable.
+
+The shell, not Waffle spawn, searches `PATH` for bare commands. It queries each
+candidate's live executable access asynchronously, without loading the module,
+and chooses the first runnable file. Missing candidates, unregistered files and
+directories do not hide a later runnable candidate. Relative `PATH` components
+and empty components (including an empty `PATH`) resolve against the current
+working directory. A command containing `/` is tried directly, without a `PATH`
+search. No runnable candidate produces status 127 when all candidates are
+missing, or 126 when a candidate exists but cannot run.
+
+Direct paths also walk the live filesystem before canonical registration lookup.
+Thus `/missing/../bin/tool` cannot skip a missing intermediate, and traversing a
+regular file as a directory or giving it a trailing slash fails with 126.
+Deleted registered files fail with 127; replacing a registered file with a
+directory fails with 126. Neither case can run a previously cached module. This
+is Waffle's executable access/admission contract, not a claim that marker files
+implement Unix permission bits or that arbitrary unregistered WASM files run.
+
+The production `mountBrowser` default remains program-free: it creates the page
+runtime, and the shell adapter supplies only its own canonical
+`/programs/shell-engine.wasm` registration and caller-owned marker. The acceptance
+page separately installs `/bin/test-guest`, `/programs/test-guest.wasm`,
+`/bin/test-spin`, and `/programs/test-spin.wasm`. There are no bare-name registry
+aliases; its normal `test-guest` and `test-spin` commands exercise shell `PATH`
+search.
+
 This package contains **no Bun guest, launcher, runtime implementation, or guest
 license payload**. The public launcher/worker APIs and hash-verified guest
 descriptor needed by the external Bun acceptance cases are not yet available at
@@ -201,37 +234,52 @@ establish Safari behavior. Safari still requires verification on an actual Mac.
 
 ### Migrated browser scope
 
-The current Playwright listing (`playwright test --list`) contains 76 unique
-cases configured once for Chromium and once for Firefox: 152 configured
+The current Playwright listing (`playwright test --list`) contains 81 unique
+cases configured once for Chromium and once for Firefox: 162 configured
 executions. This is configuration inventory, not final browser acceptance
 evidence; a configured or runnable case is not a passing result.
 
 | Suite | Configured cases | Runnable cases | Missing public Bun API | Original known failures | New engine/Waffle pending |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Shell | 12 | 11 | 0 | 0 | 1 |
-| External commands | 20 | 11 | 2 | 0 | 7 |
+| External commands | 25 | 22 | 2 | 0 | 1 |
 | Pipelines | 19 | 18 | 1 | 0 | 0 |
 | Runtime | 23 | 19 | 1 | 3 | 0 |
 | Worker assets and renderer fallback | 2 | 2 | 0 | 0 | 0 |
-| **Unique cases** | **76** | **61** | **4** | **3** | **8** |
-| **Chromium + Firefox executions** | **152** | **122** | **8** | **6** | **16** |
+| **Unique cases** | **81** | **72** | **4** | **3** | **2** |
+| **Chromium + Firefox executions** | **162** | **144** | **8** | **6** | **4** |
 
-The `command` external-guest case is now runnable following the functions unit.
-The eight remaining engine/Waffle pending cases and their exact reason strings are:
+The `command` external-guest case is runnable following the functions unit.
+Six formerly pending external-command cases are now enabled by Waffle #10 at
+`ba968a6f86468d03394792a3e9c447dfc713c279` and the shell's asynchronous executable
+access/PATH-search unit:
+
+| Activated case | Contract now exercised |
+| --- | --- |
+| Unregistered files fail with 126 | Existing regular files require a program registration; the command host remains usable after rejection. |
+| Relative executable lookup | Explicit `./test-guest` resolves against the shell's current directory. |
+| Dot-segment executable lookup | A live filesystem walk resolves `/bin/../bin/./test-guest` to its canonical registration. |
+| Missing relative executable | A missing explicit path fails with 127 without starting a guest. |
+| Deleted registered executable | Deleting a registered marker prevents execution and produces 127. |
+| Registered directory replacement | Replacing a registered marker with a directory prevents execution and produces 126. |
+
+Five additional original cases exercise PATH candidate skipping and relative/empty
+components; denied-versus-missing search status and recovery; regular-file
+intermediates/trailing slashes; root-parent traversal; and a missing intermediate
+before `..`. Rejected paths must not emit guest output or leave a child worker.
+The registration helper's unit regressions separately check canonical-only keys,
+caller-created markers before guest registration, and cancellation during marker
+creation. Enabling a case is not evidence that it has passed a browser run.
+
+The two remaining engine pending cases and their exact reason strings are:
 
 | Case | Reason |
 | --- | --- |
 | `$$` and `BASHPID` report a stable PID and the shell stays alive | `Pending plan 004 $$/BASHPID runtime identity unit: the engine needs an authoritative PID hook.` |
 | `printf` octal escapes produce exact bytes for an external guest | `Pending plan 004 printf escapes unit: octal escapes are not implemented.` |
-| Unregistered files fail with 126 | `Pending Waffle #10 live-file admission plus plan 004 PATH-search unit: unregistered PATH files must map to 126.` |
-| Relative executable lookup | `Pending Waffle #10 path admission plus plan 004 PATH-search unit: relative executable paths must resolve against cwd.` |
-| Dot-segment executable lookup | `Pending Waffle #10 path admission plus plan 004 PATH-search unit: relative executable paths must resolve against cwd.` |
-| Missing relative executable | `Pending Waffle #10 live-file admission plus plan 004 PATH-search unit: missing and deleted files must fail without execution.` |
-| Deleted registered executable | `Pending Waffle #10 live-file admission plus plan 004 PATH-search unit: missing and deleted files must fail without execution.` |
-| Registered directory replacement | `Pending Waffle #10 live-file admission: a registered directory must fail with 126 without execution.` |
 
-The original four Bun API skips remain separate from the eight remaining engine/Waffle
-pending cases, and the three inherited known-failure fixmes remain unchanged.
+The original four Bun API skips remain separate from those two engine pending
+cases, and the three inherited known-failure fixmes remain unchanged.
 
 Generic WASI guests exercise pipeline/capture/substitution, terminal and binary
 transport, cancellation, write order, raw-terminal handoff, memory, and nested
@@ -323,7 +371,7 @@ engines, or vendored `@bun-wasm/runtime` tree.
 | Original package entry, diagnostics, and targeted regressions | `src/index.ts`, `src/runtime/diagnostics.ts`, `src/runtime/{diagnostics.test.ts,terminal.test.ts,shell-host.test.ts,worker.test.ts,child-status.test.ts}` | Export the shell facade and borrowed observations, including dropped-terminal-byte counters. Manual pipe observations reclaim closed entries on a 100 ms sweep without relay/disposal ownership; retiring a root clears its timer. Original diagnostics regressions check the closed getter before any snapshot and verify root retirement stops the timer. New original regressions cover terminal streams, cancelable startup/admission retry, typed child startup status, memory telemetry and locally scoped cleanup, not foreign-adapter teardown guarantees or copied upstream suites. |
 | Shell-specific worker executor | Prototype `src/runtime/worker.ts` → `src/runtime/worker.ts`; earlier integration lineage: Bun `web/src/worker.ts` | Reduce the imported shell integration to a small original `WorkerExecutor` passed to the published `waffle/browser/worker` bootstrap. Keep shell imports/phase/memory observations only; Waffle owns generic WASI/descriptor/process/pipe/signal setup and worker cleanup. No generic runtime implementation is copied. |
 | Adapted bounded terminal stream and original prototype input policy | Bun `web/src/runtime-terminals.ts` → `src/runtime/runtime-terminals.ts` via the prototype; original prototype `src/wasi-host.ts` cooked-input policy | Retain `createBridgeTerminal`, the bounded shared-terminal stream adapter, and restore cooked carriage-return/newline handling while preserving raw editor input. Local CRLF state is shared by endpoints referencing the same buffer wrapper in one worker, not a generic cross-worker tty discipline. Remove the local descriptor/terminal codec: Waffle owns that codec and transport. |
-| Original external-program acceptance harness | `tests/browser-main.ts` and `tests/helpers/{test-programs.ts,bun-fixture.ts}` | The page owns the shared runtime and source-guest lease. Register the compiled cooperative `test-guest` and source-admitted/instrumented `test-spin` through the existing shell adapter on that same runtime, without copying runtime or ABI-host implementations. The injected Bun installer contract exposes the missing public capability explicitly; four genuinely Bun-specific cases remain skipped, with no Bun dependency or payload. The generic production host knows no specific programs. |
+| Original external-program acceptance harness | `tests/browser-main.ts` and `tests/helpers/{test-programs.ts,bun-fixture.ts}` | The page owns the shared runtime and source-guest lease. Register the compiled cooperative `test-guest` and source-admitted/instrumented `test-spin` only at canonical absolute paths after writing their marker files, through the existing shell adapter on that same runtime, without copying runtime or ABI-host implementations. Bare commands exercise shell PATH search, not registry-only aliases. The injected Bun installer contract exposes the missing public capability explicitly; four genuinely Bun-specific cases remain skipped, with no Bun dependency or payload. The generic production host knows no specific programs. |
 | Original browser host and regressions | Prototype `src/{main.tsx,session.ts,style.css,shell-terminal-output.test.ts}` → `src/browser/{main.tsx,session.ts,style.css,terminal-output.test.ts}`; `tests/{pipelines.acceptance,runtime-shell,external-commands,shell}.spec.ts` | Keep renderer and page controls outside the shell facade and remove reference-engine UI. Reuse the root library's `TerminalNewlines` rather than copying a second transformer into the page. Tests exercise the real shell asset and preserve explicit pending external-program cases; they do not replace frozen shell evidence. |
 | Original prototype terminal/guest-adapter unit regressions, adapted | Prototype `src/runtime/{terminal.test.ts,guest-imports.test.ts}` → `tests/{terminal.unit.ts,guest-imports.unit.ts}` | Retain shell-owned bounded-ring/admission/terminal metadata cases with public Waffle APIs. Bun host-slot and real-guest libc internals remain external-package tests, not copied shell-library suites. |
 | Original browser configuration, adapted | Prototype `playwright.config.ts`, `vite.config.ts`, `tsconfig.json`, `index.html`, and the browser sequence in `.github/workflows/ci.yml` → the same destinations | Build/serve/test the own-shell page with the required Waffle peer; drop reference-engine setup without replacing existing standalone shell gates. |
@@ -334,7 +382,7 @@ engines, or vendored `@bun-wasm/runtime` tree.
 | Original source-built test guests and builder | `tests/guest/{Cargo.toml,Cargo.lock,README.md,src/main.rs,src/bin/test-spin.rs}` and `scripts/build-test-guest.mjs` | Build `test-guest` for cooperative generic process-ABI exercises and `test-spin` with only WASI imports and a genuine no-checkpoint CPU loop to exercise source interrupt admission. JSON encoding, ABI callers and thin WASI/preopen wrappers are original. Publish ignored test assets, not Bun substitutes or shell-library program payloads. |
 | Original browser notice aggregator | `scripts/browser-notices.mjs` | New distribution integration collecting shell, terminal, peer and npm notices; no additional upstream code copied. |
 | Original browser packaging regressions | `scripts/test-browser-package.mjs` | Verify peer/development/lock pin identity and the absence of copied runtime/Bun implementation sources or Bun payloads before the browser build; no upstream tests copied. |
-| External shared runtime, not vendored | Waffle `c458a488bba70855c27a2921c2665c7150ef2090` | Required peer plus identical development pin. The application imports the single `createRuntime` from Waffle's package root. |
+| External shared runtime, not vendored | Waffle `ba968a6f86468d03394792a3e9c447dfc713c279` | Required peer plus identical development pin. The application imports the single `createRuntime` from Waffle's package root. |
 | Pinned terminal source | Ghostty WebGPU source/archive pin under `terminal` in `sources.lock.json` | Retain the existing terminal source revision/archive checksum and its included WASM notices; do not substitute an unpinned terminal build. |
 
 Exact pins, checksums, import mappings, classifications, and reasons are recorded

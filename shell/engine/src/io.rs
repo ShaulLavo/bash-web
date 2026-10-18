@@ -739,6 +739,20 @@ impl MemoryFs {
         }
         create(path, parents)
     }
+    pub fn set_executable(&self, path: &str, executable: bool) -> Result<(), IoError> {
+        let file = self
+            .0
+            .borrow()
+            .files
+            .get(path)
+            .cloned()
+            .ok_or(IoError::NotFound)?;
+        let mut metadata = file.metadata.get();
+        metadata.executable = Some(executable);
+        metadata.mode = Some(if executable { 0o755 } else { 0o600 });
+        file.metadata.set(metadata);
+        Ok(())
+    }
     pub fn read_file(&self, path: &str) -> Result<Vec<u8>, IoError> {
         let fs = self.0.borrow();
         let file = fs.files.get(path).ok_or(IoError::NotFound)?;

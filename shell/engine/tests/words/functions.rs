@@ -379,6 +379,9 @@ fn command_path_queries_use_executable_metadata_without_running_programs() {
         seen.borrow_mut().push((request.argv, request.env));
         async { 126 }.boxed_local()
     });
+    for path in ["/custom/tool", "/usr/bin/tool", "./relative"] {
+        host.register_access(path, "/home/guest", Ok(()));
+    }
     let session = Session::new(
         ex.clone(),
         Rc::new(host.clone()),

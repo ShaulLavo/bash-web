@@ -2,6 +2,18 @@
 use super::*;
 #[link(wasm_import_module = "runtime_proc")]
 unsafe extern "C" {
+    #[link_name = "access_start"]
+    fn proc_access_start(
+        path_ptr: *const u8,
+        path_len: usize,
+        cwd_ptr: *const u8,
+        cwd_len: usize,
+        mode: i32,
+    ) -> i32;
+    #[link_name = "access_take"]
+    fn proc_access_take(request: u32) -> i32;
+    #[link_name = "access_cancel"]
+    fn proc_access_cancel(request: u32) -> i32;
     #[link_name = "spawn"]
     fn proc_spawn(ptr: *const u8, length: usize) -> i32;
     #[link_name = "job_of"]
@@ -112,6 +124,15 @@ impl WasiAbi {
     }
 }
 impl Abi for WasiAbi {
+    fn access_start(&self, path: &str, cwd: &str) -> Result<u32, i32> {
+        result(unsafe { proc_access_start(path.as_ptr(), path.len(), cwd.as_ptr(), cwd.len(), 1) })
+    }
+    fn access_take(&self, request: u32) -> Result<(), i32> {
+        result(unsafe { proc_access_take(request) }).map(|_| ())
+    }
+    fn access_cancel(&self, request: u32) {
+        let _ = unsafe { proc_access_cancel(request) };
+    }
     fn inherited_fds(&self) -> Vec<u32> {
         self.inherited.clone()
     }

@@ -1,0 +1,445 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { resolve } from "node:path";
+import test from "node:test";
+import {
+  coverage,
+  defaultCount,
+  defaultTimeoutMs,
+  environment,
+  execute,
+  families,
+  filesystem,
+  fingerprint,
+  fixtureEnvironmentKey,
+  fixtureManifest,
+  generateCases,
+  generatedPaths,
+  generatedValues,
+  healthy,
+  matches,
+  matrixCases,
+  maxGeneratedCount,
+  optionsFor,
+  outputLimit,
+  probe,
+  provision,
+  removeSandbox,
+  render,
+  run,
+  searchPaths,
+  selectedDirectories,
+  sourceFiles,
+  sourceHashes,
+  validateFixture,
+  variants,
+} from "./fuzz-shell-path.ts";
+
+const parent = "/work/tmp/bash-web-path-20261018";
+const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
+const fixturePath = "shell-path-seed-1.json";
+const fixtureHashes = {
+  "shell-path-seed-1.json": "d15abb7e0ecc14b8df8dc2d33ddbaa8a24c494ba45bc646d25f66d20be59a139",
+  "shell-path-seed-42.json": "975b32686d50019595a1ae9e6df6da5688c91b8d83b500256cfaef438134b309",
+};
+const observation = (patch = {}) => ({
+  status: 0,
+  signal: null,
+  timedOut: false,
+  error: null,
+  stdout: Buffer.from("ok\n"),
+  stderr: Buffer.alloc(0),
+  ...patch,
+});
+function fixtureFor() {
+  const cases = generateCases(1, 0);
+  return {
+    schema: 1,
+    sourceHash: fingerprint(),
+    sourceHashes: sourceHashes(),
+    seed: 1,
+    count: 0,
+    timeoutMs: defaultTimeoutMs,
+    bash: "GNU bash, version 5.3.15(1)-release (test)",
+    oraclePath: "/usr/bin/bash",
+    environment,
+    provenance: "oracle-only",
+    coverage: coverage(cases),
+    cases: cases.map((item) => ({
+      case: item,
+      bash: {
+        status: 0,
+        signal: null,
+        timedOut: false,
+        error: null,
+        stdoutBase64: "",
+        stderrBase64: "",
+      },
+    })),
+  };
+}
+function scratch(t) {
+  // Existing: coordinator task root, shared runtimes/toolchains. This test owns
+  // only its oracle-test-* directory and run()'s bounded process descendants.
+  mkdirSync(parent, { recursive: true });
+  const path = mkdtempSync(resolve(parent, "oracle-test-"));
+  t.after(() => {
+    removeSandbox(path);
+    assert.equal(existsSync(path), false);
+  });
+  return path;
+}
+
+test("finite PATH grammar is deterministic, unique and bounded for every seed", () => {
+  const matrix = matrixCases();
+  assert.equal(matrix.length, 156);
+  for (const seed of [0, 1, 42, 0xffffffff]) {
+    const cases = generateCases(seed);
+    assert.deepEqual(cases, generateCases(seed));
+    assert.deepEqual(cases.slice(0, matrix.length), matrix);
+    assert.equal(cases.length, matrix.length + defaultCount);
+    assert.equal(new Set(cases.map((item) => item.id)).size, cases.length);
+    assert.equal(new Set(cases.map((item) => item.script)).size, cases.length);
+    for (const item of cases) {
+      assert.equal(item.script, render(item));
+      assert.ok(item.script.length < 1100);
+      assert.ok(
+        item.script.endsWith(
+          'path_status=$?; command printf "status=%s\\n" "$path_status"; exit "$path_status"\n',
+        ),
+      );
+      assert.ok(!Object.hasOwn(item, "skip"));
+      assert.ok(!Object.hasOwn(item, "unsupported"));
+      assert.ok(!/\b(?:sleep|timeout|trap|bash|chmod|mkdir|rm)\b|`|\$\$/.test(item.script));
+    }
+    for (const item of cases.slice(matrix.length)) {
+      assert.equal(item.variant, "generated");
+      assert.ok(generatedPaths.includes(item.path));
+      assert.ok(
+        selectedDirectories[searchPaths.indexOf(item.path)] !== null,
+        "generated arguments reach an executable",
+      );
+      assert.ok(generatedValues.includes(item.value));
+      assert.ok(item.script.includes(probe));
+      assert.ok(
+        item.script.includes("tail arg"),
+        "generated values are actual executable arguments",
+      );
+    }
+  }
+  assert.notDeepEqual(generateCases(1), generateCases(42));
+  const all = generateCases(1, maxGeneratedCount);
+  assert.equal(maxGeneratedCount, generatedValues.length * generatedPaths.length);
+  assert.equal(new Set(all.map((item) => item.script)).size, all.length);
+  for (const seed of [-1, 0x100000000, NaN]) assert.throws(() => generateCases(seed), /seed/);
+  for (const count of [-1, 0.5, maxGeneratedCount + 1])
+    assert.throws(() => generateCases(1, count), /count/);
+  assert.throws(
+    () => render({ family: "search", variant: "generated", value: "x", path: "unregistered" }),
+    /path/,
+  );
+  assert.throws(
+    () => render({ family: "search", variant: "unknown", value: "x" }),
+    /specification/,
+  );
+  assert.throws(
+    () => render({ family: "search", variant: "path-0", value: undefined }),
+    /specification/,
+  );
+});
+
+test("fixed matrix covers empty entries, cwd, precedence, slash names and query search ordering", () => {
+  const cases = matrixCases();
+  assert.deepEqual(coverage(cases).families, families.toSorted());
+  assert.equal(selectedDirectories.length, searchPaths.length);
+  for (const [family, members] of Object.entries(variants))
+    for (const variant of members) {
+      if (variant !== "generated")
+        assert.ok(
+          cases.some((item) => item.family === family && item.variant === variant),
+          family + "/" + variant,
+        );
+    }
+  for (const index of searchPaths.keys()) {
+    const entries = cases.filter(
+      (item) => item.family === "search" && item.variant === "path-" + index,
+    );
+    assert.deepEqual(
+      entries.map((item) => item.query),
+      [undefined, "-v", "-V"],
+    );
+  }
+  for (const path of [
+    "",
+    ":path-a",
+    "path-a:",
+    "missing::path-a",
+    "./path-a",
+    "path-b/../path-a",
+    "path-noexec:path-b",
+    "path-dir:path-b",
+    "path-denied:path-b",
+    "path-file:path-b",
+  ])
+    assert.ok(searchPaths.includes(path));
+  for (const label of [
+    "search/unset",
+    "cwd/change-after-query",
+    "precedence/command-bypass",
+    "precedence/prefix-restored",
+    "slash/not-directory",
+    "query/unset-v",
+    "query/absolute-V",
+    "query/slash-nonexec-v",
+    "query/mixed-v",
+    "query/all-missing-V",
+  ])
+    assert.ok(cases.some((item) => item.family + "/" + item.variant === label));
+  assert.equal(
+    environment.comparison,
+    "stdout bytes and exit status; stderr retained as diagnostics, not compared",
+  );
+  assert.throws(() => optionsFor(["--unit-only"]));
+  assert.throws(() => optionsFor(["--exclude", "denied"]));
+  assert.throws(() => optionsFor(["--normalize", "paths"]));
+});
+
+test("portable manifest uses bounded owned nodes, exact permissions and explicit environment identity", (t) => {
+  const fixture = scratch(t);
+  provision(fixture);
+  assert.equal(fixtureEnvironmentKey, "BASH_WEB_PATH_FIXTURE");
+  assert.deepEqual(environment.filesystem, fixtureManifest);
+  assert.equal(filesystem.length, 20);
+  assert.equal(new Set(filesystem.map((node) => node.path)).size, filesystem.length);
+  for (const node of filesystem) {
+    assert.ok(!node.path.startsWith("/") && !node.path.split("/").includes(".."));
+    if (node.path.startsWith("path-denied/")) continue;
+    assert.equal(statSync(resolve(fixture, node.path)).mode & 0o777, node.mode);
+    if (node.marker !== undefined) {
+      assert.ok(Number.isInteger(node.status) && node.status > 0 && node.status <= 255);
+      assert.ok(readFileSync(resolve(fixture, node.path), "utf8").startsWith("#!/usr/bin/bash\n"));
+    }
+  }
+  removeSandbox(fixture);
+  assert.equal(existsSync(fixture), false);
+});
+
+test("all transitive harness sources are pinned and raw bytes/status stay strict", () => {
+  assert.deepEqual(sourceFiles, [
+    "fuzz-shell-path.ts",
+    "fuzz-shell-control-flow.mjs",
+    "shell-process-group.mjs",
+  ]);
+  for (const [name, hash] of Object.entries(sourceHashes()))
+    assert.equal(
+      hash,
+      createHash("sha256")
+        .update(readFileSync(new URL(name, import.meta.url)))
+        .digest("hex"),
+    );
+  assert.equal(
+    fingerprint(),
+    createHash("sha256").update(JSON.stringify(sourceHashes())).digest("hex"),
+  );
+  assert.ok(matches(observation(), observation()));
+  assert.ok(matches(observation({ status: 127 }), observation({ status: 127 })));
+  assert.ok(
+    matches(
+      observation({ stdout: Buffer.from([0, 255]) }),
+      observation({ stdout: Buffer.from([0, 255]) }),
+    ),
+  );
+  assert.ok(
+    matches(
+      observation(),
+      observation({ stderr: Buffer.from("diagnostics differ, retained only\n") }),
+    ),
+  );
+  for (const patch of [
+    { status: 1 },
+    { stdout: Buffer.from("ok") },
+    { signal: "SIGKILL" },
+    { timedOut: true },
+    { error: "ETIMEDOUT" },
+    { status: 2, stdout: Buffer.alloc(0), stderr: Buffer.from("unsupported syntax\n") },
+  ])
+    assert.equal(matches(observation(), observation(patch)), false);
+  for (const status of [-1, 256, null, 1.5]) assert.equal(healthy(observation({ status })), false);
+});
+
+test("fixture identity rejects schema, grammar, oracle, environment, subset and raw-byte mutations", () => {
+  assert.deepEqual(validateFixture(fixturePath, fixtureFor(), options), matrixCases());
+  const mutations = [
+    (f) => f.schema++,
+    (f) => (f.sourceHash = "stale"),
+    (f) => (f.sourceHashes["fuzz-shell-path.ts"] = "stale"),
+    (f) => (f.sourceHashes["fuzz-shell-control-flow.mjs"] = "stale"),
+    (f) => (f.sourceHashes["shell-process-group.mjs"] = "stale"),
+    (f) => (f.bash = "GNU bash, version 5.2.0"),
+    (f) => (f.oraclePath = "/bin/bash"),
+    (f) => (f.environment = { ...environment, filesystem: { schema: 1, nodes: [] } }),
+    (f) => (f.provenance = "inferred"),
+    (f) => (f.seed = -1),
+    (f) => f.count++,
+    (f) => f.timeoutMs++,
+    (f) => (f.coverage = {}),
+    (f) => f.cases.pop(),
+    (f) => (f.cases[0].case.script += "\n:"),
+    (f) => (f.cases[0].case.skip = true),
+    (f) => (f.cases[0].bash.status = 256),
+    (f) => (f.cases[0].bash.signal = "SIGKILL"),
+    (f) => (f.cases[0].bash.timedOut = true),
+    (f) => (f.cases[0].bash.error = "EACCES"),
+    (f) => (f.cases[0].bash.stdoutBase64 = "not-base64"),
+    (f) => (f.cases[0].bash.stderrBase64 = "YQ"),
+    (f) => (f.cases[0].bash.stdoutBase64 = Buffer.alloc(outputLimit + 1).toString("base64")),
+  ];
+  for (const mutate of mutations) {
+    const fixture = structuredClone(fixtureFor());
+    mutate(fixture);
+    assert.throws(() => validateFixture(fixturePath, fixture, options));
+  }
+  assert.throws(
+    () => validateFixture("shell-path-seed-42.json", fixtureFor(), options),
+    /filename/,
+  );
+  assert.throws(
+    () => validateFixture(fixturePath, fixtureFor(), { ...options, explicitSeed: true, seed: 42 }),
+    /seed/,
+  );
+});
+
+test("independent GNU Bash observations expose 126/127 and nonexec query fallback without output rewriting", async (t) => {
+  const cwd = scratch(t);
+  const controls = [
+    ["search", "unset", 3, "marker=<cwd>\narg=<fixed argument>\narg=<tail arg>\nstatus=3\n"],
+    ["search", "path-0", 3, "marker=<cwd>\narg=<fixed argument>\narg=<tail arg>\nstatus=3\n"],
+    ["search", "path-17", 126, "status=126\n"],
+    ["search", "path-18", 127, "status=127\n"],
+    ["search", "path-19", 127, "status=127\n"],
+    ["search", "path-20", 127, "status=127\n"],
+    ["search", "path-21", 9, "marker=<b>\narg=<fixed argument>\narg=<tail arg>\nstatus=9\n"],
+    ["search", "path-22", 9, "marker=<b>\narg=<fixed argument>\narg=<tail arg>\nstatus=9\n"],
+    ["search", "path-26", 127, "status=127\n"],
+    ["search", "path-28", 126, "status=126\n"],
+    ["search", "path-29", 126, "status=126\n"],
+    ["query", "nonexec-v", 0, `path-noexec/${probe}\nstatus=0\n`],
+    ["query", "directory-v", 1, "status=1\n"],
+    ["slash", "directory", 126, "status=126\n"],
+    ["slash", "not-directory", 126, "status=126\n"],
+    ["slash", "denied", 126, "status=126\n"],
+    ["query", "absolute-v", 0, "query-exact=1\nstatus=0\n"],
+    ["query", "absolute-V", 0, "query-exact=1\nstatus=0\n"],
+    ["query", "unset-v", 0, "query-exact=1\nstatus=0\n"],
+    ["query", "unset-V", 0, "query-exact=1\nstatus=0\n"],
+  ] as const;
+  for (const [family, variant, status, stdout] of controls) {
+    const result = await run(
+      "/usr/bin/bash",
+      render({ family, variant, value: "fixed argument" }),
+      { ...options, cwd },
+    );
+    assert.ok(healthy(result), family + "/" + variant);
+    assert.equal(result.status, status, family + "/" + variant);
+    assert.equal(result.stdout.toString(), stdout, family + "/" + variant);
+    if ([126, 127].includes(status))
+      assert.ok(result.stderr.length > 0, "raw diagnostic bytes retained");
+    assert.deepEqual(readdirSync(cwd), [], "process tree removed after each observation");
+  }
+});
+
+test("replay processes every case and counts unsupported, status and byte differences as failures", async (t) => {
+  const cwd = scratch(t);
+  const cases = [
+    { id: "healthy", family: "search", script: "printf 'ok\\n'" },
+    { id: "unsupported", family: "search", script: "printf 'unsupported syntax\\n' >&2; exit 2" },
+    { id: "last", family: "query", script: "printf 'last\\n'; exit 127" },
+  ];
+  const recorded = cases.map(() => ({
+    bash: {
+      status: 0,
+      signal: null,
+      timedOut: false,
+      error: null,
+      stdoutBase64: Buffer.from("ok\n").toString("base64"),
+      stderrBase64: "",
+    },
+  }));
+  const result = await execute(cases, { ...options, cwd }, "/usr/bin/bash", recorded);
+  assert.equal(result.total, 3);
+  assert.deepEqual(result.counts, { MATCH: 1, MISMATCH: 2 });
+  assert.equal(result.byFamily.query.MISMATCH, 1);
+  assert.deepEqual(
+    result.mismatches.map((item) => item.case.id),
+    ["unsupported", "last"],
+  );
+  assert.deepEqual(readdirSync(cwd), []);
+});
+
+test("spawn failure, timeout, output limit and pre-interruption keep owned scratch clean", async (t) => {
+  const cwd = scratch(t);
+  const missing = await run(resolve(cwd, "absent-shell"), ":", { ...options, cwd });
+  assert.equal(missing.error, "ENOENT");
+  assert.equal(healthy(missing), false);
+  assert.deepEqual(readdirSync(cwd), []);
+  const timed = await run("/usr/bin/bash", "while :; do :; done", {
+    ...options,
+    cwd,
+    timeoutMs: 20,
+  });
+  assert.equal(timed.timedOut, true);
+  assert.equal(healthy(timed), false);
+  assert.deepEqual(readdirSync(cwd), []);
+  const overflow = await run("/usr/bin/bash", "while :; do printf '%01000d' 0; done", {
+    ...options,
+    cwd,
+  });
+  assert.equal(overflow.error, "ENOBUFS");
+  assert.equal(healthy(overflow), false);
+  assert.deepEqual(readdirSync(cwd), []);
+  await assert.rejects(
+    run("/usr/bin/bash", ":", { ...options, cwd, interrupted: true }),
+    /interrupted/,
+  );
+  assert.deepEqual(readdirSync(cwd), []);
+});
+
+test("every captured seed includes the full fixed matrix and all seeded observations", () => {
+  const names = readdirSync(new URL("./fixtures/", import.meta.url)).filter((name) =>
+    /^shell-path-seed-\d+\.json$/.test(name),
+  );
+  assert.deepEqual(names.sort(), ["shell-path-seed-1.json", "shell-path-seed-42.json"]);
+  for (const name of names) {
+    const bytes = readFileSync(new URL("./fixtures/" + name, import.meta.url));
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), fixtureHashes[name]);
+    const fixture = JSON.parse(bytes.toString("utf8"));
+    const cases = validateFixture(name, fixture, { ...options, count: defaultCount });
+    assert.equal(cases.length, matrixCases().length + defaultCount);
+    assert.equal(fixture.provenance, "oracle-only");
+    assert.ok(fixture.cases.every((entry) => healthy(entry.bash)));
+    for (const entry of fixture.cases)
+      if (entry.case.script.includes("path_answer=$(")) {
+        const stdout = Buffer.from(entry.bash.stdoutBase64, "base64").toString();
+        assert.ok(
+          stdout.startsWith("query-exact=1\n"),
+          entry.case.id + " must satisfy its exact-answer predicate",
+        );
+        assert.ok(!stdout.includes("unexpected=<"));
+      }
+    for (const entry of fixture.cases)
+      if (entry.case.variant === "generated") {
+        const stdout = Buffer.from(entry.bash.stdoutBase64, "base64").toString();
+        assert.ok(stdout.startsWith("marker=<"));
+        assert.ok(
+          stdout.includes("arg=<" + entry.case.value + ">\n"),
+          entry.case.id + " must deliver its seeded argument",
+        );
+      }
+    assert.ok(fixture.cases.some((entry) => entry.bash.status === 126));
+    assert.ok(fixture.cases.some((entry) => entry.bash.status === 127));
+    assert.ok(
+      fixture.cases.some((entry) => Buffer.from(entry.bash.stderrBase64, "base64").length > 0),
+    );
+  }
+});

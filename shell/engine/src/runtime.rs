@@ -124,6 +124,9 @@ pub trait Abi {
     /// The embedder's initial logical bindings, excluding private directory preopens
     /// and descriptors subsequently allocated by this guest.
     fn inherited_fds(&self) -> Vec<u32>;
+    fn access_start(&self, path: &str, cwd: &str) -> Result<u32, i32>;
+    fn access_take(&self, request: u32) -> Result<(), i32>;
+    fn access_cancel(&self, request: u32);
     fn spawn(&self, request: &RuntimeSpawn) -> Result<u32, i32>;
     fn job_of(&self, pid: u32) -> Result<u32, i32>;
     fn wait(&self, pid: u32) -> Result<i32, i32>;
@@ -337,6 +340,39 @@ impl Runtime {
             id,
             token: None,
         }
+    }
+    fn access_future(
+        &self,
+        path: String,
+        cwd: String,
+    ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        let runtime = self.clone();
+        async move {
+            let request = runtime
+                .0
+                .abi
+                .access_start(&path, &cwd)
+                .map_err(ProcessError::Runtime)?;
+            let guard = AccessGuard {
+                runtime: runtime.clone(),
+                request,
+                retired: Cell::new(false),
+            };
+            loop {
+                match runtime.0.abi.access_take(request) {
+                    Ok(()) => {
+                        guard.retired.set(true);
+                        return Ok(());
+                    }
+                    Err(AGAIN) => runtime.ready(5, request).await,
+                    Err(errno) => {
+                        guard.retired.set(true);
+                        return Err(ProcessError::Runtime(errno));
+                    }
+                }
+            }
+        }
+        .boxed_local()
     }
     /// Drive only BETWEEN executor turns. With timeout 0 this never blocks;
     /// timeout -1 parks until host readiness or a signal. No task calls poll.
@@ -558,6 +594,20 @@ impl Runtime {
         Ok(fd)
     }
 }
+struct AccessGuard {
+    runtime: Runtime,
+    request: u32,
+    retired: Cell<bool>,
+}
+impl Drop for AccessGuard {
+    fn drop(&mut self) {
+        if !self.retired.get() {
+            self.runtime.0.abi.access_cancel(self.request);
+            self.retired.set(true);
+        }
+    }
+}
+
 struct Ready {
     runtime: Runtime,
     kind: u32,
@@ -755,6 +805,13 @@ fn io_error(errno: i32) -> IoError {
     }
 }
 impl ProcessHost for Runtime {
+    fn access(
+        &self,
+        path: String,
+        cwd: String,
+    ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        self.access_future(path, cwd)
+    }
     fn allocate_group(&self) -> GroupId {
         self.group(false)
     }

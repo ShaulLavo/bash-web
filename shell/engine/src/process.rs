@@ -16,6 +16,36 @@ use std::{
 
 pub type ProcessId = u64;
 pub type GroupId = u64;
+
+fn access_path(cwd: &str, path: &str) -> String {
+    let mut result = if path.starts_with('/') {
+        String::from("/")
+    } else {
+        cwd.trim_end_matches('/').to_owned()
+    };
+    for component in path.split('/') {
+        match component {
+            "" | "." => {}
+            ".." => {
+                if let Some(index) = result.rfind('/') {
+                    result.truncate(index.max(1));
+                }
+            }
+            component => {
+                if result != "/" {
+                    result.push('/');
+                }
+                result.push_str(component);
+            }
+        }
+    }
+    if result.is_empty() {
+        "/".to_owned()
+    } else {
+        result
+    }
+}
+
 #[derive(Clone)]
 pub struct SpawnRequest {
     pub argv: Vec<String>,
@@ -67,6 +97,15 @@ pub trait ProcessHost {
     fn interrupted(&self) -> bool {
         false
     }
+    /// Check whether `path` is executable from `cwd` without spawning it. The
+    /// returned future owns any host request and cancellation must retire it.
+    fn access(
+        &self,
+        _path: String,
+        _cwd: String,
+    ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        Box::pin(futures::future::ready(Err(ProcessError::Runtime(58))))
+    }
     fn spawn(&self, request: SpawnRequest) -> Result<ProcessId, ProcessError>;
     fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<i32, ProcessError>>;
     fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError>;
@@ -106,6 +145,7 @@ type Program = dyn Fn(SpawnRequest, Cancel) -> LocalBoxFuture<'static, i32>;
 struct HostState {
     executor: Executor,
     registry: RefCell<BTreeMap<String, Rc<Program>>>,
+    accesses: RefCell<BTreeMap<String, Result<(), i32>>>,
     children: RefCell<BTreeMap<ProcessId, Child>>,
     // Only unreaped groups have entries; true means reject new descendants.
     groups: RefCell<BTreeMap<GroupId, bool>>,
@@ -121,6 +161,7 @@ impl InProcessHost {
         Self(Rc::new(HostState {
             executor,
             registry: RefCell::new(BTreeMap::new()),
+            accesses: RefCell::new(BTreeMap::new()),
             children: RefCell::new(BTreeMap::new()),
             groups: RefCell::new(BTreeMap::new()),
             waits: RefCell::new(BTreeMap::new()),
@@ -138,6 +179,19 @@ impl InProcessHost {
             .registry
             .borrow_mut()
             .insert(name.into(), Rc::new(program));
+    }
+    /// Install deterministic executable-access results for native/WASI shell
+    /// fixtures. This is explicit host capability data, not a spawn probe.
+    pub fn register_access(
+        &self,
+        path: impl Into<String>,
+        cwd: impl Into<String>,
+        result: Result<(), i32>,
+    ) {
+        let path = path.into();
+        let cwd = cwd.into();
+        let key = access_path(&cwd, &path);
+        self.0.accesses.borrow_mut().insert(key, result);
     }
     pub fn active_count(&self) -> usize {
         self.0
@@ -181,6 +235,36 @@ impl InProcessHost {
     }
 }
 impl ProcessHost for InProcessHost {
+    fn access(
+        &self,
+        path: String,
+        cwd: String,
+    ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        let key = access_path(&cwd, &path);
+        let result = self.0.accesses.borrow().get(&key).copied();
+        let result = result
+            .or_else(|| {
+                let name = path
+                    .rsplit_once('/')
+                    .map_or(path.as_str(), |(_, name)| name);
+                self.0
+                    .registry
+                    .borrow()
+                    .contains_key(&path)
+                    .then_some(Ok(()))
+                    .or_else(|| {
+                        self.0
+                            .registry
+                            .borrow()
+                            .contains_key(name)
+                            .then_some(Ok(()))
+                    })
+            })
+            .unwrap_or(Err(44));
+        Box::pin(futures::future::ready(
+            result.map_err(ProcessError::Runtime),
+        ))
+    }
     fn allocate_group(&self) -> GroupId {
         let group = self.0.next_group.get();
         self.0
@@ -199,6 +283,10 @@ impl ProcessHost for InProcessHost {
             .borrow()
             .get(&name)
             .cloned()
+            .or_else(|| {
+                name.rsplit_once('/')
+                    .and_then(|(_, basename)| self.0.registry.borrow().get(basename).cloned())
+            })
             .ok_or_else(|| ProcessError::UnknownCommand(name))?;
         let group = request.group;
         let parent = request.parent;

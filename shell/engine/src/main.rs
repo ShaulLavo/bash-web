@@ -28,6 +28,12 @@ fn main() {
             eprintln!("cannot create virtual working directory: {error:?}");
             std::process::exit(error.status());
         }
+        if let Ok(raw) = std::env::var("BASH_WEB_PATH_FIXTURE") {
+            if let Err(error) = compat::register_fixture(&host, &fs, cwd, &raw) {
+                eprintln!("cannot install path fixture: {error}");
+                std::process::exit(2);
+            }
+        }
     }
     let session = Session::new(
         executor.clone(),

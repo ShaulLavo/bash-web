@@ -42,10 +42,32 @@ bridge to its UI. Terminal rendering and demo controls live in `src/browser/`,
 separate from the shell facade.
 
 `waffle` is a **required peer dependency**, pinned to the published Git commit
-`c458a488bba70855c27a2921c2665c7150ef2090`:
-`git+https://github.com/ShaulLavo/waffle.git#c458a488bba70855c27a2921c2665c7150ef2090`.
+`ba968a6f86468d03394792a3e9c447dfc713c279`:
+`git+https://github.com/ShaulLavo/waffle.git#ba968a6f86468d03394792a3e9c447dfc713c279`.
 The development dependency uses the same pin so local builds and tests exercise
 the same runtime applications supply.
+
+Register external programs at canonical absolute paths and create their regular
+files yourself. For example, an integration that supplies its own Waffle guest
+launcher and WASM bytes can install `/bin/tool` on the page's existing runtime:
+
+```ts
+import type { GuestLauncher, Runtime } from "waffle";
+
+async function registerTool(runtime: Runtime, launch: GuestLauncher, source: Uint8Array) {
+  runtime.registerAdapter("tool:preview1", launch);
+  await runtime.filesystem.mkdirp("/bin");
+  await runtime.filesystem.writeFile("/bin/tool", new Uint8Array());
+  runtime.registerProgram("/bin/tool", { adapter: "tool:preview1", source });
+}
+```
+
+The marker contents are not the program: Waffle loads the registered source.
+The shell's default `PATH=/bin` finds `tool`; do not register a bare `tool` alias.
+Registration does not create or preserve the marker. Deleting it prevents future
+execution; an existing file without a registration, or a directory, is not
+runnable. See [external programs](docs/browser-runtime.md#optional-external-programs)
+for lookup and exit-status behavior.
 
 ## Build and test
 

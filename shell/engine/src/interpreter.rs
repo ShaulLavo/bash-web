@@ -3185,16 +3185,20 @@ async fn dispatch_simple_command_body(
         }
         return Ok(Outcome::status(126));
     }
-    if default_path && !name.contains('/') {
+    if !name.is_empty() {
         let _frame = BuiltinPrefixFrame::enter(state.clone(), &assigned, &context, &mut work)
             .await
             .map_err(admission_status)?;
-        let Some(path) =
-            command_builtin::executable(&name, &state, true, &context, &mut work).await?
-        else {
-            return Ok(Outcome::status(127));
+        name = match command_builtin::executable(&name, &state, default_path, &context, &mut work)
+            .await?
+        {
+            command_builtin::Resolution::Executable(path) => {
+                let cwd = state.borrow().cwd.clone();
+                absolute(&cwd, &path)
+            }
+            command_builtin::Resolution::NonExecutable(_) => return Ok(Outcome::status(126)),
+            command_builtin::Resolution::Missing => return Ok(Outcome::status(127)),
         };
-        name = path;
     }
     let (mut env, cwd) = {
         let s = state.borrow();
@@ -3913,6 +3917,13 @@ mod residual_review_tests {
         }
         fn interrupted(&self) -> bool {
             self.interrupt.replace(false)
+        }
+        fn access(
+            &self,
+            path: String,
+            cwd: String,
+        ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+            self.inner.access(path, cwd)
         }
         fn spawn(&self, request: SpawnRequest) -> Result<ProcessId, ProcessError> {
             let group = request.group;

@@ -104,34 +104,62 @@ async fn output(fds: &Descriptors, context: &Context, bytes: &[u8]) -> Result<()
         .map_err(|error| error.status())
 }
 
-/// Metadata is the only truthful path-query capability: opening a file cannot
-/// establish executability, and a query must never spawn a process as a probe.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Resolution {
+    Executable(String),
+    NonExecutable(String),
+    Missing,
+}
+
+/// Ask the process host's executable registry for X_OK. This is deliberately
+/// not a spawn probe: each request is cancellable and uses the host's shared
+/// admission and readiness path.
 pub(super) async fn executable(
     name: &str,
     state: &SharedState,
     default_path: bool,
     context: &Context,
     work: &mut expand::Work,
-) -> Result<Option<String>, i32> {
-    let (cwd, path) = {
+) -> Result<Resolution, i32> {
+    let (cwd, path, path_unset, path_empty) = {
         let state = state.borrow();
+        let path_unset = state.scalar_parameter("PATH").is_none() && !default_path;
         let path = if default_path {
             "/usr/bin:/bin"
         } else {
-            state.scalar_parameter("PATH").unwrap_or("/usr/bin:/bin")
+            state.scalar_parameter("PATH").unwrap_or(if default_path {
+                "/usr/bin:/bin"
+            } else {
+                "."
+            })
         };
         work.admit_storage(cwd_storage(&state.cwd, path)?)
             .map_err(admission_status)?;
-        (state.cwd.clone(), path.to_owned())
+        (
+            state.cwd.clone(),
+            path.to_owned(),
+            path_unset,
+            path.is_empty(),
+        )
     };
+    let explicit = name.contains('/');
     let mut entries = path.split(':');
+    let mut non_executable = None;
+    let mut blocked = false;
+    let mut blocked_before_non_executable = false;
     loop {
-        let candidate = if name.contains('/') {
+        let candidate = if explicit {
             work.admit_storage(name.len()).map_err(admission_status)?;
             name.to_owned()
         } else {
             let Some(directory) = entries.next() else {
-                return Ok(None);
+                return Ok(if blocked_before_non_executable {
+                    Resolution::Missing
+                } else {
+                    non_executable
+                        .map(Resolution::NonExecutable)
+                        .unwrap_or(Resolution::Missing)
+                });
             };
             let bytes = directory
                 .len()
@@ -140,7 +168,9 @@ pub(super) async fn executable(
                 .ok_or(2)?;
             work.admit_storage(bytes).map_err(admission_status)?;
             if directory.is_empty() {
-                name.to_owned()
+                format!("./{name}")
+            } else if (path_unset || path_empty) && directory == "." {
+                absolute(&cwd, name)
             } else {
                 format!("{directory}/{name}")
             }
@@ -157,23 +187,48 @@ pub(super) async fn executable(
                 .ok_or(2)?,
         )
         .map_err(admission_status)?;
-        let absolute = absolute(&cwd, &candidate);
-        let metadata = context
+        let result = context
             .cancel
-            .run(context.fs().stat(&absolute, true))
+            .run(context.core.host.access(candidate.clone(), cwd.clone()))
             .await
             .map_err(|_| context.cancel_status())?;
-        match metadata {
-            Ok(metadata) if metadata.kind != io::FileKind::Directory => match metadata.executable {
-                Some(true) => return Ok(Some(candidate)),
-                Some(false) => {}
-                None => return Err(2),
-            },
-            Ok(_) | Err(io::IoError::NotFound | io::IoError::NotDirectory) => {}
-            Err(error) => return Err(error.status().max(2)),
+        match result {
+            Ok(()) => return Ok(Resolution::Executable(candidate)),
+            Err(ProcessError::Runtime(2)) => {
+                if non_executable.is_none() {
+                    blocked_before_non_executable = blocked;
+                    non_executable = Some(candidate);
+                }
+            }
+            Err(ProcessError::Runtime(54)) if explicit => {
+                non_executable = Some(candidate);
+            }
+            Err(ProcessError::Runtime(54)) => {
+                blocked = true;
+            }
+            Err(ProcessError::Runtime(44)) if explicit => {
+                let absolute = absolute(&cwd, &candidate);
+                match context
+                    .cancel
+                    .run(context.fs().stat(&absolute, true))
+                    .await
+                    .map_err(|_| context.cancel_status())?
+                {
+                    Ok(_) | Err(io::IoError::NotDirectory) => {
+                        non_executable = Some(candidate);
+                    }
+                    Err(io::IoError::NotFound) => {}
+                    Err(_) => {}
+                }
+            }
+            Err(ProcessError::Runtime(44)) => {}
+            Err(ProcessError::Runtime(errno)) => return Err(errno.max(2)),
+            Err(_) => return Err(2),
         }
-        if name.contains('/') {
-            return Ok(None);
+        if explicit {
+            return Ok(non_executable
+                .map(Resolution::NonExecutable)
+                .unwrap_or(Resolution::Missing));
         }
     }
 }
@@ -272,22 +327,40 @@ pub(super) async fn query(
                 },
             )
             .await?;
-        } else if let Some(path) =
-            executable(name, state, options.default_path, context, work).await?
-        {
+        } else {
+            let resolution = executable(name, state, options.default_path, context, work).await?;
+            let path = match resolution {
+                Resolution::Executable(path) => path,
+                Resolution::NonExecutable(path) if name.contains('/') => {
+                    if options.verbose {
+                        diagnostic(fds, context, b"command: ").await?;
+                        diagnostic(fds, context, name.as_bytes()).await?;
+                        diagnostic(fds, context, b": not found\n").await?;
+                    }
+                    continue;
+                }
+                Resolution::NonExecutable(path) => path,
+                Resolution::Missing => {
+                    if options.verbose {
+                        diagnostic(fds, context, b"command: ").await?;
+                        diagnostic(fds, context, name.as_bytes()).await?;
+                        diagnostic(fds, context, b": not found\n").await?;
+                    }
+                    continue;
+                }
+            };
+            let display_path = if options.verbose && !name.contains('/') && !path.starts_with('/') {
+                let cwd = state.borrow().cwd.clone();
+                format!("{cwd}/{path}")
+            } else {
+                path
+            };
             if options.verbose {
                 output(fds, context, name.as_bytes()).await?;
                 output(fds, context, b" is ").await?;
             }
-            output(fds, context, path.as_bytes()).await?;
+            output(fds, context, display_path.as_bytes()).await?;
             output(fds, context, b"\n").await?;
-        } else {
-            if options.verbose {
-                diagnostic(fds, context, b"command: ").await?;
-                diagnostic(fds, context, name.as_bytes()).await?;
-                diagnostic(fds, context, b": not found\n").await?;
-            }
-            continue;
         }
         found = true;
     }

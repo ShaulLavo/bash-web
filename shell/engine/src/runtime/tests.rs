@@ -83,11 +83,23 @@ impl Fake {
     }
 }
 impl Abi for Fake {
+    fn access_start(&self, _path: &str, _cwd: &str) -> Result<u32, i32> {
+        Ok(1)
+    }
+    fn access_take(&self, _request: u32) -> Result<(), i32> {
+        Ok(())
+    }
+    fn access_cancel(&self, _request: u32) {}
     fn inherited_fds(&self) -> Vec<u32> {
         self.inherited.borrow().clone()
     }
     fn spawn(&self, request: &RuntimeSpawn) -> Result<u32, i32> {
-        if self.spawn_errors.borrow().contains(&request.executable) {
+        if self.spawn_errors.borrow().contains(&request.executable)
+            || request
+                .executable
+                .rsplit_once('/')
+                .is_some_and(|(_, name)| self.spawn_errors.borrow().contains(name))
+        {
             return Err(44);
         }
         // The real runtime seals a job when its pending membership reaches zero,
@@ -132,10 +144,11 @@ impl Abi for Fake {
                 signal: signal.clone(),
             },
         );
-        if matches!(
-            request.executable.as_str(),
-            "inherit" | "inherit-fail" | "inherit-sleep"
-        ) {
+        let requested_name = request
+            .executable
+            .rsplit_once('/')
+            .map_or(request.executable.as_str(), |(_, name)| name);
+        if matches!(requested_name, "inherit" | "inherit-fail" | "inherit-sleep") {
             // A process-service member, not a shell-known direct pid. It retains
             // real inherited descriptors and exits independently of its parent.
             let descendant = self.next_pid.get();
@@ -174,11 +187,15 @@ impl Abi for Fake {
             });
         }
         let argv = request.argv.clone();
+        let command = argv[0]
+            .rsplit_once('/')
+            .map_or(argv[0].as_str(), |(_, name)| name)
+            .to_owned();
         let parse_gate = self.parse_gate.clone();
         self.executor.spawn(async move {
             let run = async {
                 let output = fds.get(1).ok_or(1)?;
-                match argv[0].as_str() {
+                match command.as_str() {
                     "emit" => {
                         for _ in 0..64 {
                             output
@@ -221,7 +238,7 @@ impl Abi for Fake {
                     "parse-gate" => parse_gate.cancelled().await,
                     _ => {}
                 }
-                Ok::<i32, i32>(if argv[0] == "inherit-fail" { 7 } else { 0 })
+                Ok::<i32, i32>(if command == "inherit-fail" { 7 } else { 0 })
             };
             let result = cancel.run(run).await;
             status.set(Some(match result {
@@ -671,7 +688,11 @@ fn runtime_pipeline_builtins_external_and_fs_share_descriptor_namespace() {
     assert_eq!(
         requests
             .iter()
-            .filter(|request| request.executable == "runtime-cat")
+            .filter(|request| request
+                .executable
+                .rsplit_once('/')
+                .map_or(request.executable.as_str(), |(_, name)| name)
+                == "runtime-cat")
             .count(),
         5
     );
@@ -1388,7 +1409,7 @@ fn substitution_descriptors_cross_the_actual_runtime_spawn_boundary() {
             .iter()
             .map(|request| request.executable.as_str())
             .collect::<Vec<_>>(),
-        ["emit", "runtime-cat"]
+        ["/home/guest/emit", "/home/guest/runtime-cat"]
     );
     let consumer = &requests[1];
     let stdin = consumer
