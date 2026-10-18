@@ -466,24 +466,25 @@ test("ratchet rejects count growth, identity swaps and test-to-production promot
   assert.throws(() => assertRatchet(base, testOnly, "test"), /production violations increased/);
 });
 
-// No processes, servers or build outputs. Each test owns one tiny temporary Git
-// repository; teardown is installed before setup, on success and every exception.
+// No servers or build outputs. Each test owns one tiny temporary Git repository;
+// teardown is installed before setup, on success and every exception. Automatic
+// maintenance must not detach writers that outlive execFileSync and race teardown.
 function withRepo(
   body: (
     root: string,
-    git: (args: string[]) => string,
+    git: (args: string[], env?: NodeJS.ProcessEnv) => string,
     put: (path: string, contents: string) => void,
   ) => void,
 ) {
   const temporaryRoot = process.env.TMPDIR || (existsSync("/work/tmp") ? "/work/tmp" : tmpdir());
   const root = mkdtempSync(resolve(temporaryRoot, "bash-web-layer-tests-"));
   try {
-    const git = (args: string[]) =>
-      execFileSync("git", args, {
+    const git = (args: string[], env?: NodeJS.ProcessEnv) =>
+      execFileSync("git", ["-c", "maintenance.auto=false"].concat(args), {
         cwd: root,
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
+        env: { ...process.env, ...env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
       }).trim();
     const put = (path: string, contents: string) => {
       mkdirSync(resolve(root, path, ".."), { recursive: true });
@@ -510,6 +511,34 @@ test("repository fixtures honor an explicit temporary root", () => {
   withRepo((root) => {
     const expected = process.env.TMPDIR || (existsSync("/work/tmp") ? "/work/tmp" : tmpdir());
     assert.equal(dirname(root), resolve(expected));
+  });
+});
+
+test("fixture commits do not start automatic maintenance writers", () => {
+  withRepo((root, git) => {
+    // Keep this regression's pre-fix maintenance synchronous, so a failing test
+    // cannot leave the very background writer it is checking for.
+    git(["config", "maintenance.autoDetach", "false"]);
+    git(["config", "gc.autoDetach", "false"]);
+    git(["add", "."]);
+    const tracePath = resolve(root, "git-trace.json");
+    git(["-c", "commit.gpgsign=false", "commit", "-qm", "fixture"], {
+      GIT_TRACE2_EVENT: tracePath,
+    });
+    const events: { event: string; argv?: string[] }[] = readFileSync(tracePath, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.ok(
+      events.some((event) => event.event === "start"),
+      "commit trace was captured",
+    );
+    const maintenance = events.filter(
+      (event) =>
+        event.event === "child_start" &&
+        (event.argv?.[1] === "maintenance" || event.argv?.[1] === "gc"),
+    );
+    assert.deepEqual(maintenance, [], "fixture commits must not launch automatic maintenance");
   });
 });
 

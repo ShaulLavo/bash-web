@@ -115,9 +115,10 @@ LAYERS_BASE_REF=$(git rev-parse origin/main) npm run check:layers
 
 `LAYERS_BASE_REF` (or `--base-ref`) must be an immutable full commit SHA.
 CI fetches complete history and selects the PR base SHA, the pre-push main SHA,
-or the merge-base with main for another branch's push. Its lightweight layer
-job must pass before any Rust or browser build job starts. `npm run compat`
-is an alias for `npm run compat:shell`; it still uses the frozen oracle.
+or the merge-base with main for another branch's push. The lightweight layer
+job and the shell, compatibility and browser jobs run independently and must all
+pass: a layer-check failure must not skip real shell or browser coverage.
+`npm run compat` is an alias for `npm run compat:shell`; it still uses the frozen oracle.
 
 The checker scans every engine Rust source regardless of platform or feature
 configuration. It records separate production and test-only edges, violations,
