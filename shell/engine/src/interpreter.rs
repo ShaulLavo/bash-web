@@ -2677,7 +2677,7 @@ async fn retain_declaration_syntax(
     let source = source
         .get(simple.span.start.offset..simple.span.end.offset)
         .ok_or(2)?;
-    let mut tokens = parse::declaration_tokens(source);
+    let tokens = parse::declaration_tokens(source);
     let mut assignments = simple.assignments.len();
     let mut words = std::iter::once(&mut simple.name).chain(simple.args.iter_mut());
     let mut target = words.next();
