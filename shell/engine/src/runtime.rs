@@ -117,6 +117,24 @@ impl PollEvent {
         }
     }
 }
+/// The runtime_proc waits share one eight-byte little-endian terminal record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WaitResult {
+    Exited(i32),
+    Signaled(i32),
+    StartFailed(i32),
+}
+impl WaitResult {
+    pub fn decode(bytes: [u8; 8]) -> Result<Self, i32> {
+        let kind = u32::from_le_bytes(bytes[..4].try_into().unwrap());
+        let value = i32::from_le_bytes(bytes[4..].try_into().unwrap());
+        match kind {
+            0 => Ok(Self::Exited(value)),
+            1 => Ok(Self::Signaled(value)),
+            _ => Err(28),
+        }
+    }
+}
 /// Injectable boundary keeps native engine tests independent of WASM imports.
 /// Errnos are positive WASI errnos here; the WASM adapter decodes negative results.
 /// `wait_job` confirms descendant teardown and reaps runtime-owned tombstones.

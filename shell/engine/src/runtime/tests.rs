@@ -473,6 +473,35 @@ fn finish<T: Clone + 'static>(
     }
     panic!("fake runtime failed to finish");
 }
+fn wait_record(kind: u32, value: i32) -> [u8; 8] {
+    let mut bytes = [0; 8];
+    bytes[..4].copy_from_slice(&kind.to_le_bytes());
+    bytes[4..].copy_from_slice(&value.to_le_bytes());
+    bytes
+}
+
+#[test]
+fn typed_wait_result_preserves_each_start_failure_errno() {
+    for errno in [48, 6, 29, 44, 2, 45, 54, 28, 63] {
+        assert_eq!(
+            WaitResult::decode(wait_record(2, errno)),
+            Ok(WaitResult::StartFailed(errno)),
+            "startup errno {errno}"
+        );
+    }
+}
+
+#[test]
+fn typed_wait_result_keeps_real_exits_signals_and_unknown_kinds_distinct() {
+    for code in [0, 7, 126, 127, 255] {
+        assert_eq!(WaitResult::decode(wait_record(0, code)), Ok(WaitResult::Exited(code)));
+    }
+    assert_eq!(WaitResult::decode(wait_record(1, 9)), Ok(WaitResult::Signaled(9)));
+    for kind in [3, u32::MAX] {
+        assert_eq!(WaitResult::decode(wait_record(kind, 44)), Err(28));
+    }
+}
+
 #[test]
 fn consuming_child_wait_keeps_job_pending_until_live_grandchild_finishes() {
     let executor = Executor::new();
