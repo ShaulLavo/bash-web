@@ -264,6 +264,18 @@ async function fixture(
       "scripts/bash-compat.mjs",
       'throw Error("candidate scorer must not collect target evidence");',
     );
+    // The libc compiler is also a stand-in, but the shared link recipe is real.
+    put("sdk/VERSION", "34.0\nwasi-libc: 2e6fb9d8ee0c\n");
+    put("node_modules/waffle/patches/wasi-libc/preopen-scan.patch", "fixture patch");
+    put(
+      "node_modules/waffle/scripts/build-wasi-libc.sh",
+      `#!/bin/bash
+set -eu
+mkdir -p "$1/lib/wasm32-wasip1"
+printf fixture > "$1/lib/wasm32-wasip1/libc.a"
+`,
+    );
+    process.env.WASI_SDK_PATH = resolve(repo, "sdk");
     writeFileSync(resolve(bin, "cargo"), cargoFixture);
     chmodSync(resolve(bin, "cargo"), 0o755);
     process.env.PATH = `${bin}:${process.env.PATH}`;
@@ -491,6 +503,8 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
           "shell-scoreboard-base.mjs",
           "shell-scoreboard-migration.mjs",
           "shell-process-group.mjs",
+          "wasi-build.ts",
+          "verify-wasi-guests.ts",
         ])
           put(`scripts/${name}`, readFileSync(new URL(name, import.meta.url)));
         const child = spawn(process.execPath, [resolve(repo, "scripts/bash-compat.mjs")], {

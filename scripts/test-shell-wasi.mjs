@@ -5,12 +5,11 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { brotliCompressSync, constants } from "node:zlib";
+import { wasiBuildEnvironment } from "./wasi-build.ts";
+import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
 const root = resolve(import.meta.dirname, "..");
-const cargoEnv = {
-  ...process.env,
-  CARGO_TARGET_DIR: process.env.CARGO_TARGET_DIR ?? resolve(root, ".build/shell"),
-};
+const cargoEnv = wasiBuildEnvironment(root, process.env.CARGO_TARGET_DIR ?? ".build/shell");
 const cargo = (args, options = {}) =>
   execFileSync("cargo", args, { cwd: root, stdio: "inherit", env: cargoEnv, ...options });
 const manifest = ["--locked", "--manifest-path", "shell/Cargo.toml"];
@@ -72,6 +71,7 @@ const metadata = JSON.parse(
   }),
 );
 const wasm = resolve(metadata.target_directory, "wasm32-wasip1/release/shell-engine.wasm");
+verifyWasiGuest(wasm);
 const output = execFileSync(
   "wasmtime",
   ["run", wasm, "-c", 'false | true; printf \'STATUS:%s:%s\\n\' "$?" "${PIPESTATUS[*]}"'],
