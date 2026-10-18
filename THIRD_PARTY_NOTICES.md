@@ -1,5 +1,11 @@
 # Third-party notices
 
+The browser integration's current source and distribution boundary is recorded
+under [Browser integration port](#browser-integration-port) below. Earlier
+browser/reference-engine descriptions retain their historical context; they do
+not mean that all prototype hosts or reference engines ship in the current
+browser package. Shell and frozen-corpus provenance below is retained unchanged.
+
 Brush is MIT licensed and retained as a pinned source submodule with its license. Ghostty WebGPU is MIT licensed; its source archive and included Ghostty WASM notices are pinned by revision and checksum. Remix 3 is MIT licensed. Comlink is Apache-2.0 licensed. browser_wasi_shim is MIT OR Apache-2.0 licensed. just-bash is Apache-2.0 licensed.
 
 `scripts/notices.mjs` copies the license and notice text from the exact Rust and npm dependencies and the terminal source into `public/THIRD_PARTY_NOTICES.txt`. The production build includes that generated file as `dist/THIRD_PARTY_NOTICES.txt`. Distribution must retain it.
@@ -448,3 +454,100 @@ distribution notices. `sources.lock.json:shellAcceptanceUtilities` records the
 exact source hash, adapted behaviors and original bounded descriptor/regex
 adapters. The accompanying `mkdir` implementation and filesystem ABI bindings
 are original, not a copied upstream utility.
+
+## Browser integration port
+
+The browser shell facade, bounded terminal bridge, shell-specific worker/guest
+adapters, and own-shell browser tests originate in the retired
+`ShaulLavo/brush-web` prototype at
+`a2a4e96f8f771fdd088303535a36c0f43869d10a` (MIT, Copyright 2026 Shaul Lavo).
+Their imported source content is retained in bash-web from this port onward;
+the retired repository is neither a dependency nor a required provenance link.
+The host-local checkpoint `50c2e35a61ba8caf1ef3edbbf4a5bdd346b191a6` left these
+`src/` and `tests/` sources unchanged. The retained root [MIT license](LICENSE)
+covers those original adapters. The detailed source/destination mapping,
+classifications, and local changes are recorded under `browserRuntime` in
+`sources.lock.json` and in [Browser integration](docs/browser-runtime.md#source-provenance).
+
+Original embedding code includes `src/{shell.ts,bridge.ts,shell-terminal-output.ts}`
+and `src/runtime/{guest-imports.ts,terminal-admission.ts,limits.ts}`, together
+with the shell-facing integration and original adapter regressions. These are
+not additional copies of Bashkit's interpreter or the old Brush host. The
+browser terminal/demo in `src/browser/` is a separate host concern. New package
+exports and Waffle runtime injection are local integration code.
+
+The earlier shell integration derives from `ShaulLavo/bun-wasm` revision
+`8d3d416aa9cb23718ed3487a33d0b06e8e373672` (MIT), including
+`web/src/{worker.ts,runtime-terminals.ts,runner.ts,subprocess-broker.ts}` via
+the prototype source above. The current `src/runtime/worker.ts` is a small
+original shell-specific `WorkerExecutor` passed to the published
+`waffle/browser/worker` bootstrap; it retains only shell imports/phase/memory
+observations, not generic runtime setup or cleanup. The adapted
+`src/runtime/runtime-terminals.ts` retains only the bounded
+`createBridgeTerminal` stream; Waffle owns the terminal/descriptor codec.
+
+The root lifecycle fencing from Bun's `web/src/runner.ts` passed through
+prototype `src/runtime/browser-runtime.ts` into `src/runtime/shell-host.ts`.
+The original `src/runtime/worker-launcher.ts` assembles terminal-consumer hooks
+from the earlier lifecycle adapters and delegates to Waffle's
+`service.launchWorker`; the original `diagnostics.ts` and `src/index.ts` expose
+borrowed observations and package exports. New original regressions live in
+`src/runtime/{diagnostics.test.ts,terminal.test.ts,shell-host.test.ts}`; the
+diagnostics cases verify autonomous closed-getter observation before any snapshot
+and timer cancellation on root retirement. Shared WASI, filesystem,
+process, descriptor, pipe, signal, worker-bootstrap and lifecycle implementations
+belong to Waffle. No generic runtime, broker or terminal codec is copied here.
+The exact mappings and original-versus-adapted classifications remain recorded
+in the manifest and browser documentation.
+
+The original worker builder bundles the shell-specific executor and the external
+peer's public `waffle/browser/fs-worker` entry into stable JavaScript assets;
+this does not vendor a runtime source tree. Original regressions in
+`tests/worker-assets.spec.ts` check worker delivery and usable Canvas rendering
+when WebGPU has no available adapter. Startup cancellation/join, explicit
+post-fetch-failure admission retry, locally observed shell-worker cleanup, and
+dropped-terminal-byte diagnostics are original integration changes. The counters
+expose output loss; they are not a lossless generic terminal implementation or a
+foreign-adapter teardown guarantee. Manual pipe observations retain no relay or
+disposal ownership and clear closed observations on a bounded timer.
+
+The browser acceptance harness in `tests/browser-main.ts` and
+`tests/helpers/{test-programs.ts,bun-fixture.ts}` is original package composition
+around the page's Waffle runtime. The page owns its source-guest lease;
+`test-programs.ts` registers compiled cooperative `test-guest` and source-admitted,
+instrumented `test-spin` through the existing shell adapter, without copied
+runtime or ABI-host implementations. The injected installer contract describes
+future Bun composition. The required public Bun installer/worker and matching
+verified guest descriptor are not yet available at a published dependency pin:
+there is no Bun host package dependency, implementation, guest binary or guest
+license payload in this delivery. Affected Bun-specific cases remain pending.
+The generic browser host knows no specific external programs. No Bun worker,
+broker, subprocess transport, import-slot implementation, or runtime source is
+copied into this package to work around the missing external package surface.
+
+The small source-built guests under `tests/guest/` and their
+`scripts/build-test-guest.mjs` builder are original regression fixtures under the
+root MIT license, not adapted Bun implementations. `test-guest` exercises generic
+cooperative process-ABI behavior; `test-spin` has no `runtime_proc` imports and
+exercises the runtime's actual source interruption admission. Generated test
+assets are ignored build output, not externally sourced guest payloads.
+
+### Waffle peer
+
+`waffle` at published revision `c458a488bba70855c27a2921c2665c7150ef2090`
+is MIT licensed, Copyright 2026 Shaul Lavochkin. It is a required peer imported
+by the shell adapter and is pinned identically for development. The application
+creates the runtime through Waffle's root `createRuntime` and supplies it to the
+shell. Filesystem, process, descriptor, pipe, and shared lifecycle authority
+belongs to that peer, not a vendored `@bun-wasm/runtime` copy. Preserve Waffle's
+license and dependency notices when distributing its implementation.
+
+### Browser distribution
+
+The Ghostty terminal source/archive and included WASM notice identity retain the
+existing `terminal` pin and the historical notice correction above. The current
+port does not add the prototype's reference-engine comparisons or default Brush
+host. Browser distributions must include the generated terminal, npm/Waffle,
+and adapter notices as well as shell dependency notices in
+`dist/THIRD_PARTY_NOTICES.txt`. This port changes no frozen shell scoreboard,
+corpus licenses, generator fixture bytes, or earlier extraction provenance.
