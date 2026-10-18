@@ -3,7 +3,7 @@
 // 8d3d416aa9cb23718ed3487a33d0b06e8e373672. This adapter no longer creates an FS,
 // broker or supervisor: the supplied Waffle Runtime is their sole page owner.
 import type { ProcessService, Runtime } from "waffle";
-import { markStartup } from "./startup-diagnostics";
+import { markStartup, type StartupObserver } from "./startup-diagnostics";
 import { claimOutcome, readOutcome } from "waffle/proc/outcome";
 import { waitStatus } from "waffle/proc/wait-status";
 import {
@@ -29,8 +29,8 @@ const executable = "/programs/shell-engine.wasm";
 interface Registration {
   wasmUrl: string;
   workerUrl: string;
-  module: Promise<{ module: WebAssembly.Module; size: number }>;
-  initialized: Promise<void>;
+  module(observer?: StartupObserver): Promise<{ module: WebAssembly.Module; size: number }>;
+  initialize(observer?: StartupObserver): Promise<void>;
 }
 const registrations = new WeakMap<Runtime, Registration>();
 /** Internal adapter admission for embeddings/tests; does not launch a root or load assets. */
@@ -50,22 +50,28 @@ export function registerShell(runtime: Runtime, options: ShellOptions): Registra
       throw new Error("Shell adapters on one Runtime must use the same worker and guest URLs");
     return existing;
   }
+  const registration = createRegistration(runtime, wasmUrl, workerUrl);
+  registrations.set(runtime, registration);
+  return registration;
+}
+
+function createRegistration(runtime: Runtime, wasmUrl: string, workerUrl: string): Registration {
   // Share successful loads and in-flight attempts, but let a later explicit caller
   // try again after failure. An individual facade never retries its own startup.
   let loaded: Promise<{ module: WebAssembly.Module; size: number }> | undefined;
-  const module = () => {
+  const module = (observer?: StartupObserver) => {
     if (!loaded) {
       const attempt = (async () => {
-        markStartup(options.onStartupStage, "shell-wasm-fetch-requested");
+        markStartup(observer, "shell-wasm-fetch-requested");
         const response = await fetch(wasmUrl);
-        markStartup(options.onStartupStage, "shell-wasm-fetch-resolved");
+        markStartup(observer, "shell-wasm-fetch-resolved");
         if (!response.ok) throw new Error(`Shell executable fetch failed (${response.status})`);
-        markStartup(options.onStartupStage, "shell-wasm-body-requested");
+        markStartup(observer, "shell-wasm-body-requested");
         const bytes = await response.arrayBuffer();
-        markStartup(options.onStartupStage, "shell-wasm-body-resolved");
-        markStartup(options.onStartupStage, "shell-wasm-compile-requested");
+        markStartup(observer, "shell-wasm-body-resolved");
+        markStartup(observer, "shell-wasm-compile-requested");
         const module = await WebAssembly.compile(bytes);
-        markStartup(options.onStartupStage, "shell-wasm-compile-resolved");
+        markStartup(observer, "shell-wasm-compile-resolved");
         return { module, size: bytes.byteLength };
       })();
       loaded = attempt;
@@ -104,13 +110,11 @@ export function registerShell(runtime: Runtime, options: ShellOptions): Registra
     throw error;
   }
   let initialized: Promise<void> | undefined;
-  const registration: Registration = {
+  return {
     wasmUrl,
     workerUrl,
-    get module() {
-      return module();
-    },
-    get initialized() {
+    module,
+    initialize(observer) {
       if (initialized) return initialized;
       const attempt = (async () => {
         for (const [name, directory] of [
@@ -119,21 +123,21 @@ export function registerShell(runtime: Runtime, options: ShellOptions): Registra
           ["bin", "/bin"],
           ["programs", "/programs"],
         ] as const) {
-          markStartup(options.onStartupStage, `shell-${name}-mkdir-requested`);
+          markStartup(observer, `shell-${name}-mkdir-requested`);
           await runtime.filesystem.mkdirp(directory);
-          markStartup(options.onStartupStage, `shell-${name}-mkdir-resolved`);
+          markStartup(observer, `shell-${name}-mkdir-resolved`);
         }
-        markStartup(options.onStartupStage, "shell-executable-lookup-requested");
+        markStartup(observer, "shell-executable-lookup-requested");
         const exists = await runtime.filesystem.lookup(executable);
-        markStartup(options.onStartupStage, "shell-executable-lookup-resolved");
+        markStartup(observer, "shell-executable-lookup-resolved");
         if (!exists) {
-          markStartup(options.onStartupStage, "shell-executable-write-requested");
+          markStartup(observer, "shell-executable-write-requested");
           await runtime.filesystem.writeFile(executable, new Uint8Array());
-          markStartup(options.onStartupStage, "shell-executable-write-resolved");
+          markStartup(observer, "shell-executable-write-resolved");
         }
-        markStartup(options.onStartupStage, "shell-filesystem-drain-requested");
+        markStartup(observer, "shell-filesystem-drain-requested");
         await runtime.filesystem.drain();
-        markStartup(options.onStartupStage, "shell-filesystem-drain-resolved");
+        markStartup(observer, "shell-filesystem-drain-resolved");
       })();
       initialized = attempt;
       void attempt.catch(() => {
@@ -142,8 +146,6 @@ export function registerShell(runtime: Runtime, options: ShellOptions): Registra
       return attempt;
     },
   };
-  registrations.set(runtime, registration);
-  return registration;
 }
 
 export async function startShell(
@@ -278,10 +280,10 @@ export async function startShell(
     // Accepted synchronously, before fetch, FS initialization, or lazy process admission.
     release = runtime.retainConsumer({ filesystem: identity, revoke, stop: physicallyStop });
     markStartup(options.onStartupStage, "shell-registration-requested");
-    await pending(() => registration.initialized);
+    await pending(() => registration.initialize(options.onStartupStage));
     markStartup(options.onStartupStage, "shell-registration-resolved");
     markStartup(options.onStartupStage, "shell-module-requested");
-    const loaded = await pending(() => registration.module);
+    const loaded = await pending(() => registration.module(options.onStartupStage));
     markStartup(options.onStartupStage, "shell-module-resolved");
     if (runtime.disposed) throw new Error("Runtime is disposed");
     markStartup(options.onStartupStage, "shell-processes-requested");

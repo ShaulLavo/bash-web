@@ -20,7 +20,8 @@ export interface RuntimeProcess {
 export interface ShellOptions {
   /** The embedding page's one shared runtime. Disposing a shell does not dispose it. */
   runtime: Runtime;
-  /** Optional, non-blocking startup diagnostics. */
+  /** Passive startup measurement. Must not abort or start/stop the shell or runtime.
+   * Control reentry is unsupported, as in Waffle's docs/runtime-startup.md. */
   onStartupStage?: StartupObserver;
   /** Guest and worker asset URLs; bundlers can supply their emitted URLs explicitly. */
   wasmUrl?: string | URL;

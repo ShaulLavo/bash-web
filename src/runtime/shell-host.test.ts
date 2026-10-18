@@ -768,7 +768,7 @@ test("a live borrowed runtime does not retain disposed no-observer shell options
     gc();
   }
   for (const [name, reference] of Object.entries(references))
-    assert.equal(reference.deref(), undefined, `${name} retained after shell disposal`);
+    assert.equal(reference.deref() === undefined, true, `${name} retained after shell disposal`);
   assert.equal(host.runtime.disposed, false);
 });
 
