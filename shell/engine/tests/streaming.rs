@@ -35,6 +35,12 @@ impl Rig {
             Rc::new(fs.clone()),
             limits,
         );
+        // Stand-in programs live in one explicit directory, including after cd.
+        shell
+            .state()
+            .borrow_mut()
+            .variables
+            .insert("PATH".into(), "/home/guest".into());
         let (out, output) = capture(8 * 1024 * 1024);
         let mut fds = FdTable::default();
         fds.insert(0, Endpoint::null());
@@ -59,29 +65,31 @@ impl Rig {
         value
     }
     fn register(&self) {
-        self.host.register("okay", |_, _| async { 0 }.boxed_local());
+        self.host
+            .register("/home/guest/okay", |_, _| async { 0 }.boxed_local());
         let ticks = self.ticks.clone();
-        self.host.register("ticker", move |req, cancel| {
-            let ticks = ticks.clone();
-            async move {
-                for (i, gate) in ticks.into_iter().enumerate() {
-                    if let Err(e) = req
-                        .fds
-                        .get(1)
-                        .unwrap()
-                        .write_all(format!("tick {i}\n").as_bytes(), &cancel)
-                        .await
-                    {
-                        return e.status();
+        self.host
+            .register("/home/guest/ticker", move |req, cancel| {
+                let ticks = ticks.clone();
+                async move {
+                    for (i, gate) in ticks.into_iter().enumerate() {
+                        if let Err(e) = req
+                            .fds
+                            .get(1)
+                            .unwrap()
+                            .write_all(format!("tick {i}\n").as_bytes(), &cancel)
+                            .await
+                        {
+                            return e.status();
+                        }
+                        gate.cancelled().await;
                     }
-                    gate.cancelled().await;
+                    futures::future::pending().await
                 }
-                futures::future::pending().await
-            }
-            .boxed_local()
-        });
+                .boxed_local()
+            });
         let written = self.written.clone();
-        self.host.register("emit", move |req, cancel| {
+        self.host.register("/home/guest/emit", move |req, cancel| {
             let written = written.clone();
             async move {
                 let size = req.argv[1].parse::<usize>().unwrap();
@@ -100,34 +108,35 @@ impl Rig {
             }
             .boxed_local()
         });
-        self.host.register("copy", |req, cancel| {
+        self.host.register("/home/guest/copy", |req, cancel| {
             async move { copy(&req, &cancel, 0, 1).await }.boxed_local()
         });
-        self.host.register("fdcat", |req, cancel| {
+        self.host.register("/home/guest/fdcat", |req, cancel| {
             async move { copy(&req, &cancel, 4, 3).await }.boxed_local()
         });
-        self.host.register("count", |req, cancel| {
+        self.host.register("/home/guest/count", |req, cancel| {
             async move { count(&req, &cancel, false).await }.boxed_local()
         });
-        self.host.register("verify", |req, cancel| {
+        self.host.register("/home/guest/verify", |req, cancel| {
             async move { count(&req, &cancel, true).await }.boxed_local()
         });
         let slow = self.slow.clone();
-        self.host.register("slow-count", move |req, cancel| {
-            let slow = slow.clone();
-            async move {
-                req.fds
-                    .get(2)
-                    .unwrap()
-                    .write_all(b"READER_WAITING\n", &cancel)
-                    .await
-                    .unwrap();
-                slow.cancelled().await;
-                count(&req, &cancel, false).await
-            }
-            .boxed_local()
-        });
-        self.host.register("filter", |req, cancel| {
+        self.host
+            .register("/home/guest/slow-count", move |req, cancel| {
+                let slow = slow.clone();
+                async move {
+                    req.fds
+                        .get(2)
+                        .unwrap()
+                        .write_all(b"READER_WAITING\n", &cancel)
+                        .await
+                        .unwrap();
+                    slow.cancelled().await;
+                    count(&req, &cancel, false).await
+                }
+                .boxed_local()
+            });
+        self.host.register("/home/guest/filter", |req, cancel| {
             async move {
                 let needle = req.argv[1].as_bytes();
                 let input = req.fds.get(0).unwrap();
@@ -177,29 +186,30 @@ impl Rig {
             .boxed_local()
         });
         for name in ["endless", "handled"] {
-            self.host.register(name, move |req, cancel| {
-                async move {
-                    req.fds
-                        .get(2)
-                        .unwrap()
-                        .write_all(b"PRODUCER_READY\n", &cancel)
-                        .await
-                        .unwrap();
-                    let output = req.fds.get(1).unwrap();
-                    loop {
-                        if let Err(e) = output.write_all(b"first\n", &cancel).await {
-                            return if name == "handled" && e == IoError::BrokenPipe {
-                                23
-                            } else {
-                                e.status()
-                            };
+            self.host
+                .register(format!("/home/guest/{name}"), move |req, cancel| {
+                    async move {
+                        req.fds
+                            .get(2)
+                            .unwrap()
+                            .write_all(b"PRODUCER_READY\n", &cancel)
+                            .await
+                            .unwrap();
+                        let output = req.fds.get(1).unwrap();
+                        loop {
+                            if let Err(e) = output.write_all(b"first\n", &cancel).await {
+                                return if name == "handled" && e == IoError::BrokenPipe {
+                                    23
+                                } else {
+                                    e.status()
+                                };
+                            }
                         }
                     }
-                }
-                .boxed_local()
-            });
+                    .boxed_local()
+                });
         }
-        self.host.register("take", |req, cancel| {
+        self.host.register("/home/guest/take", |req, cancel| {
             async move {
                 let mut byte = [0];
                 let input = req.fds.get(0).unwrap();
@@ -220,7 +230,7 @@ impl Rig {
             }
             .boxed_local()
         });
-        self.host.register("hold", |req, cancel| {
+        self.host.register("/home/guest/hold", |req, cancel| {
             async move {
                 req.fds
                     .get(1)
@@ -232,7 +242,7 @@ impl Rig {
             }
             .boxed_local()
         });
-        self.host.register("accumulate", |req, cancel| {
+        self.host.register("/home/guest/accumulate", |req, cancel| {
             async move {
                 let (sink, _capture) = capture(65536);
                 let mut buffer = [0; 8192];
@@ -250,27 +260,28 @@ impl Rig {
             }
             .boxed_local()
         });
-        self.host.register("environment", |req, cancel| {
-            async move {
-                let text = format!(
-                    "{}:{}:{}\n",
-                    req.env.get("EXPORTED").map(String::as_str).unwrap_or(""),
-                    req.env.contains_key("secret"),
-                    req.cwd
-                );
-                match req
-                    .fds
-                    .get(1)
-                    .unwrap()
-                    .write_all(text.as_bytes(), &cancel)
-                    .await
-                {
-                    Ok(()) => 0,
-                    Err(e) => e.status(),
+        self.host
+            .register("/home/guest/environment", |req, cancel| {
+                async move {
+                    let text = format!(
+                        "{}:{}:{}\n",
+                        req.env.get("EXPORTED").map(String::as_str).unwrap_or(""),
+                        req.env.contains_key("secret"),
+                        req.cwd
+                    );
+                    match req
+                        .fds
+                        .get(1)
+                        .unwrap()
+                        .write_all(text.as_bytes(), &cancel)
+                        .await
+                    {
+                        Ok(()) => 0,
+                        Err(e) => e.status(),
+                    }
                 }
-            }
-            .boxed_local()
-        });
+                .boxed_local()
+            });
     }
     fn start(&self, script: &str) -> JoinHandle<i32> {
         self.shell.start(script).unwrap()
@@ -640,45 +651,47 @@ fn external_fd_close_delivers_epipe_before_consumer_exit() {
     let closed_gate = closed.clone();
     let done_gate = producer_done.clone();
     let exited = consumer_exited.clone();
-    r.host.register("close-input", move |mut req, _cancel| {
-        let closed = closed_gate.clone();
-        let done = done_gate.clone();
-        let exited = exited.clone();
-        async move {
-            drop(req.fds.remove(0).unwrap());
-            closed.cancel();
-            // The consumer cannot exit to release an accidentally retained fd.
-            // Only the producer completing its write can release this latch.
-            done.cancelled().await;
-            exited.set(true);
-            0
-        }
-        .boxed_local()
-    });
+    r.host
+        .register("/home/guest/close-input", move |mut req, _cancel| {
+            let closed = closed_gate.clone();
+            let done = done_gate.clone();
+            let exited = exited.clone();
+            async move {
+                drop(req.fds.remove(0).unwrap());
+                closed.cancel();
+                // The consumer cannot exit to release an accidentally retained fd.
+                // Only the producer completing its write can release this latch.
+                done.cancelled().await;
+                exited.set(true);
+                0
+            }
+            .boxed_local()
+        });
     let producer_exited = consumer_exited.clone();
     let producer_observed = epipe_before_exit.clone();
-    r.host.register("write-after-close", move |req, cancel| {
-        let closed = closed.clone();
-        let done = producer_done.clone();
-        let exited = producer_exited.clone();
-        let observed = producer_observed.clone();
-        async move {
-            closed.cancelled().await;
-            let result = req
-                .fds
-                .get(1)
-                .unwrap()
-                .write_all(&vec![b'x'; PIPE_CAPACITY * 2], &cancel)
-                .await;
-            observed.set(result == Err(IoError::BrokenPipe) && !exited.get());
-            done.cancel();
-            match result {
-                Ok(()) => 0,
-                Err(error) => error.status(),
+    r.host
+        .register("/home/guest/write-after-close", move |req, cancel| {
+            let closed = closed.clone();
+            let done = producer_done.clone();
+            let exited = producer_exited.clone();
+            let observed = producer_observed.clone();
+            async move {
+                closed.cancelled().await;
+                let result = req
+                    .fds
+                    .get(1)
+                    .unwrap()
+                    .write_all(&vec![b'x'; PIPE_CAPACITY * 2], &cancel)
+                    .await;
+                observed.set(result == Err(IoError::BrokenPipe) && !exited.get());
+                done.cancel();
+                match result {
+                    Ok(()) => 0,
+                    Err(error) => error.status(),
+                }
             }
-        }
-        .boxed_local()
-    });
+            .boxed_local()
+        });
     // Keep observer handles outside the registry callbacks.
     let observed = epipe_before_exit.clone();
     let exited = consumer_exited.clone();
@@ -751,7 +764,7 @@ fn sessions_sharing_a_host_have_independent_first_process_groups() {
         Limits::default(),
     );
     other.set_descriptors(r.fds.clone()).unwrap();
-    r.host.register("other-hold", |req, cancel| {
+    r.host.register("/home/guest/other-hold", |req, cancel| {
         async move {
             req.fds
                 .get(1)
@@ -818,11 +831,11 @@ fn interrupt_after_ast_completion_reaps_lingering_group_descendant() {
     let descendant = Rc::new(Cell::new(None));
     let spawned = descendant.clone();
     r.host
-        .register("leave-descendant", move |mut req, _cancel| {
+        .register("/home/guest/leave-descendant", move |mut req, _cancel| {
             let host = weak_host.upgrade().unwrap();
             let spawned = spawned.clone();
             async move {
-                req.argv = vec!["hold".into()];
+                req.argv = vec!["/home/guest/hold".into()];
                 // The host boundary supplies the process group, not the caller pid.
                 // Membership must keep this process under the foreground lifetime.
                 spawned.set(Some(host.spawn(req).unwrap()));

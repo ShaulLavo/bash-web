@@ -24,7 +24,7 @@ impl Rig {
         let host = InProcessHost::new(ex.clone());
         let calls = Rc::new(RefCell::new(Vec::new()));
         let observed = calls.clone();
-        host.register("args", move |req, _| {
+        host.register("/home/guest/args", move |req, _| {
             let observed = observed.clone();
             async move {
                 observed.borrow_mut().push(req.argv[1..].to_vec());
@@ -39,6 +39,12 @@ impl Rig {
             Rc::new(fs.clone()),
             limits,
         );
+        // Stand-in programs live in one explicit directory, including after cd.
+        shell
+            .state()
+            .borrow_mut()
+            .variables
+            .insert("PATH".into(), "/home/guest".into());
         let (out, output) = capture(64 * 1024);
         let (err, errors) = capture(64 * 1024);
         let mut fds = FdTable::default();
@@ -4136,5 +4142,7 @@ mod glob;
 
 #[path = "words/functions.rs"]
 mod functions;
+#[path = "words/path.rs"]
+mod path;
 #[path = "words/printf.rs"]
 mod printf;

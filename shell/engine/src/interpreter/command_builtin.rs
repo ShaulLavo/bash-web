@@ -96,6 +96,20 @@ pub(super) async fn diagnostic(
     Ok(())
 }
 
+/// Stream the diagnostic without allocating another copy of an admitted path.
+pub(super) async fn execution_failure(
+    fds: &Descriptors,
+    context: &Context,
+    name: &str,
+    reason: &[u8],
+) -> Result<(), i32> {
+    diagnostic(fds, context, b"/usr/bin/bash: ").await?;
+    diagnostic(fds, context, name.as_bytes()).await?;
+    diagnostic(fds, context, b": ").await?;
+    diagnostic(fds, context, reason).await?;
+    diagnostic(fds, context, b"\n").await
+}
+
 async fn output(fds: &Descriptors, context: &Context, bytes: &[u8]) -> Result<(), i32> {
     let output = fds.borrow().get(1).ok_or(1)?;
     output
@@ -107,7 +121,7 @@ async fn output(fds: &Descriptors, context: &Context, bytes: &[u8]) -> Result<()
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Resolution {
     Executable(String),
-    NonExecutable(String),
+    NonExecutable(String, &'static [u8]),
     Missing,
 }
 
@@ -118,75 +132,83 @@ pub(super) async fn executable(
     name: &str,
     state: &SharedState,
     default_path: bool,
+    path_override: Option<&str>,
     context: &Context,
-    work: &mut expand::Work,
 ) -> Result<Resolution, i32> {
-    let (cwd, path, path_unset, path_empty) = {
+    // Command-word limits describe argv, not the cwd and host-request copies
+    // needed to locate it. A distinct bounded ledger keeps exact argv boundary
+    // behavior while admitting all PATH storage and cooperative scan work.
+    let limits = context.limits();
+    let mut work = expand::Work::new(
+        limits.path_bytes.saturating_add(limits.arguments),
+        limits.path_bytes,
+        0,
+    );
+    if name.is_empty() {
+        return Ok(Resolution::Missing);
+    }
+    let explicit = name.contains('/');
+    let (cwd, path, path_unset) = {
         let state = state.borrow();
-        let path_unset = state.scalar_parameter("PATH").is_none() && !default_path;
-        let path = if default_path {
+        let environment_path = path_override.or_else(|| state.scalar_parameter("PATH"));
+        let path_unset = environment_path.is_none() && !default_path;
+        // Slash operands do not consult PATH, even for resource admission.
+        let path = if explicit {
+            ""
+        } else if default_path {
             "/usr/bin:/bin"
         } else {
-            state.scalar_parameter("PATH").unwrap_or(if default_path {
-                "/usr/bin:/bin"
-            } else {
-                "."
-            })
+            environment_path.unwrap_or(".")
         };
         work.admit_storage(cwd_storage(&state.cwd, path)?)
             .map_err(admission_status)?;
-        (
-            state.cwd.clone(),
-            path.to_owned(),
-            path_unset,
-            path.is_empty(),
-        )
+        (state.cwd.clone(), path.to_owned(), path_unset)
     };
-    let explicit = name.contains('/');
     let mut entries = path.split(':');
     let mut non_executable = None;
-    let mut blocked = false;
-    let mut blocked_before_non_executable = false;
+    // Bash remembers the first existing candidate, including a directory. A
+    // directory before a non-runnable regular file suppresses that fallback;
+    // failed metadata lookups (e.g. ENOTDIR ancestors) do not.
+    let mut directory_seen = false;
+    let mut directory_before_fallback = false;
     loop {
         let candidate = if explicit {
             work.admit_storage(name.len()).map_err(admission_status)?;
             name.to_owned()
         } else {
             let Some(directory) = entries.next() else {
-                return Ok(if blocked_before_non_executable {
+                return Ok(if directory_before_fallback {
                     Resolution::Missing
                 } else {
                     non_executable
-                        .map(Resolution::NonExecutable)
+                        .map(|path| Resolution::NonExecutable(path, b"Permission denied"))
                         .unwrap_or(Resolution::Missing)
                 });
             };
-            let bytes = directory
+            let prefix = if path_unset {
+                cwd.as_str()
+            } else if directory.is_empty() {
+                "."
+            } else {
+                directory
+            };
+            let bytes = prefix
                 .len()
                 .checked_add(name.len())
                 .and_then(|bytes| bytes.checked_add(1))
                 .ok_or(2)?;
             work.admit_storage(bytes).map_err(admission_status)?;
-            if directory.is_empty() {
-                format!("./{name}")
-            } else if (path_unset || path_empty) && directory == "." {
-                absolute(&cwd, name)
-            } else {
-                format!("{directory}/{name}")
-            }
+            format!("{prefix}/{name}")
         };
         for _ in candidate.bytes() {
             work.checkpoint(&context.cancel)
                 .await
                 .map_err(admission_status)?;
         }
-        work.admit_storage(
-            cwd.len()
-                .checked_add(candidate.len())
-                .and_then(|bytes| bytes.checked_add(1))
-                .ok_or(2)?,
-        )
-        .map_err(admission_status)?;
+        // Owned copies cross the host boundary; one request at a time, retired
+        // before advancing to the next PATH component.
+        work.admit_storage(cwd_storage(&cwd, &candidate)?)
+            .map_err(admission_status)?;
         let result = context
             .cancel
             .run(context.core.host.access(candidate.clone(), cwd.clone()))
@@ -194,40 +216,58 @@ pub(super) async fn executable(
             .map_err(|_| context.cancel_status())?;
         match result {
             Ok(()) => return Ok(Resolution::Executable(candidate)),
-            Err(ProcessError::Runtime(2)) => {
-                if non_executable.is_none() {
-                    blocked_before_non_executable = blocked;
-                    non_executable = Some(candidate);
-                }
-            }
-            Err(ProcessError::Runtime(54)) if explicit => {
-                non_executable = Some(candidate);
-            }
-            Err(ProcessError::Runtime(54)) => {
-                blocked = true;
-            }
-            Err(ProcessError::Runtime(44)) if explicit => {
-                let absolute = absolute(&cwd, &candidate);
-                match context
+            Err(ProcessError::Runtime(errno @ (2 | 31 | 44))) if errno != 44 || explicit => {
+                // X_OK failures alone cannot distinguish directories, denied
+                // ancestors and unregistered regular files. Metadata classifies
+                // only the failure; it NEVER establishes executable admission.
+                let bytes = cwd_storage(&cwd, &candidate)?.checked_add(1).ok_or(2)?;
+                work.admit_storage(bytes).map_err(admission_status)?;
+                let absolute = if candidate.starts_with('/') {
+                    candidate.clone()
+                } else {
+                    format!("{cwd}/{candidate}")
+                };
+                let metadata = context
                     .cancel
                     .run(context.fs().stat(&absolute, true))
                     .await
-                    .map_err(|_| context.cancel_status())?
-                {
-                    Ok(_) | Err(io::IoError::NotDirectory) => {
-                        non_executable = Some(candidate);
+                    .map_err(|_| context.cancel_status())?;
+                match metadata {
+                    Ok(metadata) if metadata.kind == io::FileKind::Directory => {
+                        if explicit {
+                            return Ok(Resolution::NonExecutable(candidate, b"Is a directory"));
+                        }
+                        directory_seen = true;
                     }
-                    Err(io::IoError::NotFound) => {}
+                    Ok(_) => {
+                        if non_executable.is_none() {
+                            directory_before_fallback = directory_seen;
+                            non_executable = Some(candidate);
+                        }
+                    }
+                    Err(io::IoError::NotDirectory) if explicit => {
+                        return Ok(Resolution::NonExecutable(candidate, b"Not a directory"));
+                    }
+                    Err(_) if explicit && errno != 44 => {
+                        let reason = if errno == 31 {
+                            b"Is a directory".as_slice()
+                        } else {
+                            b"Permission denied".as_slice()
+                        };
+                        return Ok(Resolution::NonExecutable(candidate, reason));
+                    }
                     Err(_) => {}
                 }
             }
-            Err(ProcessError::Runtime(44)) => {}
-            Err(ProcessError::Runtime(errno)) => return Err(errno.max(2)),
+            Err(ProcessError::Runtime(54)) if explicit => {
+                return Ok(Resolution::NonExecutable(candidate, b"Not a directory"));
+            }
+            Err(ProcessError::Runtime(44 | 54)) => {}
             Err(_) => return Err(2),
         }
         if explicit {
             return Ok(non_executable
-                .map(Resolution::NonExecutable)
+                .map(|path| Resolution::NonExecutable(path, b"Permission denied"))
                 .unwrap_or(Resolution::Missing));
         }
     }
@@ -328,10 +368,10 @@ pub(super) async fn query(
             )
             .await?;
         } else {
-            let resolution = executable(name, state, options.default_path, context, work).await?;
+            let resolution = executable(name, state, options.default_path, None, context).await?;
             let path = match resolution {
                 Resolution::Executable(path) => path,
-                Resolution::NonExecutable(path) if name.contains('/') => {
+                Resolution::NonExecutable(_, _) if name.contains('/') => {
                     if options.verbose {
                         diagnostic(fds, context, b"command: ").await?;
                         diagnostic(fds, context, name.as_bytes()).await?;
@@ -339,7 +379,7 @@ pub(super) async fn query(
                     }
                     continue;
                 }
-                Resolution::NonExecutable(path) => path,
+                Resolution::NonExecutable(path, _) => path,
                 Resolution::Missing => {
                     if options.verbose {
                         diagnostic(fds, context, b"command: ").await?;
@@ -350,8 +390,14 @@ pub(super) async fn query(
                 }
             };
             let display_path = if options.verbose && !name.contains('/') && !path.starts_with('/') {
-                let cwd = state.borrow().cwd.clone();
-                format!("{cwd}/{path}")
+                let state = state.borrow();
+                let cwd = &state.cwd;
+                // Bash removes only the initial ./, preserving remaining PATH
+                // spelling such as dir/../other or dir/.
+                let relative = path.strip_prefix("./").unwrap_or(&path);
+                work.admit_storage(cwd_storage(cwd, relative)?.checked_add(1).ok_or(2)?)
+                    .map_err(admission_status)?;
+                format!("{cwd}/{relative}")
             } else {
                 path
             };

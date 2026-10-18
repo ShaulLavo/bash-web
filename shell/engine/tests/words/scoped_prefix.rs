@@ -110,23 +110,24 @@ fn builtin_prefixes_restore_after_cancellation() {
 fn acceptance_ifs_read_pipeline_preserves_sigpipe_and_handled_epipe() {
     for (name, expected) in [("endless", 141), ("handled", 23)] {
         let rig = Rig::new(Limits::default());
-        rig.host.register(name, move |request, cancel| {
-            async move {
-                let output = request.fds.get(1).unwrap();
-                loop {
-                    if let Err(error) = output.write_all(b"first\n", &cancel).await {
-                        return if name == "handled"
-                            && error == shell_engine::io::IoError::BrokenPipe
-                        {
-                            23
-                        } else {
-                            error.status()
-                        };
+        rig.host
+            .register(format!("/home/guest/{name}"), move |request, cancel| {
+                async move {
+                    let output = request.fds.get(1).unwrap();
+                    loop {
+                        if let Err(error) = output.write_all(b"first\n", &cancel).await {
+                            return if name == "handled"
+                                && error == shell_engine::io::IoError::BrokenPipe
+                            {
+                                23
+                            } else {
+                                error.status()
+                            };
+                        }
                     }
                 }
-            }
-            .boxed_local()
-        });
+                .boxed_local()
+            });
         assert_eq!(rig.run(&format!(r#"set -o pipefail; {name} | {{ IFS= read -r line; echo "$line"; }}; printf 'STATUS:%s:%s\n' "$?" "${{PIPESTATUS[*]}}""#)), 0);
         assert_eq!(
             rig.output.bytes(),

@@ -12,7 +12,7 @@ fn bare_local_is_unset_and_redeclaration_keeps_current_value() {
 #[test]
 fn function_prefixes_are_dynamic_exported_bindings_and_restore_caller() {
     let rig = Rig::new(Limits::default());
-    rig.host.register("environment", |req, _| {
+    rig.host.register("/home/guest/environment", |req, _| {
         async move {
             let value = req.env.get("x").map(String::as_str).unwrap_or("unset");
             req.fds
@@ -153,17 +153,18 @@ fn local_attributes_restore_and_readonly_prefix_still_calls_function() {
 fn park(rig: &Rig, name: &str) -> shell_engine::executor::Cancel {
     let release = shell_engine::executor::Cancel::new();
     let gate = release.clone();
-    rig.host.register(name, move |_, cancel| {
-        let gate = gate.clone();
-        async move {
-            if cancel.run(gate.cancelled()).await.is_ok() {
-                0
-            } else {
-                130
+    rig.host
+        .register(format!("/home/guest/{name}"), move |_, cancel| {
+            let gate = gate.clone();
+            async move {
+                if cancel.run(gate.cancelled()).await.is_ok() {
+                    0
+                } else {
+                    130
+                }
             }
-        }
-        .boxed_local()
-    });
+            .boxed_local()
+        });
     release
 }
 
@@ -233,7 +234,7 @@ fn cancelled_nested_prefix_local_and_positional_frames_leave_background_peer_ali
 fn dropping_session_with_parked_nested_calls_unwinds_before_join_completion() {
     let ex = Executor::new();
     let host = InProcessHost::new(ex.clone());
-    host.register("park_foreground", |_, cancel| {
+    host.register("/home/guest/park_foreground", |_, cancel| {
         async move {
             cancel.cancelled().await;
             130
@@ -305,16 +306,20 @@ fn command_bypasses_functions_reports_names_and_retains_external_prefixes_and_st
     let rig = Rig::new(Limits::default());
     let observed = Rc::new(RefCell::new(Vec::new()));
     let seen = observed.clone();
-    rig.host.register("external", move |request, _| {
-        seen.borrow_mut().push((request.argv, request.env));
-        async { 37 }.boxed_local()
-    });
+    rig.host
+        .register("/home/guest/external", move |request, _| {
+            seen.borrow_mut().push((request.argv, request.env));
+            async { 37 }.boxed_local()
+        });
     assert_eq!(
         rig.run("external() { echo bad; }; x=temporary command external one two"),
         37
     );
     assert!(rig.output.bytes().is_empty());
-    assert_eq!(observed.borrow()[0].0, ["external", "one", "two"]);
+    assert_eq!(
+        observed.borrow()[0].0,
+        ["/home/guest/external", "one", "two"]
+    );
     assert_eq!(
         observed.borrow()[0].1.get("x").map(String::as_str),
         Some("temporary")

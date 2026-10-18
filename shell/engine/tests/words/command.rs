@@ -10,26 +10,27 @@ fn register_output(rig: &Rig, name: &str, bytes: Vec<u8>) -> Rc<Cell<usize>> {
     let bytes = Rc::new(bytes);
     let written = Rc::new(Cell::new(0));
     let observed = written.clone();
-    rig.host.register(name, move |req, cancel| {
-        let bytes = bytes.clone();
-        let written = observed.clone();
-        async move {
-            let output = req.fds.get(1).unwrap();
-            for chunk in bytes.chunks(1024) {
-                if let Err(error) = output.write_all(chunk, &cancel).await {
-                    return error.status();
+    rig.host
+        .register(format!("/home/guest/{name}"), move |req, cancel| {
+            let bytes = bytes.clone();
+            let written = observed.clone();
+            async move {
+                let output = req.fds.get(1).unwrap();
+                for chunk in bytes.chunks(1024) {
+                    if let Err(error) = output.write_all(chunk, &cancel).await {
+                        return error.status();
+                    }
+                    written.set(written.get() + chunk.len());
                 }
-                written.set(written.get() + chunk.len());
+                0
             }
-            0
-        }
-        .boxed_local()
-    });
+            .boxed_local()
+        });
     written
 }
 
 fn register_copy(rig: &Rig) {
-    rig.host.register("copy", |req, cancel| {
+    rig.host.register("/home/guest/copy", |req, cancel| {
         async move {
             let input = req.fds.get(0).unwrap();
             let output = req.fds.get(1).unwrap();
@@ -57,7 +58,7 @@ fn register_gated(rig: &Rig, bytes: &'static [u8], linger: bool) -> (Cancel, Rc<
     let progress = Rc::new(Cell::new(false));
     let gate = release.clone();
     let observed = progress.clone();
-    rig.host.register("gated", move |req, cancel| {
+    rig.host.register("/home/guest/gated", move |req, cancel| {
         let gate = gate.clone();
         let progress = observed.clone();
         async move {
@@ -81,14 +82,15 @@ fn register_gated(rig: &Rig, bytes: &'static [u8], linger: bool) -> (Cancel, Rc<
 fn register_status_gate(rig: &Rig, name: &str, status: i32) -> Cancel {
     let release = Cancel::new();
     let gate = release.clone();
-    rig.host.register(name, move |_, _| {
-        let gate = gate.clone();
-        async move {
-            gate.cancelled().await;
-            status
-        }
-        .boxed_local()
-    });
+    rig.host
+        .register(format!("/home/guest/{name}"), move |_, _| {
+            let gate = gate.clone();
+            async move {
+                gate.cancelled().await;
+                status
+            }
+            .boxed_local()
+        });
     release
 }
 
@@ -163,7 +165,8 @@ fn status_follows_each_substitution_and_empty_commands() {
     let rig = Rig::new(Limits::default());
     // Prefix assignments on builtins are not supported yet. An external
     // fixture tests named-command status independently of that restriction.
-    rig.host.register("okay", |_, _| async { 0 }.boxed_local());
+    rig.host
+        .register("/home/guest/okay", |_, _| async { 0 }.boxed_local());
     assert_eq!(
         rig.run(r#"false; args $(exit 3) $?; args $(exit 4)$?; x=$(exit 5); args $?; x=$(exit 5) $(exit 6); args $?; $(exit 7); args $?; x=$(exit 3) okay; args $?"#),
         0,

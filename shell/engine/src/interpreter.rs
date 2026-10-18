@@ -27,6 +27,8 @@ pub struct Limits {
     pub source_bytes: usize,
     /// Command name + arguments + assignment names, '=' and values, in bytes.
     pub expansion_bytes: usize,
+    /// Temporary PATH/cwd/candidate storage, separate from command-word bytes.
+    pub path_bytes: usize,
     /// All words, including command name and assignments (no empty AST placeholder).
     pub arguments: usize,
     pub pipeline_stages: usize,
@@ -43,6 +45,7 @@ impl Default for Limits {
         Self {
             source_bytes: 256 * 1024,
             expansion_bytes: 1024 * 1024,
+            path_bytes: 1024 * 1024,
             // Bash has no builtin argument count limit; expansion_bytes
             // bounds memory. `{0..10000}` alone needs 10,001 arguments.
             arguments: 65_536,
@@ -3185,20 +3188,37 @@ async fn dispatch_simple_command_body(
         }
         return Ok(Outcome::status(126));
     }
-    if !name.is_empty() {
-        let _frame = BuiltinPrefixFrame::enter(state.clone(), &assigned, &context, &mut work)
-            .await
-            .map_err(admission_status)?;
-        name = match command_builtin::executable(&name, &state, default_path, &context, &mut work)
-            .await?
-        {
-            command_builtin::Resolution::Executable(path) => {
-                let cwd = state.borrow().cwd.clone();
-                absolute(&cwd, &path)
-            }
-            command_builtin::Resolution::NonExecutable(_) => return Ok(Outcome::status(126)),
-            command_builtin::Resolution::Missing => return Ok(Outcome::status(127)),
-        };
+    {
+        // External prefix values already form the request environment. Lookup
+        // reads its last PATH binding directly; installing a builtin frame here
+        // would mutate shell state and double-charge exact argv boundaries.
+        let path_override = assigned
+            .iter()
+            .rev()
+            .find_map(|(key, value)| (key == "PATH").then_some(value.as_str()));
+        name =
+            match command_builtin::executable(&name, &state, default_path, path_override, &context)
+                .await?
+            {
+                command_builtin::Resolution::Executable(path) => {
+                    // Keep the original path walk intact for the host. Lexically
+                    // removing file/../ before spawn could bypass ENOTDIR checks.
+                    path
+                }
+                command_builtin::Resolution::NonExecutable(path, reason) => {
+                    command_builtin::execution_failure(&fds, &context, &path, reason).await?;
+                    return Ok(Outcome::status(126));
+                }
+                command_builtin::Resolution::Missing => {
+                    let reason = if name.contains('/') {
+                        b"No such file or directory".as_slice()
+                    } else {
+                        b"command not found".as_slice()
+                    };
+                    command_builtin::execution_failure(&fds, &context, &name, reason).await?;
+                    return Ok(Outcome::status(127));
+                }
+            };
     }
     let (mut env, cwd) = {
         let s = state.borrow();
@@ -3218,7 +3238,11 @@ async fn dispatch_simple_command_body(
             group: context.group,
             parent: None,
         })
-        .map_err(|_| 127)?;
+        .map_err(|error| match error {
+            ProcessError::UnknownCommand(_) | ProcessError::Runtime(44) => 127,
+            ProcessError::Runtime(_) => 126,
+            _ => 2,
+        })?;
     // The child owns its inherited descriptors. Shell-side stage copies must
     // not keep a closed child reader/writer alive while waiting for its exit.
     drop(fds);
@@ -4006,7 +4030,7 @@ mod residual_review_tests {
                 release_on_signals: RefCell::new(None),
             });
             let release = host.release.clone();
-            host.inner.register("sleep", move |request, _| {
+            host.inner.register("/home/guest/sleep", move |request, _| {
                 let release = release.clone();
                 async move {
                     release.cancelled().await;
@@ -4016,16 +4040,17 @@ mod residual_review_tests {
                 .boxed_local()
             });
             let weak = Rc::downgrade(&host);
-            host.inner.register("inherit", move |mut request, _| {
-                let host = weak.upgrade().unwrap();
-                async move {
-                    request.parent = Some(host.direct.borrow()[&request.group]);
-                    request.argv = vec!["sleep".into()];
-                    host.spawn(request).unwrap();
-                    0
-                }
-                .boxed_local()
-            });
+            host.inner
+                .register("/home/guest/inherit", move |mut request, _| {
+                    let host = weak.upgrade().unwrap();
+                    async move {
+                        request.parent = Some(host.direct.borrow()[&request.group]);
+                        request.argv = vec!["/home/guest/sleep".into()];
+                        host.spawn(request).unwrap();
+                        0
+                    }
+                    .boxed_local()
+                });
             let session = Session::new(
                 executor.clone(),
                 host.clone(),
@@ -4454,7 +4479,7 @@ mod residual_review_tests {
         let context = rig.context();
         rig.host
             .spawn(SpawnRequest {
-                argv: vec!["inherit".into()],
+                argv: vec!["/home/guest/inherit".into()],
                 env: BTreeMap::new(),
                 cwd: "/".into(),
                 fds: rig.session().core.descriptors.borrow().clone(),
@@ -4511,7 +4536,7 @@ mod function_measurements {
         let host = crate::process::InProcessHost::new(ex.clone());
         let release = Cancel::new();
         let gate = release.clone();
-        host.register("park", move |_, cancel| {
+        host.register("/home/guest/park", move |_, cancel| {
             let gate = gate.clone();
             async move {
                 if cancel.run(gate.cancelled()).await.is_ok() {
@@ -4728,7 +4753,7 @@ mod function_measurements {
             let budget = session.core.execution_storage.clone();
             let pressure = Rc::new(RefCell::new(None));
             let retained = pressure.clone();
-            host.register("consume", move |_, _| {
+            host.register("/home/guest/consume", move |_, _| {
                 // Other live work takes the free pool after both stages have
                 // launched, forcing the simple set stage's admission to fail.
                 let remaining = limit - budget.observation().0;
@@ -4801,7 +4826,7 @@ mod function_measurements {
             let pressure = Rc::new(RefCell::new(None));
             let retained = pressure.clone();
             let budget = session.core.execution_storage.clone();
-            host.register("consume", move |_, _| {
+            host.register("/home/guest/consume", move |_, _| {
                 let remaining = limit - budget.observation().0;
                 *retained.borrow_mut() = Some(budget.admit(remaining - 32 * 1024).unwrap());
                 async { 0 }.boxed_local()
