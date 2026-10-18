@@ -188,6 +188,9 @@ test("PATH skips non-runnable candidates and resolves cwd components", async ({ 
 
 test("command queries share live PATH lookup without launching a guest", async ({ page }) => {
   await open(page);
+  let queryWorkers = 0;
+  const countQueryWorker = () => queryWorkers++;
+  page.on("worker", countQueryWorker);
   await command(
     page,
     "printf unregistered > /home/guest/test-guest; mkdir /tmp/test-guest; export PATH=/missing:/home/guest:/tmp:/bin; command -v test-guest; echo QUERY:$?; command -V test-guest; echo VERBOSE:$?",
@@ -207,6 +210,8 @@ test("command queries share live PATH lookup without launching a guest", async (
   await output(page, "MISSING_QUERY:1");
   await output(page, "MISSING_VERBOSE:1");
   await ready(page);
+  expect(queryWorkers).toBe(0);
+  page.off("worker", countQueryWorker);
   await command(
     page,
     "/bin/test-guest unlink /bin/test-guest; export PATH=/bin; command -v test-guest; echo DELETED_QUERY:$?; command -V test-guest; echo DELETED_VERBOSE:$?",
