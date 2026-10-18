@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "sourceHash": "ed6c356833292523760ef5374de4ea26b0fdd822157532a85443979c770f2b07",
+  "sourceHash": "127961bc34f6aeb84c8f5ad0551ce6789bea87d78e4055fa65f382eacddb7195",
   "sourceHashes": {
-    "fuzz-shell-path.ts": "551a9252288a82bd712f4bd6e69b4918b3209720aa9f3a4bddaea9b25935549a",
+    "fuzz-shell-path.ts": "950d42f93fd773dcec42c9c4f59dddd22d488c53502a5e148b5c1c8fa48d0d82",
     "fuzz-shell-control-flow.mjs": "73e8b6576345caede2a60d910130296dfdf8e8bbfd32b6dd279692704b0a5586",
     "shell-process-group.mjs": "577f8be074a4ca5751b161d306445645a4dac9b4fa97ca73abf8195635e58205"
   },

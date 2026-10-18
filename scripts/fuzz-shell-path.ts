@@ -7,6 +7,7 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  lstatSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -529,9 +530,17 @@ export function coverage(cases) {
     queries: unique((item) => item.query).filter((item) => item !== undefined),
   };
 }
+const sandboxDirectories = new Map<string, string[]>();
 export function provision(sandbox: string, raw = fixtureManifestJson) {
   // Reject the complete wire document before creating even the first node.
   const manifest = parseManifest(raw);
+  const root = resolve(sandbox);
+  if (sandboxDirectories.has(root)) throw new Error("fixture sandbox already provisioned");
+  // Retain the validated parent-first cleanup list even if installation fails.
+  sandboxDirectories.set(
+    root,
+    manifest.nodes.filter((node) => node.kind === "directory").map((node) => node.path),
+  );
   for (const node of manifest.nodes) {
     const path = resolve(sandbox, node.path);
     if (node.kind === "directory") mkdirSync(path, { recursive: true });
@@ -547,11 +556,22 @@ export function provision(sandbox: string, raw = fixtureManifestJson) {
   for (const node of manifest.nodes.toReversed()) chmodSync(resolve(sandbox, node.path), node.mode);
 }
 export function removeSandbox(sandbox: string) {
-  // Restore the searchable ancestor before recursive removal, even after failure.
-  for (const node of filesystem)
-    if (node.kind === "directory" && existsSync(resolve(sandbox, node.path)))
-      chmodSync(resolve(sandbox, node.path), 0o755);
-  rmSync(sandbox, { recursive: true, force: true });
+  const root = resolve(sandbox);
+  // Restore this installation's directories parent-first. Never chmod through a
+  // replaced symlink or one of its descendants; recursive rm unlinks it instead.
+  if (lstatSync(root, { throwIfNoEntry: false })?.isDirectory()) {
+    const searchable = new Set([""]);
+    for (const path of sandboxDirectories.get(root) ?? []) {
+      const slash = path.lastIndexOf("/");
+      if (slash >= 0 && !searchable.has(path.slice(0, slash))) continue;
+      const directory = resolve(root, path);
+      if (!lstatSync(directory, { throwIfNoEntry: false })?.isDirectory()) continue;
+      chmodSync(directory, 0o755);
+      searchable.add(path);
+    }
+  }
+  rmSync(root, { recursive: true, force: true });
+  sandboxDirectories.delete(root);
 }
 export async function run(bin: string, script: string, options) {
   if (options.interrupted) throw new Error("interrupted");

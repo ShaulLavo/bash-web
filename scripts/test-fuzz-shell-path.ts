@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
@@ -45,8 +56,8 @@ const parent = scratchParent();
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const fixturePath = "shell-path-seed-1.json";
 const fixtureHashes = {
-  "shell-path-seed-1.json": "ab7f12b12d1614df9955aaaef49ad640bdb5fe0604b7caf372b9777870381dda",
-  "shell-path-seed-42.json": "c40cac31c0f157e1628faff82f708d8b89fd0df3e0563aeeb4d7ac4eeee1fba9",
+  "shell-path-seed-1.json": "d1b02a464581e83857d2ff228bc7168ba8976d1fe11ce99ee928c5cfc19a282e",
+  "shell-path-seed-42.json": "18d0d9db2ed85d8c31fe80c1ac6cc12e19e4119c33cd212eaa857f6a3f0facaf",
 };
 // Frozen before the manifest validator changed any harness source identity.
 // These independently pin every case and Bash observation, excluding metadata.
@@ -242,6 +253,52 @@ test("portable manifest uses bounded owned nodes, exact permissions and explicit
   }
   removeSandbox(fixture);
   assert.equal(existsSync(fixture), false);
+});
+
+test("custom manifest cleanup restores late denied ancestors without following external symlinks", (t) => {
+  const manifest = JSON.stringify({
+    schema: 1,
+    nodes: [
+      { path: "first", kind: "file", mode: 0o600 },
+      { path: "custom", kind: "directory", mode: 0o000 },
+      { path: "custom/locked", kind: "directory", mode: 0o000 },
+      { path: "custom/locked/file", kind: "file", mode: 0o600 },
+    ],
+  });
+  const denied = scratch(t);
+  try {
+    provision(denied, manifest);
+    removeSandbox(denied);
+    assert.equal(existsSync(denied), false);
+  } finally {
+    // Independent fallback is installed before provisioning so a regression in
+    // the cleanup function under test cannot leave inaccessible test data.
+    for (const relative of ["custom", "custom/locked"])
+      if (existsSync(resolve(denied, relative))) chmodSync(resolve(denied, relative), 0o755);
+    removeSandbox(denied);
+  }
+
+  const swapped = scratch(t);
+  const external = scratch(t);
+  mkdirSync(resolve(external, "locked"), { mode: 0o700 });
+  const protectedFile = resolve(external, "locked/file");
+  writeFileSync(protectedFile, "outside sandbox\n");
+  provision(
+    swapped,
+    JSON.stringify({
+      schema: 1,
+      nodes: [
+        { path: "custom", kind: "directory", mode: 0o755 },
+        { path: "custom/locked", kind: "directory", mode: 0o755 },
+      ],
+    }),
+  );
+  rmSync(resolve(swapped, "custom"), { recursive: true });
+  symlinkSync(external, resolve(swapped, "custom"), "dir");
+  removeSandbox(swapped);
+  assert.equal(existsSync(swapped), false);
+  assert.equal(statSync(resolve(external, "locked")).mode & 0o777, 0o700);
+  assert.equal(readFileSync(protectedFile, "utf8"), "outside sandbox\n");
 });
 
 test("manifest schema and limits reject the whole input before filesystem mutation", (t) => {
