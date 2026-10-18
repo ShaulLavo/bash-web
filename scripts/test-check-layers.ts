@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, resolve } from "node:path";
 import test from "node:test";
 import {
   allowedGraph,
@@ -208,6 +209,86 @@ test("self and repeated super resolve across file modules and inline modules; sa
   assert.deepEqual(evidence.issues, []);
 });
 
+test("known inline root layers own their paths instead of borrowing composition-root allowances", () => {
+  const evidence = scan({
+    "lib.rs": `
+crate::process::composition();
+mod state {
+  crate::process::forbidden();
+  use super::{io::Endpoint, exec::Frame};
+  self::State::same_owner();
+  mod nested { super::super::interpreter::forbidden(); }
+}
+mod runtime { #[cfg(test)] fn fixture() { crate::interpreter::fixture(); } }
+`,
+    "runtime_main.rs":
+      "mod guest { crate::terminal::helper(); mod nested { super::super::runtime::helper(); } }",
+  });
+  assert.deepEqual(keys(evidence), [
+    "production:lib->process",
+    "production:runtime_main->runtime",
+    "production:runtime_main->terminal",
+    "production:state->exec",
+    "production:state->interpreter",
+    "production:state->io",
+    "production:state->process",
+    "testOnly:runtime->interpreter",
+  ]);
+  assert.deepEqual(evidence.issues, []);
+  assert.equal(evidence.counts.production.violations, 3);
+  assert.equal(evidence.counts.testOnly.violations, 0);
+  assert.throws(
+    () =>
+      assertRatchet(
+        scan({ "lib.rs": "mod state { crate::process::forbidden(); }" }),
+        scan({ "state.rs": "" }),
+        "inline layer",
+      ),
+    /production violations increased/,
+  );
+  const unknown = scan({ "lib.rs": "mod unlisted { crate::process::forbidden(); }" });
+  assert.equal(unknown.issues[0]?.kind, "unknown-module");
+});
+
+test("test guards survive generic and where item headers without covering following items or variants", () => {
+  const evidence = scan({
+    "runtime.rs": `
+#[cfg(test)] fn fixture<A, B>() { crate::interpreter::fixture(); }
+#[cfg(test)] pub(crate) async unsafe fn constants<const N: usize = { 1 }, A: Fn() -> crate::parse::Ast, B>() { crate::interpreter::fixture(); }
+#[cfg(test)] fn bounded<A, B>() where A: crate::expand::Bound, B: crate::arithmetic::Bound { crate::commands::fixture(); }
+fn production() { crate::state::ordinary(); }
+#[cfg(test)] struct Guarded<A, B> where A: crate::parse::Bound, B: crate::exec::Bound { a: A, b: B }
+struct Ordinary { field: crate::io::Endpoint }
+struct FunctionFields { #[cfg(test)] callback: fn(crate::arithmetic::Value), normal: crate::arithmetic::Value }
+#[cfg(test)] type GuardedAlias<A, B> = (crate::ast_copy::Copy, A, B);
+type OrdinaryAlias = crate::process::Process;
+enum Variants {
+  #[cfg(test)] Fixture(crate::builtins::Context),
+  Ordinary(crate::executor::Executor),
+  #[cfg(test)] Named { field: crate::terminal::Editor },
+  Last(crate::compat::Host),
+}
+`,
+  });
+  assert.deepEqual(keys(evidence), [
+    "production:runtime->arithmetic",
+    "production:runtime->compat",
+    "production:runtime->executor",
+    "production:runtime->io",
+    "production:runtime->process",
+    "production:runtime->state",
+    "testOnly:runtime->arithmetic",
+    "testOnly:runtime->ast_copy",
+    "testOnly:runtime->builtins",
+    "testOnly:runtime->commands",
+    "testOnly:runtime->exec",
+    "testOnly:runtime->expand",
+    "testOnly:runtime->interpreter",
+    "testOnly:runtime->parse",
+    "testOnly:runtime->terminal",
+  ]);
+});
+
 test("production and test-only edges are deduplicated separately with stable source locations", () => {
   const evidence = scan({
     "state/z.rs": "fn z() { crate::expand::other(); }",
@@ -372,7 +453,8 @@ function withRepo(
     put: (path: string, contents: string) => void,
   ) => void,
 ) {
-  const root = mkdtempSync("/work/tmp/bash-web-layer-tests-");
+  const temporaryRoot = process.env.TMPDIR || (existsSync("/work/tmp") ? "/work/tmp" : tmpdir());
+  const root = mkdtempSync(resolve(temporaryRoot, "bash-web-layer-tests-"));
   try {
     const git = (args: string[]) =>
       execFileSync("git", args, {
@@ -401,6 +483,13 @@ function commit(git: (args: string[]) => string) {
   git(["-c", "commit.gpgsign=false", "commit", "-qm", "fixture"]);
   return git(["rev-parse", "HEAD"]);
 }
+
+test("repository fixtures honor an explicit temporary root", () => {
+  withRepo((root) => {
+    const expected = process.env.TMPDIR || (existsSync("/work/tmp") ? "/work/tmp" : tmpdir());
+    assert.equal(dirname(root), resolve(expected));
+  });
+});
 
 test("record is explicit, evidence is exact, source digest is stable across commits", () => {
   withRepo((root, git, put) => {

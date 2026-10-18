@@ -335,9 +335,13 @@ function scanFile(file: SourceFile, inheritedTestOnly: boolean, policy: Policy):
     const target = Object.hasOwn(rootReexports, absolute[0])
       ? rootReexports[absolute[0]]
       : absolute[0];
-    if (!target || target === source || target === "self" || target === "*") return;
+    // Known top-level modules own their code even when declared inline in a
+    // composition root. Explicit root helpers (runtime_main::guest) retain the
+    // file owner's allowances; unknown root modules are reported by walk.
+    const owner = context.length && Object.hasOwn(graph, context[0]) ? context[0] : source;
+    if (!target || target === owner || target === "self" || target === "*") return;
     result.edges.push({
-      source,
+      source: owner,
       target,
       scope: testOnly ? "testOnly" : "production",
       location: location(index),
@@ -379,6 +383,9 @@ function scanFile(file: SourceFile, inheritedTestOnly: boolean, policy: Policy):
   function walk(start: number, end: number, context: readonly string[], inherited: boolean) {
     let testOnly = inherited;
     let pendingTest = false;
+    let itemStart = true;
+    let itemHeader = false;
+    let genericDepth = 0;
     for (let i = start; i < end; i++) {
       const text = tokens[i].text;
       // Attributes belong to the next item, not to the following item as well.
@@ -403,6 +410,27 @@ function scanFile(file: SourceFile, inheritedTestOnly: boolean, policy: Policy):
         continue;
       }
       const activeTest = testOnly || pendingTest;
+      // Commas separate fields/variants, but not the generic parameters or
+      // where predicates in an item's header. Recognize items only at a fresh
+      // boundary, not `fn` in a field's function-pointer type.
+      if (
+        itemStart &&
+        ["fn", "struct", "enum", "union", "trait", "impl", "type", "const", "static"].some((name) =>
+          keyword(i, name),
+        )
+      )
+        itemHeader = true;
+      if (
+        !itemHeader &&
+        !["pub", "unsafe", "async", "extern", "default"].some((name) => keyword(i, name)) &&
+        !(text === "(" && keyword(i - 1, "pub")) &&
+        !(text === "<literal>" && keyword(i - 1, "extern"))
+      )
+        itemStart = false;
+      if (itemHeader) {
+        if (text === "<") genericDepth++;
+        else if (text === ">" && genericDepth > 0 && tokens[i - 1]?.text !== "-") genericDepth--;
+      }
       if (text === "include" && tokens[i + 1]?.text === "!")
         issue(i, "include! source requires explicit scanner support");
       if (keyword(i, "mod") && identifier.test(tokens[i + 1]?.text ?? "")) {
@@ -432,6 +460,7 @@ function scanFile(file: SourceFile, inheritedTestOnly: boolean, policy: Policy):
           walk(i + 3, close, nested, activeTest);
           i = close;
           pendingTest = false;
+          itemStart = true;
           continue;
         }
       }
@@ -441,6 +470,7 @@ function scanFile(file: SourceFile, inheritedTestOnly: boolean, policy: Policy):
         useTree(i + 1, close, [], context, activeTest);
         i = close;
         pendingTest = false;
+        itemStart = true;
         continue;
       }
       if (
@@ -461,9 +491,18 @@ function scanFile(file: SourceFile, inheritedTestOnly: boolean, policy: Policy):
       const close = pairs.get(i);
       if (close !== undefined) {
         walk(i + 1, close, context, activeTest);
-        if (text === "{") pendingTest = false;
+        if (text === "{" && genericDepth === 0) {
+          pendingTest = false;
+          itemHeader = false;
+          itemStart = true;
+        }
         i = close;
-      } else if (text === ";" || text === ",") pendingTest = false;
+      } else if (text === ";" || (text === "," && !itemHeader)) {
+        pendingTest = false;
+        itemHeader = false;
+        genericDepth = 0;
+        itemStart = true;
+      }
     }
   }
   walk(0, tokens.length, modulePath(file.path), inheritedTestOnly);
