@@ -1068,8 +1068,7 @@ function runtimeEnvironment() {
     stdin: "empty",
     filesystem:
       "fresh Waffle filesystem per case, no persistence: working directory, /dev, /bin, /usr/bin, /usr/local/bin",
-    processHost:
-      "Waffle process broker; argv.py and printenv.py fixture guests, plus candidate utility guests when installed",
+    processHost: "Waffle process broker; argv.py and printenv.py fixture guests only",
     timeoutMs,
     outputLimitBytes: 4 * 1024 * 1024,
     normalization: [
