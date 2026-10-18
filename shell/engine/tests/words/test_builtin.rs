@@ -255,6 +255,66 @@ fn terminal_descriptor_integer_syntax_and_errors_match_bash() {
     );
 }
 
+fn silent_statuses(cases: &[(&str, i32)]) {
+    for &(source, expected) in cases {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), expected, "{source}");
+        assert!(rig.output.bytes().is_empty(), "{source}");
+        assert!(rig.errors.bytes().is_empty(), "{source}");
+        assert!(rig.calls.borrow().is_empty(), "{source}");
+    }
+}
+
+#[test]
+fn test_terminal_integer_errors_survive_closed_stderr() {
+    silent_statuses(&[
+        ("test -t nope 2>&-", 2),
+        ("test ! -t nope 2>&-", 2),
+        ("test -t nope 2>&- && args forbidden", 2),
+        ("test -t nope 2>&- || :", 0),
+        ("test x -o -t nope 2>&-", 2),
+        ("test '' -a -t nope 2>&-", 2),
+    ]);
+}
+
+#[test]
+fn bracket_terminal_integer_errors_survive_closed_stderr() {
+    silent_statuses(&[
+        ("[ -t nope ] 2>&-", 2),
+        ("[ ! -t nope ] 2>&-", 2),
+        ("[ -t nope ] 2>&- && args forbidden", 2),
+        ("[ -t nope ] 2>&- || :", 0),
+        ("[ x -o -t nope ] 2>&-", 2),
+        ("[ '' -a -t nope ] 2>&-", 2),
+    ]);
+}
+
+#[test]
+fn conditional_terminal_integer_errors_survive_closed_stderr() {
+    silent_statuses(&[
+        ("[[ -t nope ]] 2>&-", 2),
+        ("[[ ! -t nope ]] 2>&-", 0),
+        ("[[ -t nope || yes ]] 2>&-", 0),
+        ("[[ -t nope && yes ]] 2>&-", 2),
+        ("[[ yes || -t skipped ]] 2>&-", 0),
+        ("[[ ! ( ! -t nope ) ]] 2>&-", 1),
+        ("[[ ( -t nope ) ]] 2>&-", 2),
+        ("[[ -t nope ]] 2>&- && args forbidden", 2),
+    ]);
+}
+
+#[test]
+fn closed_stderr_keeps_unrelated_predicate_errors_unchanged() {
+    silent_statuses(&[
+        ("test x -eq 0 2>&-", 1),
+        ("[ x -eq 0 ] 2>&-", 1),
+        ("[ x 2>&-", 1),
+        ("test -f /dev/stdin 2>&-", 1),
+        ("[ -f /dev/stdin ] 2>&-", 1),
+        ("[[ ! -f /dev/stdin ]] 2>&-", 2),
+    ]);
+}
+
 #[test]
 fn logical_operators_and_grouping_preserve_precedence_and_eager_errors() {
     for (arguments, expected) in [

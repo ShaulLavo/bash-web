@@ -145,7 +145,7 @@ fn conditional_terminal_integer_error_is_a_logical_status_not_expansion_failure(
         ("[[ -t nope || yes ]]", 0, true),
         ("[[ -t nope && yes ]]", 2, true),
         ("[[ yes || -t nope ]]", 0, false),
-        ("[[ ! ! -t nope ]]", 1, true),
+        ("[[ ! ( ! -t nope ) ]]", 1, true),
         ("[[ ( -t nope ) ]]", 2, true),
     ] {
         let rig = Rig::new(Limits::default());

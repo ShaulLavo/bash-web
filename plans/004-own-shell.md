@@ -207,6 +207,24 @@ predicate capability/status behavior stay unchanged.
   payload/EOF. Signed decimal and surrounding ASCII whitespace follow the
   existing intmax parser; signed-64 overflow is an integer error, not a wrapped
   descriptor. Malformed `-t` is status 2 participating in `[[ !/&&/|| ]]` only.
+- Review repair preserves malformed `-t` status when fd 2 is closed. Only
+  unavailable diagnostic descriptors are ignored for this operand error;
+  cancellation, write limits, broken pipes and unrelated predicate errors keep
+  their existing statuses. Native closed-stderr tests cover all three forms,
+  negation and short circuiting. The browser regression adds a separately
+  transported child with both pipe ends, exact diagnostics, payload/EOF and
+  retirement assertions. Repair checks pass 265 native library and 548 word
+  tests, Clippy, WASI target type checking, all 34 layer tests and strict quality
+  checks without policy/baseline changes. Current-head runtime/browser CI and
+  exact-head re-review remain pending.
+- **Approved later malformed-`-t` negation follow-up.** GNU Bash 5.3.15 returns 2
+  for `[[ ! ! -t nope ]]`, but 1 for `[[ ! ( ! -t nope ) ]]`; the native engine
+  currently returns 1 for both. Reproduced with `/usr/bin/bash --noprofile
+  --norc -c '<source>'` and the existing native conditional test at `c06539d`.
+  Both Bash forms diagnose the evaluated operand with stderr open. The existing
+  test now uses the grouped spelling for its status-1 assertion. Direct repeated
+  negation needs its own evaluator/oracle treatment; this closed-stderr repair
+  does not change that unrelated continuation behavior.
 - Native engine regressions cover local pipes, private physical mock handles,
   non-consuming queries, writer release/EOF, integer diagnostics and unchanged
   unrelated capability errors. These mocks are not transported-WASI evidence.

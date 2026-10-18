@@ -260,7 +260,23 @@ test("terminal operand errors keep Bash conditional status and short circuiting"
     "[[ yes || -t skipped ]]; echo SKIPPED_ERROR:$?",
     "test -t 9223372036854775808; echo OVERFLOW_ERROR:$?",
   ].join("; ");
-  await command(page, `/programs/shell-engine.wasm -c ${shellQuote(source)}`);
+  const closed = [
+    "test -t nope 2>&-; echo CLOSED_TEST_ERROR:$?",
+    "test ! -t nope 2>&-; echo CLOSED_TEST_NOT:$?",
+    "[ -t nope ] 2>&-; echo CLOSED_BRACKET_ERROR:$?",
+    "[ ! -t nope ] 2>&-; echo CLOSED_BRACKET_NOT:$?",
+    "[[ -t nope ]] 2>&-; echo CLOSED_CONDITIONAL_ERROR:$?",
+    "[[ ! -t nope ]] 2>&-; echo CLOSED_NOT_ERROR:$?",
+    "[[ -t nope || yes ]] 2>&-; echo CLOSED_OR_ERROR:$?",
+    "[[ -t nope && yes ]] 2>&-; echo CLOSED_AND_ERROR:$?",
+    "[[ yes || -t skipped ]] 2>&-; echo CLOSED_SKIPPED_ERROR:$?",
+    'IFS= read -r payload; echo "$payload"',
+    "IFS= read -r payload; echo CLOSED_PIPE_EOF:$?",
+  ].join("; ");
+  await command(
+    page,
+    `/programs/shell-engine.wasm -c ${shellQuote(source)}; printf 'CLOSED_PIPE_PAYLOAD\\n' | /programs/shell-engine.wasm -c ${shellQuote(closed)} | cat; echo CLOSED_PIPE_DONE:$?`,
+  );
   const lines = await descriptorOutput(page, [
     "SIGNED_TTY:0",
     "PADDED_TTY:0",
@@ -273,12 +289,30 @@ test("terminal operand errors keep Bash conditional status and short circuiting"
     "AND_ERROR:2",
     "SKIPPED_ERROR:0",
     "OVERFLOW_ERROR:2",
+    "CLOSED_TEST_ERROR:2",
+    "CLOSED_TEST_NOT:2",
+    "CLOSED_BRACKET_ERROR:2",
+    "CLOSED_BRACKET_NOT:2",
+    "CLOSED_CONDITIONAL_ERROR:2",
+    "CLOSED_NOT_ERROR:0",
+    "CLOSED_OR_ERROR:0",
+    "CLOSED_AND_ERROR:2",
+    "CLOSED_SKIPPED_ERROR:0",
+    "CLOSED_PIPE_PAYLOAD",
+    "CLOSED_PIPE_EOF:1",
+    "CLOSED_PIPE_DONE:0",
   ]);
+  expect(lines.filter((line) => line === "CLOSED_PIPE_PAYLOAD")).toHaveLength(1);
   expect(lines.filter((line) => line === "/usr/bin/bash: [[: nope: integer expected")).toHaveLength(
     4,
   );
-  expect(lines).toContain("/usr/bin/bash: test: nope: integer expected");
-  expect(lines).toContain("/usr/bin/bash: [: nope: integer expected");
+  for (const diagnostic of [
+    "/usr/bin/bash: test: nope: integer expected",
+    "/usr/bin/bash: [: nope: integer expected",
+    "/usr/bin/bash: test: 9223372036854775808: integer expected",
+  ]) {
+    expect(lines.filter((line) => line === diagnostic)).toHaveLength(1);
+  }
   expect(lines.some((line) => line.includes("skipped: integer expected"))).toBe(false);
   await descriptorRetired(page, baseline);
 });

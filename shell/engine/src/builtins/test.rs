@@ -1,7 +1,7 @@
 //! Original argv-based Bash `test` / `[` evaluator. Unlike `[[`, operands are
 //! already split/globbed, string equality is literal, and integers are decimal
 //! strings rather than arithmetic expressions. No host process or host std FS.
-use super::{endpoint, error_status};
+use super::error_status;
 use crate::{
     executor::Cancel,
     expand::Work,
@@ -19,6 +19,7 @@ enum Failure<'a> {
     Argument,
     CloseParen,
     Integer(&'a str),
+    TerminalInteger(&'a str),
     Unsupported(&'a str),
     Missing(&'static str),
     TooMany,
@@ -39,7 +40,9 @@ pub(super) async fn run(
 ) -> Result<Outcome, i32> {
     let args = if name == "[" {
         if args.last().map(String::as_str) != Some("]") {
-            diagnose(name, Failure::Missing("]"), fds, context).await?;
+            diagnose(name, Failure::Missing("]"), fds, context)
+                .await
+                .map_err(|error| error.status())?;
             return Err(2);
         }
         &args[..args.len() - 1]
@@ -49,8 +52,14 @@ pub(super) async fn run(
     match evaluate(args, state, fds, context, work).await {
         Ok(value) => Ok(Outcome::status(i32::from(!value))),
         Err(Failure::Status(status)) => Err(status),
+        Err(Failure::TerminalInteger(operand)) => {
+            integer_diagnostic(name, operand, fds, context).await?;
+            Err(2)
+        }
         Err(error) => {
-            diagnose(name, error, fds, context).await?;
+            diagnose(name, error, fds, context)
+                .await
+                .map_err(|error| error.status())?;
             Err(2)
         }
     }
@@ -61,7 +70,7 @@ async fn diagnose(
     error: Failure<'_>,
     fds: &FdTable,
     context: &Context,
-) -> Result<(), i32> {
+) -> Result<(), IoError> {
     // Borrow error operands and stream each piece; even a very large invalid
     // integer does not allocate a second copy merely to print its diagnostic.
     let pieces = match error {
@@ -69,22 +78,21 @@ async fn diagnose(
         Failure::Binary(value) => [value, ": binary operator expected", ""],
         Failure::Argument => ["argument expected", "", ""],
         Failure::CloseParen => ["`)' expected", "", ""],
-        Failure::Integer(value) => [value, ": integer expected", ""],
+        Failure::Integer(value) | Failure::TerminalInteger(value) => {
+            [value, ": integer expected", ""]
+        }
         Failure::Unsupported(value) => [value, ": unsupported predicate", ""],
         Failure::Missing(value) => ["missing `", value, "'"],
         Failure::TooMany => ["too many arguments", "", ""],
         Failure::Status(_) => return Ok(()),
     };
-    let output = endpoint(fds, 2)?;
+    let output = fds.get(2).ok_or(IoError::BadDescriptor)?;
     for piece in ["/usr/bin/bash: ", name, ": "]
         .into_iter()
         .chain(pieces)
         .chain(["\n"])
     {
-        output
-            .write_all(piece.as_bytes(), &context.cancel)
-            .await
-            .map_err(|error| error.status())?;
+        output.write_all(piece.as_bytes(), &context.cancel).await?;
     }
     Ok(())
 }
@@ -346,7 +354,7 @@ async fn predicate<'a>(
     unary(operator, operand, state, fds, context, work)
         .await
         .map_err(|error| match error {
-            UnaryError::Integer => Failure::Integer(operand),
+            UnaryError::Integer => Failure::TerminalInteger(operand),
             UnaryError::Status(2) => Failure::Unsupported(operator),
             UnaryError::Status(status) => Failure::Status(status),
         })
@@ -368,7 +376,14 @@ pub(crate) async fn integer_diagnostic(
     fds: &FdTable,
     context: &Context,
 ) -> Result<(), i32> {
-    diagnose(name, Failure::Integer(operand), fds, context).await
+    if context.cancel.is_cancelled() {
+        return Err(130);
+    }
+    match diagnose(name, Failure::TerminalInteger(operand), fds, context).await {
+        // An unavailable stderr must not replace the malformed -t status.
+        Ok(()) | Err(IoError::BadDescriptor) => Ok(()),
+        Err(error) => Err(error.status()),
+    }
 }
 
 pub(crate) async fn unary(
