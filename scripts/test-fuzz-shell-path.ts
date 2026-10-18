@@ -454,6 +454,24 @@ test("independent GNU Bash observations expose 126/127 and nonexec query fallbac
   }
 });
 
+test("Bash rejects traversed file, denied and missing ancestors before lexical parent reduction", async (t) => {
+  const cwd = scratch(t);
+  for (const directory of ["path-file", "path-denied", "missing", "path-b"]) {
+    const result = await run("/usr/bin/bash", `PATH=${directory}/../path-a; ${probe} x`, {
+      ...options,
+      cwd,
+    });
+    assert.ok(healthy(result), directory);
+    assert.equal(result.status, directory === "path-b" ? 7 : 127, directory);
+    assert.equal(
+      result.stdout.toString(),
+      directory === "path-b" ? "marker=<a>\narg=<x>\n" : "",
+      directory,
+    );
+    assert.deepEqual(readdirSync(cwd), []);
+  }
+});
+
 test("replay processes every case and counts unsupported, status and byte differences as failures", async (t) => {
   const cwd = scratch(t);
   const cases = [

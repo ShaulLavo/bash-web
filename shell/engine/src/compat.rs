@@ -16,6 +16,7 @@ pub fn register(host: &InProcessHost, fs: &MemoryFs) {
         fs.set_executable(path, true)
             .expect("fixture helper metadata");
         host.register_access(path, "/", Ok(()));
+        host.register_traversal_error(path, "/", 54);
     }
     host.register("/usr/bin/argv.py", |request, cancel| {
         argv(request, cancel).boxed_local()
@@ -192,6 +193,7 @@ pub fn register_fixture(
         return Err("invalid fixture cwd".to_owned());
     }
     let absolute = |path: &str| format!("{root}/{path}");
+    host.register_directory(cwd, cwd);
     for node in &manifest.nodes {
         let path = absolute(&node.path);
         if node.kind == FixtureKind::Directory {
@@ -225,6 +227,14 @@ pub fn register_fixture(
             Err(2)
         };
         host.register_access(path.clone(), cwd, result);
+        if node.kind == FixtureKind::Directory {
+            host.register_directory(path.clone(), cwd);
+        }
+        if node.kind == FixtureKind::File {
+            host.register_traversal_error(path.clone(), cwd, 54);
+        } else if node.mode & 0o111 == 0 {
+            host.register_traversal_error(path.clone(), cwd, 44);
+        }
         if let (Some(marker), Some(status)) = (node.marker.clone(), node.status) {
             let marker = marker.into_bytes();
             host.register(path, move |request, cancel| {
@@ -249,20 +259,6 @@ pub fn register_fixture(
                 }
                 .boxed_local()
             });
-        }
-    }
-    let command_names: std::collections::BTreeSet<&str> = manifest
-        .nodes
-        .iter()
-        .filter(|node| node.kind == FixtureKind::File)
-        .filter_map(|node| node.path.rsplit('/').next())
-        .collect();
-    for node in &manifest.nodes {
-        if node.kind == FixtureKind::File {
-            let parent = absolute(&node.path);
-            for command in &command_names {
-                host.register_access(format!("{parent}/{command}"), cwd, Err(54));
-            }
         }
     }
     Ok(())
@@ -406,6 +402,37 @@ mod tests {
             );
             assert_eq!(fs.stat("/fixture/first", true), Err(IoError::NotFound));
             assert_eq!(fs.used_bytes(), 0);
+        }
+    }
+
+    #[test]
+    fn manifest_derives_traversal_capabilities_before_parent_reduction() {
+        use shell_engine::process::{ProcessError, ProcessHost};
+        let host = InProcessHost::new(Executor::new());
+        let fs = MemoryFs::new(4096);
+        fs.mkdir("/fixture", true).unwrap();
+        let raw = json!({"schema": 1, "nodes": [
+            {"path": "bin", "kind": "directory", "mode": 493},
+            {"path": "empty", "kind": "directory", "mode": 493},
+            {"path": "denied", "kind": "directory", "mode": 0},
+            file("plain"),
+            {"path": "bin/probe", "kind": "file", "mode": 493}
+        ]})
+        .to_string();
+        register_fixture(&host, &fs, "/fixture", &raw).unwrap();
+        for (path, expected) in [
+            ("empty/../bin/probe", Ok(())),
+            ("plain/../bin/probe", Err(ProcessError::Runtime(54))),
+            ("denied/../bin/probe", Err(ProcessError::Runtime(44))),
+            ("missing/../bin/probe", Err(ProcessError::Runtime(44))),
+        ] {
+            assert_eq!(
+                host.access(path.into(), "/fixture".into())
+                    .now_or_never()
+                    .unwrap(),
+                expected,
+                "{path}"
+            );
         }
     }
 
