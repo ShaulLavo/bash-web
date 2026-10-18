@@ -144,7 +144,7 @@ function preopenInvocation(
 ) {
   if (guest !== "shell-engine") {
     const mode = inputBinding ? "preopen-input" : "preopen-probe";
-    return `${guest} ${mode} /preopen-input /preopen-result ${marker} ${extraFds.join(" ")}`;
+    return `/bin/${guest} ${mode} /preopen-input /preopen-result ${marker} ${extraFds.join(" ")}`;
   }
   // Exercise the built shell through its existing absolute-path filesystem
   // operations, not a new engine probe or an adapter-side preopen lookup.
