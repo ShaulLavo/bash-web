@@ -111,40 +111,24 @@
         "classification": "Adapted bounded terminal stream, via prototype",
         "upstreamRepository": "https://github.com/ShaulLavo/bun-wasm",
         "upstreamRevision": "8d3d416aa9cb23718ed3487a33d0b06e8e373672",
-        "upstreamPaths": [
-          "web/src/runtime-terminals.ts"
-        ],
-        "sourcePaths": [
-          "src/runtime/runtime-terminals.ts"
-        ],
-        "destinationPaths": [
-          "src/runtime/runtime-terminals.ts"
-        ],
+        "upstreamPaths": ["web/src/runtime-terminals.ts"],
+        "sourcePaths": ["src/runtime/runtime-terminals.ts"],
+        "destinationPaths": ["src/runtime/runtime-terminals.ts"],
         "changes": "Retain only the bounded createBridgeTerminal stream adapter. Remove the local terminal/descriptor codec; use the published Waffle codec and runtime-owned transport."
       },
       {
         "classification": "Original prototype terminal input policy, restored in the shell adapter",
-        "sourcePaths": [
-          "src/wasi-host.ts"
-        ],
-        "destinationPaths": [
-          "src/runtime/runtime-terminals.ts"
-        ],
+        "sourcePaths": ["src/wasi-host.ts"],
+        "destinationPaths": ["src/runtime/runtime-terminals.ts"],
         "changes": "Restore the predecessor's cooked carriage-return/newline input handling while preserving raw editor bytes through the existing bounded bridge. Do not import its generic WASI host; a full runtime-owned tty discipline remains an approved Waffle terminal-endpoint follow-up."
       },
       {
         "classification": "Adapted Bun root lifecycle with original shell-host integration, via prototype",
         "upstreamRepository": "https://github.com/ShaulLavo/bun-wasm",
         "upstreamRevision": "8d3d416aa9cb23718ed3487a33d0b06e8e373672",
-        "upstreamPaths": [
-          "web/src/runner.ts"
-        ],
-        "sourcePaths": [
-          "src/runtime/browser-runtime.ts"
-        ],
-        "destinationPaths": [
-          "src/runtime/shell-host.ts"
-        ],
+        "upstreamPaths": ["web/src/runner.ts"],
+        "sourcePaths": ["src/runtime/browser-runtime.ts"],
+        "destinationPaths": ["src/runtime/shell-host.ts"],
         "changes": "Retain shell-specific launch/outcome fencing. Remove the prototype runtime owner and external-program registry; borrow the supplied Waffle filesystem, identities and process service. Shared services and disposal remain Waffle-owned."
       },
       {
@@ -181,12 +165,7 @@
       },
       {
         "classification": "Original prototype browser build/test host configuration, adapted here",
-        "sourcePaths": [
-          "playwright.config.ts",
-          "vite.config.ts",
-          "tsconfig.json",
-          "index.html"
-        ],
+        "sourcePaths": ["playwright.config.ts", "vite.config.ts", "tsconfig.json", "index.html"],
         "destinationPaths": [
           "playwright.config.ts",
           "vite.config.ts",
@@ -197,20 +176,12 @@
       },
       {
         "classification": "Original shared-terminal worker launcher assembled from existing prototype adapters",
-        "sourcePaths": [
-          "src/runtime/browser-runtime.ts",
-          "src/runtime/subprocess-broker.ts"
-        ],
-        "destinationPaths": [
-          "src/runtime/worker-launcher.ts"
-        ],
+        "sourcePaths": ["src/runtime/browser-runtime.ts", "src/runtime/subprocess-broker.ts"],
+        "destinationPaths": ["src/runtime/worker-launcher.ts"],
         "referenceLineage": {
           "repository": "https://github.com/ShaulLavo/bun-wasm",
           "revision": "8d3d416aa9cb23718ed3487a33d0b06e8e373672",
-          "paths": [
-            "web/src/runner.ts",
-            "web/src/subprocess-broker.ts"
-          ]
+          "paths": ["web/src/runner.ts", "web/src/subprocess-broker.ts"]
         },
         "changes": "Delegate launch to the published Waffle service.launchWorker with a retained terminal consumer and controller quiesce/revoke/stop hooks. Waffle owns generic worker lifecycle, admission and descriptor transport; no generic broker implementation is retained."
       },
@@ -243,50 +214,30 @@
       },
       {
         "classification": "Original prototype server and build-output helpers, imported/adapted here",
-        "sourcePaths": [
-          "scripts/serve.mjs",
-          "scripts/finish-build.mjs"
-        ],
-        "destinationPaths": [
-          "scripts/serve.mjs",
-          "scripts/finish-build.mjs"
-        ],
+        "sourcePaths": ["scripts/serve.mjs", "scripts/finish-build.mjs"],
+        "destinationPaths": ["scripts/serve.mjs", "scripts/finish-build.mjs"],
         "changes": "Retain the server isolation behavior; adapt final output handling to preserve both prebundled shell-worker.js and fs-worker.js after the browser build clears dist. The filesystem worker is built from Waffle's public package entry, not copied source. No external program payload is included."
       },
       {
         "classification": "Original browser notice aggregator",
-        "destinationPaths": [
-          "scripts/browser-notices.mjs"
-        ],
+        "destinationPaths": ["scripts/browser-notices.mjs"],
         "changes": "New integration code collecting shell, peer/npm and terminal notices for the browser distribution. No Bun guest/runtime/license payload or additional upstream implementation copied."
       },
       {
         "classification": "Original prototype browser CI sequence, adapted here",
-        "sourcePaths": [
-          ".github/workflows/ci.yml"
-        ],
-        "destinationPaths": [
-          ".github/workflows/ci.yml"
-        ],
+        "sourcePaths": [".github/workflows/ci.yml"],
+        "destinationPaths": [".github/workflows/ci.yml"],
         "changes": "Add the own-shell browser build/type/terminal/acceptance sequence while removing reference-engine build steps and using the pinned Waffle peer. Existing standalone shell/scoreboard/generator gates remain separate."
       },
       {
         "classification": "Original prototype terminal and guest-adapter unit regressions, adapted here",
-        "sourcePaths": [
-          "src/runtime/terminal.test.ts",
-          "src/runtime/guest-imports.test.ts"
-        ],
-        "destinationPaths": [
-          "tests/terminal.unit.ts",
-          "tests/guest-imports.unit.ts"
-        ],
+        "sourcePaths": ["src/runtime/terminal.test.ts", "src/runtime/guest-imports.test.ts"],
+        "destinationPaths": ["tests/terminal.unit.ts", "tests/guest-imports.unit.ts"],
         "changes": "Retain shell-owned bounded-ring/admission/terminal metadata cases and update public runtime imports. Bun host-slot and real-guest libc internals are not copied into this shell package; those tests belong to the external guest package."
       },
       {
         "classification": "Original browser packaging regression tests",
-        "destinationPaths": [
-          "scripts/test-browser-package.mjs"
-        ],
+        "destinationPaths": ["scripts/test-browser-package.mjs"],
         "changes": "New tests verify peer/development/source-lock pin agreement and absence of copied runtime/Bun implementation sources or Bun guest/license payloads. No upstream regression suite copied."
       },
       {
@@ -300,33 +251,23 @@
       },
       {
         "classification": "Original shell-specific worker executor, adapted from prototype shell integration",
-        "sourcePaths": [
-          "src/runtime/worker.ts"
-        ],
-        "destinationPaths": [
-          "src/runtime/worker.ts"
-        ],
+        "sourcePaths": ["src/runtime/worker.ts"],
+        "destinationPaths": ["src/runtime/worker.ts"],
         "referenceLineage": {
           "repository": "https://github.com/ShaulLavo/bun-wasm",
           "revision": "8d3d416aa9cb23718ed3487a33d0b06e8e373672",
-          "paths": [
-            "web/src/worker.ts"
-          ]
+          "paths": ["web/src/worker.ts"]
         },
         "changes": "Reduce the earlier shell integration to a small WorkerExecutor passed to published waffle/browser/worker bootstrap. Retain only shell imports/phase/memory observations. Generic WASI/descriptor/process/pipe/signal setup and worker cleanup belong to Waffle; no runtime implementation is copied."
       },
       {
         "classification": "Original shell worker asset builder",
-        "destinationPaths": [
-          "scripts/build-worker.mjs"
-        ],
+        "destinationPaths": ["scripts/build-worker.mjs"],
         "changes": "Bundle the shell WorkerExecutor and Waffle's public waffle/browser/fs-worker entry into .build/browser/{shell-worker,fs-worker}.js and stable dist/{shell-worker,fs-worker}.js assets. Package prepare/browser build emits both; the adapted final browser-output step restores both after Vite. The application passes its emitted filesystem URL through createRuntime({filesystem:{workerURL}}). No runtime source tree is vendored or raw TypeScript worker contract required."
       },
       {
         "classification": "Original production worker-asset and renderer regressions",
-        "destinationPaths": [
-          "tests/worker-assets.spec.ts"
-        ],
+        "destinationPaths": ["tests/worker-assets.spec.ts"],
         "changes": "Check emitted filesystem-worker startup and stable JavaScript worker URLs, plus a usable Canvas terminal when WebGPU exposes no available adapter. New original tests, not copied upstream cases; listing inventory is not passing browser evidence."
       },
       {
@@ -628,7 +569,11 @@
         "reason": "The brace seed 1/42 acceptance failures retained the correct arithmetic source in the parser but lost its protection in the engine's later operand scanner. These controls keep that parser/engine contract explicit without changing the shared boundary grammar or accepting source-text special cases. The engine repair is classified under shellArithmetic.protectedSourceReview."
       },
       {
-        "paths": ["shell/parser/src/parser/print_cmd.rs", "shell/parser/src/parser/mod.rs", "shell/parser/tests/command_print.rs"],
+        "paths": [
+          "shell/parser/src/parser/print_cmd.rs",
+          "shell/parser/src/parser/mod.rs",
+          "shell/parser/tests/command_print.rs"
+        ],
         "classification": "Original public adapter for the existing bounded command printer in the owned Bashkit-derived parser. No additional upstream implementation copied; GNU Bash 5.3.15 supplies job-label observations only.",
         "change": "Expose bounded canonical command rendering for shell job labels through the existing parser printer. Stream bounded simple commands, word lists and redirects instead of collecting intermediate strings; admit normalization and heredoc storage before allocation. Retain all command variants, quote-aware word rendering, shared work/cancellation admission and output-byte limits. Add direct printer API, bounded/unbounded parity and Bash-observed multiline job-label controls without removing upstream assertions.",
         "reason": "A job label must represent its actual shell command, including compound and pipeline commands, rather than a simple-command-only special case or an unbounded reconstructed string. Reusing the existing typed bounded printer keeps display formatting separate from execution and shell job membership."
@@ -1112,6 +1057,20 @@
     ],
     "verification": "Focused Bash 5.3.15 C.UTF-8 controls; runtime and corpus deltas must be established by the coordinator after integration. Fixed oracle, baselines, scores and versions unchanged."
   },
+  "shellExecution": {
+    "classification": "Original shared execution ownership and admission, extracted from locally maintained engine adapters; no additional upstream implementation copied.",
+    "baseRevision": "2c6ad634dacbd109d0a45c978cb98dc39e0a3a9d",
+    "localPaths": [
+      "shell/engine/src/exec.rs",
+      "shell/engine/src/executor.rs",
+      "shell/engine/src/interpreter/eval.rs",
+      "shell/engine/src/expand.rs",
+      "shell/engine/src/arithmetic.rs",
+      "shell/engine/src/ast_copy.rs",
+      "shell/engine/src/state.rs"
+    ],
+    "strategy": "Move storage budgets/allocations and retained source ownership, pin-projected active frame admission, neutral command work, shared fault metadata and async result types down into exec. Keep Limits/Flow/Outcome, diagnostic formatting, eval parsing/orchestration and concrete substitution/arithmetic policy above it. The inline expansion Work sidecar dereferences neutral exec Work; state and AST admission borrow the latter directly. Active execution frames refund on Poll::Ready or cancellation; feature future storage remains cumulative. One test-only stack observer lives in executor and is shared by exec/state/interpreter. Existing depth resets, fresh parser input budgets/probes, sentinel -1000 versus ordinary status 2/cancellation 130 and retained Rc source lifetimes are unchanged. Bashkit-derived grammar, expansion and slice semantics retain their separate pinned classifications."
+  },
   "shellArithmetic": {
     "repository": "https://github.com/everruns/bashkit",
     "revision": "491c3281f668b76d64b15210b8f5d7bf97244be0",
@@ -1143,6 +1102,7 @@
       }
     ],
     "localPaths": [
+      "shell/engine/src/exec.rs",
       "shell/engine/src/arithmetic.rs",
       "shell/engine/src/expand.rs",
       "shell/engine/src/expand/operand.rs",
@@ -1150,7 +1110,7 @@
       "shell/engine/tests/words/arithmetic.rs",
       "shell/engine/src/expand/positional.rs"
     ],
-    "strategy": "Stream tokens over borrowed source, parse with bounded async precedence climbing, admit exact boxed future frames and all scalar snapshots/storage before growth, and share command Work across arithmetic and expansions. Every unbounded lexing, digit, parse, snapshot, substring and recursion loop checkpoints cancellation and cooperative Budget. Exponentiation uses at most63 wrapping-squaring steps. Recursive scalar cycles are arithmetic domain errors; parser depth/work/storage exhaustion remains status2 and cancellation130. Writes immediately use State::assign_parameter rather than the upstream overlay, preserving completed effects across errors/cancellation and respecting prefix frames. Shell dollar expansion precedes arithmetic evaluation; let receives already shell-expanded arguments and never expands literal dollars twice. Domain/syntax errors abort expansion environments with status1; (( )) and let retain ordinary status1 without aborting later commands. Nested expansion errors preserve fatal control. Scalar slices resolve source before arithmetic, skip expressions for unset values, skip length when start is out of range, and use signed bounded range calculations. UTF-8 locales count scalar characters; C/POSIX count bytes, rejecting output that cannot be represented as valid UTF-8. Source snapshots do not spend emitted-output bytes. An original admitted shell-grammar validation adapter reproduces Bash slice-word <(...)/>(...) lexical boundary checks without executing substitutions. GNU Bash5.3 observations correct upstream eager slice lengths and compound assignment self-write ordering. Original tests cover semantics, admission, explicit failures, cooperative cancellation and retained state. Review regressions preserve terminating recursive identifiers by pairing active names with the generation of actual scalar value changes; unchanged assignments do not hide cycles. Arithmetic and substring writes invalidate enclosing IFS caches. Nested arithmetic scanning treats selected or skipped braced operands as opaque lexical regions, and selected substrings accept the same scalar positional/special targets as top-level slices. Original native/WASI depth regressions exercise each recursive scalar form through the deepest accepted level and its first explicit resource rejection. Positional @ slices preserve empty fields, include configurable shell_name at offset zero, and admit each selected element before copying. Arithmetic and readonly expansion failures discard the current read unit and resume at the next top-level newline. Special scalar substring snapshots admit decimal storage before formatting. Scalar operand depth is explicitly capped at 16 and exercised through its boundary on native and WASI.",
+    "strategy": "Shared ResultFuture, Error/ShellBoundaryStage and the charged arithmetic fault constructor now live in original exec.rs admission machinery; scalar arithmetic recursion policy and exact cumulative future-size admission remain feature adapters. No grammar or operator implementation moves into exec. Stream tokens over borrowed source, parse with bounded async precedence climbing, admit exact boxed future frames and all scalar snapshots/storage before growth, and share command Work across arithmetic and expansions. Every unbounded lexing, digit, parse, snapshot, substring and recursion loop checkpoints cancellation and cooperative Budget. Exponentiation uses at most63 wrapping-squaring steps. Recursive scalar cycles are arithmetic domain errors; parser depth/work/storage exhaustion remains status2 and cancellation130. Writes immediately use State::assign_parameter rather than the upstream overlay, preserving completed effects across errors/cancellation and respecting prefix frames. Shell dollar expansion precedes arithmetic evaluation; let receives already shell-expanded arguments and never expands literal dollars twice. Domain/syntax errors abort expansion environments with status1; (( )) and let retain ordinary status1 without aborting later commands. Nested expansion errors preserve fatal control. Scalar slices resolve source before arithmetic, skip expressions for unset values, skip length when start is out of range, and use signed bounded range calculations. UTF-8 locales count scalar characters; C/POSIX count bytes, rejecting output that cannot be represented as valid UTF-8. Source snapshots do not spend emitted-output bytes. An original admitted shell-grammar validation adapter reproduces Bash slice-word <(...)/>(...) lexical boundary checks without executing substitutions. GNU Bash5.3 observations correct upstream eager slice lengths and compound assignment self-write ordering. Original tests cover semantics, admission, explicit failures, cooperative cancellation and retained state. Review regressions preserve terminating recursive identifiers by pairing active names with the generation of actual scalar value changes; unchanged assignments do not hide cycles. Arithmetic and substring writes invalidate enclosing IFS caches. Nested arithmetic scanning treats selected or skipped braced operands as opaque lexical regions, and selected substrings accept the same scalar positional/special targets as top-level slices. Original native/WASI depth regressions exercise each recursive scalar form through the deepest accepted level and its first explicit resource rejection. Positional @ slices preserve empty fields, include configurable shell_name at offset zero, and admit each selected element before copying. Arithmetic and readonly expansion failures discard the current read unit and resume at the next top-level newline. Special scalar substring snapshots admit decimal storage before formatting. Scalar operand depth is explicitly capped at 16 and exercised through its boundary on native and WASI.",
     "protectedSourceReview": {
       "classification": "Original arithmetic-source scanner context and focused regression controls in the owned engine adapter; no additional upstream implementation consulted or copied. Existing Bashkit parser/arithmetic attribution and all pins remain unchanged.",
       "paths": [
@@ -1404,6 +1364,7 @@
   "shellControlFlow": {
     "classification": "Original structured execution, argv test, conditional, filesystem metadata/directory, no-capture ERE and dynamic-time adapters; GNU Bash 5.3.15 is a behavior oracle, not copied implementation.",
     "paths": [
+      "shell/engine/src/exec.rs",
       "shell/engine/src/interpreter.rs",
       "shell/engine/src/interpreter/control.rs",
       "shell/engine/src/interpreter/conditional.rs",
@@ -1439,6 +1400,7 @@
   "shellFunctions": {
     "classification": "Original function-frame, dynamic scalar binding, positional, call-policy, lastpipe and command-lookup adapters; GNU Bash 5.3.15 is a behavior oracle, not copied implementation.",
     "paths": [
+      "shell/engine/src/exec.rs",
       "shell/engine/src/builtins.rs",
       "shell/engine/src/executor.rs",
       "shell/engine/src/expand.rs",
@@ -1531,10 +1493,7 @@
     "gate": "Frozen seeds 1 and 42 contain 156 fixed plus 128 generated observations each, 568 total. Strict healthy status and stdout-byte equality, independent Bash 5.3.15 self-controls, native and WASI release replay. Source-fingerprint metadata refreshed for validator, portable temporary storage and sandbox-cleanup changes; all 568 captured case/observation records are unchanged. Source controls include custom denied-directory cleanup and replaced-symlink boundaries. Native/WASI controls cover original argv, effective nameref prefixes, path spelling, newly created files, global admission, pending cancellation and refunds, exact live-storage boundaries and shared query fuel. Browser coverage activates all six waiting PATH/runtime cases and checks shared queries create no transient workers; process identity stays pending.",
     "localHarnessProvenance": {
       "baseRevision": "e2d777bb5657506557f763d29ce5a0027e7e8e4b",
-      "adapted": [
-        "scripts/fuzz-shell-functions.ts",
-        "scripts/test-fuzz-shell-functions.ts"
-      ],
+      "adapted": ["scripts/fuzz-shell-functions.ts", "scripts/test-fuzz-shell-functions.ts"],
       "importedUnchanged": [
         "scripts/fuzz-shell-control-flow.mjs",
         "scripts/shell-process-group.mjs"

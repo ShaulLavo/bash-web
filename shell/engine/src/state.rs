@@ -1,8 +1,8 @@
 //! Original shell state. Open descriptors and filesystem objects live outside
 //! this value: isolated shell environments copy rules/state, never byte streams.
 use crate::{
+    exec::{Error, Work},
     executor::Cancel,
-    expand::{Error, Work},
 };
 use shell_parser::parser::Command;
 use std::{
@@ -58,13 +58,13 @@ pub(crate) struct LocalVariable {
     readonly: bool,
     function_prefix: bool,
     storage_base: usize,
-    memory: Option<Rc<RefCell<crate::interpreter::eval::StorageAllocation>>>,
+    memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
 }
 
 #[derive(Clone, Debug)]
 pub struct StoredFunction {
     pub body: Rc<Command>,
-    pub(crate) storage: Option<crate::interpreter::RetainedStorage>,
+    pub(crate) storage: Option<crate::exec::RetainedStorage>,
 }
 
 #[derive(Clone, Debug)]
@@ -100,8 +100,8 @@ pub struct State {
     pub(crate) positional: Vec<String>,
     pub(crate) locals: Vec<BTreeMap<String, LocalVariable>>,
     pub(crate) function_calls: usize,
-    memory: Option<crate::interpreter::eval::StorageBudget>,
-    positional_memory: Option<Rc<RefCell<crate::interpreter::eval::StorageAllocation>>>,
+    memory: Option<crate::exec::StorageBudget>,
+    positional_memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
     prefixes: Vec<BTreeMap<String, Option<String>>>,
 }
 impl Default for State {
@@ -138,7 +138,7 @@ impl Default for State {
     }
 }
 impl State {
-    pub(crate) fn with_memory(memory: crate::interpreter::eval::StorageBudget) -> Self {
+    pub(crate) fn with_memory(memory: crate::exec::StorageBudget) -> Self {
         Self {
             memory: Some(memory),
             ..Self::default()
@@ -147,12 +147,12 @@ impl State {
     pub(crate) fn admit_temporary(
         &self,
         bytes: usize,
-    ) -> Result<Option<crate::interpreter::eval::StorageAllocation>, i32> {
+    ) -> Result<Option<crate::exec::StorageAllocation>, i32> {
         self.memory
             .as_ref()
             .map(|memory| memory.admit(bytes))
             .transpose()
-            .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)
+            .map_err(|_| crate::exec::RESOURCE_STATUS)
     }
     pub fn shared(self) -> SharedState {
         Rc::new(RefCell::new(self))
@@ -198,7 +198,7 @@ impl State {
                     .map(|ticket| Rc::new(RefCell::new(ticket)))
             })
             .transpose()
-            .map_err(|_| Error::Status(crate::interpreter::eval::RESOURCE_STATUS))?;
+            .map_err(|_| Error::Status(crate::exec::RESOURCE_STATUS))?;
         let positional = snapshot_vec(source, |s| &s.positional, cancel, work).await?;
         let last_async = snapshot_value(source, |s| Some(&s.last_async), cancel, work).await?;
         let (local_count, prefix_count) = {
@@ -328,12 +328,12 @@ impl State {
             memory
                 .borrow_mut()
                 .resize(bytes)
-                .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)?;
+                .map_err(|_| crate::exec::RESOURCE_STATUS)?;
         } else if let Some(memory) = &self.memory {
             self.positional_memory = Some(Rc::new(RefCell::new(
                 memory
                     .admit(bytes)
-                    .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)?,
+                    .map_err(|_| crate::exec::RESOURCE_STATUS)?,
             )));
         }
         self.positional = args;
@@ -350,7 +350,7 @@ impl State {
             memory
                 .borrow_mut()
                 .resize(positional_bytes(&self.positional)?)
-                .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)?;
+                .map_err(|_| crate::exec::RESOURCE_STATUS)?;
         }
         Ok(())
     }
@@ -362,7 +362,7 @@ impl State {
             memory
                 .borrow_mut()
                 .resize(local.storage_base.checked_add(bytes).ok_or(2)?)
-                .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)?;
+                .map_err(|_| crate::exec::RESOURCE_STATUS)?;
         }
         Ok(())
     }
@@ -868,7 +868,7 @@ impl State {
                 .map(|memory| {
                     memory
                         .admit(storage_base.checked_add(value_bytes).ok_or(2)?)
-                        .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)
+                        .map_err(|_| crate::exec::RESOURCE_STATUS)
                 })
                 .transpose()?
                 .map(|ticket| Rc::new(RefCell::new(ticket)));
@@ -980,7 +980,7 @@ impl SnapshotValue for LocalVariable {
                     .map(|ticket| Rc::new(RefCell::new(ticket)))
             })
             .transpose()
-            .map_err(|_| Error::Status(crate::interpreter::eval::RESOURCE_STATUS))?;
+            .map_err(|_| Error::Status(crate::exec::RESOURCE_STATUS))?;
         Ok(Self {
             memory,
             ..self.clone()
@@ -1137,7 +1137,7 @@ pub(crate) struct PrefixFrame {
     star_separator: StarSeparator,
     ifs_members: Option<IfsMembers>,
     restores_ifs: std::cell::Cell<bool>,
-    memory: RefCell<Option<crate::interpreter::eval::StorageAllocation>>,
+    memory: RefCell<Option<crate::exec::StorageAllocation>>,
 }
 impl PrefixFrame {
     pub(crate) fn enter(state: SharedState) -> Self {
@@ -1167,7 +1167,7 @@ impl PrefixFrame {
         if let Some(memory) = &mut *self.memory.borrow_mut() {
             memory
                 .grow(bytes)
-                .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)?;
+                .map_err(|_| crate::exec::RESOURCE_STATUS)?;
         }
         Ok(())
     }
@@ -1264,7 +1264,7 @@ pub(crate) struct FunctionFrame {
     state: SharedState,
     positional: Vec<String>,
     prefix: bool,
-    positional_memory: Option<Rc<RefCell<crate::interpreter::eval::StorageAllocation>>>,
+    positional_memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
 }
 impl FunctionFrame {
     pub(crate) fn enter(state: SharedState, args: Vec<String>, limit: usize) -> Result<Self, i32> {
@@ -1278,7 +1278,7 @@ impl FunctionFrame {
             .map(|memory| {
                 memory
                     .admit(positional_bytes(&args)?)
-                    .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)
+                    .map_err(|_| crate::exec::RESOURCE_STATUS)
             })
             .transpose()?
             .map(|ticket| Rc::new(RefCell::new(ticket)));
@@ -1288,7 +1288,7 @@ impl FunctionFrame {
         s.locals.push(BTreeMap::new());
         s.function_calls += 1;
         #[cfg(test)]
-        crate::interpreter::eval::measure_calls(s.function_calls);
+        crate::executor::observation::measure_calls(s.function_calls);
         drop(s);
         Ok(Self {
             state,
@@ -1326,7 +1326,7 @@ impl Drop for FunctionFrame {
         #[cfg(test)]
         {
             let marker = 0u8;
-            crate::interpreter::eval::measure_drop(&marker);
+            crate::executor::observation::measure_drop(&marker);
         }
         let mut s = self.state.borrow_mut();
         s.positional = std::mem::take(&mut self.positional);
@@ -2034,7 +2034,7 @@ mod tests {
 
     #[test]
     fn function_memory_local_owner_growth_shrink_unset_and_redeclare_are_bounded() {
-        use crate::interpreter::eval::{RESOURCE_STATUS, StorageBudget};
+        use crate::exec::{RESOURCE_STATUS, StorageBudget};
         let memory = StorageBudget::new(16_384);
         let state = State::with_memory(memory.clone()).shared();
         state
@@ -2092,7 +2092,7 @@ mod tests {
 
     #[test]
     fn function_memory_local_exact_capacity_failure_preserves_binding_and_frame() {
-        use crate::interpreter::eval::{RESOURCE_STATUS, StorageBudget};
+        use crate::exec::{RESOURCE_STATUS, StorageBudget};
         let baseline = StorageBudget::new(16_384);
         let probe = State::with_memory(baseline.clone()).shared();
         probe
@@ -2132,7 +2132,7 @@ mod tests {
 
     #[test]
     fn function_memory_positional_replacement_failure_is_atomic_and_snapshot_is_independent() {
-        use crate::interpreter::eval::{RESOURCE_STATUS, StorageBudget};
+        use crate::exec::{RESOURCE_STATUS, StorageBudget};
         let memory = StorageBudget::new(16_384);
         let state = State::with_memory(memory.clone()).shared();
         let frame = FunctionFrame::enter(state.clone(), vec!["caller".into()], usize::MAX).unwrap();
@@ -2194,7 +2194,7 @@ mod tests {
 
     #[test]
     fn function_memory_assignment_only_prefix_commit_charges_owner_not_temporary_scope() {
-        use crate::interpreter::eval::StorageBudget;
+        use crate::exec::StorageBudget;
         let memory = StorageBudget::new(16_384);
         let state = State::with_memory(memory.clone()).shared();
         let outer = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
@@ -2212,7 +2212,7 @@ mod tests {
 
     #[test]
     fn function_memory_multi_assignment_commit_failure_restores_all_bindings_atomically() {
-        use crate::interpreter::eval::{RESOURCE_STATUS, StorageBudget};
+        use crate::exec::{RESOURCE_STATUS, StorageBudget};
         let memory = StorageBudget::new(16_384);
         let state = State::with_memory(memory.clone()).shared();
         let outer = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
@@ -2235,7 +2235,7 @@ mod tests {
     }
     #[test]
     fn review_readonly_local_redeclaration_keeps_original_value_and_memory_ticket() {
-        use crate::interpreter::eval::StorageBudget;
+        use crate::exec::StorageBudget;
         for replacement in [20_000, 4096, 0] {
             let memory = StorageBudget::new(16_384);
             let state = State::with_memory(memory.clone()).shared();

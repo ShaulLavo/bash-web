@@ -3,8 +3,8 @@
 //! Scalar operands do not undergo IFS splitting, globbing, or brace expansion.
 use super::{Context, Descriptors, Outcome, expansion_failure};
 use crate::{
-    arithmetic::{self, ArithmeticFuture},
-    builtins,
+    arithmetic, builtins,
+    exec::ResultFuture,
     expand::{self, Error, Work},
     io::{Endpoint, FdTable},
     state::SharedState,
@@ -64,7 +64,7 @@ fn evaluate<'a>(
     fds: &'a Descriptors,
     context: &'a Context,
     work: &'a mut Work,
-) -> ArithmeticFuture<'a, bool> {
+) -> ResultFuture<'a, bool> {
     arithmetic::admitted(work, move |work| async move {
         let mut stack = Vec::new();
         let mut current = expression;

@@ -123,7 +123,7 @@ impl Executor {
         #[cfg(test)]
         let marker = 0u8;
         #[cfg(test)]
-        crate::interpreter::eval::measure_driver(&marker);
+        observation::measure_driver(&marker);
         assert!(
             !self.0.driving.replace(true),
             "executor drive is not reentrant"
@@ -583,5 +583,68 @@ mod tests {
         ex.drive(10);
         assert!(task.is_finished());
         assert!(!ex.park_if_idle());
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod observation {
+    use std::cell::Cell;
+    #[cfg(test)]
+    #[derive(Clone, Copy, Default, Debug)]
+    pub(crate) struct StackObservation {
+        driver: usize,
+        pub(crate) poll_bytes: usize,
+        pub(crate) drop_bytes: usize,
+        pub(crate) calls: usize,
+    }
+    #[cfg(test)]
+    thread_local! { static STACK_OBSERVATION: Cell<StackObservation> = Cell::new(StackObservation::default()); }
+    #[cfg(test)]
+    pub(crate) fn measure_driver(marker: &u8) {
+        STACK_OBSERVATION.with(|slot| {
+            let mut sample = slot.get();
+            sample.driver = marker as *const u8 as usize;
+            slot.set(sample);
+        });
+    }
+    #[cfg(test)]
+    pub(crate) fn measure_poll(marker: &u8) {
+        STACK_OBSERVATION.with(|slot| {
+            let mut sample = slot.get();
+            if sample.driver != 0 {
+                sample.poll_bytes = sample
+                    .poll_bytes
+                    .max(sample.driver.abs_diff(marker as *const u8 as usize));
+            }
+            slot.set(sample);
+        });
+    }
+    #[cfg(test)]
+    pub(crate) fn measure_drop(marker: &u8) {
+        STACK_OBSERVATION.with(|slot| {
+            let mut sample = slot.get();
+            if sample.driver != 0 {
+                sample.drop_bytes = sample
+                    .drop_bytes
+                    .max(sample.driver.abs_diff(marker as *const u8 as usize));
+            }
+            slot.set(sample);
+        });
+    }
+    #[cfg(test)]
+    pub(crate) fn measure_calls(calls: usize) {
+        STACK_OBSERVATION.with(|slot| {
+            let mut sample = slot.get();
+            sample.calls = sample.calls.max(calls);
+            slot.set(sample);
+        });
+    }
+    #[cfg(test)]
+    pub(crate) fn reset_stack_observation() {
+        STACK_OBSERVATION.with(|slot| slot.set(StackObservation::default()));
+    }
+    #[cfg(test)]
+    pub(crate) fn stack_observation() -> StackObservation {
+        STACK_OBSERVATION.with(Cell::get)
     }
 }

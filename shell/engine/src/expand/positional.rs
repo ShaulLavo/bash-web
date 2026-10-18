@@ -65,7 +65,7 @@ impl Expansion<'_> {
         let length =
             arithmetic::evaluate(length, state, self.cancel, self.raw_remaining, self.work).await?;
         if length < 0 {
-            return arithmetic::fault("substring expression < 0", self.work);
+            return crate::exec::fault("substring expression < 0", self.work);
         }
         Ok(start
             .saturating_add(usize::try_from(length).unwrap_or(usize::MAX))

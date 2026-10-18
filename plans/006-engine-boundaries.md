@@ -32,34 +32,34 @@ Allowed direction, lower layers never importing higher ones:
 Each row enumerates permitted imports. Self and child-module edges do not count.
 External parser AST types remain usable; this first gate checks internal Rust module paths, not dependency-crate APIs.
 
-| Owner | Permitted internal targets |
-| --- | --- |
-| `executor` | none |
-| `io` | `executor` |
-| `process` | `executor`, `io` |
-| `runtime` | `executor`, `io`, `process` |
-| `exec` | `executor` |
-| `state` | `executor`, `exec` |
-| `parse` | `executor`, `exec` |
-| `commands` | `parse`, `exec` |
-| `ast_copy` | `executor`, `exec`, `parse` |
-| `arithmetic` | `executor`, `exec`, `state`, `expand`, `parse` |
-| `expand` | `executor`, `exec`, `state`, `parse`, `arithmetic`, `ast_copy`, `io`, `interpreter` |
-| `builtins` | `executor`, `exec`, `state`, `parse`, `commands`, `expand`, `interpreter`, `io` |
+| Owner         | Permitted internal targets                                                                                        |
+| ------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `executor`    | none                                                                                                              |
+| `io`          | `executor`                                                                                                        |
+| `process`     | `executor`, `io`                                                                                                  |
+| `runtime`     | `executor`, `io`, `process`                                                                                       |
+| `exec`        | `executor`                                                                                                        |
+| `state`       | `executor`, `exec`                                                                                                |
+| `parse`       | `executor`, `exec`                                                                                                |
+| `commands`    | `parse`, `exec`                                                                                                   |
+| `ast_copy`    | `executor`, `exec`, `parse`                                                                                       |
+| `arithmetic`  | `executor`, `exec`, `state`, `expand`, `parse`                                                                    |
+| `expand`      | `executor`, `exec`, `state`, `parse`, `arithmetic`, `ast_copy`, `io`, `interpreter`                               |
+| `builtins`    | `executor`, `exec`, `state`, `parse`, `commands`, `expand`, `interpreter`, `io`                                   |
 | `interpreter` | `executor`, `exec`, `state`, `parse`, `commands`, `arithmetic`, `expand`, `builtins`, `io`, `process`, `ast_copy` |
 
 The feature cycles are deliberate. Arithmetic scalar values use expansion and expansion evaluates arithmetic; builtins consume interpreter context and the interpreter dispatches builtins; expansion invokes the interpreter's substitution runner. This plan moves shared data down without rewriting those execution protocols. It does not impose a false total order on cooperating features.
 
 `lib`, `main`, `runtime_main`, `compat` and `terminal` are composition roots with explicit allowances in the checker, never a wildcard. Unknown owners and unknown rooted targets fail closed. Rooted `crate::` paths, grouped `use` trees and conventional relative `self`/`super` paths are checked; Rust alias resolution and macro expansion are outside this lexical contract. Literal paths inside macro bodies are scanned.
 
-Test-only edges are recorded independently. Four explicit fixture allowances permit `builtins -> process`, `expand -> process`, `process -> interpreter` and `runtime -> interpreter` only in test scopes. These fixture dependencies do not make production imports legal. Instrumentation edges `executor -> interpreter` and `state -> interpreter` remain violations until their shared measurement types move with step 2.
+Test-only edges are recorded independently. Four explicit fixture allowances permit `builtins -> process`, `expand -> process`, `process -> interpreter` and `runtime -> interpreter` only in test scopes. These fixture dependencies do not make production imports legal. Step 2 removes the former instrumentation violations `executor -> interpreter` and `state -> interpreter`: one shared test-only observer now belongs to executor, with memory observations beside the exec storage budget.
 
 ## Steps
 
 Each step is a behaviour-preserving PR with zero compatibility losses, independent review and merged green before the next starts.
 
-1. **Layer check — implemented, awaiting independent review and merged-green CI.** `check:layers`, `test:check-layers` and strict `typecheck:layers` are wired. The current source scan records **3 production + 2 test-only violations**, from **34 production + 26 test-only edges**; capabilities and Full/Lite sizes remain unmeasured. CI selects a full-SHA immutable target (PR base, pre-push main, or branch merge-base), checks exact evidence and both ratchets, and gates all Cargo-heavy jobs on this lightweight job. The `compat` alias preserves the existing frozen compatibility command.
-2. **Shared execution types.** Move budget, allocation, frame, scope, `Work`, `Error`, `RESOURCE_STATUS`, retained-storage and async-result/fault types out of `interpreter/eval.rs`, `arithmetic.rs` and `expand.rs` into `exec`. `state` and `expand` stop importing `eval`, `arithmetic` and `expand` for these shared types.
+1. **Layer check — merged.** Step 1 merged at `2c6ad634dacbd109d0a45c978cb98dc39e0a3a9d`. `check:layers`, all 33 scanner tests and strict `typecheck:layers` are wired. Its baseline was **3 production + 2 test-only violations**, from **34 production + 26 test-only edges**. The unchanged exact graph, immutable full-SHA ratchets and evidence rules gate heavy CI; the `compat` alias preserves the existing frozen compatibility command.
+2. **Shared execution types — implemented locally, verification/integration in progress.** Neutral budgets, allocations, retained sources, scopes, pin-projected active frames, `Work`, `Error`/`ShellBoundaryStage`, `RESOURCE_STATUS`, `ResultFuture` and the charged fault constructor now belong to `exec`, whose only internal dependency is executor. State/AST admission consume neutral Work directly. Expansion retains an inline `Deref`/`DerefMut` wrapper for concrete substitutions and arithmetic recursion/name/write policy; arithmetic keeps its exact-size cumulative future-admission adapter. Eval parsing/source-shape orchestration and interpreter status formatting remain above exec. One executor-owned test observer replaces both reverse instrumentation edges. The unchanged graph records **0 production + 0 test-only violations**, with **38 production + 28 test-only edges**. Active frame refunds, cumulative command storage, Rc source ownership, cancellation, fresh parser budgets/probes, and 16/256 depth reset rules are preserved. No binding-restoration or parser-facade work is included. Native verification and focused ownership/accounting controls run locally through the PC shared runner. Full exact-head WASI/frozen/browser gates await coordinator integration of startup PR #11; capabilities and Full/Lite sizes remain unmeasured.
 3. **One owner for bindings.** `state` owns every privileged mutation and restoration guard. Callers ask for operations: read or assign a parameter, enter a temporary-binding scope, enter a function scope, snapshot a subshell environment, restore. `BuiltinPrefixFrame` and `state::PrefixFrame` become one mechanism. Distinct bash behaviours stay distinct operations; nothing collapses into a generic setter.
 4. **Parsing facade.** Script, `eval`, generated words, lazy operands and command substitution enter through `parse` with their source, options, budgets and capability policy. Day one it calls exactly today's code.
 5. **Command metadata.** One typed table in `commands` drives declaration recognition, dispatch, `command -v/-V` and here-document errors. A `type` builtin is not present in the current engine, so adding it is separate compatibility work. Literal declaration syntax and expanded command names stay separate phases.
@@ -71,7 +71,7 @@ From step 6 on, every new compatibility family's PR states: the owning subsystem
 
 ## Sequencing
 
-Structural moves conflict with feature lanes. The PATH search PR (#10) merged at `976012bd775122452b28caffde1142207e2e580e`; main was merged normally into this lane at `3aacd8c`. Evidence has been refreshed against those merged engine sources, without changing Rust or frozen compatibility inputs. Package/CI wiring is now included in step 1; step 2 waits until step 1 is reviewed and merged green. No new compatibility climb lane starts while a structural step is open. Steps after 2 run back to back. The startup-diagnostics lane owns PR #11 and its waffle pin; do not edit either lane's worktree.
+Structural moves conflict with feature lanes. PATH search PR #10 merged at `976012bd775122452b28caffde1142207e2e580e`; the step-1 layer gate then merged at `2c6ad634dacbd109d0a45c978cb98dc39e0a3a9d`. Step 2 develops exclusively on `plan/engine-exec` in `/work/worktrees/bash-web/engine-boundaries`. It must not push or open a PR until startup-diagnostics PR #11 merges; the coordinator owns that integration and the exact-final-head zero-loss gates afterward. Do not edit the startup lane or its Waffle pin. No new compatibility climb lane starts while a structural step is open. Later steps remain serial, independently reviewed and merged green. Frozen corpus, observations, baselines and generator fixtures are unchanged.
 
 ## Not in scope
 

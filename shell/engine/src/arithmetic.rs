@@ -3,26 +3,24 @@
 //! Streaming lexing, async work admission and immediate durable scalar writes are
 //! original adapters: no interpreter overlay, token vector, or blocking evaluator.
 use crate::{
+    exec::{ResultFuture, fault},
     executor::Cancel,
     expand::{self, Error, Work},
     state::{SharedState, State},
 };
 use futures::{
     FutureExt,
-    future::{Either, LocalBoxFuture, Ready, ready},
+    future::{Either, ready},
 };
 use std::future::Future;
 use std::rc::Rc;
-
-pub(crate) type ArithmeticFuture<'a, T = i64> =
-    Either<Ready<Result<T, Error>>, LocalBoxFuture<'a, Result<T, Error>>>;
 
 // Admit the exact future frame before boxing it. A rejected admission returns
 // an inline ready future, so even failure does not allocate an error frame.
 pub(crate) fn admitted<'a, T: 'a, F: Future<Output = Result<T, Error>> + 'a>(
     work: &'a mut Work,
     build: impl FnOnce(&'a mut Work) -> F,
-) -> ArithmeticFuture<'a, T> {
+) -> ResultFuture<'a, T> {
     if let Err(error) = work.admit_storage(std::mem::size_of::<F>()) {
         return Either::Left(ready(Err(error)));
     }
@@ -200,22 +198,13 @@ impl<'a> Program<'a> {
     }
 }
 
-pub(crate) fn fault<T>(message: &'static str, work: &mut Work) -> Result<T, Error> {
-    work.admit_storage(message.len() * 2 + 128)?;
-    Err(Error::Arithmetic {
-        message,
-        line: None,
-        expansion: false,
-    })
-}
-
 pub(crate) fn evaluate<'a>(
     source: &'a str,
     state: &'a SharedState,
     cancel: &'a Cancel,
     max: usize,
     work: &'a mut Work,
-) -> ArithmeticFuture<'a> {
+) -> ResultFuture<'a, i64> {
     admitted(work, move |work| async move {
         work.enter_arithmetic()?;
         let result = async {
@@ -244,7 +233,7 @@ pub(crate) fn evaluate_program<'a>(
     cancel: &'a Cancel,
     max: usize,
     work: &'a mut Work,
-) -> ArithmeticFuture<'a> {
+) -> ResultFuture<'a, i64> {
     admitted(work, move |work| async move {
         work.enter_arithmetic()?;
         let result = async {
@@ -290,7 +279,7 @@ fn expression<'a>(
     max: usize,
     work: &'a mut Work,
     depth: usize,
-) -> ArithmeticFuture<'a> {
+) -> ResultFuture<'a, i64> {
     admitted(work, move |work| async move {
         if depth >= MAX_DEPTH {
             return Err(2.into());
@@ -348,7 +337,7 @@ fn parse<'a, 's: 'a>(
     max: usize,
     work: &'a mut Work,
     depth: usize,
-) -> ArithmeticFuture<'a> {
+) -> ResultFuture<'a, i64> {
     admitted(work, move |work| async move {
         if depth >= MAX_DEPTH {
             return Err(2.into());
@@ -456,7 +445,7 @@ fn unary<'a, 's: 'a>(
     max: usize,
     work: &'a mut Work,
     depth: usize,
-) -> ArithmeticFuture<'a> {
+) -> ResultFuture<'a, i64> {
     admitted(work, move |work| async move {
         if depth >= MAX_DEPTH {
             return Err(2.into());
@@ -730,6 +719,22 @@ mod tests {
             ex.drive(64);
         }
         panic!("arithmetic exceeded bounded executor turns");
+    }
+
+    #[test]
+    fn completed_feature_futures_keep_their_exact_cumulative_storage_charge() {
+        let bytes = std::mem::size_of::<futures::future::Ready<Result<usize, Error>>>();
+        let mut work = Work::new(1, bytes * 2, 1);
+        for expected in [bytes, 0] {
+            let frame = admitted(&mut work, |_| ready(Ok(7usize)));
+            assert!(matches!(frame.now_or_never(), Some(Ok(7))));
+            assert_eq!(work.storage_left(), expected);
+        }
+        assert!(matches!(
+            admitted(&mut work, |_| ready(Ok(7usize))),
+            Either::Left(_)
+        ));
+        assert_eq!(work.storage_left(), 0);
     }
 
     #[test]

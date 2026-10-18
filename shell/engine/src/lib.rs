@@ -3,6 +3,7 @@
 mod arithmetic;
 mod ast_copy;
 mod builtins;
+mod exec;
 pub mod executor;
 mod expand;
 pub mod interpreter;

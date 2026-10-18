@@ -1,8 +1,8 @@
 //! Cooperative admission for synchronous parser-AST clones. Account for every
 //! owned allocation before the caller clones; never print or serialize the AST.
 use crate::{
+    exec::{Error, Work},
     executor::Cancel,
-    expand::{self, Work},
 };
 use shell_parser::parser::{
     ArithmeticForCommand, Assignment, AssignmentValue, CaseCommand, CaseItem, Command, CommandList,
@@ -22,7 +22,7 @@ pub(crate) async fn admit(
     commands: &[Command],
     cancel: &Cancel,
     work: &mut Work,
-) -> Result<(), expand::Error> {
+) -> Result<(), Error> {
     work.checkpoint(cancel).await?;
     let mut stack = Vec::new();
     push_vec(&mut stack, commands, Visit::Commands, work)?;
@@ -426,7 +426,7 @@ pub(crate) async fn command(
     command: &Command,
     cancel: &Cancel,
     work: &mut Work,
-) -> Result<(), expand::Error> {
+) -> Result<(), Error> {
     admit(std::slice::from_ref(command), cancel, work).await
 }
 
@@ -453,16 +453,12 @@ enum Visit<'a> {
     Text(&'a str),
 }
 
-fn admit_vec<T>(items: &[T], work: &mut Work) -> Result<(), expand::Error> {
+fn admit_vec<T>(items: &[T], work: &mut Work) -> Result<(), Error> {
     let bytes = items.len().checked_mul(size_of::<T>()).ok_or(2)?;
     work.admit_storage(bytes)
 }
 
-fn push<'a>(
-    stack: &mut Vec<Visit<'a>>,
-    visit: Visit<'a>,
-    work: &mut Work,
-) -> Result<(), expand::Error> {
+fn push<'a>(stack: &mut Vec<Visit<'a>>, visit: Visit<'a>, work: &mut Work) -> Result<(), Error> {
     if stack.len() == stack.capacity() {
         let capacity = stack.capacity().checked_mul(2).ok_or(2)?.max(1);
         let bytes = (capacity - stack.capacity())
@@ -471,7 +467,7 @@ fn push<'a>(
         work.admit_storage(bytes)?;
         stack
             .try_reserve_exact(capacity - stack.len())
-            .map_err(|_| expand::Error::Status(2))?;
+            .map_err(|_| Error::Status(2))?;
     }
     stack.push(visit);
     Ok(())
@@ -482,7 +478,7 @@ fn push_nonempty<'a, T>(
     items: &'a [T],
     visit: fn(&'a [T]) -> Visit<'a>,
     work: &mut Work,
-) -> Result<(), expand::Error> {
+) -> Result<(), Error> {
     if !items.is_empty() {
         push(stack, visit(items), work)?;
     }
@@ -494,7 +490,7 @@ fn push_vec<'a, T>(
     items: &'a [T],
     visit: fn(&'a [T]) -> Visit<'a>,
     work: &mut Work,
-) -> Result<(), expand::Error> {
+) -> Result<(), Error> {
     admit_vec(items, work)?;
     push_nonempty(stack, items, visit, work)
 }
@@ -505,7 +501,7 @@ fn visit_slice<'a, T>(
     rest: fn(&'a [T]) -> Visit<'a>,
     item: fn(&'a T) -> Visit<'a>,
     work: &mut Work,
-) -> Result<(), expand::Error> {
+) -> Result<(), Error> {
     if let Some((first, tail)) = items.split_first() {
         push_nonempty(stack, tail, rest, work)?;
         push(stack, item(first), work)?;
@@ -517,7 +513,7 @@ fn push_optional_text<'a>(
     stack: &mut Vec<Visit<'a>>,
     text: &'a Option<String>,
     work: &mut Work,
-) -> Result<(), expand::Error> {
+) -> Result<(), Error> {
     if let Some(text) = text {
         push(stack, Visit::Text(text), work)?;
     }
@@ -528,7 +524,7 @@ fn push_boxed_command<'a>(
     stack: &mut Vec<Visit<'a>>,
     command: &'a Command,
     work: &mut Work,
-) -> Result<(), expand::Error> {
+) -> Result<(), Error> {
     work.admit_storage(size_of::<Command>())?;
     push(stack, Visit::Command(command), work)
 }

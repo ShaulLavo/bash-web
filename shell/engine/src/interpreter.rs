@@ -20,7 +20,6 @@ mod command_builtin;
 mod conditional;
 mod control;
 pub(crate) mod eval;
-pub(crate) use eval::RetainedStorage;
 
 #[derive(Clone, Debug)]
 pub struct Limits {
@@ -76,12 +75,12 @@ pub(crate) struct Outcome {
 impl Outcome {
     pub(crate) fn status(code: i32) -> Self {
         Self {
-            code: if code == eval::RESOURCE_STATUS {
+            code: if code == crate::exec::RESOURCE_STATUS {
                 2
             } else {
                 code
             },
-            flow: if code == eval::RESOURCE_STATUS {
+            flow: if code == crate::exec::RESOURCE_STATUS {
                 Flow::Resource
             } else {
                 Flow::Normal
@@ -214,7 +213,7 @@ enum JobKind {
 }
 struct JobLabel {
     text: String,
-    _storage: eval::StorageAllocation,
+    _storage: crate::exec::StorageAllocation,
 }
 struct Job {
     label: Option<Rc<JobLabel>>,
@@ -225,7 +224,7 @@ struct Job {
     cancel: Cancel,
     signal: Rc<Cell<Option<i32>>>,
     join: JoinHandle<i32>,
-    _allocation: Option<eval::Allocation>,
+    _allocation: Option<crate::exec::Allocation>,
 }
 struct Residual {
     owner: Scope,
@@ -238,8 +237,8 @@ struct Core {
     host: Rc<dyn ProcessHost>,
     fs: Rc<dyn FileSystem>,
     limits: Limits,
-    eval_storage: eval::StorageBudget,
-    execution_storage: eval::StorageBudget,
+    eval_storage: crate::exec::StorageBudget,
+    execution_storage: crate::exec::StorageBudget,
     descriptors: Descriptors,
     jobs: RefCell<BTreeMap<JobId, Job>>,
     residuals: RefCell<BTreeMap<GroupId, Residual>>,
@@ -250,7 +249,7 @@ struct Core {
 #[derive(Clone)]
 pub(crate) struct Context {
     core: Rc<Core>,
-    source: eval::Source,
+    source: crate::exec::Source,
     pub cancel: Cancel,
     // The invoking foreground/background command, independent of nested scopes.
     lifetime: (Cancel, Rc<Cell<Option<i32>>>),
@@ -259,7 +258,7 @@ pub(crate) struct Context {
     scope: Scope,
     parameter_error_status: i32,
     compound_child: bool,
-    evaluation: eval::Scope,
+    evaluation: crate::exec::Scope,
     loop_depth: usize,
     ignore_errexit: bool,
 }
@@ -628,14 +627,14 @@ impl Session {
         fs: Rc<dyn FileSystem>,
         limits: Limits,
     ) -> Self {
-        let memory = eval::StorageBudget::new(limits.execution_bytes);
+        let memory = crate::exec::StorageBudget::new(limits.execution_bytes);
         let state = State::with_memory(memory.clone()).shared();
         Self {
             core: Rc::new(Core {
                 executor,
                 host,
                 fs,
-                eval_storage: eval::StorageBudget::new(limits.expansion_bytes),
+                eval_storage: crate::exec::StorageBudget::new(limits.expansion_bytes),
                 execution_storage: memory,
                 limits,
                 descriptors: Rc::new(RefCell::new(FdTable::default())),
@@ -693,8 +692,8 @@ impl Session {
         let host = self.core.host.clone();
         let cancel = Cancel::with_probe(Rc::new(move || host.interrupted()));
         let parser_cancel = cancel.clone();
-        let evaluation = eval::Scope::new(
-            &self.core.limits,
+        let evaluation = crate::exec::Scope::new(
+            self.core.limits.source_bytes,
             self.core.eval_storage.clone(),
             self.core.execution_storage.clone(),
         );
@@ -718,7 +717,7 @@ impl Session {
         let foreground_signal = signal.clone();
         let context = Context {
             core: self.core.clone(),
-            source: eval::Source::root(source),
+            source: crate::exec::Source::root(source),
             lifetime: (cancel.clone(), signal.clone()),
             cancel,
             signal,
@@ -1350,7 +1349,7 @@ async fn pipeline_command(
         return *results.last().unwrap();
     }
     if results.iter().any(|result| result.flow == Flow::Resource) {
-        return Outcome::status(eval::RESOURCE_STATUS);
+        return Outcome::status(crate::exec::RESOURCE_STATUS);
     }
     if pipeline.negated {
         code = i32::from(code == 0);
@@ -1639,7 +1638,7 @@ fn loop_sequence<'a>(
 
 struct CachedArithmetic<'a> {
     program: arithmetic::Program<'a>,
-    _storage: eval::StorageAllocation,
+    _storage: crate::exec::StorageAllocation,
 }
 
 async fn cache_loop_arithmetic<'a>(
@@ -2274,7 +2273,7 @@ async fn launch_background(
 fn admit_task_metadata<T>(
     context: &Context,
     count: usize,
-) -> Result<eval::Allocation, expand::Error> {
+) -> Result<crate::exec::Allocation, expand::Error> {
     let bytes = count
         .checked_mul(TASK_METADATA_BYTES + std::mem::size_of::<T>())
         .ok_or(2)?;
@@ -2284,7 +2283,7 @@ fn admit_task_metadata<T>(
         .map_err(Into::into)
 }
 
-fn admit_job(context: &Context) -> Result<eval::Allocation, expand::Error> {
+fn admit_job(context: &Context) -> Result<crate::exec::Allocation, expand::Error> {
     // One conservative B-tree node plus fixed task/queue/cancellation metadata.
     let bytes = std::mem::size_of::<(JobId, Job)>()
         .checked_add(std::mem::size_of::<usize>())
@@ -2357,7 +2356,7 @@ fn substitution_work(context: &Context, fds: &Descriptors) -> expand::Work {
 struct ProcessSubstitutionFds {
     fds: Descriptors,
     opened: Cell<u64>,
-    _allocation: eval::Allocation,
+    _allocation: crate::exec::Allocation,
 }
 impl Drop for ProcessSubstitutionFds {
     fn drop(&mut self) {
@@ -2732,7 +2731,7 @@ struct BuiltinPrefixFrame {
     state: SharedState,
     saved: BTreeMap<String, Option<String>>,
     restore_epoch_realtime: bool,
-    memory: Option<eval::StorageAllocation>,
+    memory: Option<crate::exec::StorageAllocation>,
 }
 impl BuiltinPrefixFrame {
     async fn enter(
@@ -2781,7 +2780,7 @@ impl BuiltinPrefixFrame {
                             .saturating_add(target.len().saturating_mul(2))
                             .saturating_add(value.len()),
                         )
-                        .map_err(|_| expand::Error::Status(eval::RESOURCE_STATUS))?;
+                        .map_err(|_| expand::Error::Status(crate::exec::RESOURCE_STATUS))?;
                 }
                 let previous = state_ref.variables.insert(target.clone(), value.clone());
                 frame.restore_epoch_realtime |= state_ref.suspend_epoch_realtime(&target);
@@ -3692,13 +3691,13 @@ mod scope_tests {
             Limits::default(),
         );
         let context = Context {
-            evaluation: eval::Scope::new(
-                &session.core.limits,
+            evaluation: crate::exec::Scope::new(
+                session.core.limits.source_bytes,
                 session.core.eval_storage.clone(),
                 session.core.execution_storage.clone(),
             ),
             core: session.core.clone(),
-            source: eval::Source::root(""),
+            source: crate::exec::Source::root(""),
             lifetime: (Cancel::new(), Rc::new(Cell::new(None))),
             cancel: Cancel::new(),
             signal: Rc::new(Cell::new(None)),
@@ -4106,13 +4105,13 @@ mod residual_review_tests {
             let cancel = Cancel::new();
             let signal = Rc::new(Cell::new(None));
             Context {
-                evaluation: eval::Scope::new(
-                    &core.limits,
+                evaluation: crate::exec::Scope::new(
+                    core.limits.source_bytes,
                     core.eval_storage.clone(),
                     core.execution_storage.clone(),
                 ),
                 core,
-                source: eval::Source::root(""),
+                source: crate::exec::Source::root(""),
                 lifetime: (cancel.clone(), signal.clone()),
                 cancel,
                 signal,
@@ -4900,7 +4899,7 @@ mod function_measurements {
                 let source = format!(
                     "n=0; seen=0; unwound=0; leaf=0; f() {{ local d=$1; {increment}; seen=$((seen+1)); case $n in {goal}) leaf=$n;; *) f child;; esac; unwound=$((unwound+1)); }}; f root"
                 );
-                eval::reset_stack_observation();
+                crate::executor::observation::reset_stack_observation();
                 let job = session.start(&source).unwrap();
                 for _ in 0..100_000 {
                     ex.drive(64);
@@ -4916,7 +4915,7 @@ mod function_measurements {
                 }
                 assert!(!state.variables.contains_key("d"));
                 assert!(state.positional.is_empty());
-                let sample = eval::stack_observation();
+                let sample = crate::executor::observation::stack_observation();
                 let (live, peak) = session.core.execution_storage.observation();
                 assert_eq!(live, 0, "all call/frame payload tickets refunded");
                 assert_eq!(sample.calls, goal);
@@ -4927,7 +4926,8 @@ mod function_measurements {
                     sample.poll_bytes,
                     sample.drop_bytes
                 );
-                let baseline: eval::StackObservation = *first.get_or_insert(sample);
+                let baseline: crate::executor::observation::StackObservation =
+                    *first.get_or_insert(sample);
                 assert!(
                     sample.poll_bytes <= baseline.poll_bytes + 16 * 1024,
                     "polling must not grow per function call"
