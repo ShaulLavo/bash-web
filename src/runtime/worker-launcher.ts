@@ -115,6 +115,9 @@ export function launchTerminalWorker<T extends RuntimeWorkerRequest>(
       revoke,
       quiesce,
       stop,
+      // The waiting shell owns the errno diagnostic and its redirected fd2 lifetime.
+      // Suppress only Waffle's generic startup message, not guest I/O or execution errors.
+      startFailed() {},
       retired: cleanup,
     });
     accepted = true;

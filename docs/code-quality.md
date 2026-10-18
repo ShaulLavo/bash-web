@@ -73,6 +73,17 @@ snapshot. The repeated guest-registration loop is shared instead of baselined.
 [The fingerprint delta](evidence/quality-integration.json) records this
 reconciliation. No-new-clones and empty-scan failures stay unchanged.
 
+The startup-readiness integration keeps the exact inventory at 356 clones and the
+structural inventory at 15. Repeated retained-child checks in the fake runtime are
+shared, not accepted into the baseline. Three changed exact identities are deliberate
+exceptions: required trait forwarding in independent test hosts (two) and ABI
+declarations in the engine and standalone acceptance guest (one). Sharing the latter
+would make the acceptance guest depend on the implementation it verifies; combining
+the former would require an unrelated test-host abstraction. The `startupIntegration`
+section of the fingerprint evidence records every added and removed identity,
+multiplicity, source pair, and reason for independent review. Gate thresholds,
+exclusions, and negative controls are unchanged.
+
 To review a deliberate baseline change:
 
 ```sh

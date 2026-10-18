@@ -152,6 +152,41 @@ they are removed, and they remain mandatory before step 6 replaces Brush:
   completion-before-registration, completion/cancel ownership and invalid output
   memory are separate pending cases. These TODOs are not execution evidence.
 
+**Approved startup-diagnostic follow-up (2026-10-18).** A shell child whose lazy
+executable loader rejects before adapter entry still receives Waffle's generic
+startup message before the shell's errno diagnostic. This already occurs on main;
+the child-start stderr change fixes adapter-entry failures without regressing this
+remaining path. The independent review explicitly cleared that change to land.
+
+- Waffle owns the fix: a typed `START_FAILED` delivered to a `runtime_proc` parent
+  must be the only report, with zero Waffle bytes on the child's stdio at every
+  startup stage, including executable resolution and lazy loading. Root-process
+  reporting stays unchanged, and the full error remains in host diagnostics.
+  The upstream lane is `fix/start-failure-quiet`; use its merged API, not a local
+  patch, admission-observer side effect or root-only interception.
+- Pin the exact merged Waffle dependency in bash-web and update its locks and
+  provenance together. The current affected pin is 0.0.47 at
+  `afe9cc1f3f93ea84929903e5a55854dbfd973448`; do not claim the upstream fix has
+  landed merely because adapter-entry errors are quiet.
+- Add the reviewer's real-broker lazy-loader regression beside the controls in
+  `src/runtime/shell-host.test.ts`, and retain strict browser pipe/file/closed-fd2
+  captures in `tests/pipelines.acceptance.spec.ts`. Admit executable metadata,
+  then make the lazy module loader throw
+  `WebAssembly.CompileError("review loader failure")` before the adapter runs.
+  The current reproduction observes zero adapter launches, Preview1 start status
+  45, typed `start-failed` / `ENOEXEC` / host errno 8, and the unwanted bytes
+  `runtime: process start failed: Error: review loader failure\n`. The fixed
+  child path must preserve the typed result and cleanup while emitting no generic
+  bytes; the shell emits exactly its one redirected command diagnostic. Keep a
+  root-process reporting control. Run `bun test src/runtime/shell-host.test.ts`
+  and the normal Chromium/Firefox gate; do not weaken captures to accept stacks.
+- The new pin will also include Waffle 0.0.48, whose merged pipe
+  `fd_filestat_get` support replaces errno 76 for `runtime_proc` pipe endpoints
+  (Waffle PR 34, merge `7d095e5`). Inspect shell `test -p`, `[ -p /dev/stdin ]`
+  and inherited-pipe detection coverage; add a missing real-pipe regression.
+  Preserve startup-only stderr ownership, foreground/background EOF acknowledgments,
+  real exits 126/127, cancellation and worker/descriptor cleanup throughout.
+
 **Approved job-lifetime transition (2026-10-17).** The current runtime seals a
 job when its pending membership reaches zero, before it is reaped. A shell job
 can launch another command later in a loop or after a pipeline; joining that

@@ -191,3 +191,61 @@ test("slow downstream applies bounded backpressure", async ({ page }) => {
   await ready(page);
   await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
 });
+
+for (const mode of ["foreground", "background"]) {
+  test(`successful startup releases stderr before ${mode} job EOF handshake`, async ({ page }) => {
+    await open(page);
+    await command(page, `test-guest eof-handshake ${mode}`);
+    await output(page, "EOF_PAYLOAD");
+    await output(page, "DOWNSTREAM_EOF_ACK");
+    await output(page, mode === "foreground" ? "EOF_JOB:0:0 0" : "EOF_JOB:0");
+    await ready(page);
+    await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  });
+}
+
+for (const [name, code, diagnostic] of [
+  ["nosuch", 127, "/usr/bin/bash: nosuch: command not found"],
+  ["test-start-failure", 126, "/usr/bin/bash: test-start-failure: Exec format error"],
+] as const) {
+  test(`failed startup delivers redirected diagnostic before pipe EOF, ${name}`, async ({
+    page,
+  }) => {
+    await open(page);
+    await command(
+      page,
+      name +
+        ' 2>&1 | test-guest cat >start-pipe; printf \'START_STATUS:%s:%s\\n\' "$?" "${PIPESTATUS[*]}"; printf \'PIPE_DIAGNOSTIC:<%s>\\n\' "$(cat start-pipe)"',
+    );
+    // Require the complete redirected diagnostic: runtime details or a stack are extra bytes.
+    await output(page, `PIPE_DIAGNOSTIC:<${diagnostic}>`);
+    await output(page, `START_STATUS:0:${code} 0`);
+    await ready(page);
+    await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  });
+}
+
+test("asynchronous start failure honors redirected and explicitly closed stderr", async ({
+  page,
+}) => {
+  await open(page);
+  await command(
+    page,
+    "test-start-failure 2>start-error; echo FILE_STATUS:$?; printf 'FILE_DIAGNOSTIC:<%s>\\n' \"$(cat start-error)\"; test-start-failure 2>&-; echo CLOSED_STATUS:$?; test-guest emit '' 1 126; echo EXIT_STATUS:$?; test-guest emit '' 1 127; echo REAL127:$?",
+  );
+  await output(page, "FILE_STATUS:126");
+  await output(page, "FILE_DIAGNOSTIC:</usr/bin/bash: test-start-failure: Exec format error>");
+  await output(page, "CLOSED_STATUS:126");
+  await output(page, "EXIT_STATUS:126");
+  await output(page, "REAL127:127");
+  await ready(page);
+  const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
+  expect(
+    lines?.filter(
+      (line) =>
+        line.includes("/usr/bin/bash: test-start-failure: Exec format error") &&
+        !line.includes("test-start-failure 2>"),
+    ),
+  ).toHaveLength(1);
+  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+});

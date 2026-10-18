@@ -63,6 +63,12 @@ impl ProcessHost for ParseInterruptHost {
     fn spawn(&self, request: SpawnRequest) -> Result<ProcessId, ProcessError> {
         self.inner.spawn(request)
     }
+    fn wait_start(
+        &self,
+        pid: ProcessId,
+    ) -> futures::future::LocalBoxFuture<'static, Result<(), ProcessError>> {
+        self.inner.wait_start(pid)
+    }
     fn wait(
         &self,
         pid: ProcessId,

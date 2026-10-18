@@ -21,7 +21,14 @@ test("browser entry uses one required immutable Waffle peer and matching develop
   assert.notEqual(pkg.peerDependenciesMeta?.waffle?.optional, true);
   assert.equal(lock.packages[""].peerDependencies.waffle, peer);
   assert.equal(lock.packages[""].devDependencies.waffle, peer);
-  assert.equal(lock.packages["node_modules/waffle"].resolved, peer);
+  // npm records the same immutable Git identity using its canonical SSH transport.
+  // Preserve that honest lockfile instead of forcing its text to match Bun's pin.
+  const resolved = lock.packages["node_modules/waffle"].resolved;
+  assert.match(
+    resolved,
+    /^git\+(?:https:\/\/github\.com\/|ssh:\/\/git@github\.com\/)ShaulLavo\/waffle\.git#[0-9a-f]{40}$/,
+  );
+  assert.equal(resolved.split("#")[1], sources.waffle.revision);
   assert.equal(lock.packages["node_modules/waffle"].version, sources.waffle.version);
   assert.ok(pkg.trustedDependencies.includes("waffle"));
   assert.ok(bunLock.includes(peer));
