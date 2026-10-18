@@ -101,12 +101,19 @@ async function migrate() {
         "shell/Cargo.toml",
         "-p",
         "shell-engine",
+        "--bin",
+        "shell-engine",
         "-j2",
       ],
       checkout,
       { ...wasiCargoEnvironment(root, targetDir, env), CARGO_INCREMENTAL: "0" },
     );
     const wasm = resolve(targetDir, "wasm32-wasip1/release/shell-engine.wasm");
+    await run(
+      process.execPath,
+      [fileURLToPath(new URL("./verify-wasi-guests.ts", import.meta.url)), wasm],
+      root,
+    );
     const binaryHash = bytesDigest(await readFile(wasm));
     const score = async (label) => {
       const output = resolve(scratch, `${label}.json`);

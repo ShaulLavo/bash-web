@@ -27,7 +27,18 @@ if (existsSync(target)) throw Error('reused build artifacts');
 if (process.env.RUSTC_WRAPPER || process.env.RUSTFLAGS) throw Error('compiler environment leaked');
 const source = readFileSync('shell/source.json');
 mkdirSync(resolve(target, 'wasm32-wasip1/release'), { recursive: true });
-writeFileSync(resolve(target, 'wasm32-wasip1/release/shell-engine.wasm'), source);
+const integer = (value) => {
+  const bytes = [];
+  do { const part = value & 127; value >>>= 7; bytes.push(part | (value ? 128 : 0)); } while (value);
+  return bytes;
+};
+// Genuine minimal Wasm keeps verification real while the compiler is a stand-in.
+const memory = [1, 1, 1].concat(integer(JSON.parse(source).invalidArtifact ? 65536 : 4096));
+const payload = Buffer.concat([Buffer.from([7]), Buffer.from('fixture'), source]);
+writeFileSync(resolve(target, 'wasm32-wasip1/release/shell-engine.wasm'), Buffer.concat([
+  Buffer.from([0, 97, 115, 109, 1, 0, 0, 0, 5].concat(integer(memory.length), memory)),
+  Buffer.from([0].concat(integer(payload.length))), payload,
+]));
 if (JSON.parse(source).buildFail) throw Error('fake build failure');
 if (JSON.parse(source).hang) {
   const marker = resolve(target, '../started');
@@ -50,7 +61,9 @@ assert.equal(process.env.BASH_COMPAT_BASE_REF, undefined, 'recursive base valida
 assert.equal(process.env.BASH_COMPAT_SKIP_BUILD, '1');
 const oracle = JSON.parse(readFileSync('${oraclePath}'));
 assert.equal(process.env.BASH_COMPAT_TIMEOUT_MS, String(oracle.environment.timeoutMs));
-const actual = JSON.parse(readFileSync(process.env.BASH_COMPAT_SHELL_WASM));
+const module = new WebAssembly.Module(readFileSync(process.env.BASH_COMPAT_SHELL_WASM));
+const actual = JSON.parse(Buffer.from(WebAssembly.Module.customSections(module, 'fixture')[0]));
+if (actual.invalidArtifact) writeFileSync(process.env.WASI_SDK_PATH + '/../scorer-ran', 'unexpected scoring');
 if (actual.scoreFail && oracle.oracle.capture === 'corrected') throw Error('fake scorer failure');
 writeFileSync(process.env.BASH_COMPAT_OUT, JSON.stringify({
   identity: oracle.identity,
@@ -175,6 +188,7 @@ async function fixture(
     hang = false,
     descendant = false,
     buildFail = false,
+    invalidArtifact = false,
     scoreFail = false,
     entrypoint = false,
   } = {},
@@ -223,7 +237,7 @@ async function fixture(
     );
     put(
       "shell/source.json",
-      JSON.stringify({ stdout: "YQ==", hang, descendant, buildFail, scoreFail }),
+      JSON.stringify({ stdout: "YQ==", hang, descendant, buildFail, invalidArtifact, scoreFail }),
     );
     put("scripts/bash-compat.mjs", scorerFixture);
     git(["init", "-q"]);
@@ -343,6 +357,23 @@ test("migration rejects incorrect immutable baseline membership", async () => {
       await assert.rejects(targetBranchBaseline(repo, ref, next), /stale candidate baseline/);
     },
     { wrongBaseline: true },
+  );
+});
+
+test("migration rejects a freshly built artifact with the wrong memory cap before scoring", async () => {
+  await fixture(
+    async ({ repo, ref }) => {
+      await assert.rejects(
+        targetBranchBaseline(repo, ref, JSON.parse(readFileSync(resolve(repo, oraclePath)))),
+        /failed \(1\)/,
+      );
+      assert.equal(
+        existsSync(resolve(repo, "scorer-ran")),
+        false,
+        "scorer ran before artifact validation",
+      );
+    },
+    { invalidArtifact: true },
   );
 });
 
