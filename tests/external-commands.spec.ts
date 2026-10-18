@@ -153,10 +153,6 @@ test("external terminal stdin receives a raw input line", async ({ page }) => {
 });
 
 test("unregistered files fail with 126 and leave the command host usable", async ({ page }) => {
-  test.fixme(
-    true,
-    "Pending Waffle #10 live-file admission plus plan 004 PATH-search unit: unregistered PATH files must map to 126.",
-  );
   await open(page);
   await command(
     page,
@@ -164,6 +160,108 @@ test("unregistered files fail with 126 and leave the command host usable", async
   );
   await output(page, "UNREGISTERED:126");
   await output(page, "AFTER_ERROR_OK");
+  await ready(page);
+  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+});
+
+test("PATH skips non-runnable candidates and resolves cwd components", async ({ page }) => {
+  await open(page);
+  await command(page, "printf unregistered > /home/guest/test-guest; mkdir /tmp/test-guest");
+  await ready(page);
+  for (const [label, cwd, path] of [
+    ["SKIPPED", "/home/guest", "/missing:/home/guest:/tmp:/bin"],
+    ["RELATIVE", "/programs", "../bin"],
+    ["LEADING_EMPTY", "/bin", ":/missing"],
+    ["TRAILING_EMPTY", "/bin", "/missing:"],
+    ["EMPTY", "/bin", ""],
+  ]) {
+    await command(
+      page,
+      `cd ${cwd}; export PATH='${path}'; test-guest emit $'PATH_${label}\\n'; echo PATH_STATUS_${label}:$?`,
+    );
+    await output(page, `PATH_${label}`);
+    await output(page, `PATH_STATUS_${label}:0`);
+    await ready(page);
+    await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  }
+});
+
+test("command queries share live PATH lookup without launching a guest", async ({ page }) => {
+  await open(page);
+  let queryWorkers = 0;
+  const countQueryWorker = () => queryWorkers++;
+  page.on("worker", countQueryWorker);
+  await command(
+    page,
+    "printf unregistered > /home/guest/test-guest; mkdir /tmp/test-guest; export PATH=/missing:/home/guest:/tmp:/bin; command -v test-guest; echo QUERY:$?; command -V test-guest; echo VERBOSE:$?",
+  );
+  await output(page, "/bin/test-guest");
+  await output(page, "test-guest is /bin/test-guest");
+  await output(page, "QUERY:0");
+  await output(page, "VERBOSE:0");
+  await ready(page);
+  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  await command(
+    page,
+    "cd /programs; export PATH=../bin; command -v test-guest; command -V test-guest; export PATH=/missing; command -v test-guest; echo MISSING_QUERY:$?; command -V test-guest; echo MISSING_VERBOSE:$?",
+  );
+  await output(page, "../bin/test-guest");
+  await output(page, "test-guest is /programs/../bin/test-guest");
+  await output(page, "MISSING_QUERY:1");
+  await output(page, "MISSING_VERBOSE:1");
+  await ready(page);
+  expect(queryWorkers).toBe(0);
+  page.off("worker", countQueryWorker);
+  await command(
+    page,
+    "/bin/test-guest unlink /bin/test-guest; export PATH=/bin; command -v test-guest; echo DELETED_QUERY:$?; command -V test-guest; echo DELETED_VERBOSE:$?",
+  );
+  await output(page, "DELETED_QUERY:1");
+  await output(page, "DELETED_VERBOSE:1");
+  await ready(page);
+  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+});
+
+test("PATH preserves denied versus missing status without executing rejected files", async ({
+  page,
+}) => {
+  await open(page);
+  await command(page, "printf unregistered > /home/guest/test-guest; mkdir /tmp/test-guest");
+  await ready(page);
+  for (const [label, path, status] of [
+    ["FILE", "/home/guest:/missing", 126],
+    // Bash ignores directories while searching PATH; an explicit directory is 126 below.
+    ["DIRECTORY", "/tmp:/missing", 127],
+    ["MISSING", "/missing", 127],
+  ]) {
+    await command(
+      page,
+      `export PATH='${path}'; test-guest emit $'REJECTED_RAN\\n'; echo PATH_${label}:$?`,
+    );
+    await output(page, `PATH_${label}:${status}`);
+    await ready(page);
+    await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  }
+  expect(
+    await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())),
+  ).not.toContain("REJECTED_RAN");
+  await command(page, "export PATH=/bin; test-guest emit $'PATH_RECOVERED\\n'");
+  await output(page, "PATH_RECOVERED");
+  await ready(page);
+  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+});
+
+test("an executable file cannot be traversed as a directory", async ({ page }) => {
+  await open(page);
+  await command(
+    page,
+    "/bin/test-guest/../test-guest emit $'NOTDIR_RAN\\n'; echo NOTDIR:$?; /bin/test-guest/ emit $'TRAILING_RAN\\n'; echo TRAILING:$?",
+  );
+  await output(page, "NOTDIR:126");
+  await output(page, "TRAILING:126");
+  const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
+  expect(lines).not.toContain("NOTDIR_RAN");
+  expect(lines).not.toContain("TRAILING_RAN");
   await ready(page);
   await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
 });
@@ -207,12 +305,9 @@ test("child stdio preserves pipe rather than terminal device types", async ({ pa
 for (const [label, setup, executable] of [
   ["relative", "cd /bin", "./test-guest"],
   ["dot segments", "cd /home/guest", "/bin/../bin/./test-guest"],
+  ["root parent", "cd /home/guest", "/../../bin/test-guest"],
 ]) {
   test(`external executable lookup resolves ${label}`, async ({ page }) => {
-    test.fixme(
-      true,
-      "Pending Waffle #10 path admission plus plan 004 PATH-search unit: relative executable paths must resolve against cwd.",
-    );
     await open(page);
     await command(page, `${setup}; ${executable} emit $'RESOLVED_OK\\n'; echo LOOKUP:$?`);
     await output(page, "RESOLVED_OK");
@@ -223,13 +318,10 @@ for (const [label, setup, executable] of [
 
 for (const [label, setup, executable] of [
   ["missing relative", "cd /bin", "./missing"],
+  ["missing intermediate before parent", "cd /bin", "/missing/../bin/test-guest"],
   ["deleted registered", "test-guest unlink /bin/test-guest", "/bin/test-guest"],
 ]) {
   test(`external executable lookup rejects ${label} files`, async ({ page }) => {
-    test.fixme(
-      true,
-      "Pending Waffle #10 live-file admission plus plan 004 PATH-search unit: missing and deleted files must fail without execution.",
-    );
     await open(page);
     await command(page, `${setup}; ${executable} emit $'DELETED_RAN\\n'; echo MISSING:$?`);
     await output(page, "MISSING:127");
@@ -272,10 +364,6 @@ test("normal child exit hands raw terminal input back before the next child", as
 });
 
 test("registered executable paths must still name regular files", async ({ page }) => {
-  test.fixme(
-    true,
-    "Pending Waffle #10 live-file admission: a registered directory must fail with 126 without execution.",
-  );
   await open(page);
   await command(
     page,

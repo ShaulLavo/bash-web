@@ -27,6 +27,8 @@ pub struct Limits {
     pub source_bytes: usize,
     /// Command name + arguments + assignment names, '=' and values, in bytes.
     pub expansion_bytes: usize,
+    /// Live PATH/cwd/candidate/request storage, separate from command-word bytes.
+    pub path_bytes: usize,
     /// All words, including command name and assignments (no empty AST placeholder).
     pub arguments: usize,
     pub pipeline_stages: usize,
@@ -43,6 +45,7 @@ impl Default for Limits {
         Self {
             source_bytes: 256 * 1024,
             expansion_bytes: 1024 * 1024,
+            path_bytes: 1024 * 1024,
             // Bash has no builtin argument count limit; expansion_bytes
             // bounds memory. `{0..10000}` alone needs 10,001 arguments.
             arguments: 65_536,
@@ -3242,17 +3245,45 @@ async fn dispatch_simple_command_body(
         }
         return Ok(Outcome::status(126));
     }
-    if default_path && !name.contains('/') {
-        let _frame = BuiltinPrefixFrame::enter(state.clone(), &assigned, &context, &mut work)
-            .await
-            .map_err(admission_status)?;
-        let Some(path) =
-            command_builtin::executable(&name, &state, true, &context, &mut work).await?
-        else {
-            return Ok(Outcome::status(127));
-        };
-        name = path;
-    }
+    let (executable, _executable_storage) = {
+        let mut lookup = command_builtin::LookupWork::new(context.limits());
+        // External prefix values already form the request environment. Lookup
+        // reads its last PATH binding directly; installing a builtin frame here
+        // would mutate shell state and double-charge exact argv boundaries.
+        let path_override = assigned
+            .iter()
+            .rev()
+            .find_map(|(key, value)| (key == "PATH").then_some(value.as_str()));
+        match command_builtin::executable(
+            &name,
+            &state,
+            default_path,
+            path_override,
+            &context,
+            &mut lookup,
+        )
+        .await?
+        {
+            command_builtin::Resolution::Executable(path) => {
+                // Keep the original path walk intact for the host. Lexically
+                // removing file/../ before spawn could bypass ENOTDIR checks.
+                path.into_parts()
+            }
+            command_builtin::Resolution::NonExecutable(path, reason) => {
+                command_builtin::execution_failure(&fds, &context, &path.text, reason).await?;
+                return Ok(Outcome::status(126));
+            }
+            command_builtin::Resolution::Missing => {
+                let reason = if name.contains('/') {
+                    b"No such file or directory".as_slice()
+                } else {
+                    b"command not found".as_slice()
+                };
+                command_builtin::execution_failure(&fds, &context, &name, reason).await?;
+                return Ok(Outcome::status(127));
+            }
+        }
+    };
     let (mut env, cwd) = {
         let s = state.borrow();
         (s.environment(), s.cwd.clone())
@@ -3262,6 +3293,7 @@ async fn dispatch_simple_command_body(
     let mut argv = vec![name];
     argv.extend(args);
     let pid = context.core.host.spawn(SpawnRequest {
+        executable,
         argv,
         env,
         cwd,
@@ -3291,7 +3323,9 @@ async fn dispatch_simple_command_body(
             )
             .await;
         }
-        Err(_) => return Err(127),
+        Err(ProcessError::UnknownCommand(_) | ProcessError::Runtime(44)) => return Err(127),
+        Err(ProcessError::Runtime(_)) => return Err(126),
+        Err(_) => return Err(2),
     };
     // The child owns its inherited descriptors. Shell-side stage copies must
     // not keep a closed child reader/writer alive while waiting for its exit.
@@ -3507,7 +3541,14 @@ async fn assignments(
             return Err(2.into());
         }
         if !commit {
-            assigned.push((name, value.to_owned()));
+            // PrefixFrame applied the assignment through its nameref. Preserve
+            // that effective binding in the temporary environment, not the
+            // source alias (which may itself be named PATH).
+            let target = state.scalar_target(&name)?.ok_or(2)?;
+            if target != name {
+                work.admit_storage(target.len())?;
+            }
+            assigned.push((state.assignment_name(name)?, value.to_owned()));
         }
     }
     if commit {
@@ -4043,6 +4084,13 @@ mod residual_review_tests {
         fn interrupted(&self) -> bool {
             self.interrupt.replace(false)
         }
+        fn access(
+            &self,
+            path: String,
+            cwd: String,
+        ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+            self.inner.access(path, cwd)
+        }
         fn spawn(&self, request: SpawnRequest) -> Result<ProcessId, ProcessError> {
             let group = request.group;
             let direct = request.parent.is_none();
@@ -4124,7 +4172,7 @@ mod residual_review_tests {
                 release_on_signals: RefCell::new(None),
             });
             let release = host.release.clone();
-            host.inner.register("sleep", move |request, _| {
+            host.inner.register("/home/guest/sleep", move |request, _| {
                 let release = release.clone();
                 async move {
                     release.cancelled().await;
@@ -4134,16 +4182,18 @@ mod residual_review_tests {
                 .boxed_local()
             });
             let weak = Rc::downgrade(&host);
-            host.inner.register("inherit", move |mut request, _| {
-                let host = weak.upgrade().unwrap();
-                async move {
-                    request.parent = Some(host.direct.borrow()[&request.group]);
-                    request.argv = vec!["sleep".into()];
-                    host.spawn(request).unwrap();
-                    0
-                }
-                .boxed_local()
-            });
+            host.inner
+                .register("/home/guest/inherit", move |mut request, _| {
+                    let host = weak.upgrade().unwrap();
+                    async move {
+                        request.parent = Some(host.direct.borrow()[&request.group]);
+                        request.executable = "/home/guest/sleep".into();
+                        request.argv = vec!["sleep".into()];
+                        host.spawn(request).unwrap();
+                        0
+                    }
+                    .boxed_local()
+                });
             let session = Session::new(
                 executor.clone(),
                 host.clone(),
@@ -4574,6 +4624,7 @@ mod residual_review_tests {
         let context = rig.context();
         rig.host
             .spawn(SpawnRequest {
+                executable: "/home/guest/inherit".into(),
                 argv: vec!["inherit".into()],
                 env: BTreeMap::new(),
                 cwd: "/".into(),
@@ -4631,7 +4682,7 @@ mod function_measurements {
         let host = crate::process::InProcessHost::new(ex.clone());
         let release = Cancel::new();
         let gate = release.clone();
-        host.register("park", move |_, cancel| {
+        host.register("/home/guest/park", move |_, cancel| {
             let gate = gate.clone();
             async move {
                 if cancel.run(gate.cancelled()).await.is_ok() {
@@ -4848,7 +4899,7 @@ mod function_measurements {
             let budget = session.core.execution_storage.clone();
             let pressure = Rc::new(RefCell::new(None));
             let retained = pressure.clone();
-            host.register("consume", move |_, _| {
+            host.register("/home/guest/consume", move |_, _| {
                 // Other live work takes the free pool after both stages have
                 // launched, forcing the simple set stage's admission to fail.
                 let remaining = limit - budget.observation().0;
@@ -4921,7 +4972,7 @@ mod function_measurements {
             let pressure = Rc::new(RefCell::new(None));
             let retained = pressure.clone();
             let budget = session.core.execution_storage.clone();
-            host.register("consume", move |_, _| {
+            host.register("/home/guest/consume", move |_, _| {
                 let remaining = limit - budget.observation().0;
                 *retained.borrow_mut() = Some(budget.admit(remaining - 32 * 1024).unwrap());
                 async { 0 }.boxed_local()

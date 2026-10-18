@@ -7,18 +7,19 @@ type Environments = Rc<RefCell<Vec<Vec<Option<String>>>>>;
 fn observe_environments(rig: &Rig) -> Environments {
     let environments = Rc::new(RefCell::new(Vec::new()));
     let observed = environments.clone();
-    rig.host.register("observe_env", move |request, _| {
-        let observed = observed.clone();
-        async move {
-            let values = request.argv[1..]
-                .iter()
-                .map(|key| request.env.get(key).cloned())
-                .collect();
-            observed.borrow_mut().push(values);
-            0
-        }
-        .boxed_local()
-    });
+    rig.host
+        .register("/home/guest/observe_env", move |request, _| {
+            let observed = observed.clone();
+            async move {
+                let values = request.argv[1..]
+                    .iter()
+                    .map(|key| request.env.get(key).cloned())
+                    .collect();
+                observed.borrow_mut().push(values);
+                0
+            }
+            .boxed_local()
+        });
     environments
 }
 

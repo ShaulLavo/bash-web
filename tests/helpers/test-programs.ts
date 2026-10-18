@@ -38,27 +38,31 @@ export async function registerTestPrograms(
   markStartup(onStartupStage, "test-programs-mkdir-requested");
   await runtime.filesystem.mkdirp("/programs");
   markStartup(onStartupStage, "test-programs-mkdir-resolved");
+  // Filesystem visibility belongs to this caller, not registration. Bare commands
+  // reach /bin through the shell's PATH search, never a registry-only name alias.
   for (const name of ["/bin/test-guest", "/programs/test-guest.wasm"]) {
+    signal?.throwIfAborted();
+    const stage = name.startsWith("/bin/") ? "test-guest-bin-write" : "test-guest-program-write";
+    markStartup(onStartupStage, `${stage}-requested`);
+    await runtime.filesystem.writeFile(name, new Uint8Array());
+    markStartup(onStartupStage, `${stage}-resolved`);
     signal?.throwIfAborted();
     runtime.registerProgram(name, {
       adapter: "bash-web:preview1",
       module: guest,
       cooperative: true,
     });
-    const stage = name.startsWith("/bin/") ? "test-guest-bin-write" : "test-guest-program-write";
-    markStartup(onStartupStage, `${stage}-requested`);
-    await runtime.filesystem.writeFile(name, new Uint8Array());
-    markStartup(onStartupStage, `${stage}-resolved`);
   }
   // The separate spin guest intentionally has no cooperative/runtime_proc imports.
   // Waffle admits and instruments its source bytes; no hand-built interrupt shim is used.
   for (const name of ["/bin/test-spin", "/programs/test-spin.wasm"]) {
     signal?.throwIfAborted();
-    runtime.registerProgram(name, { adapter: "bash-web:preview1", source: spinBytes });
     const stage = name.startsWith("/bin/") ? "test-spin-bin-write" : "test-spin-program-write";
     markStartup(onStartupStage, `${stage}-requested`);
     await runtime.filesystem.writeFile(name, new Uint8Array());
     markStartup(onStartupStage, `${stage}-resolved`);
+    signal?.throwIfAborted();
+    runtime.registerProgram(name, { adapter: "bash-web:preview1", source: spinBytes });
   }
   signal?.throwIfAborted();
   markStartup(onStartupStage, "test-filesystem-drain-requested");
