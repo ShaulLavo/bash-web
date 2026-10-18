@@ -54,33 +54,6 @@ pub(super) async fn options(
     Ok(options)
 }
 
-fn keyword(name: &str) -> bool {
-    matches!(
-        name,
-        "if" | "then"
-            | "else"
-            | "elif"
-            | "fi"
-            | "case"
-            | "esac"
-            | "for"
-            | "select"
-            | "while"
-            | "until"
-            | "do"
-            | "done"
-            | "in"
-            | "function"
-            | "time"
-            | "{"
-            | "}"
-            | "!"
-            | "[["
-            | "]]"
-            | "coproc"
-    )
-}
-
 pub(super) async fn diagnostic(
     fds: &Descriptors,
     context: &Context,
@@ -347,7 +320,8 @@ pub(super) async fn query(
                 .map_err(admission_status)?;
         }
         let function = state.borrow().functions().get(name).cloned();
-        if keyword(name) {
+        let command = commands::lookup(name);
+        if command.is_some_and(commands::Command::query_keyword) {
             output(fds, context, name.as_bytes()).await?;
             output(
                 fds,
@@ -406,10 +380,7 @@ pub(super) async fn query(
                 output(fds, context, rendered.as_bytes()).await?;
                 output(fds, context, b"\n").await?;
             }
-        } else if (builtins::is_builtin(name)
-            && !matches!(name.as_str(), "cat" | "grep" | "mkdir" | "seq"))
-            || matches!(name.as_str(), "exec" | "eval" | "let")
-        {
+        } else if command.is_some_and(commands::Command::query_builtin) {
             output(fds, context, name.as_bytes()).await?;
             output(
                 fds,

@@ -5,6 +5,7 @@ mod grep;
 mod printf;
 pub(crate) mod test;
 use crate::{
+    commands::{self, Builtin, Declaration},
     executor::Budget,
     expand::{Error, Work},
     interpreter::{Context, Flow, JobSelector, Outcome},
@@ -23,13 +24,12 @@ pub(crate) fn declaration_command(word: &Word) -> bool {
     let [WordPart::Literal(name)] = word.parts.as_slice() else {
         return false;
     };
-    matches!(
-        name.as_str(),
-        "export" | "local" | "readonly" | "declare" | "typeset"
-    ) && word
-        .raw
-        .as_deref()
-        .is_none_or(|raw| uncontinued(raw).eq(name.bytes()))
+    commands::lookup(name)
+        .is_some_and(|command| command.declaration == Declaration::AssignmentOperands)
+        && word
+            .raw
+            .as_deref()
+            .is_none_or(|raw| uncontinued(raw).eq(name.bytes()))
 }
 
 /// The prefix-only part of Bashkit normalize_raw_word: continuations disappear
@@ -70,41 +70,6 @@ pub(crate) fn assignment_operand(word: &Word) -> bool {
         && bytes.all(|b| b == b'_' || b.is_ascii_alphanumeric())
 }
 
-pub(crate) fn is_builtin(name: &str) -> bool {
-    matches!(
-        name,
-        ":" | "true"
-            | "false"
-            | "echo"
-            | "printf"
-            | "cat"
-            | "grep"
-            | "mkdir"
-            | "seq"
-            | "read"
-            | "export"
-            | "local"
-            | "readonly"
-            | "declare"
-            | "typeset"
-            | "cd"
-            | "pwd"
-            | "set"
-            | "shift"
-            | "command"
-            | "shopt"
-            | "exit"
-            | "return"
-            | "jobs"
-            | "wait"
-            | "kill"
-            | "unset"
-            | "test"
-            | "["
-            | "break"
-            | "continue"
-    )
-}
 pub(crate) fn valid_name(name: &str) -> bool {
     !name.is_empty()
         && name.bytes().enumerate().all(|(index, byte)| {
@@ -136,6 +101,7 @@ async fn copy(input: Endpoint, fds: &FdTable, context: &Context) -> Result<(), i
     }
 }
 pub(crate) async fn run(
+    builtin: Builtin,
     name: &str,
     args: Vec<String>,
     state: SharedState,
@@ -143,15 +109,15 @@ pub(crate) async fn run(
     context: Context,
     work: &mut Work,
 ) -> Result<Outcome, i32> {
-    match name {
-        ":" | "true" => {}
-        "false" => return Err(1),
-        "test" | "[" => return test::run(name, &args, &state, &fds, &context, work).await,
-        "shopt" => return shopt(&args, &state, &fds, &context, work).await,
-        "break" | "continue" => {
+    match builtin {
+        Builtin::Noop => {}
+        Builtin::False => return Err(1),
+        Builtin::Test => return test::run(name, &args, &state, &fds, &context, work).await,
+        Builtin::Shopt => return shopt(&args, &state, &fds, &context, work).await,
+        Builtin::LoopControl => {
             return loop_control(name, &args, &fds, &context, work).await;
         }
-        "exit" | "return" => {
+        Builtin::ExitReturn => {
             let args = if args.first().is_some_and(|arg| arg == "--") {
                 &args[1..]
             } else {
@@ -191,7 +157,7 @@ pub(crate) async fn run(
                 },
             });
         }
-        "echo" => {
+        Builtin::Echo => {
             for (index, arg) in args.iter().enumerate() {
                 if index != 0 {
                     write(&fds, b" ", &context).await?;
@@ -200,8 +166,8 @@ pub(crate) async fn run(
             }
             write(&fds, b"\n", &context).await?;
         }
-        "printf" => printf::run(&args, &state, &fds, &context, work).await?,
-        "cat" => {
+        Builtin::Printf => printf::run(&args, &state, &fds, &context, work).await?,
+        Builtin::Cat => {
             if args.is_empty() {
                 copy(endpoint(&fds, 0)?, &fds, &context).await?;
             } else {
@@ -222,8 +188,8 @@ pub(crate) async fn run(
                 }
             }
         }
-        "grep" => return grep::run(args, &state, &fds, &context).await,
-        "mkdir" => {
+        Builtin::Grep => return grep::run(args, &state, &fds, &context).await,
+        Builtin::Mkdir => {
             let mut parents = false;
             let mut operands = Vec::new();
             let mut options = true;
@@ -268,7 +234,7 @@ pub(crate) async fn run(
             }
             return Ok(Outcome::status(status));
         }
-        "seq" => {
+        Builtin::Seq => {
             let (start, end) = match args.as_slice() {
                 [end] => (1, end.parse::<i64>().map_err(|_| 2)?),
                 [start, end] => (
@@ -289,7 +255,7 @@ pub(crate) async fn run(
             }
             write(&fds, buffer.as_bytes(), &context).await?;
         }
-        "read" => {
+        Builtin::Read => {
             let mut fd = 0;
             let mut name = None;
             let mut iter = args.iter();
@@ -336,23 +302,23 @@ pub(crate) async fn run(
                 .assign_parameter(name, String::from_utf8(bytes).map_err(|_| 2)?)?;
             return Ok(Outcome::status(code));
         }
-        "export" | "local" | "readonly" | "declare" | "typeset" => {
+        Builtin::Declaration => {
             return declarations(name, args, &state, &fds, &context, work).await;
         }
-        "unset" => return unset(args, &state, &fds, &context, work).await,
-        "cd" => {
+        Builtin::Unset => return unset(args, &state, &fds, &context, work).await,
+        Builtin::Cd => {
             if args.len() != 1 {
                 return Err(2);
             }
             let cwd = absolute(&state.borrow().cwd, &args[0]);
             state.borrow_mut().cwd = cwd;
         }
-        "pwd" => {
+        Builtin::Pwd => {
             let cwd = state.borrow().cwd.clone();
             write(&fds, format!("{cwd}\n").as_bytes(), &context).await?;
         }
-        "set" => return set(args, &state, &context, work).await,
-        "shift" => {
+        Builtin::Set => return set(args, &state, &context, work).await,
+        Builtin::Shift => {
             let args = if args.first().is_some_and(|arg| arg == "--") {
                 &args[1..]
             } else {
@@ -374,20 +340,20 @@ pub(crate) async fn run(
             let count = usize::try_from(count).map_err(|_| 1)?;
             state.borrow_mut().shift_positional(count)?;
         }
-        "jobs" => {
+        Builtin::Jobs => {
             if !args.is_empty() {
                 return Err(2);
             }
             context.list_jobs(&fds).await?;
         }
-        "wait" => {
+        Builtin::Wait => {
             if args.len() > 1 {
                 return Err(2);
             }
             let id = args.first().map(|s| JobSelector::parse(s)).transpose()?;
             return Ok(Outcome::status(context.wait_job(id).await?));
         }
-        "kill" => {
+        Builtin::Kill => {
             let (action, selector) = match kill_arguments(&args) {
                 Ok(value) => value,
                 Err(error) => {
@@ -414,7 +380,6 @@ pub(crate) async fn run(
                 SignalAction::Terminate(signal) => context.kill_job(selector, signal)?,
             }
         }
-        _ => return Err(127),
     }
     Ok(Outcome::status(0))
 }
