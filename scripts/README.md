@@ -141,3 +141,41 @@ npm run fuzz:shell-substitutions -- --shell /path/to/shell-engine --seed 42
 npm run fuzz:shell-substitutions:ci -- --shell /path/to/shell-engine
 npm run test:fuzz-shell-substitutions
 ```
+
+## Structured control flow and conditionals
+
+`npm run fuzz:shell-control-flow -- --shell PATH --seed 1` compares 2,448
+cases with GNU Bash 5.3.15: 1,848 structured controls and 600 seeded cases.
+Seed 42 uses the same controls and a different deterministic stream. Coverage
+includes if/elif/else, while/until, word and arithmetic for loops, multilevel
+break/continue, case terminators, test/[ and structured [[ expressions, and
+`set -e` suppression contexts. Nesting depths 0–3, quoted/empty/newline values,
+descriptor persistence and syntax/runtime failures are included. Prerequisite
+controls cover conditional newline grammar, invalid loop targets, shopt option
+state and errexit inheritance, quote-aware for-list pathname expansion, bounded
+no-capture ERE matching and dynamic EPOCHREALTIME. Captures, backreferences and
+locale collation remain explicitly unsupported.
+
+The generator never builds a binary. Each observation has a fresh working
+directory and an owned process group, cleaned up before its scratch directory
+is removed. It self-queues through the local light admission wrapper when
+available. Exact stdout bytes and numeric status determine matches; a failed
+Bash observation cannot receive an `UNSUPPORTED` exemption. Stderr is retained
+for diagnosis, not scored.
+
+`--record-oracle PATH` captures Bash-only observations before implementation and
+marks their provenance `oracle-only`; it does not claim candidate support.
+`--record PATH` additionally requires a clean candidate comparison. Both modes
+pin GNU Bash 5.3.15. Replay verifies generator/process-runner fingerprints,
+regenerated identities, scripts, count, coverage and oracle metadata, without
+invoking Bash. Replay rejects every mismatch and `UNSUPPORTED` result:
+
+```sh
+npm run fuzz:shell-control-flow -- --shell /path/to/shell-engine --seed 1
+npm run fuzz:shell-control-flow -- --shell /path/to/shell-engine --seed 42
+npm run fuzz:shell-control-flow:ci -- --shell /path/to/shell-engine
+npm run test:fuzz-shell-control-flow
+```
+
+The two new seed fixtures belong only to this generator. Existing generators
+and fixtures are not regenerated as part of this gate.

@@ -4104,6 +4104,8 @@ mod braces;
 mod case;
 #[path = "words/command.rs"]
 mod command;
+#[path = "words/control.rs"]
+mod control;
 #[path = "words/indirect.rs"]
 mod indirect;
 #[path = "words/nounset.rs"]
@@ -4121,3 +4123,13 @@ mod scoped_prefix;
 mod session;
 #[path = "words/set_positionals.rs"]
 mod set_positionals;
+
+#[path = "words/conditional.rs"]
+mod conditional;
+#[path = "words/regex.rs"]
+mod regex;
+#[path = "words/test_builtin.rs"]
+mod test_builtin;
+
+#[path = "words/glob.rs"]
+mod glob;

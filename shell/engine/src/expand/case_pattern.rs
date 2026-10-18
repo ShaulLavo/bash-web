@@ -24,7 +24,11 @@ impl Expansion<'_> {
         } else {
             self.positional_star_separator(state).await?
         };
-        let first_field = at && quoted && ifs_separator.is_some() && count > 1;
+        let join_positionals = self
+            .pattern
+            .as_ref()
+            .is_some_and(|pattern| pattern.join_positionals);
+        let first_field = at && quoted && !join_positionals && ifs_separator.is_some() && count > 1;
         let protection = Protection::expansion(quoted, state);
         for index in 0..count {
             self.work.checkpoint(self.cancel).await?;

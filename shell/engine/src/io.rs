@@ -3,8 +3,9 @@ use crate::executor::{Cancel, Event, yield_now};
 use futures::future::LocalBoxFuture;
 use std::{
     cell::{Cell, RefCell},
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, VecDeque},
     rc::{Rc, Weak},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 /// Runtime-backed open descriptions implement notification-driven operations.
@@ -29,11 +30,81 @@ pub trait FileSystem {
     /// preview1 metadata calls currently share open's documented blocking limit.
     fn mkdir<'a>(&'a self, path: &'a str, parents: bool)
     -> LocalBoxFuture<'a, Result<(), IoError>>;
+    /// Inspect the named node without opening it or reading its contents. False
+    /// requests lstat semantics (do not follow the final symbolic link). Missing
+    /// capabilities must be reported as unsupported, never as a missing file.
+    fn stat<'a>(
+        &'a self,
+        _path: &'a str,
+        _follow_symlinks: bool,
+    ) -> LocalBoxFuture<'a, Result<FileMetadata, IoError>> {
+        Box::pin(async { Err(IoError::Unsupported) })
+    }
+    /// Open an incremental directory reader, never a directory-sized snapshot.
+    /// Dropping the reader closes its host handle, including on cancellation.
+    fn open_dir<'a>(
+        &'a self,
+        _path: &'a str,
+    ) -> LocalBoxFuture<'a, Result<Rc<dyn Directory>, IoError>> {
+        Box::pin(async { Err(IoError::Unsupported) })
+    }
     fn open<'a>(
         &'a self,
         path: &'a str,
         options: &'a OpenOptions,
     ) -> LocalBoxFuture<'a, Result<Endpoint, IoError>>;
+}
+
+/// Read one entry into caller-owned storage. Cookie zero starts enumeration;
+/// returned cookies are opaque and must make progress on this reader. A buffer
+/// of MAX_PATH_BYTES + 24 fits a maximum name and preview1's fixed header.
+pub trait Directory {
+    fn read_entry<'a>(
+        &'a self,
+        cookie: u64,
+        output: &'a mut [u8],
+    ) -> LocalBoxFuture<'a, Result<Option<DirectoryEntry>, IoError>>;
+}
+
+/// A borrowed name range in read_entry's caller-owned buffer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DirectoryEntry {
+    pub next_cookie: u64,
+    pub name: std::ops::Range<usize>,
+}
+
+/// Node types representable by the browser filesystem and WASI preview1.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FileKind {
+    Regular,
+    Directory,
+    Symlink,
+    BlockDevice,
+    CharacterDevice,
+    Fifo,
+    Socket,
+    Unknown,
+}
+/// A metadata snapshot. Optional values are absent when the host cannot report
+/// them; callers must not invent permissions, ownership or timestamps from an
+/// open succeeding. Access and ownership booleans refer to the effective caller.
+/// Timestamps are nanoseconds since the Unix epoch, not elapsed shell time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FileMetadata {
+    pub kind: FileKind,
+    pub size: u64,
+    pub mode: Option<u32>,
+    pub device: Option<u64>,
+    pub inode: Option<u64>,
+    pub uid: Option<u32>,
+    pub gid: Option<u32>,
+    pub accessed_ns: Option<u64>,
+    pub modified_ns: Option<u64>,
+    pub readable: Option<bool>,
+    pub writable: Option<bool>,
+    pub executable: Option<bool>,
+    pub owned_by_effective_uid: Option<bool>,
+    pub owned_by_effective_gid: Option<bool>,
 }
 
 pub const PIPE_CAPACITY: usize = 32 * 1024;
@@ -48,6 +119,7 @@ pub enum IoError {
     NotFound,
     AlreadyExists,
     NotDirectory,
+    Unsupported,
     InvalidPath,
     WriteZero,
     Runtime(i32),
@@ -74,6 +146,7 @@ impl std::fmt::Display for IoError {
             Self::NotFound => "file not found",
             Self::AlreadyExists => "file exists",
             Self::NotDirectory => "not a directory",
+            Self::Unsupported => "filesystem operation unsupported",
             Self::InvalidPath => "invalid path",
             Self::WriteZero => "write made no progress",
             Self::Runtime(_) => unreachable!(),
@@ -91,14 +164,72 @@ struct Pipe {
     readable: Event,
     writable: Event,
 }
+fn timestamp_ns() -> Option<u64> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|time| time.as_nanos().try_into().ok())
+}
 struct File {
     data: RefCell<Vec<u8>>,
+    metadata: Cell<FileMetadata>,
+}
+impl File {
+    fn accessed(&self) {
+        let mut metadata = self.metadata.get();
+        metadata.accessed_ns = timestamp_ns();
+        self.metadata.set(metadata);
+    }
+    fn modified(&self) {
+        let mut metadata = self.metadata.get();
+        metadata.modified_ns = timestamp_ns();
+        self.metadata.set(metadata);
+    }
 }
 struct FsState {
-    directories: BTreeSet<String>,
+    directories: BTreeMap<String, FileMetadata>,
     files: BTreeMap<String, Rc<File>>,
+    next_inode: u64,
     used: usize,
     limit: usize,
+}
+impl FsState {
+    fn child_created(&mut self, path: &str) {
+        if let Some((parent, _)) = path.rsplit_once('/') {
+            let parent = if parent.is_empty() { "/" } else { parent };
+            if let Some(metadata) = self.directories.get_mut(parent) {
+                metadata.modified_ns = timestamp_ns();
+            }
+        }
+    }
+    fn metadata(&mut self, kind: FileKind) -> FileMetadata {
+        let inode = self.next_inode;
+        self.next_inode += 1;
+        let time = timestamp_ns();
+        // MemoryFs is a single-owner filesystem without chmod or execution of
+        // file payloads. Its regular files are readable/writable, not executable;
+        // directories are searchable. There is no numeric user/group namespace.
+        FileMetadata {
+            kind,
+            size: 0,
+            mode: Some(if kind == FileKind::Directory {
+                0o777
+            } else {
+                0o666
+            }),
+            device: None,
+            inode: Some(inode),
+            uid: None,
+            gid: None,
+            accessed_ns: time,
+            modified_ns: time,
+            readable: Some(true),
+            writable: Some(true),
+            executable: Some(kind == FileKind::Directory),
+            owned_by_effective_uid: Some(true),
+            owned_by_effective_gid: Some(true),
+        }
+    }
 }
 struct FileOpen {
     file: Rc<File>,
@@ -272,6 +403,7 @@ impl Endpoint {
                     output[..count].copy_from_slice(&data[offset..offset + count]);
                     file.offset.set(offset + count);
                 }
+                file.file.accessed();
                 Ok(count)
             }
             Open::Host(endpoint) => endpoint.read(output).await,
@@ -337,6 +469,7 @@ impl Endpoint {
                 }
                 data[offset..end].copy_from_slice(input);
                 file.offset.set(end);
+                file.file.modified();
                 Ok(input.len())
             }
             Open::Capture(capture) => {
@@ -460,18 +593,65 @@ impl Default for OpenOptions {
 pub struct MemoryFs(Rc<RefCell<FsState>>);
 impl MemoryFs {
     pub fn new(total_limit: usize) -> Self {
-        Self(Rc::new(RefCell::new(FsState {
-            directories: ["/", "/home", "/home/guest", "/tmp"]
-                .into_iter()
-                .map(str::to_owned)
-                .collect(),
+        let mut state = FsState {
+            directories: BTreeMap::new(),
             files: BTreeMap::new(),
+            next_inode: 1,
             used: 0,
             limit: total_limit,
-        })))
+        };
+        for path in ["/", "/home", "/home/guest", "/tmp"] {
+            let metadata = state.metadata(FileKind::Directory);
+            state.directories.insert(path.to_owned(), metadata);
+        }
+        Self(Rc::new(RefCell::new(state)))
     }
     pub fn used_bytes(&self) -> usize {
         self.0.borrow().used
+    }
+    /// MemoryFs currently has no symlinks, so stat and lstat resolve identically.
+    /// Check each traversed directory before resolving `..`; a missing component
+    /// must not disappear merely because the following component goes upward.
+    pub fn stat(&self, path: &str, _follow_symlinks: bool) -> Result<FileMetadata, IoError> {
+        if !path.starts_with('/') || path.len() > MAX_PATH_BYTES || path.contains('\0') {
+            return Err(IoError::InvalidPath);
+        }
+        let fs = self.0.borrow();
+        let mut resolved = String::from("/");
+        let mut components = path.split('/').filter(|part| !part.is_empty()).peekable();
+        while let Some(component) = components.next() {
+            match component {
+                "." => {}
+                ".." => {
+                    let index = resolved.rfind('/').unwrap();
+                    resolved.truncate(index.max(1));
+                }
+                _ => {
+                    if resolved.len() > 1 {
+                        resolved.push('/');
+                    }
+                    resolved.push_str(component);
+                }
+            }
+            if components.peek().is_some() || path.ends_with('/') {
+                if fs.files.contains_key(&resolved) {
+                    return Err(IoError::NotDirectory);
+                }
+                if !fs.directories.contains_key(&resolved) {
+                    return Err(IoError::NotFound);
+                }
+            }
+        }
+        let mut metadata = if let Some(metadata) = fs.directories.get(&resolved) {
+            *metadata
+        } else {
+            let file = fs.files.get(&resolved).ok_or(IoError::NotFound)?;
+            let mut metadata = file.metadata.get();
+            metadata.size = file.data.borrow().len() as u64;
+            metadata
+        };
+        metadata.device = Some(Rc::as_ptr(&self.0) as usize as u64);
+        Ok(metadata)
     }
     pub fn open(&self, path: &str, options: &OpenOptions) -> Result<Endpoint, IoError> {
         if path.is_empty() || path.len() > MAX_PATH_BYTES || path.contains('\0') {
@@ -483,7 +663,7 @@ impl MemoryFs {
             return Err(IoError::BadDescriptor);
         }
         let mut fs = self.0.borrow_mut();
-        if fs.directories.contains(path) {
+        if fs.directories.contains_key(path) {
             return Err(IoError::AlreadyExists);
         }
         let file = match fs.files.get(path) {
@@ -492,10 +672,13 @@ impl MemoryFs {
                 if fs.files.len() >= MAX_MEMORY_FILES {
                     return Err(IoError::LimitExceeded);
                 }
+                let metadata = fs.metadata(FileKind::Regular);
                 let file = Rc::new(File {
                     data: RefCell::new(Vec::new()),
+                    metadata: Cell::new(metadata),
                 });
                 fs.files.insert(path.to_owned(), file.clone());
+                fs.child_created(path);
                 file
             }
             None => return Err(IoError::NotFound),
@@ -504,6 +687,7 @@ impl MemoryFs {
             let mut data = file.data.borrow_mut();
             fs.used -= data.len();
             *data = Vec::new();
+            file.modified();
         }
         Ok(Endpoint(Rc::new(Open::File(FileOpen {
             file,
@@ -523,7 +707,7 @@ impl MemoryFs {
             if fs.files.contains_key(directory) {
                 return Err(IoError::AlreadyExists);
             }
-            if fs.directories.contains(directory) {
+            if fs.directories.contains_key(directory) {
                 return if allow_existing {
                     Ok(())
                 } else {
@@ -537,13 +721,15 @@ impl MemoryFs {
             if fs.files.contains_key(parent) {
                 return Err(IoError::NotDirectory);
             }
-            if !fs.directories.contains(parent) {
+            if !fs.directories.contains_key(parent) {
                 return Err(IoError::NotFound);
             }
             if fs.directories.len() >= MAX_MEMORY_FILES {
                 return Err(IoError::LimitExceeded);
             }
-            fs.directories.insert(directory.to_owned());
+            let metadata = fs.metadata(FileKind::Directory);
+            fs.directories.insert(directory.to_owned(), metadata);
+            fs.child_created(directory);
             Ok(())
         };
         if parents {
@@ -557,6 +743,7 @@ impl MemoryFs {
         let fs = self.0.borrow();
         let file = fs.files.get(path).ok_or(IoError::NotFound)?;
         let bytes = file.data.borrow().clone();
+        file.accessed();
         Ok(bytes)
     }
     pub fn write_file(&self, path: &str, input: &[u8]) -> Result<(), IoError> {
@@ -564,7 +751,7 @@ impl MemoryFs {
             return Err(IoError::InvalidPath);
         }
         let mut fs = self.0.borrow_mut();
-        if fs.directories.contains(path) {
+        if fs.directories.contains_key(path) {
             return Err(IoError::AlreadyExists);
         }
         let old = fs
@@ -582,22 +769,109 @@ impl MemoryFs {
         data.try_reserve_exact(input.len())
             .map_err(|_| IoError::LimitExceeded)?;
         data.extend_from_slice(input);
-        let file = fs
-            .files
-            .entry(path.to_owned())
-            .or_insert_with(|| {
-                Rc::new(File {
-                    data: RefCell::new(Vec::new()),
-                })
-            })
-            .clone();
+        let file = if let Some(file) = fs.files.get(path) {
+            file.clone()
+        } else {
+            let metadata = fs.metadata(FileKind::Regular);
+            let file = Rc::new(File {
+                data: RefCell::new(Vec::new()),
+                metadata: Cell::new(metadata),
+            });
+            fs.files.insert(path.to_owned(), file.clone());
+            fs.child_created(path);
+            file
+        };
         *file.data.borrow_mut() = data;
+        file.modified();
         fs.used = fs.used - old + input.len();
         Ok(())
     }
 }
 
+struct MemoryDirectory {
+    fs: MemoryFs,
+    path: String,
+}
+impl Directory for MemoryDirectory {
+    fn read_entry<'a>(
+        &'a self,
+        cookie: u64,
+        output: &'a mut [u8],
+    ) -> LocalBoxFuture<'a, Result<Option<DirectoryEntry>, IoError>> {
+        Box::pin(async move {
+            let path = &self.path;
+            let fs = self.fs.0.borrow();
+            let mut index = 0u64;
+            // Each map is independently capped at MAX_MEMORY_FILES. This bounded
+            // scan owns no collection and returns only one copied basename.
+            for candidate in fs.directories.keys().chain(fs.files.keys()) {
+                let Some((parent, name)) = candidate.rsplit_once('/') else {
+                    continue;
+                };
+                let parent = if parent.is_empty() { "/" } else { parent };
+                if parent != path.as_str() || name.is_empty() {
+                    continue;
+                }
+                if index == cookie {
+                    if name.len() > output.len() {
+                        return Err(IoError::LimitExceeded);
+                    }
+                    output[..name.len()].copy_from_slice(name.as_bytes());
+                    return Ok(Some(DirectoryEntry {
+                        next_cookie: index + 1,
+                        name: 0..name.len(),
+                    }));
+                }
+                index += 1;
+            }
+            Ok(None)
+        })
+    }
+}
 impl FileSystem for MemoryFs {
+    fn open_dir<'a>(
+        &'a self,
+        path: &'a str,
+    ) -> LocalBoxFuture<'a, Result<Rc<dyn Directory>, IoError>> {
+        Box::pin(async move {
+            if self.stat(path, true)?.kind != FileKind::Directory {
+                return Err(IoError::NotDirectory);
+            }
+            // Validate traversal before lexical normalization of missing/.. .
+            // One bounded buffer, rather than absolute()'s component snapshots.
+            let mut resolved = String::new();
+            resolved
+                .try_reserve_exact(path.len().max(1))
+                .map_err(|_| IoError::LimitExceeded)?;
+            resolved.push('/');
+            for component in path.split('/') {
+                match component {
+                    "" | "." => {}
+                    ".." => {
+                        let index = resolved.rfind('/').unwrap();
+                        resolved.truncate(index.max(1));
+                    }
+                    _ => {
+                        if resolved.len() > 1 {
+                            resolved.push('/');
+                        }
+                        resolved.push_str(component);
+                    }
+                }
+            }
+            Ok(Rc::new(MemoryDirectory {
+                fs: self.clone(),
+                path: resolved,
+            }) as Rc<dyn Directory>)
+        })
+    }
+    fn stat<'a>(
+        &'a self,
+        path: &'a str,
+        follow_symlinks: bool,
+    ) -> LocalBoxFuture<'a, Result<FileMetadata, IoError>> {
+        Box::pin(async move { MemoryFs::stat(self, path, follow_symlinks) })
+    }
     fn mkdir<'a>(
         &'a self,
         path: &'a str,
@@ -623,6 +897,137 @@ mod tests {
         future::Future,
         task::{Context, Poll},
     };
+    #[test]
+    fn filesystem_metadata_preserves_contents_identity_and_access_time() {
+        let fs = MemoryFs::new(32);
+        fs.write_file("/f", b"abc").unwrap();
+        fs.write_file("/other", b"").unwrap();
+        let before = fs.stat("/f", true).unwrap();
+        assert_eq!(before.kind, FileKind::Regular);
+        assert_eq!(before.size, 3);
+        assert_eq!(before.mode, Some(0o666));
+        assert_eq!(before.readable, Some(true));
+        assert_eq!(before.writable, Some(true));
+        assert_eq!(before.executable, Some(false));
+        assert!(before.inode.is_some());
+        assert!(before.device.is_some());
+        assert_eq!(before, fs.stat("/f", false).unwrap());
+        assert_ne!(before.inode, fs.stat("/other", true).unwrap().inode);
+        assert_eq!(before.device, fs.stat("/other", true).unwrap().device);
+        assert_ne!(
+            before.device,
+            MemoryFs::new(0).stat("/", true).unwrap().device
+        );
+        // Merely asking for metadata must not open/read the file, advance an
+        // existing offset, or update the last-access timestamp.
+        let file = fs.open("/f", &OpenOptions::default()).unwrap();
+        assert_eq!(before, fs.stat("/f", true).unwrap());
+        let mut byte = [0];
+        assert_eq!(file.read(&mut byte).now_or_never(), Some(Ok(1)));
+        assert_eq!(&byte, b"a");
+        let read = fs.stat("/f", true).unwrap();
+        assert!(read.accessed_ns >= before.accessed_ns);
+        assert_eq!(read.modified_ns, before.modified_ns);
+        fs.write_file("/f", b"longer").unwrap();
+        let updated = fs.stat("/f", true).unwrap();
+        assert_eq!(updated.inode, before.inode);
+        assert_eq!(updated.size, 6);
+        assert!(updated.modified_ns >= before.modified_ns);
+        fs.open(
+            "/f",
+            &OpenOptions {
+                write: true,
+                truncate: true,
+                ..OpenOptions::default()
+            },
+        )
+        .unwrap();
+        let truncated = fs.stat("/f", true).unwrap();
+        assert_eq!(truncated.inode, before.inode);
+        assert_eq!(truncated.size, 0);
+        assert_eq!(fs.used_bytes(), 0);
+    }
+    #[test]
+    fn filesystem_metadata_resolves_real_directories_and_dot_components() {
+        let fs = MemoryFs::new(8);
+        fs.mkdir("/a/b", true).unwrap();
+        fs.write_file("/a/f", b"x").unwrap();
+        let directory = fs.stat("/a/", true).unwrap();
+        assert_eq!(directory.kind, FileKind::Directory);
+        assert_eq!(directory.executable, Some(true));
+        assert_eq!(directory, fs.stat("/a/b/..", false).unwrap());
+        assert_eq!(fs.stat("/a/f", true), fs.stat("//a/./b/../f", true));
+        assert_eq!(fs.stat("/", true), fs.stat("/../../", true));
+        assert_eq!(fs.stat("/a/f/", true), Err(IoError::NotDirectory));
+        assert_eq!(fs.stat("/a/f/..", true), Err(IoError::NotDirectory));
+        assert_eq!(fs.stat("/a/f/.", true), Err(IoError::NotDirectory));
+        assert_eq!(fs.stat("/missing/../a/f", true), Err(IoError::NotFound));
+        assert_eq!(fs.stat("/missing", true), Err(IoError::NotFound));
+        assert_eq!(fs.stat("a", true), Err(IoError::InvalidPath));
+        assert_eq!(fs.stat("/bad\0name", true), Err(IoError::InvalidPath));
+        assert_eq!(
+            fs.stat(&format!("/{}", "x".repeat(MAX_PATH_BYTES)), true),
+            Err(IoError::InvalidPath)
+        );
+    }
+    #[test]
+    fn filesystem_metadata_updates_directory_time_only_for_new_children() {
+        let fs = MemoryFs::new(8);
+        fs.mkdir("/dir", false).unwrap();
+        let reset_time = || {
+            fs.0.borrow_mut()
+                .directories
+                .get_mut("/dir")
+                .unwrap()
+                .modified_ns = Some(1);
+        };
+        reset_time();
+        fs.write_file("/dir/file", b"x").unwrap();
+        assert!(fs.stat("/dir", true).unwrap().modified_ns > Some(1));
+        reset_time();
+        fs.write_file("/dir/file", b"xx").unwrap();
+        assert_eq!(fs.stat("/dir", true).unwrap().modified_ns, Some(1));
+        fs.mkdir("/dir/child", false).unwrap();
+        assert!(fs.stat("/dir", true).unwrap().modified_ns > Some(1));
+        reset_time();
+        fs.open(
+            "/dir/created",
+            &OpenOptions {
+                write: true,
+                create: true,
+                ..OpenOptions::default()
+            },
+        )
+        .unwrap();
+        assert!(fs.stat("/dir", true).unwrap().modified_ns > Some(1));
+    }
+    #[test]
+    fn filesystem_metadata_tracks_reads_and_descriptor_writes() {
+        let fs = MemoryFs::new(16);
+        fs.write_file("/f", b"x").unwrap();
+        let file = fs.0.borrow().files["/f"].clone();
+        let mut metadata = file.metadata.get();
+        metadata.accessed_ns = Some(1);
+        metadata.modified_ns = Some(1);
+        file.metadata.set(metadata);
+        assert_eq!(fs.stat("/f", true).unwrap().accessed_ns, Some(1));
+        assert_eq!(fs.read_file("/f").unwrap(), b"x");
+        assert!(fs.stat("/f", true).unwrap().accessed_ns > Some(1));
+        let output = fs
+            .open(
+                "/f",
+                &OpenOptions {
+                    write: true,
+                    append: true,
+                    ..OpenOptions::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(output.write(b"yz").now_or_never(), Some(Ok(2)));
+        let after = fs.stat("/f", true).unwrap();
+        assert_eq!(after.size, 3);
+        assert!(after.modified_ns > Some(1));
+    }
     #[test]
     fn exact_capacity_partial_io_and_last_close() {
         let (read, write) = pipe();

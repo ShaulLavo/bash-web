@@ -2,6 +2,7 @@
 //! are original adapters except the explicitly attributed grep subset. The full
 //! utility/compatibility work is still deferred.
 mod grep;
+pub(crate) mod test;
 use crate::{
     executor::Budget,
     expand::{Error, Work},
@@ -88,14 +89,19 @@ pub(crate) fn is_builtin(name: &str) -> bool {
             | "cd"
             | "pwd"
             | "set"
+            | "shopt"
             | "exit"
             | "return"
             | "wait"
             | "kill"
             | "unset"
+            | "test"
+            | "["
+            | "break"
+            | "continue"
     )
 }
-fn valid_name(name: &str) -> bool {
+pub(crate) fn valid_name(name: &str) -> bool {
     !name.is_empty()
         && name.bytes().enumerate().all(|(index, byte)| {
             byte == b'_' || byte.is_ascii_alphabetic() || (index > 0 && byte.is_ascii_digit())
@@ -136,6 +142,11 @@ pub(crate) async fn run(
     match name {
         ":" | "true" => {}
         "false" => return Err(1),
+        "test" | "[" => return test::run(name, &args, &state, &fds, &context, work).await,
+        "shopt" => return shopt(&args, &state, &fds, &context, work).await,
+        "break" | "continue" => {
+            return loop_control(name, &args, &fds, &context, work).await;
+        }
         "exit" | "return" => {
             if args.len() > 1 {
                 return Err(2);
@@ -501,6 +512,238 @@ fn error_status(error: Error) -> i32 {
     }
 }
 
+const SHOPT_OPTIONS: [&str; 3] = ["extglob", "inherit_errexit", "nullglob"];
+
+fn shopt_value(state: &State, option: &str) -> Option<bool> {
+    match option {
+        "extglob" => Some(state.extglob),
+        "inherit_errexit" => Some(state.inherit_errexit),
+        "nullglob" => Some(state.nullglob),
+        _ => None,
+    }
+}
+
+/// Original streaming shopt adapter. Only options with actual state/consumers
+/// are accepted; unknown names fail rather than pretending to enable a feature.
+/// Extended-pattern matching itself may still reject unsupported syntax with 2.
+async fn shopt(
+    args: &[String],
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<Outcome, i32> {
+    let mut set = false;
+    let mut unset = false;
+    let mut quiet = false;
+    let mut reusable = false;
+    let mut index = 0;
+    while let Some(argument) = args.get(index) {
+        work.checkpoint(&context.cancel)
+            .await
+            .map_err(error_status)?;
+        if argument == "--" {
+            index += 1;
+            break;
+        }
+        if !argument.starts_with('-') || argument == "-" {
+            break;
+        }
+        for flag in argument[1..].bytes() {
+            work.checkpoint(&context.cancel)
+                .await
+                .map_err(error_status)?;
+            match flag {
+                b's' => set = true,
+                b'u' => unset = true,
+                b'q' => quiet = true,
+                b'p' => reusable = true,
+                _ => {
+                    shopt_diagnostic(argument, "invalid option", fds, context).await?;
+                    return Err(2);
+                }
+            }
+        }
+        index += 1;
+    }
+    if set && unset {
+        shopt_diagnostic(
+            "",
+            "cannot set and unset shell options simultaneously",
+            fds,
+            context,
+        )
+        .await?;
+        return Err(1);
+    }
+    let operands = &args[index..];
+    let options = if operands.is_empty() {
+        SHOPT_OPTIONS.map(Some)
+    } else {
+        [None; 3]
+    };
+    let mut status = 0;
+    // A fixed iterator over known names avoids allocating or copying argv.
+    let names = operands
+        .iter()
+        .map(String::as_str)
+        .chain(options.into_iter().flatten());
+    for option in names {
+        work.checkpoint(&context.cancel)
+            .await
+            .map_err(error_status)?;
+        for _ in option.bytes() {
+            work.checkpoint(&context.cancel)
+                .await
+                .map_err(error_status)?;
+        }
+        let enabled = {
+            let state = state.borrow();
+            shopt_value(&state, option)
+        };
+        let Some(enabled) = enabled else {
+            shopt_diagnostic(option, "invalid shell option name", fds, context).await?;
+            status = 1;
+            continue;
+        };
+        if !operands.is_empty() && (set || unset) {
+            let mut state = state.borrow_mut();
+            match option {
+                "extglob" => state.extglob = set,
+                "inherit_errexit" => state.inherit_errexit = set,
+                "nullglob" => state.nullglob = set,
+                _ => unreachable!("validated shell option"),
+            }
+            continue;
+        }
+        if !operands.is_empty() && !enabled {
+            status = 1;
+        }
+        if quiet || (operands.is_empty() && ((set && !enabled) || (unset && enabled))) {
+            continue;
+        }
+        if reusable {
+            write(
+                fds,
+                if enabled { b"shopt -s " } else { b"shopt -u " },
+                context,
+            )
+            .await?;
+            write(fds, option.as_bytes(), context).await?;
+        } else {
+            write(fds, option.as_bytes(), context).await?;
+            let padding = 20usize.saturating_sub(option.len());
+            write(fds, &b"                    "[..padding], context).await?;
+            write(fds, if enabled { b"\ton" } else { b"\toff" }, context).await?;
+        }
+        write(fds, b"\n", context).await?;
+    }
+    Ok(Outcome::status(status))
+}
+
+async fn shopt_diagnostic(
+    option: &str,
+    message: &str,
+    fds: &FdTable,
+    context: &Context,
+) -> Result<(), i32> {
+    let output = endpoint(fds, 2)?;
+    for piece in [
+        "/usr/bin/bash: shopt: ",
+        option,
+        if option.is_empty() { "" } else { ": " },
+        message,
+        "\n",
+    ] {
+        output
+            .write_all(piece.as_bytes(), &context.cancel)
+            .await
+            .map_err(|error| error.status())?;
+    }
+    Ok(())
+}
+
+/// Original bounded loop-control adapter. Counts use Bash's signed decimal
+/// intmax_t syntax, not wasm32 usize, and outside-loop calls return success
+/// before inspecting their operands. Diagnostics borrow rather than clone argv.
+async fn loop_control(
+    name: &str,
+    args: &[String],
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<Outcome, i32> {
+    work.checkpoint(&context.cancel)
+        .await
+        .map_err(error_status)?;
+    let depth = context.loop_depth();
+    let (code, flow, value, message) = if depth == 0 {
+        (
+            0,
+            Flow::Normal,
+            None,
+            "only meaningful in a `for', `while', or `until' loop",
+        )
+    } else if args.len() > 1 {
+        (1, Flow::Exit, None, "too many arguments")
+    } else {
+        let count = match args.first() {
+            None => Some(1),
+            Some(value) => test::decimal(value, &context.cancel, work).await?,
+        };
+        match count {
+            Some(count) if count > 0 => {
+                // Clamping to active depth also avoids truncating a valid
+                // 64-bit Bash count on our wasm32 target.
+                let count = (count as u64).min(depth as u64) as usize;
+                return Ok(Outcome {
+                    code: 0,
+                    flow: if name == "break" {
+                        Flow::Break(count)
+                    } else {
+                        Flow::Continue(count)
+                    },
+                });
+            }
+            // Bash unwinds every enclosing loop for a nonpositive count,
+            // including when the command was `continue`, while preserving 1.
+            Some(_) => (
+                1,
+                Flow::Break(depth),
+                args.first(),
+                "loop count out of range",
+            ),
+            None => (2, Flow::Exit, args.first(), "numeric argument required"),
+        }
+    };
+    let output = endpoint(fds, 2)?;
+    for piece in ["/usr/bin/bash: ", name, ": "] {
+        output
+            .write_all(piece.as_bytes(), &context.cancel)
+            .await
+            .map_err(|error| error.status())?;
+    }
+    if let Some(value) = value {
+        output
+            .write_all(value.as_bytes(), &context.cancel)
+            .await
+            .map_err(|error| error.status())?;
+        output
+            .write_all(b": ", &context.cancel)
+            .await
+            .map_err(|error| error.status())?;
+    }
+    output
+        .write_all(message.as_bytes(), &context.cancel)
+        .await
+        .map_err(|error| error.status())?;
+    output
+        .write_all(b"\n", &context.cancel)
+        .await
+        .map_err(|error| error.status())?;
+    Ok(Outcome { code, flow })
+}
+
 /// Original streaming adapter for Bashkit builtins/vars.rs Set. Expanded argv
 /// moves into the positional frame; no side-effect vector or argv clone.
 async fn set(
@@ -512,9 +755,9 @@ async fn set(
     if args.is_empty() {
         return Err(2); // Variable/option listing remains unsupported.
     }
-    let (mut nounset, mut pipefail) = {
+    let (mut nounset, mut pipefail, mut errexit) = {
         let state = state.borrow();
-        (state.nounset, state.pipefail)
+        (state.nounset, state.pipefail, state.errexit)
     };
     let mut index = 0;
     let mut explicit = false;
@@ -542,16 +785,18 @@ async fn set(
                 enabled,
                 &mut nounset,
                 &mut pipefail,
+                &mut errexit,
             )?;
             index += 1;
             continue;
         }
-        set_short_options(option, enabled, &mut nounset, context, work).await?;
+        set_short_options(option, enabled, &mut nounset, &mut errexit, context, work).await?;
     }
     // All options and work admission complete before any state changes.
     let mut state = state.borrow_mut();
     state.nounset = nounset;
     state.pipefail = pipefail;
+    state.errexit = errexit;
     if explicit || index < args.len() {
         args.drain(..index);
         state.replace_positional(args);
@@ -564,10 +809,12 @@ fn set_option(
     enabled: bool,
     nounset: &mut bool,
     pipefail: &mut bool,
+    errexit: &mut bool,
 ) -> Result<(), i32> {
     match option {
         "nounset" => *nounset = enabled,
         "pipefail" => *pipefail = enabled,
+        "errexit" => *errexit = enabled,
         _ => return Err(2),
     }
     Ok(())
@@ -577,6 +824,7 @@ async fn set_short_options(
     option: &str,
     enabled: bool,
     nounset: &mut bool,
+    errexit: &mut bool,
     context: &Context,
     work: &mut Work,
 ) -> Result<(), i32> {
@@ -584,10 +832,11 @@ async fn set_short_options(
         work.checkpoint(&context.cancel)
             .await
             .map_err(error_status)?;
-        if flag != b'u' {
-            return Err(2);
+        match flag {
+            b'u' => *nounset = enabled,
+            b'e' => *errexit = enabled,
+            _ => return Err(2),
         }
-        *nounset = enabled;
     }
     Ok(())
 }

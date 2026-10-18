@@ -1887,6 +1887,9 @@ impl<'a> Parser<'a> {
                         });
                         self.advance();
                     }
+                    Some(tokens::Token::ProcessSubIn | tokens::Token::ProcessSubOut) => {
+                        words.push(self.expect_word()?);
+                    }
                     Some(tokens::Token::Newline) | Some(tokens::Token::Semicolon) => {
                         self.advance();
                         break;
@@ -2814,8 +2817,11 @@ impl<'a> Parser<'a> {
                     kinds.push(CondTok::Word(None));
                     self.advance();
                 }
-                // `[[ a\n&& b\n]]`: newlines inside are blanks.
+                // Newlines are blanks only at specific grammar positions:
+                // before terms and after complete predicates, not after a
+                // lone word or between an operator and its operand.
                 Some(tokens::Token::Newline) => {
+                    kinds.push(CondTok::Op("\n"));
                     self.advance();
                 }
                 None => {
@@ -2832,17 +2838,17 @@ impl<'a> Parser<'a> {
             }
         }
 
-        if let Err(error) = check_conditional(&kinds) {
-            return Err(match error {
+        match parse_conditional_expression(&kinds, words) {
+            Ok(expression) => Ok(CompoundCommand::Test(Box::new(expression))),
+            Err(error) => Err(match error {
                 ConditionalError::Syntax(message) => Error::parse_at(
                     message,
                     self.current_span.start.line,
                     self.current_span.start.column,
                 ),
                 ConditionalError::Depth => self.limit_error(LimitExceeded::ConditionalDepth),
-            });
+            }),
         }
-        Ok(CompoundCommand::Conditional(words))
     }
 
     /// Build the `=~` operand from its raw source (see
@@ -6937,7 +6943,7 @@ fn heredoc_body_escapes(content: &str) -> String {
     out
 }
 
-/// One `[[ ]]` token for [`check_conditional`]: a word (with its text when
+/// One `[[ ]]` token for [`parse_conditional_expression`]: a word (with its text when
 /// it is a bare unquoted word that may act as an operator) or an operator
 /// token the lexer split off (`&&`, `||`, `(`, `)`, `<`, `>`, other).
 enum CondTok {
@@ -6950,19 +6956,28 @@ enum ConditionalError {
     Depth,
 }
 
-/// bash's `[[ ]]` grammar (parse.y `cond_expr`), checked at parse time so
-/// `[[ a $op b ]]`, `[[ -z ]]` or `[[ '(' x ]]` are syntax errors (status
-/// 2) as in bash, not runtime tests. Evaluation still runs on the words.
-fn check_conditional(toks: &[CondTok]) -> std::result::Result<(), ConditionalError> {
+/// Original structured adapter around the existing conditional grammar. Keep
+/// operator recognition at parse time, never reinterpret expanded operands.
+fn parse_conditional_expression(
+    toks: &[CondTok],
+    words: Vec<Word>,
+) -> std::result::Result<TestExpr, ConditionalError> {
     let mut pos = 0;
-    cond_or(toks, &mut pos, 0)?;
+    let mut words = words.into_iter();
+    let expression = cond_or(toks, &mut pos, &mut words, 0)?;
     if pos < toks.len() {
         return Err(ConditionalError::Syntax(format!(
             "syntax error in conditional expression: unexpected token `{}'",
             cond_shown(toks.get(pos))
         )));
     }
-    Ok(())
+    Ok(expression)
+}
+
+fn cond_take(words: &mut std::vec::IntoIter<Word>) -> std::result::Result<Word, ConditionalError> {
+    words.next().ok_or_else(|| {
+        ConditionalError::Syntax("syntax error in conditional expression".into())
+    })
 }
 
 const COND_UNARY: &[&str] = &[
@@ -6978,6 +6993,7 @@ const COND_MAX_DEPTH: usize = 256;
 fn cond_shown(tok: Option<&CondTok>) -> String {
     match tok {
         None => "]]".to_string(),
+        Some(CondTok::Op("\n")) => "newline".to_string(),
         Some(CondTok::Op(op)) => op.to_string(),
         Some(CondTok::Word(Some(text))) => text.clone(),
         Some(CondTok::Word(None)) => "word".to_string(),
@@ -6994,52 +7010,77 @@ fn cond_word_text(tok: Option<&CondTok>) -> Option<&str> {
 fn cond_or(
     t: &[CondTok],
     pos: &mut usize,
+    words: &mut std::vec::IntoIter<Word>,
     depth: usize,
-) -> std::result::Result<(), ConditionalError> {
+) -> std::result::Result<TestExpr, ConditionalError> {
     if depth > COND_MAX_DEPTH {
         return Err(ConditionalError::Depth);
     }
-    cond_and(t, pos, depth)?;
+    let first = cond_and(t, pos, words, depth)?;
+    if !matches!(t.get(*pos), Some(CondTok::Op("||"))) {
+        return Ok(first);
+    }
+    let mut children = vec![first];
     while matches!(t.get(*pos), Some(CondTok::Op("||"))) {
         *pos += 1;
-        cond_and(t, pos, depth)?;
+        cond_take(words)?;
+        children.push(cond_and(t, pos, words, depth)?);
     }
-    Ok(())
+    Ok(TestExpr::Or(children))
+}
+
+// Newline tokens own no Word slot. Keep them in the grammar so a lone word
+// cannot silently become a string predicate across a physical newline.
+fn cond_newlines(t: &[CondTok], pos: &mut usize) {
+    while matches!(t.get(*pos), Some(CondTok::Op("\n"))) {
+        *pos += 1;
+    }
 }
 
 fn cond_and(
     t: &[CondTok],
     pos: &mut usize,
+    words: &mut std::vec::IntoIter<Word>,
     depth: usize,
-) -> std::result::Result<(), ConditionalError> {
-    cond_term(t, pos, depth)?;
+) -> std::result::Result<TestExpr, ConditionalError> {
+    let first = cond_term(t, pos, words, depth)?;
+    cond_newlines(t, pos);
+    if !matches!(t.get(*pos), Some(CondTok::Op("&&"))) {
+        return Ok(first);
+    }
+    let mut children = vec![first];
     while matches!(t.get(*pos), Some(CondTok::Op("&&"))) {
         *pos += 1;
-        cond_term(t, pos, depth)?;
+        cond_take(words)?;
+        children.push(cond_term(t, pos, words, depth)?);
+        cond_newlines(t, pos);
     }
-    Ok(())
+    Ok(TestExpr::And(children))
 }
 
 fn cond_term(
     t: &[CondTok],
     pos: &mut usize,
+    words: &mut std::vec::IntoIter<Word>,
     depth: usize,
-) -> std::result::Result<(), ConditionalError> {
+) -> std::result::Result<TestExpr, ConditionalError> {
     if depth > COND_MAX_DEPTH {
         return Err(ConditionalError::Depth);
     }
+    cond_newlines(t, pos);
     match t.get(*pos) {
         None => Err(ConditionalError::Syntax(
             "syntax error in conditional expression".to_string(),
         )),
         Some(CondTok::Op("(")) => {
             *pos += 1;
+            cond_take(words)?;
             if matches!(t.get(*pos), Some(CondTok::Op(")"))) {
                 return Err(ConditionalError::Syntax(
                     "unexpected token `)' in conditional command".to_string(),
                 ));
             }
-            cond_or(t, pos, depth + 1)?;
+            let expression = cond_or(t, pos, words, depth + 1)?;
             if !matches!(t.get(*pos), Some(CondTok::Op(")"))) {
                 return Err(ConditionalError::Syntax(format!(
                     "unexpected token `{}', expected `)'",
@@ -7047,15 +7088,18 @@ fn cond_term(
                 )));
             }
             *pos += 1;
-            Ok(())
+            cond_take(words)?;
+            Ok(TestExpr::Group(Box::new(expression)))
         }
         Some(CondTok::Word(_)) if cond_word_text(t.get(*pos)) == Some("!") => {
             *pos += 1;
-            cond_term(t, pos, depth + 1)
+            cond_take(words)?;
+            Ok(TestExpr::Not(Box::new(cond_term(t, pos, words, depth + 1)?)))
         }
         Some(CondTok::Word(_)) => {
             let first = cond_word_text(t.get(*pos));
             *pos += 1;
+            let left = cond_take(words)?;
             if first.is_some_and(|w| COND_UNARY.contains(&w)) {
                 if !matches!(t.get(*pos), Some(CondTok::Word(_))) {
                     return Err(ConditionalError::Syntax(format!(
@@ -7064,20 +7108,26 @@ fn cond_term(
                     )));
                 }
                 *pos += 1;
-                return Ok(());
+                return Ok(TestExpr::Unary {
+                    operator: first.unwrap().to_owned(),
+                    operand: cond_take(words)?,
+                });
             }
-            let binary = match t.get(*pos) {
-                Some(CondTok::Op("<" | ">")) => true,
-                Some(CondTok::Word(Some(op))) => COND_BINARY.contains(&op.as_str()),
-                None | Some(CondTok::Op("&&" | "||" | ")")) => return Ok(()),
-                _ => false,
+            let operator = match t.get(*pos) {
+                Some(CondTok::Op(op @ ("<" | ">"))) => Some(*op),
+                Some(CondTok::Word(Some(op))) if COND_BINARY.contains(&op.as_str()) => {
+                    Some(op.as_str())
+                }
+                None | Some(CondTok::Op("&&" | "||" | ")")) => return Ok(TestExpr::Word(left)),
+                _ => None,
             };
-            if !binary {
+            let Some(operator) = operator else {
                 return Err(ConditionalError::Syntax(
                     "conditional binary operator expected".to_string(),
                 ));
-            }
+            };
             *pos += 1;
+            cond_take(words)?;
             if !matches!(t.get(*pos), Some(CondTok::Word(_))) {
                 return Err(ConditionalError::Syntax(format!(
                     "unexpected argument `{}' to conditional binary operator",
@@ -7085,7 +7135,11 @@ fn cond_term(
                 )));
             }
             *pos += 1;
-            Ok(())
+            Ok(TestExpr::Binary {
+                left,
+                operator: operator.to_owned(),
+                right: cond_take(words)?,
+            })
         }
         Some(CondTok::Op(op)) => Err(ConditionalError::Syntax(format!(
             "unexpected token `{op}' in conditional command"

@@ -16,6 +16,8 @@ use std::{
     rc::Rc,
 };
 
+mod conditional;
+mod control;
 mod eval;
 pub(crate) use eval::RetainedStorage;
 
@@ -52,6 +54,8 @@ pub(crate) enum Flow {
     Exit,
     Abort,
     Return,
+    Break(usize),
+    Continue(usize),
     DiscardReadUnit,
 }
 #[derive(Clone, Copy, Debug)]
@@ -222,6 +226,8 @@ pub(crate) struct Context {
     parameter_error_status: i32,
     compound_child: bool,
     evaluation: eval::Scope,
+    loop_depth: usize,
+    ignore_errexit: bool,
 }
 impl Context {
     fn stop_signal(&self) -> i32 {
@@ -254,8 +260,24 @@ impl Context {
             cancel.probe_now()
         })))
     }
+    pub(crate) fn loop_depth(&self) -> usize {
+        self.loop_depth
+    }
+    fn loop_body(&self) -> Self {
+        Self {
+            loop_depth: self.loop_depth + 1,
+            ..self.clone()
+        }
+    }
+    fn condition(&self) -> Self {
+        Self {
+            ignore_errexit: true,
+            ..self.clone()
+        }
+    }
     fn isolated(&self) -> Self {
         Self {
+            loop_depth: 0,
             scope: Scope::new(self.core.allocate_id()),
             evaluation: self.evaluation.new_task(),
             ..self.clone()
@@ -546,6 +568,8 @@ impl Session {
             scope: Scope::new(0),
             parameter_error_status: 127,
             compound_child: false,
+            loop_depth: 0,
+            ignore_errexit: false,
             evaluation,
         };
         let state = self.state.clone();
@@ -865,7 +889,26 @@ fn execute(
                 return Outcome::status(130);
             }
             let preserve = matches!(command, Command::Pipeline(_) | Command::List(_));
-            let result = command_body(command, state.clone(), fds, context).await;
+            let check_errexit = !context.ignore_errexit
+                && matches!(
+                    &command,
+                    Command::Simple(_)
+                        | Command::Pipeline(Pipeline { negated: false, .. })
+                        | Command::Compound(
+                            CompoundCommand::Arithmetic(_)
+                                | CompoundCommand::Test(_)
+                                | CompoundCommand::Subshell(_),
+                            _
+                        )
+                );
+            let mut result = command_body(command, state.clone(), fds, context).await;
+            if check_errexit
+                && result.flow == Flow::Normal
+                && result.code != 0
+                && state.borrow().errexit
+            {
+                result.flow = Flow::Abort;
+            }
             finish_command(&state, result, preserve)
         },
         Outcome::status,
@@ -985,9 +1028,18 @@ async fn pipeline_command(
             children.next().expect("all pipeline state was prepared")
         };
         let stage_context = if count == 1 {
-            context.clone()
+            if pipeline.negated {
+                context.condition()
+            } else {
+                context.clone()
+            }
         } else {
-            context.isolated_command(&command)
+            let child = context.isolated_command(&command);
+            if index + 1 < count || pipeline.negated {
+                child.condition()
+            } else {
+                child
+            }
         };
         let stage_fds = if count == 1 {
             fds.clone()
@@ -1087,23 +1139,51 @@ async fn compound_command(
     fds: Descriptors,
     context: Context,
 ) -> Outcome {
-    let table = fds.borrow().clone();
-    drop(fds);
-    let fds = Rc::new(RefCell::new(table));
+    // Without compound redirections, `exec` inside a branch or loop changes
+    // the surrounding shell's bindings. A redirected compound restores its
+    // caller's table when its body finishes, including after `exec`.
+    let fds = if redirs.is_empty() {
+        fds
+    } else {
+        let table = fds.borrow().clone();
+        // Shadowing alone retains the incoming table until this body returns.
+        // A redirected background loop must release its old capture writer
+        // before running, even if the loop itself never finishes.
+        drop(fds);
+        Rc::new(RefCell::new(table))
+    };
     let mut work = substitution_work(&context, &fds);
     let fds = match command_redirects(&redirs, &state, fds, &context, &mut work).await {
         Err(outcome) => return outcome,
         Ok(fds) => fds,
     };
     let context = context.compound_body();
+    // Unredirected compounds share shell bindings so exec persists, but their
+    // process-substitution descriptors still belong only to this command.
+    let allocation = match context.evaluation.admit_execution(
+        std::mem::size_of::<ProcessSubstitutionFds>() + 2 * std::mem::size_of::<usize>(),
+    ) {
+        Ok(allocation) => allocation,
+        Err(code) => return Outcome::status(code),
+    };
+    let process_fds = Rc::new(ProcessSubstitutionFds {
+        fds: fds.clone(),
+        opened: Cell::new(0),
+        _allocation: allocation,
+    });
     // Other bodies must release the expansion reader's descriptor references.
     work.substitutions = matches!(
         compound,
-        CompoundCommand::Arithmetic(_) | CompoundCommand::Case(_)
+        CompoundCommand::Arithmetic(_)
+            | CompoundCommand::Case(_)
+            | CompoundCommand::For(_)
+            | CompoundCommand::ArithmeticFor(_)
+            | CompoundCommand::Test(_)
     )
     .then(|| Substitutions {
         context: context.clone(),
         fds: fds.clone(),
+        process_fds: Some(process_fds.clone()),
     });
     execute_compound_body(compound, state, fds, context, &mut work).await
 }
@@ -1121,7 +1201,19 @@ fn command_redirects<'a>(
             let original_fds = fds.clone();
             match redirects(redirs, state, fds, context, work, None).await {
                 Ok(fds) => Ok(fds),
-                Err(error) => Err(expansion_failure(error, &original_fds, context).await),
+                Err(error) => {
+                    let mut outcome = expansion_failure(error, &original_fds, context).await;
+                    // Setup failure is a command failure even when its compound
+                    // body's statuses have their own errexit rules.
+                    if outcome.flow == Flow::Normal
+                        && outcome.code != 0
+                        && !context.ignore_errexit
+                        && state.borrow().errexit
+                    {
+                        outcome.flow = Flow::Abort;
+                    }
+                    Err(outcome)
+                }
             }
         },
         |code| Err(Outcome::status(code)),
@@ -1143,8 +1235,22 @@ fn execute_compound_body<'a>(
             Outcome::status,
         ),
         CompoundCommand::BraceGroup(commands) => sequence(commands, state, fds, context),
-        CompoundCommand::While(loop_) => {
-            evaluation.frame(while_command(loop_, state, fds, context), Outcome::status)
+        CompoundCommand::While(loop_) => evaluation.frame(
+            while_command(loop_.condition, loop_.body, false, state, fds, context),
+            Outcome::status,
+        ),
+        CompoundCommand::Test(expression) => evaluation.frame(
+            async move { conditional::run(&expression, &state, &fds, &context, work).await },
+            Outcome::status,
+        ),
+        CompoundCommand::If(if_) => control::run_if(if_, state, fds, context),
+        CompoundCommand::Until(loop_) => evaluation.frame(
+            while_command(loop_.condition, loop_.body, true, state, fds, context),
+            Outcome::status,
+        ),
+        CompoundCommand::For(loop_) => control::run_for(loop_, state, fds, context, work),
+        CompoundCommand::ArithmeticFor(loop_) => {
+            control::run_arithmetic_for(loop_, state, fds, context)
         }
         CompoundCommand::Case(case_) => {
             evaluation.frame(run_case(case_, state, fds, context, work), Outcome::status)
@@ -1154,14 +1260,18 @@ fn execute_compound_body<'a>(
 }
 
 async fn while_command(
-    loop_: WhileCommand,
+    condition: Vec<Command>,
+    body: Vec<Command>,
+    until: bool,
     state: SharedState,
     fds: Descriptors,
     context: Context,
 ) -> Outcome {
+    let context = context.loop_body();
+    let condition_context = context.condition();
     let mut condition_cache = None;
-    let mut condition_cache_attempted = false;
     let mut body_cache = None;
+    let mut condition_cache_attempted = false;
     let mut body_cache_attempted = false;
     let mut result = Outcome::status(0);
     let mut budget = Budget::default();
@@ -1171,32 +1281,37 @@ async fn while_command(
         }
         if !condition_cache_attempted {
             condition_cache_attempted = true;
-            condition_cache = cache_loop_arithmetic(&loop_.condition, &context).await;
+            condition_cache = cache_loop_arithmetic(&condition, &condition_context).await;
         }
-        let condition = loop_sequence(
-            &loop_.condition,
+        let test = loop_sequence(
+            &condition,
             &state,
             &fds,
-            &context,
+            &condition_context,
             condition_cache.as_ref(),
         )
         .await;
         if context.cancel.is_cancelled() {
             return Outcome::status(130);
         }
-        if condition.flow != Flow::Normal {
-            return condition;
-        }
-        if condition.code != 0 {
-            return result;
+        match control::loop_step(test, context.loop_depth) {
+            control::LoopStep::Normal(test) => {
+                if (test.code == 0) == until {
+                    return result;
+                }
+            }
+            control::LoopStep::Continue => continue,
+            control::LoopStep::Stop(outcome) => return outcome,
         }
         if !body_cache_attempted {
             body_cache_attempted = true;
-            body_cache = cache_loop_arithmetic(&loop_.body, &context).await;
+            body_cache = cache_loop_arithmetic(&body, &context).await;
         }
-        result = loop_sequence(&loop_.body, &state, &fds, &context, body_cache.as_ref()).await;
-        if result.flow != Flow::Normal {
-            return result;
+        let body_result = loop_sequence(&body, &state, &fds, &context, body_cache.as_ref()).await;
+        match control::loop_step(body_result, context.loop_depth) {
+            control::LoopStep::Normal(outcome) => result = outcome,
+            control::LoopStep::Continue => result = Outcome::status(0),
+            control::LoopStep::Stop(outcome) => return outcome,
         }
     }
 }
@@ -1301,7 +1416,14 @@ fn loop_arithmetic<'a>(
                 }
                 None => arithmetic_command(source, state, &fds, &context, &mut work).await,
             };
-            let result = finish_command(state, result, false);
+            let mut result = finish_command(state, result, false);
+            if result.flow == Flow::Normal
+                && result.code != 0
+                && state.borrow().errexit
+                && !context.ignore_errexit
+            {
+                result.flow = Flow::Abort;
+            }
             if context.cancel.is_cancelled() {
                 return Outcome::status(130);
             }
@@ -1633,6 +1755,7 @@ async fn subshell(
                 work.substitutions = Some(Substitutions {
                     context: child_context.clone(),
                     fds: child_fds.clone(),
+                    process_fds: None,
                 });
                 let result =
                     match command_redirects(&redirs, &child, child_fds, &child_context, &mut work)
@@ -1684,15 +1807,36 @@ async fn list_command(
     }
     // There are no separators left: evaluate AND/OR directly to avoid wrapping
     // the same AST into another list forever.
-    result = execute(first, state.clone(), fds.clone(), context.clone()).await;
-    for (operator, next) in links {
+    result = execute(
+        first,
+        state.clone(),
+        fds.clone(),
+        if links.is_empty() {
+            context.clone()
+        } else {
+            context.condition()
+        },
+    )
+    .await;
+    let count = links.len();
+    for (index, (operator, next)) in links.into_iter().enumerate() {
         if result.flow != Flow::Normal || context.cancel.is_cancelled() {
             break;
         }
         if (operator == ListOperator::And && result.code == 0)
             || (operator == ListOperator::Or && result.code != 0)
         {
-            result = execute(next, state.clone(), fds.clone(), context.clone()).await;
+            result = execute(
+                next,
+                state.clone(),
+                fds.clone(),
+                if index + 1 == count {
+                    context.clone()
+                } else {
+                    context.condition()
+                },
+            )
+            .await;
         }
     }
     result
@@ -1780,6 +1924,8 @@ async fn launch_background(
         parameter_error_status: context.child_error_status(&command),
         compound_child: matches!(command, Command::Compound(..)),
         evaluation: context.evaluation.new_task(),
+        loop_depth: 0,
+        ignore_errexit: context.ignore_errexit,
     };
     let fds = Rc::new(RefCell::new(fds.borrow().clone()));
     let parent_scope = context.scope.clone();
@@ -1885,8 +2031,29 @@ fn substitution_work(context: &Context, fds: &Descriptors) -> expand::Work {
     work.substitutions = Some(Substitutions {
         context: context.clone(),
         fds: fds.clone(),
+        process_fds: None,
     });
     work
+}
+
+/// Compound-local descriptor cleanup without retaining individual pipe ends.
+struct ProcessSubstitutionFds {
+    fds: Descriptors,
+    opened: Cell<u64>,
+    _allocation: eval::Allocation,
+}
+impl Drop for ProcessSubstitutionFds {
+    fn drop(&mut self) {
+        let mut opened = self.opened.get();
+        let mut fds = self.fds.borrow_mut();
+        while opened != 0 {
+            let fd = opened.trailing_zeros();
+            opened &= opened - 1;
+            // Bash closes the generated number even if exec replaced it;
+            // deliberate duplicates at other descriptor numbers stay open.
+            fds.remove(fd);
+        }
+    }
 }
 
 /// Runs `$(...)` bodies as subshell tasks. Expansion work carries one while it
@@ -1896,8 +2063,13 @@ fn substitution_work(context: &Context, fds: &Descriptors) -> expand::Work {
 pub(crate) struct Substitutions {
     context: Context,
     fds: Descriptors,
+    process_fds: Option<Rc<ProcessSubstitutionFds>>,
 }
 impl Substitutions {
+    pub(crate) fn filesystem(&self) -> Rc<dyn FileSystem> {
+        self.context.core.fs.clone()
+    }
+
     /// Start `commands` in an isolated copy of `state`, with stdout on a new
     /// pipe whose reader is returned. The body runs as its own executor task,
     /// so nested substitutions add no native or WASM stack depth.
@@ -1914,6 +2086,15 @@ impl Substitutions {
         self.context.core.reap_completed_jobs();
         let (reader, writer) = self.context.fs().pipe().map_err(|error| error.status())?;
         let child = state;
+        // Bash clears -e in command substitutions unless inherit_errexit is
+        // enabled. Process substitutions and explicit subshells retain it.
+        // The child already owns its state, including all shopt flags.
+        {
+            let mut state = child.borrow_mut();
+            if !state.inherit_errexit {
+                state.errexit = false;
+            }
+        }
         let mut table = self.fds.borrow().clone();
         table.insert(1, writer);
         let fds = Rc::new(RefCell::new(table));
@@ -2005,8 +2186,8 @@ impl Substitutions {
     /// Start `<(commands)` (`is_input`) or `>(commands)` as a job of this
     /// shell and open its end of the pipe in the command's descriptor table,
     /// at the highest free descriptor from 63 down, as bash does. Returns
-    /// that descriptor; the caller expands it to `/dev/fd/N`. The table is
-    /// the command's own copy, so the descriptor closes with the command.
+    /// that descriptor; the caller expands it to `/dev/fd/N`. Simple commands
+    /// own a copied table; compounds track generated numbers for scoped cleanup.
     pub(crate) fn process<'a>(
         &'a self,
         commands: Vec<Command>,
@@ -2109,6 +2290,11 @@ impl Substitutions {
             },
         );
         self.fds.borrow_mut().insert(fd, parent_end);
+        if let Some(process_fds) = &self.process_fds {
+            process_fds
+                .opened
+                .set(process_fds.opened.get() | (1u64 << fd));
+        }
         parent_state.borrow_mut().last_async = Some(identity);
         Ok(fd)
     }
@@ -2223,6 +2409,7 @@ struct PreparedCommand {
 struct BuiltinPrefixFrame {
     state: SharedState,
     saved: BTreeMap<String, Option<String>>,
+    restore_epoch_realtime: bool,
 }
 impl BuiltinPrefixFrame {
     async fn enter(
@@ -2237,6 +2424,7 @@ impl BuiltinPrefixFrame {
         let mut frame = Self {
             state: state.clone(),
             saved: BTreeMap::new(),
+            restore_epoch_realtime: false,
         };
         {
             let mut state_ref = state.borrow_mut();
@@ -2258,6 +2446,7 @@ impl BuiltinPrefixFrame {
                 }
                 work.admit_storage(target.len().saturating_add(value.len()))?;
                 let previous = state_ref.variables.insert(target.clone(), value.clone());
+                frame.restore_epoch_realtime |= state_ref.suspend_epoch_realtime(&target);
                 frame.saved.entry(target).or_insert(previous);
             }
         }
@@ -2267,6 +2456,9 @@ impl BuiltinPrefixFrame {
 impl Drop for BuiltinPrefixFrame {
     fn drop(&mut self) {
         let mut state = self.state.borrow_mut();
+        if self.restore_epoch_realtime {
+            state.restore_epoch_realtime();
+        }
         for (name, value) in std::mem::take(&mut self.saved) {
             match value {
                 Some(value) => {
@@ -2486,6 +2678,7 @@ async fn dispatch_simple_command_body(
         }
         let frame = FunctionFrame::enter(state.clone(), args, context.limits().function_depth)?;
         let context = Context {
+            loop_depth: 0,
             evaluation: context
                 .evaluation
                 .clone()
@@ -2758,6 +2951,89 @@ async fn redirect_target(
     .await
 }
 
+// Keep descriptor validation and diagnostic writes out of recursive poll frames.
+#[inline(never)]
+fn duplicate_descriptor<'a>(
+    target: &'a str,
+    line: Option<usize>,
+    fds: &'a Descriptors,
+    context: &'a Context,
+    work: &'a mut expand::Work,
+) -> eval::Frame<'a, Result<io::Endpoint, CommandError>> {
+    context.evaluation.frame(
+        async move {
+            let mut source = Some(0u32);
+            let mut first_nonzero = None;
+            for (offset, byte) in target.bytes().enumerate() {
+                work.checkpoint(&context.cancel).await?;
+                if !byte.is_ascii_digit() {
+                    return Err(2.into());
+                }
+                if byte != b'0' && first_nonzero.is_none() {
+                    first_nonzero = Some(offset);
+                }
+                source = source
+                    .and_then(|value| value.checked_mul(10))
+                    .and_then(|value| value.checked_add(u32::from(byte - b'0')));
+            }
+            if target.is_empty() {
+                return Err(2.into());
+            }
+            if let Some(endpoint) = source.and_then(|source| fds.borrow().get(source)) {
+                return Ok(endpoint);
+            }
+            let stderr = fds.borrow().get(2);
+            if let Some(stderr) = stderr {
+                let source = &target.as_bytes()[first_nonzero.unwrap_or(target.len() - 1)..];
+                // A bounded stack buffer handles the line number; the possibly
+                // large target is borrowed and streamed without allocation.
+                let mut digits = [0u8; std::mem::size_of::<usize>() * 3];
+                let mut start = digits.len();
+                let (label, separator): (&[u8], &[u8]) = if let Some(mut value) = line {
+                    loop {
+                        start -= 1;
+                        digits[start] = b'0' + (value % 10) as u8;
+                        value /= 10;
+                        if value == 0 {
+                            break;
+                        }
+                    }
+                    (b"line ", b": ")
+                } else {
+                    (b"", b"")
+                };
+                let parts: [&[u8]; 6] = [
+                    b"/usr/bin/bash: ",
+                    label,
+                    &digits[start..],
+                    separator,
+                    source,
+                    b": Bad file descriptor\n",
+                ];
+                let bytes = parts
+                    .iter()
+                    .fold(0usize, |bytes, part| bytes.saturating_add(part.len()));
+                if bytes > context.limits().expansion_bytes {
+                    return Err(2.into());
+                }
+                for part in parts {
+                    if stderr.write_all(part, &context.cancel).await.is_err() {
+                        break;
+                    }
+                }
+            }
+            // A redirect error is not intrinsically fatal; the command's
+            // existing errexit boundary decides whether execution continues.
+            Err(if context.cancel.is_cancelled() {
+                130.into()
+            } else {
+                1.into()
+            })
+        },
+        |code| Err(code.into()),
+    )
+}
+
 async fn redirects(
     redirs: &[Redirect],
     state: &SharedState,
@@ -2838,8 +3114,9 @@ async fn redirects(
                 if target == "-" {
                     fds.borrow_mut().remove(fd);
                 } else {
-                    let source = target.parse::<u32>().map_err(|_| 2)?;
-                    let endpoint = fds.borrow().get(source).ok_or(1)?;
+                    let endpoint =
+                        duplicate_descriptor(&target, redirect.expansion_line, &fds, context, work)
+                            .await?;
                     fds.borrow_mut().insert(fd, endpoint);
                 }
             }
@@ -2925,6 +3202,8 @@ mod scope_tests {
             scope: Scope::new(0),
             parameter_error_status: 127,
             compound_child: false,
+            loop_depth: 0,
+            ignore_errexit: false,
         };
         (session.state(), session.core.descriptors.clone(), context)
     }
@@ -2937,6 +3216,77 @@ mod scope_tests {
             }
         }
         panic!("arithmetic replay exceeded bounded polls");
+    }
+
+    #[test]
+    fn descriptor_diagnostics_stream_large_targets_without_storage_growth() {
+        for (target, expected) in [
+            ("8".repeat(8192), "8".repeat(8192)),
+            (format!("{}9", "0".repeat(8192)), "9".to_owned()),
+        ] {
+            let (_state, fds, context) = replay_context();
+            let (stderr, errors) = io::capture(16384);
+            fds.borrow_mut().insert(2, stderr);
+            let mut work = expand::Work::new(65536, 0, 16);
+            let outcome = finish_replay(async {
+                let error =
+                    match duplicate_descriptor(&target, Some(2), &fds, &context, &mut work).await {
+                        Ok(_) => panic!("descriptor must be closed"),
+                        Err(error) => error,
+                    };
+                expansion_failure(error, &fds, &context).await
+            });
+            assert_eq!(outcome.code, 1);
+            assert_eq!(outcome.flow, Flow::Normal);
+            assert_eq!(
+                errors.bytes(),
+                format!("/usr/bin/bash: line 2: {expected}: Bad file descriptor\n").as_bytes()
+            );
+        }
+    }
+
+    #[test]
+    fn descriptor_validation_observes_cancellation_during_long_numeric_targets() {
+        let (_state, fds, mut context) = replay_context();
+        let probes = Rc::new(Cell::new(0));
+        let observed = probes.clone();
+        context.cancel = Cancel::with_probe(Rc::new(move || {
+            observed.set(observed.get() + 1);
+            observed.get() >= 32
+        }));
+        let target = "0".repeat(8192);
+        let mut work = expand::Work::new(65536, 0, 16);
+        let outcome = finish_replay(async {
+            let error =
+                match duplicate_descriptor(&target, Some(1), &fds, &context, &mut work).await {
+                    Ok(_) => panic!("cancelled validation must not return a descriptor"),
+                    Err(error) => error,
+                };
+            expansion_failure(error, &fds, &context).await
+        });
+        assert_eq!(outcome.code, 130);
+        assert_eq!(probes.get(), 32);
+        assert!(context.cancel.is_cancelled());
+    }
+
+    #[test]
+    fn builtin_prefix_suspends_and_restores_the_dynamic_clock_hook() {
+        let (state, _fds, context) = replay_context();
+        assert!(state.borrow().dynamic_parameter("EPOCHREALTIME"));
+        let assigned = [("EPOCHREALTIME".to_owned(), "prefix".to_owned())];
+        let mut work = expand::Work::new(65536, 65536, 16);
+        finish_replay(async {
+            let frame = BuiltinPrefixFrame::enter(state.clone(), &assigned, &context, &mut work)
+                .await
+                .unwrap_or_else(|_| panic!("prefix storage must fit"));
+            assert_eq!(state.borrow().parameter("EPOCHREALTIME"), "prefix");
+            assert!(!state.borrow().dynamic_parameter("EPOCHREALTIME"));
+            context.cancel.cancel();
+            drop(frame);
+            assert!(state.borrow().dynamic_parameter("EPOCHREALTIME"));
+            assert!(!state.borrow().variables.contains_key("EPOCHREALTIME"));
+            Outcome::status(0)
+        });
     }
 
     #[test]

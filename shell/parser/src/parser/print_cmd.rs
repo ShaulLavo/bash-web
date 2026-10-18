@@ -743,13 +743,9 @@ impl<'a> Printer<'a> {
                     self.make(Some(cmd));
                 }
             }
-            CompoundCommand::Conditional(words) => {
+            CompoundCommand::Test(expression) => {
                 self.out.push_str("[[ ");
-                let toks: Vec<String> = words
-                    .iter()
-                    .map(|word| self.word_text(word))
-                    .collect();
-                self.out.push_str(&cond_text(&toks));
+                self.conditional_expression(expression);
                 self.out.push_str(" ]]");
             }
             CompoundCommand::Coproc(c) => {
@@ -758,6 +754,53 @@ impl<'a> Printer<'a> {
                 self.out.push(' ');
                 self.skip_this_indent += 1;
                 self.make(Some(&c.body));
+            }
+        }
+    }
+
+    fn conditional_expression(&mut self, expression: &TestExpr) {
+        match expression {
+            TestExpr::Word(word) => {
+                self.out.push_str("-n ");
+                self.out.push_str(&self.word_text(word));
+            }
+            TestExpr::Unary { operator, operand } => {
+                self.out.push_str(operator);
+                self.out.push(' ');
+                self.out.push_str(&self.word_text(operand));
+            }
+            TestExpr::Binary {
+                left,
+                operator,
+                right,
+            } => {
+                self.out.push_str(&self.word_text(left));
+                self.out.push(' ');
+                self.out.push_str(operator);
+                self.out.push(' ');
+                self.out.push_str(&self.word_text(right));
+            }
+            TestExpr::Not(child) => {
+                self.out.push_str("! ");
+                self.conditional_expression(child);
+            }
+            TestExpr::Group(child) => {
+                self.out.push_str("( ");
+                self.conditional_expression(child);
+                self.out.push_str(" )");
+            }
+            TestExpr::And(children) | TestExpr::Or(children) => {
+                let separator = if matches!(expression, TestExpr::And(_)) {
+                    " && "
+                } else {
+                    " || "
+                };
+                for (index, child) in children.iter().enumerate() {
+                    if index != 0 {
+                        self.out.push_str(separator);
+                    }
+                    self.conditional_expression(child);
+                }
             }
         }
     }
@@ -1066,128 +1109,6 @@ pub(crate) fn inline_commands(cmds: &[Command]) -> String {
     p.print_list(cmds);
     p.print_deferred_if_any("");
     p.out.into_string()
-}
-
-/// `[[ ... ]]` operands, as bash's `print_cond_node` prints its parse:
-/// a lone operand becomes `-n WORD`.
-fn cond_text(toks: &[String]) -> String {
-    let mut pos = 0;
-    let mut out = Vec::new();
-    cond_or(toks, &mut pos, &mut out);
-    // Anything the grammar did not consume prints as written.
-    out.extend(toks[pos.min(toks.len())..].iter().cloned());
-    out.join(" ")
-}
-
-fn cond_or(toks: &[String], pos: &mut usize, out: &mut Vec<String>) {
-    cond_and(toks, pos, out);
-    while toks.get(*pos).map(String::as_str) == Some("||") {
-        out.push("||".into());
-        *pos += 1;
-        cond_and(toks, pos, out);
-    }
-}
-
-fn cond_and(toks: &[String], pos: &mut usize, out: &mut Vec<String>) {
-    cond_term(toks, pos, out);
-    while toks.get(*pos).map(String::as_str) == Some("&&") {
-        out.push("&&".into());
-        *pos += 1;
-        cond_term(toks, pos, out);
-    }
-}
-
-fn is_cond_unary(op: &str) -> bool {
-    matches!(
-        op,
-        "-a" | "-b"
-            | "-c"
-            | "-d"
-            | "-e"
-            | "-f"
-            | "-g"
-            | "-h"
-            | "-k"
-            | "-p"
-            | "-r"
-            | "-s"
-            | "-t"
-            | "-u"
-            | "-w"
-            | "-x"
-            | "-O"
-            | "-G"
-            | "-L"
-            | "-S"
-            | "-N"
-            | "-n"
-            | "-z"
-            | "-o"
-            | "-v"
-            | "-R"
-    )
-}
-
-fn is_cond_binary(op: &str) -> bool {
-    matches!(
-        op,
-        "==" | "="
-            | "!="
-            | "<"
-            | ">"
-            | "=~"
-            | "-eq"
-            | "-ne"
-            | "-lt"
-            | "-le"
-            | "-gt"
-            | "-ge"
-            | "-nt"
-            | "-ot"
-            | "-ef"
-    )
-}
-
-fn cond_term(toks: &[String], pos: &mut usize, out: &mut Vec<String>) {
-    let Some(tok) = toks.get(*pos) else {
-        return;
-    };
-    match tok.as_str() {
-        "!" => {
-            out.push("!".into());
-            *pos += 1;
-            cond_term(toks, pos, out);
-        }
-        "(" => {
-            out.push("(".into());
-            *pos += 1;
-            cond_or(toks, pos, out);
-            if toks.get(*pos).map(String::as_str) == Some(")") {
-                *pos += 1;
-            }
-            out.push(")".into());
-        }
-        _ => {
-            let next = toks.get(*pos + 1).map(String::as_str);
-            if next.is_some_and(is_cond_binary) {
-                out.push(tok.clone());
-                out.push(toks[*pos + 1].clone());
-                if let Some(rhs) = toks.get(*pos + 2) {
-                    out.push(rhs.clone());
-                }
-                *pos += 3;
-            } else if is_cond_unary(tok) && next.is_some_and(|n| n != "&&" && n != "||" && n != ")")
-            {
-                out.push(tok.clone());
-                out.push(toks[*pos + 1].clone());
-                *pos += 2;
-            } else {
-                out.push("-n".into());
-                out.push(tok.clone());
-                *pos += 1;
-            }
-        }
-    }
 }
 
 #[cfg(test)]

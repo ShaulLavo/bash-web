@@ -3,7 +3,7 @@
 //! preview1 path_open, runtime pipes and inherited stdio share one namespace.
 use crate::{
     executor::{Cancel, Executor, JoinHandle},
-    io::{Endpoint, FdTable, FileSystem, HostEndpoint, IoError, OpenOptions},
+    io::{Endpoint, FdTable, FileMetadata, FileSystem, HostEndpoint, IoError, OpenOptions},
     process::{GroupId, ProcessError, ProcessHost, ProcessId, SpawnRequest},
 };
 use futures::{FutureExt, future::LocalBoxFuture};
@@ -21,6 +21,39 @@ use std::{
 mod wasi;
 #[cfg(target_os = "wasi")]
 pub use wasi::WasiAbi;
+
+/// Decode preview1's fixed 64-byte filestat record without relying on Rust
+/// layout/alignment. Preview1 exposes no Unix mode, owner or effective access
+/// information, so those capabilities remain absent rather than guessed.
+#[cfg(any(target_os = "wasi", test))]
+fn decode_filestat(bytes: &[u8; 64]) -> FileMetadata {
+    use crate::io::FileKind;
+    let u64_at = |offset| u64::from_le_bytes(bytes[offset..offset + 8].try_into().unwrap());
+    FileMetadata {
+        kind: match bytes[16] {
+            1 => FileKind::BlockDevice,
+            2 => FileKind::CharacterDevice,
+            3 => FileKind::Directory,
+            4 => FileKind::Regular,
+            5 | 6 => FileKind::Socket,
+            7 => FileKind::Symlink,
+            _ => FileKind::Unknown,
+        },
+        size: u64_at(32),
+        mode: None,
+        device: Some(u64_at(0)),
+        inode: Some(u64_at(8)),
+        uid: None,
+        gid: None,
+        accessed_ns: Some(u64_at(40)),
+        modified_ns: Some(u64_at(48)),
+        readable: None,
+        writable: None,
+        executable: None,
+        owned_by_effective_uid: None,
+        owned_by_effective_gid: None,
+    }
+}
 
 const AGAIN: i32 = 6;
 // runtime/proc/signals.ts: DEFAULT=0, IGNORE=1, HANDLE=2. This is a
@@ -101,6 +134,20 @@ pub trait Abi {
     /// One preview1 directory operation. Existing directories (never files)
     /// are accepted only for mkdir -p; the caller walks parent components.
     fn mkdir(&self, path: &str, allow_existing: bool) -> Result<(), i32>;
+    /// Metadata only: must not allocate descriptors or open the named node.
+    fn stat(&self, path: &str, follow_symlinks: bool) -> Result<FileMetadata, i32>;
+    /// Incremental directory operations; descriptor ownership stays with Runtime.
+    fn open_dir(&self, _path: &str) -> Result<u32, i32> {
+        Err(58)
+    }
+    fn read_dir_entry(
+        &self,
+        _fd: u32,
+        _cookie: u64,
+        _output: &mut [u8],
+    ) -> Result<Option<crate::io::DirectoryEntry>, i32> {
+        Err(58)
+    }
     fn open(&self, path: &str, options: &OpenOptions) -> Result<u32, i32>;
     fn read(&self, fd: u32, output: &mut [u8]) -> Result<usize, i32>;
     fn write(&self, fd: u32, input: &[u8]) -> Result<usize, i32>;
@@ -493,7 +540,70 @@ impl HostEndpoint for RuntimeEndpoint {
         .boxed_local()
     }
 }
+struct RuntimeDirectory {
+    runtime: Runtime,
+    fd: u32,
+}
+impl Drop for RuntimeDirectory {
+    fn drop(&mut self) {
+        self.runtime.0.abi.close(self.fd);
+    }
+}
+impl crate::io::Directory for RuntimeDirectory {
+    fn read_entry<'a>(
+        &'a self,
+        cookie: u64,
+        output: &'a mut [u8],
+    ) -> LocalBoxFuture<'a, Result<Option<crate::io::DirectoryEntry>, IoError>> {
+        async move {
+            crate::executor::yield_now().await;
+            self.runtime
+                .0
+                .abi
+                .read_dir_entry(self.fd, cookie, output)
+                .map_err(io_error)
+        }
+        .boxed_local()
+    }
+}
 impl FileSystem for Runtime {
+    fn open_dir<'a>(
+        &'a self,
+        path: &'a str,
+    ) -> LocalBoxFuture<'a, Result<Rc<dyn crate::io::Directory>, IoError>> {
+        async move {
+            if !path.starts_with('/')
+                || path.len() > crate::io::MAX_PATH_BYTES
+                || path.contains('\0')
+            {
+                return Err(IoError::InvalidPath);
+            }
+            crate::executor::yield_now().await;
+            let fd = self.0.abi.open_dir(path).map_err(io_error)?;
+            Ok(Rc::new(RuntimeDirectory {
+                runtime: self.clone(),
+                fd,
+            }) as Rc<dyn crate::io::Directory>)
+        }
+        .boxed_local()
+    }
+    fn stat<'a>(
+        &'a self,
+        path: &'a str,
+        follow_symlinks: bool,
+    ) -> LocalBoxFuture<'a, Result<FileMetadata, IoError>> {
+        async move {
+            if !path.starts_with('/')
+                || path.len() > crate::io::MAX_PATH_BYTES
+                || path.contains('\0')
+            {
+                return Err(IoError::InvalidPath);
+            }
+            crate::executor::yield_now().await;
+            self.0.abi.stat(path, follow_symlinks).map_err(io_error)
+        }
+        .boxed_local()
+    }
     fn mkdir<'a>(
         &'a self,
         path: &'a str,
@@ -541,6 +651,8 @@ fn io_error(errno: i32) -> IoError {
         8 | 76 => IoError::BadDescriptor,
         64 => IoError::BrokenPipe,
         44 => IoError::NotFound,
+        54 => IoError::NotDirectory,
+        58 => IoError::Unsupported,
         28 | 37 => IoError::InvalidPath,
         33 | 48 | 51 => IoError::LimitExceeded,
         _ => IoError::Runtime(errno),

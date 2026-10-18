@@ -135,19 +135,38 @@ impl Expansion<'_> {
         crate::state::State::admit_scalar_access(state, name, self.cancel, self.work).await?;
         let value = {
             let state = state.borrow();
-            let value = if pointer {
-                state.indirect_parameter(name)?
+            let value = if state.dynamic_parameter(name) {
+                Some(super::parameter_snapshot(
+                    &state,
+                    name,
+                    self.raw_remaining.min(self.work.remaining),
+                    true,
+                    self.work,
+                )?)
+            } else if pointer {
+                let value = state.indirect_parameter(name)?;
+                if value
+                    .is_some_and(|value| value.len() > self.raw_remaining.min(self.work.remaining))
+                {
+                    return Err(2.into());
+                }
+                self.work.admit_storage(value.map_or(0, str::len))?;
+                value.map(str::to_owned)
+            } else if state.scalar_is_set(name) {
+                Some(super::parameter_snapshot(
+                    &state,
+                    name,
+                    self.raw_remaining.min(self.work.remaining),
+                    true,
+                    self.work,
+                )?)
             } else {
-                state.scalar_parameter(name)
+                None
             };
             let Some(value) = value else {
                 return Ok(None);
             };
-            if value.len() > self.raw_remaining.min(self.work.remaining) {
-                return Err(2.into());
-            }
-            self.work.admit_storage(value.len())?;
-            value.to_owned()
+            value
         };
         for _ in value.bytes() {
             self.work.checkpoint(self.cancel).await?;

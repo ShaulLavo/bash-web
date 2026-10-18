@@ -79,8 +79,17 @@ pub struct State {
     pub pipestatus: Vec<i32>,
     pub pipefail: bool,
     pub nounset: bool,
+    pub errexit: bool,
+    /// Keep errexit in command-substitution children instead of clearing it.
+    pub inherit_errexit: bool,
+    /// Enable extended glob groups in option-sensitive pattern contexts.
+    pub extglob: bool,
+    /// Remove unmatched unquoted pathname patterns instead of keeping them.
+    pub nullglob: bool,
     /// Last published synthetic async handle. Isolated shells inherit a copy.
     pub(crate) last_async: Option<String>,
+    /// Unsetting EPOCHREALTIME permanently removes its dynamic-variable hook.
+    epoch_realtime: bool,
     pub(crate) star_separator: StarSeparator,
     ifs_members: Option<IfsMembers>,
     pub(crate) positional: Vec<String>,
@@ -101,7 +110,12 @@ impl Default for State {
             pipestatus: vec![0],
             pipefail: false,
             nounset: false,
+            errexit: false,
+            inherit_errexit: false,
+            extglob: false,
+            nullglob: false,
             last_async: None,
+            epoch_realtime: true,
             star_separator: StarSeparator::Live,
             ifs_members: None,
             positional: Vec::new(),
@@ -171,7 +185,12 @@ impl State {
             pipestatus,
             pipefail: state.pipefail,
             nounset: state.nounset,
+            errexit: state.errexit,
+            inherit_errexit: state.inherit_errexit,
+            extglob: state.extglob,
+            nullglob: state.nullglob,
             last_async,
+            epoch_realtime: state.epoch_realtime,
             star_separator: state.star_separator,
             ifs_members: state.ifs_members,
             positional,
@@ -179,7 +198,54 @@ impl State {
             prefixes,
         })
     }
+    fn epoch_realtime_shadowed(&self) -> bool {
+        self.locals
+            .iter()
+            .any(|frame| frame.contains_key("EPOCHREALTIME"))
+    }
+    /// Prefix RHS expansion keeps the dynamic hook. Only actual builtin
+    /// execution suspends it, and its owning prefix guard restores it on drop.
+    pub(crate) fn suspend_epoch_realtime(&mut self, name: &str) -> bool {
+        if name == "EPOCHREALTIME" && self.dynamic_parameter(name) {
+            self.epoch_realtime = false;
+            true
+        } else {
+            false
+        }
+    }
+    pub(crate) fn restore_epoch_realtime(&mut self) {
+        self.epoch_realtime = true;
+    }
+    pub(crate) fn dynamic_parameter(&self, name: &str) -> bool {
+        self.epoch_realtime
+            && !self.epoch_realtime_shadowed()
+            && matches!(
+                self.resolve_scalar_target(name),
+                ScalarResolution::Target("EPOCHREALTIME")
+            )
+    }
+    pub(crate) fn scalar_is_set(&self, name: &str) -> bool {
+        self.dynamic_parameter(name) || self.scalar_parameter(name).is_some()
+    }
+    /// Maximum preallocation for the host clock's signed seconds and six
+    /// fractional digits. Callers admit this before parameter() formats it.
+    pub(crate) const DYNAMIC_PARAMETER_BYTES: usize = 32;
     pub(crate) fn parameter(&self, name: &str) -> Cow<'_, str> {
+        if self.dynamic_parameter(name) {
+            use std::{
+                fmt::Write,
+                time::{SystemTime, UNIX_EPOCH},
+            };
+            let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
+                Ok(value) => value.as_micros() as i128,
+                Err(error) => -(error.duration().as_micros() as i128),
+            };
+            let seconds = timestamp.div_euclid(1_000_000);
+            let micros = timestamp.rem_euclid(1_000_000);
+            let mut result = String::with_capacity(Self::DYNAMIC_PARAMETER_BYTES);
+            write!(&mut result, "{seconds}.{micros:06}").expect("writing to String cannot fail");
+            return Cow::Owned(result);
+        }
         match name {
             "0" => Cow::Borrowed(&self.shell_name),
             "?" => Cow::Owned(self.status.to_string()),
@@ -598,6 +664,11 @@ impl State {
         if self.is_readonly(name) {
             return Err(());
         }
+        let was_dynamic =
+            name == "EPOCHREALTIME" && self.epoch_realtime && !self.epoch_realtime_shadowed();
+        if was_dynamic {
+            self.epoch_realtime = false;
+        }
         let frame = self
             .locals
             .iter()
@@ -630,7 +701,7 @@ impl State {
             *saved = None;
         }
         self.exported.remove(name);
-        let removed = self.variables.remove(name).is_some();
+        let removed = self.variables.remove(name).is_some() || was_dynamic;
         if name == "IFS" {
             self.refresh_star_separator();
         }

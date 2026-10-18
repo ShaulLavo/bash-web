@@ -196,8 +196,35 @@ fn validate_compound(
             Ok(())
         }
         CompoundCommand::Coproc(coproc) => validate_command(&coproc.body, ctx),
-        CompoundCommand::Arithmetic(_) | CompoundCommand::Conditional(_) => Ok(()),
+        CompoundCommand::Test(expression) => validate_test(expression, ctx),
+        CompoundCommand::Arithmetic(_) => Ok(()),
     }
+}
+
+fn validate_test(expression: &TestExpr, ctx: &mut ValidationContext) -> Result<(), BudgetError> {
+    match expression {
+        TestExpr::Word(word) | TestExpr::Unary { operand: word, .. } => validate_test_word(word, ctx),
+        TestExpr::Binary { left, right, .. } => {
+            validate_test_word(left, ctx)?;
+            validate_test_word(right, ctx)
+        }
+        TestExpr::Not(child) | TestExpr::Group(child) => validate_test(child, ctx),
+        TestExpr::And(children) | TestExpr::Or(children) => {
+            for child in children {
+                validate_test(child, ctx)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn validate_test_word(word: &Word, ctx: &mut ValidationContext) -> Result<(), BudgetError> {
+    // Conditional operands are scalar: a brace range is literal here, while
+    // command/process substitutions still contain executable commands.
+    for part in &word.parts {
+        validate_word_part(part, ctx, true)?;
+    }
+    Ok(())
 }
 
 fn validate_word(word: &Word, ctx: &mut ValidationContext) -> Result<(), BudgetError> {
