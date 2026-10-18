@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 /**
  * Lexical contract (not a Rust parser or a capability/build check):
@@ -668,11 +669,33 @@ function committedScan(root: string, ref: string, label: string): Evidence {
     // future graph additions be reviewed without freezing today's inventory,
     // while neither edited counts nor stale source identities can be trusted.
     const scan = scanSources(files, storedPolicy(evidence));
-    assert.deepEqual(
-      evidence,
-      scan,
-      `${label}: committed layer evidence does not match its engine sources`,
-    );
+    if (!isDeepStrictEqual(evidence, scan)) {
+      // A normal merge may inherit an unchanged evidence blob while combining
+      // new engine sources. Trust neither that stale digest nor arbitrary old
+      // evidence: verify the identical parent blob, then ratchet the merge's
+      // actual sources against that verified parent. Ordinary stale commits and
+      // evidence edited in the merge still fail closed.
+      const parents = git(root, ["rev-list", "--parents", "-n", "1", ref])
+        .trim()
+        .split(" ")
+        .slice(1);
+      const blob = git(root, ["ls-tree", ref, "--", evidencePath]);
+      let inherited = false;
+      if (parents.length > 1) {
+        for (const parent of parents) {
+          if (git(root, ["ls-tree", parent, "--", evidencePath]) !== blob) continue;
+          const parentScan = committedScan(root, parent, `${label} inherited parent`);
+          assertRatchet(scan, parentScan, `${label} merged sources`);
+          inherited = true;
+        }
+      }
+      if (!inherited)
+        assert.deepEqual(
+          evidence,
+          scan,
+          `${label}: committed layer evidence does not match its engine sources`,
+        );
+    }
     return scan;
   }
   // A first-baseline target has no JSON yet: scan its immutable sources instead

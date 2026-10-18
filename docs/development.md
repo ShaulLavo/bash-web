@@ -102,6 +102,46 @@ For explicit maintenance capture, prepare the pinned corpus sources only with
 does not build an engine. Capture itself requires Linux, GNU Bash 5.3.15,
 bubblewrap, Python's standard library, and the `yaml` package.
 
+## Engine layer gate
+
+Run the lexical dependency checks without building Rust or changing frozen
+compatibility data:
+
+```sh
+npm run test:check-layers
+npm run typecheck:layers
+LAYERS_BASE_REF=$(git rev-parse origin/main) npm run check:layers
+```
+
+`LAYERS_BASE_REF` (or `--base-ref`) must be an immutable full commit SHA.
+CI fetches complete history and selects the PR base SHA, the pre-push main SHA,
+or the merge-base with main for another branch's push. Its lightweight layer
+job must pass before any Rust or browser build job starts. `npm run compat`
+is an alias for `npm run compat:shell`; it still uses the frozen oracle.
+
+The checker scans every engine Rust source regardless of platform or feature
+configuration. It records separate production and test-only edges, violations,
+source locations and a source digest in `docs/evidence/engine-layers.json`.
+Neither violation count may increase, and a new violating edge cannot replace
+an old one even at the same count. This is a lexical check, not Rust alias or
+macro resolution and not proof that optional capabilities compile separately.
+See [plan 006](../plans/006-engine-boundaries.md) for the graph and that later gate.
+
+After editing engine sources, refresh and commit their exact evidence together:
+
+```sh
+LAYERS_BASE_REF=$(git rev-parse origin/main) npm run check:layers -- --record
+```
+
+Recording cannot bypass the committed-HEAD or immutable-target ratchet. A normal
+merge can carry unchanged evidence from a parent while combining newer sources.
+The checker verifies the identical parent evidence against that parent's sources,
+rescans the merge, and ratchets it against the verified parent before permitting
+a refresh. It never substitutes the old source digest or old counts for merged
+sources. Changed merge evidence must match exactly; ordinary source commits with
+stale evidence are rejected, as are tampered parent or immutable-target records.
+A target predating the first evidence file is scanned from its immutable sources.
+
 ## Repository layout
 
 - `shell/` contains the parser and WASI shell engine.

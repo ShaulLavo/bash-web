@@ -418,6 +418,110 @@ test("record is explicit, evidence is exact, source digest is stable across comm
   });
 });
 
+function mergeSourceChange(
+  git: (args: string[]) => string,
+  put: (path: string, contents: string) => void,
+  source: string,
+) {
+  const fork = commit(git);
+  git(["checkout", "-qb", "upstream"]);
+  put("shell/engine/src/state.rs", source);
+  const upstream = commit(git);
+  git(["checkout", "-qb", "layers", fork]);
+  return upstream;
+}
+
+test("normal merges refresh inherited evidence against verified parent and immutable target sources", () => {
+  withRepo((root, git, put) => {
+    const upstream = mergeSourceChange(git, put, "// merged source\nuse crate::exec::Frame;\n");
+    const recorded = checkLayers(root, { record: true });
+    const recordedRef = commit(git);
+    git(["-c", "commit.gpgsign=false", "merge", "--no-edit", upstream]);
+    assert.throws(() => checkLayers(root), /stale or edited/);
+    const refreshed = checkLayers(root, { record: true, baseRef: upstream });
+    assert.notEqual(refreshed.identity.engineSourceSha256, recorded.identity.engineSourceSha256);
+    assert.deepEqual(checkLayers(root, { baseRef: recordedRef }), refreshed);
+    // The same verified merge may be used as an immutable target before refresh is committed.
+    const mergedRef = git(["rev-parse", "HEAD"]);
+    assert.deepEqual(checkLayers(root, { baseRef: mergedRef }), refreshed);
+    commit(git);
+    assert.deepEqual(checkLayers(root, { baseRef: upstream }), refreshed);
+  });
+});
+
+test("merged-source reductions ratchet HEAD and immutable merge targets, not stale parent counts", () => {
+  withRepo((root, git, put) => {
+    const violating = "crate::expand::run();\n";
+    put("shell/engine/src/state.rs", violating);
+    const upstream = mergeSourceChange(git, put, "use crate::exec::Frame;\n");
+    const old = checkLayers(root, { record: true });
+    assert.equal(old.counts.production.violations, 1);
+    commit(git);
+    git(["-c", "commit.gpgsign=false", "merge", "--no-edit", upstream]);
+    const mergedRef = git(["rev-parse", "HEAD"]);
+    const reduced = checkLayers(root, { record: true });
+    assert.equal(reduced.counts.production.violations, 0);
+    put("shell/engine/src/state.rs", violating);
+    put(evidencePath, JSON.stringify(scan({ "state.rs": violating })));
+    assert.throws(
+      () => checkLayers(root, { record: true }),
+      /committed HEAD: production violations increased/,
+    );
+    commit(git); // Candidate makes its raised evidence exact; immutable merge target must still reject it.
+    assert.throws(
+      () => checkLayers(root, { record: true, baseRef: mergedRef }),
+      /immutable target: production violations increased/,
+    );
+  });
+});
+
+test("merge inheritance cannot hide new violations or edited evidence", () => {
+  for (const tamper of ["source", "counts", "identity", "parent"]) {
+    withRepo((root, git, put) => {
+      const source =
+        tamper === "source" ? "crate::expand::run();\n" : "// upstream\nuse crate::exec::Frame;\n";
+      const upstream = mergeSourceChange(git, put, source);
+      const evidence = checkLayers(root, { record: true });
+      if (tamper === "parent") {
+        evidence.counts.production.violations = 100;
+        put(evidencePath, JSON.stringify(evidence));
+      }
+      commit(git);
+      git(["-c", "commit.gpgsign=false", "merge", "--no-edit", upstream]);
+      if (tamper === "counts" || tamper === "identity") {
+        if (tamper === "counts") evidence.counts.production.violations = 100;
+        else evidence.identity.engineSourceSha256 = "0".repeat(64);
+        put(evidencePath, JSON.stringify(evidence));
+        git(["add", evidencePath]);
+        git(["-c", "commit.gpgsign=false", "commit", "--amend", "--no-edit", "-q"]);
+      }
+      for (const record of [false, true]) {
+        assert.throws(
+          () => checkLayers(root, { record, baseRef: upstream }),
+          tamper === "source"
+            ? /production violations increased/
+            : /committed layer evidence does not match/,
+        );
+      }
+    });
+  }
+});
+
+test("ordinary source commits with stale evidence still fail closed", () => {
+  withRepo((root, git, put) => {
+    commit(git);
+    checkLayers(root, { record: true });
+    commit(git);
+    put("shell/engine/src/state.rs", "// ordinary stale commit\nuse crate::exec::Frame;\n");
+    const staleRef = commit(git);
+    for (const record of [false, true])
+      assert.throws(
+        () => checkLayers(root, { record, baseRef: staleRef }),
+        /committed layer evidence does not match/,
+      );
+  });
+});
+
 test("raising working evidence cannot hide growth against committed HEAD, even with --record", () => {
   withRepo((root, git, put) => {
     commit(git);
@@ -522,6 +626,14 @@ test("target JSON numbers are verified against immutable source, not trusted", (
       () => checkLayers(root, { baseRef: badBase }),
       /committed layer evidence does not match/,
     );
+    // A valid candidate HEAD does not make a malformed older immutable target trustworthy.
+    put(evidencePath, JSON.stringify(evidence));
+    commit(git);
+    for (const record of [false, true])
+      assert.throws(
+        () => checkLayers(root, { record, baseRef: badBase }),
+        /LAYERS_BASE_REF: committed layer evidence does not match/,
+      );
   });
 });
 
