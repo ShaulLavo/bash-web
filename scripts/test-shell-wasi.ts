@@ -1,12 +1,11 @@
-// Exercise the same engine/stand-in tests on WASI, then size the core embedding.
+// Exercise the engine and utility tests on WASI, then size the core and each add-on.
 // The browser process service is deliberately not substituted by this harness.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
-import { shellTargetDirectory } from "./shell-build.ts";
-import { wasiBuildEnvironment } from "./wasi-build.ts";
+import { shellTargetDirectory, wasiBuildEnvironment } from "./wasi-build.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
 const root = resolve(import.meta.dirname, "..");
@@ -62,11 +61,27 @@ cargo(
   { env },
 );
 cargo(
+  ["test"].concat(manifest, [
+    "--target",
+    "wasm32-wasip1",
+    "-p",
+    "shell-utilities",
+    "--test",
+    "streaming",
+    "-j2",
+    "--",
+    "--test-threads=1",
+  ]),
+  { env },
+);
+cargo(
   ["build"].concat(manifest, [
     "--target",
     "wasm32-wasip1",
     "-p",
     "shell-engine",
+    "-p",
+    "shell-utilities",
     "--release",
     "-j2",
   ]),
@@ -102,11 +117,19 @@ const helpers = execFileSync(
   { encoding: "utf8" },
 );
 assert.equal(helpers, "['a', 'b c']\n/home/fixture\nNone\n");
-const bytes = readFileSync(wasm);
-const compressed = brotliCompressSync(bytes, {
-  params: { [constants.BROTLI_PARAM_QUALITY]: 11 },
-});
-console.log(
-  `Shell core release WASI: ${bytes.length} bytes raw; ${gzipSync(bytes, { level: 9 }).length} bytes gzip-9; ${compressed.length} bytes brotli-11`,
-);
-assert.ok(compressed.length <= 1_000_000, "shell core exceeds Brush's 1.0 MB brotli guardrail");
+const size = (label: string, path: string) => {
+  verifyWasiGuest(path);
+  const bytes = readFileSync(path);
+  const brotli = brotliCompressSync(bytes, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } });
+  const gzip = gzipSync(bytes, { level: 9 }).length;
+  console.log(
+    `${label}: ${bytes.length} bytes raw; ${gzip} bytes gzip-9; ${brotli.length} bytes brotli-11`,
+  );
+  return brotli.length;
+};
+const release = resolve(shellTargetDirectory(root), "wasm32-wasip1/release");
+const core = size("Shell core release WASI (standalone embedding)", wasm);
+assert.ok(core <= 1_000_000, "shell core exceeds Brush's 1.0 MB brotli guardrail");
+size("Shell core release WASI (browser runtime)", resolve(release, "shell-runtime.wasm"));
+for (const name of ["cat", "grep", "mkdir", "seq"])
+  size(`Utility add-on ${name}`, resolve(release, `${name}.wasm`));

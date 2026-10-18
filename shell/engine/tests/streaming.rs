@@ -4,7 +4,11 @@ use shell_engine::{
     process::ProcessHost,
 };
 /// Core tests use the test-only external fixtures; none is linked into the shell.
-fn register_utilities(host: &shell_engine::process::InProcessHost, fs: &shell_engine::io::MemoryFs, _line_bytes: usize) {
+fn register_utilities(
+    host: &shell_engine::process::InProcessHost,
+    fs: &shell_engine::io::MemoryFs,
+    _line_bytes: usize,
+) {
     support::register_utilities(host, fs, true);
 }
 include!("support/streaming.rs");

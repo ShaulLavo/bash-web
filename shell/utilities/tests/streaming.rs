@@ -1,34 +1,23 @@
 include!("../../engine/tests/support/streaming.rs");
 /// The separately linked utilities, driven exactly as their guest entry drives them.
 fn register_utilities(host: &InProcessHost, fs: &MemoryFs, line_bytes: usize) {
-    for (name, utility) in [
-        ("cat", shell_utilities::Utility::Cat),
-        ("grep", shell_utilities::Utility::Grep),
-        ("mkdir", shell_utilities::Utility::Mkdir),
-        ("seq", shell_utilities::Utility::Seq),
-    ] {
-        let fs = fs.clone();
-        host.register(format!("/home/guest/{name}"), move |request, cancel| {
-            let context = shell_utilities::Context {
-                cancel,
-                filesystem: Rc::new(fs.clone()),
-                line_bytes,
-            };
-            async move {
-                shell_utilities::run(
-                    utility,
-                    request.argv[1..].to_vec(),
-                    &request.cwd,
-                    &request.fds,
-                    &context,
-                )
-                .await
-            }
-            .boxed_local()
-        });
-    }
+    shell_utilities::register_in_process(host, "/home/guest", Rc::new(fs.clone()), line_bytes);
 }
+// Every scenario runs the real utility implementations through the ProcessHost
 // path, never mock executables called grep/mkdir or upstream output buffers.
+
+/// A pipeline that never produces output stays live until interrupted, then stops.
+fn interrupt_parked_pipeline(rig: &Rig, source: &str) {
+    let job = rig.start(source);
+    for _ in 0..100 {
+        rig.ex.drive(128);
+    }
+    assert!(!job.is_finished());
+    assert!(rig.output.is_empty());
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    assert_eq!(rig.host.active_count(), 0);
+}
 #[test]
 fn grep_streams_matching_lines_before_producer_exit() {
     let rig = Rig::new();
@@ -48,15 +37,7 @@ fn grep_streams_matching_lines_before_producer_exit() {
 fn grep_unmatched_pipeline_is_cancellable_and_preserves_session() {
     let rig = Rig::new();
     let source = "secret=kept; ticker | copy | grep unmatched; echo BAD_AFTER_INTERRUPT";
-    let job = rig.start(source);
-    for _ in 0..100 {
-        rig.ex.drive(128);
-    }
-    assert!(!job.is_finished());
-    assert!(rig.output.is_empty());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert_eq!(rig.host.active_count(), 0);
+    interrupt_parked_pipeline(&rig, source);
     assert_eq!(rig.run("echo \"$secret:$?\""), 0);
     assert_eq!(rig.text(), "kept:130\n");
 }
@@ -213,15 +194,7 @@ fn mkdir_parents_existing_files_and_failures() {
 fn grep_always_ready_unmatched_input_still_observes_cancellation() {
     let rig = Rig::new();
     let source = "seq 1 1000000000000 | grep unmatched";
-    let job = rig.start(source);
-    for _ in 0..100 {
-        rig.ex.drive(128);
-    }
-    assert!(!job.is_finished());
-    assert!(rig.output.is_empty());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert_eq!(rig.host.active_count(), 0);
+    interrupt_parked_pipeline(&rig, source);
 }
 
 #[test]

@@ -63,32 +63,61 @@ npm run test:rust
 npm run test:shell:wasi
 ```
 
-The shell has two explicit Cargo build presets. `Full` is the default and keeps
-the acceptance-only `cat`, `grep`, `mkdir` and `seq` stand-ins; `Lite` omits
-that optional `acceptance-utilities` capability and its `regex` dependency.
-Build and test them in separate target directories:
+There is one shell build: the core. It keeps every shell-language feature,
+including the original Thompson matcher behind `[[ =~ ]]`, arrays and all Bash
+builtins. External commands are not part of it. `cat`, `grep`, `mkdir` and `seq`
+are separately linked WASM programs in `shell/utilities` (one binary each), and
+only they depend on the `regex` crate. The core finds them, like any program,
+through functions, then ordinary PATH lookup, and reports 127 only when nothing
+is found. `npm run check:capabilities` proves the core's dependency closure has
+no `regex` crate.
 
 ```sh
-npm run build:shell:full
-npm run test:shell:full
-npm run build:shell:lite
-npm run test:shell:lite
-npm run test:shell:wasi:full
-npm run test:shell:wasi:lite
+npm run build:shell      # core, utilities and compatibility fixtures, all verified
+npm run build:utilities  # copy the four utility programs to dist/ and public/programs/
 ```
 
-Lite does not remove shell syntax. The Thompson matcher behind `[[ =~ ]]`
-remains in both presets. An omitted utility has no internal handler, so normal
-function and `command` precedence still apply, then ordinary PATH lookup runs;
-without an external executable it reports the omitted capability and exits 127.
-No syntax capability is omitted today. A future optional syntax capability must
-fail with status 2 and a diagnostic naming its capability and effective build.
-`set` and `shopt` cannot enable compiled-out capabilities.
-The capability matrix also checks that only Full contains the `regex` dependency
-closure. The preimplementation ablation measured Full at **2,881,948 raw /
-834,431 gzip-9** bytes and the acceptance-utilities omission at **1,810,845 /
-527,284**, a saving of **1,071,103 / 307,147** bytes. Those are selection
-measurements; each release build records its own final raw and compressed sizes.
+`wasm32-wasip1` has no practical dynamic linking for interpreter features, so a
+language feature cannot be split into a loadable module; the Thompson matcher
+costs only about 6 KB gzip. A command, in contrast, is naturally its own program.
+
+Applications install add-ons on the one Waffle `Runtime` they own:
+
+```ts
+import { installGrep } from "bash-web/utilities/grep";
+const grep = await installGrep(runtime); // writes /bin/grep, registers it
+```
+
+`installCat`, `installGrep`, `installMkdir` and `installSeq` each live in their own
+entry (`bash-web/utilities/<name>`), so a bundler emits only the programs an app
+imports; the core entry references none of them. Each takes optional `workerUrl`
+and `wasmUrl` (bundler-emitted URLs) or `module` (a `WebAssembly.Module` or lazy
+loader). Nothing is fetched or compiled until the shell first starts the program.
+Installation refuses an existing foreign `/bin/<name>` entry or a second install
+on the same Runtime (`UtilityConflictError`), rolls back its own marker if
+registration fails, and `dispose()` releases its registrations and removes only
+a marker it created and that is unchanged. Utility processes start through the
+shell worker on Waffle's real process, descriptor and bootstrap path.
+
+The native standalone `shell-engine` CLI stays core-only. `shell-cli`
+(`shell/compat-fixtures`) composes that same harness with the utility
+implementations on its in-process host, for the fuzzers whose fixtures use `cat`.
+
+The frozen compatibility instrument (`npm run compat`) runs on Waffle's Node
+runtime: one fresh `Runtime` and filesystem per case, the production
+`shell-runtime` guest as root, the utility programs and the oracle's `argv.py`
+and `printenv.py` fixture guests as real registered programs. stdout and stderr
+are raw separate streams, bounded together at 4 MiB with the existing 10 s case
+timeout. Each runner needs about 1.2 GiB of memory, so local replays with the
+heavy runner's suite class use `BASH_COMPAT_JOBS=2`. The unchanged-main control
+builds main's own shell, with its in-shell utilities, in a separate target:
+
+```sh
+npm run build:compat-control -- 02df6429cc142a771ff9ad26fae3f3d250d0bc04
+BASH_COMPAT_SHELL_WASM=$CARGO_TARGET_DIR/compat-control/<sha>.wasm \
+  BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell BASH_COMPAT_SKIP_BUILD=1 \
+  node scripts/bash-compat.mjs   # control: no BASH_COMPAT_UTILITY_DIR
+```
 
 Build and check the browser integration separately:
 
@@ -153,8 +182,8 @@ source locations and a source digest in `docs/evidence/engine-layers.json`.
 Neither violation count may increase, and a new violating edge cannot replace
 an old one even at the same count. This is a lexical check, not Rust alias or
 macro resolution and not proof that optional capabilities compile separately.
-See [plan 006](../plans/006-engine-boundaries.md) for the graph and separate
-Full/Lite compile-and-test matrix.
+See [plan 006](../plans/006-engine-boundaries.md) for the graph and the core
+build's dependency proof.
 
 After editing engine sources, refresh and commit their exact evidence together:
 
@@ -276,8 +305,7 @@ and retains its checkpoint/error-conversion order. Script grammar stays lenient
 at top level and strict in substitution bodies, with aliases absent and extglob
 lexing enabled as before. Validation-only substitution grammar retains the
 different default options (extglob disabled). Compiled capabilities receive no
-new filters or settings. Full/Lite capability policy is
-not introduced by this move. AST types, boundary scanners, the arithmetic
+new filters or settings, and this move introduces no build variants. AST types, boundary scanners, the arithmetic
 expression evaluator and direct parser fixture constructors are not facade entry
 points. Contract tests compare each context with its exact old parser call and
 pin recovery, byte limits, shared sticky work/cancellation, lazy quote/pattern
@@ -306,17 +334,15 @@ These are intentionally different views, not one generic builtin predicate:
   Parser-owned compound-array declaration grammar remains separate and unchanged.
 - Special/regular builtin class is descriptive metadata, not a new precedence,
   persistence or POSIX-mode rule. Declaration status overlaps both classes.
-  Acceptance `cat`, `grep`, `mkdir` and `seq` are stand-ins, not shell builtins.
-  Full retains their internal dispatch while query lookup searches PATH for all four.
-  Lite removes their handlers but keeps ordinary external lookup.
-- In Full, heredoc errors retain their different historical view: `cat`/`seq` use the
-  command-local error context, while `grep`/`mkdir` use the shell error context.
-  Functions still take precedence in that view, before command-wrapper unwrapping.
+  `cat`, `grep`, `mkdir` and `seq` are not in the catalogue: they are external
+  programs, found by PATH lookup like any other command.
+- Heredoc errors use the shell error context for builtins and the command-local
+  context for external commands, including the four utilities. Functions still
+  take precedence in that view, before command-wrapper unwrapping.
 - Queries still choose keyword, function, reportable builtin, then PATH. Keyword
   visibility does not claim syntax support: `select`, `time` and `coproc` are
-  explicitly unsupported execution syntax. Core/acceptance availability describes
-  the current full build. Step 6 adds compile-time capability filtering through
-  this same view, without changing shell options or query precedence.
+  explicitly unsupported execution syntax. The catalogue has no capability or
+  build variants; shell options never enable or remove commands.
 - The interpreter retains early direct `exec`, wrapper parsing/function bypass,
   function frames, and `let`/`eval` phases. Prefix restoration, status/diagnostics,
   PATH admission, cancellation and lazy expansion remain with their old owners.
@@ -328,12 +354,10 @@ class/capability relationships and the differing stand-in exclusions. Original
 engine controls passed against the unchanged baseline before extraction and pin
 query output, declaration syntax, heredoc scope and function/prefix behavior.
 
-The Full/Lite adapter is original local build and capability plumbing. Cargo
-feature selection lives in `shell/engine/Cargo.toml` and the existing build
-helpers, while test-only external fixtures keep Lite's pipeline, filesystem,
-redirection, cancellation, PATH and state contracts covered without shipping
-placeholder utilities. The omitted family is optional, not core; no syntax is
-omitted, and missing operations follow the ordinary external-command route.
+The utility programs are the former in-shell stand-ins moved unchanged in
+behavior to `shell/utilities` (see THIRD_PARTY_NOTICES for the grep subset's
+Bashkit origin); their guest entry, the installer, the Node instrument and the
+`shell-cli` composition are original adapters.
 
 ## Repository layout
 

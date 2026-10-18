@@ -3,9 +3,8 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { shellTargetDirectory } from "./shell-build.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
-import { wasiBuildEnvironment, wasiTarget } from "./wasi-build.ts";
+import { shellTargetDirectory, wasiBuildEnvironment, wasiTarget } from "./wasi-build.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const reference = process.argv[2] ?? "02df6429cc142a771ff9ad26fae3f3d250d0bc04";

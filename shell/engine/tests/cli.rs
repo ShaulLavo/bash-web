@@ -1,4 +1,12 @@
-use std::process::Command;
+use std::process::{Command, Output};
+
+fn run_in(cwd: &str, source: &str) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_shell-engine"))
+        .args(["-c", source])
+        .env("PWD", cwd)
+        .output()
+        .unwrap()
+}
 
 #[test]
 fn cli_keeps_stderr_separate_and_returns_status() {
@@ -83,11 +91,7 @@ fn cli_system_mount_cannot_create_path_candidates() {
 #[test]
 fn cli_system_mount_metadata_resolves_aliases_after_validating_traversal() {
     let source = "for p in /usr/bin //usr/bin /./usr/bin /tmp/../usr/bin; do test ! -w \"$p\" || exit 9; done; for p in /tmp /usr/../tmp /usr-local; do test -w \"$p\" || exit 8; done; test ! -e /missing/../usr/bin || exit 7; test ! -e /usr/bin/argv.py/../argv.py || exit 6; printf checked";
-    let output = Command::new(env!("CARGO_BIN_EXE_shell-engine"))
-        .args(["-c", source])
-        .env("PWD", "/usr-local")
-        .output()
-        .unwrap();
+    let output = run_in("/usr-local", source);
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(output.stdout, b"checked");
     assert!(output.stderr.is_empty());
@@ -135,11 +139,7 @@ fn cli_virtual_working_directory_exists_for_file_predicates() {
 #[test]
 fn core_cli_system_mount_and_writable_siblings_need_no_optional_utilities() {
     let source = "printf system >/usr/bin/probe; test ! -e /usr/bin/probe || exit 9; printf changed >/usr/bin/argv.py; test ! -s /usr/bin/argv.py || exit 8; printf 'tmp\\n' >/tmp/probe; printf 'sibling\\n' > /usr-local/probe; printf 'local\\n' >local-probe; for file in /tmp/probe /usr-local/probe local-probe; do IFS= read -r value < \"$file\"; printf '%s' \"$value\"; done; PATH=.; local-probe";
-    let output = Command::new(env!("CARGO_BIN_EXE_shell-engine"))
-        .args(["-c", source])
-        .env("PWD", "/usr-local")
-        .output()
-        .unwrap();
+    let output = run_in("/usr-local", source);
     assert_eq!(output.status.code(), Some(126));
     assert_eq!(output.stdout, b"tmpsiblinglocal");
     assert!(!String::from_utf8_lossy(&output.stderr).contains("omitted capability"));

@@ -26,14 +26,11 @@ impl Context {
         self.filesystem.as_ref()
     }
 }
-fn endpoint(fds: &FdTable, fd: u32) -> Result<Endpoint, i32> {
-    fds.get(fd).ok_or(1)
-}
+/// Standard output writes keep the former stand-ins' exact failure statuses.
 async fn write(fds: &FdTable, bytes: &[u8], context: &Context) -> Result<(), i32> {
-    endpoint(fds, 1)?
-        .write_all(bytes, &context.cancel)
-        .await
-        .map_err(|e| e.status())
+    let output = endpoint(fds, 1)?;
+    let written = output.write_all(bytes, &context.cancel).await;
+    written.map_err(|error| error.status())
 }
 pub async fn run(
     utility: Utility,
@@ -45,6 +42,52 @@ pub async fn run(
     acceptance::run(utility, args, cwd, fds, context)
         .await
         .unwrap_or_else(|status| status)
+}
+
+/// Every separately linked utility, by its executable name.
+pub const UTILITIES: [(&str, Utility); 4] = [
+    ("cat", Utility::Cat),
+    ("grep", Utility::Grep),
+    ("mkdir", Utility::Mkdir),
+    ("seq", Utility::Seq),
+];
+
+/// Register each utility as an external program of a native in-process host, at
+/// `<directory>/<name>`. Native harnesses and tests only: production starts the
+/// same code as separate WASM guests through Waffle instead.
+pub fn register_in_process(
+    host: &shell_engine::process::InProcessHost,
+    directory: &str,
+    filesystem: Rc<dyn FileSystem>,
+    line_bytes: usize,
+) {
+    use futures::FutureExt;
+    for (name, utility) in UTILITIES {
+        let filesystem = filesystem.clone();
+        host.register(format!("{directory}/{name}"), move |request, cancel| {
+            let context = Context {
+                cancel,
+                filesystem: filesystem.clone(),
+                line_bytes,
+            };
+            async move {
+                run(
+                    utility,
+                    request.argv[1..].to_vec(),
+                    &request.cwd,
+                    &request.fds,
+                    &context,
+                )
+                .await
+            }
+            .boxed_local()
+        });
+    }
+}
+
+/// A missing inherited descriptor is status 1, as it was inside the shell.
+fn endpoint(fds: &FdTable, fd: u32) -> Result<Endpoint, i32> {
+    fds.get(fd).ok_or(1)
 }
 
 /// One external program invocation, as delivered by the host process boundary.

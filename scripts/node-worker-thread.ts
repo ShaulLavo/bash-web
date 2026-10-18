@@ -6,7 +6,17 @@ const events = new EventTarget();
 installNodeWorkers();
 Object.defineProperties(globalThis, {
   self: { value: globalThis, configurable: true },
-  postMessage: { value: (data: unknown, transfer: readonly Transferable[] = []) => port.postMessage(data, transfer.filter((value): value is ArrayBuffer | MessagePort => value instanceof ArrayBuffer || value instanceof MessagePort)), configurable: true },
+  postMessage: {
+    value: (data: unknown, transfer: readonly Transferable[] = []) =>
+      port.postMessage(
+        data,
+        transfer.filter(
+          (value): value is ArrayBuffer | MessagePort =>
+            value instanceof ArrayBuffer || value instanceof MessagePort,
+        ),
+      ),
+    configurable: true,
+  },
   addEventListener: { value: events.addEventListener.bind(events), configurable: true },
   removeEventListener: { value: events.removeEventListener.bind(events), configurable: true },
 });
@@ -18,8 +28,13 @@ function dispatch(data: unknown) {
   if (typeof listener === "function") listener.call(globalThis, event);
   events.dispatchEvent(event);
 }
-port.on("message", data => { if (ready) dispatch(data); else queued.push(data); });
+port.on("message", (data) => {
+  if (ready) dispatch(data);
+  else queued.push(data);
+});
 await import(workerData.entry);
 ready = true;
 for (const data of queued) dispatch(data);
-port.on("close", () => { void stopNodeWorkers(); });
+port.on("close", () => {
+  void stopNodeWorkers();
+});

@@ -4,7 +4,6 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { shellTargetDirectory } from "./shell-build.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
 type Environment = NodeJS.ProcessEnv;
@@ -115,7 +114,12 @@ export function wasiCargoEnvironment(
   return result;
 }
 
-export const workspaceGuests = [
+/** One core shell target. Utility programs are separately linked binaries in it. */
+export function shellTargetDirectory(root: string, env: Environment = process.env): string {
+  return resolve(root, env.CARGO_TARGET_DIR ?? ".build/shell");
+}
+
+const workspaceGuests = [
   "shell-engine",
   "shell-runtime",
   "cat",
@@ -149,8 +153,7 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
   const binIndex = args.indexOf("--bin");
   // The core shell, each separately linked utility, and the compatibility fixtures
   // all pass the same patched-libc verifier.
-  const binaries =
-    binIndex < 0 ? workspaceGuests.slice() : [args[binIndex + 1]];
+  const binaries = binIndex < 0 ? workspaceGuests.slice() : [args[binIndex + 1]];
   for (const binary of binaries) {
     verifyWasiGuest(resolve(target, wasiTarget, "release", `${binary}.wasm`));
   }

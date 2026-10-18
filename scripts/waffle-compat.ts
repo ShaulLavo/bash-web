@@ -27,7 +27,7 @@ export interface WaffleCaseResult {
 }
 
 /** The existing frozen contract: stdout and stderr together, counted before acceptance. */
-export const OUTPUT_LIMIT_BYTES = 4 * 1024 * 1024;
+const OUTPUT_LIMIT_BYTES = 4 * 1024 * 1024;
 const nodeDirectory = new URL("../.build/node/", import.meta.url);
 const utilities = ["cat", "grep", "mkdir", "seq"] as const;
 const fixtures = [
@@ -46,14 +46,17 @@ function loadApi(): Promise<typeof Api> {
 const modules = new Map<string, Promise<WebAssembly.Module>>();
 function compiled(path: string): Promise<WebAssembly.Module> {
   let module = modules.get(path);
-  if (!module) modules.set(path, (module = readFile(path).then((bytes) => WebAssembly.compile(bytes))));
+  if (!module)
+    modules.set(path, (module = readFile(path).then((bytes) => WebAssembly.compile(bytes))));
   return module;
 }
 
 async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: typeof Api) {
-  // Match the standalone baseline's tree: only the working directory and the
-  // read-only system helper directories exist, plus /bin for installed programs.
-  for (const path of [options.tmp, "/usr/local/bin", "/usr/bin", "/bin"])
+  // Match the standalone baseline's tree: the working directory and the system
+  // helper directories, plus /bin for installed programs. Its in-memory filesystem
+  // created files without a parent, so `>/dev/null` made a plain file; an empty
+  // /dev directory reproduces exactly that on Waffle's real filesystem.
+  for (const path of [options.tmp, "/usr/local/bin", "/usr/bin", "/bin", "/dev"])
     await runtime.filesystem.mkdirp(path);
   const workerUrl = new URL("shell.mjs", nodeDirectory);
   for (const [name, file] of fixtures) {
@@ -72,7 +75,10 @@ async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: t
     seq: waffle.installSeq,
   };
   for (const name of utilities)
-    await installers[name](runtime, { workerUrl, module: () => compiled(`${directory}/${name}.wasm`) });
+    await installers[name](runtime, {
+      workerUrl,
+      module: () => compiled(`${directory}/${name}.wasm`),
+    });
 }
 
 export async function createWaffleRunner(options: WaffleCaseOptions) {
@@ -204,5 +210,14 @@ async function runRoot(
     };
     root.postMessage(request, [filesystem.port]);
   });
+  // The oracle reads its pipes until every writer closes, so background jobs that
+  // outlive the root still write. Join them; the pool's case timeout bounds this.
+  const live = () =>
+    waffle
+      .workerProcessSlots(transport)
+      .some(
+        (slot) => !waffle.readOutcome(waffle.workerProcessState(transport, slot).signals.outcome),
+      );
+  while (live() && !runtime.disposed) await new Promise((resolve) => setTimeout(resolve, 2));
   return status;
 }

@@ -5,6 +5,10 @@
 import { createRuntime, type SharedFilesystemOptions } from "waffle";
 import { mountBrowser, type BrowserRuntimeLease } from "../src/browser/main";
 import { registerTestPrograms } from "./helpers/test-programs";
+import { installCat } from "../src/utilities/cat";
+import { installGrep } from "../src/utilities/grep";
+import { installMkdir } from "../src/utilities/mkdir";
+import { installSeq } from "../src/utilities/seq";
 import filesystemWorkerUrl from "../.build/browser/fs-worker.js?url";
 
 function filesystemOptions(): SharedFilesystemOptions {
@@ -28,7 +32,14 @@ mountBrowser({
   acquireRuntime(onStartupStage): BrowserRuntimeLease {
     const runtime = createRuntime({ filesystem: filesystemOptions(), onStartupStage });
     const registration = new AbortController();
-    const ready = registerTestPrograms(runtime, registration.signal, onStartupStage);
+    // External commands are add-ons: this composition selects all four. Each one's
+    // program is fetched only when the shell first starts it.
+    const ready = Promise.all([
+      registerTestPrograms(runtime, registration.signal, onStartupStage),
+      Promise.all(
+        [installCat, installGrep, installMkdir, installSeq].map((install) => install(runtime)),
+      ),
+    ]).then(() => {});
     let disposing: Promise<void> | undefined;
     return {
       runtime,

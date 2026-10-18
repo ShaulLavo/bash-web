@@ -67,7 +67,7 @@
     "notices:browser": "npm run notices:shell && node scripts/browser-notices.mjs",
     "serve": "node dist/serve.mjs",
     "verify:browser": "npm run test:browser:package && npm run build:browser && npm run typecheck:browser && npm run test:runtime:terminal && npm run test:browser",
-    "test:browser:package": "node --test scripts/test-browser-package.mjs",
+    "test:browser:package": "node --test scripts/test-browser-package.mjs scripts/test-utility-packaging.ts",
     "build:worker": "node scripts/build-worker.mjs",
     "prepare": "npm run build:worker",
     "build:test-guest": "node scripts/build-test-guest.mjs",
@@ -85,11 +85,11 @@
     "check:rust": "node scripts/check-rust-quality.mjs",
     "test:quality-gates": "node --test scripts/test-quality-gates.mjs",
     "quality": "npm run sources:browser && npm run build:worker && npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates && npm run check:rust",
-    "build:shell:core": "node scripts/build-shell.ts",
     "build:utilities": "node scripts/build-utilities.ts",
     "build:node-harness": "node scripts/build-node-harness.ts",
-    "test:guest-build": "node --test scripts/test-shell-build.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts",
-    "typecheck:guest-build": "tsc --ignoreConfig --noEmit --strict --skipLibCheck --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/shell-build.ts scripts/check-shell-capabilities.ts scripts/test-shell-build.ts scripts/wasi-build.ts scripts/test-shell-wasi.ts scripts/test-wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts"
+    "build:compat-control": "node scripts/build-compat-control.ts",
+    "test:guest-build": "node --test scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts",
+    "typecheck:guest-build": "tsc --ignoreConfig --noEmit --strict --skipLibCheck --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-shell-capabilities.ts scripts/wasi-build.ts scripts/build-utilities.ts scripts/build-compat-control.ts scripts/test-utility-packaging.ts scripts/test-shell-wasi.ts scripts/test-wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",

@@ -132,10 +132,10 @@ async fn seq(args: &[String], fds: &FdTable, context: &Context) -> Result<(), i3
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
         writeln!(&mut buffer, "{n}").map_err(|_| 1)?;
         if buffer.len() >= 8192 {
-            write(&fds, buffer.as_bytes(), &context).await?;
+            write(fds, buffer.as_bytes(), context).await?;
             buffer.clear();
         }
     }
-    write(&fds, buffer.as_bytes(), &context).await?;
+    write(fds, buffer.as_bytes(), context).await?;
     Ok(())
 }

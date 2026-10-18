@@ -923,6 +923,20 @@ impl FileSystem for MemoryFs {
     }
 }
 
+/// Bash's own device names: `/dev/fd/N` duplicates open descriptor N (a
+/// process substitution, for instance); `/dev/stdin`, `/dev/stdout` and
+/// `/dev/stderr` are descriptors 0, 1 and 2. A closed descriptor is an error.
+/// Shared by the shell's redirections and the separately linked utilities.
+pub fn device_endpoint(path: &str, fds: &FdTable) -> Option<Result<Endpoint, i32>> {
+    let fd = match path {
+        "/dev/stdin" => 0,
+        "/dev/stdout" => 1,
+        "/dev/stderr" => 2,
+        _ => path.strip_prefix("/dev/fd/")?.parse::<u32>().ok()?,
+    };
+    Some(fds.get(fd).ok_or(1))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1423,14 +1437,4 @@ mod tests {
         assert_eq!(&bytes[..5], b"bytes");
         assert_eq!(read.read(&mut bytes).now_or_never(), Some(Ok(0)));
     }
-}
-
-pub fn device_endpoint(path: &str, fds: &FdTable) -> Option<Result<Endpoint, i32>> {
-    let fd = match path {
-        "/dev/stdin" => 0,
-        "/dev/stdout" => 1,
-        "/dev/stderr" => 2,
-        _ => path.strip_prefix("/dev/fd/")?.parse::<u32>().ok()?,
-    };
-    Some(fds.get(fd).ok_or(1))
 }

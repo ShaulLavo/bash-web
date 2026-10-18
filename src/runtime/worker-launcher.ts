@@ -59,7 +59,7 @@ export async function waitForShellWorkers(
 
 /** No worker or process service is created here. The accepted adapter consumer remains
  * fenced by the page runtime until its broker has physically stopped this guest. */
-export function launchTerminalWorker<T extends RuntimeWorkerRequest>(
+function launchTerminalWorker<T extends RuntimeWorkerRequest>(
   runtime: Runtime,
   service: ProcessService,
   context: ProcessContext,

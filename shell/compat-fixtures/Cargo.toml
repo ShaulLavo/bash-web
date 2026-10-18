@@ -22,3 +22,7 @@ path = "src/bin/argv.rs"
 [[bin]]
 name = "printenv-py"
 path = "src/bin/printenv.rs"
+
+[[bin]]
+name = "shell-cli"
+path = "src/bin/shell-cli.rs"

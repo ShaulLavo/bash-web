@@ -72,7 +72,8 @@ function lazyModule(options: UtilityOptions, defaultUrl: URL): () => Promise<Web
     if (module) return module();
     const url = resolveUrl(options.wasmUrl ?? defaultUrl);
     const response = await fetch(url);
-    if (!response.ok) throw new Error(`Utility executable fetch failed: ${url} (${response.status})`);
+    if (!response.ok)
+      throw new Error(`Utility executable fetch failed: ${url} (${response.status})`);
     return WebAssembly.compile(await response.arrayBuffer());
   };
   return () => {

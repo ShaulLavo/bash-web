@@ -481,7 +481,8 @@ restoration corrections are original semantic-reference adapters measured agains
 finite GNU Bash 5.3.15 controls; no additional upstream implementation is copied.
 
 The acceptance-only streaming `grep` subset in
-`shell/engine/src/builtins/grep.rs` adapts Bashkit's
+`shell/utilities/src/grep.rs` (its own WASM program; formerly an in-shell
+stand-in in `shell/engine/src/builtins/grep.rs`) adapts Bashkit's
 `crates/bashkit/src/builtins/grep.rs` at
 `491c3281f668b76d64b15210b8f5d7bf97244be0` (MIT, Copyright 2024–2026 Everruns).
 The upstream license remains at `shell/parser/LICENSE` and is included in the
@@ -490,15 +491,15 @@ exact source hash, adapted behaviors and original bounded descriptor/regex
 adapters. The accompanying `mkdir` implementation and filesystem ABI bindings
 are original, not a copied upstream utility.
 
-The `acceptance-utilities` Cargo feature and the Full/Lite presets in
-`shell/engine/Cargo.toml`, `scripts/shell-build.ts`, `scripts/wasi-build.ts` and
-`scripts/test-shell-wasi.ts` are original local build adapters. Full retains the
-four acceptance stand-ins and their direct `regex` dependency; Lite omits that
-optional family while retaining the original Thompson `[[ =~ ]]` matcher. Lite
-test fixtures register external programs only to preserve core PATH, pipeline,
-filesystem, redirection and cancellation coverage; they are not production
-utility implementations. No new upstream source, source-lock entry or license
-payload is introduced by the build split.
+The `cat`, `mkdir` and `seq` programs in `shell/utilities/src/acceptance.rs`
+are the original in-shell stand-ins moved unchanged in behavior into separately
+linked WASM programs. Their guest entry (`shell/utilities/src/lib.rs`), the
+installer (`src/utilities/`), the compatibility fixture guests and `shell-cli`
+composition (`shell/compat-fixtures`, reusing `shell/engine/src/compat.rs`) and
+the Node compatibility instrument (`scripts/waffle-compat.ts` and its worker
+roots) are original local adapters. Only the `grep` program depends on the
+`regex` crate; the core shell does not. No new upstream source, source-lock
+entry or license payload is introduced by the split.
 
 ## Browser integration port
 

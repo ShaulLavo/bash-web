@@ -2309,10 +2309,6 @@ fn admission_status(error: expand::Error) -> i32 {
         _ => 2,
     }
 }
-/// Bash's own device names: `/dev/fd/N` duplicates open descriptor N (a
-/// process substitution, for instance); `/dev/stdin`, `/dev/stdout` and
-/// `/dev/stderr` are descriptors 0, 1 and 2. A closed descriptor is an error.
-
 fn expansion_work(limits: &Limits) -> expand::Work {
     expand::Work::new(
         limits

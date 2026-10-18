@@ -80,7 +80,8 @@ jobs:
           workspaces: shell -> ../.build/shell
       - uses: ./.github/actions/wasi-sdk
       - run: npm ci --ignore-scripts
-      - run: node --test scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts
+      - run: npm run test:guest-build
+      - run: npm run typecheck:guest-build
       - run: node scripts/check-shell-parser.mjs
       - run: cargo fmt --manifest-path shell/Cargo.toml --all --check
       - name: Native shell tests
@@ -89,81 +90,45 @@ jobs:
         run: ulimit -c 0; npm run test:shell:wasi
         env:
           CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime run -W max-memory-size=268435456
-      - name: Native shell CLI
-        run: cargo build --locked --release --manifest-path shell/Cargo.toml -p shell-engine -j2
+      - name: Core dependency proof
+        run: npm run check:capabilities
+      # shell-engine is the core-only CLI; shell-cli composes it with the separately
+      # linked utilities for the fuzzers, whose fixtures use cat.
+      - name: Native shell CLIs
+        run: >-
+          cargo build --locked --release --manifest-path shell/Cargo.toml
+          -p shell-engine -p shell-compat-fixtures -j2
       - name: Record native shell CLI receipts
         run: |
-          sha256sum .build/shell/release/shell-engine > .build/shell/cli-sha256.txt
+          sha256sum .build/shell/release/shell-engine .build/shell/release/shell-cli > .build/shell/cli-sha256.txt
           git rev-parse HEAD > .build/shell/cli-source.txt
       - uses: actions/upload-artifact@v4
         with:
           name: shell-cli-${{ github.sha }}
           path: |
             .build/shell/release/shell-engine
+            .build/shell/release/shell-cli
             .build/shell/cli-sha256.txt
             .build/shell/cli-source.txt
           retention-days: 3
       - run: npm run test:fuzz-shell-braces
-      - run: npm run fuzz:shell-braces:ci -- --shell .build/shell/release/shell-engine
-      - run: npm run fuzz:shell-words:ci -- --shell .build/shell/release/shell-engine
-      - run: npm run fuzz:shell-arithmetic:ci -- --shell .build/shell/release/shell-engine
-      - run: npm run fuzz:shell-readonly:ci -- --shell .build/shell/release/shell-engine
+      - run: npm run fuzz:shell-braces:ci -- --shell .build/shell/release/shell-cli
+      - run: npm run fuzz:shell-words:ci -- --shell .build/shell/release/shell-cli
+      - run: npm run fuzz:shell-arithmetic:ci -- --shell .build/shell/release/shell-cli
+      - run: npm run fuzz:shell-readonly:ci -- --shell .build/shell/release/shell-cli
       - run: npm run test:fuzz-shell-substitutions
-      - run: npm run fuzz:shell-substitutions:ci -- --shell .build/shell/release/shell-engine
-      - run: npm run fuzz:shell-parse-boundaries:ci -- --shell .build/shell/release/shell-engine
+      - run: npm run fuzz:shell-substitutions:ci -- --shell .build/shell/release/shell-cli
+      - run: npm run fuzz:shell-parse-boundaries:ci -- --shell .build/shell/release/shell-cli
       - run: npm run test:fuzz-shell-control-flow
-      - run: npm run fuzz:shell-control-flow:ci -- --shell .build/shell/release/shell-engine
+      - run: npm run fuzz:shell-control-flow:ci -- --shell .build/shell/release/shell-cli
       - run: ulimit -c 0; npm run test:fuzz-shell-job-lifetime
-      - run: ulimit -c 0; npm run fuzz:shell-job-lifetime:ci -- --shell .build/shell/release/shell-engine
+      - run: ulimit -c 0; npm run fuzz:shell-job-lifetime:ci -- --shell .build/shell/release/shell-cli
       - run: ulimit -c 0; npm run test:fuzz-shell-functions
-      - run: ulimit -c 0; npm run fuzz:shell-functions:ci -- --shell .build/shell/release/shell-engine
+      - run: ulimit -c 0; npm run fuzz:shell-functions:ci -- --shell .build/shell/release/shell-cli
       - run: ulimit -c 0; npm run test:fuzz-shell-path
-      - run: ulimit -c 0; npm run fuzz:shell-path:ci -- --shell .build/shell/release/shell-engine
+      - run: ulimit -c 0; npm run fuzz:shell-path:ci -- --shell .build/shell/release/shell-cli
       - run: ulimit -c 0; npm run test:fuzz-shell-printf
-      - run: ulimit -c 0; npm run fuzz:shell-printf:ci -- --shell .build/shell/release/shell-engine
-
-  shell-capability-builds:
-    strategy:
-      fail-fast: false
-      matrix:
-        build: [full, lite]
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      RUSTUP_TOOLCHAIN: 1.98.1
-      CARGO_TARGET_DIR: .build/shell
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 26.7.0
-          cache: npm
-      - uses: dtolnay/rust-toolchain@1.98.1
-        with:
-          targets: wasm32-wasip1
-          components: rustfmt
-      - uses: bytecodealliance/actions/wasmtime/setup@v1.1.3
-        with:
-          version: v49.0.3
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: shell -> ../.build/shell
-      - uses: ./.github/actions/wasi-sdk
-      - run: npm ci --ignore-scripts
-      - run: npm run test:guest-build
-      - run: npm run typecheck:guest-build
-      - run: RUSTUP_TOOLCHAIN=1.98.1 cargo fmt --manifest-path shell/Cargo.toml --all --check
-      - name: Native core tests
-        run: >-
-          RUSTUP_TOOLCHAIN=1.98.1 cargo test --locked --manifest-path shell/Cargo.toml
-          --workspace
-          --target-dir "$CARGO_TARGET_DIR/native-core" -j2 --no-fail-fast
-      - name: Capability dependency proof (core)
-        run: RUSTUP_TOOLCHAIN=1.98.1 node scripts/check-shell-capabilities.ts
-      - name: Patched WASI core tests and release size
-        run: ulimit -c 0; npm run test:shell:wasi
-        env:
-          CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime run -W max-memory-size=268435456
+      - run: ulimit -c 0; npm run fuzz:shell-printf:ci -- --shell .build/shell/release/shell-cli
 
   own-shell-compatibility:
     runs-on: ubuntu-latest
@@ -213,7 +178,6 @@ jobs:
           bwrap --unshare-all --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 --proc /proc --dev /dev -- /usr/bin/true
       - run: npm run test:shell:scoreboard
       - run: npm run build:shell
-      - run: npm run build:utilities
       - run: npm run compat:shell
         env:
           BASH_COMPAT_OUT: ${{ runner.temp }}/own-shell-current.json

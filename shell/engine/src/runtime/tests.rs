@@ -1467,13 +1467,7 @@ fn partial_writes_epipe_and_dup_lifetime() {
 #[test]
 fn runtime_pipeline_builtins_external_and_fs_share_descriptor_namespace() {
     let (executor, fake, runtime) = setup();
-    let session = Session::new(
-        executor.clone(),
-        Rc::new(runtime.clone()),
-        Rc::new(runtime.clone()),
-        Limits::default(),
-    );
-    session.set_descriptors(runtime.stdio().unwrap()).unwrap();
+    let session = runtime_session(&executor, &runtime);
     let script = "consume() { IFS= read -r value; printf '%s' \"$value\"; }; printf first | runtime-cat | runtime-cat | consume > /result; runtime-cat < /result 3>&1; emit | runtime-cat | runtime-cat";
     let job = session
         // Use a distinct fake executable so these stages really cross ProcessHost;
@@ -1787,13 +1781,7 @@ fn dropping_detached_wait_observer_preserves_runtime_reaper() {
 #[test]
 fn external_after_builtin_pipeline_starts_a_fresh_runtime_job() {
     let (executor, fake, runtime) = setup();
-    let session = Session::new(
-        executor.clone(),
-        Rc::new(runtime.clone()),
-        Rc::new(runtime.clone()),
-        Limits::default(),
-    );
-    session.set_descriptors(runtime.stdio().unwrap()).unwrap();
+    let session = runtime_session(&executor, &runtime);
     let script = "consume() { while IFS= read -r value; do printf '%s\\n' \"$value\"; done; }; emit | consume > /complete; runtime-cat < /complete";
     let job = session.start(script).unwrap();
     assert_eq!(finish(&executor, &runtime, job), 0);
@@ -1818,13 +1806,7 @@ fn external_after_builtin_pipeline_starts_a_fresh_runtime_job() {
 #[test]
 fn background_brace_sequence_kill_and_wait_cover_later_runtime_members() {
     let (executor, fake, runtime) = setup();
-    let session = Session::new(
-        executor.clone(),
-        Rc::new(runtime.clone()),
-        Rc::new(runtime.clone()),
-        Limits::default(),
-    );
-    session.set_descriptors(runtime.stdio().unwrap()).unwrap();
+    let session = runtime_session(&executor, &runtime);
     let job = session
         .start("{ emit; sleep; echo BAD_AFTER_JOB_KILL; } &")
         .unwrap();
@@ -2082,7 +2064,7 @@ fn runtime_mkdir_and_grep_are_external_programs_not_shell_stand_ins() {
     let (executor, fake, runtime) = setup();
     let session = runtime_session(&executor, &runtime);
     let job = session
-        .start("mkdir -p nested/deep; cd nested/deep 2>/dev/null; grep -n tick result; cat result; seq 2")
+        .start("mkdir -p nested/deep; grep -n tick result; cat result; seq 2")
         .unwrap();
     assert_eq!(finish(&executor, &runtime, job), 0);
     let requests = fake.requests.borrow();

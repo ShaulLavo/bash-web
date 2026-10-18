@@ -18,6 +18,13 @@ fn baseline(names: &[&'static str]) -> Vec<&'static str> {
     names
 }
 
+/// Every executable builtin. External commands (cat, grep, mkdir, seq) are not here.
+const BUILTINS: &[&str] = &[
+    ":", "true", "false", "echo", "printf", "read", "export", "local", "readonly", "declare",
+    "typeset", "cd", "pwd", "set", "shift", "command", "shopt", "exit", "return", "jobs", "wait",
+    "kill", "unset", "test", "[", "break", "continue", "exec", "eval", "let",
+];
+
 #[test]
 fn catalogue_has_unique_exact_names_and_no_type_builtin() {
     let unique: BTreeSet<_> = COMMANDS.iter().map(|command| command.name).collect();
@@ -77,28 +84,12 @@ fn query_views_match_the_independent_baseline_sets() {
             "do", "done", "in", "function", "time", "{", "}", "!", "[[", "]]", "coproc",
         ])
     );
-    assert_eq!(
-        names(Command::query_builtin),
-        baseline(&[
-            ":", "true", "false", "echo", "printf", "read", "export", "local", "readonly",
-            "declare", "typeset", "cd", "pwd", "set", "shift", "command", "shopt", "exit",
-            "return", "jobs", "wait", "kill", "unset", "test", "[", "break", "continue", "exec",
-            "eval", "let",
-        ])
-    );
+    assert_eq!(names(Command::query_builtin), baseline(BUILTINS));
 }
 
 #[test]
-fn heredoc_view_preserves_grep_and_mkdir_without_query_normalization() {
-    assert_eq!(
-        names(Command::shell_heredoc_errors),
-        baseline(&[
-            ":", "true", "false", "echo", "printf", "read", "export", "local", "readonly",
-            "declare", "typeset", "cd", "pwd", "set", "shift", "command", "shopt", "exit",
-            "return", "jobs", "wait", "kill", "unset", "test", "[", "break", "continue", "exec",
-            "eval", "let",
-        ])
-    );
+fn heredoc_view_matches_builtin_query_membership_without_external_commands() {
+    assert_eq!(names(Command::shell_heredoc_errors), baseline(BUILTINS));
     assert_eq!(
         names(|command| command.shell_heredoc_errors() && !command.query_builtin()),
         baseline(&[])

@@ -3,6 +3,8 @@ import { mkdtemp, rm, writeFile, access } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { Worker } from "node:worker_threads";
+import { createWaffleRunner } from "./waffle-compat.ts";
+import { liveNodeWorkers } from "./node-worker-host.ts";
 
 // Original tiny WASI fixture: emit raw ff00 on stdout, "err" on stderr, exit 7.
 // No shell semantics or host accounts are involved.
@@ -93,6 +95,7 @@ async function runFixture(outputSize) {
 }
 test("own-shell worker preserves raw stdout, separate stderr and status", async () => {
   const result = await runFixture(2);
+  assert.equal(result.crash, undefined);
   assert.equal(result.status, 7);
   assert.deepEqual(Buffer.from(result.stdout), Buffer.from([255, 0]));
   assert.equal(Buffer.from(result.stderr).toString(), "err");
@@ -102,4 +105,33 @@ test("own-shell worker enforces the combined output ceiling before writing", asy
   const result = await runFixture(4 * 1024 * 1024 + 1);
   assert.match(result.crash, /output limit exceeded/);
   assert.equal(result.stdout.length, 0);
+});
+
+test("repeated fresh Waffle runtimes leave no threads or handles behind", async () => {
+  const scratch = await mkdtemp(resolve(import.meta.dirname, "../.build/own-shell-lifecycle-"));
+  try {
+    const modulePath = resolve(scratch, "fixture.wasm");
+    await writeFile(modulePath, fixture(2));
+    const run = await createWaffleRunner({
+      modulePath,
+      tmp: "/tmp/spec",
+      env: {},
+      fixtureDirectory: scratch,
+    });
+    const handles = () => process.getActiveResourcesInfo().length;
+    const warm = await run("fixture");
+    assert.equal(warm.status, 7);
+    const baseline = handles();
+    for (let index = 0; index < 25; index++) {
+      const result = await run("fixture");
+      assert.equal(result.crash, undefined);
+      assert.equal(result.status, 7);
+      assert.deepEqual(Buffer.from(result.stdout), Buffer.from([255, 0]));
+      assert.equal(Buffer.from(result.stderr).toString(), "err");
+      assert.equal(liveNodeWorkers(), 0, `case ${index} left Waffle threads running`);
+    }
+    assert.ok(handles() <= baseline, "repeated cases accumulated handles");
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
 });
