@@ -290,6 +290,47 @@ fn external_environment_contains_the_resolved_prefix_bindings() {
 }
 
 #[test]
+fn query_path_join_preserves_existing_slashes_without_adding_another() {
+    let rig = path_rig();
+    for path in ["/bin/probe", "/probe"] {
+        rig.host.register(path, |_, _| async { 0 }.boxed_local());
+    }
+    for (path, expected) in [
+        ("/bin/", "/bin/probe\n"),
+        ("/bin///", "/bin///probe\n"),
+        ("/", "/probe\n"),
+    ] {
+        rig.variable("PATH", path);
+        let before = rig.output.bytes().len();
+        assert_eq!(rig.run("command -v probe"), 0, "PATH={path}");
+        assert_eq!(&rig.output.bytes()[before..], expected.as_bytes());
+    }
+    assert_eq!(rig.run("cd /"), 0);
+    rig.variable("PATH", "bin");
+    let before = rig.output.bytes().len();
+    assert_eq!(rig.run("command -V probe"), 0);
+    assert_eq!(&rig.output.bytes()[before..], b"probe is /bin/probe\n");
+    assert_eq!(rig.host.retained_count(), 0);
+}
+
+#[test]
+fn created_nonexecutable_file_is_reported_without_becoming_admitted() {
+    let rig = path_rig();
+    assert_eq!(rig.run("printf data > tool; PATH=.; tool"), 126);
+    let before = rig.output.bytes().len();
+    assert_eq!(rig.run("command -v tool"), 0);
+    assert_eq!(&rig.output.bytes()[before..], b"./tool\n");
+    assert_eq!(rig.run("command tool"), 126);
+    assert_eq!(rig.run("./tool"), 126);
+    assert_eq!(rig.run("absent"), 127);
+    let before = rig.output.bytes().len();
+    assert_eq!(rig.run("command -v absent"), 1);
+    assert_eq!(rig.output.bytes().len(), before);
+    assert_eq!(rig.host.active_count(), 0);
+    assert_eq!(rig.host.retained_count(), 0);
+}
+
+#[test]
 fn explicit_denied_traversal_is_non_runnable_even_without_stat_visibility() {
     let rig = path_rig();
     rig.host

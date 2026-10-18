@@ -192,13 +192,14 @@ pub(super) async fn executable(
             } else {
                 directory
             };
+            let separator = if prefix.ends_with('/') { "" } else { "/" };
             let bytes = prefix
                 .len()
                 .checked_add(name.len())
-                .and_then(|bytes| bytes.checked_add(1))
+                .and_then(|bytes| bytes.checked_add(separator.len()))
                 .ok_or(2)?;
             work.admit_storage(bytes).map_err(admission_status)?;
-            format!("{prefix}/{name}")
+            format!("{prefix}{separator}{name}")
         };
         for _ in candidate.bytes() {
             work.checkpoint(&context.cancel)
@@ -216,7 +217,7 @@ pub(super) async fn executable(
             .map_err(|_| context.cancel_status())?;
         match result {
             Ok(()) => return Ok(Resolution::Executable(candidate)),
-            Err(ProcessError::Runtime(errno @ (2 | 31 | 44))) if errno != 44 || explicit => {
+            Err(ProcessError::Runtime(errno @ (2 | 31 | 44))) => {
                 // X_OK failures alone cannot distinguish directories, denied
                 // ancestors and unregistered regular files. Metadata classifies
                 // only the failure; it NEVER establishes executable admission.
@@ -262,7 +263,7 @@ pub(super) async fn executable(
             Err(ProcessError::Runtime(54)) if explicit => {
                 return Ok(Resolution::NonExecutable(candidate, b"Not a directory"));
             }
-            Err(ProcessError::Runtime(44 | 54)) => {}
+            Err(ProcessError::Runtime(54)) => {}
             Err(_) => return Err(2),
         }
         if explicit {
@@ -397,7 +398,8 @@ pub(super) async fn query(
                 let relative = path.strip_prefix("./").unwrap_or(&path);
                 work.admit_storage(cwd_storage(cwd, relative)?.checked_add(1).ok_or(2)?)
                     .map_err(admission_status)?;
-                format!("{cwd}/{relative}")
+                let separator = if cwd.ends_with('/') { "" } else { "/" };
+                format!("{cwd}{separator}{relative}")
             } else {
                 path
             };
