@@ -172,6 +172,20 @@ containing only directories and missing candidates produces status 127. A
 non-executable regular-file candidate produces status 126 if no runnable
 candidate follows it. Explicit directory paths still fail with 126.
 
+Executable selection is separate from the program's arguments: resolving `tool`
+to `/bin/tool` still delivers `tool` as `argv[0]`. Command queries preserve Bash's
+selected path spelling, including relative components. Temporary PATH bindings
+follow the shell's effective assignment and nameref rules without changing the
+caller's PATH after the invocation.
+
+Lookup snapshots, candidates and pending request strings count toward both the
+local PATH-storage limit and the session's shared live-execution-memory limit.
+Dropped temporaries release their storage tickets; retained candidates and
+requests stay charged through their consumers. One command-wide PATH scan-work
+allowance covers every operand of a query. Cancelling a parked access request
+releases its strings and storage tickets without releasing another task's
+allocations.
+
 Direct paths also walk the live filesystem before canonical registration lookup.
 Thus `/missing/../bin/tool` cannot skip a missing intermediate, and traversing a
 regular file as a directory or giving it a trailing slash fails with 126.
