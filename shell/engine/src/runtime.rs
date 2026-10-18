@@ -989,7 +989,14 @@ impl ProcessHost for Runtime {
             .collect();
         Box::pin(async move {
             for result in futures::future::join_all(direct).await {
-                result?;
+                // A typed startup failure is a consumed terminal child result,
+                // not a failure to observe/reap that child. `wait(pid)` reports
+                // it to the command; group waits own only lifecycle cleanup.
+                if let Err(error) = result
+                    && !matches!(error, ProcessError::StartFailed(_))
+                {
+                    return Err(error);
+                }
             }
             Ok(())
         })
@@ -1100,7 +1107,11 @@ impl ProcessHost for Runtime {
                     // children and jobs before releasing the logical group.
                 } else {
                     for result in futures::future::join_all(batch).await {
-                        result?;
+                        if let Err(error) = result
+                            && !matches!(error, ProcessError::StartFailed(_))
+                        {
+                            return Err(error);
+                        }
                     }
                 }
             }

@@ -1144,3 +1144,34 @@ A bounded control on UpCloud4 used Waffle 0.0.27 (`ba968a6`), Playwright 1.64.0,
 Ruled out for the original failure: startup stall (shell and guests ran), simple command-not-found, and the custom relocated-dist setup (examined rerun failures were shell-WASM 404s and are invalid observations). Static engine inspection found synchronous spawn registration with no await gap; access requests use cancellation ownership without spawning workers, and kill/drain code was unchanged from main. This does **not** establish that physical worker termination or Playwright's close notification is correct. Waffle separates logical/job-safe exit from physical Worker termination; prompt readiness alone is insufficient.
 
 Fresh-agent entry point: in an exclusive current checkout on a fleet-reserved host, run ordinary `npm ci && npm run build:browser`, then `npx playwright test tests/pipelines.acceptance.spec.ts --project=firefox --grep 'pipeline Ctrl' --trace on` (checked-in config serves complete dist at 4198). Keep the original bare-PATH command and assertions unchanged. Record each worker's URL/identity, real guest/PID/job ownership, spawn/cancel/drain/terminate/close ordering, and logical exit versus physical close through Ctrl+C. Instrument existing lifecycle boundaries without wrapping the Worker constructor or changing scheduling. Suspected boundary: physical Worker retirement/close notification after Ctrl+C, not yet a proven process leak. A repair needs a reproduced failing control and no longer timeouts, retries, skips or weakened worker assertions. Preserve compact evidence and verify all task processes, profiles, servers, checkouts and reservations are removed on the actual execution host.
+
+### Follow-up: synchronous fork EAGAIN retry parity
+
+Status: Approved. Match Bash 5.3 `jobs.c:2305` for synchronous spawn EAGAIN
+(no free process slot): retry with 1, 2, 4 and 8 second backoff before reporting
+final status 254 and aborting the reader. Bash's final failure path is
+`jobs.c:2329–2342`; `EX_NOEXEC` is 126 (`shell.h:64`) and
+`throw_to_top_level` adds 128 (`sig.c:424`) before noninteractive exit
+(`sig.c:485`). The current shell reports the final failure immediately; #11 adds
+no retry or sleep scheduling. Retry only a synchronous rejected spawn, where no
+child identity was allocated. Never retry typed asynchronous START_FAILED EAGAIN:
+its child identity has already been used. Tests must show slot exhaustion that
+clears during backoff succeeds, and exhaustion that does not clear gives 254
+without executing the rest of the submitted reader. Preserve cancellation and
+cleanup during every wait and do not retry other synchronous errno values.
+
+### Follow-up: start-status-scoped exec diagnostic ownership
+
+Status: Approved. In the fd-3 lane's PR or the immediately following PR, integrate
+Waffle #22's `start_status` and CHILD_START poll (0.0.37), after the 0.0.36 patched
+libc guest rebuild prerequisite. Hold the command's redirected stderr strongly
+only until start status resolves. Drop it immediately on successful start;
+write the exec failure diagnostic and then drop it on START_FAILED. Fork failure
+messages still use parent-shell stderr. #11 deliberately uses a non-owning weak
+endpoint; if it has expired before the failure is observed, the message falls
+back to shell stderr. This keeps successful children from retaining a closed
+pipeline writer but cannot guarantee redirected exec diagnostics after that
+endpoint disappears. Add controls proving `nosuch 2>&1 | cat` prints the message
+before EOF and `producer 2>&1 | eof-ack` (producer closes output and waits for an
+EOF acknowledgement) finishes without deadlock. Keep real exit statuses 126/127
+distinct from startup failure; do not pin above the fd-3 prerequisite early.

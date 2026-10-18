@@ -59,6 +59,9 @@ pub(crate) enum Flow {
     Normal,
     Exit,
     Abort,
+    // Unlike isolated errexit, a failed fork aborts the invoking reader even
+    // when it happened in a non-last stage of a pipeline.
+    SpawnFailed,
     Return,
     Break(usize),
     Continue(usize),
@@ -1084,7 +1087,10 @@ async fn script_sequence(
         }
         if result.flow == Flow::DiscardReadUnit {
             discarded_line = end_line;
-        } else if matches!(result.flow, Flow::Exit | Flow::Abort | Flow::Return) {
+        } else if matches!(
+            result.flow,
+            Flow::Exit | Flow::Abort | Flow::SpawnFailed | Flow::Return
+        ) {
             break;
         }
     }
@@ -1272,6 +1278,9 @@ async fn pipeline_command(
         pipes.push_back(pipe);
     }
     let mut previous = None;
+    // Cancel pipeline peers without cancelling the invoking reader: its final
+    // result must remain the fork failure (254), not an interrupt status (130).
+    let stage_cancel = (count > 1).then(Cancel::new);
     let mut tasks = Vec::new();
     // All stage task/queue metadata is admitted before the first launch.
     let _tasks_allocation = match admit_task_metadata::<JoinHandle<Outcome>>(&context, count) {
@@ -1301,7 +1310,7 @@ async fn pipeline_command(
             children.next().expect("all pipeline state was prepared")
         };
         let shared_stage = count == 1 || (share_last && index + 1 == count);
-        let stage_context = if shared_stage {
+        let mut stage_context = if shared_stage {
             if pipeline.negated {
                 context.condition()
             } else {
@@ -1315,6 +1324,9 @@ async fn pipeline_command(
                 child
             }
         };
+        if let Some(cancel) = &stage_cancel {
+            stage_context.cancel = cancel.clone();
+        }
         let stage_fds = if count == 1 {
             fds.clone()
         } else {
@@ -1328,11 +1340,22 @@ async fn pipeline_command(
             stage_context,
             parent_scope,
             !shared_stage,
+            stage_cancel.clone(),
         )));
     }
     drop(fds);
     drop(previous);
-    let results = join_all(tasks).await;
+    let results = if let Some(cancel) = stage_cancel {
+        match context.cancel.run(join_all(tasks.clone())).await {
+            Ok(results) => results,
+            Err(_) => {
+                cancel.cancel();
+                join_all(tasks).await
+            }
+        }
+    } else {
+        join_all(tasks).await
+    };
     let codes: Vec<_> = results.iter().map(|r| r.code).collect();
     let mut code = if state.borrow().pipefail {
         codes.iter().rev().copied().find(|&n| n != 0).unwrap_or(0)
@@ -1343,6 +1366,12 @@ async fn pipeline_command(
     // shared last-stage control flow aborts the submitted reader. Publish the
     // complete ordered result before taking any of those early exits.
     state.borrow_mut().pipestatus = codes;
+    if let Some(result) = results
+        .iter()
+        .find(|result| result.flow == Flow::SpawnFailed)
+    {
+        return *result;
+    }
     if (count == 1 || share_last) && results.last().unwrap().flow != Flow::Normal {
         return *results.last().unwrap();
     }
@@ -1410,8 +1439,15 @@ async fn pipeline_stage(
     context: Context,
     parent_scope: Scope,
     isolated: bool,
+    stage_cancel: Option<Cancel>,
 ) -> Outcome {
     let result = execute(command, state, fds, context.clone()).await;
+    if result.flow == Flow::SpawnFailed {
+        let _ = context.core.host.kill_group(context.group, 15);
+        if let Some(cancel) = stage_cancel {
+            cancel.cancel();
+        }
+    }
     if isolated {
         context.finish_scope(parent_scope).await;
     }
@@ -2828,8 +2864,12 @@ async fn simple_command(
     }
     // Even a saved stderr can alias a pipe reader. Release all diagnostic-only
     // ownership before dispatch, so a child's close can deliver EPIPE promptly.
+    let parent_stderr = original_fds
+        .borrow()
+        .get(2)
+        .map(|stderr| stderr.downgrade());
     drop(original_fds);
-    dispatch_simple_command(prepared, state, context)
+    dispatch_simple_command(prepared, state, context, parent_stderr)
         .await
         .unwrap_or_else(Outcome::status)
 }
@@ -2993,15 +3033,20 @@ fn dispatch_simple_command(
     prepared: PreparedCommand,
     state: SharedState,
     context: Context,
+    parent_stderr: Option<io::WeakEndpoint>,
 ) -> eval::Frame<'static, Result<Outcome, i32>> {
     let evaluation = context.evaluation.clone();
-    evaluation.frame(dispatch_simple_command_body(prepared, state, context), Err)
+    evaluation.frame(
+        dispatch_simple_command_body(prepared, state, context, parent_stderr),
+        Err,
+    )
 }
 
 async fn dispatch_simple_command_body(
     prepared: PreparedCommand,
     state: SharedState,
     context: Context,
+    parent_stderr: Option<io::WeakEndpoint>,
 ) -> Result<Outcome, i32> {
     let PreparedCommand {
         argv,
@@ -3204,25 +3249,47 @@ async fn dispatch_simple_command_body(
     let command = name.clone();
     let mut argv = vec![name];
     argv.extend(args);
-    let pid = context
-        .core
-        .host
-        .spawn(SpawnRequest {
-            argv,
-            env,
-            cwd,
-            fds: fds.borrow().clone(),
-            group: context.group,
-            parent: None,
-        })
-        .map_err(|_| 127)?;
+    let pid = context.core.host.spawn(SpawnRequest {
+        argv,
+        env,
+        cwd,
+        fds: fds.borrow().clone(),
+        group: context.group,
+        parent: None,
+    });
+    let pid = match pid {
+        Ok(pid) => pid,
+        Err(ProcessError::Runtime(errno @ (6 | 29 | 48))) => {
+            return external_wait_failure(
+                ProcessError::StartFailed(errno),
+                &command,
+                None,
+                parent_stderr,
+                &context,
+            )
+            .await;
+        }
+        Err(ProcessError::ProcessLimit) => {
+            return external_wait_failure(
+                ProcessError::StartFailed(6),
+                &command,
+                None,
+                parent_stderr,
+                &context,
+            )
+            .await;
+        }
+        Err(_) => return Err(127),
+    };
     // The child owns its inherited descriptors. Shell-side stage copies must
     // not keep a closed child reader/writer alive while waiting for its exit.
-    let stderr = fds.borrow().get(2);
+    let stderr = fds.borrow().get(2).map(|stderr| stderr.downgrade());
     drop(fds);
     match context.cancel.run(context.core.host.wait(pid)).await {
         Ok(Ok(status)) => Ok(Outcome::status(status)),
-        Ok(Err(error)) => external_wait_failure(error, &command, stderr, &context).await,
+        Ok(Err(error)) => {
+            external_wait_failure(error, &command, stderr, parent_stderr, &context).await
+        }
         Err(_) => {
             // Signal inherited members before waiting/reaping the direct child;
             // it may be the last live direct stage but not the last group member.
@@ -3244,7 +3311,8 @@ async fn dispatch_simple_command_body(
 async fn external_wait_failure(
     error: ProcessError,
     command: &str,
-    stderr: Option<io::Endpoint>,
+    stderr: Option<io::WeakEndpoint>,
+    parent_stderr: Option<io::WeakEndpoint>,
     context: &Context,
 ) -> Result<Outcome, i32> {
     let ProcessError::StartFailed(errno) = error else {
@@ -3252,6 +3320,17 @@ async fn external_wait_failure(
     };
     let fork = matches!(errno, 6 | 29 | 48);
     let operation = if fork { "fork" } else { command };
+    // Bash reports fork failure in the parent, before command redirections.
+    // Exec failures use the child's stderr when that open description survives.
+    // Until start_status-scoped ownership is integrated, a dead weak reference
+    // falls back to shell stderr rather than retaining a pipeline endpoint and
+    // preventing EOF. See plan004's approved start-status follow-up.
+    let stderr = if fork {
+        parent_stderr.and_then(|stderr| stderr.upgrade())
+    } else {
+        stderr.and_then(|stderr| stderr.upgrade())
+    }
+    .or_else(|| context.core.descriptors.borrow().get(2));
     if let Some(stderr) = stderr {
         let diagnostic = format!("/usr/bin/bash: {operation}: {error}\n");
         let _ = stderr
@@ -3261,7 +3340,7 @@ async fn external_wait_failure(
     if fork {
         return Ok(Outcome {
             code: 254,
-            flow: Flow::Abort,
+            flow: Flow::SpawnFailed,
         });
     }
     Ok(Outcome::status(if errno == 44 { 127 } else { 126 }))

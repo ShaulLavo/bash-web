@@ -102,30 +102,7 @@ For explicit maintenance capture, prepare the pinned corpus sources only with
 does not build an engine. Capture itself requires Linux, GNU Bash 5.3.15,
 bubblewrap, Python's standard library, and the `yaml` package.
 
-## Startup diagnostics
-
-The test page exposes `window.bashWeb.snapshot().startup` as soon as the workbench
-mounts, before a shell session exists. Each start has its own generation, a bounded
-map of first-observed stage timestamps, and a `pending` list of started awaits with
-no observed completion. Timestamps use `performance.timeOrigin + performance.now()`
-so page and worker observations share a high-resolution epoch clock. `last` is the
-latest timestamp, not a claim about which concurrent task is blocking startup.
-Waffle filesystem milestones retain their original worker timestamps. Pending runtime
-waits pair connection receipt, IndexedDB open, writer-lock acquisition, and epoch
-completion with their observed requests; worker creation alone is not a pending await.
-The demo passes its observer to runtime creation, and custom `acquireRuntime` factories
-receive it to pass to `createRuntime({ onStartupStage })` themselves. A pre-created
-borrowed runtime does not have earlier startup events reconstructed.
-
-Browser test failures print pending stages and attach the full snapshot as
-`browser-startup-diagnostics`. Shell embeddings may supply `onStartupStage` to
-`createShell` for the same non-blocking observations. Observer throws and rejected
-returns are ignored; observers are never awaited. Observers must not abort or start/stop
-shell or runtime control, matching [Waffle's passive observer contract](https://github.com/ShaulLavo/waffle/blob/b1f2b7dddb32eb52c6423c0ab12dc2e21ea699ea/docs/runtime-startup.md).
-No polling or history is kept by the observer hook.
-An absent marker means unobserved, not pending. In particular, a borrowed runtime
-or cached shell registration may have completed work before observation began.
-Restart clears timestamps and ignores callbacks from the stopped generation.
+[Startup diagnostics](docs/browser-runtime.md#startup-diagnostics) describes passive startup observations and failure attachments.
 
 ## Repository layout
 
