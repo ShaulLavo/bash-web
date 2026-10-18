@@ -2,7 +2,14 @@ import { test, expect, type Page } from "@playwright/test";
 
 test.setTimeout(60000);
 async function ready(page: Page) {
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        state: window.bashWeb?.snapshot().state,
+        failure: document.querySelector('[role="alert"]')?.textContent?.trim(),
+      })),
+    )
+    .toMatchObject({ state: "ready" });
 }
 async function open(page: Page) {
   await page.goto("/?test=1&renderer=canvas&engine=own-shell");
