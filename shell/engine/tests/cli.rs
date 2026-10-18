@@ -90,6 +90,46 @@ fn cli_system_mount_is_read_only_without_freezing_writable_paths() {
 }
 
 #[test]
+fn cli_system_mount_metadata_resolves_aliases_after_validating_traversal() {
+    let source = "for p in /usr/bin //usr/bin /./usr/bin /tmp/../usr/bin; do test ! -w \"$p\" || exit 9; done; for p in /tmp /usr/../tmp /usr-local; do test -w \"$p\" || exit 8; done; test ! -e /missing/../usr/bin || exit 7; test ! -e /usr/bin/argv.py/../argv.py || exit 6; printf checked";
+    let output = Command::new(env!("CARGO_BIN_EXE_shell-engine"))
+        .args(["-c", source])
+        .env("PWD", "/usr-local")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"checked");
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn cli_fixture_denied_traversal_is_hidden_from_lookup_metadata() {
+    // An original minimal control, independent of the frozen PATH matrix.
+    let fixture = r#"{"schema":1,"nodes":[{"path":"blocked","kind":"directory","mode":0},{"path":"blocked/tool","kind":"file","mode":493,"marker":"hidden","status":23},{"path":"plain","kind":"directory","mode":493},{"path":"plain/tool","kind":"file","mode":384}]}"#;
+    for (source, status, stdout) in [
+        ("PATH=blocked; tool", 127, ""),
+        ("PATH=blocked; command -v tool", 1, ""),
+        ("PATH=blocked; command -V tool", 1, ""),
+        ("PATH=blocked:plain; command -v tool", 0, "plain/tool\n"),
+        ("PATH=blocked:plain; tool", 126, ""),
+        (
+            "test ! -e blocked/tool && test ! -e blocked/../plain/tool && test ! -e ./blocked//tool && test -e plain/tool && printf checked",
+            0,
+            "checked",
+        ),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_shell-engine"))
+            .args(["-c", source])
+            .env("PWD", "/fixture")
+            .env("BASH_WEB_PATH_FIXTURE", fixture)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(status), "{source}");
+        assert_eq!(output.stdout, stdout.as_bytes(), "{source}");
+    }
+}
+
+#[test]
 fn cli_virtual_working_directory_exists_for_file_predicates() {
     let output = Command::new(env!("CARGO_BIN_EXE_shell-engine"))
         .args(["-c", "test -d . && [[ -d $PWD ]] && printf ready"])

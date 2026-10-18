@@ -14,11 +14,49 @@ use shell_engine::{
 pub struct ReadOnlyMount {
     inner: MemoryFs,
     root: &'static str,
+    denied_directories: Vec<String>,
 }
 impl ReadOnlyMount {
     pub fn new(inner: MemoryFs, root: &'static str) -> Self {
         assert!(root.starts_with('/') && !root.ends_with('/'));
-        Self { inner, root }
+        Self {
+            inner,
+            root,
+            denied_directories: Vec::new(),
+        }
+    }
+    pub fn with_denied_directories(mut self, paths: Vec<String>) -> Self {
+        self.denied_directories = paths;
+        self
+    }
+    // MemoryFs has no symlinks. Resolve the same components as stat, retaining
+    // fixture traversal denial before simplifying `.` or `..`. The bounded
+    // manifest supplies this policy to both metadata and executable access.
+    fn resolve(&self, path: &str) -> Result<String, IoError> {
+        if !path.starts_with('/') || path.len() > 4096 || path.contains('\0') {
+            return Err(IoError::InvalidPath);
+        }
+        let mut resolved = String::with_capacity(path.len());
+        resolved.push('/');
+        for component in path.split('/').skip(1) {
+            if self.denied_directories.contains(&resolved) {
+                return Err(IoError::Runtime(2)); // WASI EACCES
+            }
+            match component {
+                "" | "." => {}
+                ".." => {
+                    let index = resolved.rfind('/').unwrap();
+                    resolved.truncate(index.max(1));
+                }
+                _ => {
+                    if resolved.len() > 1 {
+                        resolved.push('/');
+                    }
+                    resolved.push_str(component);
+                }
+            }
+        }
+        Ok(resolved)
     }
     fn contains(&self, path: &str) -> bool {
         path == self.root
@@ -34,7 +72,8 @@ impl FileSystem for ReadOnlyMount {
         parents: bool,
     ) -> LocalBoxFuture<'a, Result<(), IoError>> {
         async move {
-            if self.contains(path) {
+            let resolved = self.resolve(path)?;
+            if self.contains(&resolved) {
                 match self.inner.stat(path, true) {
                     Ok(metadata) if metadata.kind == FileKind::Directory && parents => Ok(()),
                     Ok(_) => Err(IoError::AlreadyExists),
@@ -52,8 +91,11 @@ impl FileSystem for ReadOnlyMount {
         follow_symlinks: bool,
     ) -> LocalBoxFuture<'a, Result<FileMetadata, IoError>> {
         async move {
+            // Validate every original component first: a missing/file ancestor
+            // followed by `..` must not become a successful lexical lookup.
             let mut metadata = self.inner.stat(path, follow_symlinks)?;
-            if self.contains(path) {
+            let resolved = self.resolve(path)?;
+            if self.contains(&resolved) {
                 metadata.writable = Some(false);
             }
             Ok(metadata)
@@ -64,7 +106,11 @@ impl FileSystem for ReadOnlyMount {
         &'a self,
         path: &'a str,
     ) -> LocalBoxFuture<'a, Result<std::rc::Rc<dyn Directory>, IoError>> {
-        FileSystem::open_dir(&self.inner, path)
+        async move {
+            self.resolve(path)?;
+            FileSystem::open_dir(&self.inner, path).await
+        }
+        .boxed_local()
     }
     fn open<'a>(
         &'a self,
@@ -72,7 +118,8 @@ impl FileSystem for ReadOnlyMount {
         options: &'a OpenOptions,
     ) -> LocalBoxFuture<'a, Result<Endpoint, IoError>> {
         async move {
-            if self.contains(path)
+            let resolved = self.resolve(path)?;
+            if self.contains(&resolved)
                 && (options.write || options.create || options.truncate || options.append)
             {
                 return Err(IoError::Runtime(69)); // WASI EROFS
@@ -255,7 +302,7 @@ pub fn register_fixture(
     fs: &MemoryFs,
     cwd: &str,
     raw: &str,
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> {
     let manifest = parse_manifest(raw)?;
     let root = cwd.trim_end_matches('/');
     // Reserve enough room for the derived not-a-directory access paths too.
@@ -338,7 +385,12 @@ pub fn register_fixture(
             });
         }
     }
-    Ok(())
+    Ok(manifest
+        .nodes
+        .iter()
+        .filter(|node| node.kind == FixtureKind::Directory && node.mode & 0o111 == 0)
+        .map(|node| absolute(&node.path))
+        .collect())
 }
 
 async fn argv(request: SpawnRequest, cancel: Cancel) -> i32 {
@@ -509,6 +561,40 @@ mod tests {
                 "{path}"
             );
         }
+    }
+
+    #[test]
+    fn mounted_metadata_preserves_traversal_and_classifies_resolved_paths() {
+        let fs = MemoryFs::new(4096);
+        fs.mkdir("/usr/bin", true).unwrap();
+        fs.mkdir("/blocked", true).unwrap();
+        fs.write_file("/blocked/tool", b"hidden").unwrap();
+        fs.write_file("/usr/bin/tool", b"system").unwrap();
+        let mounted =
+            ReadOnlyMount::new(fs, "/usr").with_denied_directories(vec!["/blocked".into()]);
+        for path in ["/usr/bin", "//usr/bin", "/./usr/bin", "/tmp/../usr/bin"] {
+            let metadata = mounted.stat(path, true).now_or_never().unwrap().unwrap();
+            assert_eq!(metadata.writable, Some(false), "{path}");
+        }
+        for path in ["/tmp", "/usr/../tmp"] {
+            let metadata = mounted.stat(path, true).now_or_never().unwrap().unwrap();
+            assert_eq!(metadata.writable, Some(true), "{path}");
+        }
+        for path in ["/blocked/tool", "//blocked/tool", "/blocked/../usr/bin"] {
+            assert_eq!(
+                mounted.stat(path, true).now_or_never(),
+                Some(Err(IoError::Runtime(2))),
+                "{path}"
+            );
+        }
+        assert_eq!(
+            mounted.stat("/missing/../usr/bin", true).now_or_never(),
+            Some(Err(IoError::NotFound))
+        );
+        assert_eq!(
+            mounted.stat("/usr/bin/tool/../tool", true).now_or_never(),
+            Some(Err(IoError::NotDirectory))
+        );
     }
 
     fn file(path: &str) -> serde_json::Value {

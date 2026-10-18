@@ -22,6 +22,7 @@ fn main() {
     compat::register(&host, &fs);
     let cwd = std::env::var("PWD").ok();
     let fixture = std::env::var_os("BASH_WEB_PATH_FIXTURE");
+    let mut denied_directories = Vec::new();
     if fixture.is_some() && cwd.is_none() {
         eprintln!("cannot install path fixture without PWD");
         std::process::exit(2);
@@ -38,16 +39,19 @@ fn main() {
                 eprintln!("cannot install path fixture: invalid UTF-8");
                 std::process::exit(2);
             };
-            if let Err(error) = compat::register_fixture(&host, &fs, cwd, raw) {
-                eprintln!("cannot install path fixture: {error}");
-                std::process::exit(2);
-            }
+            denied_directories = match compat::register_fixture(&host, &fs, cwd, raw) {
+                Ok(paths) => paths,
+                Err(error) => {
+                    eprintln!("cannot install path fixture: {error}");
+                    std::process::exit(2);
+                }
+            };
         }
     }
     let session = Session::new(
         executor.clone(),
         Rc::new(host),
-        Rc::new(compat::ReadOnlyMount::new(fs, "/usr")),
+        Rc::new(compat::ReadOnlyMount::new(fs, "/usr").with_denied_directories(denied_directories)),
         Limits::default(),
     );
     {
