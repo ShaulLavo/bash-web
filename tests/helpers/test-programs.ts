@@ -66,7 +66,9 @@ export async function registerTestPrograms(
   }
   // Original empty core-Wasm module: valid at registration, but lacks _start
   // and memory. The real worker must report asynchronous START_FAILED/ENOEXEC.
+  signal?.throwIfAborted();
   await runtime.filesystem.writeFile("/bin/test-start-failure", new Uint8Array());
+  signal?.throwIfAborted();
   runtime.registerProgram("/bin/test-start-failure", {
     adapter: "bash-web:preview1",
     module: new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])),
