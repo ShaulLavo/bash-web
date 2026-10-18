@@ -3,7 +3,38 @@ on: [push, pull_request]
 permissions:
   contents: read
 jobs:
+  layers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      LAYERS_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Select immutable layer baseline
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_REF" == "refs/heads/main" ]]; then
+            baseline="$LAYERS_BASE_REF"
+          else
+            baseline="$(git merge-base origin/main "$GITHUB_SHA")"
+          fi
+          if [[ ! "$baseline" =~ ^[a-f0-9]{40}$ ]] || ! git cat-file -e "$baseline^{commit}"; then
+            echo "Could not resolve immutable layer baseline: $baseline" >&2
+            exit 1
+          fi
+          echo "LAYERS_BASE_REF=$baseline" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.7.0
+          cache: npm
+      - run: npm run test:check-layers
+      - run: npm run check:layers
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck:layers
   shell:
+    needs: layers
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -67,6 +98,7 @@ jobs:
       - run: ulimit -c 0; npm run fuzz:shell-printf:ci -- --shell .build/shell/release/shell-engine
 
   own-shell-compatibility:
+    needs: layers
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -125,6 +157,7 @@ jobs:
           if-no-files-found: ignore
 
   browser:
+    needs: layers
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:

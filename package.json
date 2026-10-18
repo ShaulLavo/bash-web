@@ -68,7 +68,11 @@
     "build:test-guest": "node scripts/build-test-guest.mjs",
     "fuzz:shell-printf": "node scripts/fuzz-shell-printf.ts",
     "test:fuzz-shell-printf": "node --test scripts/test-fuzz-shell-printf.ts",
-    "fuzz:shell-printf:ci": "node scripts/fuzz-shell-printf.ts --replay scripts/fixtures/shell-printf-seed-1.json --replay scripts/fixtures/shell-printf-seed-42.json"
+    "fuzz:shell-printf:ci": "node scripts/fuzz-shell-printf.ts --replay scripts/fixtures/shell-printf-seed-1.json --replay scripts/fixtures/shell-printf-seed-42.json",
+    "check:layers": "node scripts/check-layers.ts",
+    "test:check-layers": "node --test scripts/test-check-layers.ts",
+    "typecheck:layers": "tsc --ignoreConfig --noEmit --strict --skipLibCheck --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-layers.ts scripts/test-check-layers.ts",
+    "compat": "npm run compat:shell"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",
