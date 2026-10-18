@@ -8,6 +8,7 @@ pub mod executor;
 mod expand;
 pub mod interpreter;
 pub mod io;
+mod parse;
 pub mod process;
 pub mod runtime;
 pub mod state;

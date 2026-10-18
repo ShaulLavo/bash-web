@@ -174,8 +174,8 @@ stay with the storage budget. Parsing orchestration remains above these types.
 
 ### Binding ownership
 
-| Area | Classification | Local source and reason |
-| --- | --- | --- |
+| Area                                  | Classification                                                   | Local source and reason                                                                                                                                                |
+| ------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Binding storage and scope restoration | Original local ownership adapters; no newly copied upstream code | `state.rs` owns scalar/attribute/nameref/function/positional/local writes and every restoration guard. `state/bindings_tests.rs` pins the distinct lifecycle policies. |
 
 The binding move starts from local bash-web
@@ -212,6 +212,48 @@ an absent non-exported PATH; the browser adapter extends default bindings and
 exports the retained default IFS without inventing PATH. Execution status,
 pipeline status and async identity are published separately at their existing
 phases, not assigned as ordinary scalar strings.
+
+### Parsing contexts
+
+| Area                                   | Classification                                                            | Local source and reason                                                                                                                                                                                                                             |
+| -------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Parsing facade and delegation controls | Original local adapters; no newly copied or moved upstream implementation | `shell/engine/src/parse.rs` and `parse/tests.rs` centralize the original parser calls from local bash-web `3cec14c60bf2ed90dedb504d48da50d3b689108e`. The parser crate, provenance lock and upstream-derived expansion algorithms remain unchanged. |
+
+The private `parse` module is the single production entry boundary for shell
+parsing, not a new parser or a generic mode-switch API. Entry points retain their
+source and grammar distinctions:
+
+- `script` and `eval` borrow the caller-owned source, byte ceiling and fresh
+  interruptible parser budget. Both use the existing recovering reader: complete
+  prior lines and command-end lines survive, syntax and shell-word failures stay
+  distinct, and resource/cancellation errors remain immediate errors. Source
+  admission/retention, eval depth and public status/diagnostic mapping stay with
+  their callers.
+- `declaration_tokens` re-lexes only the bounded source span with raw capture,
+  retaining incremental token order and caller-owned cancellation checkpoints.
+- `generated_word` parses one admitted brace variant in **word** context, with
+  the general AST depth cap and source-derived fuel. It does not use the smaller
+  scalar-operand cap or treat generated reserved words as commands.
+- `lazy_parameter` receives the scanner's outer-quote and pattern flags;
+  `lazy_variable` retains the existing infallible word API and single-part check
+  in the caller. Both keep the scalar depth cap 16 and token fuel 65,536. Neither
+  parses inactive operand bodies in advance.
+- `substitution_token` and `backtick_body` retain strict body grammar, general
+  depth and source-derived fuel. Backtick syntax failures still become deferred
+  child errors, while resource failures remain immediate. `substitution_grammar`
+  keeps its separate validation-only depth cap 16, fuel 65,536 and default options.
+
+Expansion still admits synchronous work and storage **before** calling the facade
+and retains its checkpoint/error-conversion order. Script grammar stays lenient
+at top level and strict in substitution bodies, with aliases absent and extglob
+lexing enabled as before. Validation-only substitution grammar retains the
+different default options (extglob disabled). Compiled capabilities receive no
+new filters or settings. Full/Lite capability policy is
+not introduced by this move. AST types, boundary scanners, the arithmetic
+expression evaluator and direct parser fixture constructors are not facade entry
+points. Contract tests compare each context with its exact old parser call and
+pin recovery, byte limits, shared sticky work/cancellation, lazy quote/pattern
+context and deferred substitution failures.
 
 ## Repository layout
 

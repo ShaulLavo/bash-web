@@ -33,6 +33,14 @@ GNU bash executable code is not included. Keep these notices and licenses with
 copies of the fixture. The new CLI's fixture helpers and replay/comparison scripts
 are original code; no additional upstream implementation is ported.
 
+The parsing context facade in `shell/engine/src/parse.rs` and its
+`parse/tests.rs` controls are original local adapters. They centralize the
+existing script/eval, generated-word, lazy-operand and substitution parser calls
+from bash-web `3cec14c60bf2ed90dedb504d48da50d3b689108e`, without moving or
+copying upstream parser implementation. The unchanged Bashkit parser and adapted
+expansion code retain their classifications and licenses below; the facade adds
+no new upstream payload or provenance-lock changes.
+
 The binding ownership and restoration move in `shell/engine/src/state.rs` and
 its original `state/bindings_tests.rs` controls extracts the original local
 `BuiltinPrefixFrame` from `interpreter.rs` at bash-web
