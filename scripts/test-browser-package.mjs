@@ -40,7 +40,9 @@ test("shipped shell source contains no vendored runtime or Bun program implement
 test("worker preparation bundles the public Waffle FS worker and finish-build restores both assets", async (context) => {
   // This isolated packaging fixture owns only its scratch directory and child commands.
   // The existing dependency install is borrowed by a symlink, never copied or removed.
-  const scratch = await mkdtemp("/work/tmp/bash-web-worker-package-");
+  const scratchRoot = resolve(root, ".build");
+  await mkdir(scratchRoot, { recursive: true });
+  const scratch = await mkdtemp(resolve(scratchRoot, "browser-worker-package-"));
   context.after(() => rm(scratch, { recursive: true, force: true }));
   await mkdir(resolve(scratch, "scripts"), { recursive: true });
   await mkdir(resolve(scratch, "src/runtime"), { recursive: true });
