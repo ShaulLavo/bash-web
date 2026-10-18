@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
 import test from "node:test";
 import {
   boundaryEscapes,
@@ -322,10 +324,9 @@ test("CLI bounds and modes cannot weaken replay", () => {
 });
 
 test("raw process transport preserves NUL/invalid UTF8 and drains timeout/output descendants", async () => {
-  const parent =
-    process.env.FUZZ_PRINTF_SCRATCH ?? "/work/tmp/bash-web-printf-20261018/oracle-worker";
-  mkdirSync(parent, { recursive: true });
-  const cwd = mkdtempSync(parent + "/source-test-");
+  const cwd = mkdtempSync(
+    resolve(process.env.FUZZ_PRINTF_SCRATCH ?? tmpdir(), "bash-web-printf-source-test-"),
+  );
   const owned = { cwd, timeoutMs: 2000, interrupted: false };
   const onSignal = () => {
     owned.interrupted = true;

@@ -63,8 +63,9 @@ test("native cursor, Home/End, deletion and history", async ({ page }) => {
 
 test("Ctrl+C interrupts tight loops and stdin while retaining shell state", async ({ page }) => {
   await open(page);
-  await command(page, "export KEEP=still-here");
-  await command(page, "while :; do :; done");
+  // Prove this invocation owns the running state before interrupting it.
+  await command(page, "export KEEP=still-here; printf 'LOOP_READY\\n'; while :; do :; done");
+  await output(page, "LOOP_READY");
   await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("running");
   await page.keyboard.press("Control+c");
   await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");

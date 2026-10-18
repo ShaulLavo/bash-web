@@ -1,5 +1,37 @@
 //! Original raw-byte controls for GNU Bash 5.3.15 printf escapes.
 use super::*;
+use futures::future::LocalBoxFuture;
+use shell_engine::{
+    executor::Executor,
+    io::{HostEndpoint, IoError, pipe},
+};
+use std::{cell::RefCell, rc::Rc};
+
+#[derive(Clone)]
+struct RecordedEndpoint(Rc<RefCell<Vec<Vec<u8>>>>);
+impl HostEndpoint for RecordedEndpoint {
+    fn read<'a>(&'a self, _output: &'a mut [u8]) -> LocalBoxFuture<'a, Result<usize, IoError>> {
+        async { Ok(0) }.boxed_local()
+    }
+    fn write<'a>(&'a self, input: &'a [u8]) -> LocalBoxFuture<'a, Result<usize, IoError>> {
+        let records = self.0.clone();
+        let bytes = input.to_owned();
+        let length = input.len();
+        async move {
+            records.borrow_mut().push(bytes);
+            Ok(length)
+        }
+        .boxed_local()
+    }
+}
+
+fn recorded_endpoint() -> (Endpoint, Rc<RefCell<Vec<Vec<u8>>>>) {
+    let records = Rc::new(RefCell::new(Vec::new()));
+    (
+        Endpoint::host(Rc::new(RecordedEndpoint(records.clone()))),
+        records,
+    )
+}
 
 fn quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
@@ -300,4 +332,238 @@ fn printf_warning_write_failure_preserves_only_the_real_streamed_prefix() {
     assert!(rig.errors.bytes().is_empty());
     assert_eq!(rig.run("echo recovered"), 0);
     assert_eq!(rig.output.bytes(), b"prefixArecovered\n");
+}
+
+#[test]
+fn printf_small_invocation_is_one_write_and_large_output_uses_4096_byte_records() {
+    let rig = Rig::new(Limits::default());
+    let (output, records) = recorded_endpoint();
+    let mut fds = FdTable::default();
+    fds.insert(0, Endpoint::null());
+    fds.insert(1, output);
+    fds.insert(2, Endpoint::null());
+    rig.shell.set_descriptors(fds).unwrap();
+    assert_eq!(rig.run("printf 'A%s\\n' x"), 0);
+    assert_eq!(*records.borrow(), vec![b"Ax\n".to_vec()]);
+    for (length, expected) in [
+        (4095, vec![4095]),
+        (4096, vec![4096]),
+        (4097, vec![4096, 1]),
+    ] {
+        records.borrow_mut().clear();
+        assert_eq!(rig.run(&format!("printf '{}'", "x".repeat(length))), 0);
+        assert_eq!(
+            records.borrow().iter().map(Vec::len).collect::<Vec<_>>(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn printf_repeated_format_and_percent_b_stop_each_flush_at_invocation_end() {
+    let rig = Rig::new(Limits::default());
+    let (output, records) = recorded_endpoint();
+    let mut fds = FdTable::default();
+    fds.insert(0, Endpoint::null());
+    fds.insert(1, output);
+    fds.insert(2, Endpoint::null());
+    rig.shell.set_descriptors(fds).unwrap();
+    assert_eq!(rig.run("printf 'A%s' b c"), 0);
+    assert_eq!(*records.borrow(), vec![b"AbAc".to_vec()]);
+    records.borrow_mut().clear();
+    assert_eq!(rig.run("printf '%b:%s\\n' 'a\\cb' after tail"), 0);
+    assert_eq!(*records.borrow(), vec![b"a".to_vec()]);
+}
+
+#[test]
+fn concurrent_small_printf_writers_never_split_marker_records() {
+    let ex = Executor::new();
+    let host = InProcessHost::new(ex.clone());
+    let fs_a = MemoryFs::new(64 * 1024);
+    let fs_b = MemoryFs::new(64 * 1024);
+    let shell_a = Session::new(
+        ex.clone(),
+        Rc::new(host.clone()),
+        Rc::new(fs_a),
+        Limits::default(),
+    );
+    let shell_b = Session::new(
+        ex.clone(),
+        Rc::new(host.clone()),
+        Rc::new(fs_b),
+        Limits::default(),
+    );
+    let (output, records) = recorded_endpoint();
+    for shell in [&shell_a, &shell_b] {
+        let mut fds = FdTable::default();
+        fds.insert(0, Endpoint::null());
+        fds.insert(1, output.clone());
+        fds.insert(2, Endpoint::null());
+        shell.set_descriptors(fds).unwrap();
+    }
+    let job_a = shell_a.start("printf 'writer-A\\n'").unwrap();
+    let job_b = shell_b.start("printf 'writer-B\\n'").unwrap();
+    for _ in 0..100_000 {
+        if job_a.is_finished() && job_b.is_finished() {
+            break;
+        }
+        ex.drive(64);
+    }
+    assert_eq!(job_a.now_or_never(), Some(0));
+    assert_eq!(job_b.now_or_never(), Some(0));
+    let mut observed = records.borrow().clone();
+    observed.sort();
+    assert_eq!(
+        observed,
+        vec![b"writer-A\n".to_vec(), b"writer-B\n".to_vec()]
+    );
+    let shutdown_a = shell_a.shutdown();
+    let shutdown_b = shell_b.shutdown();
+    futures::pin_mut!(shutdown_a, shutdown_b);
+    for _ in 0..1000 {
+        ex.drive(64);
+        if shutdown_a.as_mut().now_or_never().is_some()
+            && shutdown_b.as_mut().now_or_never().is_some()
+        {
+            return;
+        }
+    }
+    panic!("concurrent printf sessions did not shut down");
+}
+
+#[test]
+fn printf_aliased_stderr_writes_diagnostic_before_buffered_stdout() {
+    let rig = Rig::new(Limits::default());
+    let (output, records) = recorded_endpoint();
+    let mut fds = FdTable::default();
+    fds.insert(0, Endpoint::null());
+    fds.insert(1, output.clone());
+    fds.insert(2, output);
+    rig.shell.set_descriptors(fds).unwrap();
+    assert_eq!(rig.run(r"printf 'prefixA\xZ'"), 0);
+    assert_eq!(records.borrow().len(), 2);
+    assert!(records.borrow()[0].ends_with(b"missing hex digit for \\x\n"));
+    assert_eq!(records.borrow()[1], b"prefixA\\xZ");
+}
+
+#[test]
+fn concurrent_printf_writers_on_one_engine_pipe_keep_each_marker_whole() {
+    let ex = Executor::new();
+    let host = InProcessHost::new(ex.clone());
+    let shell_a = Session::new(
+        ex.clone(),
+        Rc::new(host.clone()),
+        Rc::new(MemoryFs::new(64 * 1024)),
+        Limits::default(),
+    );
+    let shell_b = Session::new(
+        ex.clone(),
+        Rc::new(host),
+        Rc::new(MemoryFs::new(64 * 1024)),
+        Limits::default(),
+    );
+    let (reader, writer) = pipe();
+    for shell in [&shell_a, &shell_b] {
+        let mut fds = FdTable::default();
+        fds.insert(0, Endpoint::null());
+        fds.insert(1, writer.clone());
+        fds.insert(2, Endpoint::null());
+        shell.set_descriptors(fds).unwrap();
+    }
+    let marker_a = format!("writer-A:{}\n", "a".repeat(64));
+    let marker_b = format!("writer-B:{}\n", "b".repeat(64));
+    let job_a = shell_a
+        .start(&format!(
+            "printf 'writer-A:%s\\n' {}",
+            quote(&"a".repeat(64))
+        ))
+        .unwrap();
+    let job_b = shell_b
+        .start(&format!(
+            "printf 'writer-B:%s\\n' {}",
+            quote(&"b".repeat(64))
+        ))
+        .unwrap();
+    let mut output = Vec::new();
+    for _ in 0..100_000 {
+        ex.drive(1);
+        let mut chunk = [0; 17];
+        if let Some(Ok(count)) = reader.read(&mut chunk).now_or_never() {
+            output.extend_from_slice(&chunk[..count]);
+        }
+        if job_a.is_finished()
+            && job_b.is_finished()
+            && output.len() == marker_a.len() + marker_b.len()
+        {
+            break;
+        }
+    }
+    assert_eq!(job_a.now_or_never(), Some(0));
+    assert_eq!(job_b.now_or_never(), Some(0));
+    let concatenated_ab = marker_a
+        .as_bytes()
+        .iter()
+        .chain(marker_b.as_bytes())
+        .copied()
+        .collect::<Vec<_>>();
+    let concatenated_ba = marker_b
+        .as_bytes()
+        .iter()
+        .chain(marker_a.as_bytes())
+        .copied()
+        .collect::<Vec<_>>();
+    assert!(
+        output == concatenated_ab || output == concatenated_ba,
+        "interleaved pipe output: {output:?}"
+    );
+    let shutdown_a = shell_a.shutdown();
+    let shutdown_b = shell_b.shutdown();
+    futures::pin_mut!(shutdown_a, shutdown_b);
+    for _ in 0..1000 {
+        ex.drive(64);
+        if shutdown_a.as_mut().now_or_never().is_some()
+            && shutdown_b.as_mut().now_or_never().is_some()
+        {
+            return;
+        }
+    }
+    panic!("concurrent printf pipe sessions did not shut down");
+}
+
+#[test]
+fn printf_cancellation_during_failed_diagnostic_prefix_flush_wins_status() {
+    let rig = Rig::new(Limits::default());
+    let (reader, writer) = pipe();
+    let filler = vec![b'!'; shell_engine::io::PIPE_CAPACITY];
+    assert_eq!(writer.write(&filler).now_or_never(), Some(Ok(filler.len())));
+    let mut fds = FdTable::default();
+    fds.insert(0, Endpoint::null());
+    fds.insert(1, writer);
+    fds.insert(2, Endpoint::null());
+    rig.shell.set_descriptors(fds).unwrap();
+    let job = rig.shell.start(r"printf 'prefixA\xZ' 2>&-").unwrap();
+    let mut parked = false;
+    for _ in 0..100_000 {
+        let turn = rig.ex.drive(1);
+        if !turn.runnable && !job.is_finished() {
+            parked = true;
+            break;
+        }
+        assert!(
+            !job.is_finished(),
+            "printf must park on its full output pipe"
+        );
+    }
+    assert!(parked, "prefix flush never reached pipe backpressure");
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    let mut actual = vec![0; filler.len()];
+    assert_eq!(
+        reader.read(&mut actual).now_or_never(),
+        Some(Ok(filler.len()))
+    );
+    assert_eq!(actual, filler);
+    let mut byte = [0];
+    assert!(reader.read(&mut byte).now_or_never().is_none());
+    assert_eq!(rig.run("true"), 0);
 }

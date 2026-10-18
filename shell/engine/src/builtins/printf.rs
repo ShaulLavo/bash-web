@@ -43,9 +43,13 @@ pub(super) async fn run(
             break;
         }
     }
+    // Printer stays inline in this future, which is owned by the interpreter's
+    // dispatch execution frame. eval::Scope::frame admits its complete future
+    // size (including the fixed output buffer) before boxing, and refunds it on
+    // completion or drop. A separate 4096-byte ticket would double-charge it.
     // Admit the complete repeated output and work before the first write, so
     // expansion/work admission failures emit nothing. Delivery needs constant
-    // stack space and cannot discover a new expansion/work allocation limit.
+    // space and cannot discover a new expansion/work allocation limit.
     // I/O failures and cancellation are not atomic: they can leave a genuine
     // streamed prefix, including when writing a later warning to closed stderr.
     let mut printer = Printer {
@@ -55,13 +59,17 @@ pub(super) async fn run(
         budget: Budget::default(),
         remaining: context.limits().expansion_bytes,
         utf8,
+        output: [0; WRITE_CHUNK],
+        output_len: 0,
     };
     format(args, &mut printer).await?;
     printer.work = None;
     let status = format(args, &mut printer).await?;
+    printer.flush_output().await?;
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
+const WRITE_CHUNK: usize = 4096;
 struct Printer<'a> {
     fds: &'a FdTable,
     context: &'a Context,
@@ -69,6 +77,8 @@ struct Printer<'a> {
     budget: Budget,
     remaining: usize,
     utf8: bool,
+    output: [u8; WRITE_CHUNK],
+    output_len: usize,
 }
 impl Printer<'_> {
     async fn scan(&mut self, bytes: usize) -> Result<(), i32> {
@@ -86,18 +96,58 @@ impl Printer<'_> {
         }
         Ok(())
     }
+    async fn flush_output(&mut self) -> Result<(), i32> {
+        if self.output_len == 0 {
+            return Ok(());
+        }
+        // A full or final buffer is one logical printf write. Clear it even on
+        // I/O failure: any bytes accepted before the failure are a genuine
+        // streamed prefix and must not be duplicated by recovery code.
+        let result = write(self.fds, &self.output[..self.output_len], self.context).await;
+        self.output_len = 0;
+        result
+    }
+    async fn append_output(&mut self, mut bytes: &[u8]) -> Result<(), i32> {
+        while !bytes.is_empty() {
+            if self.output_len == WRITE_CHUNK {
+                self.flush_output().await?;
+            }
+            let count = bytes.len().min(WRITE_CHUNK - self.output_len);
+            self.output[self.output_len..self.output_len + count].copy_from_slice(&bytes[..count]);
+            self.output_len += count;
+            bytes = &bytes[count..];
+        }
+        Ok(())
+    }
     async fn emit(&mut self, fd: u32, bytes: &[u8]) -> Result<(), i32> {
         if self.work.is_some() {
             self.remaining = self.remaining.checked_sub(bytes.len()).ok_or(2)?;
             return Ok(());
         }
         if fd == 1 {
-            write(self.fds, bytes, self.context).await
+            self.append_output(bytes).await
         } else {
-            endpoint(self.fds, fd)?
-                .write_all(bytes, &self.context.cancel)
-                .await
-                .map_err(|error| error.status())
+            // Keep stdout buffered while the diagnostic is attempted. This
+            // preserves one small invocation write and gives aliased stderr
+            // the Bash-visible diagnostic-before-output order. If stderr is
+            // closed, expose the already-buffered stdout prefix before
+            // returning the real diagnostic I/O failure. Cancellation does
+            // not flush undelivered bytes.
+            let result = match endpoint(self.fds, fd) {
+                Ok(endpoint) => endpoint
+                    .write_all(bytes, &self.context.cancel)
+                    .await
+                    .map_err(|error| error.status()),
+                Err(status) => Err(status),
+            };
+            match result {
+                Ok(()) => Ok(()),
+                Err(status) if status == 130 => Err(status),
+                Err(status) => {
+                    self.flush_output().await?;
+                    Err(status)
+                }
+            }
         }
     }
     async fn escape(&mut self, input: &[u8], mode: Mode) -> Result<Escape, i32> {
@@ -342,5 +392,158 @@ fn unicode(value: u32, utf8: bool, out: &mut Escape) {
     out.push(prefix | (value >> (6 * (length - 1))) as u8);
     for shift in (0..length - 1).rev() {
         out.push(0x80 | ((value >> (shift * 6)) & 0x3f) as u8);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        Limits, Session,
+        executor::{Executor, JoinHandle},
+        io::{Endpoint, MemoryFs, capture, pipe},
+        process::InProcessHost,
+    };
+    use futures::FutureExt;
+    use std::rc::Rc;
+
+    fn finish(executor: &Executor, job: JoinHandle<i32>) -> i32 {
+        for _ in 0..100_000 {
+            if job.is_finished() {
+                return job.now_or_never().unwrap();
+            }
+            executor.drive(64);
+        }
+        panic!("printf live-budget control did not finish");
+    }
+
+    #[test]
+    fn printf_buffer_live_budget_refunds_after_normal_error_and_cancellation() {
+        let limit = 1024 * 1024;
+        let ex = Executor::new();
+        let host = InProcessHost::new(ex.clone());
+        let shell = Session::new(
+            ex.clone(),
+            Rc::new(host),
+            Rc::new(MemoryFs::new(64 * 1024)),
+            Limits {
+                execution_bytes: limit,
+                ..Limits::default()
+            },
+        );
+        let (out, output) = capture(4096);
+        let mut fds = FdTable::default();
+        fds.insert(0, Endpoint::null());
+        fds.insert(1, out);
+        fds.insert(2, Endpoint::null());
+        shell.set_descriptors(fds).unwrap();
+        for (source, status) in [("printf ok", 0), (r"printf 'prefixA\xZ' 2>&-", 1)] {
+            assert_eq!(finish(&ex, shell.start(source).unwrap()), status);
+            // Reserving the entire pool proves no fixed-buffer/frame ticket is
+            // retained once the last command future has been dropped.
+            drop(shell.state().borrow().admit_temporary(limit).unwrap());
+        }
+        assert_eq!(output.bytes(), b"okprefixA");
+        let (reader, writer) = pipe();
+        let filler = vec![b'!'; crate::io::PIPE_CAPACITY];
+        assert_eq!(writer.write(&filler).now_or_never(), Some(Ok(filler.len())));
+        let mut fds = FdTable::default();
+        fds.insert(0, Endpoint::null());
+        fds.insert(1, writer);
+        fds.insert(2, Endpoint::null());
+        shell.set_descriptors(fds).unwrap();
+        let job = shell.start("printf buffered").unwrap();
+        let mut parked = false;
+        for _ in 0..100_000 {
+            let turn = ex.drive(1);
+            if !turn.runnable && !job.is_finished() {
+                parked = true;
+                break;
+            }
+        }
+        assert!(parked);
+        assert!(
+            shell
+                .state()
+                .borrow()
+                .admit_temporary(limit - WRITE_CHUNK + 1)
+                .is_err()
+        );
+        shell.interrupt();
+        assert_eq!(finish(&ex, job), 130);
+        drop(shell.state().borrow().admit_temporary(limit).unwrap());
+        let mut actual = vec![0; filler.len()];
+        assert_eq!(
+            reader.read(&mut actual).now_or_never(),
+            Some(Ok(filler.len()))
+        );
+        assert_eq!(actual, filler);
+        let shutdown = shell.shutdown();
+        futures::pin_mut!(shutdown);
+        for _ in 0..1000 {
+            ex.drive(64);
+            if shutdown.as_mut().now_or_never().is_some() {
+                return;
+            }
+        }
+        panic!("printf live-budget session did not shut down");
+    }
+
+    #[test]
+    fn printf_buffer_rejects_insufficient_shared_live_memory_before_printf_output() {
+        let limit = 1024 * 1024;
+        let ex = Executor::new();
+        let host = InProcessHost::new(ex.clone());
+        let shell = Session::new(
+            ex.clone(),
+            Rc::new(host),
+            Rc::new(MemoryFs::new(64 * 1024)),
+            Limits {
+                execution_bytes: limit,
+                ..Limits::default()
+            },
+        );
+        let (out, output) = capture(4096);
+        let (err, errors) = capture(4096);
+        let mut fds = FdTable::default();
+        fds.insert(0, Endpoint::null());
+        fds.insert(1, out);
+        fds.insert(2, err);
+        shell.set_descriptors(fds).unwrap();
+        // Retain a peer's charge, leaving less than one buffer of headroom.
+        let held = shell
+            .state()
+            .borrow()
+            .admit_temporary(limit - WRITE_CHUNK + 1)
+            .unwrap();
+        // Dispatch admits its whole future before selecting a builtin. The
+        // same tight headroom must reject non-printf commands too, rather than
+        // suggesting that this limit isolates just the printf output buffer.
+        for source in ["true", "echo hidden", r"printf 'prefixA\xZ'"] {
+            assert_eq!(finish(&ex, shell.start(source).unwrap()), 2, "{source}");
+            assert!(output.bytes().is_empty(), "{source}");
+        }
+        assert!(
+            !errors
+                .bytes()
+                .windows(b"missing hex digit".len())
+                .any(|bytes| bytes == b"missing hex digit")
+        );
+        assert!(shell.state().borrow().admit_temporary(WRITE_CHUNK).is_err());
+        drop(held);
+        for source in ["true", "echo recovered"] {
+            assert_eq!(finish(&ex, shell.start(source).unwrap()), 0, "{source}");
+            drop(shell.state().borrow().admit_temporary(limit).unwrap());
+        }
+        assert_eq!(output.bytes(), b"recovered\n");
+        let shutdown = shell.shutdown();
+        futures::pin_mut!(shutdown);
+        for _ in 0..1000 {
+            ex.drive(64);
+            if shutdown.as_mut().now_or_never().is_some() {
+                return;
+            }
+        }
+        panic!("printf low-budget session did not shut down");
     }
 }
