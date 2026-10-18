@@ -1,7 +1,7 @@
 //! Scalar indirection adapted from Bashkit's IndirectExpansion/indirect_target
 //! at 491c3281. This original adapter resolves typed names directly; it never
 //! desugars a target string into syntax. Generic IndirectSuffix stays unsupported.
-use super::{Error, Expansion, Protection, operand};
+use super::{Error, Expansion, OperandContext, Protection, operand};
 use crate::state::SharedState;
 use shell_parser::parser::ParameterOp;
 
@@ -19,11 +19,14 @@ impl Expansion<'_> {
         operator: Option<&ParameterOp>,
         source: &str,
         colon: bool,
-        state: &SharedState,
-        quoted: bool,
-        scalar: bool,
-        depth: usize,
+        context: OperandContext<'_>,
     ) -> Result<(), Error> {
+        let OperandContext {
+            state,
+            quoted,
+            scalar,
+            depth,
+        } = context;
         if depth >= operand::MAX_DEPTH || operator.is_some_and(|op| !operand::indirect_operator(op))
         {
             return Err(2.into());
@@ -85,17 +88,7 @@ impl Expansion<'_> {
         let snapshots = self.pattern_snapshots;
         self.pattern_snapshots = true;
         let result = self
-            .parameter(
-                &target,
-                operator,
-                source,
-                colon,
-                state,
-                quoted,
-                scalar,
-                depth,
-                Some(name),
-            )
+            .parameter(&target, operator, source, colon, context, Some(name))
             .await;
         self.pattern_snapshots = snapshots;
         result

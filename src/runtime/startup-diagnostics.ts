@@ -56,7 +56,7 @@ const startupOperations = [
   "shell-supervisor",
   "shell-worker-start",
 ] as const;
-export type StartupOperation = (typeof startupOperations)[number];
+type StartupOperation = (typeof startupOperations)[number];
 export type StartupStage = `${StartupOperation}-${"requested" | "resolved"}` | RuntimeStartupStage;
 export type StartupObserver = (stage: StartupStage, timestamp: number) => void | PromiseLike<void>;
 

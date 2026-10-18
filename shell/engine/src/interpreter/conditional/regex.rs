@@ -455,8 +455,7 @@ async fn closure(
     states: &mut [bool],
     stack: &mut Vec<usize>,
     seed: usize,
-    position: usize,
-    end: usize,
+    position: std::ops::Range<usize>,
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<(), Error> {
@@ -477,8 +476,8 @@ async fn closure(
                 add(left);
                 add(right);
             }
-            Node::Start(next) if position == 0 => add(next),
-            Node::End(next) if position == end => add(next),
+            Node::Start(next) if position.start == 0 => add(next),
+            Node::End(next) if position.start == position.end => add(next),
             _ => {}
         }
     }
@@ -506,8 +505,7 @@ pub(super) async fn matches(
         &mut current,
         &mut stack,
         start,
-        0,
-        value.len(),
+        0..value.len(),
         work,
         cancel,
     )
@@ -533,8 +531,7 @@ pub(super) async fn matches(
                     &mut next,
                     &mut stack,
                     destination,
-                    after,
-                    value.len(),
+                    after..value.len(),
                     work,
                     cancel,
                 )
@@ -546,8 +543,7 @@ pub(super) async fn matches(
             &mut next,
             &mut stack,
             start,
-            after,
-            value.len(),
+            after..value.len(),
             work,
             cancel,
         )

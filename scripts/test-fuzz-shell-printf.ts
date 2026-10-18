@@ -31,9 +31,13 @@ import {
   validateFixture,
 } from "./fuzz-shell-printf.ts";
 
+import type { FuzzFixture } from "./fuzz-shell-results.ts";
+type Case = ReturnType<typeof generateCases>[number];
+type Fixture = FuzzFixture<Case>;
+
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const path = "shell-printf-seed-1.json";
-const hash = (value) => createHash("sha256").update(value).digest("hex");
+const hash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 const observation = (patch = {}) => ({
   status: 0,
   signal: null,
@@ -43,7 +47,7 @@ const observation = (patch = {}) => ({
   stderr: Buffer.alloc(0),
   ...patch,
 });
-function fixtureFor() {
+function fixtureFor(): Fixture {
   const cases = generateCases(1, 0);
   return {
     schema: 1,
@@ -168,6 +172,7 @@ test("every transitive raw runner source participates in fixture identity", () =
   assert.deepEqual(sourceFiles, [
     "fuzz-shell-printf.ts",
     "fuzz-shell-control-flow.mjs",
+    "fuzz-shell-results.ts",
     "shell-process-group.mjs",
   ]);
   assert.deepEqual(Object.keys(hashes), sourceFiles);
@@ -212,79 +217,79 @@ test("comparison is byte-exact, healthy and strict without stderr normalization"
 test("fixture validation rejects identity, grammar, encoding and process mutations", () => {
   assert.deepEqual(validateFixture(path, fixtureFor(), options), matrixCases());
   for (const change of [
-    (f) => {
+    (f: Fixture) => {
       f.schema = 2;
     },
-    (f) => {
+    (f: Fixture) => {
       f.sourceHash = "changed";
     },
-    (f) => {
+    (f: Fixture) => {
       f.sourceHashes["fuzz-shell-control-flow.mjs"] = "changed";
     },
-    (f) => {
+    (f: Fixture) => {
       f.sourceHashes["shell-process-group.mjs"] = "changed";
     },
-    (f) => {
+    (f: Fixture) => {
       f.bash = "GNU bash, version 5.2.0";
     },
-    (f) => {
+    (f: Fixture) => {
       f.oraclePath = "/bin/sh";
     },
-    (f) => {
+    (f: Fixture) => {
       f.environment = { ...environment, locale: "C.UTF-8" };
     },
-    (f) => {
+    (f: Fixture) => {
       f.provenance = "unknown";
     },
-    (f) => {
+    (f: Fixture) => {
       f.seed = 42;
     },
-    (f) => {
+    (f: Fixture) => {
       f.seed = -1;
     },
-    (f) => {
+    (f: Fixture) => {
       f.count = 1;
     },
-    (f) => {
+    (f: Fixture) => {
       f.timeoutMs++;
     },
-    (f) => {
+    (f: Fixture) => {
       f.coverage = {};
     },
-    (f) => {
+    (f: Fixture) => {
       f.cases.pop();
     },
-    (f) => {
+    (f: Fixture) => {
       f.cases[0].case.script += "\n";
     },
-    (f) => {
+    (f: Fixture) => {
       f.cases[0].case.value = "\\xFF";
     },
-    (f) => {
-      f.cases[0].case.skip = true;
+    (f: Fixture) => {
+      Object.assign(f.cases[0].case, { skip: true });
     },
-    (f) => {
+    (f: Fixture) => {
       f.cases[0].bash.status = 256;
     },
-    (f) => {
+    (f: Fixture) => {
       f.cases[0].bash.signal = "SIGTERM";
     },
-    (f) => {
+    (f: Fixture) => {
       f.cases[0].bash.timedOut = true;
     },
-    (f) => {
+    (f: Fixture) => {
       f.cases[0].bash.error = "EIO";
     },
-    (f) => {
+    (f: Fixture) => {
       f.cases[0].bash.stdoutBase64 = "!";
     },
-    (f) => {
+    (f: Fixture) => {
       f.cases[0].bash.stderrBase64 = "YQ";
     },
-    (f) => {
+    (f: Fixture) => {
       f.cases[0].bash.stdoutBase64 = Buffer.alloc(outputLimit + 1).toString("base64");
     },
-    (f) => {
+    (f: Fixture) => {
       f.cases[0].bash.stdoutBase64 = Buffer.alloc(outputLimit).toString("base64");
       f.cases[0].bash.stderrBase64 = "AA==";
     },
@@ -382,10 +387,10 @@ for (const seed of [1, 42])
     assert.equal(
       hash(bytes),
       seed === 1
-        ? "0136185350097ef5e41c1fe8e368886c75643e8e0b8a3dbe1b6afb0deb797667"
-        : "6c1f0ea1b0b5c2b6dc1df3fbdf9764b99113cc30ddaaa3139fb1e17604246409",
+        ? "b68a255fd1c48247c198221167a032d8d970ee7f6d028f03d08ca18df1113d34"
+        : "a4184f7afa4bc94ea36e2663cf762492d996b6b935c057e2822b92daf169b77c",
     );
-    const fixture = JSON.parse(bytes.toString("utf8"));
+    const fixture: Fixture = JSON.parse(bytes.toString("utf8"));
     const cases = validateFixture(url.pathname, fixture, {
       seed,
       count: defaultCount,
@@ -399,11 +404,14 @@ for (const seed of [1, 42])
       assert.ok(stdout.length <= outputLimit);
       if (index === 0) assert.deepEqual(stdout, Buffer.from("A\x07Z|after:0|"));
     }
-    const find = (mode: string, value: string) =>
-      fixture.cases.find(
+    const find = (mode: string, value: string) => {
+      const entry = fixture.cases.find(
         (entry) =>
           entry.case.family === "escape" && entry.case.mode === mode && entry.case.value === value,
-      ).bash;
+      );
+      assert.ok(entry, `${mode}/${value} must exist`);
+      return entry.bash;
+    };
     for (const mode of modes) {
       assert.deepEqual(
         Buffer.from(find(mode, "\\377").stdoutBase64, "base64"),

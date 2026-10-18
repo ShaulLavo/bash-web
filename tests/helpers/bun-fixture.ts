@@ -20,26 +20,20 @@ export function createBunRuntimeLease(
   const ready = Promise.resolve().then(() => {
     installed = installBunAdapters(runtime, { workerUrl });
   });
+  async function disposeLease() {
+    // Cleanup must run even after installation fails; propagate that failure afterward.
+    await Promise.allSettled([ready]);
+    // Start storage cancellation and adapter cleanup together: either can await storage.
+    const cleanup = await Promise.allSettled([
+      runtime.dispose(),
+      Promise.resolve().then(() => installed?.dispose()),
+    ]);
+    const failures = cleanup.flatMap((result) =>
+      result.status === "rejected" ? [result.reason] : [],
+    );
+    if (failures.length) throw new AggregateError(failures, "Bun runtime cleanup failed");
+    await ready;
+  }
   let disposing: Promise<void> | undefined;
-  return {
-    runtime,
-    ready,
-    dispose: () =>
-      (disposing ??= (async () => {
-        try {
-          await ready;
-        } finally {
-          // Runtime disposal starts storage cancellation synchronously. An adapter may
-          // itself be awaiting storage, so neither cleanup can wait for the other to start.
-          const cleanup = await Promise.allSettled([
-            runtime.dispose(),
-            Promise.resolve().then(() => installed?.dispose()),
-          ]);
-          const failures = cleanup.flatMap((result) =>
-            result.status === "rejected" ? [result.reason] : [],
-          );
-          if (failures.length) throw new AggregateError(failures, "Bun runtime cleanup failed");
-        }
-      })()),
-  };
+  return { runtime, ready, dispose: () => (disposing ??= disposeLease()) };
 }

@@ -1,7 +1,6 @@
 //! Scalar replacement adapted from the pinned Bashkit expansion.rs rules.
 //! Search and emission use the engine's shared admission and cancellation budget.
 use super::{Error, Expansion, Protection, Segment, Segments, Work, admit_vec_slot, pattern};
-use crate::state::SharedState;
 
 enum Piece {
     Literal(char),
@@ -121,10 +120,13 @@ impl Expansion<'_> {
         pattern_source: &str,
         replacement_source: &str,
         global: bool,
-        state: &SharedState,
-        protected: bool,
-        depth: usize,
+        context: super::TransformContext<'_>,
     ) -> Result<(), Error> {
+        let super::TransformContext {
+            state,
+            protected,
+            depth,
+        } = context;
         self.work.checkpoint(self.cancel).await?;
         let value = {
             let s = state.borrow();

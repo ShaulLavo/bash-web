@@ -11,6 +11,9 @@ use futures::{
     future::{LocalBoxFuture, WeakShared},
 };
 use serde::Serialize;
+type WaitFuture = LocalBoxFuture<'static, Result<(), ProcessError>>;
+type WaitRegistry = RefCell<BTreeMap<GroupId, WeakShared<WaitFuture>>>;
+
 use std::{
     cell::{Cell, RefCell},
     collections::{BTreeMap, BTreeSet},
@@ -284,20 +287,14 @@ impl Drop for InputPump {
     }
 }
 
-fn input_future(
-    source: Endpoint,
-    writer: Endpoint,
-    cancel: Cancel,
-) -> impl Future<Output = Result<(), IoError>> {
-    async move {
-        let mut buffer = [0; 1024];
-        loop {
-            let count = source.read_cancelled(&mut buffer, &cancel).await?;
-            if count == 0 {
-                return Ok(());
-            }
-            writer.write_all(&buffer[..count], &cancel).await?;
+async fn input_future(source: Endpoint, writer: Endpoint, cancel: Cancel) -> Result<(), IoError> {
+    let mut buffer = [0; 1024];
+    loop {
+        let count = source.read_cancelled(&mut buffer, &cancel).await?;
+        if count == 0 {
+            return Ok(());
         }
+        writer.write_all(&buffer[..count], &cancel).await?;
     }
 }
 
@@ -317,8 +314,7 @@ struct State {
     next_group: Cell<GroupId>,
     groups: RefCell<BTreeMap<GroupId, Group>>,
     children: RefCell<BTreeMap<ProcessId, Rc<Child>>>,
-    waits:
-        RefCell<BTreeMap<GroupId, WeakShared<LocalBoxFuture<'static, Result<(), ProcessError>>>>>,
+    waits: WaitRegistry,
     input_slots: Rc<Cell<usize>>,
     inputs: RefCell<Vec<InputPump>>,
 }

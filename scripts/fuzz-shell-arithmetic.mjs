@@ -600,7 +600,7 @@ function main() {
   }
   const text =
     JSON.stringify(
-      reports.map(({ results, ...report }) => report),
+      reports.map(({ results: _results, ...report }) => report),
       null,
       2,
     ) + "\n";

@@ -68,10 +68,8 @@ fn main() {
     fds.insert(0, Endpoint::null());
     fds.insert(1, writer);
     fds.insert(2, error_writer);
-    let job = match {
-        session.set_descriptors(fds).unwrap();
-        session.start(&args[2])
-    } {
+    session.set_descriptors(fds).unwrap();
+    let job = match session.start(&args[2]) {
         Ok(job) => job,
         Err(error) => {
             eprintln!("{error}");

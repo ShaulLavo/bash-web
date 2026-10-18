@@ -53,15 +53,19 @@ import {
 } from "./fuzz-shell-path.ts";
 
 const parent = scratchParent();
+import type { FuzzFixture } from "./fuzz-shell-results.ts";
+type Case = ReturnType<typeof generateCases>[number];
+type Fixture = FuzzFixture<Case>;
+
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const fixturePath = "shell-path-seed-1.json";
-const fixtureHashes = {
-  "shell-path-seed-1.json": "d1b02a464581e83857d2ff228bc7168ba8976d1fe11ce99ee928c5cfc19a282e",
-  "shell-path-seed-42.json": "18d0d9db2ed85d8c31fe80c1ac6cc12e19e4119c33cd212eaa857f6a3f0facaf",
+const fixtureHashes: Record<string, string> = {
+  "shell-path-seed-1.json": "f127475dc2b5551cce44f423b5fa3d3348b2bb4d2e50767bd39708e8a2d2f72e",
+  "shell-path-seed-42.json": "fa30d34c6360015885b1fc54da7ac25667d95bd553797d00e93bef7a5b157461",
 };
 // Frozen before the manifest validator changed any harness source identity.
 // These independently pin every case and Bash observation, excluding metadata.
-const frozenCaseHashes = {
+const frozenCaseHashes: Record<string, string> = {
   "shell-path-seed-1.json": "eb1e52ed72dc626c8e974c2edd481dd97e766bd8d465ec1bbb640ffd7bb9c77a",
   "shell-path-seed-42.json": "641771a57e8156ee0b9cf5b7081f08bf979396b2452e2b349be2338ff3af47af",
 };
@@ -74,7 +78,7 @@ const observation = (patch = {}) => ({
   stderr: Buffer.alloc(0),
   ...patch,
 });
-function fixtureFor() {
+function fixtureFor(): Fixture {
   const cases = generateCases(1, 0);
   return {
     schema: 1,
@@ -101,7 +105,7 @@ function fixtureFor() {
     })),
   };
 }
-function scratch(t) {
+function scratch(t: import("node:test").TestContext) {
   // Existing: selected temporary root and shared runtimes/toolchains. This test owns
   // only its oracle-test-* directory and run()'s bounded process descendants.
   mkdirSync(parent, { recursive: true });
@@ -145,6 +149,7 @@ test("finite PATH grammar is deterministic, unique and bounded for every seed", 
     }
     for (const item of cases.slice(matrix.length)) {
       assert.equal(item.variant, "generated");
+      assert.ok(item.path !== undefined);
       assert.ok(generatedPaths.includes(item.path));
       assert.ok(
         selectedDirectories[searchPaths.indexOf(item.path)] !== null,
@@ -174,7 +179,10 @@ test("finite PATH grammar is deterministic, unique and bounded for every seed", 
     /specification/,
   );
   assert.throws(
-    () => render({ family: "search", variant: "path-0", value: undefined }),
+    () =>
+      render(
+        Object.assign({ family: "search", variant: "path-0", value: "" }, { value: undefined }),
+      ),
     /specification/,
   );
 });
@@ -247,7 +255,12 @@ test("portable manifest uses bounded owned nodes, exact permissions and explicit
     if (node.path.startsWith("path-denied/")) continue;
     assert.equal(statSync(resolve(fixture, node.path)).mode & 0o777, node.mode);
     if (node.marker !== undefined) {
-      assert.ok(Number.isInteger(node.status) && node.status > 0 && node.status <= 255);
+      assert.ok(
+        node.status !== undefined &&
+          Number.isInteger(node.status) &&
+          node.status > 0 &&
+          node.status <= 255,
+      );
       assert.ok(readFileSync(resolve(fixture, node.path), "utf8").startsWith("#!/usr/bin/bash\n"));
     }
   }
@@ -307,25 +320,26 @@ test("manifest schema and limits reject the whole input before filesystem mutati
     schema: 1,
     nodes: [{ path: "first", kind: "file", mode: 0o755, marker: "ok", status: 7 }],
   };
-  const invalidNodes = [
-    { path: "", kind: "file", mode: 0o600 },
-    { path: "x".repeat(manifestLimits.pathBytes + 1), kind: "file", mode: 0o600 },
-    { path: "é".repeat(manifestLimits.pathBytes / 2 + 1), kind: "file", mode: 0o600 },
-    { path: "\ud800", kind: "file", mode: 0o600 },
-    { path: "\ud801", kind: "file", mode: 0o600 },
-    { path: "\udfff", kind: "file", mode: 0o600 },
-    { path: "first", kind: "file", mode: 0o600 },
-    { path: "first/child", kind: "file", mode: 0o600 },
-    { path: "missing/child", kind: "file", mode: 0o600 },
-    null,
-    {},
-    { path: "invalid", kind: "link", mode: 0o755 },
-    { path: "invalid", kind: "file", mode: -1 },
-    { path: "invalid", kind: "file", mode: 0o1000 },
-    { path: "invalid", kind: "file", mode: 1.5 },
-    { path: "invalid", kind: "file", mode: 0o755, unknown: true },
-    { path: "invalid", kind: "directory", mode: 0o755, marker: "ok", status: 7 },
-  ].concat(
+  const invalidNodes = new Array<unknown>().concat(
+    [
+      { path: "", kind: "file", mode: 0o600 },
+      { path: "x".repeat(manifestLimits.pathBytes + 1), kind: "file", mode: 0o600 },
+      { path: "é".repeat(manifestLimits.pathBytes / 2 + 1), kind: "file", mode: 0o600 },
+      { path: "\ud800", kind: "file", mode: 0o600 },
+      { path: "\ud801", kind: "file", mode: 0o600 },
+      { path: "\udfff", kind: "file", mode: 0o600 },
+      { path: "first", kind: "file", mode: 0o600 },
+      { path: "first/child", kind: "file", mode: 0o600 },
+      { path: "missing/child", kind: "file", mode: 0o600 },
+      null,
+      {},
+      { path: "invalid", kind: "link", mode: 0o755 },
+      { path: "invalid", kind: "file", mode: -1 },
+      { path: "invalid", kind: "file", mode: 0o1000 },
+      { path: "invalid", kind: "file", mode: 1.5 },
+      { path: "invalid", kind: "file", mode: 0o755, unknown: true },
+      { path: "invalid", kind: "directory", mode: 0o755, marker: "ok", status: 7 },
+    ],
     ["/absolute", "../escape", "a/../escape", "a//b", "a/./b", "trailing/", "nul\0", "line\n"].map(
       (path) => ({ path, kind: "file", mode: 0o600 }),
     ),
@@ -342,8 +356,8 @@ test("manifest schema and limits reject the whole input before filesystem mutati
     ].map((program) => ({ path: "invalid", kind: "file", mode: 0o755, ...program })),
   );
   for (const node of invalidNodes) {
-    const manifest = { ...valid, nodes: valid.nodes.concat([node]) };
-    assert.throws(() => provision(cwd, JSON.stringify(manifest)), undefined, JSON.stringify(node));
+    const manifest = { ...valid, nodes: Array.from<unknown>(valid.nodes).concat([node]) };
+    assert.throws(() => provision(cwd, JSON.stringify(manifest)), JSON.stringify(node));
     assert.deepEqual(readdirSync(cwd), [], "no earlier valid node may be created");
   }
   for (const manifest of [
@@ -404,6 +418,7 @@ test("all transitive harness sources are pinned and raw bytes/status stay strict
   assert.deepEqual(sourceFiles, [
     "fuzz-shell-path.ts",
     "fuzz-shell-control-flow.mjs",
+    "fuzz-shell-results.ts",
     "shell-process-group.mjs",
   ]);
   for (const [name, hash] of Object.entries(sourceHashes()))
@@ -445,7 +460,7 @@ test("all transitive harness sources are pinned and raw bytes/status stay strict
 
 test("fixture identity rejects schema, grammar, oracle, environment, subset and raw-byte mutations", () => {
   assert.deepEqual(validateFixture(fixturePath, fixtureFor(), options), matrixCases());
-  const mutations = [
+  const mutations: ((fixture: Fixture) => unknown)[] = [
     (f) => f.schema++,
     (f) => (f.sourceHash = "stale"),
     (f) => (f.sourceHashes["fuzz-shell-path.ts"] = "stale"),
@@ -461,7 +476,7 @@ test("fixture identity rejects schema, grammar, oracle, environment, subset and 
     (f) => (f.coverage = {}),
     (f) => f.cases.pop(),
     (f) => (f.cases[0].case.script += "\n:"),
-    (f) => (f.cases[0].case.skip = true),
+    (f) => Object.assign(f.cases[0].case, { skip: true }),
     (f) => (f.cases[0].bash.status = 256),
     (f) => (f.cases[0].bash.signal = "SIGKILL"),
     (f) => (f.cases[0].bash.timedOut = true),
@@ -606,7 +621,7 @@ test("every captured seed includes the full fixed matrix and all seeded observat
   for (const name of names) {
     const bytes = readFileSync(new URL("./fixtures/" + name, import.meta.url));
     assert.equal(createHash("sha256").update(bytes).digest("hex"), fixtureHashes[name]);
-    const fixture = JSON.parse(bytes.toString("utf8"));
+    const fixture: Fixture = JSON.parse(bytes.toString("utf8"));
     assert.equal(
       createHash("sha256").update(JSON.stringify(fixture.cases)).digest("hex"),
       frozenCaseHashes[name],

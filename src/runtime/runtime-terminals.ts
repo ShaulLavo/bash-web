@@ -4,12 +4,7 @@
 // shared-terminal stream policy lives here; token codecs stay in Waffle.
 import type { Stream } from "waffle/core";
 import { SharedBridge, control } from "../bridge";
-import {
-  attachTerminal,
-  createTerminalAdmission,
-  terminalSection,
-  type TerminalAdmission,
-} from "./terminal-admission";
+import { attachTerminal, createTerminalAdmission, terminalSection } from "./terminal-admission";
 
 type TerminalTarget = 0 | 1 | 2;
 const AGAIN = -6;
