@@ -1,0 +1,5336 @@
+{
+  "schema": 1,
+  "sourceHash": "159f3db3b232d1ee78c7530c277648727ab9b3321b1dd7fdc664cb4b58af1281",
+  "sourceHashes": {
+    "fuzz-shell-job-lifetime.mjs": "85a55fddfb3acff95d400d5a57bc5e7bb96f3e366f925de8270f371db486f013",
+    "fuzz-shell-control-flow.mjs": "73e8b6576345caede2a60d910130296dfdf8e8bbfd32b6dd279692704b0a5586",
+    "shell-process-group.mjs": "577f8be074a4ca5751b161d306445645a4dac9b4fa97ca73abf8195635e58205"
+  },
+  "seed": 42,
+  "count": 96,
+  "timeoutMs": 2000,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "oraclePath": "/usr/bin/bash",
+  "environment": {
+    "locale": "C",
+    "path": "/usr/bin:/bin",
+    "stdin": "empty",
+    "shellArgs": [
+      "-c",
+      "SCRIPT"
+    ],
+    "jobControl": "off",
+    "scope": "builtin-only direct children; inherited external descendants require RuntimeAbi tests",
+    "completionBarrier": "poll kill -0 on direct child; no fixed sleeps or output-order races"
+  },
+  "provenance": "oracle-only",
+  "coverage": {
+    "families": [
+      "jobs-after-wait",
+      "jobs-one-shot",
+      "kill-completed",
+      "nested-owned-status",
+      "nested-parent-status",
+      "wait-all",
+      "wait-empty",
+      "wait-job",
+      "wait-order",
+      "wait-pid",
+      "wait-pipeline",
+      "wait-unknown"
+    ],
+    "scopes": [
+      "function",
+      "subshell",
+      "top"
+    ],
+    "statuses": [
+      0,
+      1,
+      42,
+      7
+    ]
+  },
+  "cases": [
+    {
+      "case": {
+        "id": "matrix-0",
+        "family": "wait-pid",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "wait-pid",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "(exit 0) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-1",
+        "family": "wait-pid",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "wait-pid",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "(exit 1) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MQpzdGF0dXM9MQo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-2",
+        "family": "wait-pid",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "wait-pid",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "(exit 7) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NwpzdGF0dXM9Nwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-3",
+        "family": "wait-pid",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "wait-pid",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "(exit 42) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NDIKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-4",
+        "family": "wait-pid",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "wait-pid",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { (exit 0) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-5",
+        "family": "wait-pid",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "wait-pid",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { (exit 1) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MQpzdGF0dXM9MQo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-6",
+        "family": "wait-pid",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "wait-pid",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { (exit 7) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NwpzdGF0dXM9Nwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-7",
+        "family": "wait-pid",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "wait-pid",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { (exit 42) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NDIKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-8",
+        "family": "wait-pid",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "wait-pid",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-9",
+        "family": "wait-pid",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "wait-pid",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( (exit 1) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MQpzdGF0dXM9MQo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-10",
+        "family": "wait-pid",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "wait-pid",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( (exit 7) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NwpzdGF0dXM9Nwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-11",
+        "family": "wait-pid",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "wait-pid",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( (exit 42) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NDIKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-12",
+        "family": "wait-job",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "wait-job",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "(exit 0) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MAphZ2Fpbj0wCnN0YXR1cz0wCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-13",
+        "family": "wait-job",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "wait-job",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "(exit 1) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MQphZ2Fpbj0xCnN0YXR1cz0xCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-14",
+        "family": "wait-job",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "wait-job",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "(exit 7) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NwphZ2Fpbj03CnN0YXR1cz03Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-15",
+        "family": "wait-job",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "wait-job",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "(exit 42) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NDIKYWdhaW49NDIKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-16",
+        "family": "wait-job",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "wait-job",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { (exit 0) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MAphZ2Fpbj0wCnN0YXR1cz0wCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-17",
+        "family": "wait-job",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "wait-job",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { (exit 1) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MQphZ2Fpbj0xCnN0YXR1cz0xCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-18",
+        "family": "wait-job",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "wait-job",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { (exit 7) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NwphZ2Fpbj03CnN0YXR1cz03Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-19",
+        "family": "wait-job",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "wait-job",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { (exit 42) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NDIKYWdhaW49NDIKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-20",
+        "family": "wait-job",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "wait-job",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MAphZ2Fpbj0xMjcKc3RhdHVzPTAK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB3YWl0OiAlMTogbm8gc3VjaCBqb2IK"
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-21",
+        "family": "wait-job",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "wait-job",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( (exit 1) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MQphZ2Fpbj0xMjcKc3RhdHVzPTEK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB3YWl0OiAlMTogbm8gc3VjaCBqb2IK"
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-22",
+        "family": "wait-job",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "wait-job",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( (exit 7) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NwphZ2Fpbj0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB3YWl0OiAlMTogbm8gc3VjaCBqb2IK"
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-23",
+        "family": "wait-job",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "wait-job",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( (exit 42) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NDIKYWdhaW49MTI3CnN0YXR1cz00Mgo=",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB3YWl0OiAlMTogbm8gc3VjaCBqb2IK"
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-24",
+        "family": "wait-all",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "wait-all",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "(exit 0) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-25",
+        "family": "wait-all",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "wait-all",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "(exit 1) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-26",
+        "family": "wait-all",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "wait-all",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "(exit 7) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-27",
+        "family": "wait-all",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "wait-all",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "(exit 42) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-28",
+        "family": "wait-all",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "wait-all",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { (exit 0) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-29",
+        "family": "wait-all",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "wait-all",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { (exit 1) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-30",
+        "family": "wait-all",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "wait-all",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { (exit 7) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-31",
+        "family": "wait-all",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "wait-all",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { (exit 42) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-32",
+        "family": "wait-all",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "wait-all",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-33",
+        "family": "wait-all",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "wait-all",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( (exit 1) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-34",
+        "family": "wait-all",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "wait-all",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( (exit 7) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-35",
+        "family": "wait-all",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "wait-all",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( (exit 42) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-36",
+        "family": "wait-order",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "wait-order",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "(exit 0) & jl_pid=$!; (exit 1) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTEKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-37",
+        "family": "wait-order",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "wait-order",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "(exit 1) & jl_pid=$!; (exit 2) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTIKc3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-38",
+        "family": "wait-order",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "wait-order",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "(exit 7) & jl_pid=$!; (exit 8) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTgKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-39",
+        "family": "wait-order",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "wait-order",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "(exit 42) & jl_pid=$!; (exit 43) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTQzCnN0YXR1cz00Mgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-40",
+        "family": "wait-order",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "wait-order",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { (exit 0) & jl_pid=$!; (exit 1) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTEKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-41",
+        "family": "wait-order",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "wait-order",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { (exit 1) & jl_pid=$!; (exit 2) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTIKc3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-42",
+        "family": "wait-order",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "wait-order",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { (exit 7) & jl_pid=$!; (exit 8) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTgKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-43",
+        "family": "wait-order",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "wait-order",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { (exit 42) & jl_pid=$!; (exit 43) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTQzCnN0YXR1cz00Mgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-44",
+        "family": "wait-order",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "wait-order",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; (exit 1) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTEKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-45",
+        "family": "wait-order",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "wait-order",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( (exit 1) & jl_pid=$!; (exit 2) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTIKc3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-46",
+        "family": "wait-order",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "wait-order",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( (exit 7) & jl_pid=$!; (exit 8) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTgKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-47",
+        "family": "wait-order",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "wait-order",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( (exit 42) & jl_pid=$!; (exit 43) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTQzCnN0YXR1cz00Mgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-48",
+        "family": "wait-pipeline",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "wait-pipeline",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "true | (exit 0) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-49",
+        "family": "wait-pipeline",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "wait-pipeline",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "true | (exit 1) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9MQpzdGF0dXM9MQo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-50",
+        "family": "wait-pipeline",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "wait-pipeline",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "true | (exit 7) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9NwpzdGF0dXM9Nwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-51",
+        "family": "wait-pipeline",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "wait-pipeline",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "true | (exit 42) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9NDIKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-52",
+        "family": "wait-pipeline",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "wait-pipeline",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { true | (exit 0) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-53",
+        "family": "wait-pipeline",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "wait-pipeline",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { true | (exit 1) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9MQpzdGF0dXM9MQo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-54",
+        "family": "wait-pipeline",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "wait-pipeline",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { true | (exit 7) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9NwpzdGF0dXM9Nwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-55",
+        "family": "wait-pipeline",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "wait-pipeline",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { true | (exit 42) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9NDIKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-56",
+        "family": "wait-pipeline",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "wait-pipeline",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( true | (exit 0) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-57",
+        "family": "wait-pipeline",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "wait-pipeline",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( true | (exit 1) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9MQpzdGF0dXM9MQo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-58",
+        "family": "wait-pipeline",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "wait-pipeline",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( true | (exit 7) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9NwpzdGF0dXM9Nwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-59",
+        "family": "wait-pipeline",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "wait-pipeline",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( true | (exit 42) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9NDIKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-60",
+        "family": "wait-empty",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "wait-empty",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "wait; printf 'empty=%s\\n' \"$?\"; wait\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-61",
+        "family": "wait-empty",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "wait-empty",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "wait; printf 'empty=%s\\n' \"$?\"; wait\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-62",
+        "family": "wait-empty",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "wait-empty",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "wait; printf 'empty=%s\\n' \"$?\"; wait\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-63",
+        "family": "wait-empty",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "wait-empty",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "wait; printf 'empty=%s\\n' \"$?\"; wait\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-64",
+        "family": "wait-empty",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "wait-empty",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { wait; printf 'empty=%s\\n' \"$?\"; wait; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-65",
+        "family": "wait-empty",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "wait-empty",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { wait; printf 'empty=%s\\n' \"$?\"; wait; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-66",
+        "family": "wait-empty",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "wait-empty",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { wait; printf 'empty=%s\\n' \"$?\"; wait; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-67",
+        "family": "wait-empty",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "wait-empty",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { wait; printf 'empty=%s\\n' \"$?\"; wait; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-68",
+        "family": "wait-empty",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "wait-empty",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( wait; printf 'empty=%s\\n' \"$?\"; wait )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-69",
+        "family": "wait-empty",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "wait-empty",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( wait; printf 'empty=%s\\n' \"$?\"; wait )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-70",
+        "family": "wait-empty",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "wait-empty",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( wait; printf 'empty=%s\\n' \"$?\"; wait )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-71",
+        "family": "wait-empty",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "wait-empty",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( wait; printf 'empty=%s\\n' \"$?\"; wait )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-72",
+        "family": "wait-unknown",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "wait-unknown",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-73",
+        "family": "wait-unknown",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "wait-unknown",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-74",
+        "family": "wait-unknown",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "wait-unknown",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-75",
+        "family": "wait-unknown",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "wait-unknown",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-76",
+        "family": "wait-unknown",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "wait-unknown",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-77",
+        "family": "wait-unknown",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "wait-unknown",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-78",
+        "family": "wait-unknown",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "wait-unknown",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-79",
+        "family": "wait-unknown",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "wait-unknown",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-80",
+        "family": "wait-unknown",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "wait-unknown",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-81",
+        "family": "wait-unknown",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "wait-unknown",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-82",
+        "family": "wait-unknown",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "wait-unknown",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-83",
+        "family": "wait-unknown",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "wait-unknown",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-84",
+        "family": "nested-parent-status",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "nested-parent-status",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "(exit 0) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-85",
+        "family": "nested-parent-status",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "nested-parent-status",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "(exit 1) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-86",
+        "family": "nested-parent-status",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "nested-parent-status",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "(exit 7) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-87",
+        "family": "nested-parent-status",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "nested-parent-status",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "(exit 42) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-88",
+        "family": "nested-parent-status",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "nested-parent-status",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { (exit 0) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-89",
+        "family": "nested-parent-status",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "nested-parent-status",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { (exit 1) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-90",
+        "family": "nested-parent-status",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "nested-parent-status",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { (exit 7) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-91",
+        "family": "nested-parent-status",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "nested-parent-status",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { (exit 42) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-92",
+        "family": "nested-parent-status",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "nested-parent-status",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-93",
+        "family": "nested-parent-status",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "nested-parent-status",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( (exit 1) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-94",
+        "family": "nested-parent-status",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "nested-parent-status",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( (exit 7) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-95",
+        "family": "nested-parent-status",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "nested-parent-status",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( (exit 42) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-96",
+        "family": "nested-owned-status",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "nested-owned-status",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-97",
+        "family": "nested-owned-status",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "nested-owned-status",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "( (exit 1) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-98",
+        "family": "nested-owned-status",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "nested-owned-status",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "( (exit 7) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-99",
+        "family": "nested-owned-status",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "nested-owned-status",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "( (exit 42) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-100",
+        "family": "nested-owned-status",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "nested-owned-status",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { ( (exit 0) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-101",
+        "family": "nested-owned-status",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "nested-owned-status",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { ( (exit 1) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-102",
+        "family": "nested-owned-status",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "nested-owned-status",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { ( (exit 7) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-103",
+        "family": "nested-owned-status",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "nested-owned-status",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { ( (exit 42) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-104",
+        "family": "nested-owned-status",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "nested-owned-status",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( ( (exit 0) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-105",
+        "family": "nested-owned-status",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "nested-owned-status",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( ( (exit 1) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-106",
+        "family": "nested-owned-status",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "nested-owned-status",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( ( (exit 7) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-107",
+        "family": "nested-owned-status",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "nested-owned-status",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( ( (exit 42) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-108",
+        "family": "jobs-after-wait",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "jobs-after-wait",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "(exit 0) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD0wCmpvYnMtY29uc3VtZWQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-109",
+        "family": "jobs-after-wait",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "jobs-after-wait",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "(exit 1) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD0xCmpvYnMtY29uc3VtZWQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-110",
+        "family": "jobs-after-wait",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "jobs-after-wait",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "(exit 7) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD03CmpvYnMtY29uc3VtZWQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-111",
+        "family": "jobs-after-wait",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "jobs-after-wait",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "(exit 42) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD00Mgpqb2JzLWNvbnN1bWVkPTAKZ29uZS1qb2I9MTI3CnN0YXR1cz00Mgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-112",
+        "family": "jobs-after-wait",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "jobs-after-wait",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { (exit 0) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD0wCmpvYnMtY29uc3VtZWQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-113",
+        "family": "jobs-after-wait",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "jobs-after-wait",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { (exit 1) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD0xCmpvYnMtY29uc3VtZWQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-114",
+        "family": "jobs-after-wait",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "jobs-after-wait",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { (exit 7) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD03CmpvYnMtY29uc3VtZWQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-115",
+        "family": "jobs-after-wait",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "jobs-after-wait",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { (exit 42) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD00Mgpqb2JzLWNvbnN1bWVkPTAKZ29uZS1qb2I9MTI3CnN0YXR1cz00Mgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-116",
+        "family": "jobs-after-wait",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "jobs-after-wait",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD0wCmpvYnMtY29uc3VtZWQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-117",
+        "family": "jobs-after-wait",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "jobs-after-wait",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( (exit 1) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD0xCmpvYnMtY29uc3VtZWQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-118",
+        "family": "jobs-after-wait",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "jobs-after-wait",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( (exit 7) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD03CmpvYnMtY29uc3VtZWQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-119",
+        "family": "jobs-after-wait",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "jobs-after-wait",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( (exit 42) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD00Mgpqb2JzLWNvbnN1bWVkPTAKZ29uZS1qb2I9MTI3CnN0YXR1cz00Mgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-120",
+        "family": "jobs-one-shot",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "jobs-one-shot",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "(exit 0) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PURvbmUKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-121",
+        "family": "jobs-one-shot",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "jobs-one-shot",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "(exit 1) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PUV4aXQKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-122",
+        "family": "jobs-one-shot",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "jobs-one-shot",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "(exit 7) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PUV4aXQKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-123",
+        "family": "jobs-one-shot",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "jobs-one-shot",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "(exit 42) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PUV4aXQKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-124",
+        "family": "jobs-one-shot",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "jobs-one-shot",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { (exit 0) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PURvbmUKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-125",
+        "family": "jobs-one-shot",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "jobs-one-shot",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { (exit 1) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PUV4aXQKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-126",
+        "family": "jobs-one-shot",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "jobs-one-shot",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { (exit 7) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PUV4aXQKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-127",
+        "family": "jobs-one-shot",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "jobs-one-shot",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { (exit 42) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PUV4aXQKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-128",
+        "family": "jobs-one-shot",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "jobs-one-shot",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PURvbmUKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-129",
+        "family": "jobs-one-shot",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "jobs-one-shot",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( (exit 1) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PUV4aXQKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-130",
+        "family": "jobs-one-shot",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "jobs-one-shot",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( (exit 7) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PUV4aXQKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-131",
+        "family": "jobs-one-shot",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "jobs-one-shot",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( (exit 42) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PUV4aXQKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-132",
+        "family": "kill-completed",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "kill-completed",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "(exit 0) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1Eb25lCmdvbmUta2lsbD0xCnN0YXR1cz0wCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-133",
+        "family": "kill-completed",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "kill-completed",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "(exit 1) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz0xCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-134",
+        "family": "kill-completed",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "kill-completed",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "(exit 7) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz03Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-135",
+        "family": "kill-completed",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "kill-completed",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "(exit 42) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz00Mgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-136",
+        "family": "kill-completed",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "kill-completed",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { (exit 0) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1Eb25lCmdvbmUta2lsbD0xCnN0YXR1cz0wCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-137",
+        "family": "kill-completed",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "kill-completed",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { (exit 1) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz0xCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-138",
+        "family": "kill-completed",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "kill-completed",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { (exit 7) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz03Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-139",
+        "family": "kill-completed",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "kill-completed",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { (exit 42) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz00Mgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-140",
+        "family": "kill-completed",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "kill-completed",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1Eb25lCmdvbmUta2lsbD0xCnN0YXR1cz0wCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-141",
+        "family": "kill-completed",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "kill-completed",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( (exit 1) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz0xCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-142",
+        "family": "kill-completed",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "kill-completed",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( (exit 7) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz03Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "matrix-143",
+        "family": "kill-completed",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "kill-completed",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( (exit 42) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz00Mgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-0",
+        "family": "wait-job",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "wait-job",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( (exit 42) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NDIKYWdhaW49MTI3CnN0YXR1cz00Mgo=",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB3YWl0OiAlMTogbm8gc3VjaCBqb2IK"
+      }
+    },
+    {
+      "case": {
+        "id": "generated-1",
+        "family": "wait-pipeline",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "wait-pipeline",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "true | (exit 0) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-2",
+        "family": "wait-unknown",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "wait-unknown",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-3",
+        "family": "wait-unknown",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "wait-unknown",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-4",
+        "family": "wait-pipeline",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "wait-pipeline",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "true | (exit 7) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9NwpzdGF0dXM9Nwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-5",
+        "family": "jobs-one-shot",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "jobs-one-shot",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "(exit 0) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PURvbmUKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-6",
+        "family": "wait-all",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "wait-all",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( (exit 1) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-7",
+        "family": "wait-empty",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "wait-empty",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( wait; printf 'empty=%s\\n' \"$?\"; wait )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-8",
+        "family": "nested-parent-status",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "nested-parent-status",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { (exit 42) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-9",
+        "family": "jobs-one-shot",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "jobs-one-shot",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( (exit 7) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PUV4aXQKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-10",
+        "family": "nested-owned-status",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "nested-owned-status",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { ( (exit 7) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-11",
+        "family": "kill-completed",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "kill-completed",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1Eb25lCmdvbmUta2lsbD0xCnN0YXR1cz0wCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-12",
+        "family": "nested-parent-status",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "nested-parent-status",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "(exit 7) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-13",
+        "family": "jobs-one-shot",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "jobs-one-shot",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PURvbmUKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-14",
+        "family": "wait-pid",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "wait-pid",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "(exit 42) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NDIKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-15",
+        "family": "wait-empty",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "wait-empty",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( wait; printf 'empty=%s\\n' \"$?\"; wait )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-16",
+        "family": "kill-completed",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "kill-completed",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "(exit 0) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1Eb25lCmdvbmUta2lsbD0xCnN0YXR1cz0wCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-17",
+        "family": "nested-owned-status",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "nested-owned-status",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { ( (exit 1) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-18",
+        "family": "wait-unknown",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "wait-unknown",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-19",
+        "family": "wait-all",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "wait-all",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { (exit 1) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-20",
+        "family": "wait-order",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "wait-order",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { (exit 0) & jl_pid=$!; (exit 1) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTEKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-21",
+        "family": "nested-parent-status",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "nested-parent-status",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "(exit 7) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-22",
+        "family": "wait-order",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "wait-order",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( (exit 7) & jl_pid=$!; (exit 8) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTgKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-23",
+        "family": "wait-all",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "wait-all",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-24",
+        "family": "nested-parent-status",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "nested-parent-status",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "(exit 7) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-25",
+        "family": "wait-order",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "wait-order",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( (exit 1) & jl_pid=$!; (exit 2) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTIKc3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-26",
+        "family": "wait-all",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "wait-all",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-27",
+        "family": "wait-job",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "wait-job",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MAphZ2Fpbj0xMjcKc3RhdHVzPTAK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB3YWl0OiAlMTogbm8gc3VjaCBqb2IK"
+      }
+    },
+    {
+      "case": {
+        "id": "generated-28",
+        "family": "wait-pipeline",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "wait-pipeline",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( true | (exit 42) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9NDIKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-29",
+        "family": "wait-empty",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "wait-empty",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { wait; printf 'empty=%s\\n' \"$?\"; wait; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-30",
+        "family": "kill-completed",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "kill-completed",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "(exit 7) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz03Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-31",
+        "family": "wait-pid",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "wait-pid",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( (exit 1) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MQpzdGF0dXM9MQo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-32",
+        "family": "wait-pipeline",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "wait-pipeline",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { true | (exit 1) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9MQpzdGF0dXM9MQo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-33",
+        "family": "kill-completed",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "kill-completed",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( (exit 7) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz03Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-34",
+        "family": "nested-parent-status",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "nested-parent-status",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-35",
+        "family": "jobs-after-wait",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "jobs-after-wait",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { (exit 42) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD00Mgpqb2JzLWNvbnN1bWVkPTAKZ29uZS1qb2I9MTI3CnN0YXR1cz00Mgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-36",
+        "family": "wait-job",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "wait-job",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { (exit 7) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NwphZ2Fpbj03CnN0YXR1cz03Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-37",
+        "family": "nested-parent-status",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "nested-parent-status",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-38",
+        "family": "wait-pipeline",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "wait-pipeline",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "true | (exit 42) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9NDIKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-39",
+        "family": "kill-completed",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "kill-completed",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( (exit 7) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz03Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-40",
+        "family": "kill-completed",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "kill-completed",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "(exit 1) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz0xCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-41",
+        "family": "wait-empty",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "wait-empty",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { wait; printf 'empty=%s\\n' \"$?\"; wait; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-42",
+        "family": "nested-owned-status",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "nested-owned-status",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { ( (exit 7) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-43",
+        "family": "nested-parent-status",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "nested-parent-status",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( (exit 42) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-44",
+        "family": "nested-owned-status",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "nested-owned-status",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "( (exit 42) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-45",
+        "family": "wait-order",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "wait-order",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; (exit 1) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTEKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-46",
+        "family": "wait-unknown",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "wait-unknown",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-47",
+        "family": "kill-completed",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "kill-completed",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "(exit 1) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz0xCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-48",
+        "family": "jobs-one-shot",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "jobs-one-shot",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "(exit 7) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PUV4aXQKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-49",
+        "family": "kill-completed",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "kill-completed",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( (exit 42) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz00Mgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-50",
+        "family": "wait-order",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "wait-order",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "(exit 0) & jl_pid=$!; (exit 1) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTEKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-51",
+        "family": "wait-empty",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "wait-empty",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { wait; printf 'empty=%s\\n' \"$?\"; wait; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-52",
+        "family": "nested-owned-status",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "nested-owned-status",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( ( (exit 0) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-53",
+        "family": "nested-owned-status",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "nested-owned-status",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( ( (exit 7) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-54",
+        "family": "wait-empty",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "wait-empty",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "wait; printf 'empty=%s\\n' \"$?\"; wait\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-55",
+        "family": "wait-pid",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "wait-pid",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( (exit 1) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MQpzdGF0dXM9MQo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-56",
+        "family": "wait-all",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "wait-all",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { (exit 1) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-57",
+        "family": "wait-unknown",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "wait-unknown",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-58",
+        "family": "wait-all",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "wait-all",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "(exit 42) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-59",
+        "family": "wait-empty",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "wait-empty",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( wait; printf 'empty=%s\\n' \"$?\"; wait )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-60",
+        "family": "wait-job",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "wait-job",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( (exit 42) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NDIKYWdhaW49MTI3CnN0YXR1cz00Mgo=",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB3YWl0OiAlMTogbm8gc3VjaCBqb2IK"
+      }
+    },
+    {
+      "case": {
+        "id": "generated-61",
+        "family": "wait-all",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "wait-all",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "(exit 0) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-62",
+        "family": "wait-all",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "wait-all",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "(exit 42) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-63",
+        "family": "wait-empty",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "wait-empty",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( wait; printf 'empty=%s\\n' \"$?\"; wait )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-64",
+        "family": "wait-pipeline",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "wait-pipeline",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "true | (exit 0) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-65",
+        "family": "wait-all",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "wait-all",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "(exit 0) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-66",
+        "family": "kill-completed",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "kill-completed",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "(exit 0) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1Eb25lCmdvbmUta2lsbD0xCnN0YXR1cz0wCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-67",
+        "family": "wait-empty",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "wait-empty",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "wait; printf 'empty=%s\\n' \"$?\"; wait\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-68",
+        "family": "wait-order",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "wait-order",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( (exit 42) & jl_pid=$!; (exit 43) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTQzCnN0YXR1cz00Mgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-69",
+        "family": "wait-pipeline",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "wait-pipeline",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "true | (exit 42) & jl_pid=$!; wait \"$jl_pid\"; printf 'pipeline=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cGlwZWxpbmU9NDIKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-70",
+        "family": "wait-order",
+        "scope": "subshell",
+        "status": 0,
+        "tags": [
+          "wait-order",
+          "scope=subshell",
+          "status=0"
+        ],
+        "script": "( (exit 0) & jl_pid=$!; (exit 1) & jl_other=$!; wait \"$jl_other\"; printf 'second-launched=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c2Vjb25kLWxhdW5jaGVkPTEKc3RhdHVzPTAK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-71",
+        "family": "wait-pid",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "wait-pid",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "(exit 42) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NDIKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-72",
+        "family": "wait-all",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "wait-all",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { (exit 0) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-73",
+        "family": "kill-completed",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "kill-completed",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( (exit 7) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz03Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-74",
+        "family": "wait-job",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "wait-job",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { (exit 1) & jl_pid=$!; wait %1; printf 'first=%s\\n' \"$?\"; wait %1; printf 'again=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MQphZ2Fpbj0xCnN0YXR1cz0xCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-75",
+        "family": "nested-parent-status",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "nested-parent-status",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { (exit 7) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-76",
+        "family": "wait-unknown",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "wait-unknown",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-77",
+        "family": "wait-pid",
+        "scope": "function",
+        "status": 0,
+        "tags": [
+          "wait-pid",
+          "scope=function",
+          "status=0"
+        ],
+        "script": "jl_scope() { (exit 0) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-78",
+        "family": "jobs-after-wait",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "jobs-after-wait",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { (exit 7) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD03CmpvYnMtY29uc3VtZWQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-79",
+        "family": "wait-pid",
+        "scope": "subshell",
+        "status": 7,
+        "tags": [
+          "wait-pid",
+          "scope=subshell",
+          "status=7"
+        ],
+        "script": "( (exit 7) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9NwpzdGF0dXM9Nwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-80",
+        "family": "jobs-after-wait",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "jobs-after-wait",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( (exit 1) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD0xCmpvYnMtY29uc3VtZWQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-81",
+        "family": "jobs-one-shot",
+        "scope": "subshell",
+        "status": 1,
+        "tags": [
+          "jobs-one-shot",
+          "scope=subshell",
+          "status=1"
+        ],
+        "script": "( (exit 1) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; jobs >jl_first; printf 'jobs-first=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'first=Done\\n';; *Exit*) printf 'first=Exit\\n';; *Running*) printf 'first=Running\\n';; esac; done <jl_first; jobs >jl_second; printf 'jobs-second=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'second=Done\\n';; *Exit*) printf 'second=Exit\\n';; *Running*) printf 'second=Running\\n';; esac; done <jl_second; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\" )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "am9icy1maXJzdD0wCmZpcnN0PUV4aXQKam9icy1zZWNvbmQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-82",
+        "family": "nested-parent-status",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "nested-parent-status",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { (exit 42) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTQyCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-83",
+        "family": "jobs-after-wait",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "jobs-after-wait",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { (exit 42) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD00Mgpqb2JzLWNvbnN1bWVkPTAKZ29uZS1qb2I9MTI3CnN0YXR1cz00Mgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-84",
+        "family": "wait-empty",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "wait-empty",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "wait; printf 'empty=%s\\n' \"$?\"; wait\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-85",
+        "family": "jobs-after-wait",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "jobs-after-wait",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "(exit 1) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD0xCmpvYnMtY29uc3VtZWQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-86",
+        "family": "wait-pid",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "wait-pid",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "(exit 1) & jl_pid=$!; wait \"$jl_pid\"; printf 'first=%s\\n' \"$?\"; wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Zmlyc3Q9MQpzdGF0dXM9MQo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-87",
+        "family": "jobs-after-wait",
+        "scope": "function",
+        "status": 7,
+        "tags": [
+          "jobs-after-wait",
+          "scope=function",
+          "status=7"
+        ],
+        "script": "jl_scope() { (exit 7) & jl_pid=$!; wait \"$jl_pid\"; printf 'wait=%s\\n' \"$?\"; jobs >jl_consumed; printf 'jobs-consumed=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'consumed=Done\\n';; *Exit*) printf 'consumed=Exit\\n';; *Running*) printf 'consumed=Running\\n';; esac; done <jl_consumed; wait %1 2>/dev/null; printf 'gone-job=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "d2FpdD03CmpvYnMtY29uc3VtZWQ9MApnb25lLWpvYj0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-88",
+        "family": "wait-all",
+        "scope": "subshell",
+        "status": 42,
+        "tags": [
+          "wait-all",
+          "scope=subshell",
+          "status=42"
+        ],
+        "script": "( (exit 42) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null )\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-89",
+        "family": "wait-empty",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "wait-empty",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "wait; printf 'empty=%s\\n' \"$?\"; wait\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-90",
+        "family": "kill-completed",
+        "scope": "function",
+        "status": 42,
+        "tags": [
+          "kill-completed",
+          "scope=function",
+          "status=42"
+        ],
+        "script": "jl_scope() { (exit 42) & jl_pid=$!; while kill -0 \"$jl_pid\" 2>/dev/null; do :; done; kill -0 \"$jl_pid\" 2>/dev/null; printf 'numeric-zero=%s\\n' \"$?\"; kill \"$jl_pid\" 2>/dev/null; printf 'numeric-kill=%s\\n' \"$?\"; kill %1 2>/dev/null; printf 'percent-kill=%s\\n' \"$?\"; jobs >jl_done; printf 'jobs-done=%s\\n' \"$?\"; while read -r jl_line; do case \"$jl_line\" in *Done*) printf 'done=Done\\n';; *Exit*) printf 'done=Exit\\n';; *Running*) printf 'done=Running\\n';; esac; done <jl_done; kill %1 2>/dev/null; printf 'gone-kill=%s\\n' \"$?\"; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 42,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bnVtZXJpYy16ZXJvPTEKbnVtZXJpYy1raWxsPTEKcGVyY2VudC1raWxsPTAKam9icy1kb25lPTAKZG9uZT1FeGl0CmdvbmUta2lsbD0xCnN0YXR1cz00Mgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-91",
+        "family": "wait-empty",
+        "scope": "top",
+        "status": 1,
+        "tags": [
+          "wait-empty",
+          "scope=top",
+          "status=1"
+        ],
+        "script": "wait; printf 'empty=%s\\n' \"$?\"; wait\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZW1wdHk9MApzdGF0dXM9MAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-92",
+        "family": "wait-all",
+        "scope": "top",
+        "status": 42,
+        "tags": [
+          "wait-all",
+          "scope=top",
+          "status=42"
+        ],
+        "script": "(exit 42) & jl_pid=$!; wait; printf 'all=%s\\n' \"$?\"; wait \"$jl_pid\" 2>/dev/null; printf 'forgotten-pid=%s\\n' \"$?\"; wait %1 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWxsPTAKZm9yZ290dGVuLXBpZD0xMjcKc3RhdHVzPTEyNwo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-93",
+        "family": "wait-unknown",
+        "scope": "top",
+        "status": 0,
+        "tags": [
+          "wait-unknown",
+          "scope=top",
+          "status=0"
+        ],
+        "script": "wait 2147483647 2>/dev/null; printf 'unknown-pid=%s\\n' \"$?\"; wait %9 2>/dev/null\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 127,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "dW5rbm93bi1waWQ9MTI3CnN0YXR1cz0xMjcK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-94",
+        "family": "nested-owned-status",
+        "scope": "function",
+        "status": 1,
+        "tags": [
+          "nested-owned-status",
+          "scope=function",
+          "status=1"
+        ],
+        "script": "jl_scope() { ( (exit 1) & jl_pid=$!; wait \"$jl_pid\"; exit \"$?\" ) & jl_pid=$!; wait \"$jl_pid\"; }; jl_scope\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "generated-95",
+        "family": "nested-parent-status",
+        "scope": "top",
+        "status": 7,
+        "tags": [
+          "nested-parent-status",
+          "scope=top",
+          "status=7"
+        ],
+        "script": "(exit 7) & jl_pid=$!; ( wait \"$jl_pid\" 2>/dev/null; printf 'not-own-child=%s\\n' \"$?\" ); wait \"$jl_pid\"\njl_status=$?; printf \"status=%s\\n\" \"$jl_status\"; exit \"$jl_status\"\n"
+      },
+      "bash": {
+        "status": 7,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bm90LW93bi1jaGlsZD0xMjcKc3RhdHVzPTcK",
+        "stderrBase64": ""
+      }
+    }
+  ]
+}

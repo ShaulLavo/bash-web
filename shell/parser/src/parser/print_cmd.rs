@@ -1070,6 +1070,27 @@ fn reconstruct_word(w: &Word) -> String {
     s
 }
 
+/// Render a shell job's command with the existing Bash command printer. Every
+/// printed byte charges both the output ceiling and the caller's request budget;
+/// nested substitutions share the quota. This does not execute or expand words.
+pub fn command_string(
+    command: &Command,
+    fuel: &Cell<usize>,
+    max_fuel: usize,
+    execution_budget: Option<&ExecutionBudget>,
+) -> Result<String> {
+    let quota = Rc::new(PrintQuota {
+        fuel,
+        max_fuel,
+        execution_budget,
+        failure: RefCell::new(None),
+    });
+    let mut printer = Printer::with_quota(quota);
+    printer.make(Some(command));
+    printer.print_deferred_if_any("");
+    printer.finish()
+}
+
 /// A substitution body as bash stores it after parsing (`print_comsub`).
 pub(crate) fn comsub_commands(cmds: &[Command]) -> String {
     let mut p = Printer {
@@ -1208,5 +1229,54 @@ mod tests {
             panic!("expected a simple command");
         };
         assert_eq!(sc.args[0].raw.as_deref(), Some("'a'"));
+    }
+}
+
+#[cfg(test)]
+mod job_command_tests {
+    use super::*;
+    use crate::parser::Parser;
+
+    fn render(source: &str, limit: usize) -> Result<String> {
+        let script = Parser::new(source).parse().unwrap();
+        command_string(&script.commands[0], &Cell::new(limit), limit, None)
+    }
+
+    #[test]
+    fn job_labels_preserve_quotes_and_normalize_connections() {
+        for (source, expected) in [
+            ("echo 'a b' \"$x\"", "echo 'a b' \"$x\""),
+            ("false|true", "false | true"),
+            ("true&&false", "true && false"),
+            ("{ true; false; }", "{ true; false; }"),
+            ("(true;false)", "( true; false )"),
+            ("true &", "true &"),
+        ] {
+            assert_eq!(render(source, 4096).unwrap(), expected, "{source}");
+        }
+    }
+
+    #[test]
+    fn job_labels_support_every_command_family_and_have_an_output_ceiling() {
+        for source in [
+            "if true; then echo yes; else false; fi",
+            "for x in a b; do echo \"$x\"; done",
+            "for ((x=0; x<2; x++)); do :; done",
+            "while false; do :; done",
+            "until true; do :; done",
+            "select x in a b; do :; done",
+            "coproc worker { echo yes; }",
+            "case a in a) :;; esac",
+            "[[ a == a ]]",
+            "((1+2))",
+            "time true",
+            "f() { echo 'quoted words'; }",
+            "echo $(echo nested)",
+            "cat <(echo nested)",
+        ] {
+            let rendered = render(source, 4096).unwrap();
+            assert!(Parser::new(&rendered).parse().is_ok(), "{source}: {rendered}");
+            assert!(render(source, 1).is_err(), "{source}");
+        }
     }
 }

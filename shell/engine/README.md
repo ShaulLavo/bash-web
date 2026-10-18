@@ -19,9 +19,10 @@ It is not a new browser shell or a replacement external-command host.
 - Session-owned background jobs survive a foreground invocation. `interrupt`
   targets only the foreground; `shutdown().await` cancels and joins all jobs.
   Isolated environments have their own child-job scope: they cannot wait on or
-  kill parent jobs, and cancel/join their children before leaving. Root-shell
-  backgrounds remain session-owned. Process-group guards transfer kill-and-reap
-  ownership to the host if dropped.
+  kill parent jobs. Successful scopes transfer running asynchronous descendants
+  outward as invisible cleanup work; cancellation still drains their subtree.
+  Root-shell backgrounds remain session-owned. Process-group guards transfer
+  kill-and-reap ownership to the host if dropped.
 - Ordinary functions share caller state. Pipeline stages (with more than one
   stage), subshells and background jobs copy shell state. Positional arguments,
   local declarations and local export attributes have cancellation-safe guards.
@@ -34,11 +35,30 @@ It is not a new browser shell or a replacement external-command host.
 - `ProcessHost` accepts argv, exported environment, cwd, descriptor bindings and
   job/parent identity. Spawn/kill return without waiting; waits register exit
   notifications. The host allocates group identities, so sessions sharing a host
-  cannot collide. Group waits confirm cleanup without collecting exit history;
-  individual waits return exit status. Kill includes descendants, and termination
-  must confirm exits, including interruption during the final cleanup wait.
+  cannot collide. Natural completion joins shell execution tasks and direct
+  process pids only. `ProcessGroup::complete` transfers a shared descendant reaper
+  to the host without signaling: an inherited child can keep a descriptor open
+  after the shell returns its prompt. `wait_group`/`ProcessGroup::finish` remain
+  full-subtree cleanup barriers; termination and shutdown signal and drain every
+  descendant. Individual waits preserve direct exit status and pipefail rules.
+  Runtime job handles remain separately reachable for group signals until actual
+  membership empties, and already-empty jobs are reaped during direct waits so
+  long sequential commands do not accumulate job history. A later foreground
+  invocation never inherits an earlier invocation's lingering signal targets.
   Broken pipe is an I/O error: an unhandled writer returns 141; a guest that
   handles EPIPE retains its chosen exit code.
+
+- `wait PID`, `wait %N`, and bare `wait` observe shell-known asynchronous
+  handles/jobs, never adopted process-service grandchildren. Bare `wait` returns
+  zero and discards remembered statuses. Explicit waits retain numeric status;
+  in the root shell/functions percent selectors persist until a `jobs` sweep,
+  while isolated noninteractive scopes discard them after explicit wait.
+  `jobs` (no options) streams Running/Done/Exit state for explicit backgrounds,
+  reports natural completion once, then keeps only the remembered numeric status.
+  Foreground completion never creates a visible `%job`. Numeric kill/existence
+  probes fail after direct completion; non-monitor percent kill on an unreported
+  completed job succeeds without signaling its lingering runtime descendants.
+  Runtime group kill is a distinct internal operation and remains effective.
 
 `InProcessHost` is the stand-in for these tests, not an OS or browser process
 implementation. Its registered programs run as tasks on the same executor.
@@ -59,8 +79,15 @@ numbers, browser worker transport or shared-memory layout are frozen here.
 | Expanded command                   | 1 MiB, at most 65,536 fields including command name and assignments                                                                                                           |
 | Expansion work                     | Per command: source-byte + expansion-byte + argument capacity in character/part/element steps; cooperative yield every 64 steps; intermediate word bytes also capped at 1 MiB |
 | `read` line                        | 64 KiB, explicit failure                                                                                                                                                      |
-| Pipeline / jobs / function nesting | 128 stages / 128 retained jobs / 128 function frames                                                                                                                          |
+| Pipeline / jobs / function nesting | 128 stages / 128 retained shell jobs / 128 function frames                                                                                                                          |
 | Eval readers / execution chain     | 16 active readers / 256 execution levels, shared admission and explicit rejection                                                                                             |
+
+Residual host processes/runtime jobs share the 4,096-entry process admission
+ceiling (including failed cleanup records); they do not consume visible job
+numbers. Shared reapers prevent competing observers from reaping a runtime job
+twice. Job-label printing uses the parser's bounded request quota, and retained
+labels share the session's expansion storage budget; `jobs` streams labels rather
+than accumulating a second job-output string.
 
 A terminal is a bounded endpoint drained by the host, not a result string appended
 until exit. The standalone harness drains it **between** executor turns. The real
@@ -77,6 +104,11 @@ AND/OR lists, background lists, brace groups, subshells, `if`/`elif`/`else`,
 `test`/`[` predicates, pipelines, `pipefail`, `errexit` with
 conditional/list/pipeline suppression, `!`, file/append/input and
 descriptor-duplication redirects, and a few streaming/state builtins.
+Inherited-member native/WASI tests use `InProcessHost` and an injectable runtime
+ABI with actual same-job member pids, independently controlled exits and inherited
+descriptors. They do not establish real Bun/browser acceptance: that gate awaits
+waffle's inherited job lookup and the corresponding Bun process-service integration.
+
 File predicates use real virtual-filesystem metadata, with unavailable
 capabilities explicitly unsupported. For-list pathname expansion supports
 quote-aware basic patterns, incremental directory enumeration and `nullglob`;

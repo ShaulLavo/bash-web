@@ -555,7 +555,7 @@ fn numeric_async_handles_select_pending_children_independently_of_job_numbers() 
 }
 
 #[test]
-fn repeated_numeric_wait_reuses_retained_completion_without_restoring_percent_job() {
+fn repeated_waits_remember_direct_status_until_jobs_retires_percent_selector() {
     let rig = Rig::new(Limits::default());
     assert_eq!(
         rig.run(
@@ -563,10 +563,16 @@ fn repeated_numeric_wait_reuses_retained_completion_without_restoring_percent_jo
         ),
         0
     );
-    assert_eq!(*rig.calls.borrow(), [vec!["1", "1", "127"]]);
+    assert_eq!(*rig.calls.borrow(), [vec!["1", "1", "1"]]);
     assert_eq!(rig.shell.background_jobs(), 0);
     assert_eq!(rig.run(r#"kill -TERM "$pid"; args $?; wait "$pid""#), 1);
     assert_eq!(rig.calls.borrow()[1], ["1"]);
+    assert_eq!(rig.run(r#"jobs; wait %1"#), 127);
+    assert!(
+        rig.output.bytes().is_empty(),
+        "explicit wait already notified completion"
+    );
+    assert_eq!(rig.run(r#"wait "$pid""#), 1);
     assert_eq!(rig.run(r#"wait; wait "$pid""#), 127);
     assert_eq!(rig.host.retained_count(), 0);
 }

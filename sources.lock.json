@@ -364,6 +364,12 @@
         "classification": "Original parser API regression controls for retained arithmetic source protection. No parser implementation, upstream assertion or upstream pin changed; no additional upstream implementation consulted or copied.",
         "change": "Require ordinary word parsing, generated-word reparsing and the direct substitution-token API to preserve quotes and backslashes around a protected dollar in ArithmeticExpansion source. Pair the protected spellings with a genuinely active quoted nested arithmetic expansion.",
         "reason": "The brace seed 1/42 acceptance failures retained the correct arithmetic source in the parser but lost its protection in the engine's later operand scanner. These controls keep that parser/engine contract explicit without changing the shared boundary grammar or accepting source-text special cases. The engine repair is classified under shellArithmetic.protectedSourceReview."
+      },
+      {
+        "paths": ["shell/parser/src/parser/print_cmd.rs", "shell/parser/src/parser/mod.rs"],
+        "classification": "Original public adapter for the existing bounded command printer in the owned Bashkit-derived parser. No additional upstream implementation copied; GNU Bash 5.3.15 supplies job-label observations only.",
+        "change": "Expose bounded canonical command rendering for shell job labels through the existing parser printer. Retain all command variants, quote-aware word rendering, parser work admission and output-byte limits. Add direct printer API regression controls without removing upstream assertions.",
+        "reason": "A job label must represent its actual shell command, including compound and pipeline commands, rather than a simple-command-only special case or an unbounded reconstructed string. Reusing the existing typed bounded printer keeps display formatting separate from execution and shell job membership."
       }
     ],
     "removedUpstreamTests": [

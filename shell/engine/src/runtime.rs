@@ -6,7 +6,10 @@ use crate::{
     io::{Endpoint, FdTable, FileMetadata, FileSystem, HostEndpoint, IoError, OpenOptions},
     process::{GroupId, ProcessError, ProcessHost, ProcessId, SpawnRequest},
 };
-use futures::{FutureExt, future::LocalBoxFuture};
+use futures::{
+    FutureExt,
+    future::{LocalBoxFuture, Shared},
+};
 use serde::Serialize;
 use std::{
     cell::{Cell, RefCell},
@@ -277,6 +280,7 @@ fn input_future_bytes<F>(_: &impl FnOnce(Endpoint, Endpoint, Cancel) -> F) -> us
 }
 struct Child {
     group: GroupId,
+    job: Option<u32>,
     status: Cell<Option<i32>>,
 }
 struct State {
@@ -287,6 +291,7 @@ struct State {
     next_group: Cell<GroupId>,
     groups: RefCell<BTreeMap<GroupId, Group>>,
     children: RefCell<BTreeMap<ProcessId, Rc<Child>>>,
+    waits: RefCell<BTreeMap<GroupId, Shared<LocalBoxFuture<'static, Result<(), ProcessError>>>>>,
     input_slots: Rc<Cell<usize>>,
     inputs: RefCell<Vec<InputPump>>,
 }
@@ -302,6 +307,7 @@ impl Runtime {
             next_group: Cell::new(1),
             groups: RefCell::new(BTreeMap::new()),
             children: RefCell::new(BTreeMap::new()),
+            waits: RefCell::new(BTreeMap::new()),
             input_slots: Rc::new(Cell::new(0)),
             inputs: RefCell::new(Vec::new()),
         }))
@@ -392,6 +398,37 @@ impl Runtime {
     pub fn retained_count(&self) -> usize {
         self.0.children.borrow().len()
     }
+    fn retained_slots(&self) -> usize {
+        let jobs: usize = self
+            .0
+            .groups
+            .borrow()
+            .values()
+            .map(|group| group.runtime_jobs.len())
+            .sum();
+        // Metadata failures still own a direct pid even without a runtime job ID.
+        jobs.saturating_add(
+            self.0
+                .children
+                .borrow()
+                .values()
+                .filter(|child| child.job.is_none())
+                .count(),
+        )
+    }
+    fn try_reap_job(&self, group: GroupId, job: u32) {
+        if self
+            .0
+            .groups
+            .borrow()
+            .get(&group)
+            .is_some_and(|group| group.runtime_jobs.contains(&job))
+            && self.0.abi.wait_job(job).is_ok()
+            && let Some(group) = self.0.groups.borrow_mut().get_mut(&group)
+        {
+            group.runtime_jobs.retain(|retained| *retained != job);
+        }
+    }
 
     fn prepare_input(
         &self,
@@ -413,7 +450,7 @@ impl Runtime {
             .get()
             .checked_add(units)
             .ok_or(ProcessError::ProcessLimit)?;
-        if used.saturating_add(self.retained_count()).saturating_add(1) > MAX_RETAINED_PROCESSES {
+        if used.saturating_add(self.retained_slots()).saturating_add(1) > MAX_RETAINED_PROCESSES {
             return Err(ProcessError::ProcessLimit);
         }
         self.0.input_slots.set(used);
@@ -674,7 +711,7 @@ impl ProcessHost for Runtime {
             .borrow_mut()
             .retain(|input| !input.join.is_finished());
         if self
-            .retained_count()
+            .retained_slots()
             .saturating_add(self.0.input_slots.get())
             >= MAX_RETAINED_PROCESSES
         {
@@ -725,7 +762,7 @@ impl ProcessHost for Runtime {
                     .is_some_and(|owner| owner.ptr_eq(&input.reader))
             });
             if used {
-                input.reserve_user(request.group, self.retained_count())?;
+                input.reserve_user(request.group, self.retained_slots())?;
             }
         }
         let spec = RuntimeSpawn {
@@ -748,6 +785,7 @@ impl ProcessHost for Runtime {
                     pid as u64,
                     Rc::new(Child {
                         group: request.group,
+                        job: None,
                         status: Cell::new(None),
                     }),
                 );
@@ -794,6 +832,7 @@ impl ProcessHost for Runtime {
             pid as u64,
             Rc::new(Child {
                 group: request.group,
+                job: Some(runtime_job),
                 status: Cell::new(None),
             }),
         );
@@ -812,6 +851,9 @@ impl ProcessHost for Runtime {
                     Ok(status) => {
                         child.status.set(Some(status));
                         runtime.0.children.borrow_mut().remove(&pid);
+                        if let Some(job) = child.job {
+                            runtime.try_reap_job(child.group, job);
+                        }
                         return Ok(status);
                     }
                     Err(AGAIN) => runtime.ready(2, pid as u32).await,
@@ -849,9 +891,42 @@ impl ProcessHost for Runtime {
         }
         error.map_or(Ok(()), Err)
     }
+    fn wait_direct_group(
+        &self,
+        group: GroupId,
+    ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        let direct: Vec<_> = self
+            .0
+            .children
+            .borrow()
+            .iter()
+            .filter(|(_, child)| child.group == group)
+            .map(|(&pid, _)| self.wait(pid))
+            .collect();
+        Box::pin(async move {
+            for result in futures::future::join_all(direct).await {
+                result?;
+            }
+            Ok(())
+        })
+    }
+    fn detach_group(&self, group: GroupId) -> JoinHandle<Result<(), ProcessError>> {
+        // Reap already-empty groups synchronously; a pending drain remains
+        // shared and is then driven by the host-owned executor task.
+        let ready = self.wait_group(group).now_or_never();
+        let wait = match ready {
+            Some(result) => futures::future::ready(result).boxed_local(),
+            None => self.wait_group(group),
+        };
+        self.0.executor.spawn(wait)
+    }
     fn wait_group(&self, group: GroupId) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        if let Some(wait) = self.0.waits.borrow().get(&group).cloned() {
+            return wait.boxed_local();
+        }
         let runtime = self.clone();
-        async move {
+        let owner = self.clone();
+        let drain = async move {
             let mut error = None;
             let mut failed_jobs = Vec::new();
             loop {
@@ -903,6 +978,15 @@ impl ProcessHost for Runtime {
                         return Ok(());
                     };
                     loop {
+                        if !runtime
+                            .0
+                            .groups
+                            .borrow()
+                            .get(&group)
+                            .is_some_and(|group| group.runtime_jobs.contains(&job))
+                        {
+                            break;
+                        }
                         match runtime.0.abi.wait_job(job) {
                             Ok(_) => {
                                 if let Some(group) = runtime.0.groups.borrow_mut().get_mut(&group) {
@@ -927,8 +1011,16 @@ impl ProcessHost for Runtime {
                     }
                 }
             }
+        };
+        let wait = async move {
+            let result = drain.await;
+            owner.0.waits.borrow_mut().remove(&group);
+            result
         }
         .boxed_local()
+        .shared();
+        self.0.waits.borrow_mut().insert(group, wait.clone());
+        wait.boxed_local()
     }
     fn abandon_group(&self, group: GroupId, signal: i32) {
         let _ = self.kill_group(group, signal);

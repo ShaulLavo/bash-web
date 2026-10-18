@@ -5,10 +5,10 @@ use crate::{
     executor::{Budget, Cancel, Executor, JoinHandle, yield_now},
     expand,
     io::{self, FdTable, FileSystem, OpenOptions},
-    process::{GroupId, ProcessGroup, ProcessHost, SpawnRequest},
+    process::{GroupId, ProcessError, ProcessGroup, ProcessHost, SpawnRequest},
     state::{FunctionFrame, PrefixFrame, SharedState, State, StoredFunction, absolute},
 };
-use futures::future::join_all;
+use futures::{FutureExt, future::join_all};
 use shell_parser::parser::*;
 use std::{
     cell::{Cell, RefCell},
@@ -194,7 +194,13 @@ enum JobKind {
     Completed,
     Internal,
 }
+struct JobLabel {
+    text: String,
+    _storage: eval::StorageAllocation,
+}
 struct Job {
+    label: Option<Rc<JobLabel>>,
+    notified: bool,
     owner: Scope,
     kind: JobKind,
     group: GroupId,
@@ -202,6 +208,10 @@ struct Job {
     signal: Rc<Cell<Option<i32>>>,
     join: JoinHandle<i32>,
     _allocation: Option<eval::Allocation>,
+}
+struct Residual {
+    owner: Scope,
+    cleanup: JoinHandle<Result<(), ProcessError>>,
 }
 struct Core {
     executor: Executor,
@@ -211,6 +221,7 @@ struct Core {
     eval_storage: eval::StorageBudget,
     descriptors: Descriptors,
     jobs: RefCell<BTreeMap<JobId, Job>>,
+    residuals: RefCell<BTreeMap<GroupId, Residual>>,
     next: Cell<u64>,
     foreground: RefCell<Option<Job>>,
     exit_requested: Cell<bool>,
@@ -220,6 +231,8 @@ pub(crate) struct Context {
     core: Rc<Core>,
     source: eval::Source,
     pub cancel: Cancel,
+    // The invoking foreground/background command, independent of nested scopes.
+    lifetime: (Cancel, Rc<Cell<Option<i32>>>),
     signal: Rc<Cell<Option<i32>>>,
     pub group: GroupId,
     scope: Scope,
@@ -327,6 +340,18 @@ impl Context {
             join.await;
             self.core.jobs.borrow_mut().remove(&id);
         }
+        let residuals: Vec<_> = self
+            .core
+            .residuals
+            .borrow()
+            .iter()
+            .filter(|(_, residual)| residual.owner == self.scope)
+            .map(|(&group, residual)| (group, residual.cleanup.clone()))
+            .collect();
+        for (group, cleanup) in residuals {
+            let _ = self.core.host.kill_group(group, self.stop_signal());
+            let _ = cleanup.await;
+        }
     }
     /// A successful isolated scope leaves asynchronous descendants running.
     /// Transfer their cleanup ownership outward without making them waitable
@@ -346,9 +371,17 @@ impl Context {
         self.scope.forward_to(parent_scope);
     }
     async fn finish_group(&self, processes: &mut ProcessGroup, code: i32) -> i32 {
-        let finished = self.cancel.run(processes.finish()).await;
+        let finished = self.cancel.run(processes.complete()).await;
         match finished {
-            Ok(Ok(_)) => code,
+            Ok(Ok(cleanup)) => {
+                self.core.retain_residual(
+                    self.group,
+                    self.scope.clone(),
+                    cleanup,
+                    self.lifetime.clone(),
+                );
+                code
+            }
             Ok(Err(_)) => 1,
             Err(_) => processes
                 .terminate(self.stop_signal())
@@ -380,12 +413,17 @@ impl Context {
             };
             code = self.cancel.run(job).await.map_err(|_| 130)?;
             if selector.is_some() {
-                self.core
-                    .jobs
-                    .borrow_mut()
+                let mut jobs = self.core.jobs.borrow_mut();
+                let job = jobs
                     .get_mut(&id)
-                    .expect("owned job stays registered while waiting")
-                    .kind = JobKind::Completed;
+                    .expect("owned job stays registered while waiting");
+                job.notified = true;
+                // Noninteractive isolated shells discard the percent-job entry
+                // after an explicit wait, but retain the numeric child status.
+                if self.scope.resolved_id() != 0 {
+                    job.kind = JobKind::Completed;
+                    job.label = None;
+                }
                 return Ok(code);
             }
             self.core.jobs.borrow_mut().remove(&id);
@@ -415,12 +453,83 @@ impl Context {
             })
             .map(|(id, job)| (*id, job.join.clone()))
     }
+    pub(crate) async fn list_jobs(&self, fds: &FdTable) -> Result<(), i32> {
+        let ids: Vec<_> = self
+            .core
+            .jobs
+            .borrow()
+            .iter()
+            .filter(|(_, job)| {
+                job.owner == self.scope && matches!(job.kind, JobKind::Background(_))
+            })
+            .map(|(&id, _)| id)
+            .collect();
+        let current = ids.last().copied();
+        let previous = ids.iter().rev().nth(1).copied();
+        let output = fds.get(1).ok_or(1)?;
+        for id in ids {
+            let (number, label, status, notified) = {
+                let jobs = self.core.jobs.borrow();
+                let job = jobs.get(&id).expect("registered job");
+                let JobKind::Background(number) = job.kind else {
+                    continue;
+                };
+                (
+                    number,
+                    job.label.clone(),
+                    job.join.clone().now_or_never(),
+                    job.notified,
+                )
+            };
+            if !notified || status.is_none() {
+                let marker = if Some(id) == current {
+                    '+'
+                } else if Some(id) == previous {
+                    '-'
+                } else {
+                    ' '
+                };
+                let state = match status {
+                    None => "Running".to_owned(),
+                    Some(0) => "Done".to_owned(),
+                    Some(code) => format!("Exit {code}"),
+                };
+                let header = format!("[{}]{}  {:<27}", number.0, marker, state);
+                output
+                    .write_all(header.as_bytes(), &self.cancel)
+                    .await
+                    .map_err(|e| e.status())?;
+                if let Some(label) = label {
+                    output
+                        .write_all(label.text.as_bytes(), &self.cancel)
+                        .await
+                        .map_err(|e| e.status())?;
+                }
+                output
+                    .write_all(if status.is_none() { b" &\n" } else { b"\n" }, &self.cancel)
+                    .await
+                    .map_err(|e| e.status())?;
+            }
+            if status.is_some() {
+                let mut jobs = self.core.jobs.borrow_mut();
+                let job = jobs.get_mut(&id).expect("registered job");
+                job.kind = JobKind::Completed;
+                // A remembered numeric status needs no retained source label.
+                job.label = None;
+            }
+        }
+        Ok(())
+    }
     pub(crate) fn check_job(&self, selector: JobSelector) -> Result<(), i32> {
         self.core
             .jobs
             .borrow()
             .iter()
-            .find(|(id, job)| selector.matches_live(**id, job) && job.owner == self.scope)
+            .find(|(id, job)| {
+                selector.matches_live(**id, job)
+                    && job.owner == self.scope
+                    && (matches!(selector, JobSelector::Number(_)) || !job.join.is_finished())
+            })
             .map(|_| ())
             .ok_or(1)
     }
@@ -432,7 +541,13 @@ impl Context {
             .map(|(_, job)| job)
             .ok_or(1)?;
         if job.join.is_finished() {
-            return Err(1);
+            // Non-monitor Bash accepts an unreported completed %job, but does
+            // not signal its residual runtime group. Numeric handles are dead.
+            return if matches!(selector, JobSelector::Number(_)) {
+                Ok(())
+            } else {
+                Err(1)
+            };
         }
         self.core
             .host
@@ -490,6 +605,7 @@ impl Session {
                 limits,
                 descriptors: Rc::new(RefCell::new(FdTable::default())),
                 jobs: RefCell::new(BTreeMap::new()),
+                residuals: RefCell::new(BTreeMap::new()),
                 next: Cell::new(1),
                 foreground: RefCell::new(None),
                 exit_requested: Cell::new(false),
@@ -509,7 +625,9 @@ impl Session {
             .borrow()
             .values()
             .filter(|job| {
-                matches!(job.kind, JobKind::Background(_)) && job.owner.resolved_id() == 0
+                matches!(job.kind, JobKind::Background(_))
+                    && job.owner.resolved_id() == 0
+                    && !job.join.is_finished()
             })
             .count()
     }
@@ -562,6 +680,7 @@ impl Session {
         let context = Context {
             core: self.core.clone(),
             source: eval::Source::root(source),
+            lifetime: (cancel.clone(), signal.clone()),
             cancel,
             signal,
             group,
@@ -598,6 +717,8 @@ impl Session {
             code
         });
         *self.core.foreground.borrow_mut() = Some(Job {
+            label: None,
+            notified: false,
             owner: Scope::new(0),
             kind: JobKind::Internal,
             group,
@@ -631,6 +752,23 @@ impl Session {
             .map(|job| job.join.clone());
         join_all(jobs.into_iter().chain(foreground)).await;
         self.core.jobs.borrow_mut().clear();
+        let residuals: Vec<_> = self
+            .core
+            .residuals
+            .borrow()
+            .iter()
+            .map(|(&group, residual)| (group, residual.cleanup.clone()))
+            .collect();
+        for (group, _) in &residuals {
+            let _ = self.core.host.kill_group(*group, 2);
+        }
+        for (group, cleanup) in residuals {
+            if cleanup.await.is_err() {
+                // A prior host error retains its signal/reaping handle for retry.
+                let _ = self.core.host.wait_group(group).await;
+            }
+        }
+        self.core.residuals.borrow_mut().clear();
         *self.core.descriptors.borrow_mut() = FdTable::default();
         self.core.host.shutdown_io().await;
     }
@@ -638,6 +776,9 @@ impl Session {
 impl Drop for Session {
     fn drop(&mut self) {
         self.interrupt();
+        for &group in self.core.residuals.borrow().keys() {
+            let _ = self.core.host.kill_group(group, 2);
+        }
         for job in self.core.jobs.borrow().values() {
             if job.signal.get().is_none() {
                 job.signal.set(Some(2));
@@ -647,6 +788,34 @@ impl Drop for Session {
     }
 }
 impl Core {
+    fn retain_residual(
+        &self,
+        group: GroupId,
+        owner: Scope,
+        cleanup: JoinHandle<Result<(), ProcessError>>,
+        lifetime: (Cancel, Rc<Cell<Option<i32>>>),
+    ) {
+        // Successful handles are history, not ownership. Errors keep the handle
+        // reachable for shutdown retry. Live entries are bounded by host process
+        // admission (including residual runtime jobs), not visible shell jobs.
+        self.residuals
+            .borrow_mut()
+            .retain(|_, residual| !matches!(residual.cleanup.clone().now_or_never(), Some(Ok(()))));
+        let host = self.host.clone();
+        let cleanup = self.executor.spawn(async move {
+            match futures::future::select(cleanup, lifetime.0.cancelled().boxed_local()).await {
+                futures::future::Either::Left((result, _)) => result,
+                futures::future::Either::Right(((), cleanup)) => {
+                    let signaled = host.kill_group(group, lifetime.1.get().unwrap_or(2));
+                    let reaped = cleanup.await;
+                    signaled.and(reaped)
+                }
+            }
+        });
+        self.residuals
+            .borrow_mut()
+            .insert(group, Residual { owner, cleanup });
+    }
     fn reap_internal_jobs(&self) {
         self.jobs
             .borrow_mut()
@@ -656,12 +825,21 @@ impl Core {
         self.jobs
             .borrow()
             .values()
-            .filter(|job| job.kind != JobKind::Completed)
+            .filter(|job| {
+                job.kind != JobKind::Completed && !(job.notified && job.join.is_finished())
+            })
             .count()
             < self.limits.jobs
     }
     fn reap_completed_jobs(&self) {
         let mut jobs = self.jobs.borrow_mut();
+        for job in jobs.values_mut() {
+            if job.notified && job.join.is_finished() && matches!(job.kind, JobKind::Background(_))
+            {
+                job.kind = JobKind::Completed;
+                job.label = None;
+            }
+        }
         // Reserve one launch slot by evicting the oldest retained handle.
         // Inspect the bounded table in place; eviction allocates no scratch.
         while jobs.len() >= self.limits.jobs {
@@ -1898,6 +2076,31 @@ async fn launch_background(
         Ok(identity) => identity,
         Err(error) => return expansion_failure(error.into(), fds, context).await,
     };
+    let limit = context.limits().expansion_bytes;
+    let printed = command_string(
+        &command,
+        &Cell::new(limit),
+        limit,
+        Some(&context.parser_budget()),
+    );
+    let text = match printed {
+        Ok(text) => text,
+        Err(_) => {
+            return Outcome::status(if context.cancel.is_cancelled() {
+                context.cancel_status()
+            } else {
+                2
+            });
+        }
+    };
+    let storage = match context.evaluation.admit_storage(text.len()) {
+        Ok(storage) => storage,
+        Err(code) => return Outcome::status(code),
+    };
+    let label = Rc::new(JobLabel {
+        text,
+        _storage: storage,
+    });
     let allocation = match admit_job(context) {
         Ok(allocation) => allocation,
         Err(error) => return expansion_failure(error.into(), fds, context).await,
@@ -1917,6 +2120,7 @@ async fn launch_background(
     let child_context = Context {
         core: context.core.clone(),
         source: context.source.clone(),
+        lifetime: (cancel.clone(), signal.clone()),
         cancel: cancel.clone(),
         signal: signal.clone(),
         group,
@@ -1941,6 +2145,8 @@ async fn launch_background(
     context.core.jobs.borrow_mut().insert(
         job,
         Job {
+            label: Some(label),
+            notified: false,
             owner: context.scope.clone(),
             kind: JobKind::Background(number),
             group,
@@ -2159,6 +2365,8 @@ impl Substitutions {
         core.jobs.borrow_mut().insert(
             id,
             Job {
+                label: None,
+                notified: false,
                 owner: self.context.scope.clone(),
                 kind: JobKind::Internal,
                 group,
@@ -2280,6 +2488,8 @@ impl Substitutions {
         core.jobs.borrow_mut().insert(
             job,
             Job {
+                label: None,
+                notified: false,
                 owner: self.context.scope.clone(),
                 kind: JobKind::ProcessSubstitution,
                 group,
@@ -2768,6 +2978,12 @@ async fn dispatch_simple_command_body(
     match context.cancel.run(context.core.host.wait(pid)).await {
         Ok(result) => Ok(Outcome::status(result.map_err(|_| 1)?)),
         Err(_) => {
+            // Signal inherited members before waiting/reaping the direct child;
+            // it may be the last live direct stage but not the last group member.
+            let _ = context
+                .core
+                .host
+                .kill_group(context.group, context.stop_signal());
             context
                 .core
                 .host
@@ -3196,6 +3412,7 @@ mod scope_tests {
             evaluation: eval::Scope::new(&session.core.limits, session.core.eval_storage.clone()),
             core: session.core.clone(),
             source: eval::Source::root(""),
+            lifetime: (Cancel::new(), Rc::new(Cell::new(None))),
             cancel: Cancel::new(),
             signal: Rc::new(Cell::new(None)),
             group,

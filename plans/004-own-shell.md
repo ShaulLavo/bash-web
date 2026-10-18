@@ -217,6 +217,17 @@ completion of the foreground command it launched.
   cancellation/shutdown leaves no processes, descriptors, job holds or pumps.
   Retain native/WASI ProcessHost controls and add runtime/browser regressions.
 
+**Delivery split (2026-10-18, Approved).** Land the shell-side lifetime rule
+with injectable-ABI runtime controls before the dependency delivery. Its native
+and WASI controls must prove direct-child completion, independent residual
+reaping/signaling, direct-child wait/status and background Done semantics, and
+full cancellation/shutdown drains. Real inherited-Bun browser acceptance remains
+**pending** on Waffle's `runtime_proc.job_of(0)` delivery and bun-wasm's 7b
+package using that inherited job for non-detached `Bun.spawn` children. The
+browser-port harness owns those real-program cases once both packages land;
+stand-ins do not close that gate. This pending dependency does not block merging
+the independently reviewed shell-side unit or continuing to functions/locals.
+
 Runtime delivery order after its package split is slot recycling and creator-held
 job handles, then 7b (including the foreground-completion follow-up), then asynchronous filesystem requests. The current PR does
 not implement substitute cross-transport job fencing or a blocking filesystem

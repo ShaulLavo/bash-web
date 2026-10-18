@@ -4,7 +4,10 @@ use crate::{
     executor::{Cancel, Executor, JoinHandle},
     io::FdTable,
 };
-use futures::future::LocalBoxFuture;
+use futures::{
+    FutureExt,
+    future::{LocalBoxFuture, Shared},
+};
 use std::{
     cell::{Cell, RefCell},
     collections::BTreeMap,
@@ -67,6 +70,15 @@ pub trait ProcessHost {
     fn spawn(&self, request: SpawnRequest) -> Result<ProcessId, ProcessError>;
     fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<i32, ProcessError>>;
     fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError>;
+    /// Wait only for shell-owned direct processes, never inherited descendants.
+    /// The caller must first join its shell execution tasks so admission is done.
+    fn wait_direct_group(
+        &self,
+        group: GroupId,
+    ) -> LocalBoxFuture<'static, Result<(), ProcessError>>;
+    /// Start host-owned natural reaping without signaling residual descendants.
+    /// The returned join observes cleanup; dropping it must not stop the reaper.
+    fn detach_group(&self, group: GroupId) -> JoinHandle<Result<(), ProcessError>>;
     fn kill_group(&self, group: GroupId, signal: i32) -> Result<(), ProcessError>;
     /// Wait for and reap every process in the group, including descendants
     /// spawned while waiting. Use `wait` for an individual process's exit code.
@@ -85,6 +97,7 @@ pub trait ProcessHost {
 struct Child {
     group: GroupId,
     parent: Option<ProcessId>,
+    direct: bool,
     cancel: Cancel,
     signal: Rc<Cell<i32>>,
     exit: JoinHandle<i32>,
@@ -96,6 +109,7 @@ struct HostState {
     children: RefCell<BTreeMap<ProcessId, Child>>,
     // Only unreaped groups have entries; true means reject new descendants.
     groups: RefCell<BTreeMap<GroupId, bool>>,
+    waits: RefCell<BTreeMap<GroupId, Shared<LocalBoxFuture<'static, Result<(), ProcessError>>>>>,
     next: Cell<ProcessId>,
     next_group: Cell<GroupId>,
 }
@@ -108,6 +122,7 @@ impl InProcessHost {
             registry: RefCell::new(BTreeMap::new()),
             children: RefCell::new(BTreeMap::new()),
             groups: RefCell::new(BTreeMap::new()),
+            waits: RefCell::new(BTreeMap::new()),
             next: Cell::new(1),
             next_group: Cell::new(1),
         }))
@@ -223,6 +238,7 @@ impl ProcessHost for InProcessHost {
             Child {
                 group,
                 parent,
+                direct: parent.is_none(),
                 cancel,
                 signal,
                 exit,
@@ -280,7 +296,39 @@ impl ProcessHost for InProcessHost {
         }
         Ok(())
     }
+    fn wait_direct_group(
+        &self,
+        group: GroupId,
+    ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        let direct: Vec<_> = self
+            .0
+            .children
+            .borrow()
+            .iter()
+            .filter(|(_, child)| child.group == group && child.direct)
+            .map(|(&pid, _)| self.wait(pid))
+            .collect();
+        Box::pin(async move {
+            for result in futures::future::join_all(direct).await {
+                result?;
+            }
+            Ok(())
+        })
+    }
+    fn detach_group(&self, group: GroupId) -> JoinHandle<Result<(), ProcessError>> {
+        // Reap already-empty groups synchronously; a pending drain remains
+        // shared and is then driven by the host-owned executor task.
+        let ready = self.wait_group(group).now_or_never();
+        let wait = match ready {
+            Some(result) => futures::future::ready(result).boxed_local(),
+            None => self.wait_group(group),
+        };
+        self.0.executor.spawn(wait)
+    }
     fn wait_group(&self, group: GroupId) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        if let Some(wait) = self.0.waits.borrow().get(&group).cloned() {
+            return wait.boxed_local();
+        }
         // Capture eagerly so another waiter may reap records without stealing
         // these joins. Subsequent waves include descendants spawned while waiting.
         let first: Vec<_> = self
@@ -292,7 +340,7 @@ impl ProcessHost for InProcessHost {
             .map(|(&pid, child)| (pid, child.exit.clone()))
             .collect();
         let host = self.clone();
-        Box::pin(async move {
+        let wait = async move {
             let mut batch = first;
             loop {
                 for (pid, exit) in batch {
@@ -311,8 +359,13 @@ impl ProcessHost for InProcessHost {
                     break;
                 }
             }
+            host.0.waits.borrow_mut().remove(&group);
             Ok(())
-        })
+        }
+        .boxed_local()
+        .shared();
+        self.0.waits.borrow_mut().insert(group, wait.clone());
+        wait.boxed_local()
     }
     fn abandon_group(&self, group: GroupId, signal: i32) {
         if self.kill_group(group, signal).is_ok() {
@@ -347,7 +400,16 @@ impl ProcessGroup {
         self.signal = Some(signal);
         self
     }
-    /// Confirm natural completion and release cleanup ownership without a signal.
+    /// Complete shell-owned work, transferring residual descendants to the host.
+    /// Direct waits and shell task joins determine the shell's status, not this
+    /// separately owned reaper. Cancellation before transfer still abandons all.
+    pub async fn complete(&mut self) -> Result<JoinHandle<Result<(), ProcessError>>, ProcessError> {
+        self.host.wait_direct_group(self.id).await?;
+        let cleanup = self.host.detach_group(self.id);
+        self.terminated = true;
+        Ok(cleanup)
+    }
+    /// Confirm every descendant exit and release cleanup ownership without a signal.
     /// If this future is dropped before completion, Drop still abandons the group.
     pub async fn finish(&mut self) -> Result<(), ProcessError> {
         self.host.wait_group(self.id).await?;
@@ -649,5 +711,95 @@ mod tests {
         assert_eq!(host.active_count(), 0);
         assert_eq!(host.retained_count(), 0);
         assert!(host.0.groups.borrow().is_empty());
+    }
+    #[test]
+    fn inherited_inprocess_member_does_not_delay_shell_completion_or_wait() {
+        use crate::{
+            Limits, Session,
+            io::{self, Endpoint, MemoryFs},
+        };
+        let ex = Executor::new();
+        let host = InProcessHost::new(ex.clone());
+        let release = Cancel::new();
+        let gate = release.clone();
+        host.register("linger", move |request, _| {
+            let gate = gate.clone();
+            async move {
+                gate.cancelled().await;
+                drop(request);
+                23
+            }
+            .boxed_local()
+        });
+        let weak = Rc::downgrade(&host.0);
+        host.register("parent", move |mut req, _| {
+            let host = InProcessHost(weak.upgrade().unwrap());
+            async move {
+                let parent = host
+                    .0
+                    .children
+                    .borrow()
+                    .iter()
+                    .find(|(_, child)| {
+                        child.group == req.group && child.direct && !child.exit.is_finished()
+                    })
+                    .map(|(&pid, _)| pid)
+                    .unwrap();
+                req.parent = Some(parent);
+                req.argv = vec!["linger".into()];
+                host.spawn(req).unwrap();
+                7
+            }
+            .boxed_local()
+        });
+        let shell = Rc::new(Session::new(
+            ex.clone(),
+            Rc::new(host.clone()),
+            Rc::new(MemoryFs::new(4096)),
+            Limits::default(),
+        ));
+        let (output, captured) = io::capture(4096);
+        let (reader, writer) = pipe();
+        let mut fds = FdTable::default();
+        fds.insert(0, Endpoint::null());
+        fds.insert(1, output);
+        fds.insert(3, writer);
+        shell.set_descriptors(fds).unwrap();
+        let command = shell.start("parent; echo READY").unwrap();
+        ex.drive(256);
+        assert!(
+            command.is_finished(),
+            "prompt must precede inherited member exit"
+        );
+        assert_eq!(command.now_or_never(), Some(0));
+        assert_eq!(captured.bytes(), b"READY\n");
+        assert_eq!(host.active_count(), 1);
+        assert_eq!(host.retained_count(), 1);
+        assert_eq!(shell.background_jobs(), 0);
+        let group = *host.0.groups.borrow().keys().next().unwrap();
+        assert_eq!(
+            host.wait_direct_group(group).now_or_never(),
+            Some(Ok(())),
+            "adoption must not create a new direct child"
+        );
+        let command = shell
+            .start("exec 3>&-; jobs; wait; echo waited=$?")
+            .unwrap();
+        ex.drive(256);
+        assert_eq!(command.now_or_never(), Some(0));
+        assert_eq!(captured.bytes(), b"READY\nwaited=0\n");
+        let mut byte = [0];
+        assert!(reader.read(&mut byte).now_or_never().is_none());
+        release.cancel();
+        ex.drive(256);
+        assert_eq!(reader.read(&mut byte).now_or_never(), Some(Ok(0)));
+        assert_eq!(host.retained_count(), 0);
+        assert!(host.0.groups.borrow().is_empty());
+        let closing = shell.clone();
+        let cleanup = ex.spawn(async move { closing.shutdown().await });
+        ex.drive(256);
+        assert!(cleanup.is_finished());
+        drop(shell);
+        assert_eq!(ex.drive(256).pending, 0);
     }
 }

@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.39",
+  "version": "0.0.40",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -38,7 +38,10 @@
     "notices:shell": "node scripts/notices.mjs",
     "fuzz:shell-control-flow": "node scripts/fuzz-shell-control-flow.mjs",
     "test:fuzz-shell-control-flow": "node --test scripts/test-fuzz-shell-control-flow.mjs",
-    "fuzz:shell-control-flow:ci": "node scripts/fuzz-shell-control-flow.mjs --replay scripts/fixtures/shell-control-flow-seed-1.json --replay scripts/fixtures/shell-control-flow-seed-42.json"
+    "fuzz:shell-control-flow:ci": "node scripts/fuzz-shell-control-flow.mjs --replay scripts/fixtures/shell-control-flow-seed-1.json --replay scripts/fixtures/shell-control-flow-seed-42.json",
+    "fuzz:shell-job-lifetime": "node scripts/fuzz-shell-job-lifetime.mjs",
+    "test:fuzz-shell-job-lifetime": "node --test scripts/test-fuzz-shell-job-lifetime.mjs",
+    "fuzz:shell-job-lifetime:ci": "node scripts/fuzz-shell-job-lifetime.mjs --replay scripts/fixtures/shell-job-lifetime-seed-1.json --replay scripts/fixtures/shell-job-lifetime-seed-42.json"
   },
   "devDependencies": {
     "oxfmt": "0.70.0",
