@@ -13,6 +13,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -616,7 +617,10 @@ const root = resolve(import.meta.dirname, "..");
 const sourcePath = fileURLToPath(import.meta.url);
 const bashBin = "/usr/bin/bash";
 const oracleVersion = /^GNU bash, version 5\.3\.15(?:\(|\s)/;
-const queue = "/work/platform-production/heavy/current/run.js";
+const queue = process.env.FUZZ_HEAVY_RUNNER;
+export function scratchParent(env = process.env) {
+  return env.FUZZ_JOB_SCRATCH ?? env.RUNNER_TEMP ?? tmpdir();
+}
 export const sourceFiles = [
   "fuzz-shell-path.ts",
   "fuzz-shell-control-flow.mjs",
@@ -722,7 +726,7 @@ export async function execute(cases, options, shell, recorded) {
   return { total: cases.length, counts, byFamily, mismatches, results };
 }
 function ensureQueued() {
-  if (process.argv.includes("--queue-active") || !existsSync(queue)) return;
+  if (process.argv.includes("--queue-active") || !queue) return;
   const child = spawnSync(
     "bun",
     [
@@ -747,7 +751,7 @@ async function main() {
   const options = optionsFor(process.argv.slice(2));
   if (options.help) {
     console.log(
-      "Usage: node scripts/fuzz-shell-path.ts [--shell PATH] [--seed N] [--count 128]\n  --record-oracle PATH  Independent GNU Bash 5.3.15 recording\n  --record PATH         Record only strict candidate matches\n  --replay PATH         Strict all-case replay; repeatable; never invokes Bash\n  --self-control        Two independent Bash observations\n  --output PATH         Bounded diagnostics\nRequires the opt-in BASH_WEB_PATH_FIXTURE native/WASI test host manifest contract. No automatic build; self-queues --class light.",
+      "Usage: node scripts/fuzz-shell-path.ts [--shell PATH] [--seed N] [--count 128]\n  --record-oracle PATH  Independent GNU Bash 5.3.15 recording\n  --record PATH         Record only strict candidate matches\n  --replay PATH         Strict all-case replay; repeatable; never invokes Bash\n  --self-control        Two independent Bash observations\n  --output PATH         Bounded diagnostics\nRequires the opt-in BASH_WEB_PATH_FIXTURE native/WASI test host manifest contract. No automatic build; optional FUZZ_HEAVY_RUNNER queues --class light.",
     );
     return;
   }
@@ -761,8 +765,7 @@ async function main() {
     throw new Error("pass an existing native --shell PATH: " + shell);
   if (options.record && realpathSync(shell) === realpathSync(bashBin))
     throw new Error("cannot candidate-verify against Bash itself; use --record-oracle");
-  const parent =
-    process.env.FUZZ_JOB_SCRATCH ?? process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-path-20261018";
+  const parent = scratchParent();
   mkdirSync(parent, { recursive: true });
   const scratch = mkdtempSync(resolve(parent, "oracle-run-"));
   options.cwd = scratch;

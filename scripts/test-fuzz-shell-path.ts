@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
 import {
@@ -32,6 +33,7 @@ import {
   render,
   run,
   searchPaths,
+  scratchParent,
   selectedDirectories,
   sourceFiles,
   sourceHashes,
@@ -39,12 +41,12 @@ import {
   variants,
 } from "./fuzz-shell-path.ts";
 
-const parent = "/work/tmp/bash-web-path-20261018";
+const parent = scratchParent();
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const fixturePath = "shell-path-seed-1.json";
 const fixtureHashes = {
-  "shell-path-seed-1.json": "8e2dd2e724115eab948323f96a666c324e75b6568ec14dd7625cf9fb7c824f52",
-  "shell-path-seed-42.json": "bd39648125366d3113072487be0d604a9dd1a77fc8c86dd767cca097b0f506dd",
+  "shell-path-seed-1.json": "ab7f12b12d1614df9955aaaef49ad640bdb5fe0604b7caf372b9777870381dda",
+  "shell-path-seed-42.json": "c40cac31c0f157e1628faff82f708d8b89fd0df3e0563aeeb4d7ac4eeee1fba9",
 };
 // Frozen before the manifest validator changed any harness source identity.
 // These independently pin every case and Bash observation, excluding metadata.
@@ -89,7 +91,7 @@ function fixtureFor() {
   };
 }
 function scratch(t) {
-  // Existing: coordinator task root, shared runtimes/toolchains. This test owns
+  // Existing: selected temporary root and shared runtimes/toolchains. This test owns
   // only its oracle-test-* directory and run()'s bounded process descendants.
   mkdirSync(parent, { recursive: true });
   const path = mkdtempSync(resolve(parent, "oracle-test-"));
@@ -99,6 +101,14 @@ function scratch(t) {
   });
   return path;
 }
+
+test("scratch roots use explicit job storage, runner storage or the platform temporary directory", () => {
+  const runner = resolve(tmpdir(), "runner-storage");
+  const job = resolve(tmpdir(), "job-storage");
+  assert.equal(scratchParent({}), tmpdir());
+  assert.equal(scratchParent({ RUNNER_TEMP: runner }), runner);
+  assert.equal(scratchParent({ RUNNER_TEMP: runner, FUZZ_JOB_SCRATCH: job }), job);
+});
 
 test("finite PATH grammar is deterministic, unique and bounded for every seed", () => {
   const matrix = matrixCases();
