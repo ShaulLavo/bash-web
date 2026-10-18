@@ -110,6 +110,12 @@ map of first-observed stage timestamps, and a `pending` list of started awaits w
 no observed completion. Timestamps use `performance.timeOrigin + performance.now()`
 so page and worker observations share a high-resolution epoch clock. `last` is the
 latest timestamp, not a claim about which concurrent task is blocking startup.
+Waffle filesystem milestones retain their original worker timestamps. Pending runtime
+waits pair connection receipt, IndexedDB open, writer-lock acquisition, and epoch
+completion with their observed requests; worker creation alone is not a pending await.
+The demo passes its observer to runtime creation, and custom `acquireRuntime` factories
+receive it to pass to `createRuntime({ onStartupStage })` themselves. A pre-created
+borrowed runtime does not have earlier startup events reconstructed.
 
 Browser test failures print pending stages and attach the full snapshot as
 `browser-startup-diagnostics`. Shell embeddings may supply `onStartupStage` to

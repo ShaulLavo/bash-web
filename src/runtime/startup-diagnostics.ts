@@ -1,3 +1,25 @@
+import type { RuntimeStartupStage } from "waffle";
+
+// Keep runtime transport milestones distinct from the awaits they actually complete.
+const runtimeStartupStages = [
+  "filesystem-worker-created",
+  "filesystem-connect-requested",
+  "filesystem-connected",
+  "indexeddb-open-requested",
+  "indexeddb-open-resolved",
+  "filesystem-lock-requested",
+  "filesystem-lock-acquired",
+  "filesystem-epoch-requested",
+  "filesystem-epoch-resolved",
+  "filesystem-ready",
+] as const satisfies readonly RuntimeStartupStage[];
+const runtimeStartupAwaits = [
+  ["filesystem-connect-requested", "filesystem-connected"],
+  ["indexeddb-open-requested", "indexeddb-open-resolved"],
+  ["filesystem-lock-requested", "filesystem-lock-acquired"],
+  ["filesystem-epoch-requested", "filesystem-epoch-resolved"],
+] as const satisfies readonly (readonly [RuntimeStartupStage, RuntimeStartupStage])[];
+
 const startupOperations = [
   "previous-stop",
   "terminal-open",
@@ -34,8 +56,20 @@ const startupOperations = [
   "shell-worker-start",
 ] as const;
 export type StartupOperation = (typeof startupOperations)[number];
-export type StartupStage = `${StartupOperation}-${"requested" | "resolved"}`;
+export type StartupStage = `${StartupOperation}-${"requested" | "resolved"}` | RuntimeStartupStage;
 export type StartupObserver = (stage: StartupStage, timestamp: number) => void | PromiseLike<void>;
+
+const startupAwaits: readonly (readonly [StartupStage, StartupStage])[] = startupOperations
+  .map((operation): readonly [StartupStage, StartupStage] => [
+    `${operation}-requested`,
+    `${operation}-resolved`,
+  ])
+  .concat(runtimeStartupAwaits);
+const allowedStages = new Set<string>(
+  startupAwaits
+    .flatMap(([requested, resolved]): string[] => [requested, resolved])
+    .concat(runtimeStartupStages),
+);
 
 /** Observers never own startup work and cannot add an await or reject it. */
 export function markStartup(observer: StartupObserver | undefined, stage: StartupStage): void {
@@ -59,7 +93,13 @@ export function createStartupDiagnostics(generation: number) {
   let last: StartupSnapshot["last"];
   let active = true;
   const observe: StartupObserver = (stage, timestamp) => {
-    if (!active || !Number.isFinite(timestamp) || timestamp < 0 || stages[stage] !== undefined)
+    if (
+      !active ||
+      !allowedStages.has(stage) ||
+      !Number.isFinite(timestamp) ||
+      timestamp < 0 ||
+      stages[stage] !== undefined
+    )
       return;
     stages[stage] = timestamp;
     if (!last || timestamp >= last.timestamp) last = { stage, timestamp };
@@ -70,13 +110,12 @@ export function createStartupDiagnostics(generation: number) {
       active = false;
     },
     snapshot(): StartupSnapshot {
-      const pending = startupOperations
+      const pending = startupAwaits
         .filter(
-          (operation) =>
-            stages[`${operation}-requested`] !== undefined &&
-            stages[`${operation}-resolved`] === undefined,
+          ([requested, resolved]) =>
+            stages[requested] !== undefined && stages[resolved] === undefined,
         )
-        .map((operation): StartupStage => `${operation}-requested`);
+        .map(([requested]) => requested);
       return { generation, stages: { ...stages }, pending, last: last && { ...last } };
     },
   };

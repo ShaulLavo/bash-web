@@ -300,7 +300,10 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         } else if (options.acquireRuntime) {
           lease = options.acquireRuntime(onStartupStage);
         } else {
-          const owned = createRuntime({ filesystem: { workerURL: filesystemWorkerUrl } });
+          const owned = createRuntime({
+            filesystem: { workerURL: filesystemWorkerUrl },
+            onStartupStage,
+          });
           lease = { runtime: owned, ready: Promise.resolve(), dispose: () => owned.dispose() };
         }
         // The owner must make lease disposal idempotent, including during preparation.

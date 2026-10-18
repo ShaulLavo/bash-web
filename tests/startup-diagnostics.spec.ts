@@ -35,6 +35,30 @@ test("startup diagnostics expose a stalled shell fetch before session assignment
   );
 });
 
+test("the runtime lease forwards the real filesystem startup milestones", async ({ page }) => {
+  await page.goto("/?test=1&renderer=canvas");
+  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  const snapshot = await page.evaluate(() => window.bashWeb!.snapshot().startup);
+  const expected = [
+    "filesystem-worker-created",
+    "filesystem-connect-requested",
+    "filesystem-connected",
+    "indexeddb-open-requested",
+    "indexeddb-open-resolved",
+    "filesystem-lock-requested",
+    "filesystem-lock-acquired",
+    "filesystem-epoch-requested",
+    "filesystem-epoch-resolved",
+    "filesystem-ready",
+  ] as const;
+  let previous = snapshot.stages["runtime-lease-requested"]!;
+  for (const stage of expected) {
+    expect(snapshot.stages[stage], stage).toBeGreaterThanOrEqual(previous);
+    previous = snapshot.stages[stage]!;
+  }
+  expect(snapshot.pending).toEqual([]);
+});
+
 test("restart resets startup timestamps without retaining a previous generation", async ({
   page,
 }) => {

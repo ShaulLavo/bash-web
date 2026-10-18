@@ -9,7 +9,10 @@ import filesystemWorkerUrl from "../.build/browser/fs-worker.js?url";
 
 mountBrowser({
   acquireRuntime(onStartupStage): BrowserRuntimeLease {
-    const runtime = createRuntime({ filesystem: { workerURL: filesystemWorkerUrl } });
+    const runtime = createRuntime({
+      filesystem: { workerURL: filesystemWorkerUrl },
+      onStartupStage,
+    });
     const registration = new AbortController();
     const ready = registerTestPrograms(runtime, registration.signal, onStartupStage);
     let disposing: Promise<void> | undefined;
