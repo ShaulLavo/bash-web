@@ -13,11 +13,11 @@ import {
   workerProcessState,
 } from "waffle/proc/worker-client";
 
-for (const [errno, status] of [
-  [2, 127],
-  [13, 126],
+for (const [errno, wasiErrno] of [
+  [2, 44],
+  [13, 2],
 ] as const)
-  test(`child startup errno ${errno} reaches shell wait and job wait as ${status}`, () => {
+  test(`child startup errno ${errno} stays typed in child and job waits`, () => {
     const transport = createWorkerProcessTransport({ capacity: 4 });
     const descriptors = new DescriptorTable();
     const memory = new WebAssembly.Memory({ initial: 1 });
@@ -62,9 +62,10 @@ for (const [errno, status] of [
     const job = abi.imports.job_of!(pid);
     assert.equal(abi.imports.wait!(pid, 0), 0);
     const result = new DataView(memory.buffer);
-    assert.equal(result.getUint32(0, true), 0, "startup failure is not a signal");
-    assert.equal(result.getInt32(4, true), status);
+    assert.equal(result.getUint32(0, true), 2, "startup failure retains its distinct wait kind");
+    assert.equal(result.getInt32(4, true), wasiErrno, "wait encodes the Preview1 errno");
     assert.equal(abi.imports.wait_job!(job, 1, 8), 0);
-    assert.equal(result.getInt32(8, true), status);
+    assert.equal(result.getUint32(8, true), 2, "job wait retains the startup-failed kind");
+    assert.equal(result.getInt32(12, true), wasiErrno, "job wait encodes the Preview1 errno");
     descriptors.dispose();
   });

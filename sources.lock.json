@@ -68,10 +68,10 @@
   },
   "waffle": {
     "repository": "https://github.com/ShaulLavo/waffle",
-    "revision": "4087eae447fc536b6c0a78e5f14b8049be11c467",
+    "revision": "f2bb4bbb727fcf74f4ad1c2792e7aea6bbac2d18",
     "package": "waffle",
-    "version": "0.0.37",
-    "specifier": "git+https://github.com/ShaulLavo/waffle.git#4087eae447fc536b6c0a78e5f14b8049be11c467",
+    "version": "0.0.38",
+    "specifier": "git+https://github.com/ShaulLavo/waffle.git#f2bb4bbb727fcf74f4ad1c2792e7aea6bbac2d18",
     "license": "MIT",
     "strategy": "Required peer imported by the JavaScript shell adapter; exact same Git pin used as development dependency for browser builds and tests. One application-created runtime per page owns shared services. No runtime source tree is vendored. Waffle owns lowest-free preopen placement and the single wasi-libc scanner patch; every locally built WASI guest final-links the patched sysroot."
   },
