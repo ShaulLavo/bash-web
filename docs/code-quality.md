@@ -9,11 +9,14 @@ cargo install cargo-machete --version 0.9.2 --locked --root .build/quality-tools
 npm run quality
 ```
 
-`quality` prepares the pinned Ghostty source and Waffle worker, then runs formatting,
+`quality` prepares the pinned Ghostty source and Waffle worker, checks the immutable
+peer/development/lockfile package identity and worker assets, then runs formatting,
 lint, types, unused-code analysis, both duplicate scans, gate failure probes, and Rust
 checks. The `quality` CI job runs the same command on pushes and pull requests.
 Existing architecture, native/WASI, browser, and frozen compatibility jobs remain
-separate blocking checks.
+separate blocking checks. Set `BASH_WEB_TEST_PORT` for a browser test run in a
+parallel worktree. Its default remains 4198, and Playwright never reuses an
+existing server.
 
 ## Coverage
 
@@ -34,7 +37,7 @@ separate blocking checks.
   exceptions are documented in `.knip.jsonc`; configuration hints fail the gate.
 - Rust uses `shell/Cargo.toml`, including the owned, patched Bashkit-derived parser.
   Its local changes remain recorded in `sources.lock.json`. `cargo fmt --all`,
-  locked workspace/all-target Clippy with `-D warnings`, locked workspace tests,
+  locked host and `wasm32-wasip1` workspace/all-target Clippy with `-D warnings`, locked workspace tests,
   and cargo-machete 0.9.2 with offline metadata are blocking. No warning allowances
   hide parser or engine code. Downloaded upstream sources, build output, and
   dependencies are not lint targets.
@@ -60,6 +63,14 @@ and similar test cases. This change removes unused printer implementations and
 shares process-result codecs and byte validation instead of accepting those copies.
 The baseline fingerprints include multiplicities, so adding another occurrence of
 an existing clone is not an allowance to grow it.
+
+Merging main `3cec14c` reconciles token identities after its binding-state and
+execution-accounting changes. Exact clones change from 344 to 354, with 43 added
+and 33 removed occurrences. Structural clones change from 16 to 13, with 2 added
+and 5 removed. Every added fingerprint and multiplicity exists in an independent
+scan of that immutable main snapshot. The repeated guest-registration loop is
+shared instead of baselined. [The fingerprint delta](evidence/quality-integration.json)
+records this reconciliation. No-new-clones and empty-scan failures stay unchanged.
 
 To review a deliberate baseline change:
 

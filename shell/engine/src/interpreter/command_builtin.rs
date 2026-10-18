@@ -119,8 +119,8 @@ async fn output(fds: &Descriptors, context: &Context, bytes: &[u8]) -> Result<()
 }
 
 pub(super) struct PathStorage {
-    _local: eval::StorageAllocation,
-    _global: eval::Allocation,
+    _local: crate::exec::StorageAllocation,
+    _global: crate::exec::Allocation,
 }
 
 pub(super) struct PathString {
@@ -137,13 +137,13 @@ impl PathString {
 /// fuel is cumulative for the whole command; string tickets refund on drop and
 /// also reserve the session-wide execution budget before each allocation.
 pub(super) struct LookupWork {
-    storage: eval::StorageBudget,
+    storage: crate::exec::StorageBudget,
     scan: expand::Work,
 }
 impl LookupWork {
     pub(super) fn new(limits: &Limits) -> Self {
         Self {
-            storage: eval::StorageBudget::new(limits.path_bytes),
+            storage: crate::exec::StorageBudget::new(limits.path_bytes),
             scan: expand::Work::new(limits.path_bytes.saturating_add(limits.arguments), 0, 0),
         }
     }
@@ -346,7 +346,7 @@ pub(super) async fn query(
                 .await
                 .map_err(admission_status)?;
         }
-        let function = state.borrow().functions.get(name).cloned();
+        let function = state.borrow().functions().get(name).cloned();
         if keyword(name) {
             output(fds, context, name.as_bytes()).await?;
             output(

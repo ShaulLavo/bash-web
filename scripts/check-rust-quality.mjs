@@ -19,17 +19,19 @@ assert.equal(version.status, 0);
 assert.equal(version.stdout.trim(), "0.9.2", "Use the pinned cargo-machete version");
 run("node", ["scripts/check-shell-parser.mjs"]);
 run("cargo", ["fmt", "--manifest-path", "shell/Cargo.toml", "--all", "--check"]);
-run("cargo", [
-  "clippy",
-  "--locked",
-  "--manifest-path",
-  "shell/Cargo.toml",
-  "--workspace",
-  "--all-targets",
-  "--",
-  "-D",
-  "warnings",
-]);
+for (const target of [[], ["--target", "wasm32-wasip1"]]) {
+  run(
+    "cargo",
+    [
+      "clippy",
+      "--locked",
+      "--manifest-path",
+      "shell/Cargo.toml",
+      "--workspace",
+      "--all-targets",
+    ].concat(target, ["--", "-D", "warnings"]),
+  );
+}
 run("cargo", [
   "test",
   "--locked",

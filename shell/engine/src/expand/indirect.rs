@@ -192,12 +192,12 @@ mod tests {
         let state = crate::state::State::default().shared();
         state
             .borrow_mut()
-            .variables
-            .insert("p".into(), "target".into());
+            .assign_parameter("p".into(), "target".into())
+            .unwrap();
         state
             .borrow_mut()
-            .variables
-            .insert("target".into(), "v".into());
+            .assign_parameter("target".into(), "v".into())
+            .unwrap();
         let token = shell_parser::Parser::parse_word_string_with_limits("${!p}", 10, 1000);
         let mut work = Work::new(steps, storage, 1);
         let cancel = Cancel::new();
@@ -227,8 +227,8 @@ mod tests {
         let state = crate::state::State::default().shared();
         state
             .borrow_mut()
-            .variables
-            .insert("p".into(), "target".into());
+            .assign_parameter("p".into(), "target".into())
+            .unwrap();
         let token = shell_parser::Parser::parse_word_string_with_limits("${!p}", 10, 1000);
         let cancel = Cancel::new();
         cancel.cancel();

@@ -43,8 +43,8 @@ impl Rig {
         shell
             .state()
             .borrow_mut()
-            .variables
-            .insert("PATH".into(), "/home/guest".into());
+            .assign_parameter("PATH".into(), "/home/guest".into())
+            .unwrap();
         let (out, output) = capture(64 * 1024);
         let (err, errors) = capture(64 * 1024);
         let mut fds = FdTable::default();
@@ -79,8 +79,8 @@ impl Rig {
         self.shell
             .state()
             .borrow_mut()
-            .variables
-            .insert(name.into(), value.into());
+            .assign_parameter(name.into(), value.into())
+            .unwrap();
     }
     fn drive_until_variable(&self, name: &str, value: &str) {
         for _ in 0..200 {
@@ -89,7 +89,7 @@ impl Rig {
                 .shell
                 .state()
                 .borrow()
-                .variables
+                .bindings()
                 .get(name)
                 .map(String::as_str)
                 == Some(value)
@@ -338,7 +338,7 @@ fn scalar_replace_unsupported_selected_syntax_fails_without_dispatch() {
         rig.variable("v", "abc");
         assert_eq!(rig.run(source), 2, "{source}");
         assert!(rig.calls.borrow().is_empty(), "{source}");
-        assert!(!rig.shell.state().borrow().variables.contains_key("side"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("side"));
         assert_eq!(rig.run("args recovered"), 0);
         assert_eq!(*rig.calls.borrow(), &[vec!["recovered"]]);
     }
@@ -699,7 +699,7 @@ fn unsupported_case_targets_transformations_and_selected_patterns_fail_closed() 
     // Both function and builtin prefixes restore their temporary bindings.
     assert_eq!(rig.run("X=${v^^} echo allowed"), 0);
     assert_eq!(rig.output.bytes(), b"allowed\n");
-    assert!(!rig.shell.state().borrow().variables.contains_key("X"));
+    assert!(!rig.shell.state().borrow().bindings().contains_key("X"));
     let rig = Rig::new(Limits::default());
     rig.variable("v", "abc");
     rig.variable("p", "[[:alpha:]]");
@@ -1139,7 +1139,7 @@ fn unsupported_trim_targets_and_selected_patterns_fail_without_dispatch() {
             rig.variable("v", "abc");
             assert_eq!(rig.run(&source), 2, "{source}");
             assert!(rig.calls.borrow().is_empty(), "{source}");
-            assert!(!rig.shell.state().borrow().variables.contains_key("u"));
+            assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
         }
     }
     for pattern in ["@(a)", "[[:alpha:]]", "[[.a.]]", "[[=a=]]"] {
@@ -1158,7 +1158,7 @@ fn unsupported_trim_targets_and_selected_patterns_fail_without_dispatch() {
     // Both function and builtin prefixes restore their temporary bindings.
     assert_eq!(rig.run("X=${v#a} echo allowed"), 0);
     assert_eq!(rig.output.bytes(), b"allowed\n");
-    assert!(!rig.shell.state().borrow().variables.contains_key("X"));
+    assert!(!rig.shell.state().borrow().bindings().contains_key("X"));
 }
 
 #[test]
@@ -1177,7 +1177,7 @@ fn trim_selected_substitution_patterns_reach_default_assignment_and_error_operan
                 rig.shell
                     .state()
                     .borrow()
-                    .variables
+                    .bindings()
                     .get("u")
                     .map(String::as_str),
                 assigned.then_some("bc"),
@@ -1191,7 +1191,7 @@ fn trim_selected_substitution_patterns_reach_default_assignment_and_error_operan
         );
         assert_eq!(*rig.calls.borrow(), &[vec!["pattern"]]);
         assert_eq!(rig.errors.bytes(), b"/usr/bin/bash: line 1: u: bc\n");
-        assert!(!rig.shell.state().borrow().variables.contains_key("u"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
     }
 }
 
@@ -1588,7 +1588,7 @@ fn length_counting_yields_and_cancellation_restores_function_frames() {
             .unwrap();
         rig.drive_until_variable("LC_ALL", locale);
         assert_eq!(
-            rig.shell.state().borrow().variables.get("LC_ALL").unwrap(),
+            rig.shell.state().borrow().bindings().get("LC_ALL").unwrap(),
             locale
         );
         let peer = rig.ex.spawn(async { 42 });
@@ -1623,7 +1623,7 @@ fn length_rhs_yields_and_cancellation_restores_prefix_frames() {
             .unwrap();
         rig.drive_until_variable("LC_ALL", locale);
         assert_eq!(
-            rig.shell.state().borrow().variables.get("TEMP").unwrap(),
+            rig.shell.state().borrow().bindings().get("TEMP").unwrap(),
             "value"
         );
         let peer = rig.ex.spawn(async { 42 });
@@ -1879,7 +1879,7 @@ fn declaration_raw_capture_yields_and_can_be_cancelled_before_dispatch() {
     assert!(!job.is_finished());
     rig.shell.interrupt();
     assert_eq!(rig.finish(job), 130);
-    assert!(!rig.shell.state().borrow().variables.contains_key("v"));
+    assert!(!rig.shell.state().borrow().bindings().contains_key("v"));
 }
 
 #[test]
@@ -1989,7 +1989,7 @@ fn long_splitting_yields_and_cancellation_restores_frames() {
             .shell
             .state()
             .borrow()
-            .variables
+            .bindings()
             .get("IFS")
             .map(String::as_str)
             == Some(" ")
@@ -1998,7 +1998,7 @@ fn long_splitting_yields_and_cancellation_restores_frames() {
         }
     }
     assert_eq!(
-        rig.shell.state().borrow().variables.get("IFS").unwrap(),
+        rig.shell.state().borrow().bindings().get("IFS").unwrap(),
         " "
     );
     let peer = rig.ex.spawn(async { 42 });
@@ -2179,7 +2179,7 @@ fn selected_unsupported_operands_and_operator_targets_fail_without_dispatch() {
         let rig = Rig::new(Limits::default());
         assert_eq!(rig.run(source), 2, "{source}");
         assert!(rig.calls.borrow().is_empty(), "{source}");
-        assert!(!rig.shell.state().borrow().variables.contains_key("u"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
     }
     // Selected command substitutions execute without assigning the default.
     check(
@@ -2267,7 +2267,7 @@ fn selected_operand_scanning_yields_and_cancellation_restores_local_frames() {
             .shell
             .state()
             .borrow()
-            .variables
+            .bindings()
             .get("v")
             .map(String::as_str)
             == Some("inner")
@@ -2276,7 +2276,7 @@ fn selected_operand_scanning_yields_and_cancellation_restores_local_frames() {
         }
     }
     assert_eq!(
-        rig.shell.state().borrow().variables.get("v").unwrap(),
+        rig.shell.state().borrow().bindings().get("v").unwrap(),
         "inner"
     );
     let peer = rig.ex.spawn(async { 42 });
@@ -2335,7 +2335,7 @@ fn cancellation_during_nested_token_admission_never_dispatches() {
             .shell
             .state()
             .borrow()
-            .variables
+            .bindings()
             .get("v")
             .map(String::as_str)
             == Some("inner")
@@ -2354,7 +2354,7 @@ fn cancellation_during_nested_token_admission_never_dispatches() {
     assert_eq!(rig.finish(job), 130);
     assert!(rig.calls.borrow().is_empty());
     assert_eq!(
-        rig.shell.state().borrow().variables.get("v").unwrap(),
+        rig.shell.state().borrow().bindings().get("v").unwrap(),
         "outer"
     );
     assert_eq!(rig.run(r#"args "$#" "${u:-ok}""#), 0);
@@ -2431,7 +2431,7 @@ fn quoted_process_substitution_lookalikes_are_text() {
         assert_eq!(calls[0].len(), 1, "{source}");
         let fd = calls[0][0].strip_prefix("/dev/fd/").unwrap();
         assert!(fd.parse::<i32>().unwrap() > 2, "{source}");
-        assert!(!rig.shell.state().borrow().variables.contains_key("u"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
     }
 }
 
@@ -2718,8 +2718,8 @@ fn deferred_list_splitting_distinguishes_element_spaces_and_word_split_mode() {
     ] {
         let rig = Rig::new(Limits::default());
         assert_eq!(
-            rig.shell.state().borrow_mut().variables.remove("IFS"),
-            Some(" \t\n".to_owned()),
+            rig.shell.state().borrow_mut().unset_variable("IFS"),
+            Ok(true),
             "explicitly unset the startup IFS before this observation"
         );
         assert_eq!(rig.run(source), 0, "{source}");
@@ -2861,7 +2861,7 @@ fn deferred_list_separator_replay_yields_and_cancels_after_the_ifs_write() {
             .shell
             .state()
             .borrow()
-            .variables
+            .bindings()
             .get("IFS")
             .map(String::as_str)
             == Some(":")
@@ -2870,7 +2870,7 @@ fn deferred_list_separator_replay_yields_and_cancels_after_the_ifs_write() {
         }
     }
     assert_eq!(
-        rig.shell.state().borrow().variables.get("IFS").unwrap(),
+        rig.shell.state().borrow().bindings().get("IFS").unwrap(),
         ":"
     );
     let peer = rig.ex.spawn(async { 42 });
@@ -2884,7 +2884,7 @@ fn deferred_list_separator_replay_yields_and_cancels_after_the_ifs_write() {
     assert_eq!(rig.finish(job), 130);
     assert!(rig.calls.borrow().is_empty());
     assert_eq!(
-        rig.shell.state().borrow().variables.get("IFS").unwrap(),
+        rig.shell.state().borrow().bindings().get("IFS").unwrap(),
         "|"
     );
     assert_eq!(rig.run(r#"args "$#""#), 0);
@@ -2943,7 +2943,7 @@ fn deferred_ifs_splitting_yields_and_cancels_after_the_parameter_write() {
             .shell
             .state()
             .borrow()
-            .variables
+            .bindings()
             .get("IFS")
             .map(String::as_str)
             == Some(" ")
@@ -2952,7 +2952,7 @@ fn deferred_ifs_splitting_yields_and_cancels_after_the_parameter_write() {
         }
     }
     assert_eq!(
-        rig.shell.state().borrow().variables.get("IFS").unwrap(),
+        rig.shell.state().borrow().bindings().get("IFS").unwrap(),
         " "
     );
     let peer = rig.ex.spawn(async { 42 });
@@ -2966,7 +2966,7 @@ fn deferred_ifs_splitting_yields_and_cancels_after_the_parameter_write() {
     assert_eq!(rig.finish(job), 130);
     assert!(rig.calls.borrow().is_empty());
     assert_eq!(
-        rig.shell.state().borrow().variables.get("IFS").unwrap(),
+        rig.shell.state().borrow().bindings().get("IFS").unwrap(),
         ":"
     );
 }
@@ -3019,12 +3019,12 @@ fn assignment_and_error_operands_are_lazy_including_unsupported_syntax() {
     );
     assert_eq!(*rig.calls.borrow(), &[vec!["diagnostic"]]);
     assert_eq!(rig.errors.bytes(), b"/usr/bin/bash: line 1: u: failure\n");
-    assert!(!rig.shell.state().borrow().variables.contains_key("u"));
+    assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
     let source = "args ${u:=$@}";
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run(source), 2, "{source}");
     assert!(rig.calls.borrow().is_empty());
-    assert!(!rig.shell.state().borrow().variables.contains_key("u"));
+    assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
 }
 
 #[test]
@@ -3343,8 +3343,8 @@ fn diagnostic_fields_share_the_remaining_command_ceiling_without_partial_dispatc
         assert_eq!(rig.errors.bytes(), expected.as_bytes(), "{source}");
         assert_eq!(rig.run("args recovered"), 0);
         assert_eq!(*rig.calls.borrow(), &[vec!["recovered"]]);
-        assert!(!rig.shell.state().borrow().variables.contains_key("a"));
-        assert!(!rig.shell.state().borrow().variables.contains_key("x"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("a"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("x"));
     }
 }
 
@@ -3411,7 +3411,7 @@ fn fatal_parameter_errors_stop_sequences_functions_and_conditions() {
             "{source}"
         );
         assert_eq!(
-            rig.shell.state().borrow().variables.get("v").unwrap(),
+            rig.shell.state().borrow().bindings().get("v").unwrap(),
             "outside"
         );
         assert_eq!(rig.run(r#"args "$#" "$v""#), 0);
@@ -3475,7 +3475,7 @@ fn assignment_storage_and_error_diagnostics_are_bounded() {
         assert_eq!(rig.run(source), 2, "{source}");
         assert!(rig.calls.borrow().is_empty());
         assert!(rig.errors.bytes().is_empty());
-        assert!(!rig.shell.state().borrow().variables.contains_key("u"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
     }
 }
 
@@ -3493,14 +3493,14 @@ fn parameter_writes_share_storage_admission_even_when_fields_fit() {
     let state = rig.shell.state();
     let state = state.borrow();
     assert_eq!(
-        state.variables.get("aa").map(String::as_str),
+        state.bindings().get("aa").map(String::as_str),
         Some("123456789")
     );
     assert_eq!(
-        state.variables.get("bb").map(String::as_str),
+        state.bindings().get("bb").map(String::as_str),
         Some("123456789")
     );
-    assert!(!state.variables.contains_key("cc"));
+    assert!(!state.bindings().contains_key("cc"));
 }
 
 #[test]
@@ -3514,7 +3514,7 @@ fn cancellation_keeps_completed_rhs_effects_and_restores_local_prefix_frames() {
     let job = rig.shell.start(&source).unwrap();
     for _ in 0..500 {
         rig.ex.drive(1);
-        if rig.shell.state().borrow().variables.contains_key("saved") {
+        if rig.shell.state().borrow().bindings().contains_key("saved") {
             break;
         }
     }
@@ -3522,7 +3522,7 @@ fn cancellation_keeps_completed_rhs_effects_and_restores_local_prefix_frames() {
         rig.shell
             .state()
             .borrow()
-            .variables
+            .bindings()
             .get("saved")
             .map(String::as_str),
         Some("yes")
@@ -3578,7 +3578,7 @@ fn cancellation_during_error_operand_keeps_effects_without_partial_diagnostic() 
     let job = rig.shell.start(&source).unwrap();
     for _ in 0..500 {
         rig.ex.drive(1);
-        if rig.shell.state().borrow().variables.contains_key("saved") {
+        if rig.shell.state().borrow().bindings().contains_key("saved") {
             break;
         }
     }
@@ -3586,7 +3586,7 @@ fn cancellation_during_error_operand_keeps_effects_without_partial_diagnostic() 
         rig.shell
             .state()
             .borrow()
-            .variables
+            .bindings()
             .get("saved")
             .map(String::as_str),
         Some("yes")
@@ -4078,7 +4078,7 @@ fn cancellation_during_redirect_target_keeps_effects_and_restores_frames() {
     let job = rig.shell.start(&source).unwrap();
     for _ in 0..500 {
         rig.ex.drive(1);
-        if rig.shell.state().borrow().variables.contains_key("saved") {
+        if rig.shell.state().borrow().bindings().contains_key("saved") {
             break;
         }
     }
@@ -4086,7 +4086,7 @@ fn cancellation_during_redirect_target_keeps_effects_and_restores_frames() {
         rig.shell
             .state()
             .borrow()
-            .variables
+            .bindings()
             .get("saved")
             .map(String::as_str),
         Some("yes")

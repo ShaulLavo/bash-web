@@ -1105,12 +1105,9 @@ impl<'a> Parser<'a> {
         }
         let mut rest = Vec::new();
         while let Some(op) = self.list_operator(top_level, &mut rest)? {
-            match self.parse_pipeline()? {
-                Some(cmd) => push_list_command(&mut rest, op, cmd),
-                None => {
-                    end_list_without_command(&mut rest, op, self.current_span);
-                    break;
-                }
+            if !push_list_command(&mut rest, op, self.parse_pipeline()?) {
+                end_list_without_command(&mut rest, op, self.current_span);
+                break;
             }
         }
         self.check_list_end()?;
@@ -1210,9 +1207,8 @@ impl<'a> Parser<'a> {
         }
         let mut commands = pipeline_commands(first);
         while self.next_pipeline_stage(&mut commands)? {
-            match self.parse_command()? {
-                Some(cmd) => push_pipeline_command(&mut commands, cmd),
-                None => return Err(self.error("expected command after |")),
+            if !push_pipeline_command(&mut commands, self.parse_command()?) {
+                return Err(self.error("expected command after |"));
             }
         }
         finish_pipeline(commands, negated, start_span.merge(self.current_span))
@@ -6285,14 +6281,27 @@ fn pipeline_commands(first: Option<Box<Command>>) -> Vec<Command> {
     first.into_iter().map(|cmd| *cmd).collect()
 }
 
+// Consume optional parser results here, keeping Command moves off recursive WASI frames.
 #[inline(never)]
-fn push_pipeline_command(commands: &mut Vec<Command>, cmd: Box<Command>) {
+fn push_pipeline_command(commands: &mut Vec<Command>, cmd: Option<Box<Command>>) -> bool {
+    let Some(cmd) = cmd else {
+        return false;
+    };
     commands.push(*cmd);
+    true
 }
 
 #[inline(never)]
-fn push_list_command(rest: &mut Vec<(ListOperator, Command)>, op: ListOperator, cmd: Box<Command>) {
+fn push_list_command(
+    rest: &mut Vec<(ListOperator, Command)>,
+    op: ListOperator,
+    cmd: Option<Box<Command>>,
+) -> bool {
+    let Some(cmd) = cmd else {
+        return false;
+    };
     rest.push((op, *cmd));
+    true
 }
 
 /// `cmd &` followed by nothing still records the empty background job.

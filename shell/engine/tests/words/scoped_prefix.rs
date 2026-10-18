@@ -11,9 +11,9 @@ fn read_keeps_its_result_and_restores_only_prefix_values() {
     assert_eq!(*rig.calls.borrow(), [vec!["0", "  first\\tail  ", ":", ""]]);
     let state = rig.shell.state();
     let state = state.borrow();
-    assert!(state.exported.contains("IFS"));
-    assert!(!state.exported.contains("temporary"));
-    assert!(!state.readonly.contains("IFS"));
+    assert!(state.exported_bindings().contains("IFS"));
+    assert!(!state.exported_bindings().contains("temporary"));
+    assert!(!state.readonly_bindings().contains("IFS"));
 }
 
 #[test]
@@ -45,14 +45,26 @@ fn builtin_prefixes_preserve_local_export_and_readonly_rules() {
             vec!["1", "global", "kept"]
         ]
     );
-    assert!(!rig.shell.state().borrow().exported.contains("IFS"));
-    assert!(rig.shell.state().borrow().readonly.contains("locked"));
+    assert!(
+        !rig.shell
+            .state()
+            .borrow()
+            .exported_bindings()
+            .contains("IFS")
+    );
+    assert!(
+        rig.shell
+            .state()
+            .borrow()
+            .readonly_bindings()
+            .contains("locked")
+    );
     assert_eq!(rig.run("IFS=temporary locked=changed read line < input"), 1);
     assert_eq!(
         rig.shell
             .state()
             .borrow()
-            .variables
+            .bindings()
             .get("IFS")
             .map(String::as_str),
         Some("global")
@@ -61,7 +73,7 @@ fn builtin_prefixes_preserve_local_export_and_readonly_rules() {
         rig.shell
             .state()
             .borrow()
-            .variables
+            .bindings()
             .get("locked")
             .map(String::as_str),
         Some("kept")
@@ -100,9 +112,9 @@ fn builtin_prefixes_restore_after_cancellation() {
     assert_eq!(rig.finish(job), 130);
     let state = rig.shell.state();
     let state = state.borrow();
-    assert_eq!(state.variables.get("IFS").map(String::as_str), Some(":"));
-    assert!(!state.variables.contains_key("temporary"));
-    assert!(!state.variables.contains_key("line"));
+    assert_eq!(state.bindings().get("IFS").map(String::as_str), Some(":"));
+    assert!(!state.bindings().contains_key("temporary"));
+    assert!(!state.bindings().contains_key("line"));
     drop(writer);
 }
 

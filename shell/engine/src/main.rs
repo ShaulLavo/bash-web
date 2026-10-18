@@ -57,14 +57,7 @@ fn main() {
     {
         let state = session.state();
         let mut state = state.borrow_mut();
-        state.variables = std::env::vars().collect();
-        state.exported = state.variables.keys().cloned().collect();
-        // Like Bash startup, an absent inherited PATH gets a non-exported
-        // default. A later `unset PATH` still means a cwd-only lookup.
-        state
-            .variables
-            .entry("PATH".into())
-            .or_insert_with(|| "/usr/bin:/bin".into());
+        state.initialize_cli_environment(std::env::vars());
         if let Some(cwd) = cwd {
             state.cwd = cwd;
         }

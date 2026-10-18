@@ -1,8 +1,8 @@
 //! Original shell state. Open descriptors and filesystem objects live outside
 //! this value: isolated shell environments copy rules/state, never byte streams.
 use crate::{
+    exec::{Error, Work},
     executor::Cancel,
-    expand::{Error, Work},
 };
 use shell_parser::parser::Command;
 use std::{
@@ -58,28 +58,28 @@ pub(crate) struct LocalVariable {
     readonly: bool,
     function_prefix: bool,
     storage_base: usize,
-    memory: Option<Rc<RefCell<crate::interpreter::eval::StorageAllocation>>>,
+    memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
 }
 
 #[derive(Clone, Debug)]
 pub struct StoredFunction {
     pub body: Rc<Command>,
-    pub(crate) storage: Option<crate::interpreter::RetainedStorage>,
+    pub(crate) storage: Option<crate::exec::RetainedStorage>,
 }
 
 #[derive(Clone, Debug)]
 pub struct State {
     pub shell_name: String,
-    pub variables: BTreeMap<String, String>,
-    pub exported: BTreeSet<String>,
-    pub readonly: BTreeSet<String>,
+    variables: BTreeMap<String, String>,
+    exported: BTreeSet<String>,
+    readonly: BTreeSet<String>,
     /// Scalar reference targets, distinct from ordinary variable values.
-    pub(crate) namerefs: BTreeMap<String, String>,
+    namerefs: BTreeMap<String, String>,
     pub cwd: String,
     /// Function bodies are immutable. Isolated shells copy bindings, not ASTs.
-    pub functions: BTreeMap<String, StoredFunction>,
-    pub status: i32,
-    pub pipestatus: Vec<i32>,
+    functions: BTreeMap<String, StoredFunction>,
+    status: i32,
+    pipestatus: Vec<i32>,
     pub pipefail: bool,
     pub nounset: bool,
     pub errexit: bool,
@@ -92,16 +92,16 @@ pub struct State {
     pub lastpipe: bool,
     pub monitor: bool,
     /// Last published synthetic async handle. Isolated shells inherit a copy.
-    pub(crate) last_async: Option<String>,
+    last_async: Option<String>,
     /// Unsetting EPOCHREALTIME permanently removes its dynamic-variable hook.
     epoch_realtime: bool,
     pub(crate) star_separator: StarSeparator,
     ifs_members: Option<IfsMembers>,
-    pub(crate) positional: Vec<String>,
-    pub(crate) locals: Vec<BTreeMap<String, LocalVariable>>,
+    positional: Vec<String>,
+    locals: Vec<BTreeMap<String, LocalVariable>>,
     pub(crate) function_calls: usize,
-    memory: Option<crate::interpreter::eval::StorageBudget>,
-    positional_memory: Option<Rc<RefCell<crate::interpreter::eval::StorageAllocation>>>,
+    memory: Option<crate::exec::StorageBudget>,
+    positional_memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
     prefixes: Vec<BTreeMap<String, Option<String>>>,
 }
 impl Default for State {
@@ -138,7 +138,71 @@ impl Default for State {
     }
 }
 impl State {
-    pub(crate) fn with_memory(memory: crate::interpreter::eval::StorageBudget) -> Self {
+    /// Ordinary scalar bindings, without special-parameter or nameref resolution.
+    pub fn bindings(&self) -> &BTreeMap<String, String> {
+        &self.variables
+    }
+    pub fn exported_bindings(&self) -> &BTreeSet<String> {
+        &self.exported
+    }
+    pub fn readonly_bindings(&self) -> &BTreeSet<String> {
+        &self.readonly
+    }
+    pub(crate) fn namerefs(&self) -> &BTreeMap<String, String> {
+        &self.namerefs
+    }
+    pub(crate) fn in_function_scope(&self) -> bool {
+        !self.locals.is_empty()
+    }
+    pub fn functions(&self) -> &BTreeMap<String, StoredFunction> {
+        &self.functions
+    }
+    pub(crate) fn define_function(&mut self, name: String, function: StoredFunction) {
+        self.functions.insert(name, function);
+    }
+    pub(crate) fn unset_function(&mut self, name: &str) {
+        self.functions.remove(name);
+    }
+    pub(crate) fn positional(&self) -> &Vec<String> {
+        &self.positional
+    }
+    pub fn status(&self) -> i32 {
+        self.status
+    }
+    pub fn publish_status(&mut self, status: i32) {
+        self.status = status;
+    }
+    pub(crate) fn pipeline_status(&self) -> &[i32] {
+        &self.pipestatus
+    }
+    pub(crate) fn publish_pipeline_status(&mut self, statuses: Vec<i32>) {
+        self.pipestatus = statuses;
+    }
+    pub(crate) fn last_async(&self) -> Option<&str> {
+        self.last_async.as_deref()
+    }
+    pub(crate) fn publish_async_identity(&mut self, identity: String) {
+        self.last_async = Some(identity);
+    }
+    /// The standalone harness replaces startup bindings with the host's exact
+    /// environment, exporting inherited keys before adding a private default PATH.
+    pub fn initialize_cli_environment(
+        &mut self,
+        environment: impl IntoIterator<Item = (String, String)>,
+    ) {
+        self.variables = environment.into_iter().collect();
+        self.exported = self.variables.keys().cloned().collect();
+        self.variables
+            .entry("PATH".into())
+            .or_insert_with(|| "/usr/bin:/bin".into());
+    }
+    /// The browser process adapter keeps the engine's default IFS if absent
+    /// from the inherited environment, and exports the resulting startup keys.
+    pub fn inherit_environment(&mut self, environment: impl IntoIterator<Item = (String, String)>) {
+        self.variables.extend(environment);
+        self.exported = self.variables.keys().cloned().collect();
+    }
+    pub(crate) fn with_memory(memory: crate::exec::StorageBudget) -> Self {
         Self {
             memory: Some(memory),
             ..Self::default()
@@ -147,12 +211,12 @@ impl State {
     pub(crate) fn admit_temporary(
         &self,
         bytes: usize,
-    ) -> Result<Option<crate::interpreter::eval::StorageAllocation>, i32> {
+    ) -> Result<Option<crate::exec::StorageAllocation>, i32> {
         self.memory
             .as_ref()
             .map(|memory| memory.admit(bytes))
             .transpose()
-            .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)
+            .map_err(|_| crate::exec::RESOURCE_STATUS)
     }
     pub fn shared(self) -> SharedState {
         Rc::new(RefCell::new(self))
@@ -198,7 +262,7 @@ impl State {
                     .map(|ticket| Rc::new(RefCell::new(ticket)))
             })
             .transpose()
-            .map_err(|_| Error::Status(crate::interpreter::eval::RESOURCE_STATUS))?;
+            .map_err(|_| Error::Status(crate::exec::RESOURCE_STATUS))?;
         let positional = snapshot_vec(source, |s| &s.positional, cancel, work).await?;
         let last_async = snapshot_value(source, |s| Some(&s.last_async), cancel, work).await?;
         let (local_count, prefix_count) = {
@@ -328,12 +392,12 @@ impl State {
             memory
                 .borrow_mut()
                 .resize(bytes)
-                .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)?;
+                .map_err(|_| crate::exec::RESOURCE_STATUS)?;
         } else if let Some(memory) = &self.memory {
             self.positional_memory = Some(Rc::new(RefCell::new(
                 memory
                     .admit(bytes)
-                    .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)?,
+                    .map_err(|_| crate::exec::RESOURCE_STATUS)?,
             )));
         }
         self.positional = args;
@@ -350,7 +414,7 @@ impl State {
             memory
                 .borrow_mut()
                 .resize(positional_bytes(&self.positional)?)
-                .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)?;
+                .map_err(|_| crate::exec::RESOURCE_STATUS)?;
         }
         Ok(())
     }
@@ -362,7 +426,7 @@ impl State {
             memory
                 .borrow_mut()
                 .resize(local.storage_base.checked_add(bytes).ok_or(2)?)
-                .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)?;
+                .map_err(|_| crate::exec::RESOURCE_STATUS)?;
         }
         Ok(())
     }
@@ -629,7 +693,7 @@ impl State {
             .last()
             .is_some_and(|saved| saved.contains_key(name))
     }
-    pub(crate) fn assign_parameter(&mut self, name: String, value: String) -> Result<(), i32> {
+    pub fn assign_parameter(&mut self, name: String, value: String) -> Result<(), i32> {
         let name = self.assignment_name(name)?;
         if self.is_readonly(&name) {
             return Err(1);
@@ -733,14 +797,14 @@ impl State {
     /// calling function is removed from that frame instead, revealing the
     /// value it shadowed, as Bash's dynamic scoping does. Returns whether a
     /// variable existed; readonly variables are an error.
-    pub(crate) fn unset_variable(&mut self, name: &str) -> Result<bool, ()> {
+    pub fn unset_variable(&mut self, name: &str) -> Result<bool, i32> {
         if !self.namerefs.contains_key(name) {
             return self.unset_binding(name);
         }
         let explicit_ifs = name == "IFS";
         let name = match self.resolve_scalar_target(name) {
             ScalarResolution::Target(name) => name.to_owned(),
-            ScalarResolution::Cycle | ScalarResolution::DepthExceeded => return Err(()),
+            ScalarResolution::Cycle | ScalarResolution::DepthExceeded => return Err(1),
         };
         let removed = self.unset_binding(&name)?;
         if explicit_ifs {
@@ -748,9 +812,9 @@ impl State {
         }
         Ok(removed)
     }
-    fn unset_binding(&mut self, name: &str) -> Result<bool, ()> {
+    fn unset_binding(&mut self, name: &str) -> Result<bool, i32> {
         if self.is_readonly(name) {
-            return Err(());
+            return Err(1);
         }
         let was_dynamic =
             name == "EPOCHREALTIME" && self.epoch_realtime && !self.epoch_realtime_shadowed();
@@ -764,7 +828,7 @@ impl State {
         if let Some(index) = frame
             && index + 1 != self.locals.len()
         {
-            let local = self.locals[index].remove(name).ok_or(())?;
+            let local = self.locals[index].remove(name).ok_or(1)?;
             restore_nameref(&mut self.namerefs, name, local.nameref);
             if local.exported {
                 self.exported.insert(name.to_owned());
@@ -790,7 +854,7 @@ impl State {
         }
         // Removing a current local keeps its saved outer binding but releases
         // its live value charge. Shrinking cannot fail admission.
-        self.reserve_local_value(name, 0).map_err(|_| ())?;
+        self.reserve_local_value(name, 0).map_err(|_| 1)?;
         self.exported.remove(name);
         let removed = self.variables.remove(name).is_some() || was_dynamic;
         if name == "IFS" {
@@ -868,7 +932,7 @@ impl State {
                 .map(|memory| {
                     memory
                         .admit(storage_base.checked_add(value_bytes).ok_or(2)?)
-                        .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)
+                        .map_err(|_| crate::exec::RESOURCE_STATUS)
                 })
                 .transpose()?
                 .map(|ticket| Rc::new(RefCell::new(ticket)));
@@ -980,7 +1044,7 @@ impl SnapshotValue for LocalVariable {
                     .map(|ticket| Rc::new(RefCell::new(ticket)))
             })
             .transpose()
-            .map_err(|_| Error::Status(crate::interpreter::eval::RESOURCE_STATUS))?;
+            .map_err(|_| Error::Status(crate::exec::RESOURCE_STATUS))?;
         Ok(Self {
             memory,
             ..self.clone()
@@ -1131,13 +1195,24 @@ async fn snapshot_set(
 /// Prefix values are visible to later RHS expansions. Parameter assignments
 /// update the saved caller value too, so completed effects survive cancellation
 /// or removal of the temporary environment. No borrow crosses an await.
+enum PrefixBindings {
+    /// Saved values remain visible to durable assignments during RHS expansion.
+    Expansion,
+    /// Execution replay restores its own saved values, not durable RHS effects.
+    Builtin {
+        saved: BTreeMap<String, Option<String>>,
+        restore_epoch_realtime: bool,
+    },
+}
+
 pub(crate) struct PrefixFrame {
     state: SharedState,
     active: bool,
+    bindings: PrefixBindings,
     star_separator: StarSeparator,
     ifs_members: Option<IfsMembers>,
     restores_ifs: std::cell::Cell<bool>,
-    memory: RefCell<Option<crate::interpreter::eval::StorageAllocation>>,
+    memory: RefCell<Option<crate::exec::StorageAllocation>>,
 }
 impl PrefixFrame {
     pub(crate) fn enter(state: SharedState) -> Self {
@@ -1151,13 +1226,84 @@ impl PrefixFrame {
         Self {
             state,
             active: true,
+            bindings: PrefixBindings::Expansion,
             star_separator,
             ifs_members,
             restores_ifs: std::cell::Cell::new(false),
             memory: RefCell::new(memory),
         }
     }
+    /// Replay already-checked prefix RHS values for builtin execution. Unlike
+    /// expansion bindings, writes by the builtin do not update these saves;
+    /// readonly is not checked again and IFS caches are not refreshed. The
+    /// partially installed guard owns rollback before any later admission fails.
+    pub(crate) async fn builtin(
+        state: SharedState,
+        assigned: &[(String, String)],
+        cancel: &Cancel,
+        work: &mut Work,
+    ) -> Result<Self, Error> {
+        for (name, value) in assigned {
+            State::admit_assignment(&state, name, value.len(), cancel, work).await?;
+        }
+        let mut frame = Self {
+            state: state.clone(),
+            active: true,
+            bindings: PrefixBindings::Builtin {
+                saved: BTreeMap::new(),
+                restore_epoch_realtime: false,
+            },
+            star_separator: state.borrow().star_separator,
+            ifs_members: state.borrow().ifs_members,
+            restores_ifs: std::cell::Cell::new(false),
+            memory: RefCell::new(state.borrow().admit_temporary(0).map_err(Error::from)?),
+        };
+        let PrefixBindings::Builtin {
+            saved,
+            restore_epoch_realtime,
+        } = &mut frame.bindings
+        else {
+            unreachable!()
+        };
+        {
+            let mut state_ref = state.borrow_mut();
+            for (name, value) in assigned {
+                work.admit_storage(name.len())?;
+                let target = state_ref.assignment_name(name.clone()).map_err(|_| 2)?;
+                if !saved.contains_key(&target) {
+                    work.admit_storage(
+                        (std::mem::size_of::<(String, Option<String>)>()
+                            + std::mem::size_of::<usize>())
+                        .saturating_mul(16),
+                    )?;
+                }
+                if !state_ref.variables.contains_key(&target) {
+                    work.admit_storage(
+                        (std::mem::size_of::<(String, String)>() + std::mem::size_of::<usize>())
+                            .saturating_mul(16),
+                    )?;
+                }
+                work.admit_storage(target.len().saturating_add(value.len()))?;
+                if let Some(memory) = &mut *frame.memory.borrow_mut() {
+                    memory
+                        .grow(
+                            (std::mem::size_of::<(String, Option<String>)>()
+                                + std::mem::size_of::<usize>())
+                            .saturating_mul(16)
+                            .saturating_add(target.len().saturating_mul(2))
+                            .saturating_add(value.len()),
+                        )
+                        .map_err(|_| Error::Status(crate::exec::RESOURCE_STATUS))?;
+                }
+                let previous = state_ref.variables.insert(target.clone(), value.clone());
+                *restore_epoch_realtime |= state_ref.suspend_epoch_realtime(&target);
+                saved.entry(target).or_insert(previous);
+            }
+        }
+        Ok(frame)
+    }
     pub(crate) fn reserve(&self, name: &str, value_bytes: usize) -> Result<(), i32> {
+        assert!(matches!(self.bindings, PrefixBindings::Expansion));
         let bytes = snapshot_node_bytes::<Option<String>>()
             .map_err(|_| 2)?
             .checked_add(name.len().checked_mul(2).ok_or(2)?)
@@ -1167,11 +1313,12 @@ impl PrefixFrame {
         if let Some(memory) = &mut *self.memory.borrow_mut() {
             memory
                 .grow(bytes)
-                .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)?;
+                .map_err(|_| crate::exec::RESOURCE_STATUS)?;
         }
         Ok(())
     }
     pub(crate) fn set(&self, name: String, value: String) -> Result<(), String> {
+        assert!(matches!(self.bindings, PrefixBindings::Expansion));
         let mut state = self.state.borrow_mut();
         if state.scalar_target(&name).ok().flatten().is_none() {
             return Err(name);
@@ -1195,6 +1342,7 @@ impl PrefixFrame {
         Ok(())
     }
     pub(crate) fn commit(mut self) -> Result<(), i32> {
+        assert!(matches!(self.bindings, PrefixBindings::Expansion));
         let mut state = self.state.borrow_mut();
         let saved = state.prefixes.last().unwrap();
         // Prefix RHSs are temporary until the whole assignment-only command
@@ -1236,7 +1384,18 @@ impl Drop for PrefixFrame {
             state.star_separator = self.star_separator;
             state.ifs_members = self.ifs_members;
         }
-        let saved = state.prefixes.pop().unwrap();
+        let saved = match &mut self.bindings {
+            PrefixBindings::Expansion => state.prefixes.pop().unwrap(),
+            PrefixBindings::Builtin {
+                saved,
+                restore_epoch_realtime,
+            } => {
+                if *restore_epoch_realtime {
+                    state.restore_epoch_realtime();
+                }
+                std::mem::take(saved)
+            }
+        };
         // At most the admitted command argument count. Destructors finish
         // restoration synchronously even after cancellation, like FunctionFrame.
         for (name, value) in saved {
@@ -1264,7 +1423,7 @@ pub(crate) struct FunctionFrame {
     state: SharedState,
     positional: Vec<String>,
     prefix: bool,
-    positional_memory: Option<Rc<RefCell<crate::interpreter::eval::StorageAllocation>>>,
+    positional_memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
 }
 impl FunctionFrame {
     pub(crate) fn enter(state: SharedState, args: Vec<String>, limit: usize) -> Result<Self, i32> {
@@ -1278,7 +1437,7 @@ impl FunctionFrame {
             .map(|memory| {
                 memory
                     .admit(positional_bytes(&args)?)
-                    .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)
+                    .map_err(|_| crate::exec::RESOURCE_STATUS)
             })
             .transpose()?
             .map(|ticket| Rc::new(RefCell::new(ticket)));
@@ -1288,7 +1447,7 @@ impl FunctionFrame {
         s.locals.push(BTreeMap::new());
         s.function_calls += 1;
         #[cfg(test)]
-        crate::interpreter::eval::measure_calls(s.function_calls);
+        crate::executor::observation::measure_calls(s.function_calls);
         drop(s);
         Ok(Self {
             state,
@@ -1326,7 +1485,7 @@ impl Drop for FunctionFrame {
         #[cfg(test)]
         {
             let marker = 0u8;
-            crate::interpreter::eval::measure_drop(&marker);
+            crate::executor::observation::measure_drop(&marker);
         }
         let mut s = self.state.borrow_mut();
         s.positional = std::mem::take(&mut self.positional);
@@ -1374,6 +1533,9 @@ pub(crate) fn absolute(cwd: &str, path: &str) -> String {
     }
     format!("/{}", components.join("/"))
 }
+
+#[cfg(test)]
+mod bindings_tests;
 
 #[cfg(test)]
 mod tests {
@@ -2034,7 +2196,7 @@ mod tests {
 
     #[test]
     fn function_memory_local_owner_growth_shrink_unset_and_redeclare_are_bounded() {
-        use crate::interpreter::eval::{RESOURCE_STATUS, StorageBudget};
+        use crate::exec::{RESOURCE_STATUS, StorageBudget};
         let memory = StorageBudget::new(16_384);
         let state = State::with_memory(memory.clone()).shared();
         state
@@ -2092,7 +2254,7 @@ mod tests {
 
     #[test]
     fn function_memory_local_exact_capacity_failure_preserves_binding_and_frame() {
-        use crate::interpreter::eval::{RESOURCE_STATUS, StorageBudget};
+        use crate::exec::{RESOURCE_STATUS, StorageBudget};
         let baseline = StorageBudget::new(16_384);
         let probe = State::with_memory(baseline.clone()).shared();
         probe
@@ -2132,7 +2294,7 @@ mod tests {
 
     #[test]
     fn function_memory_positional_replacement_failure_is_atomic_and_snapshot_is_independent() {
-        use crate::interpreter::eval::{RESOURCE_STATUS, StorageBudget};
+        use crate::exec::{RESOURCE_STATUS, StorageBudget};
         let memory = StorageBudget::new(16_384);
         let state = State::with_memory(memory.clone()).shared();
         let frame = FunctionFrame::enter(state.clone(), vec!["caller".into()], usize::MAX).unwrap();
@@ -2194,7 +2356,7 @@ mod tests {
 
     #[test]
     fn function_memory_assignment_only_prefix_commit_charges_owner_not_temporary_scope() {
-        use crate::interpreter::eval::StorageBudget;
+        use crate::exec::StorageBudget;
         let memory = StorageBudget::new(16_384);
         let state = State::with_memory(memory.clone()).shared();
         let outer = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
@@ -2212,7 +2374,7 @@ mod tests {
 
     #[test]
     fn function_memory_multi_assignment_commit_failure_restores_all_bindings_atomically() {
-        use crate::interpreter::eval::{RESOURCE_STATUS, StorageBudget};
+        use crate::exec::{RESOURCE_STATUS, StorageBudget};
         let memory = StorageBudget::new(16_384);
         let state = State::with_memory(memory.clone()).shared();
         let outer = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
@@ -2235,7 +2397,7 @@ mod tests {
     }
     #[test]
     fn review_readonly_local_redeclaration_keeps_original_value_and_memory_ticket() {
-        use crate::interpreter::eval::StorageBudget;
+        use crate::exec::StorageBudget;
         for replacement in [20_000, 4096, 0] {
             let memory = StorageBudget::new(16_384);
             let state = State::with_memory(memory.clone()).shared();

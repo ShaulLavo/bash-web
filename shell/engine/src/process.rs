@@ -91,6 +91,7 @@ pub enum ProcessError {
     InvalidSignal,
     ProcessLimit,
     Runtime(i32),
+    StartFailed(i32),
 }
 impl std::fmt::Display for ProcessError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -101,14 +102,103 @@ impl std::fmt::Display for ProcessError {
             Self::InvalidParent(pid) => write!(f, "invalid process parent: {pid}"),
             Self::InvalidSignal => f.write_str("invalid signal"),
             Self::Runtime(errno) => write!(f, "runtime process error: errno {errno}"),
+            Self::StartFailed(errno) => match usize::try_from(*errno)
+                .ok()
+                .and_then(|index| WASI_ERRNO_MESSAGES.get(index))
+            {
+                Some(message) => f.write_str(message),
+                None => write!(f, "Unknown error {errno}"),
+            },
             Self::ProcessLimit => f.write_str("unreaped process limit exceeded"),
         }
     }
 }
 impl std::error::Error for ProcessError {}
+// WASI errno numbers differ from the native host's numbers. Keep guest diagnostics
+// identical in native boundary tests and the browser shell.
+const WASI_ERRNO_MESSAGES: [&str; 77] = [
+    "Success",
+    "Argument list too long",
+    "Permission denied",
+    "Address already in use",
+    "Cannot assign requested address",
+    "Address family not supported by protocol",
+    "Resource temporarily unavailable",
+    "Operation already in progress",
+    "Bad file descriptor",
+    "Bad message",
+    "Device or resource busy",
+    "Operation canceled",
+    "No child processes",
+    "Software caused connection abort",
+    "Connection refused",
+    "Connection reset by peer",
+    "Resource deadlock avoided",
+    "Destination address required",
+    "Numerical argument out of domain",
+    "Disk quota exceeded",
+    "File exists",
+    "Bad address",
+    "File too large",
+    "No route to host",
+    "Identifier removed",
+    "Invalid or incomplete multibyte or wide character",
+    "Operation now in progress",
+    "Interrupted system call",
+    "Invalid argument",
+    "Input/output error",
+    "Transport endpoint is already connected",
+    "Is a directory",
+    "Too many levels of symbolic links",
+    "Too many open files",
+    "Too many links",
+    "Message too long",
+    "Multihop attempted",
+    "File name too long",
+    "Network is down",
+    "Network dropped connection on reset",
+    "Network is unreachable",
+    "Too many open files in system",
+    "No buffer space available",
+    "No such device",
+    "No such file or directory",
+    "Exec format error",
+    "No locks available",
+    "Link has been severed",
+    "Cannot allocate memory",
+    "No message of desired type",
+    "Protocol not available",
+    "No space left on device",
+    "Function not implemented",
+    "Transport endpoint is not connected",
+    "Not a directory",
+    "Directory not empty",
+    "State not recoverable",
+    "Socket operation on non-socket",
+    "Operation not supported",
+    "Inappropriate ioctl for device",
+    "No such device or address",
+    "Value too large for defined data type",
+    "Owner died",
+    "Operation not permitted",
+    "Broken pipe",
+    "Protocol error",
+    "Protocol not supported",
+    "Protocol wrong type for socket",
+    "Numerical result out of range",
+    "Read-only file system",
+    "Illegal seek",
+    "No such process",
+    "Stale file handle",
+    "Connection timed out",
+    "Text file busy",
+    "Invalid cross-device link",
+    "Capabilities insufficient",
+];
 /// All entry points are nonblocking. Waiting must register wake notifications, not
-/// poll or sleep. Kill includes descendants; completion means the host has observed
-/// their actual exits and released process-owned descriptors. EPIPE is an I/O error,
+/// poll or sleep. Kill targets one PID; group cleanup owns inherited descendants.
+/// Completion means the host observed actual exits and released process-owned
+/// descriptors. EPIPE is an I/O error,
 /// NOT a reason for the host to overwrite a guest's chosen exit status with 141.
 pub trait ProcessHost {
     /// Allocate a group ID synchronously, without running command work. IDs are
@@ -415,21 +505,12 @@ impl ProcessHost for InProcessHost {
     fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
         Self::signal_valid(signal)?;
         let children = self.0.children.borrow();
-        if !children.contains_key(&pid) {
-            return Err(ProcessError::UnknownProcess(pid));
-        }
-        // Walk ancestry, not only immediate children. Groups are independent, but
-        // every child must inherit its parent's group at spawn.
-        for (candidate, child) in children.iter() {
-            let mut ancestor = Some(*candidate);
-            while let Some(current) = ancestor {
-                if current == pid {
-                    Self::cancel(child, signal);
-                    break;
-                }
-                ancestor = children.get(&current).and_then(|child| child.parent);
-            }
-        }
+        let child = children
+            .get(&pid)
+            .ok_or(ProcessError::UnknownProcess(pid))?;
+        // Match runtime_proc.kill: a reader-local abort signals only this PID.
+        // Inherited descendants remain owned by the enclosing job's cleanup.
+        Self::cancel(child, signal);
         Ok(())
     }
     fn kill_group(&self, group: GroupId, signal: i32) -> Result<(), ProcessError> {
@@ -929,7 +1010,7 @@ mod tests {
         assert_eq!(host.wait(pid).now_or_never(), Some(Ok(23)));
     }
     #[test]
-    fn group_cancellation_confirms_subtree_without_background() {
+    fn pid_kill_leaves_descendants_for_group_cleanup_without_background() {
         let ex = Executor::new();
         let host = InProcessHost::new(ex.clone());
         host.register("/home/guest/wait", |_, _| {
@@ -948,6 +1029,11 @@ mod tests {
         let grandchild_wait = host.wait(grandchild);
         ex.drive(10);
         host.kill(root, 2).unwrap();
+        ex.drive(10);
+        assert_eq!(host.active_count(), 3);
+        assert!(host.wait(child).now_or_never().is_none());
+        assert!(host.wait(grandchild).now_or_never().is_none());
+        host.kill_group(1, 2).unwrap();
         ex.drive(10);
         assert_eq!(host.active_count(), 1);
         assert_eq!(host.wait_group(1).now_or_never(), Some(Ok(())));
@@ -986,7 +1072,7 @@ mod tests {
         assert_eq!(read.read(&mut [0; 1]).now_or_never(), Some(Ok(0)));
     }
     #[test]
-    fn subtree_kill_survives_intermediate_reaping() {
+    fn pid_kill_leaves_orphan_after_intermediate_reaping_until_group_cleanup() {
         let ex = Executor::new();
         let host = InProcessHost::new(ex.clone());
         host.register("/home/guest/wait", |_, _| {
@@ -1015,6 +1101,10 @@ mod tests {
         ex.drive(10);
         assert_eq!(host.wait(middle).now_or_never(), Some(Ok(0)));
         host.kill(root, 2).unwrap();
+        ex.drive(10);
+        assert!(host.wait(leaf).now_or_never().is_none());
+        assert_eq!(host.active_count(), 1);
+        host.kill_group(1, 2).unwrap();
         ex.drive(10);
         assert_eq!(host.wait_group(1).now_or_never(), Some(Ok(())));
         assert_eq!(root_wait.now_or_never(), Some(Ok(130)));

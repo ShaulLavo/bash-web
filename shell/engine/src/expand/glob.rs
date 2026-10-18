@@ -52,7 +52,8 @@ async fn magic(
         }
         let magic = pattern.has_pathname_magic(work, cancel).await?;
         drop(pattern);
-        work.release_storage(storage.saturating_sub(work.storage_left()));
+        let released = storage.saturating_sub(work.storage_left());
+        work.release_storage(released);
         if magic {
             return Ok(true);
         }
@@ -172,11 +173,10 @@ async fn literal(
     }
     let output = pattern.pathname_literal(text.len(), work, cancel).await?;
     drop(pattern);
-    work.release_storage(
-        storage
-            .saturating_sub(work.storage_left())
-            .saturating_sub(output.capacity()),
-    );
+    let released = storage
+        .saturating_sub(work.storage_left())
+        .saturating_sub(output.capacity());
+    work.release_storage(released);
     Ok(output)
 }
 fn push(
@@ -398,7 +398,8 @@ async fn matches(
                 // their exact charge only after the future has dropped them.
                 let storage = work.storage_left();
                 let matched = pattern.matches_full(name, work, cancel).await?;
-                work.release_storage(storage.saturating_sub(work.storage_left()));
+                let released = storage.saturating_sub(work.storage_left());
+                work.release_storage(released);
                 if !matched {
                     continue;
                 }

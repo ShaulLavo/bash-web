@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.47",
+  "version": "0.0.51",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -58,7 +58,7 @@
     "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:test-guest && npm run notices:browser && vite build && node scripts/finish-build.mjs",
     "typecheck:browser": "tsc --noEmit",
     "test:browser": "playwright test",
-    "test:runtime:terminal": "node scripts/test-runtime-terminal.mjs",
+    "test:runtime:terminal": "node --expose-gc scripts/test-runtime-terminal.mjs",
     "notices:browser": "npm run notices:shell && node scripts/browser-notices.mjs",
     "serve": "node dist/serve.mjs",
     "verify:browser": "npm run test:browser:package && npm run build:browser && npm run typecheck:browser && npm run test:runtime:terminal && npm run test:browser",
@@ -79,7 +79,7 @@
     "check:duplicates": "node scripts/check-duplicates.mjs",
     "check:rust": "node scripts/check-rust-quality.mjs",
     "test:quality-gates": "node --test scripts/test-quality-gates.mjs",
-    "quality": "npm run sources:browser && npm run build:worker && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates && npm run check:rust"
+    "quality": "npm run sources:browser && npm run build:worker && npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates && npm run check:rust"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",
@@ -94,11 +94,11 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.1",
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#ba968a6f86468d03394792a3e9c447dfc713c279",
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#4f07d191c0c8d6047800031c3a803f67d6954572",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#ba968a6f86468d03394792a3e9c447dfc713c279"
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#4f07d191c0c8d6047800031c3a803f67d6954572"
   },
   "overrides": {
     "esbuild": "0.28.2"
@@ -108,6 +108,6 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "waffle@0.0.27": true
+    "waffle@0.0.34": true
   }
 }

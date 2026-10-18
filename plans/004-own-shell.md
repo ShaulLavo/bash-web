@@ -1131,3 +1131,56 @@ uses `.build/shell/wasm32-wasip1/release/shell-engine.wasm`.
   live mode otherwise reintroduce those dependencies; adapt selection explicitly
   before calling the standalone harness independent. The product's separate
   runtime package remains the owner of actual browser transport/filesystems.
+
+### Follow-up: Firefox physical Worker retirement after pipeline Ctrl+C
+
+Status: Approved. Investigate and fix the rare post-interrupt Worker-retirement observation; do not label it preexisting or PATH-caused without reproduction.
+
+Original GitHub PR #10 run `39102637496`, job `117601857869`, tested merge `ee0ab860dbcd355929e4de68f2e608a8a415dcf8` (head `ee2ea700501440707d4e3e4818b9ce20b437d065` into main `9bc9d40a8f9eb2ed7bb1e632e88e75946d4025c5`). Firefox failed `tests/pipelines.acceptance.spec.ts:116`, `pipeline Ctrl+C stops every stage and its children`, at the unchanged five-second physical-worker baseline assertion. The original artifact is permanently archived at `/work/reports/bash-web/path-search/firefox-ci-original/failure-artifact.zip`; timing extraction is at `/work/reports/bash-web/path-search/firefox-ci-original/timing-summary.json` (also `/work/reports/bash-web/path-search/firefox-ci-failure-timing.json`). Original CI uploaded an embedded Playwright HTML report, **not a trace.zip**. Do not substitute later invalid-harness traces for an original trace.
+
+Measured offsets from Firefox test start `2026-10-18T06:06:31.721Z`: shell ready +774 ms; Enter +811 ms; producer marker by +924 ms and consumer marker by +927 ms; Ctrl+C +928–943 ms; shell ready again +947 ms. Baseline was two workers; count was four at +947 ms, then three at +1048, +1298, +1800, +2801, +3803, +4804 and +5805 ms. One worker remained beyond the deadline; no post-interrupt STATUS/KEEP check ran after that failed assertion. The Chromium counterpart passed. Markers precede yes/cat launches, so they establish stage progress, not exact child identity or start completion.
+
+A bounded control on UpCloud4 used Waffle 0.0.27 (`ba968a6`), Playwright 1.64.0, the exact same Firefox 1555 (SHA256 `1f637a7cfe8f1a3ec814a7da7e38c360a3e3c39553b8c7245ac5d6643fd495eb`), and complete frozen dist at root via unchanged `node dist/serve.mjs`. It interleaved 25 attempts per arm, one worker, no retries, with unchanged assertions and deadlines. Main `9bc9d40` passed 25/25; frozen PATH head `391ac6c` passed 25/25; separate smoke passed 1/1 per arm. Both arms use `/bin/test-guest` operands, because baseline cannot run bare commands with the canonical-only fixture; this is an explicit-path cancellation control, not identical bare-PATH parity. No startup, admission or worker-retirement failure occurred. The result is **inconclusive** for the original rare failure, not exoneration or proof that it was preexisting. Compact summary: `/work/reports/bash-web/path-search/firefox-matched-control/matched-summary.json`; full small ledger/results belong alongside it after cleanup. Dispatcher evidence: `/work/reports/machine-fleet/remote-gate/bash-path-cancel-pair027-20261018T070716Z-bueuy8mp/`.
+
+Ruled out for the original failure: startup stall (shell and guests ran), simple command-not-found, and the custom relocated-dist setup (examined rerun failures were shell-WASM 404s and are invalid observations). Static engine inspection found synchronous spawn registration with no await gap; access requests use cancellation ownership without spawning workers, and kill/drain code was unchanged from main. This does **not** establish that physical worker termination or Playwright's close notification is correct. Waffle separates logical/job-safe exit from physical Worker termination; prompt readiness alone is insufficient.
+
+Fresh-agent entry point: in an exclusive current checkout on a fleet-reserved host, run ordinary `npm ci && npm run build:browser`, then `npx playwright test tests/pipelines.acceptance.spec.ts --project=firefox --grep 'pipeline Ctrl' --trace on` (checked-in config serves complete dist at 4198). Keep the original bare-PATH command and assertions unchanged. Record each worker's URL/identity, real guest/PID/job ownership, spawn/cancel/drain/terminate/close ordering, and logical exit versus physical close through Ctrl+C. Instrument existing lifecycle boundaries without wrapping the Worker constructor or changing scheduling. Suspected boundary: physical Worker retirement/close notification after Ctrl+C, not yet a proven process leak. A repair needs a reproduced failing control and no longer timeouts, retries, skips or weakened worker assertions. Preserve compact evidence and verify all task processes, profiles, servers, checkouts and reservations are removed on the actual execution host.
+
+### Follow-up: synchronous fork EAGAIN retry parity
+
+Status: Approved. Match Bash 5.3 `jobs.c:2305` for synchronous spawn EAGAIN
+(no free process slot): retry with 1, 2, 4 and 8 second backoff before reporting
+final status 254 and aborting the reader. Bash's final failure path is
+`jobs.c:2329–2342`; `EX_NOEXEC` is 126 (`shell.h:64`) and
+`throw_to_top_level` adds 128 (`sig.c:424`) before noninteractive exit
+(`sig.c:485`). The current shell reports the final failure immediately; #11 adds
+no retry or sleep scheduling. Retry only a synchronous rejected spawn, where no
+child identity was allocated. Never retry typed asynchronous START_FAILED EAGAIN:
+its child identity has already been used. Tests must show slot exhaustion that
+clears during backoff succeeds, and exhaustion that does not clear gives 254
+without executing the rest of the submitted reader. Preserve cancellation and
+cleanup during every wait and do not retry other synchronous errno values.
+
+### Known difference: direct-child cleanup after a subshell fork failure
+
+Status: Approved follow-up. Bash abandons the failing subshell reader without signaling its already-running children. Our existing reader cancellation currently signals shell-owned direct children with SIGINT (status 130), including on this local fork-failure path. It does not hunt down inherited descendants; those remain owned by the enclosing invocation's group cleanup. The regression `aborted_subshell_leaves_descendants_to_enclosing_invocation_cleanup` records this distinction and covers natural descendant exit and whole-invocation Ctrl+C with no leaked group or process slot. Preserve foreground process-group identity. Restore Bash's direct-child behavior only with bounded lifecycle controls; do not add descendant tracking or change process groups to hide the difference.
+
+### Follow-up: parallel shell WASM and storage startup
+
+Status: Approved. Start fetching and compiling the shell WASM in parallel with the filesystem's storage open, instead of after it. Firefox's first-visit IndexedDB open costs 586 ms median, 877 ms p90 and 2.3 s max (N26 on the PC, /work/reports/bash-web/startup-diagnostics/firefox-idb-profile/). The failed stall trace showed the shell WASM not requested until the filesystem was ready. Measure first-visit time-to-prompt in Firefox and Chromium before and after with #11's stage timestamps; keep it only if it's faster, with zero behaviour change. Sequence it after the fd-3 PR, which changes startup readiness.
+
+### Follow-up: start-status-scoped exec diagnostic ownership
+
+Status: Approved. In the fd-3 lane's PR or the immediately following PR, integrate
+Waffle #22's `start_status` and CHILD_START poll (0.0.37), after the 0.0.36 patched
+libc guest rebuild prerequisite. Hold the command's redirected stderr strongly
+only until start status resolves. Drop it immediately on successful start;
+write the exec failure diagnostic and then drop it on START_FAILED. Fork failure
+messages still use parent-shell stderr. #11 deliberately uses a non-owning weak
+endpoint; if it has expired before the failure is observed, the message falls
+back to shell stderr. This keeps successful children from retaining a closed
+pipeline writer but cannot guarantee redirected exec diagnostics after that
+endpoint disappears. Add controls proving `nosuch 2>&1 | cat` prints the message
+before EOF and `producer 2>&1 | eof-ack` (producer closes output and waits for an
+EOF acknowledgement) finishes without deadlock. Keep real exit statuses 126/127
+distinct from startup failure; do not pin above the fd-3 prerequisite early.

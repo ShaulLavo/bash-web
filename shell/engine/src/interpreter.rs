@@ -20,7 +20,6 @@ mod command_builtin;
 mod conditional;
 mod control;
 pub(crate) mod eval;
-pub(crate) use eval::RetainedStorage;
 
 #[derive(Clone, Debug)]
 pub struct Limits {
@@ -62,6 +61,9 @@ pub(crate) enum Flow {
     Normal,
     Exit,
     Abort,
+    // Unlike isolated errexit, a failed fork aborts the invoking reader even
+    // when it happened in a non-last stage of a pipeline.
+    SpawnFailed,
     Return,
     Break(usize),
     Continue(usize),
@@ -76,12 +78,12 @@ pub(crate) struct Outcome {
 impl Outcome {
     pub(crate) fn status(code: i32) -> Self {
         Self {
-            code: if code == eval::RESOURCE_STATUS {
+            code: if code == crate::exec::RESOURCE_STATUS {
                 2
             } else {
                 code
             },
-            flow: if code == eval::RESOURCE_STATUS {
+            flow: if code == crate::exec::RESOURCE_STATUS {
                 Flow::Resource
             } else {
                 Flow::Normal
@@ -95,6 +97,12 @@ enum DiagnosticStderr {
     Inherited,
     Redirected(Option<io::Endpoint>),
 }
+
+enum WeakStderr {
+    Open(io::WeakEndpoint),
+    Closed,
+}
+
 struct CommandError {
     error: expand::Error,
     stderr: DiagnosticStderr,
@@ -214,7 +222,7 @@ enum JobKind {
 }
 struct JobLabel {
     text: String,
-    _storage: eval::StorageAllocation,
+    _storage: crate::exec::StorageAllocation,
 }
 struct Job {
     label: Option<Rc<JobLabel>>,
@@ -225,7 +233,7 @@ struct Job {
     cancel: Cancel,
     signal: Rc<Cell<Option<i32>>>,
     join: JoinHandle<i32>,
-    _allocation: Option<eval::Allocation>,
+    _allocation: Option<crate::exec::Allocation>,
 }
 struct Residual {
     owner: Scope,
@@ -238,8 +246,8 @@ struct Core {
     host: Rc<dyn ProcessHost>,
     fs: Rc<dyn FileSystem>,
     limits: Limits,
-    eval_storage: eval::StorageBudget,
-    execution_storage: eval::StorageBudget,
+    eval_storage: crate::exec::StorageBudget,
+    execution_storage: crate::exec::StorageBudget,
     descriptors: Descriptors,
     jobs: RefCell<BTreeMap<JobId, Job>>,
     residuals: RefCell<BTreeMap<GroupId, Residual>>,
@@ -250,16 +258,17 @@ struct Core {
 #[derive(Clone)]
 pub(crate) struct Context {
     core: Rc<Core>,
-    source: eval::Source,
+    source: crate::exec::Source,
     pub cancel: Cancel,
     // The invoking foreground/background command, independent of nested scopes.
     lifetime: (Cancel, Rc<Cell<Option<i32>>>),
     signal: Rc<Cell<Option<i32>>>,
     pub group: GroupId,
+    invocation_group: GroupId,
     scope: Scope,
     parameter_error_status: i32,
     compound_child: bool,
-    evaluation: eval::Scope,
+    evaluation: crate::exec::Scope,
     loop_depth: usize,
     ignore_errexit: bool,
 }
@@ -402,7 +411,8 @@ impl Context {
         });
         self.scope.forward_to(parent_scope);
     }
-    async fn finish_group(&self, processes: &mut ProcessGroup, code: i32) -> i32 {
+    async fn finish_group(&self, processes: &mut ProcessGroup, outcome: Outcome) -> i32 {
+        let code = outcome.code;
         let finished = self.cancel.run(processes.complete()).await;
         match finished {
             Ok(Ok(cleanup)) => {
@@ -418,7 +428,13 @@ impl Context {
             Err(_) => processes
                 .terminate(self.stop_signal())
                 .await
-                .map(|_| self.cancel_status())
+                .map(|_| {
+                    if outcome.flow == Flow::SpawnFailed {
+                        code
+                    } else {
+                        self.cancel_status()
+                    }
+                })
                 .unwrap_or(1),
         }
     }
@@ -628,14 +644,14 @@ impl Session {
         fs: Rc<dyn FileSystem>,
         limits: Limits,
     ) -> Self {
-        let memory = eval::StorageBudget::new(limits.execution_bytes);
+        let memory = crate::exec::StorageBudget::new(limits.execution_bytes);
         let state = State::with_memory(memory.clone()).shared();
         Self {
             core: Rc::new(Core {
                 executor,
                 host,
                 fs,
-                eval_storage: eval::StorageBudget::new(limits.expansion_bytes),
+                eval_storage: crate::exec::StorageBudget::new(limits.expansion_bytes),
                 execution_storage: memory,
                 limits,
                 descriptors: Rc::new(RefCell::new(FdTable::default())),
@@ -693,8 +709,8 @@ impl Session {
         let host = self.core.host.clone();
         let cancel = Cancel::with_probe(Rc::new(move || host.interrupted()));
         let parser_cancel = cancel.clone();
-        let evaluation = eval::Scope::new(
-            &self.core.limits,
+        let evaluation = crate::exec::Scope::new(
+            self.core.limits.source_bytes,
             self.core.eval_storage.clone(),
             self.core.execution_storage.clone(),
         );
@@ -718,11 +734,12 @@ impl Session {
         let foreground_signal = signal.clone();
         let context = Context {
             core: self.core.clone(),
-            source: eval::Source::root(source),
+            source: crate::exec::Source::root(source),
             lifetime: (cancel.clone(), signal.clone()),
             cancel,
             signal,
             group,
+            invocation_group: group,
             scope: Scope::new(0),
             parameter_error_status: 127,
             compound_child: false,
@@ -751,8 +768,8 @@ impl Session {
             if result.flow == Flow::Exit {
                 context.core.exit_requested.set(true);
             }
-            let code = context.finish_group(&mut processes, result.code).await;
-            state.borrow_mut().status = code;
+            let code = context.finish_group(&mut processes, result).await;
+            state.borrow_mut().publish_status(code);
             code
         });
         *self.core.foreground.borrow_mut() = Some(Job {
@@ -1073,6 +1090,9 @@ async fn script_sequence(
             continue;
         }
         result = execute(command, state.clone(), fds.clone(), context.clone()).await;
+        if result.flow == Flow::SpawnFailed {
+            return result;
+        }
         if context.cancel.is_cancelled() {
             return Outcome::status(130);
         }
@@ -1087,7 +1107,10 @@ async fn script_sequence(
         }
         if result.flow == Flow::DiscardReadUnit {
             discarded_line = end_line;
-        } else if matches!(result.flow, Flow::Exit | Flow::Abort | Flow::Return) {
+        } else if matches!(
+            result.flow,
+            Flow::Exit | Flow::Abort | Flow::SpawnFailed | Flow::Return
+        ) {
             break;
         }
     }
@@ -1119,6 +1142,9 @@ async fn sequence_body(
         if result.flow != Flow::Normal || context.cancel.is_cancelled() {
             break;
         }
+    }
+    if result.flow == Flow::SpawnFailed {
+        return result;
     }
     if context.cancel.is_cancelled() {
         return Outcome::status(130);
@@ -1189,9 +1215,9 @@ fn execute(
 
 fn finish_command(state: &SharedState, result: Outcome, preserve_pipeline: bool) -> Outcome {
     let mut state = state.borrow_mut();
-    state.status = result.code;
+    state.publish_status(result.code);
     if !preserve_pipeline {
-        state.pipestatus = vec![result.code];
+        state.publish_pipeline_status(vec![result.code]);
     }
     result
 }
@@ -1212,7 +1238,7 @@ fn command_body(
         }
         Command::Function(function) => evaluation.frame(
             async move {
-                state.borrow_mut().functions.insert(
+                state.borrow_mut().define_function(
                     function.name,
                     StoredFunction {
                         body: Rc::new(*function.body),
@@ -1249,7 +1275,7 @@ async fn pipeline_command(
 ) -> Outcome {
     let count = pipeline.commands.len();
     if count == 0 || count > context.limits().pipeline_stages {
-        state.borrow_mut().pipestatus = vec![2];
+        state.borrow_mut().publish_pipeline_status(vec![2]);
         return Outcome::status(2);
     }
     let share_last = count > 1 && {
@@ -1261,7 +1287,9 @@ async fn pipeline_command(
         Ok(children) => children,
         Err(error) => {
             let outcome = expansion_failure(error.into(), &fds, &context).await;
-            state.borrow_mut().pipestatus = vec![outcome.code];
+            state
+                .borrow_mut()
+                .publish_pipeline_status(vec![outcome.code]);
             return outcome;
         }
     };
@@ -1280,12 +1308,12 @@ async fn pipeline_command(
     let _tasks_allocation = match admit_task_metadata::<JoinHandle<Outcome>>(&context, count) {
         Ok(allocation) => allocation,
         Err(_) => {
-            state.borrow_mut().pipestatus = vec![2];
+            state.borrow_mut().publish_pipeline_status(vec![2]);
             return Outcome::status(2);
         }
     };
     if tasks.try_reserve_exact(count).is_err() {
-        state.borrow_mut().pipestatus = vec![2];
+        state.borrow_mut().publish_pipeline_status(vec![2]);
         return Outcome::status(2);
     }
     for (index, command) in pipeline.commands.into_iter().enumerate() {
@@ -1345,12 +1373,18 @@ async fn pipeline_command(
     // Every joined stage has a public status, even when a resource failure or
     // shared last-stage control flow aborts the submitted reader. Publish the
     // complete ordered result before taking any of those early exits.
-    state.borrow_mut().pipestatus = codes;
+    state.borrow_mut().publish_pipeline_status(codes);
+    if let Some(result) = results
+        .iter()
+        .find(|result| result.flow == Flow::SpawnFailed)
+    {
+        return *result;
+    }
     if (count == 1 || share_last) && results.last().unwrap().flow != Flow::Normal {
         return *results.last().unwrap();
     }
     if results.iter().any(|result| result.flow == Flow::Resource) {
-        return Outcome::status(eval::RESOURCE_STATUS);
+        return Outcome::status(crate::exec::RESOURCE_STATUS);
     }
     if pipeline.negated {
         code = i32::from(code == 0);
@@ -1580,6 +1614,9 @@ async fn while_command(
             condition_cache.as_ref(),
         )
         .await;
+        if test.flow == Flow::SpawnFailed {
+            return test;
+        }
         if context.cancel.is_cancelled() {
             return Outcome::status(130);
         }
@@ -1639,7 +1676,7 @@ fn loop_sequence<'a>(
 
 struct CachedArithmetic<'a> {
     program: arithmetic::Program<'a>,
-    _storage: eval::StorageAllocation,
+    _storage: crate::exec::StorageAllocation,
 }
 
 async fn cache_loop_arithmetic<'a>(
@@ -2033,38 +2070,47 @@ async fn subshell(
         Err(error) => return expansion_failure(error.into(), &fds, &context).await,
     };
     let parent_scope = context.scope.clone();
-    let child_context = context.isolated();
+    // A subshell is an isolated Bash execution scope: a fatal fork failure
+    // aborts this command without changing the foreground job's process group.
+    // The outer reader still forwards its own cancellation into this token.
+    let child_cancel = context.cancel.child();
+    let child_context = Context {
+        cancel: child_cancel.clone(),
+        ..context.isolated()
+    };
     let child_fds = Rc::new(RefCell::new(fds.borrow().clone()));
     drop(fds);
-    let result =
-        context
-            .core
-            .executor
-            .spawn(async move {
-                work.substitutions = Some(Substitutions {
-                    context: child_context.clone(),
-                    fds: child_fds.clone(),
-                    process_fds: None,
-                });
-                let result =
-                    match command_redirects(&redirs, &child, child_fds, &child_context, &mut work)
-                        .await
-                    {
-                        Ok(fds) => {
-                            work.substitutions.take();
-                            let body_context = Context {
-                                parameter_error_status: 1,
-                                compound_child: false,
-                                ..child_context.clone()
-                            };
-                            sequence(commands, child, fds, body_context).await
-                        }
-                        Err(outcome) => outcome,
+    let child = context.core.executor.spawn(async move {
+        work.substitutions = Some(Substitutions {
+            context: child_context.clone(),
+            fds: child_fds.clone(),
+            process_fds: None,
+        });
+        let result =
+            match command_redirects(&redirs, &child, child_fds, &child_context, &mut work).await {
+                Ok(fds) => {
+                    work.substitutions.take();
+                    let body_context = Context {
+                        parameter_error_status: 1,
+                        compound_child: false,
+                        ..child_context.clone()
                     };
-                child_context.finish_scope(parent_scope).await;
-                result
-            })
-            .await;
+                    sequence(commands, child, fds, body_context).await
+                }
+                Err(outcome) => outcome,
+            };
+        child_context.finish_scope(parent_scope).await;
+        result
+    });
+    let child_join = child.clone();
+    let result = match context.cancel.run(child).await {
+        Ok(result) => result,
+        Err(_) => {
+            child_cancel.cancel();
+            let _ = child_join.await;
+            Outcome::status(context.cancel_status())
+        }
+    };
     Outcome::status(result.code)
 }
 
@@ -2162,8 +2208,8 @@ async fn background_body(
 ) -> Outcome {
     let result = launch_background(command, state, fds, context).await;
     let mut state = state.borrow_mut();
-    state.status = result.code;
-    state.pipestatus = vec![result.code];
+    state.publish_status(result.code);
+    state.publish_pipeline_status(vec![result.code]);
     result
 }
 
@@ -2235,6 +2281,7 @@ async fn launch_background(
         cancel: cancel.clone(),
         signal: signal.clone(),
         group,
+        invocation_group: group,
         scope: Scope::new(context.core.allocate_id()),
         parameter_error_status: context.child_error_status(&command),
         compound_child: matches!(command, Command::Compound(..)),
@@ -2249,9 +2296,7 @@ async fn launch_background(
             .with_signal(child_context.signal.clone());
         let result = execute(command, child, fds, child_context.clone()).await;
         child_context.finish_scope(parent_scope).await;
-        child_context
-            .finish_group(&mut processes, result.code)
-            .await
+        child_context.finish_group(&mut processes, result).await
     });
     context.core.jobs.borrow_mut().insert(
         job,
@@ -2267,14 +2312,14 @@ async fn launch_background(
             _allocation: Some(allocation),
         },
     );
-    state.borrow_mut().last_async = Some(identity);
+    state.borrow_mut().publish_async_identity(identity);
     Outcome::status(0)
 }
 
 fn admit_task_metadata<T>(
     context: &Context,
     count: usize,
-) -> Result<eval::Allocation, expand::Error> {
+) -> Result<crate::exec::Allocation, expand::Error> {
     let bytes = count
         .checked_mul(TASK_METADATA_BYTES + std::mem::size_of::<T>())
         .ok_or(2)?;
@@ -2284,7 +2329,7 @@ fn admit_task_metadata<T>(
         .map_err(Into::into)
 }
 
-fn admit_job(context: &Context) -> Result<eval::Allocation, expand::Error> {
+fn admit_job(context: &Context) -> Result<crate::exec::Allocation, expand::Error> {
     // One conservative B-tree node plus fixed task/queue/cancellation metadata.
     let bytes = std::mem::size_of::<(JobId, Job)>()
         .checked_add(std::mem::size_of::<usize>())
@@ -2357,7 +2402,7 @@ fn substitution_work(context: &Context, fds: &Descriptors) -> expand::Work {
 struct ProcessSubstitutionFds {
     fds: Descriptors,
     opened: Cell<u64>,
-    _allocation: eval::Allocation,
+    _allocation: crate::exec::Allocation,
 }
 impl Drop for ProcessSubstitutionFds {
     fn drop(&mut self) {
@@ -2445,7 +2490,9 @@ impl Substitutions {
                     context.cleanup_jobs().await;
                 }
                 context.finish_scope(parent_scope).await;
-                let code = if context.cancel.is_cancelled() {
+                let code = if result.flow == Flow::SpawnFailed {
+                    result.code
+                } else if context.cancel.is_cancelled() {
                     context.cancel_status()
                 } else {
                     result.code
@@ -2453,7 +2500,9 @@ impl Substitutions {
                 // EOF releases capture, while this registered supervisor keeps
                 // cleanup ownership of any host descendants still running.
                 let _ = complete.send(code);
-                context.finish_group(&mut processes, code).await
+                context
+                    .finish_group(&mut processes, Outcome { code, ..result })
+                    .await
             };
             // The parent's cancellation reaches the body through its own
             // token; the body still unwinds normally and reports its status.
@@ -2581,7 +2630,7 @@ impl Substitutions {
                 let result = sequence(commands, child, fds, context.clone()).await;
                 let _ = context.wait_jobs(None, true).await;
                 context.finish_scope(parent_scope).await;
-                context.finish_group(&mut processes, result.code).await
+                context.finish_group(&mut processes, result).await
             };
             let forward = async {
                 parent.cancelled().await;
@@ -2617,7 +2666,7 @@ impl Substitutions {
                 .opened
                 .set(process_fds.opened.get() | (1u64 << fd));
         }
-        parent_state.borrow_mut().last_async = Some(identity);
+        parent_state.borrow_mut().publish_async_identity(identity);
         Ok(fd)
     }
     /// Standard error of the shell running the substitution.
@@ -2725,91 +2774,6 @@ struct PreparedCommand {
     work: expand::Work,
 }
 
-/// Prefix assignments for a builtin live for the builtin call and restore on
-/// every exit path. The guard owns prior mutations before any later admission
-/// or alias-resolution failure can unwind the call.
-struct BuiltinPrefixFrame {
-    state: SharedState,
-    saved: BTreeMap<String, Option<String>>,
-    restore_epoch_realtime: bool,
-    memory: Option<eval::StorageAllocation>,
-}
-impl BuiltinPrefixFrame {
-    async fn enter(
-        state: SharedState,
-        assigned: &[(String, String)],
-        context: &Context,
-        work: &mut expand::Work,
-    ) -> Result<Self, expand::Error> {
-        for (name, value) in assigned {
-            State::admit_assignment(&state, name, value.len(), &context.cancel, work).await?;
-        }
-        let mut frame = Self {
-            state: state.clone(),
-            saved: BTreeMap::new(),
-            restore_epoch_realtime: false,
-            memory: state
-                .borrow()
-                .admit_temporary(0)
-                .map_err(expand::Error::from)?,
-        };
-        {
-            let mut state_ref = state.borrow_mut();
-            for (name, value) in assigned {
-                work.admit_storage(name.len())?;
-                let target = state_ref.assignment_name(name.clone()).map_err(|_| 2)?;
-                if !frame.saved.contains_key(&target) {
-                    work.admit_storage(
-                        (std::mem::size_of::<(String, Option<String>)>()
-                            + std::mem::size_of::<usize>())
-                        .saturating_mul(16),
-                    )?;
-                }
-                if !state_ref.variables.contains_key(&target) {
-                    work.admit_storage(
-                        (std::mem::size_of::<(String, String)>() + std::mem::size_of::<usize>())
-                            .saturating_mul(16),
-                    )?;
-                }
-                work.admit_storage(target.len().saturating_add(value.len()))?;
-                if let Some(memory) = &mut frame.memory {
-                    memory
-                        .grow(
-                            (std::mem::size_of::<(String, Option<String>)>()
-                                + std::mem::size_of::<usize>())
-                            .saturating_mul(16)
-                            .saturating_add(target.len().saturating_mul(2))
-                            .saturating_add(value.len()),
-                        )
-                        .map_err(|_| expand::Error::Status(eval::RESOURCE_STATUS))?;
-                }
-                let previous = state_ref.variables.insert(target.clone(), value.clone());
-                frame.restore_epoch_realtime |= state_ref.suspend_epoch_realtime(&target);
-                frame.saved.entry(target).or_insert(previous);
-            }
-        }
-        Ok(frame)
-    }
-}
-impl Drop for BuiltinPrefixFrame {
-    fn drop(&mut self) {
-        let mut state = self.state.borrow_mut();
-        if self.restore_epoch_realtime {
-            state.restore_epoch_realtime();
-        }
-        for (name, value) in std::mem::take(&mut self.saved) {
-            match value {
-                Some(value) => {
-                    state.variables.insert(name, value);
-                }
-                None => {
-                    state.variables.remove(&name);
-                }
-            }
-        }
-    }
-}
-
 async fn simple_command(
     simple: SimpleCommand,
     state: SharedState,
@@ -2831,8 +2795,12 @@ async fn simple_command(
     }
     // Even a saved stderr can alias a pipe reader. Release all diagnostic-only
     // ownership before dispatch, so a child's close can deliver EPIPE promptly.
+    let parent_stderr = match original_fds.borrow().get(2) {
+        Some(stderr) => WeakStderr::Open(stderr.downgrade()),
+        None => WeakStderr::Closed,
+    };
     drop(original_fds);
-    dispatch_simple_command(prepared, state, context)
+    dispatch_simple_command(prepared, state, context, parent_stderr)
         .await
         .unwrap_or_else(Outcome::status)
 }
@@ -2940,7 +2908,7 @@ async fn prepare_simple_command_body(
         });
     }
     let name = &argv[0];
-    let shell_command = state.borrow().functions.contains_key(name)
+    let shell_command = state.borrow().functions().contains_key(name)
         || matches!(name.as_str(), "exec" | "let" | "eval")
         || (builtins::is_builtin(name) && !matches!(name.as_str(), "cat" | "seq"));
     let heredoc_status = (!shell_command).then_some(context.parameter_error_status);
@@ -2953,7 +2921,7 @@ async fn prepare_simple_command_body(
         heredoc_status,
     )
     .await?;
-    let function_prefix = state.borrow().functions.contains_key(name);
+    let function_prefix = state.borrow().functions().contains_key(name);
     let assigned = assignments(
         simple.assignments,
         state,
@@ -2996,15 +2964,20 @@ fn dispatch_simple_command(
     prepared: PreparedCommand,
     state: SharedState,
     context: Context,
+    parent_stderr: WeakStderr,
 ) -> eval::Frame<'static, Result<Outcome, i32>> {
     let evaluation = context.evaluation.clone();
-    evaluation.frame(dispatch_simple_command_body(prepared, state, context), Err)
+    evaluation.frame(
+        dispatch_simple_command_body(prepared, state, context, parent_stderr),
+        Err,
+    )
 }
 
 async fn dispatch_simple_command_body(
     prepared: PreparedCommand,
     state: SharedState,
     context: Context,
+    parent_stderr: WeakStderr,
 ) -> Result<Outcome, i32> {
     let PreparedCommand {
         argv,
@@ -3021,13 +2994,14 @@ async fn dispatch_simple_command_body(
     let mut args: Vec<_> = fields.collect();
     let mut bypass_functions = false;
     let mut default_path = false;
-    while name == "command" && (bypass_functions || !state.borrow().functions.contains_key(&name)) {
+    while name == "command" && (bypass_functions || !state.borrow().functions().contains_key(&name))
+    {
         let mut options = command_builtin::options(&args, &fds, &context, &mut work).await?;
         default_path |= options.default_path;
         options.default_path = default_path;
         args.drain(..options.operands);
         if options.query {
-            let _frame = BuiltinPrefixFrame::enter(state.clone(), &assigned, &context, &mut work)
+            let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
                 .await
                 .map_err(admission_status)?;
             return command_builtin::query(&args, &options, &state, &fds, &context, &mut work)
@@ -3044,7 +3018,7 @@ async fn dispatch_simple_command_body(
     let function = if bypass_functions {
         None
     } else {
-        state.borrow().functions.get(&name).cloned()
+        state.borrow().functions().get(&name).cloned()
     };
     if let Some(body) = function {
         let funcnest = {
@@ -3169,7 +3143,7 @@ async fn dispatch_simple_command_body(
         return Ok(eval::run(args, state, fds, context).await);
     }
     if builtins::is_builtin(&name) {
-        let _frame = BuiltinPrefixFrame::enter(state.clone(), &assigned, &context, &mut work)
+        let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
             .await
             .map_err(admission_status)?;
         let bindings = fds.borrow().clone();
@@ -3232,37 +3206,65 @@ async fn dispatch_simple_command_body(
         (s.environment(), s.cwd.clone())
     };
     env.extend(assigned);
+    let command = name.clone();
     let mut argv = vec![name];
     argv.extend(args);
-    let pid = context
-        .core
-        .host
-        .spawn(SpawnRequest {
-            executable,
-            argv,
-            env,
-            cwd,
-            fds: fds.borrow().clone(),
-            group: context.group,
-            parent: None,
-        })
-        .map_err(|error| match error {
-            ProcessError::UnknownCommand(_) | ProcessError::Runtime(44) => 127,
-            ProcessError::Runtime(_) => 126,
-            _ => 2,
-        })?;
+    let pid = context.core.host.spawn(SpawnRequest {
+        executable,
+        argv,
+        env,
+        cwd,
+        fds: fds.borrow().clone(),
+        group: context.group,
+        parent: None,
+    });
+    let pid = match pid {
+        Ok(pid) => pid,
+        Err(ProcessError::Runtime(errno @ (6 | 29 | 48))) => {
+            return external_wait_failure(
+                ProcessError::StartFailed(errno),
+                &command,
+                WeakStderr::Closed,
+                parent_stderr,
+                &context,
+            )
+            .await;
+        }
+        Err(ProcessError::ProcessLimit) => {
+            return external_wait_failure(
+                ProcessError::StartFailed(6),
+                &command,
+                WeakStderr::Closed,
+                parent_stderr,
+                &context,
+            )
+            .await;
+        }
+        Err(ProcessError::UnknownCommand(_) | ProcessError::Runtime(44)) => return Err(127),
+        Err(ProcessError::Runtime(_)) => return Err(126),
+        Err(_) => return Err(2),
+    };
     // The child owns its inherited descriptors. Shell-side stage copies must
     // not keep a closed child reader/writer alive while waiting for its exit.
+    let stderr = match fds.borrow().get(2) {
+        Some(stderr) => WeakStderr::Open(stderr.downgrade()),
+        None => WeakStderr::Closed,
+    };
     drop(fds);
     match context.cancel.run(context.core.host.wait(pid)).await {
-        Ok(result) => Ok(Outcome::status(result.map_err(|_| 1)?)),
+        Ok(Ok(status)) => Ok(Outcome::status(status)),
+        Ok(Err(error)) => {
+            external_wait_failure(error, &command, stderr, parent_stderr, &context).await
+        }
         Err(_) => {
             // Signal inherited members before waiting/reaping the direct child;
             // it may be the last live direct stage but not the last group member.
-            let _ = context
-                .core
-                .host
-                .kill_group(context.group, context.stop_signal());
+            if context.group != context.invocation_group || context.lifetime.0.is_cancelled() {
+                let _ = context
+                    .core
+                    .host
+                    .kill_group(context.group, context.stop_signal());
+            }
             context
                 .core
                 .host
@@ -3272,6 +3274,47 @@ async fn dispatch_simple_command_body(
             Err(context.cancel_status())
         }
     }
+}
+
+async fn external_wait_failure(
+    error: ProcessError,
+    command: &str,
+    stderr: WeakStderr,
+    parent_stderr: WeakStderr,
+    context: &Context,
+) -> Result<Outcome, i32> {
+    let ProcessError::StartFailed(errno) = error else {
+        return Err(1);
+    };
+    let fork = matches!(errno, 6 | 29 | 48);
+    let operation = if fork { "fork" } else { command };
+    // Bash reports fork failure in the parent, before command redirections.
+    // Exec failures use the child's stderr when that open description survives.
+    // Until start_status-scoped ownership is integrated, a dead weak reference
+    // falls back to shell stderr rather than retaining a pipeline endpoint and
+    // preventing EOF. See plan004's approved start-status follow-up.
+    let stderr = match if fork { parent_stderr } else { stderr } {
+        WeakStderr::Closed => None,
+        WeakStderr::Open(stderr) => stderr
+            .upgrade()
+            .or_else(|| context.core.descriptors.borrow().get(2)),
+    };
+    if let Some(stderr) = stderr {
+        let diagnostic = format!("/usr/bin/bash: {operation}: {error}\n");
+        let _ = stderr
+            .write_all(diagnostic.as_bytes(), &context.cancel)
+            .await;
+    }
+    if fork {
+        // A failed fork abandons this reader, not just its pipeline stage.
+        // Existing invocation cancellation owns peers and substitutions.
+        context.cancel.cancel();
+        return Ok(Outcome {
+            code: 254,
+            flow: Flow::SpawnFailed,
+        });
+    }
+    Ok(Outcome::status(if errno == 44 { 127 } else { 126 }))
 }
 
 #[inline(never)]
@@ -3692,17 +3735,18 @@ mod scope_tests {
             Limits::default(),
         );
         let context = Context {
-            evaluation: eval::Scope::new(
-                &session.core.limits,
+            evaluation: crate::exec::Scope::new(
+                session.core.limits.source_bytes,
                 session.core.eval_storage.clone(),
                 session.core.execution_storage.clone(),
             ),
             core: session.core.clone(),
-            source: eval::Source::root(""),
+            source: crate::exec::Source::root(""),
             lifetime: (Cancel::new(), Rc::new(Cell::new(None))),
             cancel: Cancel::new(),
             signal: Rc::new(Cell::new(None)),
             group,
+            invocation_group: group,
             scope: Scope::new(0),
             parameter_error_status: 127,
             compound_child: false,
@@ -3780,7 +3824,7 @@ mod scope_tests {
         let assigned = [("EPOCHREALTIME".to_owned(), "prefix".to_owned())];
         let mut work = expand::Work::new(65536, 65536, 16);
         finish_replay(async {
-            let frame = BuiltinPrefixFrame::enter(state.clone(), &assigned, &context, &mut work)
+            let frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
                 .await
                 .unwrap_or_else(|_| panic!("prefix storage must fit"));
             assert_eq!(state.borrow().parameter("EPOCHREALTIME"), "prefix");
@@ -3788,7 +3832,7 @@ mod scope_tests {
             context.cancel.cancel();
             drop(frame);
             assert!(state.borrow().dynamic_parameter("EPOCHREALTIME"));
-            assert!(!state.borrow().variables.contains_key("EPOCHREALTIME"));
+            assert!(!state.borrow().bindings().contains_key("EPOCHREALTIME"));
             Outcome::status(0)
         });
     }
@@ -3797,8 +3841,8 @@ mod scope_tests {
     fn borrowed_arithmetic_replay_preserves_execution_depth_and_status() {
         for (depth, code) in [(255, 0), (256, 2)] {
             let (state, fds, mut context) = replay_context();
-            state.borrow_mut().status = 13;
-            state.borrow_mut().pipestatus = vec![9, 13];
+            state.borrow_mut().publish_status(13);
+            state.borrow_mut().publish_pipeline_status(vec![9, 13]);
             for _ in 0..depth {
                 context.evaluation = context.evaluation.descend().unwrap();
             }
@@ -3809,10 +3853,10 @@ mod scope_tests {
             let outcome = finish_replay(loop_sequence(&commands, &state, &fds, &context, None));
             assert_eq!(outcome.code, code);
             assert_eq!(outcome.flow, Flow::Normal);
-            assert_eq!(state.borrow().variables.contains_key("n"), code == 0);
-            assert_eq!(state.borrow().status, if code == 0 { 0 } else { 13 });
+            assert_eq!(state.borrow().bindings().contains_key("n"), code == 0);
+            assert_eq!(state.borrow().status(), if code == 0 { 0 } else { 13 });
             assert_eq!(
-                state.borrow().pipestatus,
+                state.borrow().pipeline_status(),
                 if code == 0 { vec![0] } else { vec![9, 13] }
             );
         }
@@ -3833,7 +3877,7 @@ mod scope_tests {
             finish_replay(loop_sequence(&commands, &state, &fds, &context, None)).code,
             2
         );
-        assert!(!state.borrow().variables.contains_key("n"));
+        assert!(!state.borrow().bindings().contains_key("n"));
         drop(allocation);
         let replay = loop_sequence(&commands, &state, &fds, &context, None);
         assert!(context.evaluation.admit_execution(limit).is_err());
@@ -3843,7 +3887,7 @@ mod scope_tests {
             finish_replay(loop_sequence(&commands, &state, &fds, &context, None)).code,
             0
         );
-        assert_eq!(state.borrow().variables["n"], "7");
+        assert_eq!(state.borrow().bindings()["n"], "7");
         drop(context.evaluation.admit_execution(limit).unwrap());
     }
 
@@ -3881,8 +3925,8 @@ mod scope_tests {
             finish_replay(loop_sequence(&commands, &state, &fds, &context, None)).code,
             2
         );
-        assert!(!state.borrow().variables.contains_key("n"));
-        assert_eq!(state.borrow().pipestatus, vec![2]);
+        assert!(!state.borrow().bindings().contains_key("n"));
+        assert_eq!(state.borrow().pipeline_status(), vec![2]);
     }
 
     #[test]
@@ -4105,18 +4149,20 @@ mod residual_review_tests {
             let core = self.session().core.clone();
             let cancel = Cancel::new();
             let signal = Rc::new(Cell::new(None));
+            let group = self.host.allocate_group();
             Context {
-                evaluation: eval::Scope::new(
-                    &core.limits,
+                evaluation: crate::exec::Scope::new(
+                    core.limits.source_bytes,
                     core.eval_storage.clone(),
                     core.execution_storage.clone(),
                 ),
                 core,
-                source: eval::Source::root(""),
+                source: crate::exec::Source::root(""),
                 lifetime: (cancel.clone(), signal.clone()),
                 cancel,
                 signal,
-                group: self.host.allocate_group(),
+                group,
+                invocation_group: group,
                 scope: Scope::new(0),
                 parameter_error_status: 127,
                 compound_child: false,
@@ -4672,12 +4718,12 @@ mod function_measurements {
             0
         );
         let before = session.core.execution_storage.observation().0;
-        let capacity = session.state.borrow().positional.capacity();
+        let capacity = session.state.borrow().positional().capacity();
         let vector_bytes = capacity * std::mem::size_of::<String>();
         let strings: Vec<_> = session
             .state
             .borrow()
-            .positional
+            .positional()
             .iter()
             .map(String::capacity)
             .collect();
@@ -4685,7 +4731,7 @@ mod function_measurements {
         for (command, status) in [("shift 4", 1), ("shift bad", 2)] {
             assert_eq!(finish_review(&ex, session.start(command).unwrap()), status);
             assert_eq!(session.core.execution_storage.observation().0, before);
-            assert_eq!(session.state.borrow().positional.len(), 3);
+            assert_eq!(session.state.borrow().positional().len(), 3);
         }
         for (command, released) in [
             ("shift", strings[0]),
@@ -4700,7 +4746,7 @@ mod function_measurements {
                 before - released,
                 "{command} only refunds dropped string capacities"
             );
-            assert_eq!(session.state.borrow().positional.capacity(), capacity);
+            assert_eq!(session.state.borrow().positional().capacity(), capacity);
         }
         assert_eq!(session.core.execution_storage.observation().0, vector_bytes);
         assert_eq!(finish_review(&ex, session.start("set --").unwrap()), 0);
@@ -4708,7 +4754,7 @@ mod function_measurements {
         // the actual empty vector allocation charged until replaced/dropped.
         assert_eq!(
             session.core.execution_storage.observation().0,
-            session.state.borrow().positional.capacity() * std::mem::size_of::<String>()
+            session.state.borrow().positional().capacity() * std::mem::size_of::<String>()
         );
     }
 
@@ -4728,17 +4774,17 @@ mod function_measurements {
         session
             .state
             .borrow_mut()
-            .variables
-            .insert("payload".into(), "x".repeat(64 * 1024));
+            .assign_parameter("payload".into(), "x".repeat(64 * 1024))
+            .unwrap();
         assert_eq!(finish_review(&ex, session.start("seen=0; g() { local x=$payload; seen=$((seen+1)); }; f() { shift; g; }; f \"$payload\"").unwrap()), 0);
-        assert_eq!(session.state.borrow().variables["seen"], "1");
-        assert!(session.state.borrow().positional.is_empty());
+        assert_eq!(session.state.borrow().bindings()["seen"], "1");
+        assert!(session.state.borrow().positional().is_empty());
         assert_eq!(session.core.execution_storage.observation().0, 0);
         assert_eq!(
             finish_review(&ex, session.start("f \"$payload\"").unwrap()),
             0
         );
-        assert_eq!(session.state.borrow().variables["seen"], "2");
+        assert_eq!(session.state.borrow().bindings()["seen"], "2");
         assert_eq!(session.core.execution_storage.observation().0, 0);
         assert_eq!(ex.drive(64).pending, 0);
     }
@@ -4778,7 +4824,10 @@ mod function_measurements {
                 async { 7 }.boxed_local()
             });
             session.state.borrow_mut().lastpipe = lastpipe;
-            session.state.borrow_mut().pipestatus = vec![91, 92];
+            session
+                .state
+                .borrow_mut()
+                .publish_pipeline_status(vec![91, 92]);
             let stage = format!("set -- '{}'", "x".repeat(32 * 1024));
             let source = if failed_first {
                 format!("{stage} | consume; continued=yes")
@@ -4791,21 +4840,21 @@ mod function_measurements {
                 source
             };
             assert_eq!(finish_review(&ex, session.start(&source).unwrap()), 2);
-            assert_eq!(session.state.borrow().status, 2);
+            assert_eq!(session.state.borrow().status(), 2);
             assert!(pressure.borrow().is_some());
             assert_eq!(
-                session.state.borrow().pipestatus,
+                session.state.borrow().pipeline_status(),
                 if failed_first { vec![2, 7] } else { vec![7, 2] },
                 "lastpipe={lastpipe}, failed_first={failed_first}"
             );
-            assert!(!session.state.borrow().variables.contains_key("continued"));
+            assert!(!session.state.borrow().bindings().contains_key("continued"));
             pressure.borrow_mut().take();
             assert_eq!(
                 finish_review(&ex, session.start("recovered=yes").unwrap()),
                 0
             );
-            assert_eq!(session.state.borrow().variables["recovered"], "yes");
-            assert_eq!(session.state.borrow().pipestatus, [0]);
+            assert_eq!(session.state.borrow().bindings()["recovered"], "yes");
+            assert_eq!(session.state.borrow().pipeline_status(), [0]);
             assert_eq!(session.core.execution_storage.observation().0, 0);
             assert_eq!(host.active_count(), 0);
             assert_eq!(host.retained_count(), 0);
@@ -4838,8 +4887,8 @@ mod function_measurements {
             session
                 .state
                 .borrow_mut()
-                .variables
-                .insert("payload".into(), "x".repeat(64 * 1024));
+                .assign_parameter("payload".into(), "x".repeat(64 * 1024))
+                .unwrap();
             let pressure = Rc::new(RefCell::new(None));
             let retained = pressure.clone();
             let budget = session.core.execution_storage.clone();
@@ -4871,13 +4920,13 @@ mod function_measurements {
                 "{diagnostic}"
             );
             assert!(!diagnostic.contains("function"), "{diagnostic}");
-            assert!(!session.state.borrow().variables.contains_key("continued"));
+            assert!(!session.state.borrow().bindings().contains_key("continued"));
             pressure.borrow_mut().take();
             assert_eq!(
                 finish_review(&ex, session.start("recovered=yes").unwrap()),
                 0
             );
-            assert!(!session.state.borrow().variables.contains_key("saved"));
+            assert!(!session.state.borrow().bindings().contains_key("saved"));
             assert_eq!(session.core.execution_storage.observation().0, 0);
             assert_eq!(host.retained_count(), 0);
             assert_eq!(ex.drive(64).pending, 0);
@@ -4900,7 +4949,7 @@ mod function_measurements {
                 let source = format!(
                     "n=0; seen=0; unwound=0; leaf=0; f() {{ local d=$1; {increment}; seen=$((seen+1)); case $n in {goal}) leaf=$n;; *) f child;; esac; unwound=$((unwound+1)); }}; f root"
                 );
-                eval::reset_stack_observation();
+                crate::executor::observation::reset_stack_observation();
                 let job = session.start(&source).unwrap();
                 for _ in 0..100_000 {
                     ex.drive(64);
@@ -4912,11 +4961,11 @@ mod function_measurements {
                 assert_eq!(ex.drive(64).pending, 0);
                 let state = session.state.borrow();
                 for name in ["n", "seen", "unwound", "leaf"] {
-                    assert_eq!(state.variables[name], goal.to_string(), "{name}");
+                    assert_eq!(state.bindings()[name], goal.to_string(), "{name}");
                 }
-                assert!(!state.variables.contains_key("d"));
-                assert!(state.positional.is_empty());
-                let sample = eval::stack_observation();
+                assert!(!state.bindings().contains_key("d"));
+                assert!(state.positional().is_empty());
+                let sample = crate::executor::observation::stack_observation();
                 let (live, peak) = session.core.execution_storage.observation();
                 assert_eq!(live, 0, "all call/frame payload tickets refunded");
                 assert_eq!(sample.calls, goal);
@@ -4927,7 +4976,8 @@ mod function_measurements {
                     sample.poll_bytes,
                     sample.drop_bytes
                 );
-                let baseline: eval::StackObservation = *first.get_or_insert(sample);
+                let baseline: crate::executor::observation::StackObservation =
+                    *first.get_or_insert(sample);
                 assert!(
                     sample.poll_bytes <= baseline.poll_bytes + 16 * 1024,
                     "polling must not grow per function call"

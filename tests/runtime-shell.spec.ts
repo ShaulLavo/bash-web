@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/browser-test";
 
 test.setTimeout(60000);
 async function ready(page: Page) {
