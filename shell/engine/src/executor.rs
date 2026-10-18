@@ -188,6 +188,14 @@ impl<T> Clone for JoinHandle<T> {
     }
 }
 impl<T> JoinHandle<T> {
+    /// Observe an already-completed operation without scheduling an executor task.
+    pub fn ready(value: T) -> Self {
+        Self {
+            result: Rc::new(RefCell::new(Some(value))),
+            event: Event::default(),
+            waiting: None,
+        }
+    }
     pub fn is_finished(&self) -> bool {
         self.result.borrow().is_some()
     }

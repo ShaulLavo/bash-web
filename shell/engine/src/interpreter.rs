@@ -5,10 +5,10 @@ use crate::{
     executor::{Budget, Cancel, Executor, JoinHandle, yield_now},
     expand,
     io::{self, FdTable, FileSystem, OpenOptions},
-    process::{GroupId, ProcessGroup, ProcessHost, SpawnRequest},
+    process::{GroupId, ProcessError, ProcessGroup, ProcessHost, SpawnRequest},
     state::{FunctionFrame, PrefixFrame, SharedState, State, StoredFunction, absolute},
 };
-use futures::future::join_all;
+use futures::{FutureExt, future::join_all};
 use shell_parser::parser::*;
 use std::{
     cell::{Cell, RefCell},
@@ -194,7 +194,13 @@ enum JobKind {
     Completed,
     Internal,
 }
+struct JobLabel {
+    text: String,
+    _storage: eval::StorageAllocation,
+}
 struct Job {
+    label: Option<Rc<JobLabel>>,
+    notified: bool,
     owner: Scope,
     kind: JobKind,
     group: GroupId,
@@ -202,6 +208,12 @@ struct Job {
     signal: Rc<Cell<Option<i32>>>,
     join: JoinHandle<i32>,
     _allocation: Option<eval::Allocation>,
+}
+struct Residual {
+    owner: Scope,
+    cleanup: JoinHandle<Result<(), ProcessError>>,
+    // Retries still belong to the invocation that created the descendants.
+    lifetime: (Cancel, Rc<Cell<Option<i32>>>),
 }
 struct Core {
     executor: Executor,
@@ -211,6 +223,7 @@ struct Core {
     eval_storage: eval::StorageBudget,
     descriptors: Descriptors,
     jobs: RefCell<BTreeMap<JobId, Job>>,
+    residuals: RefCell<BTreeMap<GroupId, Residual>>,
     next: Cell<u64>,
     foreground: RefCell<Option<Job>>,
     exit_requested: Cell<bool>,
@@ -220,6 +233,8 @@ pub(crate) struct Context {
     core: Rc<Core>,
     source: eval::Source,
     pub cancel: Cancel,
+    // The invoking foreground/background command, independent of nested scopes.
+    lifetime: (Cancel, Rc<Cell<Option<i32>>>),
     signal: Rc<Cell<Option<i32>>>,
     pub group: GroupId,
     scope: Scope,
@@ -323,9 +338,31 @@ impl Context {
             }
             job.cancel.cancel();
         }
+        let residuals: Vec<_> = self
+            .core
+            .residuals
+            .borrow()
+            .iter()
+            .filter(|(_, residual)| residual.owner == self.scope)
+            .map(|(&group, residual)| (group, residual.cleanup.clone()))
+            .collect();
+        // Signal the whole scope before awaiting shell tasks or drains:
+        // inherited members in different groups can depend on one another.
+        for (group, _) in &residuals {
+            let _ = self.core.host.kill_group(*group, self.stop_signal());
+        }
         while let Some((id, join)) = self.next_job(None, true) {
             join.await;
             self.core.jobs.borrow_mut().remove(&id);
+        }
+        for (group, cleanup) in residuals {
+            let result = match cleanup.await {
+                Ok(()) => Ok(()),
+                Err(_) => self.core.host.wait_group(group).await,
+            };
+            if result.is_ok() {
+                self.core.residuals.borrow_mut().remove(&group);
+            }
         }
     }
     /// A successful isolated scope leaves asynchronous descendants running.
@@ -341,14 +378,23 @@ impl Context {
                 return true;
             }
             job.kind = JobKind::Internal;
+            job.label = None;
             !job.join.is_finished()
         });
         self.scope.forward_to(parent_scope);
     }
     async fn finish_group(&self, processes: &mut ProcessGroup, code: i32) -> i32 {
-        let finished = self.cancel.run(processes.finish()).await;
+        let finished = self.cancel.run(processes.complete()).await;
         match finished {
-            Ok(Ok(_)) => code,
+            Ok(Ok(cleanup)) => {
+                self.core.retain_residual(
+                    self.group,
+                    self.scope.clone(),
+                    cleanup,
+                    self.lifetime.clone(),
+                );
+                code
+            }
             Ok(Err(_)) => 1,
             Err(_) => processes
                 .terminate(self.stop_signal())
@@ -380,12 +426,17 @@ impl Context {
             };
             code = self.cancel.run(job).await.map_err(|_| 130)?;
             if selector.is_some() {
-                self.core
-                    .jobs
-                    .borrow_mut()
+                let mut jobs = self.core.jobs.borrow_mut();
+                let job = jobs
                     .get_mut(&id)
-                    .expect("owned job stays registered while waiting")
-                    .kind = JobKind::Completed;
+                    .expect("owned job stays registered while waiting");
+                job.notified = true;
+                // Noninteractive isolated shells discard the percent-job entry
+                // after an explicit wait, but retain the numeric child status.
+                if self.scope.resolved_id() != 0 || job.kind == JobKind::ProcessSubstitution {
+                    job.kind = JobKind::Completed;
+                    job.label = None;
+                }
                 return Ok(code);
             }
             self.core.jobs.borrow_mut().remove(&id);
@@ -415,12 +466,83 @@ impl Context {
             })
             .map(|(id, job)| (*id, job.join.clone()))
     }
+    pub(crate) async fn list_jobs(&self, fds: &FdTable) -> Result<(), i32> {
+        let ids: Vec<_> = self
+            .core
+            .jobs
+            .borrow()
+            .iter()
+            .filter(|(_, job)| {
+                job.owner == self.scope && matches!(job.kind, JobKind::Background(_))
+            })
+            .map(|(&id, _)| id)
+            .collect();
+        let current = ids.last().copied();
+        let previous = ids.iter().rev().nth(1).copied();
+        for id in ids {
+            let (number, label, status, notified) = {
+                let jobs = self.core.jobs.borrow();
+                let job = jobs.get(&id).expect("registered job");
+                let JobKind::Background(number) = job.kind else {
+                    continue;
+                };
+                (
+                    number,
+                    job.label.clone(),
+                    job.join.clone().now_or_never(),
+                    job.notified,
+                )
+            };
+            if !notified || status.is_none() {
+                let output = fds.get(1).ok_or(1)?;
+                let marker = if Some(id) == current {
+                    '+'
+                } else if Some(id) == previous {
+                    '-'
+                } else {
+                    ' '
+                };
+                let state = match status {
+                    None => "Running".to_owned(),
+                    Some(0) => "Done".to_owned(),
+                    Some(code) => format!("Exit {code}"),
+                };
+                let header = format!("[{}]{}  {:<27}", number.0, marker, state);
+                output
+                    .write_all(header.as_bytes(), &self.cancel)
+                    .await
+                    .map_err(|e| e.status())?;
+                if let Some(label) = label {
+                    output
+                        .write_all(label.text.as_bytes(), &self.cancel)
+                        .await
+                        .map_err(|e| e.status())?;
+                }
+                output
+                    .write_all(if status.is_none() { b" &\n" } else { b"\n" }, &self.cancel)
+                    .await
+                    .map_err(|e| e.status())?;
+            }
+            if status.is_some() {
+                let mut jobs = self.core.jobs.borrow_mut();
+                let job = jobs.get_mut(&id).expect("registered job");
+                job.kind = JobKind::Completed;
+                // A remembered numeric status needs no retained source label.
+                job.label = None;
+            }
+        }
+        Ok(())
+    }
     pub(crate) fn check_job(&self, selector: JobSelector) -> Result<(), i32> {
         self.core
             .jobs
             .borrow()
             .iter()
-            .find(|(id, job)| selector.matches_live(**id, job) && job.owner == self.scope)
+            .find(|(id, job)| {
+                selector.matches_live(**id, job)
+                    && job.owner == self.scope
+                    && (matches!(selector, JobSelector::Number(_)) || !job.join.is_finished())
+            })
             .map(|_| ())
             .ok_or(1)
     }
@@ -432,7 +554,13 @@ impl Context {
             .map(|(_, job)| job)
             .ok_or(1)?;
         if job.join.is_finished() {
-            return Err(1);
+            // Non-monitor Bash accepts an unreported completed %job, but does
+            // not signal its residual runtime group. Numeric handles are dead.
+            return if matches!(selector, JobSelector::Number(_)) {
+                Ok(())
+            } else {
+                Err(1)
+            };
         }
         self.core
             .host
@@ -490,6 +618,7 @@ impl Session {
                 limits,
                 descriptors: Rc::new(RefCell::new(FdTable::default())),
                 jobs: RefCell::new(BTreeMap::new()),
+                residuals: RefCell::new(BTreeMap::new()),
                 next: Cell::new(1),
                 foreground: RefCell::new(None),
                 exit_requested: Cell::new(false),
@@ -509,7 +638,9 @@ impl Session {
             .borrow()
             .values()
             .filter(|job| {
-                matches!(job.kind, JobKind::Background(_)) && job.owner.resolved_id() == 0
+                matches!(job.kind, JobKind::Background(_))
+                    && job.owner.resolved_id() == 0
+                    && !job.join.is_finished()
             })
             .count()
     }
@@ -562,6 +693,7 @@ impl Session {
         let context = Context {
             core: self.core.clone(),
             source: eval::Source::root(source),
+            lifetime: (cancel.clone(), signal.clone()),
             cancel,
             signal,
             group,
@@ -598,6 +730,8 @@ impl Session {
             code
         });
         *self.core.foreground.borrow_mut() = Some(Job {
+            label: None,
+            notified: false,
             owner: Scope::new(0),
             kind: JobKind::Internal,
             group,
@@ -629,8 +763,25 @@ impl Session {
             .borrow()
             .as_ref()
             .map(|job| job.join.clone());
+        let residuals: Vec<_> = self
+            .core
+            .residuals
+            .borrow()
+            .iter()
+            .map(|(&group, residual)| (group, residual.cleanup.clone()))
+            .collect();
+        for (group, _) in &residuals {
+            let _ = self.core.host.kill_group(*group, 2);
+        }
         join_all(jobs.into_iter().chain(foreground)).await;
         self.core.jobs.borrow_mut().clear();
+        for (group, cleanup) in residuals {
+            if cleanup.await.is_err() {
+                // A prior host error retains its signal/reaping handle for retry.
+                let _ = self.core.host.wait_group(group).await;
+            }
+        }
+        self.core.residuals.borrow_mut().clear();
         *self.core.descriptors.borrow_mut() = FdTable::default();
         self.core.host.shutdown_io().await;
     }
@@ -638,6 +789,9 @@ impl Session {
 impl Drop for Session {
     fn drop(&mut self) {
         self.interrupt();
+        for &group in self.core.residuals.borrow().keys() {
+            self.core.host.abandon_group(group, 2);
+        }
         for job in self.core.jobs.borrow().values() {
             if job.signal.get().is_none() {
                 job.signal.set(Some(2));
@@ -647,6 +801,71 @@ impl Drop for Session {
     }
 }
 impl Core {
+    fn retain_residual(
+        &self,
+        group: GroupId,
+        owner: Scope,
+        cleanup: JoinHandle<Result<(), ProcessError>>,
+        lifetime: (Cancel, Rc<Cell<Option<i32>>>),
+    ) {
+        // One natural retry per completion checkpoint keeps transient errors
+        // recoverable without a retry loop. The host retains admission ownership
+        // until full cleanup succeeds, even if its runtime members already exited.
+        self.residuals.borrow_mut().retain(|group, residual| {
+            if !residual.cleanup.is_finished() {
+                return true;
+            }
+            if matches!(residual.cleanup.clone().now_or_never(), Some(Ok(()))) {
+                return false;
+            }
+            residual.cleanup = self.monitor_residual(
+                *group,
+                self.host.detach_group(*group),
+                residual.lifetime.clone(),
+            );
+            !residual.cleanup.is_finished()
+                || !matches!(residual.cleanup.clone().now_or_never(), Some(Ok(())))
+        });
+        // Old monitors observe explicit cancellation only; they must not consume
+        // a host interrupt belonging to the next foreground invocation.
+        let lifetime = (lifetime.0.without_probe(), lifetime.1);
+        let cleanup = self.monitor_residual(group, cleanup, lifetime.clone());
+        if cleanup.is_finished() && matches!(cleanup.clone().now_or_never(), Some(Ok(()))) {
+            return;
+        }
+        self.residuals.borrow_mut().insert(
+            group,
+            Residual {
+                owner,
+                cleanup,
+                lifetime,
+            },
+        );
+    }
+    fn monitor_residual(
+        &self,
+        group: GroupId,
+        cleanup: JoinHandle<Result<(), ProcessError>>,
+        lifetime: (Cancel, Rc<Cell<Option<i32>>>),
+    ) -> JoinHandle<Result<(), ProcessError>> {
+        // Ready success has no ownership left; ready failure needs a future
+        // checkpoint or shutdown retry, not an extra executor task.
+        if cleanup.is_finished() {
+            return cleanup;
+        }
+        let host = self.host.clone();
+        self.executor.spawn(async move {
+            match futures::future::select(cleanup, lifetime.0.cancelled().boxed_local()).await {
+                futures::future::Either::Left((result, _)) => result,
+                futures::future::Either::Right(((), cleanup)) => {
+                    let _ = host.kill_group(group, lifetime.1.get().unwrap_or(2));
+                    // Reaping, not signal delivery, decides whether ownership
+                    // remains. A delivery error cannot undo confirmed cleanup.
+                    cleanup.await
+                }
+            }
+        })
+    }
     fn reap_internal_jobs(&self) {
         self.jobs
             .borrow_mut()
@@ -656,12 +875,21 @@ impl Core {
         self.jobs
             .borrow()
             .values()
-            .filter(|job| job.kind != JobKind::Completed)
+            .filter(|job| {
+                job.kind != JobKind::Completed && !(job.notified && job.join.is_finished())
+            })
             .count()
             < self.limits.jobs
     }
     fn reap_completed_jobs(&self) {
         let mut jobs = self.jobs.borrow_mut();
+        for job in jobs.values_mut() {
+            if job.notified && job.join.is_finished() && matches!(job.kind, JobKind::Background(_))
+            {
+                job.kind = JobKind::Completed;
+                job.label = None;
+            }
+        }
         // Reserve one launch slot by evicting the oldest retained handle.
         // Inspect the bounded table in place; eviction allocates no scratch.
         while jobs.len() >= self.limits.jobs {
@@ -1898,6 +2126,31 @@ async fn launch_background(
         Ok(identity) => identity,
         Err(error) => return expansion_failure(error.into(), fds, context).await,
     };
+    let limit = context.limits().expansion_bytes;
+    let printed = command_string(
+        &command,
+        &Cell::new(limit),
+        limit,
+        Some(&context.parser_budget()),
+    );
+    let text = match printed {
+        Ok(text) => text,
+        Err(_) => {
+            return Outcome::status(if context.cancel.is_cancelled() {
+                context.cancel_status()
+            } else {
+                2
+            });
+        }
+    };
+    let storage = match context.evaluation.admit_storage(text.len()) {
+        Ok(storage) => storage,
+        Err(code) => return Outcome::status(code),
+    };
+    let label = Rc::new(JobLabel {
+        text,
+        _storage: storage,
+    });
     let allocation = match admit_job(context) {
         Ok(allocation) => allocation,
         Err(error) => return expansion_failure(error.into(), fds, context).await,
@@ -1917,6 +2170,7 @@ async fn launch_background(
     let child_context = Context {
         core: context.core.clone(),
         source: context.source.clone(),
+        lifetime: (cancel.clone(), signal.clone()),
         cancel: cancel.clone(),
         signal: signal.clone(),
         group,
@@ -1941,6 +2195,8 @@ async fn launch_background(
     context.core.jobs.borrow_mut().insert(
         job,
         Job {
+            label: Some(label),
+            notified: false,
             owner: context.scope.clone(),
             kind: JobKind::Background(number),
             group,
@@ -2159,6 +2415,8 @@ impl Substitutions {
         core.jobs.borrow_mut().insert(
             id,
             Job {
+                label: None,
+                notified: false,
                 owner: self.context.scope.clone(),
                 kind: JobKind::Internal,
                 group,
@@ -2252,6 +2510,7 @@ impl Substitutions {
         };
         let parent = self.context.cancel.clone();
         let parent_signal = self.context.signal.clone();
+        let parent_scope = self.context.scope.clone();
         let link = cancel.clone();
         let link_signal = signal.clone();
         let join = core.executor.spawn(async move {
@@ -2260,7 +2519,7 @@ impl Substitutions {
             let body = async {
                 let result = sequence(commands, child, fds, context.clone()).await;
                 let _ = context.wait_jobs(None, true).await;
-                context.cleanup_jobs().await;
+                context.finish_scope(parent_scope).await;
                 context.finish_group(&mut processes, result.code).await
             };
             let forward = async {
@@ -2280,6 +2539,8 @@ impl Substitutions {
         core.jobs.borrow_mut().insert(
             job,
             Job {
+                label: None,
+                notified: false,
                 owner: self.context.scope.clone(),
                 kind: JobKind::ProcessSubstitution,
                 group,
@@ -2768,6 +3029,12 @@ async fn dispatch_simple_command_body(
     match context.cancel.run(context.core.host.wait(pid)).await {
         Ok(result) => Ok(Outcome::status(result.map_err(|_| 1)?)),
         Err(_) => {
+            // Signal inherited members before waiting/reaping the direct child;
+            // it may be the last live direct stage but not the last group member.
+            let _ = context
+                .core
+                .host
+                .kill_group(context.group, context.stop_signal());
             context
                 .core
                 .host
@@ -3196,6 +3463,7 @@ mod scope_tests {
             evaluation: eval::Scope::new(&session.core.limits, session.core.eval_storage.clone()),
             core: session.core.clone(),
             source: eval::Source::root(""),
+            lifetime: (Cancel::new(), Rc::new(Cell::new(None))),
             cancel: Cancel::new(),
             signal: Rc::new(Cell::new(None)),
             group,
@@ -3418,5 +3686,609 @@ mod scope_tests {
         assert_eq!(inner.resolved_id(), 1);
         outer.forward_to(root);
         assert_eq!(inner.resolved_id(), 0);
+    }
+}
+
+#[cfg(test)]
+mod residual_review_tests {
+    use super::*;
+    use crate::{
+        io::{Capture, Endpoint, MemoryFs},
+        process::{InProcessHost, ProcessId},
+    };
+    use futures::future::LocalBoxFuture;
+
+    struct Host {
+        inner: InProcessHost,
+        executor: Executor,
+        direct: RefCell<BTreeMap<GroupId, ProcessId>>,
+        signals: RefCell<Vec<GroupId>>,
+        abandoned: RefCell<Vec<GroupId>>,
+        interrupt: Cell<bool>,
+        fail_detach: Cell<bool>,
+        cleanup_error: Cell<bool>,
+        release: Cancel,
+        signal_error: Cell<bool>,
+        release_on_signals: RefCell<Option<(Vec<GroupId>, Cancel)>>,
+    }
+    impl ProcessHost for Host {
+        fn allocate_group(&self) -> GroupId {
+            self.inner.allocate_group()
+        }
+        fn allocate_background_group(&self) -> GroupId {
+            self.inner.allocate_background_group()
+        }
+        fn interrupted(&self) -> bool {
+            self.interrupt.replace(false)
+        }
+        fn spawn(&self, request: SpawnRequest) -> Result<ProcessId, ProcessError> {
+            let group = request.group;
+            let direct = request.parent.is_none();
+            let pid = self.inner.spawn(request)?;
+            if direct {
+                self.direct.borrow_mut().insert(group, pid);
+            }
+            Ok(pid)
+        }
+        fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<i32, ProcessError>> {
+            self.inner.wait(pid)
+        }
+        fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
+            self.inner.kill(pid, signal)
+        }
+        fn wait_direct_group(
+            &self,
+            group: GroupId,
+        ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+            self.inner.wait_direct_group(group)
+        }
+        fn detach_group(&self, group: GroupId) -> JoinHandle<Result<(), ProcessError>> {
+            if self.cleanup_error.get() {
+                JoinHandle::ready(Err(ProcessError::Runtime(8)))
+            } else if self.fail_detach.replace(false) {
+                self.executor.spawn(async { Err(ProcessError::Runtime(8)) })
+            } else {
+                self.inner.detach_group(group)
+            }
+        }
+        fn kill_group(&self, group: GroupId, signal: i32) -> Result<(), ProcessError> {
+            self.signals.borrow_mut().push(group);
+            if let Some((groups, release)) = &*self.release_on_signals.borrow()
+                && groups
+                    .iter()
+                    .all(|group| self.signals.borrow().contains(group))
+            {
+                release.cancel();
+            }
+            self.inner.kill_group(group, signal)?;
+            if self.signal_error.get() {
+                Err(ProcessError::Runtime(8))
+            } else {
+                Ok(())
+            }
+        }
+        fn wait_group(&self, group: GroupId) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+            if self.cleanup_error.get() {
+                futures::future::ready(Err(ProcessError::Runtime(8))).boxed_local()
+            } else {
+                self.inner.wait_group(group)
+            }
+        }
+        fn abandon_group(&self, group: GroupId, signal: i32) {
+            self.abandoned.borrow_mut().push(group);
+            self.inner.abandon_group(group, signal);
+        }
+    }
+    struct Harness {
+        executor: Executor,
+        host: Rc<Host>,
+        session: Option<Session>,
+        output: Capture,
+    }
+    impl Harness {
+        fn new() -> Self {
+            let executor = Executor::new();
+            let host = Rc::new(Host {
+                inner: InProcessHost::new(executor.clone()),
+                executor: executor.clone(),
+                direct: RefCell::new(BTreeMap::new()),
+                signals: RefCell::new(Vec::new()),
+                abandoned: RefCell::new(Vec::new()),
+                interrupt: Cell::new(false),
+                fail_detach: Cell::new(false),
+                cleanup_error: Cell::new(false),
+                release: Cancel::new(),
+                signal_error: Cell::new(false),
+                release_on_signals: RefCell::new(None),
+            });
+            let release = host.release.clone();
+            host.inner.register("sleep", move |request, _| {
+                let release = release.clone();
+                async move {
+                    release.cancelled().await;
+                    drop(request);
+                    23
+                }
+                .boxed_local()
+            });
+            let weak = Rc::downgrade(&host);
+            host.inner.register("inherit", move |mut request, _| {
+                let host = weak.upgrade().unwrap();
+                async move {
+                    request.parent = Some(host.direct.borrow()[&request.group]);
+                    request.argv = vec!["sleep".into()];
+                    host.spawn(request).unwrap();
+                    0
+                }
+                .boxed_local()
+            });
+            let session = Session::new(
+                executor.clone(),
+                host.clone(),
+                Rc::new(MemoryFs::new(65536)),
+                Limits::default(),
+            );
+            let (out, output) = io::capture(65536);
+            let mut fds = FdTable::default();
+            fds.insert(0, Endpoint::null());
+            fds.insert(1, out);
+            fds.insert(2, Endpoint::null());
+            session.set_descriptors(fds).unwrap();
+            Self {
+                executor,
+                host,
+                session: Some(session),
+                output,
+            }
+        }
+        fn session(&self) -> &Session {
+            self.session.as_ref().unwrap()
+        }
+        fn finish<T: Clone>(&self, join: JoinHandle<T>) -> T {
+            for _ in 0..2000 {
+                if join.is_finished() {
+                    return join.now_or_never().unwrap();
+                }
+                self.executor.drive(64);
+            }
+            panic!("review control exceeded bounded executor turns");
+        }
+        fn run(&self, source: &str) -> i32 {
+            self.finish(self.session().start(source).unwrap())
+        }
+        fn context(&self) -> Context {
+            let core = self.session().core.clone();
+            let cancel = Cancel::new();
+            let signal = Rc::new(Cell::new(None));
+            Context {
+                evaluation: eval::Scope::new(&core.limits, core.eval_storage.clone()),
+                core,
+                source: eval::Source::root(""),
+                lifetime: (cancel.clone(), signal.clone()),
+                cancel,
+                signal,
+                group: self.host.allocate_group(),
+                scope: Scope::new(0),
+                parameter_error_status: 127,
+                compound_child: false,
+                loop_depth: 0,
+                ignore_errexit: false,
+            }
+        }
+        fn shutdown(mut self) {
+            let session = self.session.take().unwrap();
+            self.finish(self.executor.spawn(async move { session.shutdown().await }));
+            assert_eq!(self.host.inner.retained_count(), 0);
+            assert_eq!(self.executor.drive(256).pending, 0);
+        }
+    }
+
+    #[test]
+    fn residual_review_successful_process_substitution_transfers_nested_residual() {
+        let rig = Harness::new();
+        assert_eq!(
+            rig.run("cat <(x=$(inherit >/dev/null); echo READY); wait \"$!\""),
+            0
+        );
+        assert_eq!(rig.output.bytes(), b"READY\n");
+        assert_eq!(
+            rig.host.inner.active_count(),
+            1,
+            "success must leave inherited work alive"
+        );
+        assert!(rig.host.signals.borrow().is_empty());
+        rig.shutdown();
+    }
+    #[test]
+    fn residual_review_monitor_never_consumes_foreground_host_interrupt() {
+        let rig = Harness::new();
+        let context = rig.context();
+        let gate = Cancel::new();
+        let release = gate.clone();
+        let cleanup = rig.executor.spawn(async move {
+            gate.cancelled().await;
+            Ok(())
+        });
+        let host = rig.host.clone();
+        let lifetime = Cancel::with_probe(Rc::new(move || host.interrupted()));
+        context.core.retain_residual(
+            context.group,
+            context.scope.clone(),
+            cleanup,
+            (lifetime, context.signal.clone()),
+        );
+        rig.host.interrupt.set(true);
+        rig.executor.drive(256);
+        let untouched = rig.host.interrupt.replace(false);
+        release.cancel();
+        rig.executor.drive(256);
+        assert!(
+            untouched,
+            "a residual monitor must only observe explicit lifetime cancellation"
+        );
+        drop(context);
+        rig.shutdown();
+    }
+    #[test]
+    fn residual_review_explicit_process_substitution_wait_recycles_capacity() {
+        let rig = Harness::new();
+        assert_eq!(
+            rig.run("for ((i=0; i<140; i++)); do : <(:) || exit $?; wait \"$!\" || exit $?; done; echo READY"),
+            0
+        );
+        assert_eq!(rig.output.bytes(), b"READY\n");
+        rig.shutdown();
+    }
+    #[test]
+    fn residual_review_drop_retries_failed_descendant_cleanup() {
+        let mut rig = Harness::new();
+        rig.host.fail_detach.set(true);
+        assert_eq!(rig.run("inherit"), 0);
+        rig.executor.drive(256);
+        assert_eq!(rig.host.inner.active_count(), 1);
+        drop(rig.session.take().unwrap());
+        rig.executor.drive(256);
+        assert_eq!(
+            rig.host.inner.retained_count(),
+            0,
+            "Drop must transfer confirmed reaping, not only signal"
+        );
+        assert!(!rig.host.abandoned.borrow().is_empty());
+        assert_eq!(rig.executor.drive(256).pending, 0);
+    }
+    #[test]
+    fn residual_review_scope_cleanup_signals_all_groups_before_waiting() {
+        let rig = Harness::new();
+        let context = rig.context();
+        let groups = vec![rig.host.allocate_group(), rig.host.allocate_group()];
+        let gate = Cancel::new();
+        *rig.host.release_on_signals.borrow_mut() = Some((groups.clone(), gate.clone()));
+        for group in groups {
+            let gate = gate.clone();
+            let cleanup = rig.executor.spawn(async move {
+                gate.cancelled().await;
+                Ok(())
+            });
+            context.core.retain_residual(
+                group,
+                context.scope.clone(),
+                cleanup,
+                context.lifetime.clone(),
+            );
+        }
+        rig.finish(
+            rig.executor
+                .spawn(async move { context.cleanup_jobs().await }),
+        );
+        rig.shutdown();
+    }
+    #[test]
+    fn residual_review_scope_and_shutdown_signal_residuals_before_shell_task_joins() {
+        for shutdown in [false, true] {
+            let mut rig = Harness::new();
+            let context = rig.context();
+            let gate = Cancel::new();
+            *rig.host.release_on_signals.borrow_mut() = Some((vec![context.group], gate.clone()));
+            let release = gate.clone();
+            let cleanup = rig.executor.spawn(async move {
+                release.cancelled().await;
+                Ok(())
+            });
+            context.core.retain_residual(
+                context.group,
+                context.scope.clone(),
+                cleanup,
+                context.lifetime.clone(),
+            );
+            let join = rig.executor.spawn(async move {
+                gate.cancelled().await;
+                130
+            });
+            context.core.jobs.borrow_mut().insert(
+                JobId(context.core.allocate_id()),
+                Job {
+                    label: None,
+                    notified: false,
+                    owner: context.scope.clone(),
+                    kind: JobKind::Internal,
+                    group: rig.host.allocate_group(),
+                    cancel: Cancel::new(),
+                    signal: Rc::new(Cell::new(None)),
+                    join,
+                    _allocation: None,
+                },
+            );
+            if shutdown {
+                let session = rig.session.take().unwrap();
+                rig.finish(rig.executor.spawn(async move { session.shutdown().await }));
+                drop(context);
+                assert_eq!(rig.executor.drive(256).pending, 0);
+            } else {
+                rig.finish(
+                    rig.executor
+                        .spawn(async move { context.cleanup_jobs().await }),
+                );
+                rig.shutdown();
+            }
+        }
+    }
+    #[test]
+    fn residual_review_signal_error_does_not_retain_successfully_reaped_groups() {
+        let rig = Harness::new();
+        let context = rig.context();
+        let gate = Cancel::new();
+        *rig.host.release_on_signals.borrow_mut() = Some((vec![context.group], gate.clone()));
+        rig.host.signal_error.set(true);
+        let cleanup = rig.executor.spawn(async move {
+            gate.cancelled().await;
+            Ok(())
+        });
+        context.core.retain_residual(
+            context.group,
+            context.scope.clone(),
+            cleanup,
+            context.lifetime.clone(),
+        );
+        context.cancel.cancel();
+        rig.executor.drive(256);
+        assert_eq!(
+            context.core.residuals.borrow()[&context.group]
+                .cleanup
+                .clone()
+                .now_or_never(),
+            Some(Ok(()))
+        );
+        rig.host.signal_error.set(false);
+        let next = rig.host.allocate_group();
+        let cleanup = rig.executor.spawn(async { Ok(()) });
+        context.core.retain_residual(
+            next,
+            context.scope.clone(),
+            cleanup,
+            (Cancel::new(), context.signal.clone()),
+        );
+        assert!(!context.core.residuals.borrow().contains_key(&context.group));
+        drop(context);
+        rig.shutdown();
+    }
+    #[test]
+    fn residual_review_internal_background_transfer_discards_job_label() {
+        let rig = Harness::new();
+        assert_eq!(rig.run("(sleep &)"), 0);
+        assert!(
+            rig.session()
+                .core
+                .jobs
+                .borrow()
+                .values()
+                .any(|job| job.kind == JobKind::Internal && !job.join.is_finished())
+        );
+        assert!(
+            rig.session()
+                .core
+                .jobs
+                .borrow()
+                .values()
+                .filter(|job| job.kind == JobKind::Internal)
+                .all(|job| job.label.is_none())
+        );
+        rig.shutdown();
+    }
+    #[test]
+    fn residual_review_ready_builtin_completion_enqueues_no_cleanup_tasks() {
+        let rig = Harness::new();
+        for _ in 0..140 {
+            let command = rig.session().start(":").unwrap();
+            // Include the normal interpreter stage, but stop at foreground
+            // completion before any extra cleanup task can run.
+            let mut polls = 0;
+            let turn = loop {
+                let turn = rig.executor.drive(1);
+                polls += turn.polls;
+                assert!(
+                    polls <= 4,
+                    "builtin exceeded its normal foreground task bound"
+                );
+                if command.is_finished() {
+                    break turn;
+                }
+            };
+            assert_eq!(command.now_or_never(), Some(0));
+            assert_eq!(
+                turn.pending, 0,
+                "builtin completion must not enqueue a cleanup monitor"
+            );
+            assert!(!turn.runnable);
+            assert!(rig.session().core.residuals.borrow().is_empty());
+        }
+        rig.shutdown();
+    }
+    #[test]
+    fn residual_review_ready_failed_cleanup_keeps_ownership_without_a_monitor() {
+        let rig = Harness::new();
+        rig.host.cleanup_error.set(true);
+        let context = rig.context();
+        context.core.retain_residual(
+            context.group,
+            context.scope.clone(),
+            JoinHandle::ready(Err(ProcessError::Runtime(8))),
+            context.lifetime.clone(),
+        );
+        assert_eq!(rig.executor.drive(64).polls, 0);
+        assert_eq!(
+            context.core.residuals.borrow()[&context.group]
+                .cleanup
+                .clone()
+                .now_or_never(),
+            Some(Err(ProcessError::Runtime(8)))
+        );
+        let complete = rig.host.allocate_group();
+        context.core.retain_residual(
+            complete,
+            context.scope.clone(),
+            JoinHandle::ready(Ok(())),
+            context.lifetime.clone(),
+        );
+        assert_eq!(rig.executor.drive(64).polls, 0);
+        assert_eq!(context.core.residuals.borrow().len(), 1);
+        let retry = context.clone();
+        rig.finish(
+            rig.executor
+                .spawn(async move { retry.cleanup_jobs().await }),
+        );
+        assert_eq!(
+            context.core.residuals.borrow().len(),
+            1,
+            "failed scope retry must preserve ownership"
+        );
+        assert_eq!(rig.executor.drive(256).pending, 0);
+        rig.host.cleanup_error.set(false);
+        context.core.retain_residual(
+            rig.host.allocate_group(),
+            context.scope.clone(),
+            JoinHandle::ready(Ok(())),
+            context.lifetime.clone(),
+        );
+        assert!(
+            context.core.residuals.borrow().is_empty(),
+            "a healed failed retry must release ownership"
+        );
+        drop(context);
+        rig.shutdown();
+    }
+    #[test]
+    fn residual_review_failed_scope_cleanup_retries_before_cancellation_returns() {
+        let rig = Harness::new();
+        rig.host.fail_detach.set(true);
+        let command = rig
+            .session()
+            .start("(x=$(inherit >/dev/null); sleep)")
+            .unwrap();
+        let mut ready = false;
+        for _ in 0..2000 {
+            rig.executor.drive(1);
+            if rig.host.inner.active_count() == 2
+                && rig
+                    .session()
+                    .core
+                    .residuals
+                    .borrow()
+                    .values()
+                    .any(|residual| {
+                        residual.cleanup.is_finished()
+                            && matches!(residual.cleanup.clone().now_or_never(), Some(Err(_)))
+                    })
+            {
+                ready = true;
+                break;
+            }
+        }
+        assert!(
+            ready,
+            "isolated scope must own both the failed residual and blocked shell command"
+        );
+        rig.session().interrupt();
+        assert_eq!(rig.finish(command), 130);
+        assert_eq!(
+            rig.host.inner.retained_count(),
+            0,
+            "scope exit must confirm reaping after a failed observer"
+        );
+        assert!(rig.session().core.residuals.borrow().is_empty());
+        rig.shutdown();
+    }
+    #[test]
+    fn residual_review_healed_errors_do_not_accumulate_core_ownership() {
+        let rig = Harness::new();
+        rig.host.release.cancel();
+        for _ in 0..4097 {
+            rig.host.fail_detach.set(true);
+            assert_eq!(rig.run("inherit"), 0);
+            rig.executor.drive(256);
+            assert!(
+                rig.session().core.residuals.borrow().len() <= 1,
+                "healed ownership must be retired at the next completion checkpoint"
+            );
+            assert!(rig.host.inner.retained_count() <= 1);
+        }
+        assert_eq!(rig.run(":"), 0);
+        assert!(rig.session().core.residuals.borrow().is_empty());
+        assert_eq!(rig.host.inner.retained_count(), 0);
+        assert!(
+            rig.host.signals.borrow().is_empty(),
+            "natural retries must not signal"
+        );
+        rig.shutdown();
+    }
+    #[test]
+    fn residual_review_pending_error_retry_keeps_original_lifetime_cancellation() {
+        let rig = Harness::new();
+        let context = rig.context();
+        rig.host
+            .spawn(SpawnRequest {
+                argv: vec!["inherit".into()],
+                env: BTreeMap::new(),
+                cwd: "/".into(),
+                fds: rig.session().core.descriptors.borrow().clone(),
+                group: context.group,
+                parent: None,
+            })
+            .unwrap();
+        rig.executor.drive(256);
+        rig.host.fail_detach.set(true);
+        let cleanup = rig.host.detach_group(context.group);
+        rig.executor.drive(256);
+        context.core.retain_residual(
+            context.group,
+            context.scope.clone(),
+            cleanup,
+            context.lifetime.clone(),
+        );
+        let next = rig.host.allocate_group();
+        context.core.retain_residual(
+            next,
+            context.scope.clone(),
+            JoinHandle::ready(Ok(())),
+            (Cancel::new(), Rc::new(Cell::new(None))),
+        );
+        assert!(
+            !context.core.residuals.borrow()[&context.group]
+                .cleanup
+                .is_finished(),
+            "a pending retry must replace the failed observer"
+        );
+        context.cancel.cancel();
+        rig.executor.drive(256);
+        assert_eq!(rig.host.inner.retained_count(), 0);
+        assert!(rig.host.signals.borrow().contains(&context.group));
+        drop(context);
+        rig.shutdown();
+    }
+    #[test]
+    fn residual_review_jobs_with_no_output_accepts_closed_stdout() {
+        let rig = Harness::new();
+        assert_eq!(rig.run("jobs >&-"), 0);
+        assert_eq!(rig.run("false & p=$!; wait \"$p\"; jobs >&-"), 0);
+        rig.shutdown();
     }
 }

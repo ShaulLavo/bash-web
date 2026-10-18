@@ -179,3 +179,31 @@ npm run test:fuzz-shell-control-flow
 
 The two new seed fixtures belong only to this generator. Existing generators
 and fixtures are not regenerated as part of this gate.
+
+## Direct-child wait and job lifetime
+
+`npm run fuzz:shell-job-lifetime -- --shell PATH --seed 1` compares 240
+builtin-only cases with GNU Bash 5.3.15: 144 fixed controls and 96 seeded cases.
+The matrix crosses 12 wait/status/notification families, root/function/subshell
+scopes, and four fixed exit statuses. Each seed adds 96 unique scripts using
+non-matrix statuses across 0–255; all 240 scripts are distinct within the seed.
+It covers repeated numeric and percent waits,
+bare wait, pipeline status, child ownership, one-shot `jobs` completion, and
+completed-job signal selectors. Completion barriers use direct-child existence
+checks rather than timing sleeps. Job descriptions are normalized to their state;
+exact resulting stdout bytes and exit status are compared without exemptions.
+
+The generator shares the bounded process-group runner and fingerprints its own
+source plus both imported runner sources. Oracle-only recording pins Bash
+5.3.15, environment and every generated script. Strict CI replay never invokes
+Bash and rejects stale source, metadata, grammar or observation mutations:
+
+```sh
+npm run fuzz:shell-job-lifetime:ci -- --shell /path/to/shell-engine
+npm run test:fuzz-shell-job-lifetime
+```
+
+Inherited external descendants are intentionally outside this builtin grammar.
+Their descriptor, signal and reaping behavior is covered by native/WASI tests
+using the engine's injectable runtime ABI. Real Bun/browser acceptance remains
+pending the inherited runtime-job dependency delivery.

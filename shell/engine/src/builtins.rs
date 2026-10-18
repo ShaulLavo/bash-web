@@ -92,6 +92,7 @@ pub(crate) fn is_builtin(name: &str) -> bool {
             | "shopt"
             | "exit"
             | "return"
+            | "jobs"
             | "wait"
             | "kill"
             | "unset"
@@ -373,6 +374,12 @@ pub(crate) async fn run(
             write(&fds, format!("{cwd}\n").as_bytes(), &context).await?;
         }
         "set" => return set(args, &state, &context, work).await,
+        "jobs" => {
+            if !args.is_empty() {
+                return Err(2);
+            }
+            context.list_jobs(&fds).await?;
+        }
         "wait" => {
             if args.len() > 1 {
                 return Err(2);

@@ -65,6 +65,18 @@ impl ProcessHost for ParseInterruptHost {
     fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
         self.inner.kill(pid, signal)
     }
+    fn wait_direct_group(
+        &self,
+        group: GroupId,
+    ) -> futures::future::LocalBoxFuture<'static, Result<(), ProcessError>> {
+        self.inner.wait_direct_group(group)
+    }
+    fn detach_group(
+        &self,
+        group: GroupId,
+    ) -> shell_engine::executor::JoinHandle<Result<(), ProcessError>> {
+        self.inner.detach_group(group)
+    }
     fn kill_group(&self, group: GroupId, signal: i32) -> Result<(), ProcessError> {
         self.inner.kill_group(group, signal)
     }
