@@ -92,6 +92,25 @@ test("verifier rejects final guest memory cap drift", () => {
   }, 65536);
 });
 
+for (const [description, limits] of [
+  ["uncapped", [0, 1]],
+  ["512 MiB", [1, 1].concat(integer(8192))],
+] as const) {
+  test(`verifier rejects an additional ${description} imported memory`, () => {
+    fixture((path, sdk) => {
+      const bytes = new Uint8Array(
+        [0, 97, 115, 109, 1, 0, 0, 0].concat(
+          section(2, [1].concat(text("env"), text("extraMemory"), [2], limits)),
+          section(5, [1, 1, 1].concat(integer(4096))),
+        ),
+      );
+      assert.ok(WebAssembly.validate(bytes), "control must be a valid Wasm module");
+      writeFileSync(path, bytes);
+      assert.throws(() => verifyWasiGuest(path, sdk), /guest memory must not be imported/);
+    });
+  });
+}
+
 test("deadstripped libc is accepted only when no filesystem imports remain", () => {
   fixture((path, sdk) => {
     writeFileSync(

@@ -56,6 +56,13 @@ export function verifyWasiGuest(
 ) {
   const bytes = readFileSync(path);
   const module = new WebAssembly.Module(bytes);
+  const imports = WebAssembly.Module.imports(module);
+  // Guests own their only memory. The defined-memory section below cannot
+  // account for additional host-provided memories, even when it is capped.
+  assert.ok(
+    !imports.some((entry) => entry.kind === "memory"),
+    `${path}: guest memory must not be imported`,
+  );
   const names = functionNames(module);
   const scanner = "__wasilibc_populate_preopens";
   const hasScanner = names.has(scanner);
@@ -79,9 +86,7 @@ export function verifyWasiGuest(
     // Rust WASI adapter. Neither needs libc path I/O. Permit deadstripping only
     // when path/prestat imports are absent or provably belong to that adapter,
     // never when a stripped libc scanner could be hiding behind those imports.
-    const functions = WebAssembly.Module.imports(module).filter(
-      (entry) => entry.kind === "function",
-    );
+    const functions = imports.filter((entry) => entry.kind === "function");
     for (let index = 0; index < functions.length; index++) {
       const entry = functions[index];
       if (entry.module !== "wasi_snapshot_preview1" || !/^(fd_prestat_|path_)/.test(entry.name))
