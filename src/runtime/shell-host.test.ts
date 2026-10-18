@@ -682,6 +682,96 @@ test("page disposal retains a lazy shell consumer until its owner fences and sto
   assert.equal(host.consumers.size, 0);
 });
 
+test("an unobserved cached registration reports work first started by an observed shell", async (context) => {
+  const host = fixture(context);
+  registerShell(host.runtime, host.options);
+  const diagnostics = createStartupDiagnostics(1);
+  const shell = await createShell({ ...host.options, onStartupStage: diagnostics.observe });
+  try {
+    for (const stage of [
+      "shell-home-mkdir-requested",
+      "shell-home-mkdir-resolved",
+      "shell-wasm-fetch-requested",
+      "shell-wasm-fetch-resolved",
+      "shell-wasm-compile-resolved",
+    ] as const)
+      assert.notEqual(diagnostics.snapshot().stages[stage], undefined, stage);
+    assert.deepEqual(diagnostics.snapshot().pending, []);
+  } finally {
+    await shell.dispose();
+  }
+});
+
+for (const failed of ["fetch", "mkdir"] as const)
+  test(`a new start observes a new shared ${failed} attempt, not the stopped generation`, async (context) => {
+    const host = fixture(context);
+    let attempts = 0;
+    if (failed === "fetch")
+      globalThis.fetch = async () =>
+        ++attempts === 1
+          ? new Response("unavailable", { status: 503 })
+          : new Response(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0));
+    else
+      host.runtime.filesystem.mkdirp = async () => {
+        if (++attempts === 1) throw new Error("Directory initialization failed");
+      };
+    const previous = createStartupDiagnostics(1);
+    await assert.rejects(
+      createShell({ ...host.options, onStartupStage: previous.observe }),
+      failed === "fetch" ? /Shell executable fetch failed/ : /Directory initialization failed/,
+    );
+    previous.stop();
+    const stopped = previous.snapshot();
+    const next = createStartupDiagnostics(2);
+    const shell = await createShell({ ...host.options, onStartupStage: next.observe });
+    try {
+      const operation = failed === "fetch" ? "shell-wasm-fetch" : "shell-home-mkdir";
+      assert.notEqual(next.snapshot().stages[`${operation}-requested`], undefined);
+      assert.notEqual(next.snapshot().stages[`${operation}-resolved`], undefined);
+      assert.deepEqual(next.snapshot().pending, []);
+      assert.deepEqual(previous.snapshot(), stopped);
+      if (failed === "fetch") {
+        assert.equal(attempts, 2);
+        assert.equal(next.snapshot().stages["shell-home-mkdir-requested"], undefined);
+      }
+    } finally {
+      await shell.dispose();
+    }
+  });
+
+test("a live borrowed runtime does not retain disposed no-observer shell options", async (context) => {
+  const host = fixture(context);
+  const gc = globalThis.gc;
+  assert.ok(gc, "The runtime unit runner must enable --expose-gc");
+  const references = await (async () => {
+    const terminal = new SharedBridge();
+    const env = { GC_PROBE: "original environment" };
+    const signal = new AbortController().signal;
+    const options = { ...host.options, terminal, env, signal };
+    const references = {
+      options: new WeakRef(options),
+      terminal: new WeakRef(terminal),
+      env: new WeakRef(env),
+      signal: new WeakRef(signal),
+    };
+    const shell = await createShell(options);
+    await shell.dispose();
+    return references;
+  })();
+  assert.equal(host.consumers.size, 0);
+  assert.equal(host.roots.size, 0);
+  assert.equal(host.runtime.disposed, false);
+  // WeakRef construction keeps targets alive for that job. Collect on later turns;
+  // do not dereference between collections, which would keep a target alive again.
+  for (let pass = 0; pass < 8; pass++) {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    gc();
+  }
+  for (const [name, reference] of Object.entries(references))
+    assert.equal(reference.deref(), undefined, `${name} retained after shell disposal`);
+  assert.equal(host.runtime.disposed, false);
+});
+
 for (const stalled of ["mkdir", "fetch"] as const)
   test(`startup diagnostics name a stalled ${stalled} without marking it resolved`, async (context) => {
     const host = fixture(context);

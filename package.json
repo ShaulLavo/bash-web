@@ -55,7 +55,7 @@
     "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:test-guest && npm run notices:browser && vite build && node scripts/finish-build.mjs",
     "typecheck:browser": "tsc --noEmit",
     "test:browser": "playwright test",
-    "test:runtime:terminal": "node scripts/test-runtime-terminal.mjs",
+    "test:runtime:terminal": "node --expose-gc scripts/test-runtime-terminal.mjs",
     "notices:browser": "npm run notices:shell && node scripts/browser-notices.mjs",
     "serve": "node dist/serve.mjs",
     "verify:browser": "npm run test:browser:package && npm run build:browser && npm run typecheck:browser && npm run test:runtime:terminal && npm run test:browser",
