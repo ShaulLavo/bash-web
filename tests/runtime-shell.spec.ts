@@ -632,6 +632,33 @@ test("Ctrl+C confirms foreground descendants while preserving another background
   await expect.poll(() => page.workers().length).toBe(baseline);
 });
 
+type ProcessRoot = ReturnType<
+  typeof import("../src/runtime/diagnostics").runtimeSnapshot
+>["roots"][number];
+
+function assertPipelineChildren(before: ProcessRoot, peak: ProcessRoot, expected: number) {
+  const baselinePids = new Set(before.records.map((record) => record.pid));
+  const children = peak.records.filter((record) => !baselinePids.has(record.pid));
+  expect(children).toHaveLength(expected);
+  expect(new Set(children.map((record) => record.pid)).size).toBe(expected);
+  expect(new Set(children.map((record) => record.job)).size).toBe(expected);
+  for (const child of children) {
+    expect(child.parentPid).toBe(before.pid);
+    expect(child.job).toBeGreaterThan(0);
+    expect(before.records.some((record) => record.job === child.job)).toBe(false);
+  }
+  expect(peak.retainedSlots - before.retainedSlots).toBe(children.length);
+}
+
+function assertPipelineReclaimed(before: ProcessRoot, after: ProcessRoot) {
+  expect(after.retainedSlots).toBe(before.retainedSlots);
+  expect(after.workers).toBe(before.workers);
+  expect(after.pipes).toBe(before.pipes);
+  expect(after.records.map(({ pid, parentPid, job }) => ({ pid, parentPid, job }))).toEqual(
+    before.records.map(({ pid, parentPid, job }) => ({ pid, parentPid, job })),
+  );
+}
+
 // These bounds cover the shell, descriptor transport and supervisor. The child
 // program's deliberate read-all allocation is not a shell buffering budget.
 test("an accumulating consumer cannot make the shell or transport buffer its input", async ({
@@ -644,7 +671,7 @@ test("an accumulating consumer cannot make the shell or transport buffer its inp
   const baseMemory = before.roots[0].memoryBytes;
   let peakShell = baseMemory;
   let peakPipes = 0;
-  let peakSlots = before.roots[0].retainedSlots;
+  let peak = before.roots[0];
   await command(page, "seq 1 2000000 | test-guest delayed-count 500 ACCUMULATED");
   const deadline = Date.now() + 45000;
   while (Date.now() < deadline) {
@@ -657,7 +684,7 @@ test("an accumulating consumer cannot make the shell or transport buffer its inp
     const root = sample.runtime.roots[0];
     peakShell = Math.max(peakShell, root.memoryBytes);
     peakPipes = Math.max(peakPipes, root.pipes);
-    peakSlots = Math.max(peakSlots, root.retainedSlots);
+    if (root.retainedSlots > peak.retainedSlots) peak = root;
     expect(sample.runtime.terminal.outputQueued).toBeLessThanOrEqual(
       sample.runtime.terminal.outputCapacity,
     );
@@ -668,22 +695,35 @@ test("an accumulating consumer cannot make the shell or transport buffer its inp
   await ready(page);
   expect(peakShell - baseMemory).toBeLessThanOrEqual(8 * 1024 * 1024);
   expect(peakPipes).toBeLessThanOrEqual(2);
-  expect(peakSlots - before.roots[0].retainedSlots).toBe(externalPipelineProcesses);
+  assertPipelineChildren(before.roots[0], peak, externalPipelineProcesses);
   await expect.poll(() => page.workers().length).toBe(baselineWorkers);
   await expect
     .poll(() => page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0].pipes))
-    .toBe(0);
+    .toBe(before.roots[0].pipes);
   await expect
     .poll(() => page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0].retainedSlots))
     .toBe(before.roots[0].retainedSlots);
+  const after = await page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0]);
+  assertPipelineReclaimed(before.roots[0], after);
+  // Fail closed even when workers and pipes retire but an anonymous slot remains.
+  expect(() =>
+    assertPipelineChildren(
+      before.roots[0],
+      { ...peak, retainedSlots: peak.retainedSlots + 1 },
+      externalPipelineProcesses,
+    ),
+  ).toThrow();
+  expect(() =>
+    assertPipelineReclaimed(before.roots[0], { ...after, retainedSlots: after.retainedSlots + 1 }),
+  ).toThrow();
   await test.info().attach("pipeline-retention", {
     body: JSON.stringify({
       externalPipelineProcesses,
       baseline: before.roots[0],
       peakShell,
       peakPipes,
-      peakSlots,
-      after: await page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0]),
+      peak,
+      after,
     }),
     contentType: "application/json",
   });
