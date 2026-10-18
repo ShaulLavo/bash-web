@@ -15,8 +15,6 @@ extern "C" {
     fn proc_write(fd: u32, data: *const u8, length: usize) -> i32;
     #[link_name = "pipe"]
     fn proc_pipe(output: *mut u32) -> i32;
-    #[link_name = "close"]
-    fn proc_close(fd: u32) -> i32;
     #[link_name = "poll"]
     fn proc_poll(
         subscriptions: *const Subscription,
@@ -38,6 +36,16 @@ extern "C" {
     fn proc_job_of(pid: u32) -> i32;
     #[link_name = "kill"]
     fn proc_kill(pid: u32, signal: u32) -> i32;
+}
+
+#[link(wasm_import_module = "wasi_snapshot_preview1")]
+extern "C" {
+    #[link_name = "fd_close"]
+    fn wasi_fd_close(fd: u32) -> u16;
+}
+
+fn close_fd(fd: u32) -> io::Result<()> {
+    checked(-i32::from(unsafe { wasi_fd_close(fd) })).map(|_| ())
 }
 
 // ABI records are little-endian wasm32 structs, 16 bytes each. Poll kinds 0/1/2
@@ -319,8 +327,8 @@ fn run(args: &[String]) -> Result<i32> {
             // This process cannot exit until the consumer sees EOF. Retaining a
             // shell-side fd2 through terminal wait would make this cycle deadlock.
             write_fd(1, b"EOF_PAYLOAD\n")?;
-            checked(unsafe { proc_close(1) })?;
-            checked(unsafe { proc_close(2) })?;
+            close_fd(1)?;
+            close_fd(2)?;
             let mut ack = [0];
             if read_fd(3, &mut ack)? != 1 || ack != [b'!'] {
                 return Err("missing downstream EOF acknowledgement".into());
@@ -338,7 +346,7 @@ fn run(args: &[String]) -> Result<i32> {
             impl Drop for Pipe {
                 fn drop(&mut self) {
                     for fd in self.0 {
-                        unsafe { proc_close(fd) };
+                        let _ = close_fd(fd);
                     }
                 }
             }
