@@ -1,31 +1,35 @@
 // Original telemetry lifecycle regressions. Diagnostics borrow pipe state without owning it.
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 import type { Runtime } from "waffle";
 import { DescriptorTable } from "waffle/core/descriptors";
 import { claimOutcome } from "waffle/proc/outcome";
 import { PipeController } from "waffle/proc/pipes";
+import { ProcessErrno, ProcessError } from "waffle/proc/types";
 import {
   confirmWorkerProcessJob,
   createWorkerProcessTransport,
   WorkerProcessClient,
   workerProcessState,
+  type WorkerProcessTransport,
 } from "waffle/proc/worker-client";
 import { observeGuest, observeProcessMessage, observeRoot, runtimeSnapshot } from "./diagnostics";
 
-test("snapshot ignores a process collected between enumeration and reading its state", (context) => {
+function completedChild(context: TestContext) {
   const runtime = {} as Runtime;
   const transport = createWorkerProcessTransport({ capacity: 8 });
   const descriptors = new DescriptorTable();
   const unused = (): never => {
     throw new Error("No descriptor transfers in snapshot probe");
   };
+  const children: WorkerProcessTransport[] = [];
   const client = new WorkerProcessClient({
     transport,
     descriptors,
     codec: { export: unused, import: unused, discard: unused },
     postMessage(message) {
       if (message.operation !== "spawn") return;
+      children.push(message.transport);
       claimOutcome(workerProcessState(message.transport).signals.outcome, {
         kind: "exited",
         code: 0,
@@ -54,6 +58,11 @@ test("snapshot ignores a process collected between enumeration and reading its s
     retireGuest();
     descriptors.dispose();
   });
+  return { runtime, transport, observedTransport, client, child, childTransport: children[0]! };
+}
+
+test("snapshot ignores a process collected between enumeration and reading its state", (context) => {
+  const { runtime, transport, observedTransport, client, child } = completedChild(context);
   assert.equal(runtimeSnapshot(runtime).roots[0]!.retainedSlots, 2);
   let reads = 0;
   context.mock.getter(observedTransport, "directory", () => {
@@ -67,6 +76,33 @@ test("snapshot ignores a process collected between enumeration and reading its s
   assert.equal(root.retainedSlots, 1);
   assert.equal(root.workers, 0);
   assert.deepEqual(root.guests, []);
+});
+
+test("snapshot ignores a collected job during state decoding", (context) => {
+  const { runtime, transport, observedTransport } = completedChild(context);
+  let reads = 0;
+  context.mock.getter(observedTransport, "directory", () => {
+    if (++reads === 5) throw new ProcessError(ProcessErrno.CHILD, "job has been collected");
+    return transport.directory;
+  });
+  const root = runtimeSnapshot(runtime).roots[0]!;
+  assert.equal(root.retainedSlots, 1);
+  assert.equal(root.workers, 0);
+});
+
+test("a delayed pipe observation ignores its collected sender", (context) => {
+  const { runtime, client, child, childTransport } = completedChild(context);
+  const pipe = new PipeController({ capacity: 8, maxReaders: 1, maxWriters: 1, relay: "manual" });
+  context.after(() => pipe.dispose());
+  const handle = pipe.retain(child, "read").handle();
+  assert.equal(client.wait(client.pid, child)!.code, 0);
+  observeProcessMessage(runtime, {
+    type: "runtime-proc",
+    operation: "pipe",
+    transport: childTransport,
+    handle,
+  });
+  assert.equal(runtimeSnapshot(runtime).roots[0]!.pipes, 0);
 });
 
 test("snapshot does not hide invalid process directories", (context) => {
