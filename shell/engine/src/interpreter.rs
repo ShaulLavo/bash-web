@@ -1,5 +1,6 @@
 //! Original task-oriented interpreter for the engine gate, not a Bashkit
 //! interpreter fork. Unsupported syntax returns status 2 rather than guessing.
+use crate::commands;
 use crate::{
     arithmetic, builtins,
     executor::{Budget, Cancel, Executor, JoinHandle, yield_now},
@@ -2729,7 +2730,11 @@ async fn simple_command(
         Ok(prepared) => prepared,
         Err(error) => return expansion_failure(error.at_line(line), &original_fds, &context).await,
     };
-    if prepared.argv.first().is_some_and(|name| name == "exec") {
+    if prepared
+        .argv
+        .first()
+        .is_some_and(|name| commands::handler(name) == Some(commands::Handler::Exec))
+    {
         if prepared.argv.len() != 1 || !prepared.assigned.is_empty() {
             return Outcome::status(2);
         }
@@ -2852,8 +2857,7 @@ async fn prepare_simple_command_body(
     }
     let name = &argv[0];
     let shell_command = state.borrow().functions().contains_key(name)
-        || matches!(name.as_str(), "exec" | "let" | "eval")
-        || (builtins::is_builtin(name) && !matches!(name.as_str(), "cat" | "seq"));
+        || commands::lookup(name).is_some_and(commands::Command::shell_heredoc_errors);
     let heredoc_status = (!shell_command).then_some(context.parameter_error_status);
     let fds = redirects(
         &simple.redirects,
@@ -2937,7 +2941,8 @@ async fn dispatch_simple_command_body(
     let mut args: Vec<_> = fields.collect();
     let mut bypass_functions = false;
     let mut default_path = false;
-    while name == "command" && (bypass_functions || !state.borrow().functions().contains_key(&name))
+    while commands::handler(&name) == Some(commands::Handler::Command)
+        && (bypass_functions || !state.borrow().functions().contains_key(&name))
     {
         let mut options = command_builtin::options(&args, &fds, &context, &mut work).await?;
         default_path |= options.default_path;
@@ -3073,24 +3078,25 @@ async fn dispatch_simple_command_body(
         }
         return Ok(outcome);
     }
-    if name == "let" {
+    let handler = commands::handler(&name);
+    if handler == Some(commands::Handler::Let) {
         if !assigned.is_empty() {
             return Err(2);
         }
         return Ok(let_command(args, state, fds, context, work).await);
     }
-    if name == "eval" {
+    if handler == Some(commands::Handler::Eval) {
         if !assigned.is_empty() {
             return Err(2);
         }
         return Ok(eval::run(args, state, fds, context).await);
     }
-    if builtins::is_builtin(&name) {
+    if let Some(commands::Handler::Builtin(builtin)) = handler {
         let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
             .await
             .map_err(admission_status)?;
         let bindings = fds.borrow().clone();
-        return builtins::run(&name, args, state, bindings, context, &mut work).await;
+        return builtins::run(builtin, &name, args, state, bindings, context, &mut work).await;
     }
     // A pipe named by an open descriptor exists but cannot be executed.
     if name.starts_with("/dev/fd/")

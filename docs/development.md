@@ -255,6 +255,49 @@ points. Contract tests compare each context with its exact old parser call and
 pin recovery, byte limits, shared sticky work/cancellation, lazy quote/pattern
 context and deferred substitution failures.
 
+### Command views and dispatch
+
+| Area                                       | Classification                                                   | Local source and reason                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------ | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Typed command catalogue and view contracts | Original local ownership adapters; no newly copied upstream code | `shell/engine/src/commands.rs`, `commands/tests.rs` and `tests/words/command_metadata.rs` centralize the command-name inventory from bash-web `92ab384516abcf91da811e11ac871b73f6722ba0`. The adapted declaration-word checks remain in `builtins.rs`; their existing Bashkit classification below is unchanged. |
+
+Before extraction, the engine had **31** `is_builtin` names, only **30** builtin
+adapter dispatch names (`command` has no adapter arm), and three interpreter-only
+names (`exec`, `eval`, `let`): **34** expanded-name execution entries in total.
+The query view reports **30** shell builtins and **22** keywords. Literal scalar
+declaration syntax has exactly five candidates. The single typed catalogue now
+owns these names and selects the existing enum handlers. `type`, `alias`,
+`builtin` and `source` are not added.
+
+These are intentionally different views, not one generic builtin predicate:
+
+- Literal declaration recognition still checks quoting, word parts and raw
+  continuation spelling before scalar assignment operands suppress splitting.
+  An expanded name may dispatch a declaration handler without gaining that
+  syntactic privilege; `command` does not re-expand its target's arguments.
+  Parser-owned compound-array declaration grammar remains separate and unchanged.
+- Special/regular builtin class is descriptive metadata, not a new precedence,
+  persistence or POSIX-mode rule. Declaration status overlaps both classes.
+  Acceptance `cat`, `grep`, `mkdir` and `seq` are stand-ins, not shell builtins.
+  They retain internal dispatch while query lookup searches PATH for all four.
+- Heredoc errors retain their different historical view: `cat`/`seq` use the
+  command-local error context, while `grep`/`mkdir` use the shell error context.
+  Functions still take precedence in that view, before command-wrapper unwrapping.
+- Queries still choose keyword, function, reportable builtin, then PATH. Keyword
+  visibility does not claim syntax support: `select`, `time` and `coproc` are
+  explicitly unsupported execution syntax. Core/acceptance availability describes
+  the current full build; it introduces no Cargo features, Lite filters or options.
+- The interpreter retains early direct `exec`, wrapper parsing/function bypass,
+  function frames, and `let`/`eval` phases. Prefix restoration, status/diagnostics,
+  PATH admission, cancellation and lazy expansion remain with their old owners.
+  There is no alias lookup to reorder.
+
+The catalogue has no dependencies on feature modules. Original membership tests
+pin every old view independently, including absent names, handler ownership,
+class/capability relationships and the differing stand-in exclusions. Original
+engine controls passed against the unchanged baseline before extraction and pin
+query output, declaration syntax, heredoc scope and function/prefix behavior.
+
 ## Repository layout
 
 - `shell/` contains the parser and WASI shell engine.
