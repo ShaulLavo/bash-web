@@ -13,6 +13,8 @@ export function migrationEnvironment() {
       "HOME",
       "CARGO_HOME",
       "RUSTUP_HOME",
+      "WASI_SDK_PATH",
+      "WASI_LIBC_SCRATCH_ROOT",
       "TMPDIR",
       "RUNNER_TEMP",
       "SYSTEMROOT",

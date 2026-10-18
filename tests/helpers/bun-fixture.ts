@@ -29,11 +29,16 @@ export function createBunRuntimeLease(
         try {
           await ready;
         } finally {
-          try {
-            await installed?.dispose();
-          } finally {
-            await runtime.dispose();
-          }
+          // Runtime disposal starts storage cancellation synchronously. An adapter may
+          // itself be awaiting storage, so neither cleanup can wait for the other to start.
+          const cleanup = await Promise.allSettled([
+            runtime.dispose(),
+            Promise.resolve().then(() => installed?.dispose()),
+          ]);
+          const failures = cleanup.flatMap((result) =>
+            result.status === "rejected" ? [result.reason] : [],
+          );
+          if (failures.length) throw new AggregateError(failures, "Bun runtime cleanup failed");
         }
       })()),
   };

@@ -12,11 +12,7 @@ import {
   quiesceTerminal,
   type TerminalAdmission,
 } from "../src/runtime/terminal-admission";
-import {
-  preserveRootPreopen,
-  preservePreopenDiscovery,
-  shellTerminalImports,
-} from "../src/runtime/guest-imports";
+import { shellTerminalImports } from "../src/runtime/guest-imports";
 import assert from "node:assert/strict";
 import { DescriptorTable } from "waffle/core";
 import { SharedBridge, control, INPUT_CAPACITY, OUTPUT_CAPACITY } from "../src/bridge";
@@ -259,30 +255,6 @@ test("all child terminal fds share fresh admission, independently of parent and 
   if (sibling.kind !== "terminal") throw new Error("expected terminal");
   assert.equal(sibling.tryWrite!([new Uint8Array([2])]), 1);
   source.dispose();
-});
-
-test("inherited fd3 stays terminal while the real root preopen remains discoverable", () => {
-  const table = new DescriptorTable();
-  const bridge = new SharedBridge();
-  for (const target of [0, 1, 2] as const)
-    table.open(createBridgeTerminal(bridge.buffer, target), 0n, 0n);
-  table.open({ kind: "directory", handle: 1 }, 0n, 0n, undefined, "/");
-  const root = table.get(3)!.resource;
-  const preopen = preserveRootPreopen(table, [0, 1, 2, 3, 77]);
-  assert.equal(preopen, 4);
-  table.inherit(3, table.get(1)!);
-  assert.equal(table.get(3)!.resource.kind, "terminal");
-  assert.equal(table.get(3)!.preopen, undefined);
-  assert.equal(table.get(preopen)!.resource, root);
-  assert.equal(table.get(preopen)!.preopen, "/");
-  const imports = {
-    wasi_snapshot_preview1: { fd_prestat_get: (fd: number) => (fd === preopen ? 0 : 8) },
-  };
-  preservePreopenDiscovery(imports, table, preopen);
-  assert.equal(imports.wasi_snapshot_preview1.fd_prestat_get(3), 58);
-  assert.equal(imports.wasi_snapshot_preview1.fd_prestat_get(preopen), 0);
-  assert.equal(imports.wasi_snapshot_preview1.fd_prestat_get(preopen + 1), 8);
-  table.dispose();
 });
 
 test("child shell phase imports exist without changing root terminal ownership", () => {

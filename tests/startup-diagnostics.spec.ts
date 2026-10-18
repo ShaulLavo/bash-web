@@ -1,4 +1,5 @@
 import { test, expect } from "./helpers/browser-test";
+import { ready, startupReady, storageReady } from "./helpers/readiness";
 
 test("startup diagnostics expose a stalled shell fetch before session assignment", async ({
   page,
@@ -27,7 +28,7 @@ test("startup diagnostics expose a stalled shell fetch before session assignment
   } finally {
     release();
   }
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await ready(page);
   const snapshot = await page.evaluate(() => window.bashWeb!.snapshot());
   expect(snapshot.startup.pending).toEqual([]);
   expect(snapshot.startup.stages["shell-wasm-fetch-resolved"]).toBeGreaterThanOrEqual(
@@ -37,7 +38,7 @@ test("startup diagnostics expose a stalled shell fetch before session assignment
 
 test("the runtime lease forwards the real filesystem startup milestones", async ({ page }) => {
   await page.goto("/?test=1&renderer=canvas");
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await startupReady(page);
   const snapshot = await page.evaluate(() => window.bashWeb!.snapshot().startup);
   const expected = [
     "filesystem-worker-created",
@@ -63,14 +64,43 @@ test("restart resets startup timestamps without retaining a previous generation"
   page,
 }) => {
   await page.goto("/?test=1&renderer=canvas");
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await startupReady(page);
   const previous = await page.evaluate(() => window.bashWeb!.snapshot().startup);
-  await page.evaluate(() => window.bashWeb!.restart());
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  const restarted = page.evaluate(() => window.bashWeb!.restart());
+  await startupReady(page);
+  await restarted;
   const next = await page.evaluate(() => window.bashWeb!.snapshot().startup);
   expect(next.generation).toBeGreaterThan(previous.generation);
   expect(next.stages["runtime-lease-requested"]).toBeGreaterThan(
     previous.stages["runtime-lease-resolved"]!,
   );
   expect(next.pending).toEqual([]);
+});
+
+test("storage readiness has its own operation while caller registration is still pending", async ({
+  page,
+}) => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/programs/test-guest.wasm", async (route) => {
+    await held;
+    await route.continue();
+  });
+  try {
+    await page.goto("/?test=1&renderer=canvas");
+    await storageReady(page);
+    const snapshot = await page.evaluate(() => window.bashWeb!.snapshot().startup);
+    expect(snapshot.stages["storage-wait-resolved"]).toBeGreaterThanOrEqual(
+      snapshot.stages["storage-wait-requested"]!,
+    );
+    expect(snapshot.stages["runtime-lease-resolved"]).toBeUndefined();
+    expect(snapshot.pending).toContain("runtime-lease-requested");
+    expect(snapshot.pending).toContain("test-guest-fetch-requested");
+    expect(snapshot.pending).not.toContain("storage-wait-requested");
+  } finally {
+    release();
+  }
+  await startupReady(page);
 });

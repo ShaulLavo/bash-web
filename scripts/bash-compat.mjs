@@ -6,6 +6,7 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs
 import { availableParallelism } from "node:os";
 import { basename, resolve } from "node:path";
 import { Worker } from "node:worker_threads";
+import { buildWasiShell } from "./wasi-build.ts";
 import { pythonHelpers } from "./bash-compat-helpers.mjs";
 import {
   bashStderrTransport,
@@ -61,7 +62,8 @@ const engines = {
   "own-shell": {
     modulePath: resolve(
       root,
-      process.env.BASH_COMPAT_SHELL_WASM ?? ".build/shell/wasm32-wasip1/release/shell-engine.wasm",
+      process.env.BASH_COMPAT_SHELL_WASM ??
+        `${process.env.CARGO_TARGET_DIR ?? ".build/shell"}/wasm32-wasip1/release/shell-engine.wasm`,
     ),
   },
 };
@@ -512,26 +514,7 @@ async function prepareCorpus() {
 
 function prepareEngines() {
   if (process.env.BASH_COMPAT_SKIP_BUILD === "1") return;
-  execFileSync(
-    "cargo",
-    [
-      "build",
-      "--locked",
-      "--release",
-      "--target",
-      "wasm32-wasip1",
-      "--manifest-path",
-      "shell/Cargo.toml",
-      "-p",
-      "shell-engine",
-      "-j2",
-    ],
-    {
-      cwd: root,
-      stdio: "inherit",
-      env: { ...process.env, CARGO_TARGET_DIR: resolve(root, ".build/shell") },
-    },
-  );
+  buildWasiShell(["-p", "shell-engine"]);
 }
 
 async function loadOilsCases(corpus) {
