@@ -68,10 +68,10 @@
   },
   "waffle": {
     "repository": "https://github.com/ShaulLavo/waffle",
-    "revision": "c458a488bba70855c27a2921c2665c7150ef2090",
+    "revision": "b1f2b7dddb32eb52c6423c0ab12dc2e21ea699ea",
     "package": "waffle",
-    "version": "0.0.26",
-    "specifier": "git+https://github.com/ShaulLavo/waffle.git#c458a488bba70855c27a2921c2665c7150ef2090",
+    "version": "0.0.31",
+    "specifier": "git+https://github.com/ShaulLavo/waffle.git#b1f2b7dddb32eb52c6423c0ab12dc2e21ea699ea",
     "license": "MIT",
     "strategy": "Required peer imported by the JavaScript shell adapter; exact same Git pin used as development dependency for browser builds and tests. One application-created runtime per page owns shared services. No runtime source tree is vendored."
   },

@@ -77,11 +77,11 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.1",
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#c458a488bba70855c27a2921c2665c7150ef2090",
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#b1f2b7dddb32eb52c6423c0ab12dc2e21ea699ea",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#c458a488bba70855c27a2921c2665c7150ef2090"
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#b1f2b7dddb32eb52c6423c0ab12dc2e21ea699ea"
   },
   "overrides": {
     "esbuild": "0.28.2"
@@ -91,6 +91,6 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "waffle@0.0.26": true
+    "waffle@0.0.31": true
   }
 }

@@ -5,6 +5,7 @@ import { DescriptorTable } from "waffle/core/descriptors";
 import type { FileSystem } from "waffle/core/filesystem";
 import { ProcessABI } from "waffle/proc/abi";
 import { claimOutcome } from "waffle/proc/outcome";
+import { controlStore } from "waffle/proc/control";
 import {
   confirmWorkerProcessJob,
   createWorkerProcessTransport,
@@ -31,7 +32,7 @@ for (const [errno, status] of [
         if (message.operation !== "spawn") return;
         const state = workerProcessState(message.transport);
         claimOutcome(state.signals.outcome, { kind: "start-failed", code: errno });
-        Atomics.store(state.confirmed, 0, 1);
+        controlStore(state.confirmed, 0, 1);
         confirmWorkerProcessJob(message.transport);
       },
     });
@@ -63,7 +64,9 @@ for (const [errno, status] of [
     const result = new DataView(memory.buffer);
     assert.equal(result.getUint32(0, true), 0, "startup failure is not a signal");
     assert.equal(result.getInt32(4, true), status);
+    assert.equal(abi.imports.wait!(pid, 0), -12, "child outcome is consumed once");
     assert.equal(abi.imports.wait_job!(job, 1, 8), 0);
     assert.equal(result.getInt32(8, true), status);
+    assert.equal(abi.imports.wait_job!(job, 1, 8), -12, "job outcome is consumed once");
     descriptors.dispose();
   });

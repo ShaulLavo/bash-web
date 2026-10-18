@@ -42,8 +42,8 @@ bridge to its UI. Terminal rendering and demo controls live in `src/browser/`,
 separate from the shell facade.
 
 `waffle` is a **required peer dependency**, pinned to the published Git commit
-`c458a488bba70855c27a2921c2665c7150ef2090`:
-`git+https://github.com/ShaulLavo/waffle.git#c458a488bba70855c27a2921c2665c7150ef2090`.
+`b1f2b7dddb32eb52c6423c0ab12dc2e21ea699ea`:
+`git+https://github.com/ShaulLavo/waffle.git#b1f2b7dddb32eb52c6423c0ab12dc2e21ea699ea`.
 The development dependency uses the same pin so local builds and tests exercise
 the same runtime applications supply.
 
@@ -120,7 +120,9 @@ borrowed runtime does not have earlier startup events reconstructed.
 Browser test failures print pending stages and attach the full snapshot as
 `browser-startup-diagnostics`. Shell embeddings may supply `onStartupStage` to
 `createShell` for the same non-blocking observations. Observer throws and rejected
-returns are ignored; observers are never awaited. No polling or history is kept.
+returns are ignored; observers are never awaited. Observers must not abort or start/stop
+shell or runtime control, matching [Waffle's passive observer contract](https://github.com/ShaulLavo/waffle/blob/b1f2b7dddb32eb52c6423c0ab12dc2e21ea699ea/docs/runtime-startup.md).
+No polling or history is kept by the observer hook.
 An absent marker means unobserved, not pending. In particular, a borrowed runtime
 or cached shell registration may have completed work before observation began.
 Restart clears timestamps and ignores callbacks from the stopped generation.

@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 struct FakeChild {
     job: u32,
     status: Rc<Cell<Option<i32>>>,
+    collected: Cell<bool>,
     cancel: Cancel,
     signal: Rc<Cell<i32>>,
 }
@@ -75,6 +76,9 @@ impl Fake {
             output,
         })
     }
+    fn child_status(&self, pid: u32) -> Option<i32> {
+        self.children.borrow().get(&pid)?.status.get()
+    }
     fn fd(&self, endpoint: Endpoint) -> u32 {
         let fd = self.next_fd.get();
         self.next_fd.set(fd + 1);
@@ -128,6 +132,7 @@ impl Abi for Fake {
             FakeChild {
                 job,
                 status: status.clone(),
+                collected: Cell::new(false),
                 cancel: cancel.clone(),
                 signal: signal.clone(),
             },
@@ -148,6 +153,7 @@ impl Abi for Fake {
                 FakeChild {
                     job,
                     status: status.clone(),
+                    collected: Cell::new(false),
                     cancel: cancel.clone(),
                     signal: signal.clone(),
                 },
@@ -239,17 +245,24 @@ impl Abi for Fake {
             .ok_or(71)
     }
     fn wait(&self, pid: u32) -> Result<i32, i32> {
-        self.children
-            .borrow()
-            .get(&pid)
-            .ok_or(12)?
-            .status
-            .get()
-            .ok_or(AGAIN)
+        let children = self.children.borrow();
+        let child = children.get(&pid).ok_or(12)?;
+        if child.collected.get() || self.reaped_jobs.borrow().contains(&child.job) {
+            return Err(12);
+        }
+        let status = child.status.get().ok_or(AGAIN)?;
+        child.collected.set(true);
+        Ok(status)
     }
     fn wait_job(&self, job: u32) -> Result<i32, i32> {
         self.wait_job_calls.borrow_mut().push(job);
-        if self.reaped_jobs.borrow().contains(&job) {
+        if self.reaped_jobs.borrow().contains(&job)
+            || !self
+                .children
+                .borrow()
+                .values()
+                .any(|child| child.job == job)
+        {
             return Err(12);
         }
         if let Some(&errno) = self.wait_job_errors.borrow().get(&job) {
@@ -460,6 +473,40 @@ fn finish<T: Clone + 'static>(
     }
     panic!("fake runtime failed to finish");
 }
+#[test]
+fn consuming_child_wait_keeps_job_pending_until_live_grandchild_finishes() {
+    let executor = Executor::new();
+    let fake = Fake::new(executor.clone());
+    let pid = fake
+        .spawn(&RuntimeSpawn {
+            executable: "inherit".into(),
+            argv: vec!["inherit".into()],
+            env: BTreeMap::new(),
+            cwd: "/home/guest".into(),
+            job: 0,
+            fds: vec![Binding {
+                child: 1,
+                parent: 1,
+            }],
+        })
+        .unwrap();
+    let job = fake.job_of(pid).unwrap();
+    let grandchild = pid + 1;
+    assert_eq!(fake.wait(pid), Err(AGAIN));
+    executor.drive(64);
+    assert_eq!(fake.wait(pid), Ok(0));
+    assert_eq!(fake.wait(pid), Err(12));
+    assert_eq!(fake.wait(grandchild), Err(AGAIN));
+    assert_eq!(fake.wait_job(job), Err(AGAIN));
+    assert!(!fake.reaped_jobs.borrow().contains(&job));
+    fake.descendant_gates.borrow()[&grandchild].cancel();
+    executor.drive(64);
+    assert_eq!(fake.wait_job(job), Ok(0));
+    assert_eq!(fake.wait_job(job), Err(12));
+    assert_eq!(fake.wait(grandchild), Err(12));
+    assert_eq!(executor.drive(64).pending, 0);
+}
+
 #[test]
 fn preview1_filestat_decodes_native_widths_and_preserves_missing_capabilities() {
     use crate::io::FileKind;
@@ -804,7 +851,7 @@ fn background_eval_parser_routes_consuming_interrupt_to_the_current_foreground()
     assert_eq!(fake.wait(foreground_pid), Err(AGAIN));
     interrupt_during_isolated_eval_parse(&executor, &runtime, &fake);
     assert_eq!(finish(&executor, &runtime, foreground), 130);
-    assert_eq!(fake.wait(foreground_pid), Ok(130));
+    assert_eq!(fake.child_status(foreground_pid), Some(130));
     drive_until_spawn(&executor, &runtime, &fake, 3);
     assert_eq!(session.background_jobs(), 1);
     assert_eq!(runtime.retained_count(), 1);
@@ -1875,7 +1922,7 @@ fn inherited_member_outlives_direct_foreground_but_not_runtime_reaping() {
         executor.drive(128);
         runtime.poll(0).unwrap();
     }
-    assert_eq!(fake.wait(descendant), Ok(23));
+    assert_eq!(fake.child_status(descendant), Some(23));
     assert_eq!(reader.read(&mut byte).now_or_never(), Some(Ok(0)));
     assert!(fake.reaped_jobs.borrow().contains(&job));
     assert!(runtime.0.groups.borrow().is_empty());
@@ -1925,7 +1972,7 @@ fn background_wait_jobs_and_kill_do_not_adopt_inherited_members() {
             ),
             Ok(())
         );
-        assert_eq!(fake.wait(descendant), Ok(143));
+        assert_eq!(fake.child_status(descendant), Some(143));
         assert!(fake.reaped_jobs.borrow().contains(&job));
         shutdown_session(&executor, &runtime, &fake, session);
     }
@@ -1953,7 +2000,7 @@ fn jobs_reports_direct_done_once_without_signaling_residual_members() {
     assert_eq!(fake.wait(descendant), Err(AGAIN));
     assert!(fake.signals.borrow().is_empty());
     shutdown_session(&executor, &runtime, &fake, session);
-    assert_eq!(fake.wait(descendant), Ok(130));
+    assert_eq!(fake.child_status(descendant), Some(130));
 }
 
 #[test]
@@ -1987,7 +2034,7 @@ fn later_foreground_interrupt_isolates_prior_residual_and_shared_peer_session() 
         &runtime,
         executor.spawn(async move { first.shutdown().await }),
     );
-    assert_eq!(fake.wait(descendant), Ok(130));
+    assert_eq!(fake.child_status(descendant), Some(130));
     assert_eq!(peer.background_jobs(), 1);
     assert_eq!(
         runtime.retained_count(),
@@ -2013,7 +2060,7 @@ fn interrupt_and_shutdown_drain_real_inherited_members_and_input_pumps() {
         assert!(!command.is_finished());
         session.interrupt();
         assert_eq!(finish(&executor, &runtime, command), 130);
-        assert_eq!(fake.wait(descendant), Ok(130));
+        assert_eq!(fake.child_status(descendant), Some(130));
         assert!(fake.signals.borrow().contains(&(true, job, 2)));
         assert!(fake.reaped_jobs.borrow().contains(&job));
         shutdown_session(&executor, &runtime, &fake, session);
@@ -2051,7 +2098,7 @@ fn completed_inherited_jobs_release_admission_during_one_foreground_group() {
         assert_eq!(fake.wait(member), Err(AGAIN));
         fake.descendant_gates.borrow()[&member].cancel();
         executor.drive(64);
-        assert_eq!(fake.wait(member), Ok(23));
+        assert_eq!(fake.child_status(member), Some(23));
     }
     assert_eq!(runtime.retained_count(), 0);
     assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
@@ -2137,8 +2184,8 @@ fn admission_sweep_preserves_unconsumed_direct_status_and_failed_job_handles() {
         ),
         Err(ProcessError::Runtime(63))
     );
-    assert_eq!(fake.wait(second as u32), Ok(143));
-    assert_eq!(fake.wait(third as u32), Ok(143));
+    assert_eq!(fake.child_status(second as u32), Some(143));
+    assert_eq!(fake.child_status(third as u32), Some(143));
     fake.wait_job_errors.borrow_mut().remove(&first_job);
     let sibling = runtime.allocate_group();
     let pid = runtime.spawn(request(&runtime, "done", sibling)).unwrap();
