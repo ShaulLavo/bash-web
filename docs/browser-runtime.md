@@ -167,8 +167,10 @@ and chooses the first runnable file. Missing candidates, unregistered files and
 directories do not hide a later runnable candidate. Relative `PATH` components
 and empty components (including an empty `PATH`) resolve against the current
 working directory. A command containing `/` is tried directly, without a `PATH`
-search. No runnable candidate produces status 127 when all candidates are
-missing, or 126 when a candidate exists but cannot run.
+search. Like GNU Bash 5.3.15, PATH search ignores directory candidates: a search
+containing only directories and missing candidates produces status 127. A
+non-executable regular-file candidate produces status 126 if no runnable
+candidate follows it. Explicit directory paths still fail with 126.
 
 Direct paths also walk the live filesystem before canonical registration lookup.
 Thus `/missing/../bin/tool` cannot skip a missing intermediate, and traversing a

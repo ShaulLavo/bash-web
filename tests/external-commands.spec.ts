@@ -230,7 +230,8 @@ test("PATH preserves denied versus missing status without executing rejected fil
   await ready(page);
   for (const [label, path, status] of [
     ["FILE", "/home/guest:/missing", 126],
-    ["DIRECTORY", "/tmp:/missing", 126],
+    // Bash ignores directories while searching PATH; an explicit directory is 126 below.
+    ["DIRECTORY", "/tmp:/missing", 127],
     ["MISSING", "/missing", 127],
   ]) {
     await command(
