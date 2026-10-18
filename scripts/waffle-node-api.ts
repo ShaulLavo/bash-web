@@ -1,4 +1,3 @@
-// Bundled by build-node-harness.ts for the Node compatibility instrument only.
 export { createRuntime } from "waffle";
 export {
   createWorkerProcessTransport,
@@ -7,6 +6,7 @@ export {
 } from "waffle/proc/worker-client";
 export { claimOutcome, readOutcome } from "waffle/proc/outcome";
 export { waitStatus } from "waffle/proc/wait-status";
+export { launchTerminalWorker } from "../src/runtime/worker-launcher";
 export { installUtility } from "../src/utilities/install";
 export { installCat } from "../src/utilities/cat";
 export { installGrep } from "../src/utilities/grep";

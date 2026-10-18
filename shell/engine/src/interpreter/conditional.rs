@@ -5,6 +5,7 @@ use super::{Context, Descriptors, Outcome, expansion_failure};
 use crate::{
     arithmetic, builtins,
     exec::ResultFuture,
+    executor::Cancel,
     expand::{self, Error, Work},
     io::{Endpoint, FdTable},
     state::SharedState,
@@ -24,7 +25,7 @@ pub(super) async fn run(
     work: &mut Work,
 ) -> Outcome {
     match evaluate(expression, state, fds, context, work).await {
-        Ok(value) => Outcome::status(i32::from(!value)),
+        Ok(status) => Outcome::status(status),
         Err(error) => expansion_failure(error.into(), fds, context).await,
     }
 }
@@ -64,7 +65,7 @@ fn evaluate<'a>(
     fds: &'a Descriptors,
     context: &'a Context,
     work: &'a mut Work,
-) -> ResultFuture<'a, bool> {
+) -> ResultFuture<'a, i32> {
     arithmetic::admitted(work, move |work| async move {
         let mut stack = Vec::new();
         let mut current = expression;
@@ -98,16 +99,18 @@ fn evaluate<'a>(
             while let Some(continuation) = stack.pop() {
                 work.checkpoint(&context.cancel).await?;
                 match continuation {
-                    Continuation::Not => value = !value,
+                    Continuation::Not => {
+                        value = negate(value, &mut stack, &context.cancel, work).await?;
+                    }
                     Continuation::Group => {}
                     Continuation::And(rest) | Continuation::Or(rest) => {
                         let select_next = match continuation {
-                            Continuation::And(_) => value,
-                            Continuation::Or(_) => !value,
+                            Continuation::And(_) => value == 0,
+                            Continuation::Or(_) => value != 0,
                             _ => unreachable!("logical continuation"),
                         };
                         if select_next && let Some((next, rest)) = rest.split_first() {
-                            let continuation = if value {
+                            let continuation = if value == 0 {
                                 Continuation::And(rest)
                             } else {
                                 Continuation::Or(rest)
@@ -124,37 +127,79 @@ fn evaluate<'a>(
     })
 }
 
+// Direct ! operators toggle one inversion; groups and logical nodes start a
+// separate inversion. Keep each admitted frame's work/cancellation checkpoint.
+async fn negate(
+    value: i32,
+    stack: &mut Vec<Continuation<'_>>,
+    cancel: &Cancel,
+    work: &mut Work,
+) -> Result<i32, Error> {
+    let mut inverted = true;
+    while matches!(stack.last(), Some(Continuation::Not)) {
+        work.checkpoint(cancel).await?;
+        stack.pop();
+        inverted = !inverted;
+    }
+    Ok(if inverted {
+        i32::from(value == 0)
+    } else {
+        value
+    })
+}
+
 async fn predicate(
     expression: &TestExpr,
     state: &SharedState,
     fds: &Descriptors,
     context: &Context,
     work: &mut Work,
-) -> Result<bool, Error> {
+) -> Result<i32, Error> {
     match expression {
-        TestExpr::Word(word) => Ok(!scalar(word, state, context, work).await?.is_empty()),
+        TestExpr::Word(word) => Ok(i32::from(
+            scalar(word, state, context, work).await?.is_empty(),
+        )),
         TestExpr::Unary { operator, operand } => {
             let value = scalar(operand, state, context, work).await?;
-            match operator.as_str() {
-                "-n" => Ok(!value.is_empty()),
-                "-z" => Ok(value.is_empty()),
-                _ => {
-                    if !builtins::test::is_unary(operator) {
-                        return Err(2.into());
-                    }
-                    let table = descriptors(fds, context, work).await?;
-                    builtins::test::unary(operator, &value, state, &table, context, work)
-                        .await
-                        .map_err(Into::into)
-                }
-            }
+            unary(operator, &value, state, fds, context, work).await
         }
         TestExpr::Binary {
             left,
             operator,
             right,
-        } => binary(left, operator, right, state, fds, context, work).await,
+        } => binary(left, operator, right, state, fds, context, work)
+            .await
+            .map(|value| i32::from(!value)),
         _ => unreachable!("logical nodes handled by continuation traversal"),
+    }
+}
+
+async fn unary(
+    operator: &str,
+    value: &str,
+    state: &SharedState,
+    fds: &Descriptors,
+    context: &Context,
+    work: &mut Work,
+) -> Result<i32, Error> {
+    match operator {
+        "-n" => return Ok(i32::from(value.is_empty())),
+        "-z" => return Ok(i32::from(!value.is_empty())),
+        _ => {}
+    }
+    if !builtins::test::is_unary(operator) {
+        return Err(2.into());
+    }
+    let table = descriptors(fds, context, work).await?;
+    match builtins::test::unary(operator, value, state, &table, context, work).await {
+        Ok(value) => Ok(i32::from(!value)),
+        Err(builtins::test::UnaryError::Status(status)) => Err(status.into()),
+        Err(builtins::test::UnaryError::Integer) => {
+            builtins::test::integer_diagnostic("[[", value, &table, context).await?;
+            // Bash's malformed -t status participates in !/&&/||. Other unary
+            // failures remain expansion errors, as before.
+            Ok(2)
+        }
     }
 }
 
@@ -323,6 +368,7 @@ async fn compare(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::FutureExt;
 
     #[test]
     fn continuation_storage_is_admitted_before_vector_growth() {
@@ -347,6 +393,26 @@ mod tests {
         ));
         assert_eq!(stack.len(), 4);
         assert_eq!(stack.capacity(), 4);
+    }
+
+    #[test]
+    fn consecutive_negations_checkpoint_every_admitted_frame() {
+        let cancel = Cancel::new();
+        let mut stack = vec![Continuation::Not, Continuation::Not];
+        let mut work = Work::new(1, 0, 1);
+        assert!(matches!(
+            negate(2, &mut stack, &cancel, &mut work).now_or_never(),
+            Some(Err(Error::Status(2)))
+        ));
+        assert_eq!(stack.len(), 1);
+
+        let mut work = Work::new(1, 0, 1);
+        cancel.cancel();
+        assert!(matches!(
+            negate(2, &mut stack, &cancel, &mut work).now_or_never(),
+            Some(Err(Error::Status(130)))
+        ));
+        assert_eq!(stack.len(), 1);
     }
 
     #[test]

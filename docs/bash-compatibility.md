@@ -107,8 +107,10 @@ Cause: `mapfile` replaces the array through builtin side effects that remove the
 
 ## Own-shell fixed scoreboard
 
-The original `shell-engine` CLI is registered as `own-shell`. It is the
-standalone package's only default engine. The first measured baseline is
+`own-shell` is the package's only default engine. Since 2026-10-18 its frozen
+replay runs the production `shell-runtime` guest on Waffle's Node runtime (see
+[the replay instrument transition](#replay-instrument-transition)); earlier
+measurements below came from the original standalone `shell-engine` CLI. The first measured baseline is
 **288/1,682 Oils, 295/1,888 Brush-suite and 445/2,222 Bashkit-suite**. The
 historical engine tables above keep their original case sets and are not a
 comparison under this fixed identity.
@@ -209,6 +211,48 @@ terminates the supervisor if Node is killed abruptly; bubblewrap then tears down
 the private process namespace. Updating existing frozen observations requires a
 complete eligible-case audit and the target-baseline proof described below.
 
+### Replay instrument transition
+
+On 2026-10-18 the frozen replay moved from the standalone `node:wasi` CLI, with its
+in-memory filesystem and in-process fixture host, to the Waffle Node harness. GNU
+Bash observations, the case set, sources and schema are unchanged; only the oracle's
+replay `environment` record (which describes our runner) and its identity digest
+changed. Main `9f0bf6a` scored **951 / 955 / 1,341** (Oils / Brush suite / Bashkit
+suite) on the old runner and **948 / 956 / 1,339** on the real runtime, with 10
+cases lost and 6 gained. Every changed case is classified in
+[the receipt](evidence/own-shell-instrument-migration.json) with Bash's output, the
+old runner's and the real runtime's: **10** are real-runtime differences from Bash,
+each an Approved item in [plan 004](../plans/004-own-shell.md#follow-up-real-runtime-scoreboard-differences),
+and **6** were fake-host artifacts.
+
+| Case | Change | Class | Reason |
+| --- | --- | --- | --- |
+| `bashkit-suite:proc-self:57` | lost | a | No /proc/self exists on the runtime filesystem, so writing /proc/self/comm fails; the old pass came only from the in-memory filesystem creating files without parent directories. |
+| `bashkit-suite:script-exec:132` | lost | a | Same writable-/usr difference (126 instead of 127). |
+| `bashkit-suite:script-exec:95` | lost | a | The oracle's sandbox mounts /usr read-only; Waffle's filesystem has no read-only mount, so the script is created and fails as non-executable (126) instead of not found (127). |
+| `bashkit-suite:subprocess-isolation:126` | lost | a | Same writable-/usr difference (126 instead of 127). |
+| `bashkit-suite:test-operators:32` | lost | a | test -r is unsupported on the runtime filesystem (no access metadata through preview1). |
+| `bashkit-suite:test-operators:40` | lost | a | test -w is unsupported on the runtime filesystem (no access metadata through preview1). |
+| `oils:builtin-bracket:280` | lost | a | The runtime filesystem exposes no Unix mode bits, so test -k is an unsupported predicate (status 2); the old in-memory filesystem answered it. |
+| `oils:builtin-read:794` | lost | a | read from a directory reports status 2 on the runtime filesystem instead of Bash's status 1 (EISDIR mapping). |
+| `oils:shell-grammar:17` | lost | a | shell-runtime's -c exit cancels a still-running background job, truncating its output; Bash leaves it to finish. |
+| `oils:shell-grammar:23` | lost | a | Same background-job cancellation at -c exit: the last job's newline is lost. |
+| `bashkit-suite:bashbox-filesystem-backends-integration:5` | gained | b | Fake-host artifact: the in-memory filesystem created ro/new without a parent directory; the real filesystem fails like Bash. |
+| `bashkit-suite:bashbox-interpreter-builtins:281` | gained | b | Fake-host artifact: /no/such/dir/f was created without parents in memory; the real filesystem fails like Bash. |
+| `bashkit-suite:pipes-redirects:411` | gained | b | Fake-host artifact: &> /no/such/dir/f was created without parents in memory; the real filesystem fails like Bash. |
+| `bashkit-suite:stderr-redirect-fidelity:132` | gained | b | Fake-host artifact: /proc/naopode was created without parents in memory; the real filesystem fails like Bash. |
+| `brush-suite:ifs:26` | gained | b | Fake-host artifact: the standalone CLI's environment setup replaced the shell's default IFS, so $IFS printed empty; the runtime entry keeps Bash's default IFS. |
+| `oils:var-sub:24` | gained | b | Fake-host artifact: the in-memory filesystem created _tmp/var-sub1 without its parent, so the redirect succeeded; on a real filesystem it fails with status 1 like Bash (Bash's reason is an ambiguous redirect; see R6). |
+
+The committed baseline is now the real runtime's per-case result and the ratchet
+continues against it. Comparing a candidate with a target recorded on the old
+runner is allowed only for this one transition: `shell-scoreboard-base.mjs` names
+the target commit and the old and new environment digests, and the receipt must
+match them. The target's own shell is then rebuilt and scored by the new instrument,
+and it must differ from the target's old baseline by exactly the receipt's cases.
+Any other environment change, or any change to Bash observations, case set,
+sources or schema alongside it, is incomparable and fails.
+
 ### Output-stream recording correction
 
 The [2026-10-17 transport audit](evidence/oracle-pipe-audit.json) covers all **5,792**
@@ -264,14 +308,13 @@ result. The exact scored denominator is `total - skipped` in each count group.
 
 CI uses Node 26.7.0 and Waffle's Node runtime to run only those selected cases
 against the release `shell-runtime` guest. Each case gets a fresh Runtime and
-filesystem with the baseline's tree (working directory, `/dev`, `/usr/bin`,
-`/usr/local/bin`, `/bin`), the two fixture programs and, for the candidate, the
-four utility add-ons, all as separate registered guests on Waffle's process path.
-stdout and stderr are raw separate streams, never a terminal sink. There is a
-10-second timeout and a 4 MiB combined output ceiling per case. A crash or
-timeout fails that case; it never silently becomes a skip. The fixed oracle's
-`environment` record still names the former `node:wasi` standalone instrument:
-its digest is part of the frozen oracle, so it is unchanged. Browser transport, shared filesystem behavior and cold-start measurement remain
+filesystem with the working directory, `/dev`, `/bin`, `/usr/bin` and
+`/usr/local/bin`, and the two fixture programs as separate guests on Waffle's
+process path. stdout and stderr are raw separate streams, never a terminal sink,
+and the root reports the oracle's descriptor kinds (pipes for stdout and stderr,
+`/dev/null` for stdin). There is a 10-second timeout and a 4 MiB combined output
+ceiling per case. A crash or timeout fails that case; it never silently becomes a
+skip. Browser transport, shared filesystem behavior and cold-start measurement remain
 host/product concerns. This package verifies the shell program and its
 runtime boundary; it does not replace the browser host.
 

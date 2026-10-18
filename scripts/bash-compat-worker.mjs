@@ -1,5 +1,3 @@
-// One fresh Waffle Runtime per case: real registered guests, separate raw output streams.
-// The parent pool terminates this whole thread, with its runtime, at the case timeout.
 import { parentPort, workerData } from "node:worker_threads";
 import { createWaffleRunner } from "./waffle-compat.ts";
 

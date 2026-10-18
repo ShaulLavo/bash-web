@@ -8,6 +8,17 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+/// Open-description categories needed by descriptor predicates. This is separate
+/// from filesystem node metadata and from Preview1's filetype enum.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DescriptorKind {
+    Other,
+    Pipe,
+    Terminal,
+    Regular,
+    Directory,
+}
+
 /// Runtime-backed open descriptions implement notification-driven operations.
 /// Neither operation may block the executor; dropped futures must unregister
 /// readiness waits. The host endpoint's last Rc drop closes its runtime handle.
@@ -15,6 +26,10 @@ pub trait HostEndpoint {
     /// Descriptor in the shared preview1/runtime_proc namespace, when spawnable.
     fn runtime_fd(&self) -> Option<u32> {
         None
+    }
+    /// Non-consuming observation; must not duplicate or retain an endpoint.
+    fn descriptor_kind(&self) -> Result<DescriptorKind, IoError> {
+        Ok(DescriptorKind::Other)
     }
     fn read<'a>(&'a self, output: &'a mut [u8]) -> LocalBoxFuture<'a, Result<usize, IoError>>;
     fn write<'a>(&'a self, input: &'a [u8]) -> LocalBoxFuture<'a, Result<usize, IoError>>;
@@ -357,6 +372,16 @@ impl Endpoint {
                 .as_ref()
                 .and_then(|host| host.runtime_fd()),
             _ => None,
+        }
+    }
+    pub fn descriptor_kind(&self) -> Result<DescriptorKind, IoError> {
+        match self.0.as_ref() {
+            Open::PipeRead(_) | Open::PipeWrite(_) => Ok(DescriptorKind::Pipe),
+            Open::Host(host) => host.descriptor_kind(),
+            Open::File(_) | Open::Bytes { .. } | Open::BytesSource(_) => {
+                Ok(DescriptorKind::Regular)
+            }
+            Open::Capture(_) | Open::Null => Ok(DescriptorKind::Other),
         }
     }
     pub fn null() -> Self {

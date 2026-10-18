@@ -1,5 +1,3 @@
-// Bundle the Node compatibility instrument: the harness API, its stdio root, the
-// production shell worker for every child program, and Waffle's filesystem worker.
 import { build } from "esbuild";
 import { resolve } from "node:path";
 
@@ -9,13 +7,12 @@ await build({
   entryPoints: {
     api: "scripts/waffle-node-api.ts",
     root: "scripts/waffle-root-worker.ts",
+    child: "scripts/waffle-child-worker.ts",
     shell: "src/runtime/worker.ts",
     fs: "waffle/browser/fs-worker",
   },
   bundle: true,
   format: "esm",
-  // The same Waffle source entries the browser build consumes; the harness supplies
-  // Worker over node:worker_threads (node-worker-host.ts).
   platform: "neutral",
   conditions: ["browser"],
   external: ["node:*"],

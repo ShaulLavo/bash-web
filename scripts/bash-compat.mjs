@@ -514,7 +514,7 @@ async function prepareCorpus() {
 
 function prepareEngines() {
   if (process.env.BASH_COMPAT_SKIP_BUILD === "1") return;
-  buildWasiShell(["-p", "shell-engine"]);
+  buildWasiShell();
 }
 
 async function loadOilsCases(corpus) {
@@ -742,8 +742,6 @@ class Pool {
         engine: this.engine.startsWith("bashkit") ? "bashkit" : this.engine,
         modulePath: engines[this.engine].modulePath,
         scratch,
-        // Frozen fixture guests (argv.py, printenv.py) belong to the instrument and are
-        // installed for the control and candidate alike; utilities only for the candidate.
         fixtureDirectory: resolve(
           root,
           process.env.BASH_COMPAT_FIXTURE_DIR ??
@@ -939,7 +937,7 @@ function buildEvidence({ bashVersion, cases, spots, inventories, inventoryNames 
     oilsExcludedFiles: excludedFiles,
     engines: {
       "own-shell":
-        "Original shell-engine CLI, wasm32-wasip1, in-process fixture ProcessHost on node:wasi; no browser integration",
+        "Production shell-runtime guest, wasm32-wasip1, on Waffle's Node runtime with fixture guests; no browser terminal",
     },
     corpora,
     oilsByCategory: Object.fromEntries(
@@ -1056,12 +1054,22 @@ const packResult = (result) => ({
 function runtimeEnvironment() {
   return {
     target: "wasm32-wasip1",
-    runner: "node:wasi",
+    runner: "waffle-node",
     nodeVersion: "v26.7.0",
-    env: { HOME: virtualHome, TMP: virtualTmp, PWD: virtualTmp, SH: "bash", LC_ALL: "C.UTF-8" },
+    shell: "shell-runtime -c SCRIPT, the production runtime_proc guest",
+    env: {
+      PATH: "/usr/bin:/bin",
+      HOME: virtualHome,
+      TMP: virtualTmp,
+      PWD: virtualTmp,
+      SH: "bash",
+      LC_ALL: "C.UTF-8",
+    },
     stdin: "empty",
-    filesystem: "fresh MemoryFs, 16 MiB; no host preopens",
-    processHost: "InProcessHost, argv.py and printenv.py fixtures only",
+    filesystem:
+      "fresh Waffle filesystem per case, no persistence: working directory, /dev, /bin, /usr/bin, /usr/local/bin",
+    processHost:
+      "Waffle process broker; argv.py and printenv.py fixture guests, plus candidate utility guests when installed",
     timeoutMs,
     outputLimitBytes: 4 * 1024 * 1024,
     normalization: [
