@@ -13,8 +13,15 @@ function browserOwner(context: TestContext) {
   });
   const connections: FilesystemConnection[] = [];
   globalThis.Worker = class extends EventTarget {
-    postMessage(message: { connect?: FilesystemConnection }) {
+    postMessage(message: { connect?: FilesystemConnection; dispose?: boolean }) {
       if (message.connect) connections.push(message.connect);
+      if (message.dispose) {
+        queueMicrotask(() =>
+          this.dispatchEvent(
+            new MessageEvent("message", { data: { type: "filesystem-disposed" } }),
+          ),
+        );
+      }
     }
     terminate() {}
   } as unknown as typeof Worker;

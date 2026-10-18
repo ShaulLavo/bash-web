@@ -13,7 +13,7 @@ TypeScript entry and its worker imports. Install the required `waffle` peer at
 the exact pin in `package.json`:
 
 ```text
-git+https://github.com/ShaulLavo/waffle.git#918ca040931d6ce243861c926ee841b9178be03f
+git+https://github.com/ShaulLavo/waffle.git#8bfc767d6097cf3c741092328573460a3047d114
 ```
 
 The package's development dependency uses that same published commit. There
@@ -92,7 +92,7 @@ guard. Storage `failed`/`disposed` states are terminal, not a fallback to empty 
 Backend contention policy belongs to the runtime owner, not the shell. At the
 pinned Waffle revision, OPFS waits and rejects takeover; IndexedDB defaults to
 takeover with optional `whenBusy: "wait"`. See Waffle's
-[storage ownership contract](https://github.com/ShaulLavo/waffle/blob/918ca040931d6ce243861c926ee841b9178be03f/docs/storage.md).
+[storage ownership contract](https://github.com/ShaulLavo/waffle/blob/8bfc767d6097cf3c741092328573460a3047d114/docs/storage.md).
 
 Restart/stop cancels admission, joins pending session creation and awaits
 `BrowserSession.dispose()` before releasing an owned lease or creating its
@@ -101,7 +101,8 @@ it does not dispose a borrowed runtime. The owner must `await runtime.dispose()`
 when its final consumer stops, including while waiting for storage: Waffle then
 cancels queued filesystem work and joins worker cleanup/ownership release.
 Do not treat a shell exit or an unawaited dispose call as that ownership fence.
-Restart after a truly hung default IndexedDB open awaits Waffle's pending disposal fix.
+Pending IndexedDB opens can be cancelled under either busy policy. Restart awaits that
+cleanup before acquiring its replacement runtime, including after the opening guard expires.
 
 ## Terminal and host responsibilities
 
@@ -389,7 +390,7 @@ engines, or vendored `@bun-wasm/runtime` tree.
 | Original inherited-descriptor browser regression matrix             | `tests/runtime-shell.spec.ts` and `tests/guest/src/{main.rs,bin/test-spin.rs}`                                                                                                                                                      | Check filesystem access alongside literal inherited fd 3, sparse/occupied layouts, nested shells and input inheritance for every rebuilt guest. Existing shell operations through the original Rust WASI adapter and ordinary libc-backed fixture probes, not external Bun evidence.                                                                                                                                                                                                                                                                                                         |
 | Original browser notice aggregator                                  | `scripts/browser-notices.mjs`                                                                                                                                                                                                       | New distribution integration collecting shell, terminal, peer and npm notices; no additional upstream code copied.                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Original browser packaging regressions                              | `scripts/test-browser-package.mjs`                                                                                                                                                                                                  | Verify peer/development/lock pin identity and the absence of copied runtime/Bun implementation sources or Bun payloads before the browser build; no upstream tests copied.                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| External shared runtime, not vendored                               | Waffle `918ca040931d6ce243861c926ee841b9178be03f`                                                                                                                                                                                   | Required peer plus identical development pin. The application imports the single `createRuntime` from Waffle's package root.                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| External shared runtime, not vendored                               | Waffle `8bfc767d6097cf3c741092328573460a3047d114`                                                                                                                                                                                   | Required peer plus identical development pin. The application imports the single `createRuntime` from Waffle's package root.                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Pinned terminal source                                              | Ghostty WebGPU source/archive pin under `terminal` in `sources.lock.json`                                                                                                                                                           | Retain the existing terminal source revision/archive checksum and its included WASM notices; do not substitute an unpinned terminal build.                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 Exact pins, checksums, import mappings, classifications, and reasons are recorded

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import { createRuntime, type Runtime, type SharedFilesystemState } from "waffle";
-import type { FilesystemConnection } from "waffle/fs/protocol";
+import { FilesystemError, type FilesystemConnection } from "waffle/fs/protocol";
 import { FilesystemService } from "waffle/fs/service";
 import { MemoryBackend } from "waffle/fs/backend";
 import { BrowserSession } from "./session";
@@ -17,6 +17,7 @@ function storageWorker(context: TestContext) {
     service = new FilesystemService(new MemoryBackend());
     initialization?: { storage: string; whenBusy?: string };
     disposalRequested = false;
+    holdDisposal = false;
     terminated = false;
     constructor() {
       super();
@@ -32,7 +33,10 @@ function storageWorker(context: TestContext) {
         this.connection = message.connect;
         this.initialization = { storage: message.storage!, whenBusy: message.whenBusy };
       }
-      if (message.dispose) this.disposalRequested = true;
+      if (message.dispose) {
+        this.disposalRequested = true;
+        if (!this.holdDisposal) queueMicrotask(() => this.finishDisposal());
+      }
     }
     terminate() {
       this.terminated = true;
@@ -51,9 +55,12 @@ function storageWorker(context: TestContext) {
   globalThis.Worker = StorageWorker as unknown as typeof Worker;
   let runtime: Runtime | undefined;
   context.after(async () => {
-    // Begin cancellation before acknowledging it, just like the worker-side abort handshake.
+    // The final worker abort follows admitted consumer fences, not the dispose() call.
+    for (const worker of workers) worker.holdDisposal = false;
     const disposing = runtime?.dispose();
-    for (const worker of workers) worker.finishDisposal();
+    for (const worker of workers) {
+      if (worker.disposalRequested) worker.finishDisposal();
+    }
     try {
       await disposing;
     } finally {
@@ -143,9 +150,10 @@ test("shell startup timeout starts only after storage is ready", async (context)
   assert.equal(admitted, true, "shell initialization begins once storage is ready");
 });
 
-test("runtime disposal begins the waiting-storage handshake synchronously and awaits acknowledgement", async (context) => {
+test("runtime disposal revokes synchronously and awaits the final waiting-storage acknowledgement", async (context) => {
   const fixture = storageWorker(context);
   const { runtime, worker } = fixture.create({ filesystem: { storage: "opfs" } });
+  worker.holdDisposal = true;
   worker.state("waiting");
   const opening = waitForStorage(runtime, new AbortController().signal);
   const rejected = assert.rejects(opening, /storage was disposed/);
@@ -153,9 +161,11 @@ test("runtime disposal begins the waiting-storage handshake synchronously and aw
   const disposing = runtime.dispose().then(() => {
     finished = true;
   });
+  assert.equal(runtime.disposed, true);
+  assert.equal(worker.disposalRequested, false, "abort follows the runtime's consumer fences");
+  await turn();
   assert.equal(worker.disposalRequested, true);
   await rejected;
-  await turn();
   assert.equal(finished, false);
   assert.equal(worker.terminated, false);
   worker.finishDisposal();
@@ -163,6 +173,43 @@ test("runtime disposal begins the waiting-storage handshake synchronously and aw
   assert.equal(worker.terminated, true);
   assert.equal(runtime.filesystem.state.status, "disposed");
 });
+
+for (const whenBusy of ["takeover", "wait"] as const) {
+  test(`opening IndexedDB ${whenBusy} revokes queued work before joining an admitted consumer`, async (context) => {
+    const fixture = storageWorker(context);
+    const { runtime, worker } = fixture.create({ filesystem: { whenBusy } });
+    let releaseStop!: () => void;
+    const physicalStop = new Promise<void>((resolve) => {
+      releaseStop = resolve;
+    });
+    let stopping = false;
+    runtime.retainConsumer({
+      filesystem: runtime.filesystem.createIdentity(),
+      revoke() {},
+      async stop() {
+        stopping = true;
+        await physicalStop;
+      },
+    });
+    const cancelled = assert.rejects(
+      runtime.filesystem.mkdirp("/pending"),
+      (error: unknown) => error instanceof FilesystemError && error.errno === 11,
+    );
+    const disposing = runtime.dispose();
+    try {
+      await cancelled;
+      await turn();
+      assert.equal(stopping, true);
+      assert.equal(worker.disposalRequested, false, "the consumer still owns its stop fence");
+      assert.equal(worker.terminated, false);
+    } finally {
+      releaseStop();
+      await disposing;
+    }
+    assert.equal(worker.disposalRequested, true);
+    assert.equal(worker.terminated, true);
+  });
+}
 
 test("cancelling a waiting session detaches its observer without disposing the borrowed runtime", async (context) => {
   const fixture = storageWorker(context);
@@ -271,7 +318,7 @@ test("storage defaults are forwarded unchanged and OPFS takeover is rejected", a
   const fixture = storageWorker(context);
   const { runtime, worker } = fixture.create();
   assert.deepEqual(worker.initialization, { storage: "indexeddb", whenBusy: undefined });
-  // A default IndexedDB runtime has no cancellable ownership wait.
+  // Default IndexedDB startup is cancellable even before storage becomes ready.
   await runtime.dispose();
   const invalid = { storage: "opfs", whenBusy: "takeover" };
   assert.throws(
