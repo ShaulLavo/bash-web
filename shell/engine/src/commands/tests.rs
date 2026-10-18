@@ -18,6 +18,16 @@ fn baseline(names: &[&'static str]) -> Vec<&'static str> {
     names
 }
 
+fn available_baseline(names: &[&'static str]) -> Vec<&'static str> {
+    baseline(names)
+        .into_iter()
+        .filter(|name| {
+            cfg!(feature = "acceptance-utilities")
+                || !["cat", "grep", "mkdir", "seq"].contains(name)
+        })
+        .collect()
+}
+
 #[test]
 fn catalogue_has_unique_exact_names_and_no_type_builtin() {
     let unique: BTreeSet<_> = COMMANDS.iter().map(|command| command.name).collect();
@@ -50,7 +60,7 @@ fn declaration_metadata_matches_only_the_five_literal_syntax_candidates() {
 fn adapter_dispatch_preserves_the_old_dispatch_set_not_the_old_is_builtin_set() {
     assert_eq!(
         names(|command| matches!(command.handler(), Some(Handler::Builtin(_)))),
-        baseline(&[
+        available_baseline(&[
             ":", "true", "false", "echo", "printf", "cat", "grep", "mkdir", "seq", "read",
             "export", "local", "readonly", "declare", "typeset", "cd", "pwd", "set", "shift",
             "shopt", "exit", "return", "jobs", "wait", "kill", "unset", "test", "[", "break",
@@ -93,7 +103,7 @@ fn query_views_match_the_independent_baseline_sets() {
 fn heredoc_view_preserves_grep_and_mkdir_without_query_normalization() {
     assert_eq!(
         names(Command::shell_heredoc_errors),
-        baseline(&[
+        available_baseline(&[
             ":", "true", "false", "echo", "printf", "grep", "mkdir", "read", "export", "local",
             "readonly", "declare", "typeset", "cd", "pwd", "set", "shift", "command", "shopt",
             "exit", "return", "jobs", "wait", "kill", "unset", "test", "[", "break", "continue",
@@ -102,7 +112,7 @@ fn heredoc_view_preserves_grep_and_mkdir_without_query_normalization() {
     );
     assert_eq!(
         names(|command| command.shell_heredoc_errors() && !command.query_builtin()),
-        baseline(&["grep", "mkdir"])
+        available_baseline(&["grep", "mkdir"])
     );
 }
 
@@ -134,7 +144,36 @@ fn classes_and_capabilities_do_not_mislabel_standins_or_unimplemented_syntax() {
             assert!(!command.query_builtin());
             assert!(!command.shell_heredoc_errors());
         } else {
-            assert!(command.handler().is_some());
+            assert_eq!(
+                command.handler().is_some(),
+                command.omitted_capability().is_none()
+            );
         }
     }
+}
+
+#[test]
+fn compiled_capability_controls_dispatch_without_changing_recognition() {
+    for name in ["cat", "grep", "mkdir", "seq"] {
+        let command = lookup(name).unwrap();
+        assert_eq!(
+            command.handler().is_some(),
+            cfg!(feature = "acceptance-utilities")
+        );
+        assert_eq!(
+            command.omitted_capability().is_none(),
+            cfg!(feature = "acceptance-utilities")
+        );
+        assert!(!command.query_builtin());
+        assert!(!command.query_keyword());
+        assert_eq!(command.declaration, Declaration::Ordinary);
+    }
+    assert_eq!(
+        build_name(),
+        if cfg!(feature = "acceptance-utilities") {
+            "Full"
+        } else {
+            "Lite"
+        }
+    );
 }

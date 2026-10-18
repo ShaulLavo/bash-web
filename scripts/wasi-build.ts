@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { shellBuild, shellFeatures, shellTargetDirectory } from "./shell-build.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
 type Environment = NodeJS.ProcessEnv;
@@ -115,6 +116,8 @@ export function wasiCargoEnvironment(
 }
 
 export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
+  const build = shellBuild();
+  const target = shellTargetDirectory(repositoryRoot, build);
   execFileSync(
     "cargo",
     [
@@ -126,10 +129,10 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
       "--manifest-path",
       "shell/Cargo.toml",
       "-j2",
-    ].concat(args),
+    ].concat(shellFeatures(build), args),
     {
       cwd: repositoryRoot,
-      env: wasiBuildEnvironment(repositoryRoot, process.env.CARGO_TARGET_DIR ?? ".build/shell"),
+      env: wasiBuildEnvironment(repositoryRoot, target),
       stdio: "inherit",
     },
   );
@@ -138,8 +141,7 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
   for (const binary of binaries) {
     verifyWasiGuest(
       resolve(
-        repositoryRoot,
-        process.env.CARGO_TARGET_DIR ?? ".build/shell",
+        target,
         wasiTarget,
         "release",
         `${binary}.wasm`,

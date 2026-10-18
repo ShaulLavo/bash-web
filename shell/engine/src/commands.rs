@@ -8,10 +8,8 @@ pub(crate) enum Builtin {
     False,
     Echo,
     Printf,
-    Cat,
-    Grep,
-    Mkdir,
-    Seq,
+    #[cfg(feature = "acceptance-utilities")]
+    AcceptanceUtility(Utility),
     Read,
     Declaration,
     Cd,
@@ -26,6 +24,26 @@ pub(crate) enum Builtin {
     Unset,
     Test,
     LoopControl,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Utility {
+    Cat,
+    Grep,
+    Mkdir,
+    Seq,
+}
+impl Utility {
+    const fn handler(self) -> Option<Handler> {
+        #[cfg(feature = "acceptance-utilities")]
+        {
+            Some(Handler::Builtin(Builtin::AcceptanceUtility(self)))
+        }
+        #[cfg(not(feature = "acceptance-utilities"))]
+        {
+            None
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -51,12 +69,34 @@ pub(crate) enum Declaration {
     AssignmentOperands,
 }
 
-/// Descriptive ownership for the current full build, not Cargo feature flags or
-/// shell options. Step 6 owns compile-time filtering and omitted-operation errors.
+/// Compile-time ownership, independent of mutable shell options.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Capability {
     Core,
     AcceptanceUtilities,
+}
+
+impl Capability {
+    const fn included(self) -> bool {
+        match self {
+            Self::Core => true,
+            Self::AcceptanceUtilities => cfg!(feature = "acceptance-utilities"),
+        }
+    }
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::Core => "core",
+            Self::AcceptanceUtilities => "acceptance-utilities",
+        }
+    }
+}
+
+pub(crate) const fn build_name() -> &'static str {
+    if cfg!(feature = "acceptance-utilities") {
+        "Full"
+    } else {
+        "Lite"
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -83,8 +123,16 @@ pub(crate) struct Command {
 impl Command {
     pub(crate) fn handler(&self) -> Option<Handler> {
         match self.availability {
-            Availability::Included(_) => self.handler,
+            Availability::Included(capability) if capability.included() => self.handler,
+            Availability::Included(_) => None,
             Availability::UnsupportedSyntax => None,
+        }
+    }
+
+    pub(crate) fn omitted_capability(&self) -> Option<Capability> {
+        match self.availability {
+            Availability::Included(capability) if !capability.included() => Some(capability),
+            _ => None,
         }
     }
 
@@ -140,13 +188,13 @@ const fn declaration(name: &'static str, class: Class) -> Command {
         Handler::Builtin(Builtin::Declaration),
     )
 }
-const fn utility(name: &'static str, builtin: Builtin, heredoc_errors: HeredocErrors) -> Command {
+const fn utility(name: &'static str, utility: Utility, heredoc_errors: HeredocErrors) -> Command {
     Command {
         name,
         class: Class::AcceptanceUtility,
         declaration: Declaration::Ordinary,
         availability: Availability::Included(Capability::AcceptanceUtilities),
-        handler: Some(Handler::Builtin(builtin)),
+        handler: utility.handler(),
         heredoc_errors,
     }
 }
@@ -170,10 +218,10 @@ static COMMANDS: &[Command] = &[
     regular("false", Builtin::False),
     regular("echo", Builtin::Echo),
     regular("printf", Builtin::Printf),
-    utility("cat", Builtin::Cat, HeredocErrors::CommandLocal),
-    utility("grep", Builtin::Grep, HeredocErrors::Shell),
-    utility("mkdir", Builtin::Mkdir, HeredocErrors::Shell),
-    utility("seq", Builtin::Seq, HeredocErrors::CommandLocal),
+    utility("cat", Utility::Cat, HeredocErrors::CommandLocal),
+    utility("grep", Utility::Grep, HeredocErrors::Shell),
+    utility("mkdir", Utility::Mkdir, HeredocErrors::Shell),
+    utility("seq", Utility::Seq, HeredocErrors::CommandLocal),
     regular("read", Builtin::Read),
     declaration("export", Class::SpecialBuiltin),
     declaration("local", Class::RegularBuiltin),

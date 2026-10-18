@@ -4,13 +4,15 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { brotliCompressSync, constants } from "node:zlib";
+import { brotliCompressSync, constants, gzipSync } from "node:zlib";
+import { shellBuild, shellFeatures, shellTargetDirectory } from "./shell-build.ts";
 import { wasiBuildEnvironment } from "./wasi-build.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
 const root = resolve(import.meta.dirname, "..");
-const cargoEnv = wasiBuildEnvironment(root, process.env.CARGO_TARGET_DIR ?? ".build/shell");
-const cargo = (args, options = {}) =>
+const build = shellBuild();
+const cargoEnv = wasiBuildEnvironment(root, shellTargetDirectory(root, build));
+const cargo = (args: readonly string[], options: import("node:child_process").ExecFileSyncOptions = {}) =>
   execFileSync("cargo", args, { cwd: root, stdio: "inherit", env: cargoEnv, ...options });
 const manifest = ["--locked", "--manifest-path", "shell/Cargo.toml"];
 const env = {
@@ -38,7 +40,7 @@ cargo(
   { env },
 );
 cargo(
-  ["test"].concat(manifest, [
+  ["test"].concat(manifest, shellFeatures(build), [
     "--target",
     "wasm32-wasip1",
     "-p",
@@ -50,6 +52,8 @@ cargo(
     "terminal_display",
     "--test",
     "words",
+    "--test",
+    "capabilities",
     "-j2",
     "--",
     "--test-threads=1",
@@ -57,7 +61,7 @@ cargo(
   { env },
 );
 cargo(
-  ["build"].concat(manifest, [
+  ["build"].concat(manifest, shellFeatures(build), [
     "--target",
     "wasm32-wasip1",
     "-p",
@@ -66,12 +70,12 @@ cargo(
     "-j2",
   ]),
 );
-const metadata = JSON.parse(
+const metadata: { target_directory: string } = JSON.parse(String(
   cargo(["metadata"].concat(manifest, ["--format-version", "1", "--no-deps"]), {
     stdio: "pipe",
     encoding: "utf8",
   }),
-);
+));
 const wasm = resolve(metadata.target_directory, "wasm32-wasip1/release/shell-engine.wasm");
 verifyWasiGuest(wasm);
 const output = execFileSync(
@@ -80,7 +84,7 @@ const output = execFileSync(
   { encoding: "utf8" },
 );
 assert.equal(output, "STATUS:0:1 0\n");
-const invoke = (script) => {
+const invoke = (script: string) => {
   const result = spawnSync("wasmtime", ["run", wasm, "-c", script], {
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -91,7 +95,7 @@ const separate = invoke("printf out; printf err >&2; exit 7");
 assert.equal(separate.status, 7);
 assert.equal(separate.stdout.toString(), "out");
 assert.equal(separate.stderr.toString(), "err");
-const longErrors = invoke("seq 20000 >&2; printf done; exit 7");
+const longErrors = invoke("for ((i=1;i<=20000;i++)); do printf '%s\n' \"$i\" >&2; done; printf done; exit 7");
 assert.equal(longErrors.status, 7);
 assert.equal(longErrors.stdout.toString(), "done");
 assert.ok(longErrors.stderr.toString().endsWith("20000\n"));
@@ -106,6 +110,6 @@ const compressed = brotliCompressSync(bytes, {
   params: { [constants.BROTLI_PARAM_QUALITY]: 11 },
 });
 console.log(
-  `Shell core release WASI: ${bytes.length} bytes raw; ${compressed.length} bytes brotli-11`,
+  `Shell ${build} release WASI: ${bytes.length} bytes raw; ${gzipSync(bytes, { level: 9 }).length} bytes gzip-9; ${compressed.length} bytes brotli-11`,
 );
 assert.ok(compressed.length <= 1_000_000, "shell core exceeds Brush's 1.0 MB brotli guardrail");

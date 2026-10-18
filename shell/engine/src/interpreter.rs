@@ -3145,7 +3145,22 @@ async fn dispatch_simple_command_body(
                 } else {
                     b"command not found".as_slice()
                 };
-                command_builtin::execution_failure(&fds, &context, &name, reason).await?;
+                let omitted = commands::lookup(&name)
+                    .and_then(commands::Command::omitted_capability)
+                    .map(|capability| {
+                        format!(
+                            "command not found (bash-web {}; omitted capability: {})",
+                            commands::build_name(),
+                            capability.name()
+                        )
+                    });
+                command_builtin::execution_failure(
+                    &fds,
+                    &context,
+                    &name,
+                    omitted.as_deref().map(str::as_bytes).unwrap_or(reason),
+                )
+                .await?;
                 return Ok(Outcome::status(127));
             }
         }

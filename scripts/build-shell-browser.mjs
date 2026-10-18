@@ -1,9 +1,10 @@
 import { copyFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
+import { shellBuild, shellTargetDirectory } from "./shell-build.ts";
 import { buildWasiShell } from "./wasi-build.ts";
 
 const root = resolve(import.meta.dirname, "..");
-const target = resolve(root, process.env.CARGO_TARGET_DIR ?? ".build/shell");
+const target = shellTargetDirectory(root, shellBuild());
 buildWasiShell(["-p", "shell-engine", "--bin", "shell-runtime"]);
 const directory = resolve(root, "public/programs");
 await mkdir(directory, { recursive: true });
