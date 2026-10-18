@@ -224,7 +224,7 @@ impl Work {
         self.storage_remaining -= bytes;
         Ok(())
     }
-    fn storage_left(&self) -> usize {
+    pub(crate) fn storage_left(&self) -> usize {
         self.storage_remaining
     }
     /// Return storage admitted for a temporary once it has been dropped. Only

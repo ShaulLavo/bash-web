@@ -56,6 +56,9 @@ pub(crate) struct LocalVariable {
     nameref: Option<String>,
     exported: bool,
     readonly: bool,
+    function_prefix: bool,
+    storage_base: usize,
+    memory: Option<Rc<RefCell<crate::interpreter::eval::StorageAllocation>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -86,6 +89,8 @@ pub struct State {
     pub extglob: bool,
     /// Remove unmatched unquoted pathname patterns instead of keeping them.
     pub nullglob: bool,
+    pub lastpipe: bool,
+    pub monitor: bool,
     /// Last published synthetic async handle. Isolated shells inherit a copy.
     pub(crate) last_async: Option<String>,
     /// Unsetting EPOCHREALTIME permanently removes its dynamic-variable hook.
@@ -94,6 +99,9 @@ pub struct State {
     ifs_members: Option<IfsMembers>,
     pub(crate) positional: Vec<String>,
     pub(crate) locals: Vec<BTreeMap<String, LocalVariable>>,
+    pub(crate) function_calls: usize,
+    memory: Option<crate::interpreter::eval::StorageBudget>,
+    positional_memory: Option<Rc<RefCell<crate::interpreter::eval::StorageAllocation>>>,
     prefixes: Vec<BTreeMap<String, Option<String>>>,
 }
 impl Default for State {
@@ -114,17 +122,38 @@ impl Default for State {
             inherit_errexit: false,
             extglob: false,
             nullglob: false,
+            lastpipe: false,
+            monitor: false,
             last_async: None,
             epoch_realtime: true,
             star_separator: StarSeparator::Live,
             ifs_members: None,
             positional: Vec::new(),
             locals: Vec::new(),
+            function_calls: 0,
+            memory: None,
+            positional_memory: None,
             prefixes: Vec::new(),
         }
     }
 }
 impl State {
+    pub(crate) fn with_memory(memory: crate::interpreter::eval::StorageBudget) -> Self {
+        Self {
+            memory: Some(memory),
+            ..Self::default()
+        }
+    }
+    pub(crate) fn admit_temporary(
+        &self,
+        bytes: usize,
+    ) -> Result<Option<crate::interpreter::eval::StorageAllocation>, i32> {
+        self.memory
+            .as_ref()
+            .map(|memory| memory.admit(bytes))
+            .transpose()
+            .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)
+    }
     pub fn shared(self) -> SharedState {
         Rc::new(RefCell::new(self))
     }
@@ -158,6 +187,18 @@ impl State {
         let namerefs = snapshot_map(source, |s| &s.namerefs, cancel, work).await?;
         let functions = snapshot_map(source, |s| &s.functions, cancel, work).await?;
         let pipestatus = snapshot_vec(source, |s| &s.pipestatus, cancel, work).await?;
+        let positional_memory = source
+            .borrow()
+            .positional_memory
+            .as_ref()
+            .map(|memory| {
+                memory
+                    .borrow()
+                    .fork()
+                    .map(|ticket| Rc::new(RefCell::new(ticket)))
+            })
+            .transpose()
+            .map_err(|_| Error::Status(crate::interpreter::eval::RESOURCE_STATUS))?;
         let positional = snapshot_vec(source, |s| &s.positional, cancel, work).await?;
         let last_async = snapshot_value(source, |s| Some(&s.last_async), cancel, work).await?;
         let (local_count, prefix_count) = {
@@ -189,11 +230,16 @@ impl State {
             inherit_errexit: state.inherit_errexit,
             extglob: state.extglob,
             nullglob: state.nullglob,
+            lastpipe: state.lastpipe,
+            monitor: state.monitor,
             last_async,
             epoch_realtime: state.epoch_realtime,
             star_separator: state.star_separator,
             ifs_members: state.ifs_members,
             positional,
+            function_calls: state.function_calls,
+            memory: state.memory.clone(),
+            positional_memory,
             locals,
             prefixes,
         })
@@ -276,8 +322,33 @@ impl State {
         self.variables.get(name).map(String::as_str)
     }
     /// Takes ownership of argv already admitted by command expansion.
-    pub(crate) fn replace_positional(&mut self, args: Vec<String>) {
+    pub(crate) fn replace_positional(&mut self, args: Vec<String>) -> Result<(), i32> {
+        let bytes = positional_bytes(&args)?;
+        if let Some(memory) = &self.positional_memory {
+            memory
+                .borrow_mut()
+                .resize(bytes)
+                .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)?;
+        } else if let Some(memory) = &self.memory {
+            self.positional_memory = Some(Rc::new(RefCell::new(
+                memory
+                    .admit(bytes)
+                    .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)?,
+            )));
+        }
         self.positional = args;
+        Ok(())
+    }
+    fn reserve_local_value(&self, name: &str, bytes: usize) -> Result<(), i32> {
+        if let Some(local) = self.locals.iter().rev().find_map(|frame| frame.get(name))
+            && let Some(memory) = &local.memory
+        {
+            memory
+                .borrow_mut()
+                .resize(local.storage_base.checked_add(bytes).ok_or(2)?)
+                .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)?;
+        }
+        Ok(())
     }
     fn live_star_separator(&self) -> Option<char> {
         self.scalar_parameter("IFS")
@@ -547,6 +618,7 @@ impl State {
         if self.is_readonly(&name) {
             return Err(1);
         }
+        self.reserve_local_value(&name, value.len())?;
         if let Some(saved) = self
             .prefixes
             .last_mut()
@@ -700,6 +772,9 @@ impl State {
         {
             *saved = None;
         }
+        // Removing a current local keeps its saved outer binding but releases
+        // its live value charge. Shrinking cannot fail admission.
+        self.reserve_local_value(name, 0).map_err(|_| ())?;
         self.exported.remove(name);
         let removed = self.variables.remove(name).is_some() || was_dynamic;
         if name == "IFS" {
@@ -708,28 +783,90 @@ impl State {
         Ok(removed)
     }
     pub(crate) fn local(&mut self, name: String, value: String) -> Result<(), i32> {
-        self.save_local(&name)?;
+        self.declare_local(name, Some(value))
+    }
+    pub(crate) fn declare_local(&mut self, name: String, value: Option<String>) -> Result<(), i32> {
+        let already_local = self
+            .locals
+            .last()
+            .is_some_and(|frame| frame.contains_key(&name));
+        // Temporary environments of function calls are inherited by a bare
+        // local declaration, unlike ordinary dynamically visible bindings.
+        let prefix = self
+            .locals
+            .iter()
+            .rev()
+            .find_map(|frame| frame.get(&name))
+            .is_some_and(|binding| binding.function_prefix);
+        let inherited_bytes = if !already_local && prefix && value.is_none() {
+            self.variables.get(&name).map_or(0, String::len)
+        } else {
+            0
+        };
+        let bytes = value.as_ref().map_or(inherited_bytes, String::len);
+        if already_local && value.is_some() {
+            self.reserve_local_value(&name, bytes)?;
+        }
+        self.save_local(&name, bytes)?;
+        let inherited = if !already_local && prefix && value.is_none() {
+            self.locals
+                .last()
+                .and_then(|frame| frame.get(&name))
+                .and_then(|binding| binding.previous.clone())
+        } else {
+            None
+        };
         self.namerefs.remove(&name);
         let direct_ifs = name == "IFS";
-        self.variables.insert(name, value);
+        if let Some(value) = value.or(inherited) {
+            self.variables.insert(name, value);
+        }
         if direct_ifs {
             self.refresh_star_separator();
         }
         Ok(())
     }
-    fn save_local(&mut self, name: &str) -> Result<(), i32> {
+    fn save_local(&mut self, name: &str, value_bytes: usize) -> Result<(), i32> {
         if self.readonly.contains(name) || self.current_local_readonly(name) {
             return Err(1);
         }
-        let frame = self.locals.last_mut().ok_or(1)?;
-        if !frame.contains_key(name) {
+        if self.locals.is_empty() {
+            return Err(1);
+        }
+        if !self.locals.last().unwrap().contains_key(name) {
+            let storage_base = snapshot_node_bytes::<LocalVariable>()
+                .map_err(|_| 2)?
+                .checked_add(snapshot_node_bytes::<String>().map_err(|_| 2)?)
+                .ok_or(2)?
+                .checked_add(name.len().checked_mul(3).ok_or(2)?)
+                .ok_or(2)?
+                .checked_add(self.variables.get(name).map_or(0, String::len))
+                .ok_or(2)?
+                .checked_add(self.namerefs.get(name).map_or(0, String::len))
+                .ok_or(2)?;
+            let memory = self
+                .memory
+                .as_ref()
+                .map(|memory| {
+                    memory
+                        .admit(storage_base.checked_add(value_bytes).ok_or(2)?)
+                        .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)
+                })
+                .transpose()?
+                .map(|ticket| Rc::new(RefCell::new(ticket)));
             let previous = LocalVariable {
                 previous: self.variables.remove(name),
                 nameref: self.namerefs.remove(name),
                 exported: self.exported.contains(name),
                 readonly: false,
+                function_prefix: false,
+                storage_base,
+                memory,
             };
-            frame.insert(name.to_owned(), previous);
+            self.locals
+                .last_mut()
+                .unwrap()
+                .insert(name.to_owned(), previous);
         }
         Ok(())
     }
@@ -748,7 +885,14 @@ impl State {
             return Err(1);
         }
         if local {
-            self.save_local(&name)?;
+            if self
+                .locals
+                .last()
+                .is_some_and(|frame| frame.contains_key(&name))
+            {
+                self.reserve_local_value(&name, target.len())?;
+            }
+            self.save_local(&name, target.len())?;
         }
         let is_ifs = name == "IFS";
         self.variables.remove(&name);
@@ -791,6 +935,9 @@ fn restore_nameref(namerefs: &mut BTreeMap<String, String>, name: &str, target: 
 // These are the only values copied by the state snapshot. Keeping this list
 // explicit prevents accidentally introducing a recursively cloned AST/value.
 trait SnapshotValue: Clone {
+    fn snapshot_clone(&self) -> Result<Self, Error> {
+        Ok(self.clone())
+    }
     fn snapshot_bytes(&self) -> usize;
 }
 impl SnapshotValue for String {
@@ -804,6 +951,23 @@ impl SnapshotValue for Option<String> {
     }
 }
 impl SnapshotValue for LocalVariable {
+    fn snapshot_clone(&self) -> Result<Self, Error> {
+        let memory = self
+            .memory
+            .as_ref()
+            .map(|memory| {
+                memory
+                    .borrow()
+                    .fork()
+                    .map(|ticket| Rc::new(RefCell::new(ticket)))
+            })
+            .transpose()
+            .map_err(|_| Error::Status(crate::interpreter::eval::RESOURCE_STATUS))?;
+        Ok(Self {
+            memory,
+            ..self.clone()
+        })
+    }
     fn snapshot_bytes(&self) -> usize {
         self.previous
             .snapshot_bytes()
@@ -840,7 +1004,7 @@ async fn snapshot_value<T: SnapshotValue>(
         let value = select(&state).ok_or(2)?;
         let bytes = value.snapshot_bytes();
         work.admit_storage(bytes)?;
-        (value.clone(), bytes)
+        (value.snapshot_clone()?, bytes)
     };
     snapshot_steps(bytes, cancel, work).await?;
     Ok(value)
@@ -904,7 +1068,7 @@ async fn snapshot_map<T: SnapshotValue>(
             };
             let bytes = key.len().checked_add(value.snapshot_bytes()).ok_or(2)?;
             work.admit_storage(snapshot_node_bytes::<T>()?.checked_add(bytes).ok_or(2)?)?;
-            (key.clone(), value.clone(), bytes)
+            (key.clone(), value.snapshot_clone()?, bytes)
         };
         // Install before yielding: this copied key is the allocation-free
         // cursor for the next source lookup, and no source borrow survives.
@@ -938,7 +1102,7 @@ async fn snapshot_set(
             };
             let bytes = value.len();
             work.admit_storage(snapshot_node_bytes::<()>()?.checked_add(bytes).ok_or(2)?)?;
-            (value.clone(), bytes)
+            (value.snapshot_clone()?, bytes)
         };
         values.insert(value);
         snapshot_steps(bytes, cancel, work).await?;
@@ -955,11 +1119,16 @@ pub(crate) struct PrefixFrame {
     star_separator: StarSeparator,
     ifs_members: Option<IfsMembers>,
     restores_ifs: std::cell::Cell<bool>,
+    memory: RefCell<Option<crate::interpreter::eval::StorageAllocation>>,
 }
 impl PrefixFrame {
     pub(crate) fn enter(state: SharedState) -> Self {
         let star_separator = state.borrow().star_separator;
         let ifs_members = state.borrow().ifs_members;
+        let memory = state
+            .borrow()
+            .admit_temporary(0)
+            .expect("zero-byte admission");
         state.borrow_mut().prefixes.push(BTreeMap::new());
         Self {
             state,
@@ -967,7 +1136,22 @@ impl PrefixFrame {
             star_separator,
             ifs_members,
             restores_ifs: std::cell::Cell::new(false),
+            memory: RefCell::new(memory),
         }
+    }
+    pub(crate) fn reserve(&self, name: &str, value_bytes: usize) -> Result<(), i32> {
+        let bytes = snapshot_node_bytes::<Option<String>>()
+            .map_err(|_| 2)?
+            .checked_add(name.len().checked_mul(2).ok_or(2)?)
+            .ok_or(2)?
+            .checked_add(value_bytes)
+            .ok_or(2)?;
+        if let Some(memory) = &mut *self.memory.borrow_mut() {
+            memory
+                .grow(bytes)
+                .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)?;
+        }
+        Ok(())
     }
     pub(crate) fn set(&self, name: String, value: String) -> Result<(), String> {
         let mut state = self.state.borrow_mut();
@@ -992,9 +1176,36 @@ impl PrefixFrame {
         }
         Ok(())
     }
-    pub(crate) fn commit(mut self) {
-        self.state.borrow_mut().prefixes.pop();
+    pub(crate) fn commit(mut self) -> Result<(), i32> {
+        let mut state = self.state.borrow_mut();
+        let saved = state.prefixes.last().unwrap();
+        // Prefix RHSs are temporary until the whole assignment-only command
+        // commits. Reserve every owning local's positive delta together before
+        // changing any ticket, so failed multi-assignment commits are atomic.
+        let mut growth = 0usize;
+        for name in saved.keys() {
+            if let Some(local) = state.locals.iter().rev().find_map(|frame| frame.get(name))
+                && let Some(memory) = &local.memory
+            {
+                let bytes = local
+                    .storage_base
+                    .checked_add(state.variables.get(name).map_or(0, String::len))
+                    .ok_or(2)?;
+                growth = growth
+                    .checked_add(bytes.saturating_sub(memory.borrow().bytes()))
+                    .ok_or(2)?;
+            }
+        }
+        let reservation = state.admit_temporary(growth)?;
+        // No yield or other admission can intervene between releasing this
+        // aggregate reservation and moving each part onto its binding ticket.
+        drop(reservation);
+        for name in saved.keys() {
+            state.reserve_local_value(name, state.variables.get(name).map_or(0, String::len))?;
+        }
+        state.prefixes.pop();
         self.active = false;
+        Ok(())
     }
 }
 impl Drop for PrefixFrame {
@@ -1020,29 +1231,91 @@ impl Drop for PrefixFrame {
     }
 }
 
+fn positional_bytes(args: &Vec<String>) -> Result<usize, i32> {
+    args.iter().try_fold(
+        args.capacity()
+            .checked_mul(std::mem::size_of::<String>())
+            .ok_or(2)?,
+        |bytes, value| bytes.checked_add(value.capacity()).ok_or(2),
+    )
+}
+
 /// No borrow is held over an await. Dropping a cancelled function future restores
 /// the positional/local frame, including when it is nested inside another call.
 pub(crate) struct FunctionFrame {
     state: SharedState,
     positional: Vec<String>,
+    prefix: bool,
+    positional_memory: Option<Rc<RefCell<crate::interpreter::eval::StorageAllocation>>>,
 }
 impl FunctionFrame {
     pub(crate) fn enter(state: SharedState, args: Vec<String>, limit: usize) -> Result<Self, i32> {
         let mut s = state.borrow_mut();
-        if s.locals.len() >= limit {
+        if s.function_calls >= limit {
             return Err(2);
         }
+        let memory = s
+            .memory
+            .as_ref()
+            .map(|memory| {
+                memory
+                    .admit(positional_bytes(&args)?)
+                    .map_err(|_| crate::interpreter::eval::RESOURCE_STATUS)
+            })
+            .transpose()?
+            .map(|ticket| Rc::new(RefCell::new(ticket)));
+        s.locals.try_reserve(2).map_err(|_| 2)?;
+        let positional_memory = std::mem::replace(&mut s.positional_memory, memory);
         let positional = std::mem::replace(&mut s.positional, args);
         s.locals.push(BTreeMap::new());
+        s.function_calls += 1;
+        #[cfg(test)]
+        crate::interpreter::eval::measure_calls(s.function_calls);
         drop(s);
-        Ok(Self { state, positional })
+        Ok(Self {
+            state,
+            positional,
+            prefix: false,
+            positional_memory,
+        })
+    }
+    /// Prefix bindings sit below the function's declaration scope. `unset`
+    /// can therefore reveal the caller, while `local` keeps a separate shadow.
+    pub(crate) fn prefixes(&mut self, assigned: Vec<(String, String)>) -> Result<(), i32> {
+        if assigned.is_empty() {
+            return Ok(());
+        }
+        let mut state = self.state.borrow_mut();
+        for (name, value) in assigned {
+            let name = state.assignment_name(name)?;
+            state.local(name.clone(), value)?;
+            state
+                .locals
+                .last_mut()
+                .unwrap()
+                .get_mut(&name)
+                .unwrap()
+                .function_prefix = true;
+            state.exported.insert(name);
+        }
+        state.locals.push(BTreeMap::new());
+        self.prefix = true;
+        Ok(())
     }
 }
 impl Drop for FunctionFrame {
     fn drop(&mut self) {
+        #[cfg(test)]
+        {
+            let marker = 0u8;
+            crate::interpreter::eval::measure_drop(&marker);
+        }
         let mut s = self.state.borrow_mut();
         s.positional = std::mem::take(&mut self.positional);
-        if let Some(locals) = s.locals.pop() {
+        s.positional_memory = self.positional_memory.take();
+        s.function_calls -= 1;
+        for _ in 0..if self.prefix { 2 } else { 1 } {
+            let Some(locals) = s.locals.pop() else { break };
             for (name, local) in locals {
                 restore_nameref(&mut s.namerefs, &name, local.nameref);
                 // Only local declarations restore their export attribute;
@@ -1601,6 +1874,9 @@ mod tests {
                     nameref: None,
                     exported: true,
                     readonly: true,
+                    function_prefix: false,
+                    storage_base: 0,
+                    memory: None,
                 },
             )]));
             source.prefixes.push(BTreeMap::from([
@@ -1642,6 +1918,9 @@ mod tests {
                         nameref: None,
                         exported: false,
                         readonly: false,
+                        function_prefix: false,
+                        storage_base: 0,
+                        memory: None,
                     },
                 )]));
             } else {
@@ -1733,5 +2012,207 @@ mod tests {
         assert_eq!(state.scalar_parameter("IFS"), None);
         assert_eq!(state.clone().scalar_parameter("IFS"), None);
         assert!(!state.environment().contains_key("IFS"));
+    }
+
+    #[test]
+    fn function_memory_local_owner_growth_shrink_unset_and_redeclare_are_bounded() {
+        use crate::interpreter::eval::{RESOURCE_STATUS, StorageBudget};
+        let memory = StorageBudget::new(16_384);
+        let state = State::with_memory(memory.clone()).shared();
+        state
+            .borrow_mut()
+            .variables
+            .insert("x".into(), "global".into());
+        let outer = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+        state.borrow_mut().local("x".into(), "1234".into()).unwrap();
+        let initial = memory.observation().0;
+        let inner = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+        state
+            .borrow_mut()
+            .declare_nameref("ref".into(), "x".into(), true)
+            .unwrap();
+        let with_ref = memory.observation().0;
+        for _ in 0..16 {
+            state
+                .borrow_mut()
+                .assign_parameter("ref".into(), "a".repeat(2048))
+                .unwrap();
+            assert_eq!(memory.observation().0, with_ref + 2048 - 4);
+            state
+                .borrow_mut()
+                .assign_parameter("x".into(), "12".into())
+                .unwrap();
+            assert_eq!(memory.observation().0, with_ref - 2);
+        }
+        assert_eq!(
+            state
+                .borrow_mut()
+                .assign_parameter("ref".into(), "a".repeat(20_000)),
+            Err(RESOURCE_STATUS)
+        );
+        assert_eq!(state.borrow().parameter("x"), "12");
+        drop(inner);
+        assert_eq!(
+            memory.observation().0,
+            initial - 2,
+            "child writes remain charged to caller binding"
+        );
+        state.borrow_mut().unset_variable("x").unwrap();
+        assert_eq!(
+            memory.observation().0,
+            initial - 4,
+            "unset refunds only live value, not saved global"
+        );
+        state.borrow_mut().declare_local("x".into(), None).unwrap();
+        assert_eq!(state.borrow().scalar_parameter("x"), None);
+        state.borrow_mut().local("x".into(), "new".into()).unwrap();
+        assert_eq!(memory.observation().0, initial - 1);
+        drop(outer);
+        assert_eq!(state.borrow().parameter("x"), "global");
+        assert_eq!(memory.observation().0, 0);
+    }
+
+    #[test]
+    fn function_memory_local_exact_capacity_failure_preserves_binding_and_frame() {
+        use crate::interpreter::eval::{RESOURCE_STATUS, StorageBudget};
+        let baseline = StorageBudget::new(16_384);
+        let probe = State::with_memory(baseline.clone()).shared();
+        probe
+            .borrow_mut()
+            .variables
+            .insert("x".into(), "saved".into());
+        let frame = FunctionFrame::enter(probe.clone(), Vec::new(), usize::MAX).unwrap();
+        probe
+            .borrow_mut()
+            .local("x".into(), "local".into())
+            .unwrap();
+        let exact = baseline.observation().0;
+        drop(frame);
+        for capacity in [exact - 1, exact] {
+            let memory = StorageBudget::new(capacity);
+            let state = State::with_memory(memory.clone()).shared();
+            state
+                .borrow_mut()
+                .variables
+                .insert("x".into(), "saved".into());
+            let frame = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+            let result = state.borrow_mut().local("x".into(), "local".into());
+            if capacity < exact {
+                assert_eq!(result, Err(RESOURCE_STATUS));
+                assert_eq!(state.borrow().parameter("x"), "saved");
+                assert!(state.borrow().locals.last().unwrap().is_empty());
+                assert_eq!(memory.observation().0, 0);
+            } else {
+                assert_eq!(result, Ok(()));
+                assert_eq!(memory.observation().0, exact);
+            }
+            drop(frame);
+            assert_eq!(state.borrow().parameter("x"), "saved");
+            assert_eq!(memory.observation().0, 0);
+        }
+    }
+
+    #[test]
+    fn function_memory_positional_replacement_failure_is_atomic_and_snapshot_is_independent() {
+        use crate::interpreter::eval::{RESOURCE_STATUS, StorageBudget};
+        let memory = StorageBudget::new(16_384);
+        let state = State::with_memory(memory.clone()).shared();
+        let frame = FunctionFrame::enter(state.clone(), vec!["caller".into()], usize::MAX).unwrap();
+        state
+            .borrow_mut()
+            .local("x".into(), "caller".into())
+            .unwrap();
+        let before = memory.observation().0;
+        assert_eq!(
+            state
+                .borrow_mut()
+                .replace_positional(vec!["x".repeat(20_000)]),
+            Err(RESOURCE_STATUS)
+        );
+        assert_eq!(state.borrow().positional, ["caller"]);
+        assert_eq!(memory.observation().0, before);
+        let pressure = memory.admit(16_384 - before - 1).unwrap();
+        let mut work = Work::new(100_000, 100_000, 0);
+        assert!(matches!(
+            finish_snapshot(&state, &Cancel::new(), &mut work),
+            Err(Error::Status(RESOURCE_STATUS))
+        ));
+        assert_eq!(
+            memory.observation().0,
+            16_383,
+            "partial snapshot admission refunds on failure"
+        );
+        assert_eq!(state.borrow().parameter("x"), "caller");
+        drop(pressure);
+        let mut work = Work::new(100_000, 100_000, 0);
+        let mut snapshot = finish_snapshot(&state, &Cancel::new(), &mut work)
+            .unwrap_or_else(|_| panic!("snapshot fits"));
+        assert_eq!(memory.observation().0, before * 2);
+        snapshot.local("x".into(), "a".repeat(100)).unwrap();
+        snapshot.replace_positional(vec!["b".repeat(100)]).unwrap();
+        assert_eq!(state.borrow().parameter("x"), "caller");
+        assert_eq!(state.borrow().positional, ["caller"]);
+        let snapshot_used = memory.observation().0;
+        state
+            .borrow_mut()
+            .local("x".into(), "c".repeat(200))
+            .unwrap();
+        assert_eq!(memory.observation().0, snapshot_used + 200 - 6);
+        drop(snapshot);
+        assert_eq!(memory.observation().0, before + 200 - 6);
+        drop(frame);
+        assert_eq!(memory.observation().0, 0);
+        state
+            .borrow_mut()
+            .replace_positional(vec!["global".into()])
+            .unwrap();
+        assert!(
+            memory.observation().0 > 0,
+            "top-level positional storage is retained too"
+        );
+        state.borrow_mut().replace_positional(Vec::new()).unwrap();
+        assert_eq!(memory.observation().0, 0);
+    }
+
+    #[test]
+    fn function_memory_assignment_only_prefix_commit_charges_owner_not_temporary_scope() {
+        use crate::interpreter::eval::StorageBudget;
+        let memory = StorageBudget::new(16_384);
+        let state = State::with_memory(memory.clone()).shared();
+        let outer = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+        state.borrow_mut().local("x".into(), "old".into()).unwrap();
+        let before = memory.observation().0;
+        let prefix = PrefixFrame::enter(state.clone());
+        prefix.reserve("x", 100).unwrap();
+        prefix.set("x".into(), "a".repeat(100)).unwrap();
+        prefix.commit().unwrap();
+        assert_eq!(memory.observation().0, before + 100 - 3);
+        assert_eq!(state.borrow().parameter("x").len(), 100);
+        drop(outer);
+        assert_eq!(memory.observation().0, 0);
+    }
+
+    #[test]
+    fn function_memory_multi_assignment_commit_failure_restores_all_bindings_atomically() {
+        use crate::interpreter::eval::{RESOURCE_STATUS, StorageBudget};
+        let memory = StorageBudget::new(16_384);
+        let state = State::with_memory(memory.clone()).shared();
+        let outer = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+        state.borrow_mut().local("x".into(), "old".into()).unwrap();
+        state.borrow_mut().local("y".into(), "old".into()).unwrap();
+        let before = memory.observation().0;
+        let prefix = PrefixFrame::enter(state.clone());
+        for name in ["x", "y"] {
+            prefix.reserve(name, 100).unwrap();
+            prefix.set(name.into(), "a".repeat(100)).unwrap();
+        }
+        let pressure = memory.admit(16_384 - memory.observation().0 - 150).unwrap();
+        assert_eq!(prefix.commit(), Err(RESOURCE_STATUS));
+        assert_eq!(state.borrow().parameter("x"), "old");
+        assert_eq!(state.borrow().parameter("y"), "old");
+        drop(pressure);
+        assert_eq!(memory.observation().0, before);
+        drop(outer);
+        assert_eq!(memory.observation().0, 0);
     }
 }

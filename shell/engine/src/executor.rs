@@ -120,6 +120,10 @@ impl Executor {
     }
     /// Nonblocking host turn, bounded even if tasks continually yield to themselves.
     pub fn drive(&self, max_polls: usize) -> Drive {
+        #[cfg(test)]
+        let marker = 0u8;
+        #[cfg(test)]
+        crate::interpreter::eval::measure_driver(&marker);
         assert!(
             !self.0.driving.replace(true),
             "executor drive is not reentrant"

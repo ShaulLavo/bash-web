@@ -16,9 +16,10 @@ use std::{
     rc::Rc,
 };
 
+mod command_builtin;
 mod conditional;
 mod control;
-mod eval;
+pub(crate) mod eval;
 pub(crate) use eval::RetainedStorage;
 
 #[derive(Clone, Debug)]
@@ -30,7 +31,11 @@ pub struct Limits {
     pub arguments: usize,
     pub pipeline_stages: usize,
     pub jobs: usize,
+    /// Explicit host call-depth policy; usize::MAX means no depth policy.
+    /// A positive FUNCNEST binding can impose a tighter dynamic limit.
     pub function_depth: usize,
+    /// Session-wide live execution/frame memory, including suspended calls.
+    pub execution_bytes: usize,
     pub line_bytes: usize,
 }
 impl Default for Limits {
@@ -43,7 +48,8 @@ impl Default for Limits {
             arguments: 65_536,
             pipeline_stages: 128,
             jobs: 128,
-            function_depth: 128,
+            function_depth: usize::MAX,
+            execution_bytes: 100_000_000,
             line_bytes: 64 * 1024,
         }
     }
@@ -57,6 +63,7 @@ pub(crate) enum Flow {
     Break(usize),
     Continue(usize),
     DiscardReadUnit,
+    Resource,
 }
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Outcome {
@@ -66,8 +73,16 @@ pub(crate) struct Outcome {
 impl Outcome {
     pub(crate) fn status(code: i32) -> Self {
         Self {
-            code,
-            flow: Flow::Normal,
+            code: if code == eval::RESOURCE_STATUS {
+                2
+            } else {
+                code
+            },
+            flow: if code == eval::RESOURCE_STATUS {
+                Flow::Resource
+            } else {
+                Flow::Normal
+            },
         }
     }
 }
@@ -221,6 +236,7 @@ struct Core {
     fs: Rc<dyn FileSystem>,
     limits: Limits,
     eval_storage: eval::StorageBudget,
+    execution_storage: eval::StorageBudget,
     descriptors: Descriptors,
     jobs: RefCell<BTreeMap<JobId, Job>>,
     residuals: RefCell<BTreeMap<GroupId, Residual>>,
@@ -609,12 +625,15 @@ impl Session {
         fs: Rc<dyn FileSystem>,
         limits: Limits,
     ) -> Self {
+        let memory = eval::StorageBudget::new(limits.execution_bytes);
+        let state = State::with_memory(memory.clone()).shared();
         Self {
             core: Rc::new(Core {
                 executor,
                 host,
                 fs,
                 eval_storage: eval::StorageBudget::new(limits.expansion_bytes),
+                execution_storage: memory,
                 limits,
                 descriptors: Rc::new(RefCell::new(FdTable::default())),
                 jobs: RefCell::new(BTreeMap::new()),
@@ -623,7 +642,7 @@ impl Session {
                 foreground: RefCell::new(None),
                 exit_requested: Cell::new(false),
             }),
-            state: State::default().shared(),
+            state,
         }
     }
     pub fn state(&self) -> SharedState {
@@ -671,7 +690,11 @@ impl Session {
         let host = self.core.host.clone();
         let cancel = Cancel::with_probe(Rc::new(move || host.interrupted()));
         let parser_cancel = cancel.clone();
-        let evaluation = eval::Scope::new(&self.core.limits, self.core.eval_storage.clone());
+        let evaluation = eval::Scope::new(
+            &self.core.limits,
+            self.core.eval_storage.clone(),
+            self.core.execution_storage.clone(),
+        );
         let parser = evaluation.parser_budget(Some(Rc::new(move || parser_cancel.probe_now())));
         let (script, failure) =
             parse_shell(source, &self.core.limits, &parser).map_err(|error| {
@@ -1050,6 +1073,10 @@ async fn script_sequence(
         if context.cancel.is_cancelled() {
             return Outcome::status(130);
         }
+        if result.flow == Flow::Resource {
+            return function_failure(&fds, &context, b"function live-memory limit exceeded", 2)
+                .await;
+        }
         if result.flow == Flow::DiscardReadUnit {
             discarded_line = end_line;
         } else if matches!(result.flow, Flow::Exit | Flow::Abort | Flow::Return) {
@@ -1087,6 +1114,9 @@ async fn sequence_body(
     }
     if context.cancel.is_cancelled() {
         return Outcome::status(130);
+    }
+    if result.flow == Flow::Resource {
+        return function_failure(&fds, &context, b"function live-memory limit exceeded", 2).await;
     }
     result
 }
@@ -1208,6 +1238,10 @@ async fn pipeline_command(
         state.borrow_mut().pipestatus = vec![2];
         return Outcome::status(2);
     }
+    let share_last = count > 1 && {
+        let state = state.borrow();
+        state.lastpipe && !state.monitor
+    };
     let mut work = expansion_work(context.limits());
     let children = match pipeline_children(count, &state, &context, &mut work).await {
         Ok(children) => children,
@@ -1255,7 +1289,8 @@ async fn pipeline_command(
         } else {
             children.next().expect("all pipeline state was prepared")
         };
-        let stage_context = if count == 1 {
+        let shared_stage = count == 1 || (share_last && index + 1 == count);
+        let stage_context = if shared_stage {
             if pipeline.negated {
                 context.condition()
             } else {
@@ -1281,14 +1316,17 @@ async fn pipeline_command(
             stage_fds,
             stage_context,
             parent_scope,
-            count > 1,
+            !shared_stage,
         )));
     }
     drop(fds);
     drop(previous);
     let results = join_all(tasks).await;
-    if count == 1 && results[0].flow != Flow::Normal {
-        return results[0];
+    if (count == 1 || share_last) && results.last().unwrap().flow != Flow::Normal {
+        return *results.last().unwrap();
+    }
+    if results.iter().any(|result| result.flow == Flow::Resource) {
+        return Outcome::status(eval::RESOURCE_STATUS);
     }
     let codes: Vec<_> = results.iter().map(|r| r.code).collect();
     let mut code = if state.borrow().pipefail {
@@ -1335,12 +1373,18 @@ async fn pipeline_children_body(
             .ok_or(2)?,
     )?;
     children.try_reserve_exact(count).map_err(|_| 2)?;
-    for _ in 0..count {
-        children.push(
+    let share_last = {
+        let state = state.borrow();
+        state.lastpipe && !state.monitor
+    };
+    for index in 0..count {
+        children.push(if share_last && index + 1 == count {
+            state.clone()
+        } else {
             State::snapshot(state, &context.cancel, work)
                 .await?
-                .shared(),
-        );
+                .shared()
+        });
     }
     Ok(children)
 }
@@ -2671,6 +2715,7 @@ struct BuiltinPrefixFrame {
     state: SharedState,
     saved: BTreeMap<String, Option<String>>,
     restore_epoch_realtime: bool,
+    memory: Option<eval::StorageAllocation>,
 }
 impl BuiltinPrefixFrame {
     async fn enter(
@@ -2686,6 +2731,10 @@ impl BuiltinPrefixFrame {
             state: state.clone(),
             saved: BTreeMap::new(),
             restore_epoch_realtime: false,
+            memory: state
+                .borrow()
+                .admit_temporary(0)
+                .map_err(expand::Error::from)?,
         };
         {
             let mut state_ref = state.borrow_mut();
@@ -2706,6 +2755,17 @@ impl BuiltinPrefixFrame {
                     )?;
                 }
                 work.admit_storage(target.len().saturating_add(value.len()))?;
+                if let Some(memory) = &mut frame.memory {
+                    memory
+                        .grow(
+                            (std::mem::size_of::<(String, Option<String>)>()
+                                + std::mem::size_of::<usize>())
+                            .saturating_mul(16)
+                            .saturating_add(target.len().saturating_mul(2))
+                            .saturating_add(value.len()),
+                        )
+                        .map_err(|_| expand::Error::Status(eval::RESOURCE_STATUS))?;
+                }
                 let previous = state_ref.variables.insert(target.clone(), value.clone());
                 frame.restore_epoch_realtime |= state_ref.suspend_epoch_realtime(&target);
                 frame.saved.entry(target).or_insert(previous);
@@ -2850,6 +2910,7 @@ async fn prepare_simple_command_body(
             &mut bytes,
             &mut work,
             true,
+            None,
         )
         .await?;
         let fds = redirects(&simple.redirects, state, fds, context, &mut work, Some(1)).await?;
@@ -2875,6 +2936,7 @@ async fn prepare_simple_command_body(
         heredoc_status,
     )
     .await?;
+    let function_prefix = state.borrow().functions.contains_key(name);
     let assigned = assignments(
         simple.assignments,
         state,
@@ -2882,6 +2944,7 @@ async fn prepare_simple_command_body(
         &mut bytes,
         &mut work,
         false,
+        function_prefix.then_some(&fds),
     )
     .await?;
     work.substitutions = None;
@@ -2891,6 +2954,24 @@ async fn prepare_simple_command_body(
         fds,
         work,
     })
+}
+
+async fn function_failure(
+    fds: &Descriptors,
+    context: &Context,
+    message: &[u8],
+    code: i32,
+) -> Outcome {
+    let error = fds.borrow().get(2);
+    if let Some(error) = error {
+        let _ = error.write_all(b"bash: ", &context.cancel).await;
+        let _ = error.write_all(message, &context.cancel).await;
+        let _ = error.write_all(b"\n", &context.cancel).await;
+    }
+    Outcome {
+        code,
+        flow: Flow::Abort,
+    }
 }
 
 #[inline(never)]
@@ -2915,18 +2996,68 @@ async fn dispatch_simple_command_body(
         mut work,
     } = prepared;
     let mut fields = argv.into_iter();
-    let Some(name) = fields.next() else {
+    let Some(mut name) = fields.next() else {
         // A command with no words left takes the status of the last command
         // substitution it ran (words, then redirects and assignments).
         return Ok(Outcome::status(work.substitution_status.unwrap_or(0)));
     };
-    let args: Vec<_> = fields.collect();
-    // Prefix assignments for external commands belong only to their environment.
-    // Function prefix assignments remain deferred until full Bash rules.
-    let function = state.borrow().functions.get(&name).cloned();
+    let mut args: Vec<_> = fields.collect();
+    let mut bypass_functions = false;
+    let mut default_path = false;
+    while name == "command" && (bypass_functions || !state.borrow().functions.contains_key(&name)) {
+        let mut options = command_builtin::options(&args, &fds, &context, &mut work).await?;
+        default_path |= options.default_path;
+        options.default_path = default_path;
+        args.drain(..options.operands);
+        if options.query {
+            let _frame = BuiltinPrefixFrame::enter(state.clone(), &assigned, &context, &mut work)
+                .await
+                .map_err(admission_status)?;
+            return command_builtin::query(&args, &options, &state, &fds, &context, &mut work)
+                .await;
+        }
+        if args.is_empty() {
+            return Ok(Outcome::status(0));
+        }
+        name = args.remove(0);
+        bypass_functions = true;
+    }
+    // Ordinary function calls share shell state. Their temporary exported
+    // bindings belong to call-local restore frames, not an isolated State.
+    let function = if bypass_functions {
+        None
+    } else {
+        state.borrow().functions.get(&name).cloned()
+    };
     if let Some(body) = function {
-        if !assigned.is_empty() {
-            return Err(2);
+        let funcnest = {
+            let state = state.borrow();
+            let target = state.scalar_target("FUNCNEST").ok().flatten();
+            let prefix = assigned.iter().rev().find_map(|(name, value)| {
+                (state.scalar_target(name).ok().flatten() == target && target.is_some())
+                    .then_some(value.as_str())
+            });
+            prefix
+                .or_else(|| state.scalar_parameter("FUNCNEST"))
+                .and_then(|value| value.trim_matches([' ', '\t', '\n']).parse::<i64>().ok())
+                .filter(|limit| *limit > 0)
+                .and_then(|limit| usize::try_from(limit).ok())
+                .unwrap_or(usize::MAX)
+        };
+        let limit = funcnest.min(context.limits().function_depth);
+        if state.borrow().function_calls >= limit {
+            let status = if funcnest <= context.limits().function_depth {
+                1
+            } else {
+                2
+            };
+            return Ok(function_failure(
+                &fds,
+                &context,
+                b"maximum function nesting level exceeded",
+                status,
+            )
+            .await);
         }
         // Function syntax has a source-size budget independent of argv bytes.
         // Admit its execution copy before cloning even with a tiny argv ceiling.
@@ -2937,12 +3068,47 @@ async fn dispatch_simple_command_body(
         {
             return Ok(expansion_failure(error.into(), &fds, &context).await);
         }
-        let frame = FunctionFrame::enter(state.clone(), args, context.limits().function_depth)?;
+        let copied_bytes = source_bytes - copy_work.storage_left();
+        let call_storage = match context.evaluation.admit_execution(copied_bytes) {
+            Ok(storage) => storage,
+            Err(_) => {
+                return Ok(function_failure(
+                    &fds,
+                    &context,
+                    b"function live-memory limit exceeded",
+                    2,
+                )
+                .await);
+            }
+        };
+        for (name, value) in &assigned {
+            let bytes = state
+                .borrow()
+                .declaration_storage(name, true)
+                .map_err(admission_status)?;
+            work.admit_storage(bytes).map_err(admission_status)?;
+            State::admit_assignment(&state, name, value.len(), &context.cancel, &mut work)
+                .await
+                .map_err(admission_status)?;
+        }
+        let mut frame = match FunctionFrame::enter(state.clone(), args, limit) {
+            Ok(frame) => frame,
+            Err(_) => {
+                return Ok(function_failure(
+                    &fds,
+                    &context,
+                    b"function live-memory limit exceeded",
+                    2,
+                )
+                .await);
+            }
+        };
+        frame.prefixes(assigned)?;
         let context = Context {
             loop_depth: 0,
             evaluation: context
                 .evaluation
-                .clone()
+                .function_body()
                 .with_retained(body.storage.clone()),
             ..context
         };
@@ -2957,6 +3123,7 @@ async fn dispatch_simple_command_body(
         let call = evaluation.frame(
             async move {
                 let _frame = frame;
+                let _call_storage = call_storage;
                 let _allocation = allocation;
                 execute(body.body.as_ref().clone(), state, fds, context).await
             },
@@ -3003,6 +3170,17 @@ async fn dispatch_simple_command_body(
                 .await;
         }
         return Ok(Outcome::status(126));
+    }
+    if default_path && !name.contains('/') {
+        let _frame = BuiltinPrefixFrame::enter(state.clone(), &assigned, &context, &mut work)
+            .await
+            .map_err(admission_status)?;
+        let Some(path) =
+            command_builtin::executable(&name, &state, true, &context, &mut work).await?
+        else {
+            return Ok(Outcome::status(127));
+        };
+        name = path;
     }
     let (mut env, cwd) = {
         let s = state.borrow();
@@ -3103,24 +3281,6 @@ async fn literal_arithmetic_failure(
     result
 }
 
-#[inline(never)]
-fn builtin_command(
-    name: String,
-    args: Vec<String>,
-    state: SharedState,
-    fds: Descriptors,
-    context: Context,
-    mut work: expand::Work,
-) -> eval::Frame<'static, Result<Outcome, i32>> {
-    let evaluation = context.evaluation.clone();
-    evaluation.frame(
-        async move {
-            let bindings = fds.borrow().clone();
-            builtins::run(&name, args, state, bindings, context, &mut work).await
-        },
-        Err,
-    )
-}
 async fn assignments(
     assignments: Vec<Assignment>,
     state: &SharedState,
@@ -3128,6 +3288,7 @@ async fn assignments(
     bytes: &mut usize,
     work: &mut expand::Work,
     commit: bool,
+    function_diagnostics: Option<&Descriptors>,
 ) -> Result<Vec<(String, String)>, expand::Error> {
     if assignments.is_empty() {
         return Ok(Vec::new());
@@ -3166,8 +3327,21 @@ async fn assignments(
         }
         expand::admit_assignment(state, &assignment.name, value.len(), &context.cancel, work)
             .await?;
-        names.push(assignment.name.clone());
+        frame
+            .reserve(&assignment.name, value.len())
+            .map_err(expand::Error::from)?;
+        let assignment_name = assignment.name.clone();
         if let Err(name) = frame.set(assignment.name, value) {
+            if let Some(fds) = function_diagnostics {
+                let stderr = fds.borrow().get(2);
+                if let Some(stderr) = stderr {
+                    let _ = stderr.write_all(name.as_bytes(), &context.cancel).await;
+                    let _ = stderr
+                        .write_all(b": readonly variable\n", &context.cancel)
+                        .await;
+                }
+                continue;
+            }
             work.admit_storage(name.len().saturating_add(160))?;
             return Err(expand::Error::Readonly {
                 name,
@@ -3175,6 +3349,7 @@ async fn assignments(
                 expansion: true,
             });
         }
+        names.push(assignment_name);
     }
     let mut assigned = Vec::new();
     *bytes = initial_bytes;
@@ -3194,7 +3369,7 @@ async fn assignments(
         }
     }
     if commit {
-        frame.commit();
+        frame.commit().map_err(expand::Error::from)?;
     }
     Ok(assigned)
 }
@@ -3460,7 +3635,11 @@ mod scope_tests {
             Limits::default(),
         );
         let context = Context {
-            evaluation: eval::Scope::new(&session.core.limits, session.core.eval_storage.clone()),
+            evaluation: eval::Scope::new(
+                &session.core.limits,
+                session.core.eval_storage.clone(),
+                session.core.execution_storage.clone(),
+            ),
             core: session.core.clone(),
             source: eval::Source::root(""),
             lifetime: (Cancel::new(), Rc::new(Cell::new(None))),
@@ -3861,7 +4040,11 @@ mod residual_review_tests {
             let cancel = Cancel::new();
             let signal = Rc::new(Cell::new(None));
             Context {
-                evaluation: eval::Scope::new(&core.limits, core.eval_storage.clone()),
+                evaluation: eval::Scope::new(
+                    &core.limits,
+                    core.eval_storage.clone(),
+                    core.execution_storage.clone(),
+                ),
                 core,
                 source: eval::Source::root(""),
                 lifetime: (cancel.clone(), signal.clone()),
@@ -4290,5 +4473,156 @@ mod residual_review_tests {
         assert_eq!(rig.run("jobs >&-"), 0);
         assert_eq!(rig.run("false & p=$!; wait \"$p\"; jobs >&-"), 0);
         rig.shutdown();
+    }
+}
+
+#[cfg(test)]
+mod function_measurements {
+    use super::*;
+
+    #[test]
+    fn function_memory_background_calls_share_pool_with_next_session_start_and_refund() {
+        let ex = Executor::new();
+        let host = crate::process::InProcessHost::new(ex.clone());
+        let release = Cancel::new();
+        let gate = release.clone();
+        host.register("park", move |_, cancel| {
+            let gate = gate.clone();
+            async move {
+                if cancel.run(gate.cancelled()).await.is_ok() {
+                    0
+                } else {
+                    130
+                }
+            }
+            .boxed_local()
+        });
+        let limit = 256 * 1024;
+        let session = Session::new(
+            ex.clone(),
+            Rc::new(host.clone()),
+            Rc::new(io::MemoryFs::new(1024)),
+            Limits {
+                execution_bytes: limit,
+                ..Limits::default()
+            },
+        );
+        let finish = |job: JoinHandle<i32>| {
+            for _ in 0..100_000 {
+                ex.drive(64);
+                if job.is_finished() {
+                    break;
+                }
+            }
+            job.now_or_never()
+                .expect("bounded submitted command completes")
+        };
+        assert_eq!(
+            finish(
+                session
+                    .start("hold() { local x=held; park; }; hold &")
+                    .unwrap()
+            ),
+            0
+        );
+        for _ in 0..10_000 {
+            ex.drive(64);
+            if host.active_count() == 1 {
+                break;
+            }
+        }
+        assert_eq!(host.active_count(), 1);
+        let held = session.core.execution_storage.observation().0;
+        assert!(held > 0 && held < limit);
+        // Use an exact independent live ticket to leave room for command
+        // dispatch but not an AST copy. It represents other concurrent frames.
+        let pressure = session
+            .core
+            .execution_storage
+            .admit(limit - held - 64 * 1024)
+            .unwrap();
+        let source = format!(
+            "large() {{ local x='{}'; }}; large; echo bad",
+            "x".repeat(96 * 1024)
+        );
+        assert_eq!(finish(session.start(&source).unwrap()), 2);
+        assert_eq!(
+            host.active_count(),
+            1,
+            "foreground admission must not cancel the background frame"
+        );
+        drop(pressure);
+        assert_eq!(session.core.execution_storage.observation().0, held);
+        assert_eq!(
+            finish(
+                session
+                    .start("small() { local x=small; :; }; small")
+                    .unwrap()
+            ),
+            0
+        );
+        assert_eq!(session.core.execution_storage.observation().0, held);
+        release.cancel();
+        assert_eq!(finish(session.start("wait").unwrap()), 0);
+        assert_eq!(ex.drive(64).pending, 0);
+        assert_eq!(host.active_count(), 0);
+        assert_eq!(host.retained_count(), 0);
+        assert_eq!(session.core.execution_storage.observation().0, 0);
+    }
+
+    #[test]
+    fn function_tasks_measure_512_real_calls_without_growing_poll_or_drop_stacks() {
+        for increment in ["n=$((n+1))", "eval 'n=$((n+1))'"] {
+            let mut first = None;
+            for goal in [1, 32, 128, 512] {
+                let ex = Executor::new();
+                let host = crate::process::InProcessHost::new(ex.clone());
+                let session = Session::new(
+                    ex.clone(),
+                    Rc::new(host),
+                    Rc::new(io::MemoryFs::new(1024)),
+                    Limits::default(),
+                );
+                let source = format!(
+                    "n=0; seen=0; unwound=0; leaf=0; f() {{ local d=$1; {increment}; seen=$((seen+1)); case $n in {goal}) leaf=$n;; *) f child;; esac; unwound=$((unwound+1)); }}; f root"
+                );
+                eval::reset_stack_observation();
+                let job = session.start(&source).unwrap();
+                for _ in 0..100_000 {
+                    ex.drive(64);
+                    if job.is_finished() {
+                        break;
+                    }
+                }
+                assert_eq!(job.now_or_never(), Some(0));
+                assert_eq!(ex.drive(64).pending, 0);
+                let state = session.state.borrow();
+                for name in ["n", "seen", "unwound", "leaf"] {
+                    assert_eq!(state.variables[name], goal.to_string(), "{name}");
+                }
+                assert!(!state.variables.contains_key("d"));
+                assert!(state.positional.is_empty());
+                let sample = eval::stack_observation();
+                let (live, peak) = session.core.execution_storage.observation();
+                assert_eq!(live, 0, "all call/frame payload tickets refunded");
+                assert_eq!(sample.calls, goal);
+                assert!(sample.poll_bytes > 0 && sample.drop_bytes > 0);
+                println!(
+                    "functions target={} increment={increment:?} calls={goal} poll_stack_bytes={} drop_stack_bytes={} peak_live_bytes={peak}",
+                    std::env::consts::ARCH,
+                    sample.poll_bytes,
+                    sample.drop_bytes
+                );
+                let baseline: eval::StackObservation = *first.get_or_insert(sample);
+                assert!(
+                    sample.poll_bytes <= baseline.poll_bytes + 16 * 1024,
+                    "polling must not grow per function call"
+                );
+                assert!(
+                    sample.drop_bytes <= baseline.drop_bytes + 16 * 1024,
+                    "dropping must not grow per function call"
+                );
+            }
+        }
     }
 }

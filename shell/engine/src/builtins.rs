@@ -89,6 +89,8 @@ pub(crate) fn is_builtin(name: &str) -> bool {
             | "cd"
             | "pwd"
             | "set"
+            | "shift"
+            | "command"
             | "shopt"
             | "exit"
             | "return"
@@ -149,15 +151,35 @@ pub(crate) async fn run(
             return loop_control(name, &args, &fds, &context, work).await;
         }
         "exit" | "return" => {
-            if args.len() > 1 {
+            let args = if args.first().is_some_and(|arg| arg == "--") {
+                &args[1..]
+            } else {
+                &args[..]
+            };
+            if name == "return" && state.borrow().function_calls == 0 {
                 return Err(2);
             }
             let code = match args.first() {
-                Some(s) => s.parse::<i32>().map_err(|_| 2)?.rem_euclid(256),
+                Some(s) => match s.trim_matches([' ', '\t', '\n']).parse::<i64>() {
+                    Ok(code) => code.rem_euclid(256) as i32,
+                    Err(_) => {
+                        return Ok(Outcome {
+                            code: 2,
+                            flow: if name == "return" {
+                                Flow::Return
+                            } else {
+                                Flow::Exit
+                            },
+                        });
+                    }
+                },
                 None => state.borrow().status,
             };
-            if name == "return" && state.borrow().locals.is_empty() {
-                return Err(1);
+            if args.len() > 1 {
+                return Ok(Outcome {
+                    code: 1,
+                    flow: Flow::Exit,
+                });
             }
             return Ok(Outcome {
                 code,
@@ -374,6 +396,32 @@ pub(crate) async fn run(
             write(&fds, format!("{cwd}\n").as_bytes(), &context).await?;
         }
         "set" => return set(args, &state, &context, work).await,
+        "shift" => {
+            let args = if args.first().is_some_and(|arg| arg == "--") {
+                &args[1..]
+            } else {
+                &args[..]
+            };
+            let count = match args.first() {
+                None => 1,
+                Some(value) => value
+                    .trim_matches([' ', '\t', '\n'])
+                    .parse::<i64>()
+                    .map_err(|_| 2)?,
+            };
+            if args.len() > 1 {
+                return Ok(Outcome {
+                    code: 1,
+                    flow: Flow::Exit,
+                });
+            }
+            let count = usize::try_from(count).map_err(|_| 1)?;
+            let mut state = state.borrow_mut();
+            if count > state.positional.len() {
+                return Err(1);
+            }
+            state.positional.drain(..count);
+        }
         "jobs" => {
             if !args.is_empty() {
                 return Err(2);
@@ -519,13 +567,14 @@ fn error_status(error: Error) -> i32 {
     }
 }
 
-const SHOPT_OPTIONS: [&str; 3] = ["extglob", "inherit_errexit", "nullglob"];
+const SHOPT_OPTIONS: [&str; 4] = ["extglob", "inherit_errexit", "lastpipe", "nullglob"];
 
 fn shopt_value(state: &State, option: &str) -> Option<bool> {
     match option {
         "extglob" => Some(state.extglob),
         "inherit_errexit" => Some(state.inherit_errexit),
         "nullglob" => Some(state.nullglob),
+        "lastpipe" => Some(state.lastpipe),
         _ => None,
     }
 }
@@ -587,7 +636,7 @@ async fn shopt(
     let options = if operands.is_empty() {
         SHOPT_OPTIONS.map(Some)
     } else {
-        [None; 3]
+        [None; 4]
     };
     let mut status = 0;
     // A fixed iterator over known names avoids allocating or copying argv.
@@ -619,6 +668,7 @@ async fn shopt(
                 "extglob" => state.extglob = set,
                 "inherit_errexit" => state.inherit_errexit = set,
                 "nullglob" => state.nullglob = set,
+                "lastpipe" => state.lastpipe = set,
                 _ => unreachable!("validated shell option"),
             }
             continue;
@@ -762,9 +812,9 @@ async fn set(
     if args.is_empty() {
         return Err(2); // Variable/option listing remains unsupported.
     }
-    let (mut nounset, mut pipefail, mut errexit) = {
+    let (mut nounset, mut pipefail, mut errexit, mut monitor) = {
         let state = state.borrow();
-        (state.nounset, state.pipefail, state.errexit)
+        (state.nounset, state.pipefail, state.errexit, state.monitor)
     };
     let mut index = 0;
     let mut explicit = false;
@@ -793,21 +843,32 @@ async fn set(
                 &mut nounset,
                 &mut pipefail,
                 &mut errexit,
+                &mut monitor,
             )?;
             index += 1;
             continue;
         }
-        set_short_options(option, enabled, &mut nounset, &mut errexit, context, work).await?;
+        set_short_options(
+            option,
+            enabled,
+            &mut nounset,
+            &mut errexit,
+            &mut monitor,
+            context,
+            work,
+        )
+        .await?;
     }
     // All options and work admission complete before any state changes.
     let mut state = state.borrow_mut();
+    if explicit || index < args.len() {
+        args.drain(..index);
+        state.replace_positional(args)?;
+    }
     state.nounset = nounset;
     state.pipefail = pipefail;
     state.errexit = errexit;
-    if explicit || index < args.len() {
-        args.drain(..index);
-        state.replace_positional(args);
-    }
+    state.monitor = monitor;
     Ok(Outcome::status(0))
 }
 
@@ -817,11 +878,13 @@ fn set_option(
     nounset: &mut bool,
     pipefail: &mut bool,
     errexit: &mut bool,
+    monitor: &mut bool,
 ) -> Result<(), i32> {
     match option {
         "nounset" => *nounset = enabled,
         "pipefail" => *pipefail = enabled,
         "errexit" => *errexit = enabled,
+        "monitor" => *monitor = enabled,
         _ => return Err(2),
     }
     Ok(())
@@ -832,6 +895,7 @@ async fn set_short_options(
     enabled: bool,
     nounset: &mut bool,
     errexit: &mut bool,
+    monitor: &mut bool,
     context: &Context,
     work: &mut Work,
 ) -> Result<(), i32> {
@@ -842,6 +906,7 @@ async fn set_short_options(
         match flag {
             b'u' => *nounset = enabled,
             b'e' => *errexit = enabled,
+            b'm' => *monitor = enabled,
             _ => return Err(2),
         }
     }
@@ -858,9 +923,31 @@ async fn declarations(
 ) -> Result<Outcome, i32> {
     let mut args = args.into_iter().peekable();
     let mut nameref = false;
+    let mut readonly = false;
+    let mut exported = false;
+    if name == "local" && state.borrow().function_calls == 0 {
+        return Err(1);
+    }
     if matches!(name, "local" | "declare" | "typeset") {
-        nameref = args.next_if(|arg| arg == "-n").is_some();
-        args.next_if(|arg| arg == "--");
+        while let Some(option) = args.next_if(|arg| arg.starts_with('-')) {
+            if option == "--" {
+                break;
+            }
+            for flag in option[1..].bytes() {
+                work.checkpoint(&context.cancel)
+                    .await
+                    .map_err(error_status)?;
+                match flag {
+                    b'n' => nameref = true,
+                    b'r' => readonly = true,
+                    b'x' => exported = true,
+                    _ => return Err(2),
+                }
+            }
+        }
+    }
+    if nameref && (readonly || exported) {
+        return Err(2);
     }
     if args.peek().is_none() && (nameref || matches!(name, "declare" | "typeset")) {
         return Err(2);
@@ -886,11 +973,15 @@ async fn declarations(
             .map(|(key, value)| (key.to_owned(), Some(value.to_owned())))
             .unwrap_or((arg, None));
         if !valid_name(&key) {
+            if name == "local" {
+                status = 1;
+                continue;
+            }
             return Err(2);
         }
         let local = name == "local"
             || matches!(name, "declare" | "typeset") && !state.borrow().locals.is_empty();
-        if extended {
+        if extended || local {
             let storage = state
                 .borrow()
                 .declaration_storage(&key, local)
@@ -901,9 +992,9 @@ async fn declarations(
             let result = nameref_declaration(&key, value, local, state, context, work).await;
             status |= i32::from(result.is_err());
             if let Err(code) = result
-                && code == 2
+                && matches!(code, 2 | crate::interpreter::eval::RESOURCE_STATUS)
             {
-                return Err(2);
+                return Err(code);
             }
             continue;
         }
@@ -921,7 +1012,17 @@ async fn declarations(
         } else {
             key
         };
-        if apply_declaration(name, &key, value, &mut state.borrow_mut()).is_ok() {
+        let result = apply_declaration(name, &key, value, &mut state.borrow_mut());
+        if result == Err(crate::interpreter::eval::RESOURCE_STATUS) {
+            return result.map(|()| Outcome::status(0));
+        }
+        if result.is_ok() {
+            if exported {
+                state.borrow_mut().export(key.clone(), None)?;
+            }
+            if readonly {
+                state.borrow_mut().readonly(key.clone(), None)?;
+            }
             continue;
         }
         status = 1;
@@ -981,11 +1082,10 @@ fn apply_declaration(
         return state.export(key.to_owned(), value);
     }
     if name == "local" {
-        let value = value.unwrap_or_else(|| state.variables.get(key).cloned().unwrap_or_default());
-        return state.local(key.to_owned(), value);
+        return state.declare_local(key.to_owned(), value);
     }
     if matches!(name, "declare" | "typeset") && !state.locals.is_empty() {
-        return state.local(key.to_owned(), value.unwrap_or_default());
+        return state.declare_local(key.to_owned(), value);
     }
     if let Some(value) = value {
         state.assign_parameter(key.to_owned(), value)?;

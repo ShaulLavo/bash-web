@@ -25,6 +25,67 @@ use std::{
     time::Duration,
 };
 
+pub(crate) const RESOURCE_STATUS: i32 = -1000;
+
+#[cfg(test)]
+#[derive(Clone, Copy, Default, Debug)]
+pub(crate) struct StackObservation {
+    driver: usize,
+    pub(crate) poll_bytes: usize,
+    pub(crate) drop_bytes: usize,
+    pub(crate) calls: usize,
+}
+#[cfg(test)]
+thread_local! { static STACK_OBSERVATION: Cell<StackObservation> = Cell::new(StackObservation::default()); }
+#[cfg(test)]
+pub(crate) fn measure_driver(marker: &u8) {
+    STACK_OBSERVATION.with(|slot| {
+        let mut sample = slot.get();
+        sample.driver = marker as *const u8 as usize;
+        slot.set(sample);
+    });
+}
+#[cfg(test)]
+fn measure_poll(marker: &u8) {
+    STACK_OBSERVATION.with(|slot| {
+        let mut sample = slot.get();
+        if sample.driver != 0 {
+            sample.poll_bytes = sample
+                .poll_bytes
+                .max(sample.driver.abs_diff(marker as *const u8 as usize));
+        }
+        slot.set(sample);
+    });
+}
+#[cfg(test)]
+pub(crate) fn measure_drop(marker: &u8) {
+    STACK_OBSERVATION.with(|slot| {
+        let mut sample = slot.get();
+        if sample.driver != 0 {
+            sample.drop_bytes = sample
+                .drop_bytes
+                .max(sample.driver.abs_diff(marker as *const u8 as usize));
+        }
+        slot.set(sample);
+    });
+}
+#[cfg(test)]
+pub(crate) fn measure_calls(calls: usize) {
+    STACK_OBSERVATION.with(|slot| {
+        let mut sample = slot.get();
+        sample.calls = sample.calls.max(calls);
+        slot.set(sample);
+    });
+}
+#[cfg(test)]
+pub(super) fn reset_stack_observation() {
+    STACK_OBSERVATION.with(|slot| slot.set(StackObservation::default()));
+}
+#[cfg(test)]
+pub(super) fn stack_observation() -> StackObservation {
+    STACK_OBSERVATION.with(Cell::get)
+}
+
 const MAX_EVAL_DEPTH: usize = 16;
 const MAX_EXECUTION_DEPTH: usize = 256;
 const TEXT_BYTES_PER_LEVEL: usize = 16;
@@ -44,6 +105,11 @@ impl<F: Future> Future for Admitted<F> {
     type Output = F::Output;
 
     fn poll(self: Pin<&mut Self>, context: &mut TaskContext<'_>) -> Poll<Self::Output> {
+        #[cfg(test)]
+        {
+            let marker = 0u8;
+            measure_poll(&marker);
+        }
         let this = self.project();
         match this.future.poll(context) {
             Poll::Ready(value) => {
@@ -61,25 +127,48 @@ struct Shared {
     /// Bytes retained by currently active boxed execution frames. This is an
     /// active-memory bound, so a loop may keep running after each iteration's
     /// frame has been dropped instead of spending a cumulative parser budget.
-    execution: Cell<usize>,
-    execution_limit: usize,
+    execution: StorageBudget,
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct StorageBudget(Rc<Cell<usize>>);
+pub(crate) struct StorageBudget(Rc<Cell<usize>>, #[cfg(test)] Rc<MemoryObservation>);
+#[cfg(test)]
+#[derive(Debug)]
+struct MemoryObservation {
+    limit: usize,
+    peak: Cell<usize>,
+}
 
 impl StorageBudget {
-    pub(super) fn new(bytes: usize) -> Self {
-        Self(Rc::new(Cell::new(bytes)))
+    pub(crate) fn new(bytes: usize) -> Self {
+        Self(
+            Rc::new(Cell::new(bytes)),
+            #[cfg(test)]
+            Rc::new(MemoryObservation {
+                limit: bytes,
+                peak: Cell::new(0),
+            }),
+        )
     }
 
-    fn admit(&self, bytes: usize) -> Result<StorageAllocation, i32> {
+    pub(crate) fn admit(&self, bytes: usize) -> Result<StorageAllocation, i32> {
         let remaining = self.0.get().checked_sub(bytes).ok_or(2)?;
         self.0.set(remaining);
+        self.record_peak();
         Ok(StorageAllocation {
             budget: self.clone(),
             bytes,
         })
+    }
+    fn record_peak(&self) {
+        #[cfg(test)]
+        self.1
+            .peak
+            .set(self.1.peak.get().max(self.1.limit - self.0.get()));
+    }
+    #[cfg(test)]
+    pub(crate) fn observation(&self) -> (usize, usize) {
+        (self.1.limit - self.0.get(), self.1.peak.get())
     }
 }
 
@@ -90,12 +179,28 @@ pub(crate) struct StorageAllocation {
 }
 
 impl StorageAllocation {
-    fn grow(&mut self, bytes: usize) -> Result<(), i32> {
+    pub(crate) fn bytes(&self) -> usize {
+        self.bytes
+    }
+    pub(crate) fn grow(&mut self, bytes: usize) -> Result<(), i32> {
         let total = self.bytes.checked_add(bytes).ok_or(2)?;
         let remaining = self.budget.0.get().checked_sub(bytes).ok_or(2)?;
         self.budget.0.set(remaining);
+        self.budget.record_peak();
         self.bytes = total;
         Ok(())
+    }
+    pub(crate) fn resize(&mut self, bytes: usize) -> Result<(), i32> {
+        if bytes > self.bytes {
+            self.grow(bytes - self.bytes)?;
+        } else {
+            self.budget.0.set(self.budget.0.get() + self.bytes - bytes);
+            self.bytes = bytes;
+        }
+        Ok(())
+    }
+    pub(crate) fn fork(&self) -> Result<Self, i32> {
+        self.budget.admit(self.bytes)
     }
 }
 
@@ -145,16 +250,7 @@ impl JoinedSource {
 }
 
 pub(super) struct Allocation {
-    shared: Rc<Shared>,
-    bytes: usize,
-}
-
-impl Drop for Allocation {
-    fn drop(&mut self) {
-        self.shared
-            .execution
-            .set(self.shared.execution.get().saturating_sub(self.bytes));
-    }
+    _storage: StorageAllocation,
 }
 
 #[derive(Clone)]
@@ -166,16 +262,12 @@ pub(super) struct Scope {
 }
 
 impl Scope {
-    pub(super) fn new(limits: &Limits, storage: StorageBudget) -> Self {
+    pub(super) fn new(limits: &Limits, storage: StorageBudget, execution: StorageBudget) -> Self {
         Self {
             shared: Rc::new(Shared {
                 storage,
                 source_bytes: limits.source_bytes,
-                execution: Cell::new(0),
-                // Reuse the former execution-byte ceiling, now for live
-                // memory instead of the sum of every frame ever executed.
-                execution_limit: usize::try_from(ExecutionLimits::default().max_work_units)
-                    .unwrap_or(usize::MAX),
+                execution,
             }),
             retained: None,
             depth: 0,
@@ -198,6 +290,10 @@ impl Scope {
             Some(probe) => parser.with_cancellation_probe(probe),
             None => parser,
         }
+    }
+
+    pub(super) fn execution_available(&self) -> usize {
+        self.shared.execution.0.get()
     }
 
     pub(super) fn retained(&self) -> Option<RetainedStorage> {
@@ -236,15 +332,22 @@ impl Scope {
     }
 
     pub(super) fn admit_execution(&self, bytes: usize) -> Result<Allocation, i32> {
-        let used = self.shared.execution.get().checked_add(bytes).ok_or(2)?;
-        if used > self.shared.execution_limit {
-            return Err(2);
-        }
-        self.shared.execution.set(used);
         Ok(Allocation {
-            shared: self.shared.clone(),
-            bytes,
+            _storage: self
+                .shared
+                .execution
+                .admit(bytes)
+                .map_err(|_| RESOURCE_STATUS)?,
         })
+    }
+
+    /// Calls already cross an executor task boundary. Only structural command
+    /// depth restarts there: an active eval reader remains active across calls.
+    pub(super) fn function_body(&self) -> Self {
+        Self {
+            execution_depth: 0,
+            ..self.clone()
+        }
     }
 
     pub(super) fn new_task(&self) -> Self {
@@ -508,7 +611,12 @@ mod tests {
         assert!(storage.admit(1).is_err());
         let retained = Rc::new(allocation);
         let limits = Limits::default();
-        let scope = Scope::new(&limits, storage.clone()).with_retained(Some(retained.clone()));
+        let scope = Scope::new(
+            &limits,
+            storage.clone(),
+            StorageBudget::new(limits.execution_bytes),
+        )
+        .with_retained(Some(retained.clone()));
         let child = scope.new_task();
         drop(retained);
         drop(scope);
@@ -538,7 +646,11 @@ mod tests {
     #[test]
     fn parser_work_is_shared_inside_an_input_and_fresh_for_a_later_input() {
         let limits = Limits::default();
-        let scope = Scope::new(&limits, StorageBudget::new(limits.expansion_bytes));
+        let scope = Scope::new(
+            &limits,
+            StorageBudget::new(limits.expansion_bytes),
+            StorageBudget::new(limits.execution_bytes),
+        );
         let parser = scope.parser_budget(None);
         parser
             .consume_work(ExecutionLimits::default().max_work_units)
@@ -554,7 +666,11 @@ mod tests {
         let interrupted = Rc::new(Cell::new(false));
         let observed = interrupted.clone();
         let probe: Rc<dyn Fn() -> bool> = Rc::new(move || observed.get());
-        let scope = Scope::new(&limits, StorageBudget::new(limits.expansion_bytes));
+        let scope = Scope::new(
+            &limits,
+            StorageBudget::new(limits.expansion_bytes),
+            StorageBudget::new(limits.execution_bytes),
+        );
         let parser = scope.parser_budget(Some(probe.clone()));
         assert!(parser.consume_work(1).is_ok());
         interrupted.set(true);
@@ -571,22 +687,26 @@ mod tests {
     #[test]
     fn completed_and_cancelled_frames_release_admission_before_the_wrapper_is_dropped() {
         let limits = Limits::default();
-        let scope = Scope::new(&limits, StorageBudget::new(limits.expansion_bytes));
+        let scope = Scope::new(
+            &limits,
+            StorageBudget::new(limits.expansion_bytes),
+            StorageBudget::new(limits.execution_bytes),
+        );
         let frame = scope.frame(ready(7), |_| 2);
         futures::pin_mut!(frame);
-        assert!(scope.shared.execution.get() > 0);
+        assert!((limits.execution_bytes - scope.shared.execution.0.get()) > 0);
         assert_eq!(frame.as_mut().now_or_never(), Some(7));
-        assert_eq!(scope.shared.execution.get(), 0);
+        assert_eq!((limits.execution_bytes - scope.shared.execution.0.get()), 0);
 
         let cancel = Cancel::new();
         let frame = scope.frame(futures::future::pending::<()>(), |_| ());
         let wait = cancel.run(frame);
         futures::pin_mut!(wait);
         assert!(wait.as_mut().now_or_never().is_none());
-        assert!(scope.shared.execution.get() > 0);
+        assert!((limits.execution_bytes - scope.shared.execution.0.get()) > 0);
         cancel.cancel();
         assert!(matches!(wait.as_mut().now_or_never(), Some(Err(_))));
-        assert_eq!(scope.shared.execution.get(), 0);
+        assert_eq!((limits.execution_bytes - scope.shared.execution.0.get()), 0);
     }
 
     #[test]
@@ -607,7 +727,11 @@ mod tests {
         }
 
         let limits = Limits::default();
-        let scope = Scope::new(&limits, StorageBudget::new(limits.expansion_bytes));
+        let scope = Scope::new(
+            &limits,
+            StorageBudget::new(limits.expansion_bytes),
+            StorageBudget::new(limits.execution_bytes),
+        );
         let mut frame = scope.frame(ready(0), |_| usize::MAX);
         for _ in 0..MAX_EXECUTION_DEPTH {
             frame = scope.frame(
@@ -619,32 +743,36 @@ mod tests {
             );
         }
         assert_eq!(frame.now_or_never(), Some(MAX_EXECUTION_DEPTH));
-        assert_eq!(scope.shared.execution.get(), 0);
+        assert_eq!((limits.execution_bytes - scope.shared.execution.0.get()), 0);
     }
 
     #[test]
     fn live_execution_admission_rejects_growth_and_releases_dropped_allocations() {
         let limits = Limits::default();
-        let scope = Scope::new(&limits, StorageBudget::new(limits.expansion_bytes));
-        let allocation = scope.admit_execution(scope.shared.execution_limit).unwrap();
+        let scope = Scope::new(
+            &limits,
+            StorageBudget::new(limits.expansion_bytes),
+            StorageBudget::new(limits.execution_bytes),
+        );
+        let allocation = scope.admit_execution(limits.execution_bytes).unwrap();
         assert!(scope.admit_execution(1).is_err());
         drop(allocation);
-        assert_eq!(scope.shared.execution.get(), 0);
+        assert_eq!((limits.execution_bytes - scope.shared.execution.0.get()), 0);
         let frame = scope.frame(futures::future::pending::<()>(), |_| ());
-        assert!(scope.shared.execution.get() > 0);
+        assert!((limits.execution_bytes - scope.shared.execution.0.get()) > 0);
         drop(frame);
-        assert_eq!(scope.shared.execution.get(), 0);
+        assert_eq!((limits.execution_bytes - scope.shared.execution.0.get()), 0);
         assert_eq!(scope.frame(ready(7), |_| 2).now_or_never(), Some(7));
-        assert_eq!(scope.shared.execution.get(), 0);
+        assert_eq!((limits.execution_bytes - scope.shared.execution.0.get()), 0);
         let frame = scope.frame(ready([7u8; 4096]), |_| [0; 4096]);
         let Either::Right(body) = &frame else {
             panic!("the bounded future fits the execution allowance");
         };
         assert_eq!(
-            scope.shared.execution.get(),
+            (limits.execution_bytes - scope.shared.execution.0.get()),
             size_of_val(body.as_ref().get_ref())
         );
         assert_eq!(frame.now_or_never(), Some([7; 4096]));
-        assert_eq!(scope.shared.execution.get(), 0);
+        assert_eq!((limits.execution_bytes - scope.shared.execution.0.get()), 0);
     }
 }

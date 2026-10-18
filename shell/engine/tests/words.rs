@@ -687,10 +687,10 @@ fn unsupported_case_targets_transformations_and_selected_patterns_fail_closed() 
         assert!(rig.calls.borrow().is_empty());
     }
     let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run("f() { args forbidden; }; X=${v^^} f"), 2);
-    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.run("f() { args allowed; }; X=${v^^} f"), 0);
+    assert_eq!(*rig.calls.borrow(), [vec!["allowed"]]);
     assert!(rig.output.bytes().is_empty());
-    // Ordinary builtin prefixes are supported; function prefixes remain deferred.
+    // Both function and builtin prefixes restore their temporary bindings.
     assert_eq!(rig.run("X=${v^^} echo allowed"), 0);
     assert_eq!(rig.output.bytes(), b"allowed\n");
     assert!(!rig.shell.state().borrow().variables.contains_key("X"));
@@ -1146,10 +1146,10 @@ fn unsupported_trim_targets_and_selected_patterns_fail_without_dispatch() {
         assert_eq!(*rig.calls.borrow(), &[vec!["tail"]]);
     }
     let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run("f() { args forbidden; }; X=${v#a} f"), 2);
-    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.run("f() { args allowed; }; X=${v#a} f"), 0);
+    assert_eq!(*rig.calls.borrow(), [vec!["allowed"]]);
     assert!(rig.output.bytes().is_empty());
-    // Ordinary builtin prefixes are supported; function prefixes remain deferred.
+    // Both function and builtin prefixes restore their temporary bindings.
     assert_eq!(rig.run("X=${v#a} echo allowed"), 0);
     assert_eq!(rig.output.bytes(), b"allowed\n");
     assert!(!rig.shell.state().borrow().variables.contains_key("X"));
@@ -4133,3 +4133,6 @@ mod test_builtin;
 
 #[path = "words/glob.rs"]
 mod glob;
+
+#[path = "words/functions.rs"]
+mod functions;

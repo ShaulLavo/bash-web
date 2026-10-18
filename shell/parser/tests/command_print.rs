@@ -7,7 +7,10 @@ use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use shell_parser::limits::{ExecutionBudget, ExecutionLimits};
-use shell_parser::{Command, ParameterOp, Parser, Word, WordPart, command_string};
+use shell_parser::{
+    Command, ParameterOp, Parser, Word, WordPart, command_string, function_string,
+    function_string_bounded,
+};
 
 thread_local! {
     static ALLOCATIONS: Cell<Option<(usize, usize)>> = const { Cell::new(None) };
@@ -168,6 +171,98 @@ fn request_work_cancellation_and_deadlines_precede_reconstruction() {
             probe_polls.get() >= 3
         }));
     assert_bounded(&huge, Some(&interrupted), usize::MAX);
+    assert!(
+        interrupted
+            .check()
+            .unwrap_err()
+            .to_string()
+            .contains("cancelled")
+    );
+}
+
+#[test]
+fn bounded_function_layout_matches_existing_printer_for_all_body_shapes() {
+    for source in [
+        "f() { :; }",
+        "f() { echo 'a b' \"$x\" \\$y >out; }",
+        "f() { if :; then echo yes; else echo no; fi; } 2>err",
+        "f() ( echo subshell )",
+        "f() { cat <<EOF\nbody\nEOF\n}",
+        "f() { g() { :; }; g; }",
+    ] {
+        let definition = command(source);
+        let Command::Function(function) = definition else {
+            unreachable!()
+        };
+        for name in ["f", "if", "unicode_λ"] {
+            let fuel = Cell::new(4096);
+            let bounded = function_string_bounded(name, &function.body, &fuel, 4096, None).unwrap();
+            assert_eq!(bounded, function_string(name, &function.body), "{source}");
+            assert!(
+                fuel.get() < 4096,
+                "printing must charge its caller's shared fuel"
+            );
+        }
+    }
+}
+
+fn assert_function_bounded(
+    name: &str,
+    body: &Command,
+    budget: Option<&ExecutionBudget>,
+    fuel: usize,
+) {
+    ALLOCATIONS.with(|counter| counter.set(Some((0, 0))));
+    let result = function_string_bounded(name, body, &Cell::new(fuel), fuel, budget);
+    let (largest, total) = ALLOCATIONS.with(|counter| counter.replace(None).unwrap());
+    assert!(
+        result.is_err(),
+        "bounded function rendering must refuse before copying"
+    );
+    assert!(largest <= 4096, "allocated {largest} bytes before refusing");
+    assert!(total <= 8192, "allocated {total} bytes before refusing");
+}
+
+#[test]
+fn bounded_function_names_and_bodies_are_admitted_before_copying() {
+    let huge = "x".repeat(128 * 1024);
+    let body = with_argument(Word::literal(&huge));
+    assert_function_bounded("f", &body, None, 32);
+    assert_function_bounded(&huge, &command(":"), None, 32);
+    let mut wide = command("echo value");
+    let Command::Simple(simple) = &mut wide else {
+        unreachable!()
+    };
+    simple.args = vec![Word::literal(""); 10_000];
+    assert_function_bounded("f", &wide, None, 32);
+
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let work = ExecutionBudget::new(
+        &ExecutionLimits {
+            max_work_units: 32,
+            ..ExecutionLimits::default()
+        },
+        cancelled.clone(),
+    );
+    assert_function_bounded("f", &body, Some(&work), usize::MAX);
+    assert!(
+        work.check()
+            .unwrap_err()
+            .to_string()
+            .contains("work exhausted")
+    );
+    let timeout = ExecutionBudget::new(
+        &ExecutionLimits {
+            timeout: Duration::ZERO,
+            ..ExecutionLimits::default()
+        },
+        cancelled.clone(),
+    );
+    assert_function_bounded("f", &body, Some(&timeout), usize::MAX);
+    assert!(timeout.check().unwrap_err().to_string().contains("timeout"));
+    let interrupted = ExecutionBudget::new(&ExecutionLimits::default(), cancelled)
+        .with_cancellation_probe(Rc::new(|| true));
+    assert_function_bounded("f", &body, Some(&interrupted), usize::MAX);
     assert!(
         interrupted
             .check()
