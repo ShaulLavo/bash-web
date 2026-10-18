@@ -18,9 +18,15 @@ fn main() {
     }
     let executor = Executor::new();
     let host = InProcessHost::new(executor.clone());
-    compat::register(&host);
     let fs = MemoryFs::new(16 * 1024 * 1024);
+    compat::register(&host, &fs);
     let cwd = std::env::var("PWD").ok();
+    let fixture = std::env::var_os("BASH_WEB_PATH_FIXTURE");
+    let mut denied_directories = Vec::new();
+    if fixture.is_some() && cwd.is_none() {
+        eprintln!("cannot install path fixture without PWD");
+        std::process::exit(2);
+    }
     // The standalone host selects a virtual cwd from its environment. Create
     // that directory in its own filesystem before exposing it to the shell.
     if let Some(cwd) = cwd.as_deref() {
@@ -28,11 +34,24 @@ fn main() {
             eprintln!("cannot create virtual working directory: {error:?}");
             std::process::exit(error.status());
         }
+        if let Some(raw) = fixture {
+            let Some(raw) = raw.to_str() else {
+                eprintln!("cannot install path fixture: invalid UTF-8");
+                std::process::exit(2);
+            };
+            denied_directories = match compat::register_fixture(&host, &fs, cwd, raw) {
+                Ok(paths) => paths,
+                Err(error) => {
+                    eprintln!("cannot install path fixture: {error}");
+                    std::process::exit(2);
+                }
+            };
+        }
     }
     let session = Session::new(
         executor.clone(),
         Rc::new(host),
-        Rc::new(fs),
+        Rc::new(compat::ReadOnlyMount::new(fs, "/usr").with_denied_directories(denied_directories)),
         Limits::default(),
     );
     {
@@ -40,6 +59,12 @@ fn main() {
         let mut state = state.borrow_mut();
         state.variables = std::env::vars().collect();
         state.exported = state.variables.keys().cloned().collect();
+        // Like Bash startup, an absent inherited PATH gets a non-exported
+        // default. A later `unset PATH` still means a cwd-only lookup.
+        state
+            .variables
+            .entry("PATH".into())
+            .or_insert_with(|| "/usr/bin:/bin".into());
         if let Some(cwd) = cwd {
             state.cwd = cwd;
         }

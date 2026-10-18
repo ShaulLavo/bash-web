@@ -32,6 +32,12 @@ struct Fake {
     wait_job_calls: RefCell<Vec<u32>>,
     descendant_gates: RefCell<BTreeMap<u32, Cancel>>,
     spawn_errors: RefCell<BTreeSet<String>>,
+    access_next: Cell<u32>,
+    access_requests: RefCell<BTreeMap<u32, Option<Result<(), i32>>>>,
+    access_paths: RefCell<Vec<(u32, String, String)>>,
+    access_results: RefCell<BTreeMap<String, Option<Result<(), i32>>>>,
+    access_cancelled: RefCell<Vec<u32>>,
+    access_start_error: Cell<Option<i32>>,
     interrupt: Cell<i32>,
     interrupt_after: Cell<Option<usize>>,
     consumed_interrupts: Cell<usize>,
@@ -66,6 +72,12 @@ impl Fake {
             wait_job_calls: RefCell::new(Vec::new()),
             descendant_gates: RefCell::new(BTreeMap::new()),
             spawn_errors: RefCell::new(BTreeSet::new()),
+            access_next: Cell::new(1),
+            access_requests: RefCell::new(BTreeMap::new()),
+            access_paths: RefCell::new(Vec::new()),
+            access_results: RefCell::new(BTreeMap::new()),
+            access_cancelled: RefCell::new(Vec::new()),
+            access_start_error: Cell::new(None),
             interrupt: Cell::new(0),
             interrupt_after: Cell::new(None),
             consumed_interrupts: Cell::new(0),
@@ -83,11 +95,52 @@ impl Fake {
     }
 }
 impl Abi for Fake {
+    fn access_start(&self, path: &str, cwd: &str) -> Result<u32, i32> {
+        if let Some(errno) = self.access_start_error.get() {
+            return Err(errno);
+        }
+        if self.access_requests.borrow().len() >= 64 {
+            return Err(AGAIN);
+        }
+        let id = self.access_next.get();
+        self.access_next.set(id + 1);
+        let result = self
+            .access_results
+            .borrow()
+            .get(path)
+            .copied()
+            .unwrap_or(Some(Ok(())));
+        self.access_requests.borrow_mut().insert(id, result);
+        self.access_paths
+            .borrow_mut()
+            .push((id, path.to_owned(), cwd.to_owned()));
+        Ok(id)
+    }
+    fn access_take(&self, request: u32) -> Result<(), i32> {
+        let result = self
+            .access_requests
+            .borrow()
+            .get(&request)
+            .copied()
+            .ok_or(8)?;
+        let result = result.ok_or(AGAIN)?;
+        self.access_requests.borrow_mut().remove(&request);
+        result
+    }
+    fn access_cancel(&self, request: u32) {
+        self.access_cancelled.borrow_mut().push(request);
+        self.access_requests.borrow_mut().remove(&request);
+    }
     fn inherited_fds(&self) -> Vec<u32> {
         self.inherited.borrow().clone()
     }
     fn spawn(&self, request: &RuntimeSpawn) -> Result<u32, i32> {
-        if self.spawn_errors.borrow().contains(&request.executable) {
+        if self.spawn_errors.borrow().contains(&request.executable)
+            || request
+                .executable
+                .rsplit_once('/')
+                .is_some_and(|(_, name)| self.spawn_errors.borrow().contains(name))
+        {
             return Err(44);
         }
         // The real runtime seals a job when its pending membership reaches zero,
@@ -132,10 +185,11 @@ impl Abi for Fake {
                 signal: signal.clone(),
             },
         );
-        if matches!(
-            request.executable.as_str(),
-            "inherit" | "inherit-fail" | "inherit-sleep"
-        ) {
+        let requested_name = request
+            .executable
+            .rsplit_once('/')
+            .map_or(request.executable.as_str(), |(_, name)| name);
+        if matches!(requested_name, "inherit" | "inherit-fail" | "inherit-sleep") {
             // A process-service member, not a shell-known direct pid. It retains
             // real inherited descriptors and exits independently of its parent.
             let descendant = self.next_pid.get();
@@ -174,11 +228,15 @@ impl Abi for Fake {
             });
         }
         let argv = request.argv.clone();
+        let command = argv[0]
+            .rsplit_once('/')
+            .map_or(argv[0].as_str(), |(_, name)| name)
+            .to_owned();
         let parse_gate = self.parse_gate.clone();
         self.executor.spawn(async move {
             let run = async {
                 let output = fds.get(1).ok_or(1)?;
-                match argv[0].as_str() {
+                match command.as_str() {
                     "emit" => {
                         for _ in 0..64 {
                             output
@@ -221,7 +279,7 @@ impl Abi for Fake {
                     "parse-gate" => parse_gate.cancelled().await,
                     _ => {}
                 }
-                Ok::<i32, i32>(if argv[0] == "inherit-fail" { 7 } else { 0 })
+                Ok::<i32, i32>(if command == "inherit-fail" { 7 } else { 0 })
             };
             let result = cancel.run(run).await;
             status.set(Some(match result {
@@ -381,14 +439,24 @@ impl Abi for Fake {
         self.polls
             .borrow_mut()
             .push((timeout, subscriptions.to_vec()));
-        for (slot, sub) in output.iter_mut().zip(subscriptions) {
+        let ready = subscriptions.iter().filter(|sub| {
+            sub.kind != 5
+                || self
+                    .access_requests
+                    .borrow()
+                    .get(&sub.id)
+                    .is_some_and(Option::is_some)
+        });
+        let mut count = 0;
+        for (slot, sub) in output.iter_mut().zip(ready) {
+            count += 1;
             *slot = PollEvent {
                 userdata: sub.userdata,
                 kind: sub.kind,
                 flags: 0,
             };
         }
-        Ok(subscriptions.len())
+        Ok(count)
     }
     fn interrupted(&self) -> i32 {
         if let Some(remaining) = self.interrupt_after.get() {
@@ -433,11 +501,13 @@ fn shutdown_session(executor: &Executor, runtime: &Runtime, fake: &Fake, session
     assert!(runtime.0.inputs.borrow().is_empty());
     assert_eq!(runtime.0.input_slots.get(), 0);
     assert!(runtime.0.waiters.borrow().is_empty());
+    assert!(fake.access_requests.borrow().is_empty());
     assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
     assert_eq!(executor.drive(64).pending, 0);
 }
 fn request(runtime: &Runtime, name: &str, group: GroupId) -> SpawnRequest {
     SpawnRequest {
+        executable: name.into(),
         argv: vec![name.into()],
         env: BTreeMap::new(),
         cwd: "/home/guest".into(),
@@ -460,6 +530,29 @@ fn finish<T: Clone + 'static>(
     }
     panic!("fake runtime failed to finish");
 }
+#[test]
+fn spawn_forwards_resolved_executable_separately_from_original_argv_zero() {
+    let (executor, fake, runtime) = setup();
+    let group = runtime.allocate_group();
+    let mut spec = request(&runtime, "/home/guest/done", group);
+    spec.argv = vec!["done".into(), "ARG".into()];
+    let pid = runtime.spawn(spec).unwrap();
+    assert_eq!(
+        fake.requests.borrow().last().unwrap().executable,
+        "/home/guest/done"
+    );
+    assert_eq!(fake.requests.borrow().last().unwrap().argv, ["done", "ARG"]);
+    assert_eq!(
+        finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
+        Ok(0)
+    );
+    assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
+    assert!(runtime.0.groups.borrow().is_empty());
+    assert!(runtime.0.waiters.borrow().is_empty());
+    assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
+    assert_eq!(executor.drive(64).pending, 0);
+}
+
 #[test]
 fn preview1_filestat_decodes_native_widths_and_preserves_missing_capabilities() {
     use crate::io::FileKind;
@@ -671,7 +764,11 @@ fn runtime_pipeline_builtins_external_and_fs_share_descriptor_namespace() {
     assert_eq!(
         requests
             .iter()
-            .filter(|request| request.executable == "runtime-cat")
+            .filter(|request| request
+                .executable
+                .rsplit_once('/')
+                .map_or(request.executable.as_str(), |(_, name)| name)
+                == "runtime-cat")
             .count(),
         5
     );
@@ -952,6 +1049,7 @@ fn dropping_detached_wait_observer_preserves_runtime_reaper() {
     assert!(runtime.0.groups.borrow().is_empty());
     assert!(runtime.0.waits.borrow().is_empty());
     assert!(runtime.0.waiters.borrow().is_empty());
+    assert!(fake.access_requests.borrow().is_empty());
     assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
     let weak = Rc::downgrade(&runtime.0);
     drop(runtime);
@@ -1388,7 +1486,7 @@ fn substitution_descriptors_cross_the_actual_runtime_spawn_boundary() {
             .iter()
             .map(|request| request.executable.as_str())
             .collect::<Vec<_>>(),
-        ["emit", "runtime-cat"]
+        ["/home/guest/emit", "/home/guest/runtime-cat"]
     );
     let consumer = &requests[1];
     let stdin = consumer
@@ -2209,6 +2307,7 @@ fn admission_sweep_wakes_parked_job_wait_without_releasing_its_input_pump() {
     assert_eq!(runtime.wait_group(sibling).now_or_never(), Some(Ok(())));
     assert!(runtime.0.groups.borrow().is_empty());
     assert!(runtime.0.waiters.borrow().is_empty());
+    assert!(fake.access_requests.borrow().is_empty());
     assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
     assert_eq!(executor.drive(64).pending, 0);
 }
@@ -2257,6 +2356,7 @@ fn healed_wait_errors_keep_logical_cleanup_bounded_until_successful_retry() {
     assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
     assert!(runtime.0.groups.borrow().is_empty());
     assert!(runtime.0.waiters.borrow().is_empty());
+    assert!(fake.access_requests.borrow().is_empty());
     assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
     assert_eq!(executor.drive(64).pending, 0);
 }
@@ -2310,6 +2410,7 @@ fn healed_wait_error_keeps_input_ownership_charged_until_retry_completes() {
     assert!(runtime.0.groups.borrow().is_empty());
     assert!(runtime.0.waits.borrow().is_empty());
     assert!(runtime.0.waiters.borrow().is_empty());
+    assert!(fake.access_requests.borrow().is_empty());
     assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
     assert_eq!(executor.drive(64).pending, 0);
 }
@@ -2366,4 +2467,183 @@ fn runtime_job_retention_is_bounded_and_empty_jobs_do_not_accumulate() {
     assert!(runtime.0.waits.borrow().is_empty());
     assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
     assert_eq!(executor.drive(64).pending, 0);
+}
+
+#[test]
+fn access_requests_retire_success_errors_and_submission_failures_without_spawning() {
+    let (_, fake, runtime) = setup();
+    let unopened = runtime.access("unused".into(), "/captured".into());
+    drop(unopened);
+    assert!(fake.access_paths.borrow().is_empty());
+    for (index, result) in [Ok(()), Err(2), Err(44), Err(54)].into_iter().enumerate() {
+        let path = format!("./query-{index}");
+        fake.access_results
+            .borrow_mut()
+            .insert(path.clone(), Some(result));
+        assert_eq!(
+            runtime
+                .access(path.clone(), "/captured".into())
+                .now_or_never(),
+            Some(result.map_err(ProcessError::Runtime))
+        );
+        assert_eq!(fake.access_paths.borrow()[index].1, path);
+        assert_eq!(fake.access_paths.borrow()[index].2, "/captured");
+        assert!(fake.access_requests.borrow().is_empty());
+        assert!(runtime.0.waiters.borrow().is_empty());
+    }
+    fake.access_start_error.set(Some(48));
+    assert_eq!(
+        runtime.access("failure".into(), "/".into()).now_or_never(),
+        Some(Err(ProcessError::Runtime(48)))
+    );
+    assert!(fake.access_requests.borrow().is_empty());
+    assert!(fake.access_cancelled.borrow().is_empty());
+    assert!(fake.requests.borrow().is_empty());
+}
+
+#[test]
+fn access_readiness_is_nonblocking_reactor_owned_and_cancel_removes_pending_or_ready_requests() {
+    let (_, fake, runtime) = setup();
+    fake.access_results
+        .borrow_mut()
+        .insert("pending".into(), None);
+    let mut future = runtime.access("pending".into(), "/captured".into());
+    assert!(future.as_mut().now_or_never().is_none());
+    let id = fake.access_paths.borrow()[0].0;
+    assert_eq!(runtime.0.waiters.borrow().len(), 1);
+    assert!(
+        fake.polls.borrow().is_empty(),
+        "task must not call the reactor"
+    );
+    assert_eq!(runtime.poll(0), Ok(0));
+    assert!(future.as_mut().now_or_never().is_none());
+    fake.access_requests.borrow_mut().insert(id, Some(Err(2)));
+    assert_eq!(runtime.poll(0), Ok(1));
+    assert_eq!(
+        future.as_mut().now_or_never(),
+        Some(Err(ProcessError::Runtime(2)))
+    );
+    assert!(fake.access_requests.borrow().is_empty());
+    assert!(runtime.0.waiters.borrow().is_empty());
+    assert!(fake.access_cancelled.borrow().is_empty());
+    for completed in [false, true] {
+        let mut future = runtime.access("pending".into(), "/".into());
+        assert!(future.as_mut().now_or_never().is_none());
+        let id = fake.access_paths.borrow().last().unwrap().0;
+        if completed {
+            fake.access_requests.borrow_mut().insert(id, Some(Ok(())));
+            assert_eq!(runtime.poll(0), Ok(1));
+        }
+        drop(future);
+        assert_eq!(fake.access_cancelled.borrow().last(), Some(&id));
+        assert!(fake.access_requests.borrow().is_empty());
+        assert!(runtime.0.waiters.borrow().is_empty());
+    }
+    assert!(fake.requests.borrow().is_empty());
+}
+
+#[test]
+fn access_host_bound_rejects_new_requests_and_releases_capacity_on_drop() {
+    let (_, fake, runtime) = setup();
+    fake.access_results
+        .borrow_mut()
+        .insert("pending".into(), None);
+    let mut pending = Vec::new();
+    for _ in 0..64 {
+        let mut future = runtime.access("pending".into(), "/".into());
+        assert!(future.as_mut().now_or_never().is_none());
+        pending.push(future);
+    }
+    assert_eq!(
+        runtime.access("pending".into(), "/".into()).now_or_never(),
+        Some(Err(ProcessError::Runtime(AGAIN)))
+    );
+    assert_eq!(fake.access_requests.borrow().len(), 64);
+    assert_eq!(runtime.0.waiters.borrow().len(), 64);
+    drop(pending.pop());
+    let mut replacement = runtime.access("pending".into(), "/".into());
+    assert!(replacement.as_mut().now_or_never().is_none());
+    drop(replacement);
+    drop(pending);
+    assert_eq!(fake.access_cancelled.borrow().len(), 65);
+    assert!(fake.access_requests.borrow().is_empty());
+    assert!(runtime.0.waiters.borrow().is_empty());
+}
+
+#[test]
+fn stalled_path_query_keeps_background_and_peer_progress_and_interrupt_retires_request() {
+    let (executor, fake, runtime) = setup();
+    let session = runtime_session(&executor, &runtime);
+    let peer = runtime_session(&executor, &runtime);
+    assert_eq!(
+        finish(
+            &executor,
+            &runtime,
+            session
+                .start("{ parse-gate; echo background-progress; } &")
+                .unwrap()
+        ),
+        0
+    );
+    drive_until_spawn(&executor, &runtime, &fake, 1);
+    fake.access_results
+        .borrow_mut()
+        .insert("/home/guest/stalled".into(), None);
+    let query = session.start("command -v stalled").unwrap();
+    for _ in 0..1000 {
+        executor.drive(64);
+        if !fake.access_requests.borrow().is_empty() {
+            break;
+        }
+        runtime.poll(0).unwrap();
+    }
+    assert_eq!(fake.access_requests.borrow().len(), 1);
+    assert!(!query.is_finished());
+    fake.parse_gate.cancel();
+    assert_eq!(
+        finish(
+            &executor,
+            &runtime,
+            peer.start("echo peer-progress").unwrap()
+        ),
+        0
+    );
+    for _ in 0..100 {
+        executor.drive(64);
+        runtime.poll(0).unwrap();
+        if String::from_utf8_lossy(&fake.output.bytes()).contains("background-progress") {
+            break;
+        }
+    }
+    let output = fake.output.bytes();
+    assert!(String::from_utf8_lossy(&output).contains("background-progress"));
+    assert!(String::from_utf8_lossy(&output).contains("peer-progress"));
+    assert!(!query.is_finished());
+    session.interrupt();
+    assert_eq!(finish(&executor, &runtime, query), 130);
+    assert!(fake.access_requests.borrow().is_empty());
+    assert_eq!(fake.access_cancelled.borrow().len(), 1);
+    assert!(
+        fake.requests
+            .borrow()
+            .iter()
+            .all(|request| !request.executable.ends_with("stalled"))
+    );
+    fake.access_results
+        .borrow_mut()
+        .remove("/home/guest/stalled");
+    assert_eq!(
+        finish(
+            &executor,
+            &runtime,
+            session.start("command -v stalled").unwrap()
+        ),
+        0
+    );
+    finish(
+        &executor,
+        &runtime,
+        executor.spawn(async move { session.shutdown().await }),
+    );
+    shutdown_session(&executor, &runtime, &fake, peer);
 }
