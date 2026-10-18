@@ -152,7 +152,7 @@ they are removed, and they remain mandatory before step 6 replaces Brush:
   completion-before-registration, completion/cancel ownership and invalid output
   memory are separate pending cases. These TODOs are not execution evidence.
 
-**Approved startup-diagnostic adoption (2026-10-18; implemented, integrated CI pending).**
+**Approved startup-diagnostic adoption (2026-10-18; delivered in PR #21).**
 Waffle 0.0.50 at `33ece68f9f484d99b8a57a675de71d847e248051` includes
 the quiet-start 0.0.49 contract: typed
 `START_FAILED` is the only child-visible report for admitted `runtime_proc` children,
@@ -176,36 +176,87 @@ locks, trust version and source provenance move together.
   the bounded runtime suite passes 127/127. The final 0.0.50 pin also passes
   127/127, package contracts, strict TypeScript, lint, format, Knip, exact and
   structural duplicate gates, layer controls and cleanup/negative controls.
-  These are local results, not completed browser, PR or post-merge evidence.
+  These local results are separate from the integrated delivery evidence below.
 - The browser fixture `/bin/test-lazy-start-failure` uses the shipped lazy loader.
   `tests/pipelines.acceptance.spec.ts` requires one complete shell diagnostic in
   both a pipe and regular file, and retains closed-fd2, real126/127, worker
-  cleanup and foreground/background EOF acknowledgement controls. Normal required
-  Chromium/Firefox CI must qualify these captures before delivery is claimed.
+  cleanup and foreground/background EOF acknowledgement controls. Required
+  Chromium/Firefox CI qualified these captures in PR #21 and on its main merge.
+- PR #21 merged as `c81f3b57e861835bc6390b32ecfc4544627c1729` after independent
+  approval and all ten required PR checks. Its exact-main run `39144577199`
+  passed all five checks: 1,130 native and 1,115 WASI tests, 214 browser passes
+  with the same 16 inherited skips, and frozen memberships 949/955/1341 with
+  no gained, lost or newly failing cases. Actual-host checkout/scratch cleanup
+  is complete. This delivered quiet-start evidence is not descriptor-unit evidence.
 - Keep the explicit adapter `startFailed` hook: its removal changes host-spawn
   behavior. The five host-broker modes now explicitly distinguish retained adapter
   policy from unchanged host-default reporting, post-start failure and genuine
   exits. Quiet runtime-child reporting has independent no-hook coverage.
 
-**Approved separate inherited-descriptor predicates unit (2026-10-18).**
-The adopted runtime includes pipe `fd_filestat_get` support, but this does not
-implement shell predicates. Existing real inherited-pipe tests exercise streaming,
-process substitution and EOF handshakes, not positive pipe metadata or `-p`.
-Descriptor-alias tests currently return capability-error status 2 for predicates
-other than `-a`/`-e`; retain every current `-p`/`-t` status in the adoption unit.
+**Approved inherited-descriptor predicates unit (2026-10-18); implemented, focused checks pass.**
+This separate unit follows the quiet-start adoption in PR #21. `test`, `[` and
+shared `[[ ]]` now query `runtime_proc.fd_kind` from Waffle #36 at the adopted
+0.0.50 pin. The query uses the endpoint's physical handle, including inherited
+private duplicates and logical remaps. Both local pipe ends and transported
+runtime pipes satisfy descriptor-alias `-p`; terminal descriptors satisfy `-t`.
+Category 0 remains other/unknown, never FIFO. Preview1 filetypes and unrelated
+predicate capability/status behavior stay unchanged.
 
-- Consume the separately agreed append-only
-  `runtime_proc.fd_kind(fd: u32) -> i32`: 0 other/unknown, 1 pipe (either endpoint),
-  2 terminal, 3 regular file, 4 directory, negative EBADF (-8) for invalid/closed.
-  It is non-consuming, needs no rights, and remains truthful after inherit, dup
-  and remap. The upstream API is delivered in the adopted 0.0.50 pin; the shell
-  predicate caller and its qualification remain this separate Approved unit.
-- Add real inherited runtime_proc pipe/remap tests, regular files, terminals,
-  directories and closed descriptors; compare `test -p`, `[ -p /dev/stdin ]` and
-  `-t` against Bash. Prove probes consume no payload and retain no endpoint that
-  delays EOF. Never infer FIFO from Preview1 UNKNOWN (there is no FIFO enum).
-- This is a separate implementation/qualification unit, not a partial predicate
-  change hidden inside the quiet-start dependency adoption.
+- GNU Bash 5.3.15 oracle covers inherited read/write pipes, aliases/remaps, files,
+  closed fds and a real controlled PTY, including numeric statuses and unchanged
+  payload/EOF. Signed decimal and surrounding ASCII whitespace follow the
+  existing intmax parser; signed-64 overflow is an integer error, not a wrapped
+  descriptor. Malformed `-t` is status 2 participating in `[[ !/&&/|| ]]` only.
+- Review repair preserves malformed `-t` status when fd 2 is closed. Only
+  unavailable diagnostic descriptors are ignored for this operand error;
+  cancellation, write limits, broken pipes and unrelated predicate errors keep
+  their existing statuses. Native closed-stderr tests cover all three forms,
+  negation and short circuiting. The browser regression adds a separately
+  transported child with both pipe ends, exact diagnostics, payload/EOF and
+  retirement assertions. At `7096f08`, repair checks passed 265 native library and 548 word
+  tests, Clippy, WASI target type checking, all 34 layer tests and strict quality
+  checks without policy/baseline changes. Current-head runtime/browser CI and
+  exact-head re-review remain pending.
+- Negation review repair keeps direct and grouped forms distinct. GNU Bash
+  5.3.15 returns 2/0/2 for two/three/four direct `!` operators on malformed
+  `-t`, but 1 for `[[ ! ( ! -t nope ) ]]`. Consecutive negations now toggle
+  one inversion, stopping at group and logical boundaries. Every frame still
+  receives its depth/storage admission and work/cancellation checkpoint;
+  unrelated predicate errors remain errors. Separate native regressions cover
+  direct/grouped forms, valid statuses, short circuiting and open/closed stderr.
+  The actual transported-child browser regression retains exact diagnostics,
+  payload/EOF and retirement checks and adds both forms with open/closed stderr.
+  The focused gate passes 7 native library and 25 word tests, all 34 layer tests,
+  strict TypeScript, lint and formatting. WASI/browser execution and exact-head
+  re-review for this negation repair remain pending required CI and review.
+- Native engine regressions cover local pipes, private physical mock handles,
+  non-consuming queries, writer release/EOF, integer diagnostics and unchanged
+  unrelated capability errors. These mocks are not transported-WASI evidence.
+- `tests/runtime-shell.spec.ts` and the raw `test-guest fd-kinds` mode exercise
+  actual WASI child pipe ends/remaps, runtime terminals, files, directories,
+  closed handles, payload and worker/pipe retirement. At `8238cf5`, all five new
+  Chromium cases and 127 runtime/terminal host tests passed on UpCloud. The WASI
+  build is from `afce126`, with identical production Rust/host code; `8238cf5`
+  only extracted shared browser assertions to remove new duplicate clones.
+- Required CI at `9a96117` passed layers, shell and quality, including 1,138
+  native and 1,123 executed WASI tests. Frozen replay gained only
+  `oils:builtin-bracket:319` and `oils:builtin-bracket:554`, reaching 951/955/1341
+  with zero lost or newly failing cases. Raise only those two verified pass
+  memberships; oracle, case, skip and exclusion identities stay unchanged.
+- That historical browser run passed 222 cases with the exact 16 inherited
+  skips, but two Firefox pipe fixtures exposed an unsupported line-ordering
+  assumption: child stderr and downstream stdout interleaved as
+  `WRITE_CLOSED:1PIPE_PAYLOAD`. The fixture now drains the actual output pipe to
+  a file before displaying its bytes. It keeps every exact marker, both payloads,
+  pipeline-status and EOF/worker/pipe-retirement checks, without substring
+  matching, retries, longer deadlines or skips. Final-head CI remains pending.
+- Also at `8238cf5`, 263 native library and 544 word tests, wasm32-wasip1 type
+  checking, Clippy, Rust formatting, TypeScript checks, lint, formatting, unused
+  code and both strict duplicate gates passed without baseline/exclusion changes.
+  Independent review and normal required native/WASI/frozen/Chromium/Firefox CI
+  remain the delivery gate. Older quiet-start/frozen runs are not this unit's
+  qualification. Root is 0.0.57, engine 0.0.31 and the changed test guest 0.0.5
+  after normal PR #21 integration; the already adopted Waffle pin is unchanged.
 
 **Approved job-lifetime transition (2026-10-17).** The current runtime seals a
 job when its pending membership reaches zero, before it is reaped. A shell job
@@ -1226,16 +1277,13 @@ Status: Approved. Start fetching and compiling the shell WASM in parallel with t
 
 ### Follow-up: start-status-scoped exec diagnostic ownership
 
-Status: Approved. In the fd-3 lane's PR or the immediately following PR, integrate
-Waffle #22's `start_status` and CHILD_START poll (0.0.37), after the 0.0.36 patched
-libc guest rebuild prerequisite. Hold the command's redirected stderr strongly
-only until start status resolves. Drop it immediately on successful start;
-write the exec failure diagnostic and then drop it on START_FAILED. Fork failure
-messages still use parent-shell stderr. #11 deliberately uses a non-owning weak
-endpoint; if it has expired before the failure is observed, the message falls
-back to shell stderr. This keeps successful children from retaining a closed
-pipeline writer but cannot guarantee redirected exec diagnostics after that
-endpoint disappears. Add controls proving `nosuch 2>&1 | cat` prints the message
-before EOF and `producer 2>&1 | eof-ack` (producer closes output and waits for an
-EOF acknowledgement) finishes without deadlock. Keep real exit statuses 126/127
-distinct from startup failure; do not pin above the fd-3 prerequisite early.
+Status: Delivered by PR #20, merge
+`02df6429cc142a771ff9ad26fae3f3d250d0bc04`. The runtime adapter holds redirected
+stderr until start status resolves, drops it immediately on successful start,
+and diagnoses START_FAILED before releasing it. Fork failures still use parent
+stderr; genuine program exits 126/127 remain distinct. Exact-main checks and
+actual-host cleanup completed for that unit. Its pipe/file diagnostic and
+foreground/background EOF-ack controls remain covered. PR #21 separately adopted
+Waffle 0.0.50 and covered lazy-loader quiet-start reporting. This historical item
+is not another open assignment; later reader-cancellation, filesystem/device
+and external Bun work remain separate.

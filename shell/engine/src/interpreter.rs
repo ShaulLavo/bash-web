@@ -3783,6 +3783,67 @@ mod scope_tests {
     }
 
     #[test]
+    fn terminal_integer_diagnostic_keeps_write_errors_and_streamed_prefix() {
+        let (_state, _fds, context) = replay_context();
+        let (reader, broken) = io::pipe();
+        drop(reader);
+        let (limited, errors) = io::capture(21);
+        for (stderr, expected) in [
+            (None, 0),
+            (Some(io::pipe().0), 0),
+            (Some(broken), 141),
+            (Some(limited), 1),
+        ] {
+            let mut table = FdTable::default();
+            if let Some(stderr) = stderr {
+                table.insert(2, stderr);
+            }
+            let outcome = finish_replay(async {
+                Outcome::status(
+                    builtins::test::integer_diagnostic("test", "nope", &table, &context)
+                        .await
+                        .err()
+                        .unwrap_or(0),
+                )
+            });
+            assert_eq!(outcome.code, expected);
+        }
+        assert_eq!(errors.bytes(), b"/usr/bin/bash: test: ");
+        context.cancel.cancel();
+        assert_eq!(
+            builtins::test::integer_diagnostic("test", "nope", &FdTable::default(), &context)
+                .now_or_never(),
+            Some(Err(130))
+        );
+    }
+
+    #[test]
+    fn terminal_integer_diagnostic_cancellation_releases_its_writer() {
+        let (_state, _fds, context) = replay_context();
+        let (reader, writer) = io::pipe();
+        let mut table = FdTable::default();
+        table.insert(2, writer);
+        let operand = "x".repeat(2 * io::PIPE_CAPACITY);
+        let mut diagnostic = Box::pin(builtins::test::integer_diagnostic(
+            "test", &operand, &table, &context,
+        ));
+        for _ in 0..16 {
+            assert!(diagnostic.as_mut().now_or_never().is_none());
+        }
+        context.cancel.cancel();
+        let outcome = finish_replay(async { Outcome::status(diagnostic.await.unwrap_err()) });
+        assert_eq!(outcome.code, 130);
+        table.remove(2);
+        let mut buffer = vec![0; io::PIPE_CAPACITY];
+        assert_eq!(
+            reader.read(&mut buffer).now_or_never(),
+            Some(Ok(io::PIPE_CAPACITY))
+        );
+        assert!(buffer.starts_with(b"/usr/bin/bash: test: x"));
+        assert_eq!(reader.read(&mut buffer).now_or_never(), Some(Ok(0)));
+    }
+
+    #[test]
     fn builtin_prefix_suspends_and_restores_the_dynamic_clock_hook() {
         let (state, _fds, context) = replay_context();
         assert!(state.borrow().dynamic_parameter("EPOCHREALTIME"));
