@@ -137,6 +137,8 @@ jobs:
       - run: ulimit -c 0; npm run fuzz:shell-printf:ci -- --shell .build/shell/release/shell-cli
       - run: npm run test:fuzz-shell-echo
       - run: ulimit -c 0; npm run fuzz:shell-echo:ci -- --shell .build/shell/release/shell-cli
+        env:
+          TMPDIR: ${{ runner.temp }}
 
   own-shell-compatibility:
     needs: shell
@@ -194,6 +196,8 @@ jobs:
           path: .build/utility-artifacts/
       - run: npm run build:shell
       - run: npm run fuzz:shell-echo:ci -- --waffle --shell .build/shell/wasm32-wasip1/release/shell-runtime.wasm
+        env:
+          TMPDIR: ${{ runner.temp }}
       - run: npm run compat:shell
         env:
           BASH_COMPAT_OUT: ${{ runner.temp }}/own-shell-current.json
