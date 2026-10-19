@@ -136,7 +136,7 @@ jobs:
       - run: ulimit -c 0; npm run test:fuzz-shell-printf
       - run: ulimit -c 0; npm run fuzz:shell-printf:ci -- --shell .build/shell/release/shell-cli
       - run: npm run test:fuzz-shell-echo
-      - run: ulimit -c 0; npm run fuzz:shell-echo:ci -- --shell .build/shell/release/shell-cli
+      - run: ulimit -c 0; npm run fuzz:shell-echo:ci -- --shell "$GITHUB_WORKSPACE/.build/shell/release/shell-cli"
         env:
           TMPDIR: ${{ runner.temp }}
 
@@ -195,7 +195,7 @@ jobs:
           name: utility-guests-${{ github.sha }}
           path: .build/utility-artifacts/
       - run: npm run build:shell
-      - run: npm run fuzz:shell-echo:ci -- --waffle --shell .build/shell/wasm32-wasip1/release/shell-runtime.wasm
+      - run: npm run fuzz:shell-echo:ci -- --waffle --shell "$GITHUB_WORKSPACE/.build/shell/wasm32-wasip1/release/shell-runtime.wasm"
         env:
           TMPDIR: ${{ runner.temp }}
       - run: npm run compat:shell
