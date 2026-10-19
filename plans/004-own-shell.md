@@ -1330,3 +1330,29 @@ Give the Waffle Node instrument the oracle sandbox's read-only `/usr` (needs a W
 ### R6. Ambiguous redirect diagnostics
 
 `oils:var-sub:24` (`echo hi > "$@"` with two words) now passes on stdout and status, but only because `_tmp` is missing: Bash reports an ambiguous redirect. Diagnose multi-word redirect targets as Bash does; the stdout/status score cannot show this.
+
+## Default echo options and bytes, 2026-10-19
+
+Status: Approved. Bounded implementation from main
+`dfbf44038ad43602f0e7c381b832fd9e984b577c`; parent owns independent review,
+CI monitoring and merge.
+
+The default `-n`/`-e`/`-E` family shares the existing bounded printf printer with
+an explicit echo mode. No R1 file-permission code, runtime adapter or broad
+option subsystem changes. `xpg_echo` and POSIX echo modes remain deferred.
+See [echo behavior and ownership](../docs/echo.md) and `sources.lock.json`.
+
+Strict native failing-first observations had 476 mismatches among 492 cases;
+representative production real-Waffle observations had 5 mismatches among 6.
+The implemented family matches all 492 on native and real Waffle. The unchanged
+printf seeds retain all 1,122 native matches.
+
+The frozen real-Waffle ruler retains its exact oracle/environment/source
+identity, 9,221 records and 5,792 scored cases. Measured pass counts change
+Oils 948 to 967, Brush 956 to 958, Bashkit 1,339 to 1,357. There are 39 gained
+memberships and zero lost memberships. Only these measured outcomes and derived
+counts change in the candidate baseline. The original 30 echo-file failures
+were candidates, not an assumed gain; 28 of those pass now, while the two Brush
+mode-dependent failures remain deferred. Eleven other cases gain from corrected
+echo output. Exact IDs and raw candidate evidence are retained under
+`/work/reports/bash-web/hill-climb/echo-options/` on the implementation host.

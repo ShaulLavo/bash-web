@@ -50,6 +50,16 @@ test("printf octal escapes produce exact bytes for an external guest", async ({ 
   await ready(page);
 });
 
+test("echo options and escapes preserve exact bytes for an external guest", async ({ page }) => {
+  await open(page);
+  await command(page, `echo -e 'hi\\000\\0377\\r\\n\\cdiscarded' later | test-guest bytes`);
+  await output(page, "BYTES:104,105,0,255,13,10");
+  await ready(page);
+  await command(page, `echo -neE 'a\\nb' | test-guest bytes`);
+  await output(page, "BYTES:97,92,110,98");
+  await ready(page);
+});
+
 test("external pipes preserve binary bytes, EOF, and backpressure in both directions", async ({
   page,
 }) => {

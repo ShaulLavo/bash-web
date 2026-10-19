@@ -19,13 +19,16 @@ const target = authorizedInstrumentTransition.target;
 const read = (path: string) => JSON.parse(readFileSync(resolve(root, path), "utf8"));
 const candidate = () => read(oraclePath);
 const receipt = () => read(instrumentReceiptPath);
-const targetBaseline = () =>
+const committedBaseline = (revision: string) =>
   JSON.parse(
-    execFileSync("git", ["show", `${target}:${baselinePath}`], {
+    execFileSync("git", ["show", `${revision}:${baselinePath}`], {
       cwd: root,
       maxBuffer: 1 << 26,
     }).toString(),
   );
+
+const targetBaseline = () => committedBaseline(target);
+const migratedBaseline = () => committedBaseline("38c229271c851543ce564976e7b09f2971c5e0f8");
 
 test("the committed receipt authorizes exactly the recorded target and identity pair", () => {
   const { oracle } = instrumentMigrationEvidence(root, target, candidate());
@@ -35,12 +38,12 @@ test("the committed receipt authorizes exactly the recorded target and identity 
   assert.equal(recorded.classification.a + recorded.classification.b, recorded.changes.length);
 });
 
-test("the committed real-runtime baseline differs from the target by exactly the receipt", () => {
-  assertInstrumentChanges(targetBaseline(), read(baselinePath), receipt());
+test("the historical real-runtime baseline differs from the target by exactly the receipt", () => {
+  assertInstrumentChanges(targetBaseline(), migratedBaseline(), receipt());
 });
 
 test("an extra or missing changed case fails the transition proof", () => {
-  const extra = read(baselinePath);
+  const extra = migratedBaseline();
   const index = extra.cases.findIndex((item: { outcome: string }) => item.outcome === "pass");
   extra.cases[index] = { ...extra.cases[index], outcome: "fail" };
   assert.throws(
@@ -49,7 +52,7 @@ test("an extra or missing changed case fails the transition proof", () => {
   );
   const missing = { ...receipt(), changes: receipt().changes.slice(1) };
   assert.throws(
-    () => assertInstrumentChanges(targetBaseline(), read(baselinePath), missing),
+    () => assertInstrumentChanges(targetBaseline(), migratedBaseline(), missing),
     /recorded transition/,
   );
 });
