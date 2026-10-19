@@ -4153,3 +4153,6 @@ mod printf;
 
 #[path = "words/echo.rs"]
 mod echo;
+
+#[path = "words/read_count.rs"]
+mod read_count;

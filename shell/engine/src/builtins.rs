@@ -1,5 +1,6 @@
 //! Bash builtins. External commands are installed by the embedding runtime.
 mod printf;
+mod read;
 pub(crate) mod test;
 use crate::{
     commands::{self, Builtin, Declaration},
@@ -140,53 +141,7 @@ pub(crate) async fn run(
         }
         Builtin::Echo => printf::echo(&args, &state, &fds, &context, work).await?,
         Builtin::Printf => printf::run(&args, &state, &fds, &context, work).await?,
-        Builtin::Read => {
-            let mut fd = 0;
-            let mut name = None;
-            let mut iter = args.iter();
-            while let Some(arg) = iter.next() {
-                match arg.as_str() {
-                    "-r" => {}
-                    "-u" => fd = iter.next().ok_or(2)?.parse().map_err(|_| 2)?,
-                    s if s.starts_with('-') => return Err(2),
-                    _ => {
-                        if name.replace(arg.clone()).is_some() {
-                            return Err(2);
-                        }
-                    }
-                }
-            }
-            let input = endpoint(&fds, fd)?;
-            let mut bytes = Vec::new();
-            let mut byte = [0];
-            let mut budget = Budget::default();
-            let code = loop {
-                budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-                if input
-                    .read_cancelled(&mut byte, &context.cancel)
-                    .await
-                    .map_err(|e| e.status())?
-                    == 0
-                {
-                    break 1;
-                }
-                if byte[0] == b'\n' {
-                    break 0;
-                }
-                if bytes.len() >= context.limits().line_bytes {
-                    return Err(2);
-                }
-                bytes.push(byte[0]);
-            };
-            let name = name.unwrap_or_else(|| "REPLY".into());
-            State::admit_assignment(&state, &name, bytes.len(), &context.cancel, work)
-                .await
-                .map_err(error_status)?;
-            state
-                .borrow_mut()
-                .assign_parameter(name, String::from_utf8(bytes).map_err(|_| 2)?)?;
-            return Ok(Outcome::status(code));
-        }
+        Builtin::Read => return read::run(&args, &state, &fds, &context, work).await,
         Builtin::Declaration => {
             return declarations(name, args, &state, &fds, &context, work).await;
         }

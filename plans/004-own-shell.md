@@ -1307,11 +1307,12 @@ Let `shell-runtime -c` exit without cancelling still-running background jobs, as
 - `oils:shell-grammar:17`: Bash status 0, stdout `word word\n`; ours status 0, stdout `word`.
 - `oils:shell-grammar:23`: Bash status 0, stdout `word_a\nword_b\n`; ours status 0, stdout `word_a\nword_b`.
 
-### R3. Reading a directory
+### R3. Directory-read diagnostics
 
-Map reading a directory descriptor to Bash's status 1 (EISDIR) on the runtime filesystem.
-
-- `oils:builtin-read:794`: Bash status 0, stdout `status=1\n`; ours status 0, stdout `status=2\n`.
+The original candidate `oils:builtin-read:794` uses `read -n3`. Its stdout/status
+failure was option rejection, not proof that runtime errno mapping was wrong.
+Counted-read support now makes that frozen case pass. No runtime errno mapping
+changed. Bash-formatted directory-read diagnostics remain outside this unit.
 
 ### R4. `/proc/self`
 
@@ -1356,3 +1357,27 @@ were candidates, not an assumed gain; 28 of those pass now, while the two Brush
 mode-dependent failures remain deferred. Eleven other cases gain from corrected
 echo output. Exact IDs and raw candidate evidence are retained under
 `/work/reports/bash-web/hill-climb/echo-options/` on the implementation host.
+
+## Counted scalar read, 2026-10-19
+
+Status: Approved. Bounded implementation from exact main
+`1bdbacd6c11ca7be31a55a2b3964239eabf10482`; parent owns independent review,
+CI monitoring and merge.
+
+Add `read -n` for one scalar, including raw mode, backslash processing, NUL
+skipping, UTF-8 character boundaries, newline/EOF/zero behavior and unread suffix
+preservation. Keep the uncounted reader unchanged. Multiple destinations,
+arrays, other read modes, terminal editing, timeouts and runtime work are outside
+this unit. See [counted read](../docs/read.md) for the supported locale domain,
+resource limits and unsupported byte sequences.
+
+The native and production real-Waffle failing-first matrix has 124 mismatches
+on the exact merged base; both final matrices match all 124 stdout/status pairs
+and 123 including stderr. The closed-descriptor diagnostic remains different
+and is not claimed fixed. The frozen ruler retains all 9,221 records, 5,792 scored
+cases and all four identity hashes.
+Measured memberships change Oils 967 to 972, Brush 958 to 961 and Bashkit 1,357
+to 1,361: twelve gains and zero losses. Only those twelve records and derived
+counts change in the baseline. Exact IDs and verification receipts are in
+[read-count evidence](../docs/evidence/read-count.json); host logs and reproducer
+are under `/work/reports/bash-web/hill-climb/read-count/`.

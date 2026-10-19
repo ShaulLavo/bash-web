@@ -35,7 +35,7 @@ pub(super) async fn run(
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
-async fn character_locale(
+pub(super) async fn character_locale(
     state: &SharedState,
     context: &Context,
     work: &mut Work,

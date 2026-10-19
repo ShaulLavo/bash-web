@@ -60,6 +60,17 @@ test("echo options and escapes preserve exact bytes for an external guest", asyn
   await ready(page);
 });
 
+test("read character counts preserve Unicode and unread pipe bytes", async ({ page }) => {
+  await open(page);
+  await command(
+    page,
+    `test-guest emit-bytes 195,169,228,184,173,120,10 | { LC_ALL=C.UTF-8 read -n2 x; printf '%s' "$x" | test-guest bytes; read -r; printf '%s' "$REPLY" | test-guest bytes; }`,
+  );
+  await output(page, "BYTES:195,169,228,184,173");
+  await output(page, "BYTES:120");
+  await ready(page);
+});
+
 test("external pipes preserve binary bytes, EOF, and backpressure in both directions", async ({
   page,
 }) => {
