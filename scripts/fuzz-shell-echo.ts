@@ -1,0 +1,99 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { boundaryEscapes, originalEscapes, utf8Escapes, execute } from "./fuzz-shell-printf.ts";
+import { optionsFor, run, healthy, matches } from "./fuzz-shell-control-flow.mjs";
+import { decode, encode, type RecordedCase } from "./fuzz-shell-results.ts";
+import { createWaffleRunner } from "./waffle-compat.ts";
+
+const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+export function cases() {
+  const result: { id: string; family: string; script: string }[] = [];
+  const add = (family: string, script: string) =>
+    result.push({ id: `echo-${result.length}`, family, script });
+  for (const prefix of ["", "-n", "-e", "-E", "-ne", "-en", "-nE", "-Een", "-eEn", "-neE", "-n -e", "-e -E", "-E -e", "-n -n", "-e -n -E -e"])
+    for (const operands of ["", "''", "'' '' tail", "'a\\nb' tail", "'a\\cb' later"])
+      add("options", `echo ${prefix} ${operands}`);
+  for (const operand of ["-", "--", "-z", "-neZ", "-eZ", "-e-", "-n=", "ordinary", "", "-é"])
+    for (const prefix of ["", "-e", "-n"])
+      add("option-end", `echo ${prefix} ${quote(operand)} -n -e 'a\\nb'`);
+  for (const escape of originalEscapes.concat(boundaryEscapes, utf8Escapes))
+    for (const locale of ["C", "C.UTF-8"])
+      add("escapes", `LC_ALL=${locale} echo -ne ${quote(escape)} tail`);
+  for (const value of ["a\nb", "a\\\nb", "\\c", "a\\cb", "\\0\\xff", "\\uZ\\U", "\\\\\\q\\"])
+    add("sequences", `echo -e ${quote(value)} later; echo recovered`);
+  for (const script of ["echo -e lost >&-", "echo -ne '\\c' >&-", "echo -n >&-", "echo -e 'a\\cb' later; echo -E 'a\\nb'", "(echo -ne a); echo b", "echo -ne 'a\\0b\\xff' | cat"])
+    add("descriptors-state", script);
+  return result;
+}
+type Case = ReturnType<typeof cases>[number];
+export function fingerprint() {
+  const hash = createHash("sha256");
+  for (const name of ["fuzz-shell-echo.ts", "fuzz-shell-printf.ts", "fuzz-shell-control-flow.mjs", "fuzz-shell-results.ts"])
+    hash.update(readFileSync(new URL(name, import.meta.url)));
+  return hash.digest("hex");
+}
+export function validateFixture(fixture: { sourceHash: string; cases: RecordedCase<Case>[] }) {
+  assert.equal(fixture.sourceHash, fingerprint());
+  assert.deepEqual(fixture.cases.map((entry) => entry.case), cases());
+  for (const entry of fixture.cases) assert.ok(healthy(decode(entry.bash)), entry.case.id);
+  return fixture.cases;
+}
+async function main() {
+  const args = process.argv.slice(2);
+  const waffle = args.includes("--waffle");
+  const options = optionsFor(args.filter((arg) => arg !== "--waffle"));
+  const scratch = mkdtempSync(resolve(process.env.TMPDIR ?? "/work/tmp", "echo-"));
+  options.cwd = scratch;
+  const interrupt = () => { options.interrupted = true; };
+  process.on("SIGINT", interrupt);
+  process.on("SIGTERM", interrupt);
+  try {
+    const report = await measure(options, waffle);
+    if (options.output) writeFileSync(options.output, JSON.stringify(report, null, 2) + "\n");
+    console.log(JSON.stringify(report));
+    if (report.counts.MISMATCH) process.exitCode = 1;
+  } finally {
+    process.off("SIGINT", interrupt);
+    process.off("SIGTERM", interrupt);
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+async function measure(options: ReturnType<typeof optionsFor>, waffle: boolean) {
+  const fixturePath = options.replays[0];
+  const recorded = fixturePath ? validateFixture(JSON.parse(readFileSync(fixturePath, "utf8"))) : undefined;
+  if (!recorded) assert.match(execFileSync("/usr/bin/bash", ["--version"], { encoding: "utf8" }), /version 5\.3\.15\(1\)-release/);
+  const selected = cases();
+  const shell = options.shell ?? resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "release/shell-engine");
+  const result = waffle ? await measureWaffle(options, shell, recorded) : await execute(selected, options, shell, recorded);
+  const report = { sourceHash: fingerprint(), instrument: waffle ? "production real-Waffle shell-runtime" : "native shell-engine", ...result };
+  if (options.record) {
+    assert.equal(result.counts.MISMATCH, 0, "refuse recording mismatched echo observations");
+    writeFileSync(options.record, JSON.stringify({ schema: 1, sourceHash: fingerprint(), bash: "5.3.15(1)-release", cases: result.results }, null, 2) + "\n");
+  }
+  return report;
+}
+async function measureWaffle(options: ReturnType<typeof optionsFor>, modulePath: string, recorded?: RecordedCase<Case>[]) {
+  const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
+  const runner = await createWaffleRunner({ modulePath, fixtureDirectory: directory, utilityDirectory: directory, tmp: "/tmp/echo", env: { PATH: "/usr/bin:/bin", HOME: "/tmp/echo", TMP: "/tmp/echo", LC_ALL: "C", LANG: "C" } });
+  const counts = { MATCH: 0, MISMATCH: 0 };
+  const mismatches = [];
+  const results = [];
+  for (const [index, item] of cases().entries()) {
+    if (options.interrupted) throw new Error("interrupted");
+    const bash = recorded ? decode(recorded[index].bash) : await run("/usr/bin/bash", item.script, options);
+    assert.ok(healthy(bash), item.id);
+    const actual = await runner(item.script);
+    const candidate = { ...actual, status: actual.status ?? null, signal: null, timedOut: false, error: actual.crash ?? null };
+    const outcome = matches(bash, candidate) ? "MATCH" : "MISMATCH";
+    counts[outcome]++;
+    results.push({ case: item, bash: encode(bash) });
+    if (outcome === "MISMATCH") mismatches.push({ case: item, bash: encode(bash), candidate: encode(candidate) });
+  }
+  return { total: cases().length, counts, mismatches, results };
+}
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
+  await main();

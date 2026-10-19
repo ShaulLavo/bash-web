@@ -4150,3 +4150,6 @@ mod functions;
 mod path;
 #[path = "words/printf.rs"]
 mod printf;
+
+#[path = "words/echo.rs"]
+mod echo;
