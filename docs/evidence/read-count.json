@@ -1,0 +1,151 @@
+{
+  "schema": 1,
+  "date": "2026-10-19",
+  "classification": "Original local implementation, regression controls and measurements. GNU Bash is the behavior oracle; no upstream implementation copied.",
+  "baseRevision": "1bdbacd6c11ca7be31a55a2b3964239eabf10482",
+  "model": "gpt-6.1-sol",
+  "routing": "cli-proxy",
+  "executionHost": "pc, canonical shared heavy queue; Cargo -j2; full frozen replay one worker in suite memory class",
+  "tools": {
+    "bash": "5.3.15(1)-release",
+    "bashSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+    "node": "26.7.0",
+    "rust": "1.98.1",
+    "wasmtime": "49.0.3",
+    "wasiSdk": "34.0",
+    "waffleRevision": "33ece68f9f484d99b8a57a675de71d847e248051"
+  },
+  "sourceSha256": {
+    "shell/engine/src/builtins.rs": "5333f72917190b76b400d9da5c964c7dece4033273b4f98b02a1cbd0f2783f07",
+    "shell/engine/src/builtins/read.rs": "048a821f8aa5fbe2d1190872310f73b30ad14e399b33bf43adb4c349d51f20f3",
+    "shell/engine/src/builtins/printf.rs": "d4f45f35986e1bc318815ae3f6fbaa82d9a71c34705f693698b12b57c9d5da8b",
+    "shell/engine/src/interpreter.rs": "262afc595ee3112ab37465227a0ff4b21174f320a9b1fe818ccd6d18e5f639ff",
+    "shell/engine/tests/words/read_count.rs": "c699230874325a425abff54635cbfa95c56bd337711ac80d32b2b833fbb48191",
+    "tests/external-commands.spec.ts": "3bef32f251d6c2900a6740bd68bbb1fbdba1a9686abd284ab54eef2100d40d36"
+  },
+  "artifactSha256": {
+    "release/shell-cli": "1da771e1bc2ce4e91378986543bfa85c4c9762608b6f6efe302edac2492b9bcf",
+    "wasm32-wasip1/release/shell-cli.wasm": "fcd6c99853e1fe0a785a6e02bf3c4c9a8c499911cb70dab58a33e0e33e3704f4",
+    "wasm32-wasip1/release/shell-runtime.wasm": "9157817fb583cef5afa6f72fdc94acdf9365ad6c0fc2b52d7c21fc8118d5ecc0"
+  },
+  "failingFirst": {
+    "native": {
+      "total": 124,
+      "matched": 0
+    },
+    "realWaffle": {
+      "total": 124,
+      "matched": 0
+    },
+    "nativeRegressions": "Seven tests failed on actual base, then passed after implementation. Syntax-only setup failure is not counted."
+  },
+  "final": {
+    "native": {
+      "total": 124,
+      "stdoutAndStatusMatches": 124,
+      "allStreamsAndStatusMatches": 123
+    },
+    "realWaffle": {
+      "total": 124,
+      "stdoutAndStatusMatches": 124,
+      "allStreamsAndStatusMatches": 123
+    },
+    "diagnosticsBoundary": "The sole focused stderr mismatch is the closed-fd negative control. Invalid-count controls deliberately suppress diagnostics in both shells. Frozen scoring remains exact stdout and status, not stderr.",
+    "nativeTests": 1178,
+    "wasiTests": 1158,
+    "browser": {
+      "passed": 228,
+      "preexistingSkipped": 16,
+      "projects": [
+        "chromium",
+        "firefox"
+      ]
+    },
+    "seededFuzz": "All twelve existing CI native replay families passed unchanged; echo also passed 492/492 on real Waffle. No fixture or timeout changes.",
+    "quality": "Full npm run quality passed, including clippy test targets. Two duplicated new test fragments were extracted; duplicate allowances are unchanged.",
+    "layers": "Zero production and test-only violations; exact immutable base enforced."
+  },
+  "frozenIdentity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "frozenDelta": {
+    "ok": true,
+    "corpora": {
+      "oils": {
+        "before": 967,
+        "after": 972,
+        "gained": [
+          "oils:builtin-read:213",
+          "oils:builtin-read:220",
+          "oils:builtin-read:736",
+          "oils:builtin-read:748",
+          "oils:builtin-read:794"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "brush-suite": {
+        "before": 958,
+        "after": 961,
+        "gained": [
+          "brush-suite:builtins/read:31",
+          "brush-suite:builtins/read:52",
+          "brush-suite:builtins/read:53"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "bashkit-suite": {
+        "before": 1357,
+        "after": 1361,
+        "gained": [
+          "bashkit-suite:blackbox-edge-cases:93",
+          "bashkit-suite:builtin-validation:57",
+          "bashkit-suite:builtin-validation:64",
+          "bashkit-suite:read-builtin:93"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      }
+    }
+  },
+  "frozenProof": {
+    "records": 9221,
+    "scored": 5792,
+    "gained": 12,
+    "lost": 0,
+    "unchangedOtherBaselineRecords": 9209,
+    "gate": "RECORD=0; exact base; unchanged oracle/environment/source/classification/exclusions/scoring/per-case deadlines; full original-pass and exact candidate-pass membership checks passed."
+  },
+  "resourceControls": "One-byte cancellable reads with work checkpoints; incremental four-byte UTF-8 validation; line/count cap; command storage and shared live execution admission before reading; ticket retained through final atomic assignment; cancellation and failure refund it. No read-ahead or fd metadata probes.",
+  "initialFailures": [
+    "First full measurement with four workers under 4GiB was killed with status 137 after 500 cases. No score produced. Owned descendants/scratch removed; unchanged replay passed with one worker in suite class.",
+    "Quality rejected two new test duplicates. Extracted shared assertions/setup without changing allowances; full quality then passed."
+  ],
+  "deferred": [
+    "Uncounted escape behavior and splitting",
+    "Multiple destinations, arrays and other read modes",
+    "Terminal editing and timeouts",
+    "Non-UTF-8 locale encodings and malformed/unrepresentable scalar bytes",
+    "Bash-formatted descriptor/invalid-number diagnostics"
+  ],
+  "reportDirectory": "/work/reports/bash-web/hill-climb/read-count",
+  "commands": [
+    "cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast",
+    "npm run test:shell:wasi",
+    "node /work/reports/bash-web/hill-climb/read-count/probe.ts native native-after.json",
+    "node /work/reports/bash-web/hill-climb/read-count/probe.ts waffle waffle-after.json",
+    "BASH_COMPAT_RECORD=0 BASH_COMPAT_JOBS=1 BASH_COMPAT_SKIP_BUILD=1 BASH_COMPAT_BASE_REF=1bdbacd6c11ca7be31a55a2b3964239eabf10482 npm run compat:shell",
+    "node /work/reports/bash-web/hill-climb/read-count/verify-final.ts",
+    "bash /work/reports/bash-web/hill-climb/read-count/run-fuzz-gates.sh",
+    "npm run check:capabilities && npm run test:guest-build && npm run typecheck:guest-build && npm run test:shell:scoreboard",
+    "npm run quality",
+    "npm run test:check-layers && LAYERS_BASE_REF=1bdbacd6c11ca7be31a55a2b3964239eabf10482 npm run check:layers && npm run typecheck:layers",
+    "npm run build:browser && npm run typecheck:browser && npm run test:runtime:terminal",
+    "BASH_WEB_TEST_PORT=4297 npm run test:browser"
+  ]
+}

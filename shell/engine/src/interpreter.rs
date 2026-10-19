@@ -287,6 +287,12 @@ impl Context {
     pub(crate) fn limits(&self) -> &Limits {
         &self.core.limits
     }
+    pub(crate) fn admit_builtin_buffer(
+        &self,
+        bytes: usize,
+    ) -> Result<crate::exec::Allocation, i32> {
+        self.evaluation.admit_execution(bytes)
+    }
     fn parser_budget(&self) -> shell_parser::limits::ExecutionBudget {
         let core = self.core.clone();
         let cancel = self.cancel.clone();
@@ -3717,6 +3723,40 @@ mod scope_tests {
             }
         }
         panic!("arithmetic replay exceeded bounded polls");
+    }
+
+    #[test]
+    fn counted_read_retains_and_refunds_its_buffer_on_pending_cancellation() {
+        let (state, _fds, context) = replay_context();
+        let limit = context.limits().execution_bytes;
+        let (reader, writer) = io::pipe();
+        let mut fds = FdTable::default();
+        fds.insert(0, reader);
+        let mut work = expand::Work::new(1_000_000, 1_000_000, 16);
+        let mut future = Box::pin(builtins::run(
+            commands::Builtin::Read,
+            "read",
+            vec!["-n2147483647".into(), "value".into()],
+            state.clone(),
+            fds,
+            context.clone(),
+            &mut work,
+        ));
+        for _ in 0..1000 {
+            assert!(future.as_mut().now_or_never().is_none());
+        }
+        assert!(
+            state
+                .borrow()
+                .admit_temporary(limit - context.limits().line_bytes + 1)
+                .is_err()
+        );
+        context.cancel.cancel();
+        assert!(matches!(future.as_mut().now_or_never(), Some(Err(130))));
+        drop(future);
+        drop(state.borrow().admit_temporary(limit).unwrap());
+        assert!(!state.borrow().bindings().contains_key("value"));
+        drop(writer);
     }
 
     #[test]

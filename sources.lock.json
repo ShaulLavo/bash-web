@@ -1570,5 +1570,20 @@
       "reason": "Original bounded echo case matrix reuses local escape inputs, raw process observations, strict result-byte validation, and real Waffle execution. No external upstream implementation copied or adapted."
     },
     "deferred": "xpg_echo, POSIX echo mode and non-UTF-8 locale encodings remain unsupported; no shopt/set subsystem added."
+  },
+  "shellReadCount": {
+    "classification": "Original local counted scalar read implementation and controls; GNU Bash 5.3.15 is a behavior oracle. No upstream implementation copied or adapted.",
+    "baseRevision": "1bdbacd6c11ca7be31a55a2b3964239eabf10482",
+    "paths": [
+      "shell/engine/src/builtins/read.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/printf.rs",
+      "shell/engine/src/interpreter.rs",
+      "shell/engine/tests/words/read_count.rs",
+      "tests/external-commands.spec.ts"
+    ],
+    "implementation": "Original incremental counted input with one-byte reads, bounded UTF-8 validation, escape/continuation processing, NUL skipping, scalar IFS-whitespace trimming, count validation and exact-boundary stopping. Reuses the existing local locale selector and state/endpoint/work admission. Shared live buffer admission remains retained through assignment; cancellation and errors drop it. Uncounted line-reader implementation is moved unchanged from the exact base.",
+    "deferred": "Uncounted escapes and splitting, multiple destinations, arrays, -N/-d, terminal/editor/timeouts, other locale encodings and malformed UTF-8 scalar representation. No runtime metadata or permissions changes.",
+    "gate": "Failing-first original Rust controls, exact raw stdout and status differentials on native shell-cli and production shell-runtime on real Waffle, native/WASI suites, browser external-guest pipe, unchanged frozen 9221-record oracle and zero-lost membership comparison."
   }
 }
