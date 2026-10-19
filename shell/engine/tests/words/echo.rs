@@ -1,13 +1,9 @@
 //! Original byte-exact controls for Bash's default echo mode.
+use super::printf::{
+    assert_recovery, check_bytes as check, check_chunks, interrupt_delivery, interrupt_empty,
+    recorded_endpoint, replace_output,
+};
 use super::*;
-use shell_engine::io::pipe;
-
-fn check(source: &str, expected: &[u8]) {
-    let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run(source), 0, "{source}");
-    assert_eq!(rig.output.bytes(), expected, "{source}");
-    assert!(rig.errors.bytes().is_empty(), "{source}");
-}
 
 #[test]
 fn echo_option_prefix_is_all_or_nothing_and_last_escape_flag_wins() {
@@ -84,38 +80,64 @@ fn echo_admission_rejects_before_output_and_recovers() {
         ..Limits::default()
     });
     rig.variable("payload", &"x".repeat(1024));
-    assert_eq!(rig.run("echo \"$payload\""), 2);
-    assert!(rig.output.bytes().is_empty());
-    assert_eq!(rig.run("echo recovered"), 0);
-    assert_eq!(rig.output.bytes(), b"recovered\n");
+    assert_recovery(&rig, "echo \"$payload\"", 2);
 }
 
 #[test]
 fn echo_delivery_cancellation_and_epipe_do_not_leak_state() {
     let rig = Rig::new(Limits::default());
-    let (reader, writer) = pipe();
-    let mut fds = FdTable::default();
-    fds.insert(0, Endpoint::null());
-    fds.insert(1, writer);
-    fds.insert(2, Endpoint::null());
-    rig.shell.set_descriptors(fds).unwrap();
-    let job = rig
-        .shell
-        .start(&format!("echo -ne '{}'; echo bad", r"\0377".repeat(12_000)))
-        .unwrap();
-    let mut first = [0; 1];
-    for _ in 0..100_000 {
-        rig.ex.drive(1);
-        if reader.read(&mut first).now_or_never() == Some(Ok(1)) {
-            break;
-        }
-    }
-    assert_eq!(first, [0xff]);
-    assert!(!job.is_finished());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert_eq!(rig.run("true"), 0);
+    let reader = interrupt_delivery(
+        &rig,
+        &format!("echo -ne '{}'; echo bad", r"\0377".repeat(12_000)),
+    );
     drop(reader);
     assert_eq!(rig.run("echo -e broken"), 141);
     assert_eq!(rig.run("true"), 0);
+}
+
+#[test]
+fn echo_small_invocations_are_single_writes_and_large_output_is_chunked() {
+    let rig = Rig::new(Limits::default());
+    let (output, records) = recorded_endpoint();
+    replace_output(&rig, output);
+    assert_eq!(rig.run(r"echo -e 'x\0y' z"), 0);
+    assert_eq!(*records.borrow(), vec![b"x\0y z\n".to_vec()]);
+    for (length, expected) in [
+        (4095, vec![4096]),
+        (4096, vec![4096, 1]),
+        (4097, vec![4096, 2]),
+    ] {
+        check_chunks(
+            &rig,
+            &records,
+            &format!("echo '{}'", "x".repeat(length)),
+            &expected,
+        );
+    }
+}
+
+#[test]
+fn echo_cancellation_during_work_admission_preserves_empty_output() {
+    let rig = Rig::new(Limits::default());
+    rig.variable("payload", &r"\0377".repeat(12_000));
+    let job = rig
+        .shell
+        .start("started=yes; echo -ne \"$payload\"; echo bad")
+        .unwrap();
+    rig.drive_until_variable("started", "yes");
+    for _ in 0..100 {
+        rig.ex.drive(1);
+    }
+    interrupt_empty(&rig, job);
+}
+
+#[test]
+fn echo_capture_cap_keeps_only_delivered_prefix_and_recovers() {
+    let rig = Rig::new(Limits::default());
+    rig.variable("payload", &"x".repeat(70_000));
+    assert_eq!(rig.run("echo -n \"$payload\""), 1);
+    assert_eq!(rig.output.bytes(), vec![b'x'; 64 * 1024]);
+    let (fresh, _) = capture(64);
+    replace_output(&rig, fresh);
+    assert_eq!(rig.run("echo recovered"), 0);
 }

@@ -1544,5 +1544,31 @@
       ],
       "reason": "Reuse owned deterministic record/replay, process-group supervision, CLI and fixture identity scaffolding; new grammar, manifest validators, fixture programs and observations are original. No external upstream implementation copied or adapted."
     }
+  },
+  "shellEcho": {
+    "classification": "Original local default-Bash echo options and raw-byte escape adapter; GNU Bash 5.3.15 is a behavior oracle, not copied implementation.",
+    "baseRevision": "dfbf44038ad43602f0e7c381b832fd9e984b577c",
+    "paths": [
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/printf.rs",
+      "shell/engine/tests/words/echo.rs",
+      "shell/engine/tests/words/printf.rs",
+      "scripts/fuzz-shell-echo.ts",
+      "scripts/test-fuzz-shell-echo.ts",
+      "scripts/fixtures/shell-echo.json",
+      "tests/external-commands.spec.ts"
+    ],
+    "implementation": "Reuse the existing original printf fixed-byte printer and locale decoder with a distinct Echo mode. Preserve zero-prefixed octal, silent incomplete hex/Unicode, last -e/-E and command-wide \\c. Work preflight, bounded delivery, cancellation, EPIPE, shared memory refund and small-write coalescing keep their existing owners. No Bashkit buffering implementation or other upstream code copied or adapted.",
+    "gate": "492 deterministic GNU Bash 5.3.15 observations, exact status and raw stdout, no unsupported class or exclusions. Native shell-cli and the production shell-runtime guest on real Waffle replay the same fixture. The frozen 9,221-record oracle, environment, membership and scoring are unchanged; only measured gained baseline outcomes change.",
+    "localHarnessProvenance": {
+      "importedUnchanged": [
+        "scripts/fuzz-shell-printf.ts",
+        "scripts/fuzz-shell-control-flow.mjs",
+        "scripts/fuzz-shell-results.ts",
+        "scripts/waffle-compat.ts"
+      ],
+      "reason": "Original bounded echo case matrix reuses local escape inputs, raw process observations, strict result-byte validation, and real Waffle execution. No external upstream implementation copied or adapted."
+    },
+    "deferred": "xpg_echo, POSIX echo mode and non-UTF-8 locale encodings remain unsupported; no shopt/set subsystem added."
   }
 }

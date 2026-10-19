@@ -25,7 +25,7 @@ impl HostEndpoint for RecordedEndpoint {
     }
 }
 
-fn recorded_endpoint() -> (Endpoint, Rc<RefCell<Vec<Vec<u8>>>>) {
+pub(super) fn recorded_endpoint() -> (Endpoint, Rc<RefCell<Vec<Vec<u8>>>>) {
     let records = Rc::new(RefCell::new(Vec::new()));
     (
         Endpoint::host(Rc::new(RecordedEndpoint(records.clone()))),
@@ -33,11 +33,72 @@ fn recorded_endpoint() -> (Endpoint, Rc<RefCell<Vec<Vec<u8>>>>) {
     )
 }
 
+pub(super) fn replace_output(rig: &Rig, output: Endpoint) {
+    let mut fds = FdTable::default();
+    fds.insert(0, Endpoint::null());
+    fds.insert(1, output);
+    fds.insert(2, Endpoint::null());
+    rig.shell.set_descriptors(fds).unwrap();
+}
+
+pub(super) fn assert_recovery(rig: &Rig, source: &str, status: i32) {
+    assert_eq!(rig.run(source), status);
+    assert!(rig.output.bytes().is_empty());
+    check_recovery(rig);
+}
+
+pub(super) fn check_recovery(rig: &Rig) {
+    assert_eq!(rig.run("echo recovered"), 0);
+    assert_eq!(rig.output.bytes(), b"recovered\n");
+}
+
+pub(super) fn interrupt_empty(rig: &Rig, job: JoinHandle<i32>) {
+    assert!(!job.is_finished());
+    assert!(rig.output.bytes().is_empty());
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    assert!(rig.output.bytes().is_empty());
+    check_recovery(rig);
+}
+
+pub(super) fn interrupt_delivery(rig: &Rig, source: &str) -> Endpoint {
+    let (reader, writer) = pipe();
+    replace_output(rig, writer);
+    let job = rig.shell.start(source).unwrap();
+    let mut first = [0; 1];
+    for _ in 0..100_000 {
+        rig.ex.drive(1);
+        if reader.read(&mut first).now_or_never() == Some(Ok(1)) {
+            break;
+        }
+    }
+    assert_eq!(first, [0xff]);
+    assert!(!job.is_finished());
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    assert_eq!(rig.run("true"), 0);
+    reader
+}
+
+pub(super) fn check_chunks(
+    rig: &Rig,
+    records: &Rc<RefCell<Vec<Vec<u8>>>>,
+    source: &str,
+    lengths: &[usize],
+) {
+    records.borrow_mut().clear();
+    assert_eq!(rig.run(source), 0);
+    assert_eq!(
+        records.borrow().iter().map(Vec::len).collect::<Vec<_>>(),
+        lengths
+    );
+}
+
 fn quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
-fn check_bytes(source: &str, expected: &[u8]) {
+pub(super) fn check_bytes(source: &str, expected: &[u8]) {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run(source), 0, "{source}");
     assert_eq!(rig.output.bytes(), expected, "{source}");
@@ -147,10 +208,7 @@ fn printf_repeated_output_is_admitted_before_writing_and_session_recovers() {
         ..Limits::default()
     });
     let source = format!("printf '{}%s' a b c d", "x".repeat(300));
-    assert_eq!(rig.run(&source), 2);
-    assert!(rig.output.bytes().is_empty());
-    assert_eq!(rig.run("echo recovered"), 0);
-    assert_eq!(rig.output.bytes(), b"recovered\n");
+    assert_recovery(&rig, &source, 2);
 }
 
 #[test]
@@ -168,13 +226,7 @@ fn printf_cancellation_during_admission_outputs_no_fabricated_success() {
     for _ in 0..500 {
         rig.ex.drive(1);
     }
-    assert!(!job.is_finished());
-    assert!(rig.output.bytes().is_empty());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert!(rig.output.bytes().is_empty());
-    assert_eq!(rig.run("echo recovered"), 0);
-    assert_eq!(rig.output.bytes(), b"recovered\n");
+    interrupt_empty(&rig, job);
 }
 
 #[test]
@@ -296,32 +348,10 @@ fn printf_large_binary_payload_stays_bounded_and_byte_exact() {
 #[test]
 fn printf_delivery_cancellation_preserves_only_real_streamed_prefix() {
     let rig = Rig::new(Limits::default());
-    let (reader, writer) = shell_engine::io::pipe();
-    let (errors, _) = capture(4096);
-    let mut fds = FdTable::default();
-    fds.insert(0, Endpoint::null());
-    fds.insert(1, writer);
-    fds.insert(2, errors);
-    rig.shell.set_descriptors(fds).unwrap();
-    let job = rig
-        .shell
-        .start(&format!(
-            "printf '%b' '{}'; echo bad",
-            r"\377".repeat(12_000)
-        ))
-        .unwrap();
-    let mut first = [0; 1];
-    for _ in 0..100_000 {
-        rig.ex.drive(1);
-        if reader.read(&mut first).now_or_never() == Some(Ok(1)) {
-            break;
-        }
-    }
-    assert_eq!(first, [0xff]);
-    assert!(!job.is_finished());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert_eq!(rig.run("true"), 0);
+    interrupt_delivery(
+        &rig,
+        &format!("printf '%b' '{}'; echo bad", r"\377".repeat(12_000)),
+    );
 }
 
 #[test]

@@ -1,0 +1,7387 @@
+{
+  "schema": 1,
+  "sourceHash": "6676764c84da24fbb2e15e5ace5689484cb0a4124b1a921e7128100213cfc780",
+  "bash": "5.3.15(1)-release",
+  "cases": [
+    {
+      "case": {
+        "id": "echo-0",
+        "family": "options",
+        "script": "echo  "
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-1",
+        "family": "options",
+        "script": "echo  ''"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-2",
+        "family": "options",
+        "script": "echo  '' '' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWlsCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-3",
+        "family": "options",
+        "script": "echo  'a\\nb' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVxuYiB0YWlsCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-4",
+        "family": "options",
+        "script": "echo  'a\\cb' later"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVxjYiBsYXRlcgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-5",
+        "family": "options",
+        "script": "echo -n "
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-6",
+        "family": "options",
+        "script": "echo -n ''"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-7",
+        "family": "options",
+        "script": "echo -n '' '' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-8",
+        "family": "options",
+        "script": "echo -n 'a\\nb' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVxuYiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-9",
+        "family": "options",
+        "script": "echo -n 'a\\cb' later"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVxjYiBsYXRlcg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-10",
+        "family": "options",
+        "script": "echo -e "
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-11",
+        "family": "options",
+        "script": "echo -e ''"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-12",
+        "family": "options",
+        "script": "echo -e '' '' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWlsCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-13",
+        "family": "options",
+        "script": "echo -e 'a\\nb' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YQpiIHRhaWwK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-14",
+        "family": "options",
+        "script": "echo -e 'a\\cb' later"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YQ==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-15",
+        "family": "options",
+        "script": "echo -E "
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-16",
+        "family": "options",
+        "script": "echo -E ''"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-17",
+        "family": "options",
+        "script": "echo -E '' '' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWlsCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-18",
+        "family": "options",
+        "script": "echo -E 'a\\nb' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVxuYiB0YWlsCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-19",
+        "family": "options",
+        "script": "echo -E 'a\\cb' later"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVxjYiBsYXRlcgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-20",
+        "family": "options",
+        "script": "echo -ne "
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-21",
+        "family": "options",
+        "script": "echo -ne ''"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-22",
+        "family": "options",
+        "script": "echo -ne '' '' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-23",
+        "family": "options",
+        "script": "echo -ne 'a\\nb' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YQpiIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-24",
+        "family": "options",
+        "script": "echo -ne 'a\\cb' later"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YQ==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-25",
+        "family": "options",
+        "script": "echo -en "
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-26",
+        "family": "options",
+        "script": "echo -en ''"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-27",
+        "family": "options",
+        "script": "echo -en '' '' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-28",
+        "family": "options",
+        "script": "echo -en 'a\\nb' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YQpiIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-29",
+        "family": "options",
+        "script": "echo -en 'a\\cb' later"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YQ==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-30",
+        "family": "options",
+        "script": "echo -nE "
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-31",
+        "family": "options",
+        "script": "echo -nE ''"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-32",
+        "family": "options",
+        "script": "echo -nE '' '' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-33",
+        "family": "options",
+        "script": "echo -nE 'a\\nb' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVxuYiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-34",
+        "family": "options",
+        "script": "echo -nE 'a\\cb' later"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVxjYiBsYXRlcg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-35",
+        "family": "options",
+        "script": "echo -Een "
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-36",
+        "family": "options",
+        "script": "echo -Een ''"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-37",
+        "family": "options",
+        "script": "echo -Een '' '' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-38",
+        "family": "options",
+        "script": "echo -Een 'a\\nb' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YQpiIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-39",
+        "family": "options",
+        "script": "echo -Een 'a\\cb' later"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YQ==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-40",
+        "family": "options",
+        "script": "echo -eEn "
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-41",
+        "family": "options",
+        "script": "echo -eEn ''"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-42",
+        "family": "options",
+        "script": "echo -eEn '' '' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-43",
+        "family": "options",
+        "script": "echo -eEn 'a\\nb' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVxuYiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-44",
+        "family": "options",
+        "script": "echo -eEn 'a\\cb' later"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVxjYiBsYXRlcg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-45",
+        "family": "options",
+        "script": "echo -neE "
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-46",
+        "family": "options",
+        "script": "echo -neE ''"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-47",
+        "family": "options",
+        "script": "echo -neE '' '' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-48",
+        "family": "options",
+        "script": "echo -neE 'a\\nb' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVxuYiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-49",
+        "family": "options",
+        "script": "echo -neE 'a\\cb' later"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVxjYiBsYXRlcg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-50",
+        "family": "options",
+        "script": "echo -n -e "
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-51",
+        "family": "options",
+        "script": "echo -n -e ''"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-52",
+        "family": "options",
+        "script": "echo -n -e '' '' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-53",
+        "family": "options",
+        "script": "echo -n -e 'a\\nb' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YQpiIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-54",
+        "family": "options",
+        "script": "echo -n -e 'a\\cb' later"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YQ==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-55",
+        "family": "options",
+        "script": "echo -e -E "
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-56",
+        "family": "options",
+        "script": "echo -e -E ''"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-57",
+        "family": "options",
+        "script": "echo -e -E '' '' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWlsCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-58",
+        "family": "options",
+        "script": "echo -e -E 'a\\nb' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVxuYiB0YWlsCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-59",
+        "family": "options",
+        "script": "echo -e -E 'a\\cb' later"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVxjYiBsYXRlcgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-60",
+        "family": "options",
+        "script": "echo -E -e "
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-61",
+        "family": "options",
+        "script": "echo -E -e ''"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Cg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-62",
+        "family": "options",
+        "script": "echo -E -e '' '' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWlsCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-63",
+        "family": "options",
+        "script": "echo -E -e 'a\\nb' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YQpiIHRhaWwK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-64",
+        "family": "options",
+        "script": "echo -E -e 'a\\cb' later"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YQ==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-65",
+        "family": "options",
+        "script": "echo -n -n "
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-66",
+        "family": "options",
+        "script": "echo -n -n ''"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-67",
+        "family": "options",
+        "script": "echo -n -n '' '' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-68",
+        "family": "options",
+        "script": "echo -n -n 'a\\nb' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVxuYiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-69",
+        "family": "options",
+        "script": "echo -n -n 'a\\cb' later"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVxjYiBsYXRlcg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-70",
+        "family": "options",
+        "script": "echo -e -n -E -e "
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-71",
+        "family": "options",
+        "script": "echo -e -n -E -e ''"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-72",
+        "family": "options",
+        "script": "echo -e -n -E -e '' '' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-73",
+        "family": "options",
+        "script": "echo -e -n -E -e 'a\\nb' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YQpiIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-74",
+        "family": "options",
+        "script": "echo -e -n -E -e 'a\\cb' later"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YQ==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-75",
+        "family": "option-end",
+        "script": "echo  '-' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LSAtbiAtZSBhXG5iCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-76",
+        "family": "option-end",
+        "script": "echo -e '-' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LSAtbiAtZSBhCmIK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-77",
+        "family": "option-end",
+        "script": "echo -n '-' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LSAtbiAtZSBhXG5i",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-78",
+        "family": "option-end",
+        "script": "echo  '--' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LS0gLW4gLWUgYVxuYgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-79",
+        "family": "option-end",
+        "script": "echo -e '--' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LS0gLW4gLWUgYQpiCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-80",
+        "family": "option-end",
+        "script": "echo -n '--' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LS0gLW4gLWUgYVxuYg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-81",
+        "family": "option-end",
+        "script": "echo  '-z' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LXogLW4gLWUgYVxuYgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-82",
+        "family": "option-end",
+        "script": "echo -e '-z' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LXogLW4gLWUgYQpiCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-83",
+        "family": "option-end",
+        "script": "echo -n '-z' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LXogLW4gLWUgYVxuYg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-84",
+        "family": "option-end",
+        "script": "echo  '-neZ' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LW5lWiAtbiAtZSBhXG5iCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-85",
+        "family": "option-end",
+        "script": "echo -e '-neZ' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LW5lWiAtbiAtZSBhCmIK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-86",
+        "family": "option-end",
+        "script": "echo -n '-neZ' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LW5lWiAtbiAtZSBhXG5i",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-87",
+        "family": "option-end",
+        "script": "echo  '-eZ' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LWVaIC1uIC1lIGFcbmIK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-88",
+        "family": "option-end",
+        "script": "echo -e '-eZ' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LWVaIC1uIC1lIGEKYgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-89",
+        "family": "option-end",
+        "script": "echo -n '-eZ' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LWVaIC1uIC1lIGFcbmI=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-90",
+        "family": "option-end",
+        "script": "echo  '-e-' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LWUtIC1uIC1lIGFcbmIK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-91",
+        "family": "option-end",
+        "script": "echo -e '-e-' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LWUtIC1uIC1lIGEKYgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-92",
+        "family": "option-end",
+        "script": "echo -n '-e-' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LWUtIC1uIC1lIGFcbmI=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-93",
+        "family": "option-end",
+        "script": "echo  '-n=' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LW49IC1uIC1lIGFcbmIK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-94",
+        "family": "option-end",
+        "script": "echo -e '-n=' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LW49IC1uIC1lIGEKYgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-95",
+        "family": "option-end",
+        "script": "echo -n '-n=' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LW49IC1uIC1lIGFcbmI=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-96",
+        "family": "option-end",
+        "script": "echo  'ordinary' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "b3JkaW5hcnkgLW4gLWUgYVxuYgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-97",
+        "family": "option-end",
+        "script": "echo -e 'ordinary' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "b3JkaW5hcnkgLW4gLWUgYQpiCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-98",
+        "family": "option-end",
+        "script": "echo -n 'ordinary' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "b3JkaW5hcnkgLW4gLWUgYVxuYg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-99",
+        "family": "option-end",
+        "script": "echo  '' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "IC1uIC1lIGFcbmIK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-100",
+        "family": "option-end",
+        "script": "echo -e '' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "IC1uIC1lIGEKYgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-101",
+        "family": "option-end",
+        "script": "echo -n '' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "IC1uIC1lIGFcbmI=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-102",
+        "family": "option-end",
+        "script": "echo  '-é' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LcOpIC1uIC1lIGFcbmIK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-103",
+        "family": "option-end",
+        "script": "echo -e '-é' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LcOpIC1uIC1lIGEKYgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-104",
+        "family": "option-end",
+        "script": "echo -n '-é' -n -e 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "LcOpIC1uIC1lIGFcbmI=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-105",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\a' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ByB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-106",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\a' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ByB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-107",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\b' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "CCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-108",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\b' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "CCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-109",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\e' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "GyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-110",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\e' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "GyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-111",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\E' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "GyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-112",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\E' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "GyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-113",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\f' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "DCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-114",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\f' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "DCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-115",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\n' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "CiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-116",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\n' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "CiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-117",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\r' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "DSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-118",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\r' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "DSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-119",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\t' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "CSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-120",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\t' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "CSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-121",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\v' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "CyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-122",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\v' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "CyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-123",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\\\' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-124",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\\\' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-125",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\c' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-126",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\c' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-127",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\0' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-128",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\0' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-129",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\00' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-130",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\00' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-131",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-132",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-133",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\0000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-134",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\0000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-135",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\001' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ASB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-136",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\001' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ASB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-137",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\007' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ByB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-138",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\007' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ByB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-139",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\033' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "GyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-140",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\033' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "GyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-141",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\077' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "PyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-142",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\077' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "PyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-143",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\100' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDEwMCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-144",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\100' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDEwMCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-145",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\177' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDE3NyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-146",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\177' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDE3NyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-147",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\200' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDIwMCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-148",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\200' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDIwMCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-149",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\377' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDM3NyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-150",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\377' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDM3NyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-151",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\400' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDQwMCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-152",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\400' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDQwMCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-153",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\777' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDc3NyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-154",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\777' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDc3NyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-155",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\0123' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "UyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-156",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\0123' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "UyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-157",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\0777' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/yB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-158",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\0777' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/yB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-159",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\00000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ADAgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-160",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\00000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ADAgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-161",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDEgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-162",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDEgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-163",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\12' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDEyIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-164",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\12' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDEyIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-165",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\123' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDEyMyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-166",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\123' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDEyMyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-167",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\1234' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDEyMzQgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-168",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\1234' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDEyMzQgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-169",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\08' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ADggdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-170",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\08' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ADggdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-171",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\078' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "BzggdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-172",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\078' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "BzggdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-173",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHggdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-174",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHggdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-175",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x0' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-176",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x0' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-177",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x00' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-178",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x00' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-179",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x1b' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "GyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-180",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x1b' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "GyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-181",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x7F' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "fyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-182",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x7F' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "fyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-183",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x80' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "gCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-184",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x80' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "gCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-185",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\xff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/yB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-186",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\xff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/yB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-187",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x100' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "EDAgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-188",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x100' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "EDAgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-189",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\xg1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHhnMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-190",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\xg1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHhnMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-191",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x1g' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "AWcgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-192",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x1g' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "AWcgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-193",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\q' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHEgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-194",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\q' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHEgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-195",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\\"' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XCIgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-196",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\\"' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XCIgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-197",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\'\\''' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XCcgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-198",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\'\\''' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XCcgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-199",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\?' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XD8gdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-200",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\?' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XD8gdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-201",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u0041' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "QSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-202",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u0041' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "QSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-203",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U00000041' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "QSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-204",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U00000041' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "QSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-205",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-206",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-207",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\01' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ASB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-208",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\01' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ASB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-209",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\07' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ByB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-210",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\07' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ByB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-211",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\010' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "CCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-212",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\010' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "CCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-213",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\037' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "HyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-214",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\037' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "HyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-215",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\040' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-216",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\040' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ICB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-217",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\0177' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "fyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-218",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\0177' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "fyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-219",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\0200' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "gCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-220",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\0200' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "gCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-221",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\0377' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/yB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-222",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\0377' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/yB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-223",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\0400' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-224",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\0400' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-225",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\01000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "QDAgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-226",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\01000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "QDAgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-227",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\07777' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/zcgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-228",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\07777' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/zcgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-229",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\0000008' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ADAwOCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-230",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\0000008' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ADAwOCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-231",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\123456' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDEyMzQ1NiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-232",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\123456' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDEyMzQ1NiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-233",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\7777' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDc3NzcgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-234",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\7777' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDc3NzcgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-235",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\8' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDggdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-236",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\8' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDggdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-237",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\9' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDkgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-238",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\9' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDkgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-239",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\09' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ADkgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-240",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\09' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ADkgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-241",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\099' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ADk5IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-242",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\099' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ADk5IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-243",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\378' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDM3OCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-244",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\378' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDM3OCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-245",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\008' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ADggdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-246",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\008' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ADggdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-247",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\7777777777777777777777777777' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3NzcgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-248",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\7777777777777777777777777777' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3NzcgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-249",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ASB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-250",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ASB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-251",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\xF' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "DyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-252",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\xF' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "DyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-253",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\xFF' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/yB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-254",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\xFF' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/yB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-255",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ADAgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-256",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ADAgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-257",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x001' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ADEgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-258",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x001' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ADEgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-259",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x7ff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "f2YgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-260",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x7ff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "f2YgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-261",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\xffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/2ZmIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-262",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\xffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/2ZmIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-263",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\xfg' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "D2cgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-264",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\xfg' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "D2cgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-265",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\xG0' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHhHMCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-266",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\xG0' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHhHMCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-267",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x-1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHgtMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-268",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x-1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHgtMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-269",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x+1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHgrMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-270",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x+1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHgrMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-271",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x 1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHggMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-272",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x 1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHggMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-273",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x\\n' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHgKIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-274",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x\\n' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHgKIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-275",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x\\c' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHg=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-276",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x\\c' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHg=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-277",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x\\x41' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHhBIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-278",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x\\x41' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHhBIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-279",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-280",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-281",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\uQ' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVRIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-282",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\uQ' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVRIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-283",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ASB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-284",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ASB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-285",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u12' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "EiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-286",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u12' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "EiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-287",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u123' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUwMTIzIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-288",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u123' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "xKMgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-289",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u1234' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUxMjM0IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-290",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u1234' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "4Yi0IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-291",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u12345' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUxMjM0NSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-292",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u12345' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "4Yi0NSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-293",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u0000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-294",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u0000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-295",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u007f' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "fyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-296",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u007f' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "fyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-297",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u0080' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUwMDgwIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-298",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u0080' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "woAgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-299",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u07ff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUwN0ZGIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-300",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u07ff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "378gdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-301",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u0800' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUwODAwIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-302",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u0800' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "4KCAIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-303",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\ud7ff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVEN0ZGIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-304",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\ud7ff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "7Z+/IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-305",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\ud800' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVEODAwIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-306",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\ud800' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "7aCAIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-307",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\udbff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVEQkZGIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-308",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\udbff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "7a+/IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-309",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\udc00' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVEQzAwIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-310",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\udc00' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "7bCAIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-311",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\udfff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVERkZGIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-312",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\udfff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "7b+/IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-313",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\ue000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVFMDAwIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-314",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\ue000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "7oCAIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-315",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\uffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVGRkZGIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-316",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\uffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "77+/IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-317",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\uFFFF' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVGRkZGIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-318",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\uFFFF' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "77+/IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-319",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u-1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUtMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-320",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u-1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUtMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-321",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u+1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUrMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-322",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u+1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUrMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-323",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u 1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUgMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-324",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u 1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUgMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-325",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u12g4' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Emc0IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-326",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u12g4' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Emc0IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-327",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u\\n' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUKIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-328",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u\\n' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUKIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-329",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-330",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-331",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\UQ' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFVRIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-332",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\UQ' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFVRIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-333",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ASB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-334",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ASB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-335",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U12' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "EiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-336",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U12' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "EiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-337",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U123' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUwMTIzIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-338",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U123' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "xKMgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-339",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U1234' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUxMjM0IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-340",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U1234' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "4Yi0IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-341",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U12345' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwMDAxMjM0NSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-342",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U12345' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "8JKNhSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-343",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U123456' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwMDEyMzQ1NiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-344",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U123456' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "9KORliB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-345",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U1234567' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwMTIzNDU2NyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-346",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U1234567' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "+Yi0lacgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-347",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U12345678' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUxMjM0NTY3OCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-348",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U12345678' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/JKNhZm4IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-349",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U00000000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-350",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U00000000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-351",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U0000007f' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "fyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-352",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U0000007f' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "fyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-353",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U00000080' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUwMDgwIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-354",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U00000080' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "woAgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-355",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U000007ff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUwN0ZGIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-356",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U000007ff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "378gdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-357",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U00000800' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUwODAwIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-358",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U00000800' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "4KCAIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-359",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U0000ffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVGRkZGIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-360",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U0000ffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "77+/IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-361",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U0000d800' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVEODAwIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-362",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U0000d800' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "7aCAIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-363",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U0000dfff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVERkZGIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-364",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U0000dfff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "7b+/IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-365",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U00010000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwMDAxMDAwMCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-366",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U00010000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "8JCAgCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-367",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U0010ffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwMDEwRkZGRiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-368",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U0010ffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "9I+/vyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-369",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U00110000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwMDExMDAwMCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-370",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U00110000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "9JCAgCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-371",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U001fffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwMDFGRkZGRiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-372",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U001fffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "97+/vyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-373",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U00200000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwMDIwMDAwMCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-374",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U00200000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "+IiAgIAgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-375",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U03ffffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwM0ZGRkZGRiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-376",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U03ffffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "+7+/v78gdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-377",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U04000000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwNDAwMDAwMCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-378",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U04000000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/ISAgICAIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-379",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U7fffffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFU3RkZGRkZGRiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-380",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U7fffffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/b+/v7+/IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-381",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U80000000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-382",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U80000000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-383",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\Uffffffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-384",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\Uffffffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-385",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U100000000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUxMDAwMDAwMDAgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-386",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U100000000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/JCAgICAMCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-387",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\Ufffffffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-388",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\Ufffffffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-389",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U-1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUtMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-390",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U-1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUtMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-391",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U+1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUrMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-392",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U+1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUrMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-393",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U 1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUgMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-394",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U 1' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUgMSB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-395",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U1234567g' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwMTIzNDU2N2cgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-396",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U1234567g' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "+Yi0ladnIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-397",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\A' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XEEgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-398",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\A' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XEEgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-399",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\B' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XEIgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-400",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\B' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XEIgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-401",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\C' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XEMgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-402",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\C' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XEMgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-403",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\N' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XE4gdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-404",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\N' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XE4gdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-405",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\s' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHMgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-406",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\s' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHMgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-407",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\z' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHogdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-408",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\z' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHogdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-409",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\_' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XF8gdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-410",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\_' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XF8gdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-411",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\/' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XC8gdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-412",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\/' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XC8gdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-413",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\:' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDogdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-414",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\:' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XDogdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-415",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\ ' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XCAgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-416",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\ ' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XCAgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-417",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\\n' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XAogdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-418",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\\n' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XAogdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-419",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\\t' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XAkgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-420",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\\t' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XAkgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-421",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\\\n' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XG4gdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-422",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\\\n' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XG4gdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-423",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\\\c' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XGMgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-424",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\\\c' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XGMgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-425",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\a\\b\\e\\E\\f\\n\\r\\t\\v\\\\' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "BwgbGwwKDQkLXCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-426",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\a\\b\\e\\E\\f\\n\\r\\t\\v\\\\' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "BwgbGwwKDQkLXCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-427",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\000\\377\\xFF' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "AFwzNzf/IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-428",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\000\\377\\xFF' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "AFwzNzf/IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-429",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\c\\x' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-430",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\c\\x' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-431",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\c\\u' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-432",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\c\\u' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-433",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\x\\cZ' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHg=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-434",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\x\\cZ' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHg=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-435",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u0000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-436",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u0000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ACB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-437",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u007f' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "fyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-438",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u007f' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "fyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-439",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u0080' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUwMDgwIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-440",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u0080' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "woAgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-441",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u00e9' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUwMEU5IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-442",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u00e9' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "w6kgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-443",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u07ff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUwN0ZGIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-444",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u07ff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "378gdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-445",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u0800' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUwODAwIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-446",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u0800' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "4KCAIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-447",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\ud800' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVEODAwIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-448",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\ud800' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "7aCAIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-449",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\udfff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVERkZGIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-450",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\udfff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "7b+/IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-451",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\uffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVGRkZGIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-452",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\uffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "77+/IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-453",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U000000e9' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUwMEU5IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-454",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U000000e9' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "w6kgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-455",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U0000d800' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVEODAwIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-456",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U0000d800' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "7aCAIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-457",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U0010ffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwMDEwRkZGRiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-458",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U0010ffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "9I+/vyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-459",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U00110000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwMDExMDAwMCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-460",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U00110000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "9JCAgCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-461",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U001fffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwMDFGRkZGRiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-462",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U001fffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "97+/vyB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-463",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U00200000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwMDIwMDAwMCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-464",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U00200000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "+IiAgIAgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-465",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U03ffffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwM0ZGRkZGRiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-466",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U03ffffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "+7+/v78gdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-467",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U04000000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFUwNDAwMDAwMCB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-468",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U04000000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/ISAgICAIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-469",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U7fffffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFU3RkZGRkZGRiB0YWls",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-470",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U7fffffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "/b+/v7+/IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-471",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\U80000000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-472",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\U80000000' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-473",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\Uffffffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-474",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\Uffffffff' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "IHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-475",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\u' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-476",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\u' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHUgdGFpbA==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-477",
+        "family": "escapes",
+        "script": "LC_ALL=C echo -ne '\\UQ' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFVRIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-478",
+        "family": "escapes",
+        "script": "LC_ALL=C.UTF-8 echo -ne '\\UQ' tail"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFVRIHRhaWw=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-479",
+        "family": "sequences",
+        "script": "echo -e 'a\nb' later; echo recovered"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YQpiIGxhdGVyCnJlY292ZXJlZAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-480",
+        "family": "sequences",
+        "script": "echo -e 'a\\\nb' later; echo recovered"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YVwKYiBsYXRlcgpyZWNvdmVyZWQK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-481",
+        "family": "sequences",
+        "script": "echo -e '\\c' later; echo recovered"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cmVjb3ZlcmVkCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-482",
+        "family": "sequences",
+        "script": "echo -e 'a\\cb' later; echo recovered"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YXJlY292ZXJlZAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-483",
+        "family": "sequences",
+        "script": "echo -e '\\0\\xff' later; echo recovered"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "AP8gbGF0ZXIKcmVjb3ZlcmVkCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-484",
+        "family": "sequences",
+        "script": "echo -e '\\uZ\\U' later; echo recovered"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XHVaXFUgbGF0ZXIKcmVjb3ZlcmVkCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-485",
+        "family": "sequences",
+        "script": "echo -e '\\\\\\q\\' later; echo recovered"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "XFxxXCBsYXRlcgpyZWNvdmVyZWQK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-486",
+        "family": "descriptors-state",
+        "script": "echo -e lost >&-"
+      },
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBlY2hvOiB3cml0ZSBlcnJvcjogQmFkIGZpbGUgZGVzY3JpcHRvcgo="
+      }
+    },
+    {
+      "case": {
+        "id": "echo-487",
+        "family": "descriptors-state",
+        "script": "echo -ne '\\c' >&-"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-488",
+        "family": "descriptors-state",
+        "script": "echo -n >&-"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-489",
+        "family": "descriptors-state",
+        "script": "echo -e 'a\\cb' later; echo -E 'a\\nb'"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWFcbmIK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-490",
+        "family": "descriptors-state",
+        "script": "(echo -ne a); echo b"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWIK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "case": {
+        "id": "echo-491",
+        "family": "descriptors-state",
+        "script": "echo -ne 'a\\0b\\xff' | cat"
+      },
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YQBi/w==",
+        "stderrBase64": ""
+      }
+    }
+  ]
+}

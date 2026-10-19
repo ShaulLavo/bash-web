@@ -138,15 +138,7 @@ pub(crate) async fn run(
                 },
             });
         }
-        Builtin::Echo => {
-            for (index, arg) in args.iter().enumerate() {
-                if index != 0 {
-                    write(&fds, b" ", &context).await?;
-                }
-                write(&fds, arg.as_bytes(), &context).await?;
-            }
-            write(&fds, b"\n", &context).await?;
-        }
+        Builtin::Echo => printf::echo(&args, &state, &fds, &context, work).await?,
         Builtin::Printf => printf::run(&args, &state, &fds, &context, work).await?,
         Builtin::Read => {
             let mut fd = 0;
