@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "./helpers/browser-test";
 import { ready, startupReady } from "./helpers/readiness.ts";
+import { pipelinePeak, type ProcessRoot } from "./helpers/pipeline-peak.ts";
 
 test.setTimeout(60000);
 
@@ -632,10 +633,6 @@ test("Ctrl+C confirms foreground descendants while preserving another background
   await expect.poll(() => page.workers().length).toBe(baseline);
 });
 
-type ProcessRoot = ReturnType<
-  typeof import("../src/runtime/diagnostics").runtimeSnapshot
->["roots"][number];
-
 function assertPipelineChildren(before: ProcessRoot, peak: ProcessRoot, expected: number) {
   const baselinePids = new Set(before.records.map((record) => record.pid));
   const children = peak.records.filter((record) => !baselinePids.has(record.pid));
@@ -683,7 +680,7 @@ test("an accumulating consumer cannot make the shell or transport buffer its inp
     const root = sample.runtime.roots[0];
     peakShell = Math.max(peakShell, root.memoryBytes);
     peakPipes = Math.max(peakPipes, root.pipes);
-    if (root.retainedSlots > peak.retainedSlots) peak = root;
+    peak = pipelinePeak(peak, root);
     expect(sample.runtime.terminal.outputQueued).toBeLessThanOrEqual(
       sample.runtime.terminal.outputCapacity,
     );
