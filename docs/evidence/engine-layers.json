@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "aa6659c4d813cbe5259b3e82fc9a0492594177ebd9fb167cd1f47ed3b6fd1ffc",
+    "engineSourceSha256": "a47072d9e613ffb8847b0b5aafb2b159e99ec402aecb145f7d5c6ead3d19f8c1",
     "binaryBuild": null
   },
   "contract": {
@@ -170,6 +170,7 @@
       "files": [
         "shell/engine/src/builtins.rs",
         "shell/engine/src/builtins/printf.rs",
+        "shell/engine/src/builtins/printf/fields.rs",
         "shell/engine/src/builtins/read.rs",
         "shell/engine/src/builtins/test.rs"
       ]
@@ -749,7 +750,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/builtins/printf.rs",
-        "line": 491,
+        "line": 546,
         "column": 20
       }
     },
@@ -759,7 +760,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/builtins/printf.rs",
-        "line": 490,
+        "line": 545,
         "column": 9
       }
     },
@@ -769,7 +770,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/builtins/printf.rs",
-        "line": 492,
+        "line": 547,
         "column": 14
       }
     },
@@ -779,7 +780,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/builtins/printf.rs",
-        "line": 493,
+        "line": 548,
         "column": 9
       }
     },

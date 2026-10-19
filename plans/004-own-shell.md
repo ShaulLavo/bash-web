@@ -1381,3 +1381,33 @@ to 1,361: twelve gains and zero losses. Only those twelve records and derived
 counts change in the baseline. Exact IDs and verification receipts are in
 [read-count evidence](../docs/evidence/read-count.json); host logs and reproducer
 are under `/work/reports/bash-web/hill-climb/read-count/`.
+
+## Printf string fields, 2026-10-19
+
+Status: Approved. Bounded implementation from exact main
+`4b063eb5b839f93dc26ff2bc0508b8b8d86fa95a`; parent owns independent review,
+CI monitoring and merge.
+
+Add literal and star width/precision for `%s`, including valid string flags,
+missing/reused operands and byte precision. Keep bare `%d`/`%b`, echo and all
+other conversions unchanged. Borrow string bytes and stream space padding
+through the existing printer's admission/delivery walks, with output/work
+limits, fixed-size writes and cancellation. See
+[printf string fields](../docs/printf-string-fields.md) and `sources.lock.json`.
+
+Four production native and real-Waffle cases fail on the unchanged base. Four
+new native regressions fail before implementation. The final focused matrix
+matches all 167 Bash stdout/status observations on native and real Waffle.
+Invalid numeric controls suppress diagnostics in both shells; the existing
+adapter diagnostic prefix remains different from Bash's source-line annotation.
+
+The full frozen real-Waffle measurement retains 9,221 records, 5,792 scored
+cases and the exact oracle/environment/source identity. Memberships change
+Oils 972 to 979, Brush 961 to 964 and Bashkit 1,361 to 1,366. There are fifteen
+gains and zero losses. The normal `RECORD=0` gate passes with exact candidate
+pass membership; all 9,206 other baseline records remain unchanged. Only these
+fifteen records and derived counts change in the baseline. The 34-case discovery pool is not a promise of gains and
+contains conversions outside this unit. Exact IDs, source cases and verification
+receipts are retained under
+`/work/reports/bash-web/hill-climb/printf-string-fields/`; the checked-in receipt
+is [printf evidence](../docs/evidence/printf-string-fields.json).

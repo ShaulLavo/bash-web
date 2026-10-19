@@ -1,5 +1,6 @@
 //! Original byte-oriented printf and default-Bash echo escape adapter. Admission and delivery walk the
 //! same borrowed inputs: no decoded String or whole-result buffer is allocated.
+mod fields;
 use super::{endpoint, error_status, write};
 use crate::{
     executor::Budget,
@@ -8,6 +9,7 @@ use crate::{
     io::FdTable,
     state::{SharedState, State},
 };
+use fields::{Arguments, StringField};
 
 pub(super) async fn run(
     args: &[String],
@@ -233,6 +235,20 @@ impl<'a> Printer<'a> {
             }
         }
     }
+    async fn padding(&mut self, mut count: usize) -> Result<(), i32> {
+        if self.work.is_some() {
+            self.remaining = self.remaining.checked_sub(count).ok_or(2)?;
+            return self.scan(count).await;
+        }
+        const SPACES: [u8; WRITE_CHUNK] = [b' '; WRITE_CHUNK];
+        while count != 0 {
+            let chunk = count.min(WRITE_CHUNK);
+            self.scan(chunk).await?;
+            self.emit(1, &SPACES[..chunk]).await?;
+            count -= chunk;
+        }
+        Ok(())
+    }
     async fn escape(&mut self, input: &[u8], mode: Mode) -> Result<Escape, i32> {
         let escape = decode(input, mode, self.utf8);
         self.scan(escape.consumed).await?;
@@ -273,63 +289,102 @@ impl<'a> Printer<'a> {
 
 async fn format(args: &[String], printer: &mut Printer<'_>) -> Result<i32, i32> {
     let input = args[0].as_bytes();
-    let mut index = 1;
+    let mut arguments = Arguments {
+        values: args,
+        index: 1,
+        status: 0,
+    };
     loop {
         printer.scan(1).await?;
-        let mut offset = 0;
-        let mut consumed = false;
-        while offset < input.len() {
-            match input[offset] {
-                b'\\' => {
-                    let escape = printer.escape(&input[offset..], Mode::Format).await?;
-                    offset += escape.consumed;
-                }
-                b'%' => {
-                    printer.scan(1).await?;
-                    offset += 1;
-                    match input.get(offset) {
-                        Some(b'%') => {
-                            printer.scan(1).await?;
-                            printer.emit(1, b"%").await?;
-                        }
-                        Some(conversion @ (b's' | b'd' | b'b')) => {
-                            printer.scan(1).await?;
-                            let arg = args.get(index).map(String::as_bytes).unwrap_or(b"");
-                            index += 1;
-                            consumed = true;
-                            if printer.operand(arg, *conversion == b'b').await? {
-                                return Ok(0);
-                            }
-                        }
-                        _ => {
-                            // Keep unsupported conversions unsupported. In
-                            // particular, decoding an escape must not introduce
-                            // a second interpretation as format syntax.
-                            printer
-                                .emit(2, b"/usr/bin/bash: printf: unsupported format conversion\n")
-                                .await?;
-                            return Ok(2);
-                        }
-                    }
-                    offset += 1;
-                }
-                _ => {
-                    let start = offset;
-                    while offset < input.len()
-                        && offset - start < 4096
-                        && !matches!(input[offset], b'%' | b'\\')
-                    {
-                        offset += 1;
-                    }
-                    printer.scan(offset - start).await?;
-                    printer.emit(1, &input[start..offset]).await?;
-                }
-            }
+        let before = arguments.index;
+        if format_pass(input, &mut arguments, printer).await? {
+            return Ok(arguments.status);
         }
-        if !consumed || index >= args.len() {
-            return Ok(0);
+        if before == arguments.index || arguments.index >= args.len() {
+            return Ok(arguments.status);
         }
     }
+}
+
+async fn format_pass(
+    input: &[u8],
+    args: &mut Arguments<'_>,
+    printer: &mut Printer<'_>,
+) -> Result<bool, i32> {
+    let mut offset = 0;
+    while offset < input.len() {
+        if format_piece(input, &mut offset, args, printer).await? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+async fn format_piece(
+    input: &[u8],
+    offset: &mut usize,
+    args: &mut Arguments<'_>,
+    printer: &mut Printer<'_>,
+) -> Result<bool, i32> {
+    match input[*offset] {
+        b'\\' => {
+            let escape = printer.escape(&input[*offset..], Mode::Format).await?;
+            *offset += escape.consumed;
+        }
+        b'%' => {
+            printer.scan(1).await?;
+            *offset += 1;
+            return conversion(input, offset, args, printer).await;
+        }
+        _ => format_literal(input, offset, printer).await?,
+    }
+    Ok(false)
+}
+
+async fn format_literal(
+    input: &[u8],
+    offset: &mut usize,
+    printer: &mut Printer<'_>,
+) -> Result<(), i32> {
+    let start = *offset;
+    while *offset < input.len()
+        && *offset - start < WRITE_CHUNK
+        && !matches!(input[*offset], b'%' | b'\\')
+    {
+        *offset += 1;
+    }
+    printer.scan(*offset - start).await?;
+    printer.emit(1, &input[start..*offset]).await
+}
+
+async fn conversion(
+    input: &[u8],
+    offset: &mut usize,
+    args: &mut Arguments<'_>,
+    printer: &mut Printer<'_>,
+) -> Result<bool, i32> {
+    if input.get(*offset) == Some(&b'%') {
+        printer.scan(1).await?;
+        *offset += 1;
+        printer.emit(1, b"%").await?;
+        return Ok(false);
+    }
+    if let Some(conversion @ (b'd' | b'b')) = input.get(*offset) {
+        printer.scan(1).await?;
+        *offset += 1;
+        return printer
+            .operand(args.take().unwrap_or("").as_bytes(), *conversion == b'b')
+            .await;
+    }
+    if let Some(field) = StringField::parse(input, offset, printer).await? {
+        return field.print(args, printer).await;
+    }
+    // Escape decoding never feeds a second format-syntax interpretation.
+    printer
+        .emit(2, b"/usr/bin/bash: printf: unsupported format conversion\n")
+        .await?;
+    args.status = 2;
+    Ok(true)
 }
 
 #[derive(Clone, Copy, PartialEq)]

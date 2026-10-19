@@ -1,0 +1,160 @@
+{
+  "schema": 1,
+  "date": "2026-10-19",
+  "classification": "Original local implementation, regression controls and measurements. GNU Bash is the behavior oracle; no upstream implementation copied or adapted. Parent owns independent provenance/code review.",
+  "baseRevision": "4b063eb5b839f93dc26ff2bc0508b8b8d86fa95a",
+  "model": "gpt-6.1-sol",
+  "routing": "cli-proxy",
+  "executionHost": "pc, canonical shared heavy queue; Cargo -j2; full frozen replay one worker in suite memory class",
+  "tools": {
+    "bash": "5.3.15(1)-release",
+    "bashSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+    "node": "26.7.0",
+    "rust": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "wasmtime": "49.0.3",
+    "wasiSdk": "34.0",
+    "waffleRevision": "33ece68f9f484d99b8a57a675de71d847e248051"
+  },
+  "sourceSha256": {
+    "shell/engine/src/builtins/printf.rs": "09288edd07e21196b376f4bda8f8fd92900fc451237539c92fe6c597e4443db1",
+    "shell/engine/src/builtins/printf/fields.rs": "40d96853395f465dc91ee5bdf89f1a546a5d927fa5b774cc8df63576db3dff9f",
+    "shell/engine/tests/words/printf_fields.rs": "ffe6c76fd8ed4249fc514195353ec439b8136b90284e34c16e6c5141676ae92a",
+    "shell/engine/tests/words/printf.rs": "b0bac8957e485f6171357fdbcdc1326d9be8940b220a60ceade519fc5d0c33ad",
+    "shell/engine/tests/words.rs": "079d04c7773dd65b4ee3c2afd827ad60a81c8e05af7f2656bfb2dd12e3544a90"
+  },
+  "artifactSha256": {
+    "release/shell-cli": "65729f20cbb25322e54b66d0b31b9395edbdda14d44e19fb33ca900848164756",
+    "wasm32-wasip1/release/shell-cli.wasm": "dff18600ea06d74967f4f78507fdf6b4f02fa07f9c7b1d2cb1a6d706c253ce7e",
+    "wasm32-wasip1/release/shell-runtime.wasm": "c25f8110600f936b3d7f8305bb0ecc9048914a63d58ff8207ef569c7a3c467b2"
+  },
+  "failingFirst": {
+    "native": {
+      "total": 4,
+      "matched": 0
+    },
+    "realWaffle": {
+      "total": 4,
+      "matched": 0
+    },
+    "nativeRegressions": "Four deterministic new tests failed on the exact base before production edits. An earlier test module-path setup error is not counted."
+  },
+  "final": {
+    "native": {
+      "total": 167,
+      "matched": 167
+    },
+    "realWaffle": {
+      "total": 167,
+      "matched": 167
+    },
+    "diagnosticsBoundary": "Invalid numeric controls suppress stderr on both sides; strict stdout/status and healthy execution checks remain. Raw diagnostics are retained. Existing source-line annotation differences remain outside this unit.",
+    "nativeTests": 1190,
+    "wasiTests": 1170,
+    "browser": {
+      "passed": 228,
+      "preexistingSkipped": 16,
+      "projects": [
+        "chromium",
+        "firefox"
+      ]
+    },
+    "seededFuzz": "All twelve existing native CI replay families passed unchanged, including printf 1122/1122 and echo 492/492. Echo also passed 492/492 on real Waffle. No fixture or deadline changes.",
+    "quality": "Full npm run quality passed, including clippy all test targets, native workspace tests, duplicate checks with unchanged allowances, formatting, lint, typecheck and unused dependency checks.",
+    "layers": "Zero production and test-only violations; unchanged 42 production and 28 test-only unique edges; exact immutable base enforced."
+  },
+  "frozenIdentity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "frozenDelta": {
+    "ok": true,
+    "corpora": {
+      "oils": {
+        "before": 972,
+        "after": 979,
+        "gained": [
+          "oils:nul-bytes:472",
+          "oils:builtin-printf:170",
+          "oils:builtin-printf:266",
+          "oils:builtin-printf:286",
+          "oils:builtin-printf:302",
+          "oils:builtin-printf:312",
+          "oils:builtin-printf:326"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "brush-suite": {
+        "before": 961,
+        "after": 964,
+        "gained": [
+          "brush-suite:builtins/printf:24",
+          "brush-suite:builtins/printf:42",
+          "brush-suite:builtins/printf:53"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "bashkit-suite": {
+        "before": 1361,
+        "after": 1366,
+        "gained": [
+          "bashkit-suite:bashbox-printf:5",
+          "bashkit-suite:blackbox-edge-cases:431",
+          "bashkit-suite:blackbox-exploration:819",
+          "bashkit-suite:printf:85",
+          "bashkit-suite:printf:92"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      }
+    }
+  },
+  "frozenProof": {
+    "records": 9221,
+    "scored": 5792,
+    "gained": 15,
+    "lost": 0,
+    "unchangedOtherBaselineRecords": 9206,
+    "gate": "Full normal RECORD=0 JOBS=1 replay against exact base; candidate pass membership exact; oracle/environment/source/classification/exclusions/scoring/per-case deadlines and every other baseline record unchanged."
+  },
+  "resourceControls": "Borrowed byte precision, bounded numeric parser, complete output/work admission before emission, padding capacity checked before walking spaces, fixed 4096-byte delivery buffer, existing cancellable work/backpressure and live frame memory admission. No reconstructed result String or padding allocation.",
+  "initialFailures": [
+    "The first 159-case matrix exposed one preexisting out-of-scope bare %d invalid/missing-value mismatch. The mixed-format control was corrected to use complete valid numeric operands; no production %d behavior changed. The expanded final 167-case matrix matches both targets.",
+    "The initial frozen RECORD=0 measurement intentionally rejected the stale baseline after writing the complete 15-gain/zero-loss score. Only proven gained records and counts were recorded, then the full normal gate was rerun.",
+    "The first gate orchestration script was edited as its queue slot began, causing shell read-offset parsing failure after WASI passed. No test failed. The remaining unexecuted gates use an immutable separate script; WASI was not repeated."
+  ],
+  "existingTestExpectation": "The unsupported-fields regression uses %08d instead of newly supported %08s. The assertions and unsupported-field coverage remain strict; no fixture, skip, timeout or allowance changed.",
+  "deferred": [
+    "Numeric fields and new conversions",
+    "printf -v and broad options",
+    "echo/read/runtime changes",
+    "Bash source-line diagnostic annotation"
+  ],
+  "reportDirectory": "/work/reports/bash-web/hill-climb/printf-string-fields",
+  "commands": [
+    "bash run-gates.sh: WASI tests and guest verification",
+    "bash run-gates-remaining.sh: all remaining ordinary blocking gates",
+    "node probe.ts native native-after.json; node probe.ts waffle waffle-after.json",
+    "BASH_COMPAT_RECORD=0 BASH_COMPAT_JOBS=1 BASH_COMPAT_SKIP_BUILD=1 BASH_COMPAT_BASE_REF=4b063eb5b839f93dc26ff2bc0508b8b8d86fa95a npm run compat:shell",
+    "node verify-final.ts"
+  ],
+  "resourceRetention": {
+    "cleanupOwner": "Parent coordinator",
+    "removalCondition": "After independent review and CI consumers stop, run report teardown.sh and remove the exclusive worktree with git worktree remove. Preserve shared caches/services and diagnostic-snapshot/PR23.",
+    "exactBuildRoot": {
+      "path": "/work/tmp/bash-web-printf-string-fields",
+      "allocatedBytes": 4068196352,
+      "reason": "Exact native/WASI release artifacts and warm test target retained for parent review; env.sh and empty browser temp parent retained."
+    },
+    "worktree": {
+      "path": "/work/worktrees/bash-web/climb-printf-string-fields",
+      "allocatedBytes": 322060288,
+      "reason": "Review source plus owned dependencies/build helpers."
+    },
+    "verifiedCleanup": "Owned probes/frozen temporary roots/browser profiles/test-results removed after all consumers stopped. Actual-host /proc cwd/exe/fd/maps/environment-name audit found no remaining consumers. Canonical queue empty and browser port 4296 closed. No service/container/route created."
+  }
+}

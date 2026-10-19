@@ -188,7 +188,7 @@ fn printf_missing_hex_digits_are_diagnostics_not_command_failure() {
 fn printf_unsupported_conversions_do_not_become_supported_by_escape_decoding() {
     for source in [
         r"printf 'prefix%q' x",
-        r"printf 'prefix%08s' x",
+        r"printf 'prefix%08d' x",
         r"printf 'prefix%z' x",
         r"printf 'prefix%'",
     ] {
