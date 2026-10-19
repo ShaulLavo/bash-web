@@ -747,6 +747,9 @@ class Pool {
           process.env.BASH_COMPAT_FIXTURE_DIR ??
             `${process.env.CARGO_TARGET_DIR ?? ".build/shell"}/wasm32-wasip1/release`,
         ),
+        utilityDirectory: process.env.BASH_COMPAT_UTILITY_DIR
+          ? resolve(root, process.env.BASH_COMPAT_UTILITY_DIR)
+          : undefined,
         tmp: virtualTmp,
         home: virtualHome,
         env: { HOME: virtualHome, TMP: virtualTmp, SH: "bash", LC_ALL: "C.UTF-8" },

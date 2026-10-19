@@ -8,6 +8,7 @@ await build({
     api: "scripts/waffle-node-api.ts",
     root: "scripts/waffle-root-worker.ts",
     child: "scripts/waffle-child-worker.ts",
+    shell: "src/runtime/worker.ts",
     fs: "waffle/browser/fs-worker",
   },
   bundle: true,

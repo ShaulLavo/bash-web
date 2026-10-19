@@ -609,6 +609,7 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
           "shell-scoreboard-migration.mjs",
           "shell-process-group.mjs",
           "wasi-build.ts",
+          "utility-artifacts.ts",
           "verify-wasi-guests.ts",
         ])
           put(`scripts/${name}`, readFileSync(new URL(name, import.meta.url)));

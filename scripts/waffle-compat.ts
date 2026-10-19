@@ -8,7 +8,10 @@ export interface WaffleCaseOptions {
   readonly modulePath: string;
   readonly tmp: string;
   readonly env: Readonly<Record<string, string>>;
+  /** Directory holding the frozen oracle's argv.py/printenv.py fixture guests. */
   readonly fixtureDirectory: string;
+  /** Separately built utility programs. Omitted for the unchanged-main control. */
+  readonly utilityDirectory?: string;
 }
 export interface WaffleCaseResult {
   stdout: Buffer;
@@ -20,6 +23,7 @@ export interface WaffleCaseResult {
 
 const OUTPUT_LIMIT_BYTES = 4 * 1024 * 1024;
 const nodeDirectory = new URL("../.build/node/", import.meta.url);
+const utilities = ["cat", "grep", "mkdir", "seq"] as const;
 const fixtures = [
   ["argv.py", "argv-py.wasm"],
   ["printenv.py", "printenv-py.wasm"],
@@ -67,6 +71,20 @@ async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: t
       cooperative: true,
     });
   }
+  if (options.utilityDirectory === undefined) return;
+  const directory = options.utilityDirectory;
+  const utilityWorkerUrl = new URL("shell.mjs", nodeDirectory);
+  const installers = {
+    cat: waffle.installCat,
+    grep: waffle.installGrep,
+    mkdir: waffle.installMkdir,
+    seq: waffle.installSeq,
+  };
+  for (const name of utilities)
+    await installers[name](runtime, {
+      workerUrl: utilityWorkerUrl,
+      module: () => compiled(`${directory}/${name}.wasm`),
+    });
 }
 
 export async function createWaffleRunner(options: WaffleCaseOptions) {
@@ -114,7 +132,7 @@ export async function createWaffleRunner(options: WaffleCaseOptions) {
   };
 }
 
-async function runRoot(
+export async function runRoot(
   runtime: Runtime,
   waffle: typeof Api,
   module: WebAssembly.Module,
@@ -136,12 +154,14 @@ async function runRoot(
   let worker: Worker | undefined;
   const stop = () => void worker?.terminate();
   onStop(() => void service.kill(transport.pid, 9).catch(stop));
-  await service.adoptRuntimeRoot(transport, {
+  const controller = {
     filesystem: identity,
     output,
     acknowledged: () => acknowledged,
+    canConfirmExit: () => acknowledged,
     stop,
-  });
+  };
+  await service.adoptRuntimeRoot(transport, controller);
   const supervisor = await service.ready();
   const state = waffle.workerProcessState(transport);
   const root = new Worker(new URL("root.mjs", nodeDirectory), { type: "module" });

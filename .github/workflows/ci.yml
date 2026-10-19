@@ -80,7 +80,8 @@ jobs:
           workspaces: shell -> ../.build/shell
       - uses: ./.github/actions/wasi-sdk
       - run: npm ci --ignore-scripts
-      - run: node --test scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts
+      - run: npm run test:guest-build
+      - run: npm run typecheck:guest-build
       - run: node scripts/check-shell-parser.mjs
       - run: cargo fmt --manifest-path shell/Cargo.toml --all --check
       - name: Native shell tests
@@ -89,44 +90,60 @@ jobs:
         run: ulimit -c 0; npm run test:shell:wasi
         env:
           CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime run -W max-memory-size=268435456
-      - name: Native shell CLI
-        run: cargo build --locked --release --manifest-path shell/Cargo.toml -p shell-engine -j2
+      - name: Identify verified utility guests
+        run: node scripts/utility-artifacts.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: utility-guests-${{ github.sha }}
+          path: .build/utility-artifacts/
+          if-no-files-found: error
+          retention-days: 3
+      - name: Core dependency proof
+        run: npm run check:capabilities
+      - name: Native shell CLIs
+        run: >-
+          cargo build --locked --release --manifest-path shell/Cargo.toml
+          -p shell-engine -p shell-compat-fixtures -j2
       - name: Record native shell CLI receipts
         run: |
-          sha256sum .build/shell/release/shell-engine > .build/shell/cli-sha256.txt
+          sha256sum .build/shell/release/shell-engine .build/shell/release/shell-cli > .build/shell/cli-sha256.txt
           git rev-parse HEAD > .build/shell/cli-source.txt
       - uses: actions/upload-artifact@v4
         with:
           name: shell-cli-${{ github.sha }}
           path: |
             .build/shell/release/shell-engine
+            .build/shell/release/shell-cli
             .build/shell/cli-sha256.txt
             .build/shell/cli-source.txt
           retention-days: 3
       - run: npm run test:fuzz-shell-braces
-      - run: npm run fuzz:shell-braces:ci -- --shell .build/shell/release/shell-engine
-      - run: npm run fuzz:shell-words:ci -- --shell .build/shell/release/shell-engine
-      - run: npm run fuzz:shell-arithmetic:ci -- --shell .build/shell/release/shell-engine
-      - run: npm run fuzz:shell-readonly:ci -- --shell .build/shell/release/shell-engine
+      - run: npm run fuzz:shell-braces:ci -- --shell .build/shell/release/shell-cli
+      - run: npm run fuzz:shell-words:ci -- --shell .build/shell/release/shell-cli
+      - run: npm run fuzz:shell-arithmetic:ci -- --shell .build/shell/release/shell-cli
+      - run: npm run fuzz:shell-readonly:ci -- --shell .build/shell/release/shell-cli
       - run: npm run test:fuzz-shell-substitutions
-      - run: npm run fuzz:shell-substitutions:ci -- --shell .build/shell/release/shell-engine
-      - run: npm run fuzz:shell-parse-boundaries:ci -- --shell .build/shell/release/shell-engine
+      - run: npm run fuzz:shell-substitutions:ci -- --shell .build/shell/release/shell-cli
+      - run: npm run fuzz:shell-parse-boundaries:ci -- --shell .build/shell/release/shell-cli
       - run: npm run test:fuzz-shell-control-flow
-      - run: npm run fuzz:shell-control-flow:ci -- --shell .build/shell/release/shell-engine
+      - run: npm run fuzz:shell-control-flow:ci -- --shell .build/shell/release/shell-cli
       - run: ulimit -c 0; npm run test:fuzz-shell-job-lifetime
-      - run: ulimit -c 0; npm run fuzz:shell-job-lifetime:ci -- --shell .build/shell/release/shell-engine
+      - run: ulimit -c 0; npm run fuzz:shell-job-lifetime:ci -- --shell .build/shell/release/shell-cli
       - run: ulimit -c 0; npm run test:fuzz-shell-functions
-      - run: ulimit -c 0; npm run fuzz:shell-functions:ci -- --shell .build/shell/release/shell-engine
+      - run: ulimit -c 0; npm run fuzz:shell-functions:ci -- --shell .build/shell/release/shell-cli
       - run: ulimit -c 0; npm run test:fuzz-shell-path
-      - run: ulimit -c 0; npm run fuzz:shell-path:ci -- --shell .build/shell/release/shell-engine
+      - run: ulimit -c 0; npm run fuzz:shell-path:ci -- --shell .build/shell/release/shell-cli
       - run: ulimit -c 0; npm run test:fuzz-shell-printf
-      - run: ulimit -c 0; npm run fuzz:shell-printf:ci -- --shell .build/shell/release/shell-engine
+      - run: ulimit -c 0; npm run fuzz:shell-printf:ci -- --shell .build/shell/release/shell-cli
 
   own-shell-compatibility:
+    needs: shell
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
       CARGO_TARGET_DIR: .build/shell
+      BASH_WEB_UTILITY_ARTIFACTS: .build/utility-artifacts
       BASH_COMPAT_MODE: frozen
       BASH_COMPAT_ENGINES: own-shell
       BASH_COMPAT_JOBS: 4
@@ -169,6 +186,10 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --unshare-all --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 --proc /proc --dev /dev -- /usr/bin/true
       - run: npm run test:shell:scoreboard
+      - uses: actions/download-artifact@v4
+        with:
+          name: utility-guests-${{ github.sha }}
+          path: .build/utility-artifacts/
       - run: npm run build:shell
       - run: npm run compat:shell
         env:
@@ -182,10 +203,13 @@ jobs:
           if-no-files-found: ignore
 
   browser:
+    needs: shell
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       CARGO_TARGET_DIR: .build/shell
+      BASH_WEB_UTILITY_ARTIFACTS: .build/utility-artifacts
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -206,6 +230,10 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium firefox
       - run: npm run test:browser:package
+      - uses: actions/download-artifact@v4
+        with:
+          name: utility-guests-${{ github.sha }}
+          path: .build/utility-artifacts/
       - run: npm run build:browser
       - run: cargo fmt --manifest-path tests/guest/Cargo.toml --check
       - run: npm run typecheck:browser

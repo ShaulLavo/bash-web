@@ -464,7 +464,7 @@ async fn unary_value(
             })
         }
         operator if is_unary(operator) => {
-            if let Some(endpoint) = crate::interpreter::device_endpoint(operand, fds) {
+            if let Some(endpoint) = crate::io::device_endpoint(operand, fds) {
                 let Ok(endpoint) = endpoint else {
                     return Ok(false);
                 };
@@ -590,8 +590,8 @@ pub(crate) async fn file_binary(
     work: &mut Work,
 ) -> Result<bool, i32> {
     step(context, work).await?;
-    if crate::interpreter::device_endpoint(left, fds).is_some()
-        || crate::interpreter::device_endpoint(right, fds).is_some()
+    if crate::io::device_endpoint(left, fds).is_some()
+        || crate::io::device_endpoint(right, fds).is_some()
     {
         return Err(2);
     } // Endpoint identity is not filesystem inode identity.

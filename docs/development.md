@@ -42,10 +42,59 @@ bridge to its UI. Terminal rendering and demo controls live in `src/browser/`,
 separate from the shell facade.
 
 `waffle` is a **required peer dependency**, pinned to the published Git commit
-`afe9cc1f3f93ea84929903e5a55854dbfd973448`:
-`git+https://github.com/ShaulLavo/waffle.git#afe9cc1f3f93ea84929903e5a55854dbfd973448`.
+`33ece68f9f484d99b8a57a675de71d847e248051`:
+`git+https://github.com/ShaulLavo/waffle.git#33ece68f9f484d99b8a57a675de71d847e248051`.
 The development dependency uses the same pin so local builds and tests exercise
 the same runtime applications supply.
+
+## Install external utilities
+
+The core entry imports no utilities. `cat`, `grep`, `mkdir`, and `seq` each have
+an independent `bash-web/utilities/<name>` entry and WASM program. Install only
+what your application needs on the same Runtime that you pass to `createShell`:
+
+```ts
+import { installCat } from "bash-web/utilities/cat";
+
+const cat = await installCat(runtime);
+try {
+	const shell = await createShell({ runtime, script: "printf hello | cat" });
+	try {
+		await shell.done;
+	} finally {
+		await shell.dispose();
+	}
+} finally {
+	await cat.dispose();
+}
+```
+
+The other entries export `installGrep`, `installMkdir`, and `installSeq`.
+Installers register `/bin/<name>` without fetching, compiling, or starting a
+worker. The first spawn loads the guest. Supply `wasmUrl` and `workerUrl` when
+bundling changes asset URLs, or supply a compiled `module` or lazy module loader.
+The worker URL identifies this package's `dist/shell-worker.js`.
+
+A foreign executable entry or duplicate installation raises
+`UtilityConflictError`. Disposal releases that installation's registrations and
+removes its executable marker only if the installation created it and its bytes
+remain unchanged. Stop the utility's processes before disposing its installation.
+The application still owns the Runtime. A failed install keeps its path reserved until
+registration release and marker rollback have settled. Concurrent attempts conflict
+during rollback; afterward a fresh install may retry.
+
+CI's shell job builds and verifies the four utility guests once. Its artifact
+contains the exact Git source SHA and each guest's SHA-256. Compatibility and
+browser builds check that receipt and the patched-libc/memory contract before
+staging those guests, without compiling utility binaries again. This utility-only
+handoff does not replace the separately owned CI-speed work on native/core builds.
+Local builds without `BASH_WEB_UTILITY_ARTIFACTS` compile normally. Hosted cache
+hits still need confirmation from the publication run's logs.
+
+Without an installed or otherwise registered program, ordinary PATH lookup
+returns status 127. Shell-language features remain in the core. Only `grep`
+uses the `regex` crate. Each utility carries guest glue, so installing all four
+can cost more than the former combined shell.
 
 ## Build and test
 
@@ -287,15 +336,15 @@ These are intentionally different views, not one generic builtin predicate:
   Parser-owned compound-array declaration grammar remains separate and unchanged.
 - Special/regular builtin class is descriptive metadata, not a new precedence,
   persistence or POSIX-mode rule. Declaration status overlaps both classes.
-  Acceptance `cat`, `grep`, `mkdir` and `seq` are stand-ins, not shell builtins.
-  They retain internal dispatch while query lookup searches PATH for all four.
-- Heredoc errors retain their different historical view: `cat`/`seq` use the
-  command-local error context, while `grep`/`mkdir` use the shell error context.
-  Functions still take precedence in that view, before command-wrapper unwrapping.
+  `cat`, `grep`, `mkdir` and `seq` are external programs, absent from builtin
+  metadata and dispatch. Queries and execution both use ordinary PATH lookup.
+- Builtin heredoc errors belong to the shell; external-command errors use the
+  command-local context. Functions take precedence before command-wrapper
+  unwrapping.
 - Queries still choose keyword, function, reportable builtin, then PATH. Keyword
   visibility does not claim syntax support: `select`, `time` and `coproc` are
-  explicitly unsupported execution syntax. Core/acceptance availability describes
-  the current full build; it introduces no Cargo features, Lite filters or options.
+  explicitly unsupported execution syntax. Availability distinguishes included
+  core commands from unsupported syntax, without build presets or feature filters.
 - The interpreter retains early direct `exec`, wrapper parsing/function bypass,
   function frames, and `let`/`eval` phases. Prefix restoration, status/diagnostics,
   PATH admission, cancellation and lazy expansion remain with their old owners.
@@ -303,7 +352,7 @@ These are intentionally different views, not one generic builtin predicate:
 
 The catalogue has no dependencies on feature modules. Original membership tests
 pin every old view independently, including absent names, handler ownership,
-class/capability relationships and the differing stand-in exclusions. Original
+class/availability relationships and the external-command exclusions. Original
 engine controls passed against the unchanged baseline before extraction and pin
 query output, declaration syntax, heredoc scope and function/prefix behavior.
 
@@ -339,3 +388,20 @@ The page owns runtime disposal. Waffle owns shared services and their teardown;
 terminal rendering, browser controls, and asset serving remain host concerns.
 Browser acceptance complements the frozen shell scoreboard and never replaces
 or regenerates its oracle, baseline, classifications, or generator fixtures.
+
+### Frozen runner completion
+
+The canonical Waffle root controller gates ordinary exit confirmation on the
+worker's ordered acknowledgement. Its shared outcome can become visible before
+queued stdout and stderr messages. Resolving on that outcome alone could dispose
+the runtime and discard the output tail after an external utility. Signals still
+settle without an ordinary acknowledgement through Waffle's supervisor.
+
+This is an original local adapter correction, not copied upstream code.
+`scripts/test-own-shell-root.ts` holds real root-worker messages until its outcome
+is published, observes it through the real supervisor, then delivers those messages
+in order. It pins raw output, status and the acknowledgement boundary, and separately
+pins a killed root that never starts. `scripts/own-shell-runner-fixture.ts` only
+relocates the unchanged original tiny WASI fixture from the existing runner tests.
+No oracle, baseline, migration receipt, stdio kind, case deadline or output bound
+changes.

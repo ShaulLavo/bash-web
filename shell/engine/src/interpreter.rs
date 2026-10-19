@@ -2309,18 +2309,6 @@ fn admission_status(error: expand::Error) -> i32 {
         _ => 2,
     }
 }
-/// Bash's own device names: `/dev/fd/N` duplicates open descriptor N (a
-/// process substitution, for instance); `/dev/stdin`, `/dev/stdout` and
-/// `/dev/stderr` are descriptors 0, 1 and 2. A closed descriptor is an error.
-pub(crate) fn device_endpoint(path: &str, fds: &FdTable) -> Option<Result<io::Endpoint, i32>> {
-    let fd = match path {
-        "/dev/stdin" => 0,
-        "/dev/stdout" => 1,
-        "/dev/stderr" => 2,
-        _ => path.strip_prefix("/dev/fd/")?.parse::<u32>().ok()?,
-    };
-    Some(fds.get(fd).ok_or(1))
-}
 fn expansion_work(limits: &Limits) -> expand::Work {
     expand::Work::new(
         limits
@@ -3100,7 +3088,7 @@ async fn dispatch_simple_command_body(
     }
     // A pipe named by an open descriptor exists but cannot be executed.
     if name.starts_with("/dev/fd/")
-        && device_endpoint(&name, &fds.borrow()).is_some_and(|endpoint| endpoint.is_ok())
+        && crate::io::device_endpoint(&name, &fds.borrow()).is_some_and(|endpoint| endpoint.is_ok())
     {
         let diagnostic = format!("/usr/bin/bash: {name}: Permission denied\n");
         let stderr = fds.borrow().get(2);
@@ -3646,7 +3634,7 @@ async fn redirects(
             | RedirectKind::Append
             | RedirectKind::OutputBoth
             | RedirectKind::ReadWrite => {
-                let device = device_endpoint(&target, &fds.borrow());
+                let device = crate::io::device_endpoint(&target, &fds.borrow());
                 if let Some(endpoint) = device {
                     let endpoint = endpoint?;
                     if redirect.kind == RedirectKind::OutputBoth {
@@ -4213,10 +4201,8 @@ mod residual_review_tests {
     #[test]
     fn residual_review_successful_process_substitution_transfers_nested_residual() {
         let rig = Harness::new();
-        assert_eq!(
-            rig.run("cat <(x=$(inherit >/dev/null); echo READY); wait \"$!\""),
-            0
-        );
+        let source = r#"consume() { while IFS= read -r line; do printf '%s\n' "$line"; done < "$1"; }; consume <(x=$(inherit >/dev/null); echo READY); wait "$!""#;
+        assert_eq!(rig.run(source), 0);
         assert_eq!(rig.output.bytes(), b"READY\n");
         assert_eq!(
             rig.host.inner.active_count(),

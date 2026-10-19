@@ -18,6 +18,12 @@ fn baseline(names: &[&'static str]) -> Vec<&'static str> {
     names
 }
 
+const BUILTINS: &[&str] = &[
+    ":", "[", "break", "cd", "command", "continue", "declare", "echo", "eval", "exec", "exit",
+    "export", "false", "jobs", "kill", "let", "local", "printf", "pwd", "read", "readonly",
+    "return", "set", "shift", "shopt", "test", "true", "typeset", "unset", "wait",
+];
+
 #[test]
 fn catalogue_has_unique_exact_names_and_no_type_builtin() {
     let unique: BTreeSet<_> = COMMANDS.iter().map(|command| command.name).collect();
@@ -51,10 +57,9 @@ fn adapter_dispatch_preserves_the_old_dispatch_set_not_the_old_is_builtin_set() 
     assert_eq!(
         names(|command| matches!(command.handler(), Some(Handler::Builtin(_)))),
         baseline(&[
-            ":", "true", "false", "echo", "printf", "cat", "grep", "mkdir", "seq", "read",
-            "export", "local", "readonly", "declare", "typeset", "cd", "pwd", "set", "shift",
-            "shopt", "exit", "return", "jobs", "wait", "kill", "unset", "test", "[", "break",
-            "continue"
+            ":", "true", "false", "echo", "printf", "read", "export", "local", "readonly",
+            "declare", "typeset", "cd", "pwd", "set", "shift", "shopt", "exit", "return", "jobs",
+            "wait", "kill", "unset", "test", "[", "break", "continue"
         ])
     );
     // `command` was recognized by is_builtin but never had a builtins::run arm.
@@ -78,31 +83,15 @@ fn query_views_match_the_independent_baseline_sets() {
             "do", "done", "in", "function", "time", "{", "}", "!", "[[", "]]", "coproc",
         ])
     );
-    assert_eq!(
-        names(Command::query_builtin),
-        baseline(&[
-            ":", "true", "false", "echo", "printf", "read", "export", "local", "readonly",
-            "declare", "typeset", "cd", "pwd", "set", "shift", "command", "shopt", "exit",
-            "return", "jobs", "wait", "kill", "unset", "test", "[", "break", "continue", "exec",
-            "eval", "let",
-        ])
-    );
+    assert_eq!(names(Command::query_builtin), baseline(BUILTINS));
 }
 
 #[test]
-fn heredoc_view_preserves_grep_and_mkdir_without_query_normalization() {
-    assert_eq!(
-        names(Command::shell_heredoc_errors),
-        baseline(&[
-            ":", "true", "false", "echo", "printf", "grep", "mkdir", "read", "export", "local",
-            "readonly", "declare", "typeset", "cd", "pwd", "set", "shift", "command", "shopt",
-            "exit", "return", "jobs", "wait", "kill", "unset", "test", "[", "break", "continue",
-            "exec", "eval", "let",
-        ])
-    );
+fn heredoc_view_matches_builtin_query_membership_without_external_commands() {
+    assert_eq!(names(Command::shell_heredoc_errors), baseline(BUILTINS));
     assert_eq!(
         names(|command| command.shell_heredoc_errors() && !command.query_builtin()),
-        baseline(&["grep", "mkdir"])
+        baseline(&[])
     );
 }
 
@@ -116,19 +105,10 @@ fn classes_and_capabilities_do_not_mislabel_standins_or_unimplemented_syntax() {
         ])
     );
     assert_eq!(
-        names(|command| command.availability
-            == Availability::Included(Capability::AcceptanceUtilities)),
-        baseline(&["cat", "grep", "mkdir", "seq"])
-    );
-    assert_eq!(
         names(|command| command.availability == Availability::UnsupportedSyntax),
         baseline(&["select", "time", "coproc"])
     );
     for command in COMMANDS {
-        assert_eq!(
-            command.class == Class::AcceptanceUtility,
-            command.availability == Availability::Included(Capability::AcceptanceUtilities)
-        );
         if command.class == Class::Keyword {
             assert!(command.handler().is_none());
             assert!(!command.query_builtin());
@@ -136,5 +116,12 @@ fn classes_and_capabilities_do_not_mislabel_standins_or_unimplemented_syntax() {
         } else {
             assert!(command.handler().is_some());
         }
+    }
+}
+
+#[test]
+fn external_utilities_are_not_shell_commands() {
+    for name in ["cat", "grep", "mkdir", "seq"] {
+        assert!(lookup(name).is_none());
     }
 }

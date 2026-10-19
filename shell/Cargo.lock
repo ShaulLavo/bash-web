@@ -200,7 +200,10 @@ name = "shell-compat-fixtures"
 version = "0.0.1"
 dependencies = [
  "futures",
+ "serde",
+ "serde_json",
  "shell-engine",
+ "shell-utilities",
 ]
 
 [[package]]
@@ -209,7 +212,6 @@ version = "0.0.31"
 dependencies = [
  "futures",
  "pin-project-lite",
- "regex",
  "serde",
  "serde_json",
  "shell-parser",
@@ -221,6 +223,15 @@ version = "0.0.13"
 dependencies = [
  "serde",
  "thiserror",
+]
+
+[[package]]
+name = "shell-utilities"
+version = "0.0.1"
+dependencies = [
+ "futures",
+ "regex",
+ "shell-engine",
 ]
 
 [[package]]

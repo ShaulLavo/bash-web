@@ -5,11 +5,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
+import { stageUtilityArtifacts, utilityNames } from "./utility-artifacts.ts";
 
 type Environment = NodeJS.ProcessEnv;
 const helper = fileURLToPath(import.meta.url);
 const repositoryRoot = resolve(import.meta.dirname, "..");
-const wasiTarget = "wasm32-wasip1";
+export const wasiTarget = "wasm32-wasip1";
 
 export function wasiBuildConfiguration(root: string, env: Environment = process.env) {
   const sdk = resolve(env.WASI_SDK_PATH ?? "/work/cache/wasi-sdk-34.0-x86_64-linux");
@@ -114,7 +115,32 @@ export function wasiCargoEnvironment(
   return result;
 }
 
+/** One core shell target. Utility programs are separately linked binaries in it. */
+export function shellTargetDirectory(root: string, env: Environment = process.env): string {
+  return resolve(root, env.CARGO_TARGET_DIR ?? ".build/shell");
+}
+
+const workspaceGuests: readonly string[] = ["shell-engine", "shell-runtime"].concat(utilityNames, [
+  "argv-py",
+  "printenv-py",
+]);
+
 export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
+  const target = shellTargetDirectory(repositoryRoot);
+  const artifacts = process.env.BASH_WEB_UTILITY_ARTIFACTS;
+  const utilityPackage = args.includes("shell-utilities");
+  if (artifacts) {
+    stageUtilityArtifacts(
+      repositoryRoot,
+      resolve(repositoryRoot, artifacts),
+      resolve(target, wasiTarget, "release"),
+    );
+    if (utilityPackage) return;
+  }
+  const cargoArgs =
+    artifacts && args.includes("--workspace")
+      ? args.concat(["--exclude", "shell-utilities"])
+      : args;
   execFileSync(
     "cargo",
     [
@@ -126,28 +152,20 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
       "--manifest-path",
       "shell/Cargo.toml",
       "-j2",
-    ].concat(args),
+    ].concat(cargoArgs),
     {
       cwd: repositoryRoot,
-      env: wasiBuildEnvironment(repositoryRoot, process.env.CARGO_TARGET_DIR ?? ".build/shell"),
+      env: wasiBuildEnvironment(repositoryRoot, target),
       stdio: "inherit",
     },
   );
   const binIndex = args.indexOf("--bin");
+  // The core shell, each separately linked utility, and the compatibility fixtures
+  // all pass the same patched-libc verifier.
   const binaries =
-    binIndex < 0
-      ? ["shell-engine", "shell-runtime", "argv-py", "printenv-py"]
-      : [args[binIndex + 1]];
+    binIndex >= 0 ? [args[binIndex + 1]] : utilityPackage ? utilityNames : workspaceGuests;
   for (const binary of binaries) {
-    verifyWasiGuest(
-      resolve(
-        repositoryRoot,
-        process.env.CARGO_TARGET_DIR ?? ".build/shell",
-        wasiTarget,
-        "release",
-        `${binary}.wasm`,
-      ),
-    );
+    verifyWasiGuest(resolve(target, wasiTarget, "release", `${binary}.wasm`));
   }
 }
 

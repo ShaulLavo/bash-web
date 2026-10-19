@@ -1475,18 +1475,9 @@ fn partial_writes_epipe_and_dup_lifetime() {
 #[test]
 fn runtime_pipeline_builtins_external_and_fs_share_descriptor_namespace() {
     let (executor, fake, runtime) = setup();
-    let session = Session::new(
-        executor.clone(),
-        Rc::new(runtime.clone()),
-        Rc::new(runtime.clone()),
-        Limits::default(),
-    );
-    session.set_descriptors(runtime.stdio().unwrap()).unwrap();
-    let job = session
-        // `cat` is an engine builtin. Use a distinct fake executable so these
-        // stages really cross ProcessHost; retain a builtin consumer as well.
-        .start("printf first | runtime-cat | runtime-cat | cat > /result; runtime-cat < /result 3>&1; emit | runtime-cat | runtime-cat")
-        .unwrap();
+    let session = runtime_session(&executor, &runtime);
+    let script = "consume() { IFS= read -r value; printf '%s' \"$value\"; }; printf first | runtime-cat | runtime-cat | consume > /result; runtime-cat < /result 3>&1; emit | runtime-cat | runtime-cat";
+    let job = session.start(script).unwrap();
     assert_eq!(finish(&executor, &runtime, job), 0);
     let mut expected = b"first".to_vec();
     for _ in 0..64 {
@@ -1794,16 +1785,9 @@ fn dropping_detached_wait_observer_preserves_runtime_reaper() {
 #[test]
 fn external_after_builtin_pipeline_starts_a_fresh_runtime_job() {
     let (executor, fake, runtime) = setup();
-    let session = Session::new(
-        executor.clone(),
-        Rc::new(runtime.clone()),
-        Rc::new(runtime.clone()),
-        Limits::default(),
-    );
-    session.set_descriptors(runtime.stdio().unwrap()).unwrap();
-    let job = session
-        .start("emit | cat > /complete; runtime-cat < /complete")
-        .unwrap();
+    let session = runtime_session(&executor, &runtime);
+    let script = "consume() { while IFS= read -r value; do printf '%s\\n' \"$value\"; done; }; emit | consume > /complete; runtime-cat < /complete";
+    let job = session.start(script).unwrap();
     assert_eq!(finish(&executor, &runtime, job), 0);
     assert_eq!(fake.output.bytes(), b"runtime bytes\n".repeat(64));
     assert_eq!(fake.requests.borrow().len(), 2);
@@ -1826,13 +1810,7 @@ fn external_after_builtin_pipeline_starts_a_fresh_runtime_job() {
 #[test]
 fn background_brace_sequence_kill_and_wait_cover_later_runtime_members() {
     let (executor, fake, runtime) = setup();
-    let session = Session::new(
-        executor.clone(),
-        Rc::new(runtime.clone()),
-        Rc::new(runtime.clone()),
-        Limits::default(),
-    );
-    session.set_descriptors(runtime.stdio().unwrap()).unwrap();
+    let session = runtime_session(&executor, &runtime);
     let job = session
         .start("{ emit; sleep; echo BAD_AFTER_JOB_KILL; } &")
         .unwrap();
@@ -2084,25 +2062,30 @@ fn sigint_registration_calls_runtime_with_handle_not_ignore() {
 }
 
 #[test]
-fn runtime_mkdir_uses_shared_filesystem_and_grep_reads_created_directory() {
+fn runtime_mkdir_and_grep_are_external_programs_not_shell_stand_ins() {
     let (executor, fake, runtime) = setup();
-    let session = Session::new(
-        executor.clone(),
-        Rc::new(runtime.clone()),
-        Rc::new(runtime.clone()),
-        Limits::default(),
-    );
-    session.set_descriptors(runtime.stdio().unwrap()).unwrap();
-    let job = session.start("mkdir -p nested/deep; mkdir -p nested/deep; cd nested/deep; printf 'tick\\nother\\n' > result; grep -n tick result").unwrap();
+    let session = runtime_session(&executor, &runtime);
+    let job = session
+        .start("mkdir -p nested/deep; grep -n tick result; cat result; seq 2")
+        .unwrap();
     assert_eq!(finish(&executor, &runtime, job), 0);
-    assert_eq!(fake.output.bytes(), b"1:tick\n");
+    let requests = fake.requests.borrow();
     assert_eq!(
-        fake.fs.read_file("/home/guest/nested/deep/result").unwrap(),
-        b"tick\nother\n"
+        requests
+            .iter()
+            .map(|request| request.executable.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "/home/guest/mkdir",
+            "/home/guest/grep",
+            "/home/guest/cat",
+            "/home/guest/seq"
+        ]
     );
-    let job = session.start("mkdir -p result").unwrap();
-    assert_eq!(finish(&executor, &runtime, job), 1);
-    assert!(fake.requests.borrow().is_empty()); // Neither utility spawned a guest.
+    assert_eq!(requests[0].argv, ["mkdir", "-p", "nested/deep"]);
+    assert_eq!(requests[1].argv, ["grep", "-n", "tick", "result"]);
+    assert!(fake.fs.read_file("/home/guest/nested/deep/result").is_err());
+    assert!(fake.output.bytes().is_empty());
 }
 
 #[test]
@@ -2614,7 +2597,9 @@ fn interrupt_and_shutdown_drain_live_capture_and_blocked_input_writers() {
 fn runtime_for_globs_stream_names_and_close_directory_descriptors() {
     let (executor, fake, runtime) = setup();
     let session = runtime_session(&executor, &runtime);
-    let job = session.start("mkdir -p /tmp/runtime-glob; cd /tmp/runtime-glob; : >b.txt; : >a.txt; shopt -s nullglob; for f in *.missing *.txt; do echo \"$f\"; done").unwrap();
+    fake.fs.mkdir("/tmp/runtime-glob", true).unwrap();
+    let source = r#"cd /tmp/runtime-glob; : >b.txt; : >a.txt; shopt -s nullglob; for f in *.missing *.txt; do echo "$f"; done"#;
+    let job = session.start(source).unwrap();
     assert_eq!(finish(&executor, &runtime, job), 0);
     assert_eq!(fake.output.bytes(), b"a.txt\nb.txt\n");
     assert!(fake.directories.borrow().is_empty());
@@ -3339,7 +3324,8 @@ fn fork_failure_subshell_status_is_254_but_outer_reader_continues() {
 fn subshell_pipeline_interrupt_preserves_foreground_group_and_stops_all_stages() {
     let (executor, fake, runtime) = setup();
     let session = runtime_session(&executor, &runtime);
-    let foreground = session.start("( sleep; true ) | cat").unwrap();
+    let source = "consume() { while IFS= read -r value; do :; done; }; ( sleep; true ) | consume";
+    let foreground = session.start(source).unwrap();
     drive_until_spawn(&executor, &runtime, &fake, 1);
     assert_eq!(
         runtime.0.groups.borrow().len(),

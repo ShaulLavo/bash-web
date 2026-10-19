@@ -30,6 +30,7 @@ fn metadata_query_baseline_keeps_keywords_builtins_and_standins_distinct() {
             format!("{name} is a shell builtin\n").as_bytes()
         );
     }
+    rig.variable("PATH", "/missing");
     for name in ["cat", "grep", "mkdir", "seq", "type"] {
         let before = rig.output.bytes().len();
         assert_eq!(rig.run(&format!("command -v {name}")), 1, "{name}");
@@ -45,8 +46,8 @@ fn metadata_heredoc_baseline_does_not_normalize_the_query_exclusions() {
     for (name, command_local) in [
         ("cat", true),
         ("seq", true),
-        ("grep", false),
-        ("mkdir", false),
+        ("grep", true),
+        ("mkdir", true),
     ] {
         let rig = Rig::new(Limits::default());
         assert_eq!(

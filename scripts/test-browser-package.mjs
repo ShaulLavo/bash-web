@@ -48,7 +48,7 @@ test("shipped shell source contains no vendored runtime or Bun program implement
   assert.equal(pkg.peerDependencies?.["@bun-wasm/runtime"], undefined);
 });
 
-test("worker preparation bundles the public Waffle FS worker and finish-build restores both assets", async (context) => {
+test("worker preparation bundles the public Waffle FS worker and finish-build restores its assets", async (context) => {
   // This isolated packaging fixture owns only its scratch directory and child commands.
   // The existing dependency install is borrowed by a symlink, never copied or removed.
   const scratchRoot = resolve(root, ".build");
@@ -75,8 +75,17 @@ test("worker preparation bundles the public Waffle FS worker and finish-build re
   // finish-build must also restore the stable URLs for package consumers.
   await rm(resolve(scratch, "dist"), { recursive: true });
   await mkdir(resolve(scratch, "dist"));
+  const programs = ["cat", "grep", "mkdir", "seq"].map((name) => [
+    name,
+    Buffer.from(`${name}-program`),
+  ]);
+  await mkdir(resolve(scratch, "public/programs"), { recursive: true });
+  for (const [name, bytes] of programs)
+    await writeFile(resolve(scratch, `public/programs/${name}.wasm`), bytes);
   await run(process.execPath, [resolve(scratch, "scripts/finish-build.mjs")], { timeout: 30000 });
   for (const [worker, bytes] of prepared) {
     assert.deepEqual(await readFile(resolve(scratch, `dist/${worker}.js`)), bytes);
   }
+  for (const [name, bytes] of programs)
+    assert.deepEqual(await readFile(resolve(scratch, `dist/${name}.wasm`)), bytes);
 });
