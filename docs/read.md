@@ -8,9 +8,10 @@ Decimal counts through 2147483647 accept a sign and surrounding ASCII whitespace
 negative nonzero and invalid counts return 1 before consuming input.
 
 The counted path supports separate and combined `-r`, `-n` and `-u` options and
-one scalar destination. Without `-r`, backslash quotes the next character,
-backslash-newline contributes nothing, and a trailing backslash at EOF is
-removed. NUL bytes do not contribute to the count. An explicit name trims
+one scalar destination. Invalid scalar names return 1 before consuming input.
+Signed zero is accepted as descriptor zero. Without `-r`, backslash quotes the
+next character, backslash-newline contributes nothing, and a trailing backslash
+at EOF is removed. NUL bytes do not contribute to the count. An explicit name trims
 unquoted IFS whitespace at its ends; the default `REPLY` preserves it.
 
 Character locale selection reuses printf's existing `LC_ALL`, `LC_CTYPE`, `LANG`
@@ -22,9 +23,10 @@ Other locale encodings remain unsupported.
 
 The buffer is bounded by `line_bytes` and the count's maximum encoded size.
 Both command storage and shared live execution memory admit it before input.
-The live ticket stays through assignment and drops on success, failure or
-cancellation. Each input byte consumes cooperative work and uses the cancellable
-endpoint reader. There is no read-ahead, descriptor probe or metadata inference.
+The buffer is compacted to its final byte length before assignment, so retained
+values cannot keep the unused reservation after its live ticket drops. The ticket
+stays through assignment and drops on success, failure or cancellation. Each
+input byte consumes cooperative work and uses the cancellable endpoint reader. There is no read-ahead, descriptor probe or metadata inference.
 
 Uncounted reads retain their existing behavior. This change does not implement
 uncounted escape processing, multiple destinations, arrays, `-N`, `-d`, timers,

@@ -1,4 +1,3 @@
-//! Original counted scalar read. Uncounted reads retain the existing line reader.
 use super::{endpoint, error_status, printf};
 use crate::{
     executor::Budget,
@@ -72,14 +71,18 @@ async fn option_word<'a>(
             options.count = Some(count(value, context, work).await?);
             return Ok(());
         }
-        options.fd = value.parse().map_err(|_| 2)?;
+        options.fd = value
+            .parse::<i64>()
+            .ok()
+            .and_then(|fd| u32::try_from(fd).ok())
+            .ok_or(2)?;
         return Ok(());
     }
     Ok(())
 }
 
 async fn count(value: &str, context: &Context, work: &mut Work) -> Result<usize, i32> {
-    let value = value.trim_matches(|ch: char| ch.is_ascii_whitespace());
+    let value = value.trim_matches(|ch: char| ch.is_ascii_whitespace() || ch == '\u{b}');
     let negative = value.starts_with('-');
     let digits = value.strip_prefix(['+', '-']).unwrap_or(value);
     if digits.is_empty() {
@@ -184,6 +187,9 @@ async fn counted(
     context: &Context,
     work: &mut Work,
 ) -> Result<Outcome, i32> {
+    if options.name.is_some_and(|name| !super::valid_name(name)) {
+        return Err(1);
+    }
     let utf8 = printf::character_locale(state, context, work).await?;
     let trim = if options.name.is_some() {
         let members = State::admit_ifs_members(state, &context.cancel, work)
@@ -302,7 +308,7 @@ impl Reader {
             return Err(2);
         }
         self.bytes.truncate(self.bytes.len() - self.trailing);
-        Ok((self.bytes, code))
+        Ok((self.bytes.into_boxed_slice().into_vec(), code))
     }
 }
 

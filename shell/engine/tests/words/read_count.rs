@@ -1,4 +1,3 @@
-//! Original controls for the bounded read -n family, observed against Bash 5.3.15.
 use super::*;
 use shell_engine::io::pipe;
 
@@ -198,4 +197,116 @@ fn read_count_pending_after_partial_input_keeps_unread_suffix() {
     assert_eq!(reader.read(&mut byte).now_or_never(), Some(Ok(1)));
     assert_eq!(byte, [b'x']);
     assert!(reader.read(&mut byte).now_or_never().is_none());
+}
+
+#[test]
+fn read_count_short_local_values_do_not_retain_the_reserved_ceiling() {
+    let rig = Rig::new(Limits {
+        execution_bytes: 131072,
+        ..Limits::default()
+    });
+    let (_reader, _writer) = pending_input(&rig, b"");
+    let job = rig.shell.start("f() { local a b c d; read -n99999 a <<<x; read -n99999 b <<<x; read -n99999 c <<<x; read -n99999 d <<<x; read -n1 waiting; }; f").unwrap();
+    for _ in 0..10000 {
+        rig.ex.drive(64);
+    }
+    assert!(!job.is_finished());
+    let capacities: Vec<_> = ["a", "b", "c", "d"]
+        .map(|name| {
+            let state = rig.shell.state();
+            let state = state.borrow();
+            let value = state.bindings().get(name).unwrap();
+            (value.len(), value.capacity())
+        })
+        .into();
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    assert_eq!(capacities, vec![(1, 1); 4]);
+    assert_eq!(rig.run("true"), 0);
+}
+
+#[test]
+fn read_count_invalid_scalar_names_leave_all_input_unread() {
+    for name in ["1bad", "a-b", "a.b", "", "é"] {
+        check(
+            &format!(
+                "{{ x=old; read -n3 '{name}' 2>/dev/null; echo \"[$x]:$?\"; read -r tail; echo \"[$tail]:$?\"; }} <<<abcdef"
+            ),
+            b"[old]:1\n[abcdef]:0\n",
+        );
+    }
+    for name in ["a", "_", "a0", "_a_9"] {
+        check(
+            &format!(
+                "{{ read -n3 {name}; echo \"[${name}]:$?\"; read -r tail; echo \"[$tail]:$?\"; }} <<<abcdef"
+            ),
+            b"[abc]:0\n[def]:0\n",
+        );
+    }
+}
+
+#[test]
+fn read_count_decimal_padding_and_numeric_boundaries() {
+    for count in [
+        "\u{b}3\u{b}",
+        " \t\r\n\u{b}\u{c}+03 \t\r\n\u{b}\u{c}",
+        "0003",
+    ] {
+        check(
+            &format!(
+                "{{ read -n '{count}' x; echo \"[$x]:$?\"; read -r tail; echo \"[$tail]:$?\"; }} <<<abcdef"
+            ),
+            b"[abc]:0\n[def]:0\n",
+        );
+    }
+    for count in [
+        "",
+        " ",
+        "+",
+        "-",
+        "-1",
+        "3x",
+        "3 0",
+        "0x3",
+        "2147483648",
+        "999999999999999999999999",
+        "\u{85}3",
+        "\u{a0}3",
+    ] {
+        check(
+            &format!(
+                "{{ x=old; read -n '{count}' x 2>/dev/null; echo \"[$x]:$?\"; read -r tail; echo \"[$tail]:$?\"; }} <<<abcdef"
+            ),
+            b"[old]:1\n[abcdef]:0\n",
+        );
+    }
+    check("read -n2147483647 x <<<a; echo \"[$x]:$?\"", b"[a]:0\n");
+}
+
+#[test]
+fn read_count_signed_zero_descriptor_and_invalid_descriptors() {
+    for fd in ["-0", "-00", "+0", "00"] {
+        check(
+            &format!(
+                "{{ read -n3 -u '{fd}' x; echo \"[$x]:$?\"; read -r tail; echo \"[$tail]:$?\"; }} <<<abcdef"
+            ),
+            b"[abc]:0\n[def]:0\n",
+        );
+    }
+    for fd in [
+        "-1",
+        "",
+        "+",
+        "0x0",
+        "0.0",
+        "4294967296",
+        "999999999999999999999",
+    ] {
+        check(
+            &format!(
+                "{{ x=old; read -n3 -u '{fd}' x 2>/dev/null; echo \"[$x]:$?\"; read -r tail; echo \"[$tail]:$?\"; }} <<<abcdef"
+            ),
+            b"[old]:2\n[abcdef]:0\n",
+        );
+    }
 }

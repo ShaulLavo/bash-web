@@ -1372,8 +1372,10 @@ this unit. See [counted read](../docs/read.md) for the supported locale domain,
 resource limits and unsupported byte sequences.
 
 The native and production real-Waffle failing-first matrix has 124 mismatches
-on the exact merged base; both final matrices match all 124. The frozen ruler
-retains all 9,221 records, 5,792 scored cases and all four identity hashes.
+on the exact merged base; both final matrices match all 124 stdout/status pairs
+and 123 including stderr. The closed-descriptor diagnostic remains different
+and is not claimed fixed. The frozen ruler retains all 9,221 records, 5,792 scored
+cases and all four identity hashes.
 Measured memberships change Oils 967 to 972, Brush 958 to 961 and Bashkit 1,357
 to 1,361: twelve gains and zero losses. Only those twelve records and derived
 counts change in the baseline. Exact IDs and verification receipts are in

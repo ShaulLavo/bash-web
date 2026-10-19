@@ -17,16 +17,16 @@
   },
   "sourceSha256": {
     "shell/engine/src/builtins.rs": "5333f72917190b76b400d9da5c964c7dece4033273b4f98b02a1cbd0f2783f07",
-    "shell/engine/src/builtins/read.rs": "048a821f8aa5fbe2d1190872310f73b30ad14e399b33bf43adb4c349d51f20f3",
+    "shell/engine/src/builtins/read.rs": "86b364d55241b5be533452ead4f12a11cda87780e5bf5e18111379e69ce86435",
     "shell/engine/src/builtins/printf.rs": "d4f45f35986e1bc318815ae3f6fbaa82d9a71c34705f693698b12b57c9d5da8b",
     "shell/engine/src/interpreter.rs": "262afc595ee3112ab37465227a0ff4b21174f320a9b1fe818ccd6d18e5f639ff",
-    "shell/engine/tests/words/read_count.rs": "c699230874325a425abff54635cbfa95c56bd337711ac80d32b2b833fbb48191",
+    "shell/engine/tests/words/read_count.rs": "b4a642b07797d293befce4f772e956071f3ac0b3d5532f91ef715849630fc652",
     "tests/external-commands.spec.ts": "3bef32f251d6c2900a6740bd68bbb1fbdba1a9686abd284ab54eef2100d40d36"
   },
   "artifactSha256": {
-    "release/shell-cli": "1da771e1bc2ce4e91378986543bfa85c4c9762608b6f6efe302edac2492b9bcf",
-    "wasm32-wasip1/release/shell-cli.wasm": "fcd6c99853e1fe0a785a6e02bf3c4c9a8c499911cb70dab58a33e0e33e3704f4",
-    "wasm32-wasip1/release/shell-runtime.wasm": "9157817fb583cef5afa6f72fdc94acdf9365ad6c0fc2b52d7c21fc8118d5ecc0"
+    "release/shell-cli": "e23c4825a4b01bbd771c3306b9a8d2eeb1b3268743e9baef1ece86d737b12de0",
+    "wasm32-wasip1/release/shell-cli.wasm": "68ee989e7513b0f6adc2f47e4dc7222f19be51ec8fc32c6f54231379fa3f0131",
+    "wasm32-wasip1/release/shell-runtime.wasm": "e394dd6325a493cf0b6c409ae435d8a8c09715ee070574327a5b4be2b9d232b1"
   },
   "failingFirst": {
     "native": {
@@ -51,15 +51,16 @@
       "allStreamsAndStatusMatches": 123
     },
     "diagnosticsBoundary": "The sole focused stderr mismatch is the closed-fd negative control. Invalid-count controls deliberately suppress diagnostics in both shells. Frozen scoring remains exact stdout and status, not stderr.",
-    "nativeTests": 1178,
-    "wasiTests": 1158,
+    "nativeTests": 1182,
+    "wasiTests": 1162,
     "browser": {
       "passed": 228,
       "preexistingSkipped": 16,
       "projects": [
         "chromium",
         "firefox"
-      ]
+      ],
+      "provenance": "Prior e7a02e1 verification, not rerun for round-one fixes; no browser host or browser test changes in this revision. Hosted CI remains blocking."
     },
     "seededFuzz": "All twelve existing CI native replay families passed unchanged; echo also passed 492/492 on real Waffle. No fixture or timeout changes.",
     "quality": "Full npm run quality passed, including clippy test targets. Two duplicated new test fragments were extracted; duplicate allowances are unchanged.",
@@ -121,7 +122,7 @@
     "unchangedOtherBaselineRecords": 9209,
     "gate": "RECORD=0; exact base; unchanged oracle/environment/source/classification/exclusions/scoring/per-case deadlines; full original-pass and exact candidate-pass membership checks passed."
   },
-  "resourceControls": "One-byte cancellable reads with work checkpoints; incremental four-byte UTF-8 validation; line/count cap; command storage and shared live execution admission before reading; ticket retained through final atomic assignment; cancellation and failure refund it. No read-ahead or fd metadata probes.",
+  "resourceControls": "One-byte cancellable reads with work checkpoints; incremental four-byte UTF-8 validation; line/count cap; command and shared live execution admission before reading; compact retained capacity to final length before atomic assignment while the ticket is still held; cancellation/failure refund. No read-ahead or descriptor metadata probes.",
   "initialFailures": [
     "First full measurement with four workers under 4GiB was killed with status 137 after 500 cases. No score produced. Owned descendants/scratch removed; unchanged replay passed with one worker in suite class.",
     "Quality rejected two new test duplicates. Extracted shared assertions/setup without changing allowances; full quality then passed."
@@ -147,5 +148,71 @@
     "npm run test:check-layers && LAYERS_BASE_REF=1bdbacd6c11ca7be31a55a2b3964239eabf10482 npm run check:layers && npm run typecheck:layers",
     "npm run build:browser && npm run typecheck:browser && npm run test:runtime:terminal",
     "BASH_WEB_TEST_PORT=4297 npm run test:browser"
-  ]
+  ],
+  "reviewFixesRound1": {
+    "originalHead": "e7a02e1fc27648258b0429f4a696ea199714bf47",
+    "failingFirst": "Four new Rust regressions fail at the original head. Pending locals retain four 65536-byte allocations for four one-byte values under execution_bytes=131072. All four regressions pass after local fixes.",
+    "fixes": "Compact the counted buffer to its length before transfer; reject invalid scalar destinations before input; accept vertical-tab decimal padding; accept signed-zero descriptors. Remove exactly the two accepted redundant source banners, preserving sources.lock provenance.",
+    "retainedCapacity": {
+      "pendingLocalValues": 4,
+      "eachLength": 1,
+      "beforeEachCapacity": 65536,
+      "afterEachCapacity": 1,
+      "executionBytes": 131072
+    },
+    "observations": [
+      {
+        "mode": "native",
+        "total": 39,
+        "beforeExactMatches": 23,
+        "afterExactMatches": 32,
+        "gained": [
+          "name:\"1bad\"",
+          "name:\"a-b\"",
+          "name:\"a.b\"",
+          "name:\"\"",
+          "name:\"é\"",
+          "count:\"\\u000b3\\u000b\"",
+          "count:\" \\t\\r\\n\\u000b\\f+03 \\t\\r\\n\\u000b\\f\"",
+          "fd:\"-0\"",
+          "fd:\"-00\""
+        ],
+        "lost": [],
+        "unchangedInvalidDescriptorStatusDifferences": 7,
+        "originalMatrix": {
+          "total": 124,
+          "stdoutAndStatusMatches": 124,
+          "allStreamsAndStatusMatches": 123
+        }
+      },
+      {
+        "mode": "waffle",
+        "total": 39,
+        "beforeExactMatches": 23,
+        "afterExactMatches": 32,
+        "gained": [
+          "name:\"1bad\"",
+          "name:\"a-b\"",
+          "name:\"a.b\"",
+          "name:\"\"",
+          "name:\"é\"",
+          "count:\"\\u000b3\\u000b\"",
+          "count:\" \\t\\r\\n\\u000b\\f+03 \\t\\r\\n\\u000b\\f\"",
+          "fd:\"-0\"",
+          "fd:\"-00\""
+        ],
+        "lost": [],
+        "unchangedInvalidDescriptorStatusDifferences": 7,
+        "originalMatrix": {
+          "total": 124,
+          "stdoutAndStatusMatches": 124,
+          "allStreamsAndStatusMatches": 123
+        }
+      }
+    ],
+    "negativeControls": "Seven invalid-descriptor cases retain the preexisting status-2 versus Bash status-1 difference, with full unread suffix in both. Their diagnostics are suppressed. They are controls, not claimed fixes or exact matches.",
+    "frozenProof": "Normal RECORD=0 JOBS=1 gate against the exact base passes; all 9221 records, identities, classifications and exclusions remain frozen. Same 12 gains, zero losses, no baseline changes in this revision.",
+    "commandsScript": "/work/reports/bash-web/hill-climb/read-count/review-fixes-r1-gates.sh",
+    "report": "/work/reports/bash-web/hill-climb/read-count/review-fixes-r1.md"
+  }
 }
