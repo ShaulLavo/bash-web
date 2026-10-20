@@ -606,3 +606,27 @@ pub(super) fn assert_diagnostic_backpressure_cancellation(source: &str, fd: u32)
     assert!(reader.read(&mut byte).now_or_never().is_none());
     assert_eq!(rig.run("true"), 0);
 }
+
+pub(super) fn assert_warning_admission(source: &str) {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 1024,
+        ..Limits::default()
+    });
+    assert_recovery(&rig, source, 2);
+    assert!(
+        !rig.errors
+            .bytes()
+            .windows(b"invalid number".len())
+            .any(|bytes| bytes == b"invalid number")
+    );
+}
+
+pub(super) fn assert_admission_cancellation(source: &str) {
+    let rig = Rig::new(Limits::default());
+    let job = rig.shell.start(source).unwrap();
+    rig.drive_until_variable("started", "yes");
+    for _ in 0..500 {
+        rig.ex.drive(1);
+    }
+    interrupt_empty(&rig, job);
+}

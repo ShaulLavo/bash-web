@@ -379,11 +379,16 @@ async fn conversion(
         printer.emit(1, b"%").await?;
         return Ok(false);
     }
-    if matches!(input.get(*offset), Some(b'd' | b'i')) {
+    if let Some(conversion @ (b'd' | b'i' | b'u' | b'o' | b'x' | b'X')) = input.get(*offset) {
         printer.scan(1).await?;
         *offset += 1;
-        let number = args.number(printer, NumberRange::Signed).await?;
-        print_integer(number, printer).await?;
+        let range = if matches!(conversion, b'd' | b'i') {
+            NumberRange::Signed
+        } else {
+            NumberRange::Unsigned
+        };
+        let number = args.number(printer, range).await?;
+        print_integer(number, *conversion, printer).await?;
         return Ok(false);
     }
     if input.get(*offset) == Some(&b'b') {
@@ -407,19 +412,34 @@ async fn conversion(
     Ok(true)
 }
 
-async fn print_integer(number: i64, printer: &mut Printer<'_>) -> Result<(), i32> {
-    let mut digits = [0u8; 20];
+async fn print_integer(number: u64, conversion: u8, printer: &mut Printer<'_>) -> Result<(), i32> {
+    let negative = matches!(conversion, b'd' | b'i') && (number as i64) < 0;
+    let radix = match conversion {
+        b'o' => 8,
+        b'x' | b'X' => 16,
+        _ => 10,
+    };
+    let alphabet = if conversion == b'X' {
+        b"0123456789ABCDEF"
+    } else {
+        b"0123456789abcdef"
+    };
+    let mut digits = [0u8; 22];
     let mut offset = digits.len();
-    let mut magnitude = number.unsigned_abs();
+    let mut magnitude = if negative {
+        number.wrapping_neg()
+    } else {
+        number
+    };
     loop {
         offset -= 1;
-        digits[offset] = b'0' + (magnitude % 10) as u8;
-        magnitude /= 10;
+        digits[offset] = alphabet[(magnitude % radix) as usize];
+        magnitude /= radix;
         if magnitude == 0 {
             break;
         }
     }
-    if number < 0 {
+    if negative {
         offset -= 1;
         digits[offset] = b'-';
     }

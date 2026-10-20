@@ -4161,3 +4161,5 @@ mod read_count;
 mod printf_fields;
 #[path = "words/printf_integers.rs"]
 mod printf_integers;
+#[path = "words/printf_unsigned.rs"]
+mod printf_unsigned;
