@@ -1512,5 +1512,23 @@ field/count parsing with strings and preserves signed-32 star versus signed and
 unsigned-64 operand policies. Fixed digit storage and chunked padding retain
 admission before delivery, cancellation and stream ordering. No floats, time,
 locale grouping, `%c`, `-v`, dependency, runtime or architecture changes.
-See [integer fields](../docs/printf-integer-fields.md). Measurement evidence and
-newly gained baseline memberships follow after the single frozen replay.
+See [integer fields](../docs/printf-integer-fields.md).
+
+Failing-first native and production-Waffle controls match 31/542 strict Bash
+stdout/status observations per target, improving to 537/542 with raw stderr
+retained separately. Ten new Rust tests pass on native and WASI alongside prior
+signed/unsigned/star/string/echo and resource controls. Frozen printf/echo
+fixtures, duplicate allowances and layer policy are unchanged.
+
+One complete frozen production-Waffle replay preserves 9,221 records, 5,792
+scored cases and all case/oracle/environment/source identities. It measures
+Oils 996 to 1,002, Brush 975 to 983 and Bashkit 1,373 to 1,383, 24 gains and zero
+lost passes. Its expected exit 1 follows the complete saved result and stale
+membership assertion. Only those 24 gained rows and derived counts change.
+The unchanged strict comparator passes offline against the same saved replay;
+no second replay or re-oracle. All 9,197 other baseline rows stay unchanged,
+including 18 historical still-failing payload differences. Production/test
+source is frozen at 8b8ce95b3bfb04405eaa5c494eb7d883ee0b33fd. Exact gains,
+hashes, comparisons, unrun gates and cleanup ownership are in
+[the evidence receipt](../docs/evidence/printf-integer-fields.json) and
+`/work/reports/bash-web/hill-climb/printf-integer-fields/`.
