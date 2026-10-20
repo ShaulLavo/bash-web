@@ -1,4 +1,3 @@
-//! Original string-field controls observed against GNU Bash 5.3.15.
 use super::{Limits, Rig, printf};
 
 #[test]
@@ -143,4 +142,62 @@ fn printf_string_padding_delivery_cancellation_keeps_only_written_spaces() {
     assert!(remaining[..length].iter().all(|byte| *byte == b' '));
     assert!(reader.read(&mut byte).now_or_never().is_none());
     assert_eq!(rig.run("true"), 0);
+}
+
+#[test]
+fn printf_string_star_errors_are_cleared_by_operand_stop() {
+    for (source, expected) in [
+        (r"printf '[%*s]%bBAD' 3x abc '\c'", &b"[abc]"[..]),
+        (r"printf '[%.*s]%bBAD' 2x abc '\c'", &b"[ab]"[..]),
+        (r"printf '[%*.*s]%bBAD' 3x 2x abc '\c'", &b"[ ab]"[..]),
+        (
+            r"printf '[%*s]%b' 3x abc ok 2 xy '\c' 5 bad BAD",
+            &b"[abc]ok[xy]"[..],
+        ),
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 0, "{source}");
+        assert_eq!(rig.output.bytes(), expected, "{source}");
+        assert!(rig.errors.bytes().ends_with(b"invalid number\n"));
+    }
+}
+
+#[test]
+fn printf_string_star_diagnostics_to_closed_stderr_do_not_stop_output() {
+    for (source, expected, status) in [
+        (
+            "printf 'prefix[%.*s]tail' 2x abc 2>&-",
+            &b"prefix[ab]tail"[..],
+            1,
+        ),
+        ("printf '[%*s]' 3x abc 2 xy 2>&-", &b"[abc][xy]"[..], 1),
+        (r"printf '[%.*s]%bBAD' 2x abc '\c' 2>&-", &b"[ab]"[..], 0),
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), status, "{source}");
+        assert_eq!(rig.output.bytes(), expected, "{source}");
+        assert!(rig.errors.bytes().is_empty());
+    }
+}
+
+#[test]
+fn printf_string_stop_does_not_hide_output_or_admission_errors() {
+    for source in [
+        r"printf '[%*s]%bBAD' 3x abc '\c' 1>&-",
+        r"printf '[%.*s]%bBAD' 2x abc '\c' 1>&- 2>&-",
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 1, "{source}");
+        assert!(rig.output.bytes().is_empty());
+    }
+    let rig = Rig::new(Limits {
+        expansion_bytes: 1024,
+        ..Limits::default()
+    });
+    printf::assert_recovery(&rig, r"printf '%2000s%b' x '\c'", 2);
+}
+
+#[test]
+fn printf_string_star_diagnostic_cancellation_stays_cancelled() {
+    printf::assert_diagnostic_backpressure_cancellation(r"printf '[%*s]%bBAD' 3x abc '\c'", 2);
 }

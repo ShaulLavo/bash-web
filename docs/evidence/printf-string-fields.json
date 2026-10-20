@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "date": "2026-10-19",
+  "date": "2026-10-20",
   "classification": "Original local implementation, regression controls and measurements. GNU Bash is the behavior oracle; no upstream implementation copied or adapted. Parent owns independent provenance/code review.",
   "baseRevision": "4b063eb5b839f93dc26ff2bc0508b8b8d86fa95a",
   "model": "gpt-6.1-sol",
@@ -16,16 +16,16 @@
     "waffleRevision": "33ece68f9f484d99b8a57a675de71d847e248051"
   },
   "sourceSha256": {
-    "shell/engine/src/builtins/printf.rs": "09288edd07e21196b376f4bda8f8fd92900fc451237539c92fe6c597e4443db1",
-    "shell/engine/src/builtins/printf/fields.rs": "40d96853395f465dc91ee5bdf89f1a546a5d927fa5b774cc8df63576db3dff9f",
-    "shell/engine/tests/words/printf_fields.rs": "ffe6c76fd8ed4249fc514195353ec439b8136b90284e34c16e6c5141676ae92a",
-    "shell/engine/tests/words/printf.rs": "b0bac8957e485f6171357fdbcdc1326d9be8940b220a60ceade519fc5d0c33ad",
+    "shell/engine/src/builtins/printf.rs": "720869c20afe36364d733befd224222e17357cd141f7ab4d989437f7692c1437",
+    "shell/engine/src/builtins/printf/fields.rs": "a67a61cb604e7931b61cc8e2b28b236185db0c7f61df01f9a367ba8252e9cafb",
+    "shell/engine/tests/words/printf_fields.rs": "25f0e848866600fbaec3335e5e9aa196cbbe482ec6f562d9ab8ae15977ec8873",
+    "shell/engine/tests/words/printf.rs": "6ba551bd2c91404496cb7b139641b7288c49e161db8e3727185af3154c44b6a2",
     "shell/engine/tests/words.rs": "079d04c7773dd65b4ee3c2afd827ad60a81c8e05af7f2656bfb2dd12e3544a90"
   },
   "artifactSha256": {
-    "release/shell-cli": "65729f20cbb25322e54b66d0b31b9395edbdda14d44e19fb33ca900848164756",
-    "wasm32-wasip1/release/shell-cli.wasm": "dff18600ea06d74967f4f78507fdf6b4f02fa07f9c7b1d2cb1a6d706c253ce7e",
-    "wasm32-wasip1/release/shell-runtime.wasm": "c25f8110600f936b3d7f8305bb0ecc9048914a63d58ff8207ef569c7a3c467b2"
+    "release/shell-cli": "76d09155fc295a84d3dcfd07ddaf54e6004340b76cf906b0827f221491978ee3",
+    "wasm32-wasip1/release/shell-cli.wasm": "539c8465753af024f995051ed330a292e03b18f02e2d87a75b0c62b50caacce9",
+    "wasm32-wasip1/release/shell-runtime.wasm": "b01bad7a2efaf96798dcb03939e8e13dfcde1496e858758d1cfca315b6f7c241"
   },
   "failingFirst": {
     "native": {
@@ -47,20 +47,40 @@
       "total": 167,
       "matched": 167
     },
-    "diagnosticsBoundary": "Invalid numeric controls suppress stderr on both sides; strict stdout/status and healthy execution checks remain. Raw diagnostics are retained. Existing source-line annotation differences remain outside this unit.",
-    "nativeTests": 1190,
-    "wasiTests": 1170,
-    "browser": {
-      "passed": 228,
-      "preexistingSkipped": 16,
-      "projects": [
-        "chromium",
-        "firefox"
+    "reviewMatrix": {
+      "native": {
+        "total": 222,
+        "matched": 214
+      },
+      "realWaffle": {
+        "total": 222,
+        "matched": 214
+      },
+      "remaining": "Seven disclosed missing bare %d defaults and one source-line annotation in stdout with 2>&1. All 222 cases retained."
+    },
+    "rawBoundaryControls": {
+      "total": 18,
+      "matched": 18,
+      "platforms": [
+        "native",
+        "real Waffle"
+      ],
+      "assertions": "Explicit exact raw stdout and exit status; raw stderr retained. Numeric diagnostic source-line annotations remain different."
+    },
+    "targetedTestsPerPlatform": {
+      "printfWords": 33,
+      "echoWords": 10,
+      "printfLibrary": 2,
+      "total": 45,
+      "platforms": [
+        "native",
+        "WASI"
       ]
     },
-    "seededFuzz": "All twelve existing native CI replay families passed unchanged, including printf 1122/1122 and echo 492/492. Echo also passed 492/492 on real Waffle. No fixture or deadline changes.",
-    "quality": "Full npm run quality passed, including clippy all test targets, native workspace tests, duplicate checks with unchanged allowances, formatting, lint, typecheck and unused dependency checks.",
-    "layers": "Zero production and test-only violations; unchanged 42 production and 28 test-only unique edges; exact immutable base enforced."
+    "seededFuzz": "Unchanged printf fixtures 1122/1122 and echo 492/492 on both native and production real Waffle, rerun after final artifact rebuild. No fixture/deadline changes.",
+    "quality": "Cargo formatting; clippy workspace/all test targets on native and WASI with -D warnings; owned parser audit; exact and structural duplicates with original allowances; immutable-base layer ratchet. No full unrelated-suite or browser rerun claimed for this fix; hosted CI remains blocking.",
+    "layers": "Zero production and test-only violations; unchanged 42 production and 28 test-only unique edges; source hash refreshed without changing graph/policy.",
+    "diagnosticsBoundary": "The author 167-case controls suppress numeric stderr; the 222-case reviewer comparator normalizes stderr source-line prefixes but not stdout. Raw before/after stderr is retained. The separate 18 boundary observations explicitly check exact stdout/status without discarding the diagnostic evidence."
   },
   "frozenIdentity": {
     "schema": 1,
@@ -119,13 +139,16 @@
     "gained": 15,
     "lost": 0,
     "unchangedOtherBaselineRecords": 9206,
-    "gate": "Full normal RECORD=0 JOBS=1 replay against exact base; candidate pass membership exact; oracle/environment/source/classification/exclusions/scoring/per-case deadlines and every other baseline record unchanged."
+    "gate": "Final rebuilt-artifact normal RECORD=0 JOBS=1 replay in canonical suite class, against exact base; candidate pass memberships exact and all 9206 other baseline records unchanged. Frozen oracle/environment/source/classification/exclusions/scoring/per-case deadlines unchanged."
   },
   "resourceControls": "Borrowed byte precision, bounded numeric parser, complete output/work admission before emission, padding capacity checked before walking spaces, fixed 4096-byte delivery buffer, existing cancellable work/backpressure and live frame memory admission. No reconstructed result String or padding allocation.",
   "initialFailures": [
     "The first 159-case matrix exposed one preexisting out-of-scope bare %d invalid/missing-value mismatch. The mixed-format control was corrected to use complete valid numeric operands; no production %d behavior changed. The expanded final 167-case matrix matches both targets.",
     "The initial frozen RECORD=0 measurement intentionally rejected the stale baseline after writing the complete 15-gain/zero-loss score. Only proven gained records and counts were recorded, then the full normal gate was rerun.",
-    "The first gate orchestration script was edited as its queue slot began, causing shell read-offset parsing failure after WASI passed. No test failed. The remaining unexecuted gates use an immutable separate script; WASI was not repeated."
+    "The first gate orchestration script was edited as its queue slot began, causing shell read-offset parsing failure after WASI passed. No test failed. The remaining unexecuted gates use an immutable separate script; WASI was not repeated.",
+    "Review fix first direct WASI command failed linking because unencoded scratch flags combined with target config; remaining/final commands use canonical wasiBuildEnvironment encoded flags.",
+    "A printf replay CLI attempt rejected unsupported --waffle before tests. Production Waffle replay uses the existing fixture validator and real runner directly.",
+    "Unchanged duplicate gate rejected three initial clones. Shared diagnostic I/O and the existing full-pipe assertion remove them without allowance changes. A local Python quoting edit failed before writes, then the unchanged-source duplicate check failed again; corrected edit passed. Final artifacts were rebuilt and the frozen replay repeated."
   ],
   "existingTestExpectation": "The unsupported-fields regression uses %08d instead of newly supported %08s. The assertions and unsupported-field coverage remain strict; no fixture, skip, timeout or allowance changed.",
   "deferred": [
@@ -136,18 +159,16 @@
   ],
   "reportDirectory": "/work/reports/bash-web/hill-climb/printf-string-fields",
   "commands": [
-    "bash run-gates.sh: WASI tests and guest verification",
-    "bash run-gates-remaining.sh: all remaining ordinary blocking gates",
-    "node probe.ts native native-after.json; node probe.ts waffle waffle-after.json",
-    "BASH_COMPAT_RECORD=0 BASH_COMPAT_JOBS=1 BASH_COMPAT_SKIP_BUILD=1 BASH_COMPAT_BASE_REF=4b063eb5b839f93dc26ff2bc0508b8b8d86fa95a npm run compat:shell",
-    "node verify-final.ts"
+    "bash review-fixes-r1-build-deduplicated.sh",
+    "bash review-fixes-r1-frozen.sh, final log review-fixes-r1-frozen-final.log",
+    "bash review-fixes-r1-controls-final.sh"
   ],
   "resourceRetention": {
     "cleanupOwner": "Parent coordinator",
     "removalCondition": "After independent review and CI consumers stop, run report teardown.sh and remove the exclusive worktree with git worktree remove. Preserve shared caches/services and diagnostic-snapshot/PR23.",
     "exactBuildRoot": {
       "path": "/work/tmp/bash-web-printf-string-fields",
-      "allocatedBytes": 4068196352,
+      "allocatedBytes": 5025914880,
       "reason": "Exact native/WASI release artifacts and warm test target retained for parent review; env.sh and empty browser temp parent retained."
     },
     "worktree": {
@@ -155,6 +176,73 @@
       "allocatedBytes": 322060288,
       "reason": "Review source plus owned dependencies/build helpers."
     },
-    "verifiedCleanup": "Owned probes/frozen temporary roots/browser profiles/test-results removed after all consumers stopped. Actual-host /proc cwd/exe/fd/maps/environment-name audit found no remaining consumers. Canonical queue empty and browser port 4296 closed. No service/container/route created."
+    "verifiedCleanup": "Final actual-host consumer/queue audit is recorded in review-fixes-r1-cleanup.json and review-fixes-r1.md. Assigned source and warm targets retained for the next independent parent review; only disposable run scratch is torn down."
+  },
+  "priorAuthorValidation": {
+    "revision": "916a7611cef6f778a863853766162f0a89a6c6d4",
+    "results": {
+      "native": {
+        "total": 167,
+        "matched": 167
+      },
+      "realWaffle": {
+        "total": 167,
+        "matched": 167
+      },
+      "diagnosticsBoundary": "Invalid numeric controls suppress stderr on both sides; strict stdout/status and healthy execution checks remain. Raw diagnostics are retained. Existing source-line annotation differences remain outside this unit.",
+      "nativeTests": 1190,
+      "wasiTests": 1170,
+      "browser": {
+        "passed": 228,
+        "preexistingSkipped": 16,
+        "projects": [
+          "chromium",
+          "firefox"
+        ]
+      },
+      "seededFuzz": "All twelve existing native CI replay families passed unchanged, including printf 1122/1122 and echo 492/492. Echo also passed 492/492 on real Waffle. No fixture or deadline changes.",
+      "quality": "Full npm run quality passed, including clippy all test targets, native workspace tests, duplicate checks with unchanged allowances, formatting, lint, typecheck and unused dependency checks.",
+      "layers": "Zero production and test-only violations; unchanged 42 production and 28 test-only unique edges; exact immutable base enforced."
+    },
+    "commands": [
+      "bash run-gates.sh: WASI tests and guest verification",
+      "bash run-gates-remaining.sh: all remaining ordinary blocking gates",
+      "node probe.ts native native-after.json; node probe.ts waffle waffle-after.json",
+      "BASH_COMPAT_RECORD=0 BASH_COMPAT_JOBS=1 BASH_COMPAT_SKIP_BUILD=1 BASH_COMPAT_BASE_REF=4b063eb5b839f93dc26ff2bc0508b8b8d86fa95a npm run compat:shell",
+      "node verify-final.ts"
+    ]
+  },
+  "reviewFixes": {
+    "startingRevision": "916a7611cef6f778a863853766162f0a89a6c6d4",
+    "before": {
+      "native": {
+        "total": 222,
+        "matched": 206
+      },
+      "realWaffle": {
+        "total": 222,
+        "matched": 206
+      },
+      "nativeRegressions": "Two new targeted tests failed first on original production source, for retained status 1 after %b stop and truncated stdout after a numeric warning to closed stderr."
+    },
+    "fixes": [
+      "Clear accumulated numeric-star status at the %b operand stop after successful operand processing. Output flush, admission and cancellation errors still propagate.",
+      "Numeric-star warnings tolerate rejected stderr writes, not stdout failures or cancellation. Shared diagnostic writer preserves other escape diagnostics.",
+      "Delete exactly three accepted narration comments; preserve sources.lock.json. Reuse the existing full-pipe cancellation helper to satisfy unchanged duplicate gates."
+    ],
+    "classification": {
+      "originalMismatches": 16,
+      "stopStatusFixed": 7,
+      "closedStderrFixed": 1,
+      "barePercentDDeferred": 7,
+      "sourceLineAnnotationDeferred": 1
+    },
+    "logs": [
+      "review-fixes-r1-red.log",
+      "review-fixes-r1-build-deduplicated.log",
+      "review-fixes-r1-frozen-final.log",
+      "review-fixes-r1-controls-final.log"
+    ],
+    "classificationEvidence": "review-fixes-r1-classification.json"
   }
 }

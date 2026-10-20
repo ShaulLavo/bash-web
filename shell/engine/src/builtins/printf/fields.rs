@@ -1,4 +1,3 @@
-//! Original %s field parser. Bash is the behavior oracle; no libc formatter is used.
 use super::Printer;
 
 pub(super) struct Arguments<'a> {
@@ -20,9 +19,9 @@ impl<'a> Arguments<'a> {
         let (number, diagnostic) = star_number(value, printer.utf8);
         if let Some(diagnostic) = diagnostic {
             self.status = 1;
-            printer.emit(2, b"/usr/bin/bash: printf: ").await?;
-            printer.emit(2, value.as_bytes()).await?;
-            printer.emit(2, diagnostic).await?;
+            printer.star_warning(b"/usr/bin/bash: printf: ").await?;
+            printer.star_warning(value.as_bytes()).await?;
+            printer.star_warning(diagnostic).await?;
         }
         Ok(number)
     }

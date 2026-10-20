@@ -562,16 +562,21 @@ fn concurrent_printf_writers_on_one_engine_pipe_keep_each_marker_whole() {
 
 #[test]
 fn printf_cancellation_during_failed_diagnostic_prefix_flush_wins_status() {
+    assert_diagnostic_backpressure_cancellation(r"printf 'prefixA\xZ' 2>&-", 1);
+}
+
+pub(super) fn assert_diagnostic_backpressure_cancellation(source: &str, fd: u32) {
     let rig = Rig::new(Limits::default());
     let (reader, writer) = pipe();
     let filler = vec![b'!'; shell_engine::io::PIPE_CAPACITY];
     assert_eq!(writer.write(&filler).now_or_never(), Some(Ok(filler.len())));
     let mut fds = FdTable::default();
     fds.insert(0, Endpoint::null());
-    fds.insert(1, writer);
+    fds.insert(1, Endpoint::null());
     fds.insert(2, Endpoint::null());
+    fds.insert(fd, writer);
     rig.shell.set_descriptors(fds).unwrap();
-    let job = rig.shell.start(r"printf 'prefixA\xZ' 2>&-").unwrap();
+    let job = rig.shell.start(source).unwrap();
     let mut parked = false;
     for _ in 0..100_000 {
         let turn = rig.ex.drive(1);

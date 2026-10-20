@@ -1411,3 +1411,13 @@ contains conversions outside this unit. Exact IDs, source cases and verification
 receipts are retained under
 `/work/reports/bash-web/hill-climb/printf-string-fields/`; the checked-in receipt
 is [printf evidence](../docs/evidence/printf-string-fields.json).
+
+Review fixes, 2026-10-20: the interrupted review exposed two numeric-star error
+boundaries. A later `%b` `\c` must clear the earlier numeric status, and a rejected
+numeric warning on closed stderr must not truncate stdout. Both failed first on
+`916a761` in native and real Waffle. Four new native/WASI regression tests cover
+these boundaries, repetitions, output/admission failures and warning cancellation.
+The expanded raw-evidence matrix keeps all 222 cases: eight introduced mismatches
+are fixed, while seven disclosed bare `%d` cases and one diagnostic source-line
+annotation case remain outside this unit. The three accepted narration comments
+are deleted without changing `sources.lock.json` provenance.

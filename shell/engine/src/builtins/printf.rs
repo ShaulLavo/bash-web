@@ -218,13 +218,7 @@ impl<'a> Printer<'a> {
             // closed, expose the already-buffered stdout prefix before
             // returning the real diagnostic I/O failure. Cancellation does
             // not flush undelivered bytes.
-            let result = match endpoint(self.fds, fd) {
-                Ok(endpoint) => endpoint
-                    .write_all(bytes, &self.context.cancel)
-                    .await
-                    .map_err(|error| error.status()),
-                Err(status) => Err(status),
-            };
+            let result = self.write_diagnostic(fd, bytes).await;
             match result {
                 Ok(()) => Ok(()),
                 Err(status) if status == 130 => Err(status),
@@ -233,6 +227,22 @@ impl<'a> Printer<'a> {
                     Err(status)
                 }
             }
+        }
+    }
+    async fn write_diagnostic(&self, fd: u32, bytes: &[u8]) -> Result<(), i32> {
+        endpoint(self.fds, fd)?
+            .write_all(bytes, &self.context.cancel)
+            .await
+            .map_err(|error| error.status())
+    }
+    async fn star_warning(&mut self, bytes: &[u8]) -> Result<(), i32> {
+        if self.work.is_some() {
+            return self.emit(2, bytes).await;
+        }
+        let result = self.write_diagnostic(2, bytes).await;
+        match result {
+            Err(130) => Err(130),
+            _ => Ok(()),
         }
     }
     async fn padding(&mut self, mut count: usize) -> Result<(), i32> {
@@ -372,14 +382,17 @@ async fn conversion(
     if let Some(conversion @ (b'd' | b'b')) = input.get(*offset) {
         printer.scan(1).await?;
         *offset += 1;
-        return printer
+        let stop = printer
             .operand(args.take().unwrap_or("").as_bytes(), *conversion == b'b')
-            .await;
+            .await?;
+        if stop {
+            args.status = 0;
+        }
+        return Ok(stop);
     }
     if let Some(field) = StringField::parse(input, offset, printer).await? {
         return field.print(args, printer).await;
     }
-    // Escape decoding never feeds a second format-syntax interpretation.
     printer
         .emit(2, b"/usr/bin/bash: printf: unsupported format conversion\n")
         .await?;
