@@ -82,6 +82,20 @@ impl Rig {
             .assign_parameter(name.into(), value.into())
             .unwrap();
     }
+    fn prepare_large_matching_input(&self) {
+        assert!(self.calls.borrow().is_empty());
+        self.variable("v", &"a".repeat(12_000));
+    }
+    fn interrupt_after_counting_yields(&self, job: JoinHandle<i32>) {
+        let peer = self.ex.spawn(async { 42 });
+        self.ex.drive(4);
+        assert!(peer.is_finished(), "counting must yield");
+        assert!(!job.is_finished());
+        self.variable("peer", "ran");
+        self.shell.interrupt();
+        assert_eq!(self.finish(job), 130);
+        assert!(self.calls.borrow().is_empty());
+    }
     fn drive_until_variable(&self, name: &str, value: &str) {
         for _ in 0..200 {
             self.ex.drive(1);
@@ -786,8 +800,7 @@ fn case_matching_reparsing_and_redirects_share_work_without_a_candidate_cap() {
         )),
         2
     );
-    assert!(rig.calls.borrow().is_empty());
-    rig.variable("v", &"a".repeat(12_000));
+    rig.prepare_large_matching_input();
     assert_eq!(rig.run(r#"args "${v^^*?}""#), 0);
     assert_eq!(rig.calls.borrow()[0][0], "A".repeat(12_000));
 }
@@ -1262,8 +1275,7 @@ fn trim_matching_and_operand_reparsing_share_command_work() {
     assert_eq!(rig.run(&oversized), 2);
     let deep = format!("args {}${{v#x}}{}", "${u:-".repeat(34), "}".repeat(34));
     assert_eq!(rig.run(&deep), 2);
-    assert!(rig.calls.borrow().is_empty());
-    rig.variable("v", &"a".repeat(12_000));
+    rig.prepare_large_matching_input();
     assert_eq!(rig.run(r#"args "${v##*?}" "${v%%?*}""#), 0);
     assert_eq!(*rig.calls.borrow(), &[vec!["", ""]]);
 }
@@ -1582,14 +1594,7 @@ fn length_counting_yields_and_cancellation_restores_function_frames() {
             rig.shell.state().borrow().bindings().get("LC_ALL").unwrap(),
             locale
         );
-        let peer = rig.ex.spawn(async { 42 });
-        rig.ex.drive(4);
-        assert!(peer.is_finished(), "counting must yield");
-        assert!(!job.is_finished());
-        rig.variable("peer", "ran");
-        rig.shell.interrupt();
-        assert_eq!(rig.finish(job), 130);
-        assert!(rig.calls.borrow().is_empty());
+        rig.interrupt_after_counting_yields(job);
         assert_eq!(rig.run(r#"args "$LC_ALL" "$#" "$1" "${TEMP-unset}""#), 0);
         assert_eq!(*rig.calls.borrow(), &[vec!["POSIX", "0", "", "unset"]]);
     }
@@ -1615,14 +1620,7 @@ fn length_rhs_yields_and_cancellation_restores_prefix_frames() {
             rig.shell.state().borrow().bindings().get("TEMP").unwrap(),
             "value"
         );
-        let peer = rig.ex.spawn(async { 42 });
-        rig.ex.drive(4);
-        assert!(peer.is_finished(), "counting must yield");
-        assert!(!job.is_finished());
-        rig.variable("peer", "ran");
-        rig.shell.interrupt();
-        assert_eq!(rig.finish(job), 130);
-        assert!(rig.calls.borrow().is_empty());
+        rig.interrupt_after_counting_yields(job);
         assert_eq!(rig.run(r#"args "$LC_ALL" "${TEMP-unset}" "$length""#), 0);
         assert_eq!(*rig.calls.borrow(), &[vec!["POSIX", "unset", "outer"]]);
     }

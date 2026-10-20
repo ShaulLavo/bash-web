@@ -215,7 +215,7 @@
   "sourceSha256": {
     "shell/engine/src/builtins/printf.rs": "5bde696448de44f323e4bcbaf26f2207a8bc660cf0886cafcccd6d962dcd61be",
     "shell/engine/src/builtins/printf/fields.rs": "b85eb489609b7c24cd7095ddf15c73265f3ae196c34b6c8cd4923283fcc5212b",
-    "shell/engine/tests/words.rs": "bf2116bd046e17c47ce5e489798375acfb3483f10ab8bf3d851654c5301e2f70",
+    "shell/engine/tests/words.rs": "bfb14b20f044eef530d92f07fd9276f0812d58a002fb2cb3cbab6b05b917b0c4",
     "shell/engine/tests/words/printf.rs": "d08a38625fff969824d468090de8302f8cc7ff027b5829b9034fd2a953a5762c",
     "shell/engine/tests/words/printf_integers.rs": "933192f6df2cf8543f24ae6e44ae70048b70c4d07c844142d2b8032c01d28b4e",
     "shell/engine/tests/words/printf_unsigned.rs": "f4baf163a920e72c3e801c08448d8781ce1961f0fc246198cbee3b9e61c87dbe",
@@ -313,5 +313,21 @@
     },
     "proof": "/work/reports/bash-web/hill-climb/printf-unsigned-radix/comment-fixes-r1.ts",
     "report": "/work/reports/bash-web/hill-climb/printf-unsigned-radix/comment-fixes-r1.md"
+  },
+  "testSetupDeduplicationFollowup": {
+    "priorRevision": "2c9cddf6a933e3a0475d668a25e9c4e6a371d0a1",
+    "testSource": "shell/engine/tests/words.rs",
+    "helpers": ["Rig::prepare_large_matching_input", "Rig::interrupt_after_counting_yields"],
+    "correspondence": "Inlining both helpers at their two call sites reconstructs the prior test file byte for byte. Production source, assertions, inputs, outputs, bounds, cancellation order, fixtures and both duplicate baselines are unchanged. commentOnlyFollowup remains the historical step ending at priorRevision. Current targeted native/WASI tests are recorded separately; measuredRevision, measuredSourceSha256, release artifact hashes and frozen results remain historical. No release rebuild or frozen replay is claimed.",
+    "checks": [
+      "native and wasm32-wasip1 complete words integration target",
+      "native and wasm32-wasip1 builtins::printf unit tests",
+      "native and wasm32-wasip1 workspace all-targets clippy -D warnings -j2",
+      "cargo fmt --check",
+      "npm run format:check",
+      "npm run check:duplicates both modes"
+    ],
+    "proof": "/work/reports/bash-web/hill-climb/printf-unsigned-radix/duplicate-fix-r1.proof.ts",
+    "report": "/work/reports/bash-web/hill-climb/printf-unsigned-radix/duplicate-fix-r1.md"
   }
 }
