@@ -10,7 +10,7 @@
   "counts": {
     "oils": {
       "total": 2492,
-      "passed": 979,
+      "passed": 985,
       "skipped": 810,
       "categories": {
         "Quoting and word splitting": {
@@ -80,7 +80,7 @@
         },
         "echo, printf, read, mapfile, getopts": {
           "total": 198,
-          "passed": 47,
+          "passed": 53,
           "skipped": 51
         },
         "Other builtins (cd, eval, source, type, alias...)": {
@@ -97,7 +97,7 @@
     },
     "brush-suite": {
       "total": 2894,
-      "passed": 964,
+      "passed": 969,
       "skipped": 1006,
       "categories": {
         "and_or": {
@@ -277,7 +277,7 @@
         },
         "builtins/printf": {
           "total": 74,
-          "passed": 21,
+          "passed": 26,
           "skipped": 1
         },
         "builtins/ps4": {
@@ -704,7 +704,7 @@
     },
     "bashkit-suite": {
       "total": 3835,
-      "passed": 1366,
+      "passed": 1367,
       "skipped": 1613,
       "categories": {
         "alias": {
@@ -999,7 +999,7 @@
         },
         "bashbox-printf": {
           "total": 26,
-          "passed": 6,
+          "passed": 7,
           "skipped": 0
         },
         "bashbox-process-substitution": {
@@ -4018,8 +4018,8 @@
 {"id":"oils:builtin-printf:326","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-printf:340","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"W1tbWwpbWw==","stderr":{"base64":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCi91c3IvYmluL2Jhc2g6IHByaW50ZjogdW5zdXBwb3J0ZWQgZm9ybWF0IGNvbnZlcnNpb24KL3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3Vw","bytes":318,"sha256":"e760ca3757aa1dd174c8ae892ed12bc792bb35da31ccf0628b031aefe674d13d","prefixBytes":240}}},
 {"id":"oils:builtin-printf:360","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"W1tbWwpbW1tbCg==","stderr":{"base64":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCi91c3IvYmluL2Jhc2g6IHByaW50ZjogdW5zdXBwb3J0ZWQgZm9ybWF0IGNvbnZlcnNpb24KL3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3Vw","bytes":424,"sha256":"6f53eb8dc213cd43c90f5ee50d63278f5d490f2f831d9a53b8b30a415e2ef71f","prefixBytes":240}}},
-{"id":"oils:builtin-printf:396","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"Cg==","stderr":""}},
-{"id":"oils:builtin-printf:405","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"JwoiCg==","stderr":""}},
+{"id":"oils:builtin-printf:396","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"pass"},
+{"id":"oils:builtin-printf:405","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-printf:417","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"Cgo=","stderr":{"base64":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCi91c3IvYmluL2Jhc2g6IHByaW50ZjogdW5zdXBwb3J0ZWQgZm9ybWF0IGNvbnZlcnNpb24KL3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3Vw","bytes":318,"sha256":"e760ca3757aa1dd174c8ae892ed12bc792bb35da31ccf0628b031aefe674d13d","prefixBytes":240}}},
 {"id":"oils:builtin-printf:500","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"Ynl0ZXMxCgpieXRlczIKCm92ZXJsb25nMgoKb3ZlcmxvbmczCgo=","stderr":{"base64":"L3Vzci9iaW4vYmFzaDogcHl0aG9uMjogY29tbWFuZCBub3QgZm91bmQKL3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCi91c3IvYmluL2Jhc2g6IHByaW50ZjogdW5zdXBwb3J0ZWQgZm9ybWF0IGNvbnZlcnNpb24KL3Vzci9iaW4vYmFzaDogcHl0aG9uMjogY29tbWFuZCBub3QgZm91","bytes":804,"sha256":"6c40bc94938dfe7a16c82c770a27abb8dc4da9b789e838891859960036495187","prefixBytes":240}}},
 {"id":"oils:builtin-printf:557","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"dG9vIGxhcmdlCgo=","stderr":"L3Vzci9iaW4vYmFzaDogcHl0aG9uMjogY29tbWFuZCBub3QgZm91bmQKL3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCi91c3IvYmluL2Jhc2g6IHByaW50ZjogdW5zdXBwb3J0ZWQgZm9ybWF0IGNvbnZlcnNpb24K"}},
@@ -4037,10 +4037,10 @@
 {"id":"oils:builtin-printf:777","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"c3RhdHVzPTIKc3RhdHVzPTIK","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCg=="}},
 {"id":"oils:builtin-printf:792","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"Ww==","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgo="}},
 {"id":"oils:builtin-printf:805","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"W1s=","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCg=="}},
-{"id":"oils:builtin-printf:822","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"Wy00Ml0gc3RhdHVzPTAKW3N0YXR1cz0yClsgLTQyXSBzdGF0dXM9MApbc3RhdHVzPTIKWyAtNDIgXSBzdGF0dXM9MApbc3RhdHVzPTIKWyAtNDJ6XSBzdGF0dXM9MApbc3RhdHVzPTIK","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCi91c3IvYmluL2Jhc2g6IHByaW50ZjogdW5zdXBwb3J0ZWQgZm9ybWF0IGNvbnZlcnNpb24KL3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgo="}},
+{"id":"oils:builtin-printf:822","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-printf:895","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"W1tbWw==","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCi91c3IvYmluL2Jhc2g6IHByaW50ZjogdW5zdXBwb3J0ZWQgZm9ybWF0IGNvbnZlcnNpb24KL3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgo="}},
 {"id":"oils:builtin-printf:910","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"W1tbLS0tCltb","stderr":{"base64":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCi91c3IvYmluL2Jhc2g6IHByaW50ZjogdW5zdXBwb3J0ZWQgZm9ybWF0IGNvbnZlcnNpb24KL3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3Vw","bytes":265,"sha256":"40844d6aae1e480b72c24d80dd49c1156a2e6451be72b0217a544e4fb4883d44","prefixBytes":240}}},
-{"id":"oils:builtin-printf:934","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"M2FiYwpzdGF0dXM9MAp4eXoKc3RhdHVzPTAK","stderr":""}},
+{"id":"oils:builtin-printf:934","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-printf:966","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"c3RhdHVzPTIK","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCg=="}},
 {"id":"oils:builtin-printf:985","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCg=="}},
 {"id":"oils:builtin-printf:1007","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCg=="}},
@@ -4055,9 +4055,9 @@
 {"id":"oils:builtin-printf:1330","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-printf:1371","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:builtin-printf:1407","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"aGV4CjB4NTUKaGV4IENBUFMKMFg1NQpvY3RhbCAzCjA1NQpvY3RhbCA0CjAwNTUKb2N0YWwgNQowMDA1NQo=","stderr":{"base64":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCi91c3IvYmluL2Jhc2g6IHByaW50ZjogdW5zdXBwb3J0ZWQgZm9ybWF0IGNvbnZlcnNpb24KL3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3Vw","bytes":265,"sha256":"40844d6aae1e480b72c24d80dd49c1156a2e6451be72b0217a544e4fb4883d44","prefixBytes":240}}},
-{"id":"oils:builtin-printf:1465","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"ZGVjaW1hbAorNDIKb2N0YWwKKzA3NwpoZXggbG93ZXJjYXNlCisweGFiCmhleCB1cHBlcmNhc2UKKzBYQUIK","stderr":""}},
+{"id":"oils:builtin-printf:1465","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-printf:1501","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"IC0xMjMKc3RhdHVzPTAKIC0xMjMgCnN0YXR1cz0wCi0tLQogKzA3NwpzdGF0dXM9MAogKzB4ZmYKc3RhdHVzPTAKc3RhdHVzPTIKc3RhdHVzPTIK","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCg=="}},
-{"id":"oils:builtin-printf:1576","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"NjQjYQpzdGF0dXM9MAo=","stderr":""}},
+{"id":"oils:builtin-printf:1576","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-read:4","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-read:15","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:builtin-read:34","corpus":"oils","category":"echo, printf, read, mapfile, getopts","kind":"builtins-only","outcome":"pass"},
@@ -5353,7 +5353,7 @@
 {"id":"brush-suite:builtins/printf:22","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCi91c3IvYmluL2Jhc2g6IHByaW50ZjogdW5zdXBwb3J0ZWQgZm9ybWF0IGNvbnZlcnNpb24K"}},
 {"id":"brush-suite:builtins/printf:23","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCi91c3IvYmluL2Jhc2g6IHByaW50ZjogdW5zdXBwb3J0ZWQgZm9ybWF0IGNvbnZlcnNpb24K"}},
 {"id":"brush-suite:builtins/printf:24","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"pass"},
-{"id":"brush-suite:builtins/printf:25","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"b25lIHR3byAKMSAyIAo=","stderr":""}},
+{"id":"brush-suite:builtins/printf:25","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:builtins/printf:26","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:builtins/printf:27","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:builtins/printf:28","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"pass"},
@@ -5366,9 +5366,9 @@
 {"id":"brush-suite:builtins/printf:35","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgo="}},
 {"id":"brush-suite:builtins/printf:36","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgo="}},
 {"id":"brush-suite:builtins/printf:37","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"pass"},
-{"id":"brush-suite:builtins/printf:38","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"J0EKIgo=","stderr":""}},
-{"id":"brush-suite:builtins/printf:39","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"KzQyCi0xNwo=","stderr":""}},
-{"id":"brush-suite:builtins/printf:40","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCg=="}},
+{"id":"brush-suite:builtins/printf:38","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"pass"},
+{"id":"brush-suite:builtins/printf:39","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"pass"},
+{"id":"brush-suite:builtins/printf:40","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:builtins/printf:41","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCg=="}},
 {"id":"brush-suite:builtins/printf:42","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:builtins/printf:43","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgo="}},
@@ -5389,7 +5389,7 @@
 {"id":"brush-suite:builtins/printf:58","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:builtins/printf:59","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgo="}},
 {"id":"brush-suite:builtins/printf:60","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"pass"},
-{"id":"brush-suite:builtins/printf:61","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"YWJjClJlc3VsdDogMAo=","stderr":""}},
+{"id":"brush-suite:builtins/printf:61","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:builtins/printf:62","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"fg==","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCg=="}},
 {"id":"brush-suite:builtins/printf:63","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"LXZ0YXJnZXQ6IApyZWY6IAo=","stderr":""}},
 {"id":"brush-suite:builtins/printf:64","corpus":"brush-suite","category":"builtins/printf","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"Cms9fg==","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgovdXNyL2Jpbi9iYXNoOiBwcmludGY6IHVuc3VwcG9ydGVkIGZvcm1hdCBjb252ZXJzaW9uCi91c3IvYmluL2Jhc2g6IHByaW50ZjogdW5zdXBwb3J0ZWQgZm9ybWF0IGNvbnZlcnNpb24KL3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgo="}},
@@ -8248,7 +8248,7 @@
 {"id":"bashkit-suite:bashbox-path-name:22","corpus":"bashkit-suite","category":"bashbox-path-name","kind":"needs-commands","outcome":"skip"},
 {"id":"bashkit-suite:bashbox-printf:5","corpus":"bashkit-suite","category":"bashbox-printf","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:bashbox-printf:12","corpus":"bashkit-suite","category":"bashbox-printf","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"NyA=","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgo="}},
-{"id":"bashkit-suite:bashbox-printf:19","corpus":"bashkit-suite","category":"bashbox-printf","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"MHgxRiAwMTAgIDUK","stderr":""}},
+{"id":"bashkit-suite:bashbox-printf:19","corpus":"bashkit-suite","category":"bashbox-printf","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:bashbox-printf:26","corpus":"bashkit-suite","category":"bashbox-printf","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgo="}},
 {"id":"bashkit-suite:bashbox-printf:33","corpus":"bashkit-suite","category":"bashbox-printf","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogcHJpbnRmOiB1bnN1cHBvcnRlZCBmb3JtYXQgY29udmVyc2lvbgo="}},
 {"id":"bashkit-suite:bashbox-printf:40","corpus":"bashkit-suite","category":"bashbox-printf","kind":"builtins-only","outcome":"pass"},

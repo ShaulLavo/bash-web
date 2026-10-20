@@ -65,19 +65,23 @@ pub(super) fn interrupt_delivery(rig: &Rig, source: &str) -> Endpoint {
     let (reader, writer) = pipe();
     replace_output(rig, writer);
     let job = rig.shell.start(source).unwrap();
-    let mut first = [0; 1];
-    for _ in 0..100_000 {
-        rig.ex.drive(1);
-        if reader.read(&mut first).now_or_never() == Some(Ok(1)) {
-            break;
-        }
-    }
-    assert_eq!(first, [0xff]);
+    assert_eq!(read_first_byte(rig, &reader), 0xff);
     assert!(!job.is_finished());
     rig.shell.interrupt();
     assert_eq!(rig.finish(job), 130);
     assert_eq!(rig.run("true"), 0);
     reader
+}
+
+pub(super) fn read_first_byte(rig: &Rig, reader: &Endpoint) -> u8 {
+    let mut byte = [0];
+    for _ in 0..100_000 {
+        rig.ex.drive(1);
+        if reader.read(&mut byte).now_or_never() == Some(Ok(1)) {
+            return byte[0];
+        }
+    }
+    panic!("expected a streamed printf byte");
 }
 
 pub(super) fn check_chunks(

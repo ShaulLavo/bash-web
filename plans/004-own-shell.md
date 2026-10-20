@@ -1436,3 +1436,35 @@ difference is the unchanged missing write-error message on closed stdout.
 Complete raw stdout/status/stderr agreement remains 107/222 due to Bash's
 source-line annotation. Seven bare `%d` defaults and the `2>&1` annotation case
 remain outside scope. No oracle, fixture, score or exclusion is changed.
+
+## Printf integer operands, 2026-10-20
+
+Status: Approved. Bounded implementation from exact accepted main
+`ca974e0facd8c578e483dee5433735f69eb5e620`. Parent owns independent review,
+blocking CI, merge and acceptance. These are measured gains, not accepted gains.
+
+Bare `%d` and `%i` now convert missing, signed, radix and quoted-character operands
+to signed 64-bit decimal. Missing operands give zero without a warning; explicit
+empty and malformed operands warn. Signed overflow saturates, while star counts
+retain their distinct signed-32 limit and -1 fallback. Fixed-stack decimal output
+uses the existing two-pass admission and cancellable chunked delivery. Numeric
+fields and all other new conversions stay outside scope. See
+[integer behavior](../docs/printf-integer-operands.md) and `sources.lock.json`.
+
+Native and production real-Waffle failing-first controls match 6/147 strict
+stdout/status pairs. The same controls now match 146/147, and the expanded matrix
+matches 194/195 per target. Raw diagnostic comparisons remain separate. The
+existing source-line annotation and closed-stdout write-error differences remain
+disclosed in [integer evidence](../docs/evidence/printf-integer-operands.json).
+Native/WASI targeted tests, unchanged printf/echo fixtures, prior string/star
+controls and the unchanged duplicate/layer gates pass.
+
+One complete frozen real-Waffle replay preserves 9,221 records, 5,792 scored cases
+and all identity hashes. Oils changes 979 to 985, Brush 964 to 969 and Bashkit
+1,366 to 1,367, twelve gains and zero lost passes. The replay saves all results
+then exits 1 at the expected stale-membership assertion. After updating only the
+twelve gained rows and derived counts, the unchanged strict membership check
+passes offline against that saved replay. No full rerun or re-oracle is claimed.
+All 9,209 other baseline rows remain unchanged, including 25 historical failing
+payload differences. Exact case IDs, source pins, hashes and reproducer logs are
+in the evidence receipt and `/work/reports/bash-web/hill-climb/printf-integer-operands/`.

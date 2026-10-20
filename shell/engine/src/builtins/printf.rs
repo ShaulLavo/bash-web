@@ -9,7 +9,7 @@ use crate::{
     io::FdTable,
     state::{SharedState, State},
 };
-use fields::{Arguments, StringField};
+use fields::{Arguments, NumberRange, StringField};
 
 pub(super) async fn run(
     args: &[String],
@@ -235,7 +235,7 @@ impl<'a> Printer<'a> {
             .await
             .map_err(|error| error.status())
     }
-    async fn star_warning(&mut self, bytes: &[u8]) -> Result<(), i32> {
+    async fn numeric_warning(&mut self, bytes: &[u8]) -> Result<(), i32> {
         if self.work.is_some() {
             return self.emit(2, bytes).await;
         }
@@ -379,11 +379,18 @@ async fn conversion(
         printer.emit(1, b"%").await?;
         return Ok(false);
     }
-    if let Some(conversion @ (b'd' | b'b')) = input.get(*offset) {
+    if matches!(input.get(*offset), Some(b'd' | b'i')) {
+        printer.scan(1).await?;
+        *offset += 1;
+        let number = args.number(printer, NumberRange::Signed).await?;
+        print_integer(number, printer).await?;
+        return Ok(false);
+    }
+    if input.get(*offset) == Some(&b'b') {
         printer.scan(1).await?;
         *offset += 1;
         let stop = printer
-            .operand(args.take().unwrap_or("").as_bytes(), *conversion == b'b')
+            .operand(args.take().unwrap_or("").as_bytes(), true)
             .await?;
         if stop {
             args.status = 0;
@@ -398,6 +405,26 @@ async fn conversion(
         .await?;
     args.status = 2;
     Ok(true)
+}
+
+async fn print_integer(number: i64, printer: &mut Printer<'_>) -> Result<(), i32> {
+    let mut digits = [0u8; 20];
+    let mut offset = digits.len();
+    let mut magnitude = number.unsigned_abs();
+    loop {
+        offset -= 1;
+        digits[offset] = b'0' + (magnitude % 10) as u8;
+        magnitude /= 10;
+        if magnitude == 0 {
+            break;
+        }
+    }
+    if number < 0 {
+        offset -= 1;
+        digits[offset] = b'-';
+    }
+    printer.operand(&digits[offset..], false).await?;
+    Ok(())
 }
 
 #[derive(Clone, Copy, PartialEq)]

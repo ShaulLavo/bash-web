@@ -1,0 +1,221 @@
+{
+  "schema": 1,
+  "date": "2026-10-20",
+  "status": "Measured, parent independent review, blocking CI and acceptance pending",
+  "classification": "Original local implementation observed against GNU Bash 5.3.15. No upstream implementation copied or adapted.",
+  "baseRevision": "ca974e0facd8c578e483dee5433735f69eb5e620",
+  "model": "gpt-6.1-sol",
+  "routing": "cli-proxy",
+  "executionHost": "pc, canonical heavy queue; Cargo -j2; frozen replay suite class, one worker",
+  "scope": "Bare signed %d/%i only. No numeric fields, unsigned/radix output, float, time, -v, runtime changes or new dependencies.",
+  "tools": {
+    "bash": "5.3.15(1)-release",
+    "bashSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+    "node": "26.7.0",
+    "rust": "1.98.1",
+    "wasmtime": "49.0.3",
+    "wasiSdk": "34.0",
+    "waffleRevision": "33ece68f9f484d99b8a57a675de71d847e248051"
+  },
+  "sourceSha256": {
+    "shell/engine/src/builtins/printf.rs": "fdd34d45973ef70bd40ea03765f2c75a84d69246bf0b7c5523208147fc03a3e8",
+    "shell/engine/src/builtins/printf/fields.rs": "258334e3a49c8c859455f9829211dbc9dbf36f31baed63829ca97ce1c9aa8700",
+    "shell/engine/tests/words.rs": "e1d6b528557186f5da8b72c4abb1bcee6d68ad2e3ef84f020cb7090b625b6464",
+    "shell/engine/tests/words/printf.rs": "bcbba81efd02cdf552ea5cefebfedfc7914b6884f980c67c66549115ad3b18f4",
+    "shell/engine/tests/words/printf_integers.rs": "37f8e0090e8b82f43ec1a0b11df0ac95d737b2221d67c21ab00cd5fe0d167028",
+    "sources.lock.json": "59b44333ddd69749de5ca83a0cd867fff6313b653ecc309884a487788495ee58"
+  },
+  "artifactSha256": {
+    "release/shell-cli": "8be4dcd9fd2843a0b86c6f866e9bd46d14526842aa79eea8a9245adcf9c35b1f",
+    "wasm32-wasip1/release/shell-cli.wasm": "2cec724f2eda88847b94c64b8992fe5bda19b75eff749ff04cf5730ef0a96fbd",
+    "wasm32-wasip1/release/shell-runtime.wasm": "53d4782d8fab52996265e831dac3d6f542f563de15847c90c85da995e240fdd4"
+  },
+  "failingFirst": {
+    "controlsPerTarget": 147,
+    "stdoutStatusMatchesPerTarget": 6,
+    "completeRawMatchesPerTarget": 4,
+    "targets": ["native", "production real Waffle"],
+    "rustRegressions": "Two new tests fail before implementation on the exact base. red.log records the intentional red result.",
+    "checkpoint": "checkpoint.md, 14:16 Asia/Jerusalem, within seven minutes"
+  },
+  "final": {
+    "originalControlsPerTarget": 147,
+    "originalStdoutStatusMatchesPerTarget": 146,
+    "expandedControlsPerTarget": 195,
+    "stdoutStatusMatchesPerTarget": 194,
+    "normalizedStderrMatchesPerTarget": 193,
+    "stdoutStatusAndNormalizedStderrMatchesPerTarget": 192,
+    "completeRawMatchesPerTarget": 71,
+    "comparison": "Stdout/status are strict. Diagnostic normalization removes only Bash source-line annotation, never changes frozen scoring. All raw stdout/status/stderr remain in after.json. One merged-stdout source-line annotation mismatch and two closed-stdout missing write-error diagnostics per target remain disclosed.",
+    "priorControls": {
+      "starDiagnosticMatchesPerTarget": 108,
+      "stringStdoutStatusMatchesPerTarget": 167,
+      "preAdmissionControls": 10,
+      "printfFixturesPerTarget": 1122,
+      "echoFixturesPerTarget": 492,
+      "targets": ["native", "production real Waffle"],
+      "printfGeneratorTests": 9
+    },
+    "rustTestsPerTarget": {
+      "printfWords": 43,
+      "echoWords": 10,
+      "printerMemory": 2,
+      "newIntegerTests": 8,
+      "targets": ["native", "WASI"]
+    },
+    "quality": "Formatting, owned parser audit, native/WASI workspace/all-targets clippy with warnings denied, unchanged exact/structural duplicate gates, canonical guest verification and immutable-base layer gate pass.",
+    "layers": {
+      "violations": 0,
+      "productionEdges": 42,
+      "testOnlyEdges": 28
+    },
+    "unrunGates": [
+      "Whole unrelated Rust suites",
+      "Browser suite",
+      "Other fuzz families",
+      "Full quality command",
+      "Hosted CI",
+      "Independent parent review"
+    ]
+  },
+  "frozenIdentity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "frozenSourcePins": {
+    "oils": {
+      "repository": "https://github.com/oils-for-unix/oils",
+      "revision": "bdc8364c253ce921e033bbc2399ea2ce0be41825",
+      "archiveSha256": "459509a093fb5afa035cf19acbd5fa77d62fca79c99b75b44f43cbc1f3f3cc47",
+      "use": "bash-compatibility corpus; bash is the oracle, Oils expectations are ignored",
+      "relevantFile": {
+        "spec/builtin-printf.test.sh": "fc682f0349791265dda9fe3f8eadebd7218e5ee75814c5be04c006af28bf494b"
+      }
+    },
+    "brush-suite": {
+      "revision": "4cfba081f2f8bcda8150010a57203d020f14f0cc",
+      "relevantFile": {
+        "builtins/printf.yaml": "b1c37046cad7dd4a240d3e13aa4116e976e4860a38037885b21c3bd1cf388101"
+      }
+    },
+    "bashkit-suite": {
+      "revision": "491c3281f668b76d64b15210b8f5d7bf97244be0",
+      "relevantFile": {
+        "bashbox-printf.test.sh": "d0b8c7a4b699d3ff042a7e55024901e0973d0734dd4836cedf910fe77d0c684a"
+      }
+    }
+  },
+  "oracleFileSha256": "bb13fdf4319ae0af179457ff4b3e3c0db57002902f07eb37fde02ff7a6636eaa",
+  "frozenDelta": {
+    "ok": true,
+    "corpora": {
+      "oils": {
+        "before": 979,
+        "after": 985,
+        "gained": [
+          "oils:builtin-printf:396",
+          "oils:builtin-printf:405",
+          "oils:builtin-printf:822",
+          "oils:builtin-printf:934",
+          "oils:builtin-printf:1465",
+          "oils:builtin-printf:1576"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "brush-suite": {
+        "before": 964,
+        "after": 969,
+        "gained": [
+          "brush-suite:builtins/printf:25",
+          "brush-suite:builtins/printf:38",
+          "brush-suite:builtins/printf:39",
+          "brush-suite:builtins/printf:40",
+          "brush-suite:builtins/printf:61"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "bashkit-suite": {
+        "before": 1366,
+        "after": 1367,
+        "gained": ["bashkit-suite:bashbox-printf:19"],
+        "lost": [],
+        "newlyFailing": []
+      }
+    }
+  },
+  "frozenProof": {
+    "records": 9221,
+    "scored": 5792,
+    "gained": 12,
+    "lost": 0,
+    "unchangedOtherBaselineRecords": 9209,
+    "replayCount": 1,
+    "recordMode": 0,
+    "replayExit": 1,
+    "replayExitReason": "All 9221 cases completed and saved. The unchanged gate then rejected stale baseline membership for exactly the 12 gains. This command is not claimed green.",
+    "finalMembershipCheck": "Unchanged validateScore and compareScores with requireMembership:true pass offline on that saved real-Waffle replay after updating only the 12 gained baseline rows and derived counts. No repeat full replay or RECORD=1.",
+    "wholeActualPayloadEquality": false,
+    "retainedHistoricalFailPayloadDifferences": [
+      "oils:unicode:125",
+      "oils:unicode:150",
+      "oils:var-op-slice:107",
+      "oils:var-op-slice:124",
+      "oils:builtin-printf:178",
+      "oils:builtin-printf:1111",
+      "oils:builtin-printf:1192",
+      "oils:builtin-printf:1407",
+      "oils:builtin-printf:1501",
+      "oils:builtin-read:100",
+      "brush-suite:builtins/command:35",
+      "brush-suite:builtins/echo:5",
+      "brush-suite:builtins/echo:6",
+      "brush-suite:builtins/printf:23",
+      "brush-suite:builtins/printf:46",
+      "brush-suite:builtins/printf:54",
+      "brush-suite:builtins/printf:57",
+      "brush-suite:builtins/read:54",
+      "brush-suite:prompt:14",
+      "bashkit-suite:background:1",
+      "bashkit-suite:bashbox-printf:12",
+      "bashkit-suite:bashbox-printf:153",
+      "bashkit-suite:bashbox-read-names:5",
+      "bashkit-suite:heredoc-read-escapes:36",
+      "bashkit-suite:printf:311"
+    ],
+    "frozenInputs": "Oracle, case/environment/source identities, classifications, scoring, exclusions, deadlines and duplicate allowances unchanged. Full source/file checksums remain in proof.json and the unchanged oracle."
+  },
+  "resourceControls": "Fixed 20-byte signed decimal rendering, shared lexical scanner with separate signed64/star32 policies, unchanged two-pass admission and chunked delivery. Tests cover warning cost, no-output rejection/cancellation, real partial pipe output, closed stderr, exact diagnostic ordering and %b stop precedence.",
+  "initialFailures": [
+    "Local base environment omitted cmake/ninja from PATH; fixed only owned env.sh.",
+    "Unchanged duplicate gates rejected repeated new test setup; shared existing reader helper removes duplication.",
+    "New broken-pipe test initially expected status 1; existing engine and separate Bash observation return 141. Corrected test only."
+  ],
+  "reportDirectory": "/work/reports/bash-web/hill-climb/printf-integer-operands",
+  "commands": [
+    "Canonical heavy build runner: bash build-final-r3.sh",
+    "Canonical heavy suite runner: bash controls.sh",
+    "Canonical heavy suite runner: bash frozen.sh, completed measurement with expected stale-membership exit 1",
+    "node update-membership.ts, one-time measured-row update and offline proof",
+    "bash cleanup-review.sh"
+  ],
+  "resourceRetention": {
+    "cleanupOwner": "Parent coordinator",
+    "removalCondition": "After independent review/reproduction, blocking CI and merge verification consumers stop, run report remove-after-review.sh from /work. Preserve small evidence and shared caches.",
+    "warmRoot": {
+      "path": "/work/tmp/bash-web-printf-integer-operands",
+      "allocatedBytes": 2882912256,
+      "reason": "Exact final native/WASI artifacts and warm test target for parent review; only target and env.sh retained."
+    },
+    "worktree": {
+      "path": "/work/worktrees/bash-web/climb-printf-integer-operands",
+      "allocatedBytesAtAudit": 312397824,
+      "reason": "Review source and owned node_modules/.build. Remove via git worktree remove after consumers stop."
+    },
+    "verifiedCleanup": "consumer-audit.json records zero actual-host process consumers, unexpected-retained-paths.txt is empty, cleanup-review.log records idle queue. No services, containers, routes, mounts, browser profiles or other execution hosts created."
+  }
+}
