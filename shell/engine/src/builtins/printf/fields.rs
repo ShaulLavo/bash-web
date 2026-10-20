@@ -63,32 +63,63 @@ impl Count {
         self,
         args: &mut Arguments<'_>,
         printer: &mut Printer<'_>,
-    ) -> Result<i64, i32> {
+    ) -> Result<Option<i64>, i32> {
         match self {
-            Self::Literal(value) => Ok(i64::from(value)),
-            Self::Star => Ok(args.number(printer, NumberRange::Star).await? as i64),
-            Self::Overflow => Err(1),
+            Self::Literal(value) => Ok(Some(i64::from(value))),
+            Self::Star => Ok(Some(args.number(printer, NumberRange::Star).await? as i64)),
+            Self::Overflow => Ok(None),
         }
     }
 }
 
-pub(super) struct StringField {
+#[derive(Clone, Copy, Default)]
+struct Flags {
     left: bool,
+    plus: bool,
+    space: bool,
+    zero: bool,
+    alternate: bool,
+    grouping: bool,
+}
+impl Flags {
+    async fn parse(
+        input: &[u8],
+        offset: &mut usize,
+        printer: &mut Printer<'_>,
+    ) -> Result<Self, i32> {
+        let mut flags = Self::default();
+        while let Some(flag @ (b'-' | b'+' | b' ' | b'#' | b'0' | b'\'')) = input.get(*offset) {
+            printer.scan(1).await?;
+            flags.left |= *flag == b'-';
+            flags.plus |= *flag == b'+';
+            flags.space |= *flag == b' ';
+            flags.zero |= *flag == b'0';
+            flags.alternate |= *flag == b'#';
+            flags.grouping |= *flag == b'\'';
+            *offset += 1;
+        }
+        Ok(flags)
+    }
+}
+
+pub(super) struct Field {
+    flags: Flags,
     width: Count,
     precision: Option<Count>,
+    conversion: u8,
 }
-impl StringField {
+struct ResolvedField {
+    left: bool,
+    width: usize,
+    precision: Option<usize>,
+}
+impl Field {
     pub async fn parse(
         input: &[u8],
         offset: &mut usize,
         printer: &mut Printer<'_>,
     ) -> Result<Option<Self>, i32> {
-        let mut left = false;
-        while let Some(flag @ (b'-' | b'+' | b' ' | b'#' | b'0' | b'\'')) = input.get(*offset) {
-            printer.scan(1).await?;
-            left |= *flag == b'-';
-            *offset += 1;
-        }
+        let flags = Flags::parse(input, offset, printer).await?;
         let width = Count::parse(input, offset, printer).await?;
         let precision = if input.get(*offset) == Some(&b'.') {
             printer.scan(1).await?;
@@ -97,54 +128,204 @@ impl StringField {
         } else {
             None
         };
-        if input.get(*offset) != Some(&b's') {
+        let Some(&conversion @ (b's' | b'd' | b'i' | b'u' | b'o' | b'x' | b'X')) =
+            input.get(*offset)
+        else {
+            return Ok(None);
+        };
+        if conversion != b's' && flags.grouping {
             return Ok(None);
         }
         printer.scan(1).await?;
         *offset += 1;
         Ok(Some(Self {
-            left,
+            flags,
             width,
             precision,
+            conversion,
         }))
+    }
+    async fn resolve(
+        &self,
+        args: &mut Arguments<'_>,
+        printer: &mut Printer<'_>,
+    ) -> Result<Option<ResolvedField>, i32> {
+        let overflow = matches!(self.width, Count::Overflow)
+            || matches!(self.precision, Some(Count::Overflow));
+        if self.conversion == b's' && overflow {
+            return Ok(None);
+        }
+        let width = self.width.resolve(args, printer).await?;
+        let precision = match self.precision {
+            Some(count) => count.resolve(args, printer).await?,
+            None => Some(-1),
+        };
+        Ok(width
+            .zip(precision)
+            .map(|(width, precision)| ResolvedField {
+                left: self.flags.left || width < 0,
+                width: width.unsigned_abs() as usize,
+                precision: (precision >= 0).then_some(precision as usize),
+            }))
     }
     pub async fn print(
         self,
         args: &mut Arguments<'_>,
         printer: &mut Printer<'_>,
     ) -> Result<bool, i32> {
-        if matches!(self.width, Count::Overflow) || matches!(self.precision, Some(Count::Overflow))
-        {
-            printer
-                .emit(
-                    2,
-                    b"/usr/bin/bash: printf: Value too large for defined data type\n",
-                )
+        let field = self.resolve(args, printer).await?;
+        if self.conversion == b's' {
+            let Some(field) = field else {
+                return field_overflow(args, printer).await;
+            };
+            field
+                .print_string(args.take().unwrap_or("").as_bytes(), printer)
                 .await?;
-            args.status = 1;
-            return Ok(true);
+            return Ok(false);
         }
-        let width = self.width.resolve(args, printer).await?;
-        let precision = match self.precision {
-            Some(count) => count.resolve(args, printer).await?,
-            None => -1,
-        };
-        let value = args.take().unwrap_or("").as_bytes();
-        let length = if precision < 0 {
-            value.len()
+        let range = if matches!(self.conversion, b'd' | b'i') {
+            NumberRange::Signed
         } else {
-            value.len().min(precision as usize)
+            NumberRange::Unsigned
         };
-        let padding = (width.unsigned_abs() as usize).saturating_sub(length);
-        let left = self.left || width < 0;
-        if !left {
-            printer.padding(padding).await?;
+        let number = args.number(printer, range).await?;
+        let Some(field) = field else {
+            return field_overflow(args, printer).await;
+        };
+        Integer::new(number, self.conversion, self.flags, field)
+            .print(printer)
+            .await?;
+        Ok(false)
+    }
+}
+async fn field_overflow(args: &mut Arguments<'_>, printer: &mut Printer<'_>) -> Result<bool, i32> {
+    printer
+        .emit(
+            2,
+            b"/usr/bin/bash: printf: Value too large for defined data type\n",
+        )
+        .await?;
+    args.status = 1;
+    Ok(true)
+}
+
+impl ResolvedField {
+    async fn print_string(&self, value: &[u8], printer: &mut Printer<'_>) -> Result<(), i32> {
+        let length = self.precision.map_or(value.len(), |n| value.len().min(n));
+        let padding = self.width.saturating_sub(length);
+        if !self.left {
+            printer.padding(padding, b' ').await?;
         }
         printer.operand(&value[..length], false).await?;
-        if left {
-            printer.padding(padding).await?;
+        if self.left {
+            printer.padding(padding, b' ').await?;
         }
-        Ok(false)
+        Ok(())
+    }
+}
+
+struct Integer {
+    digits: [u8; 22],
+    start: usize,
+    prefix: &'static [u8],
+    zeroes: usize,
+    padding: usize,
+    left: bool,
+}
+impl Integer {
+    fn new(number: u64, conversion: u8, flags: Flags, field: ResolvedField) -> Self {
+        let negative = matches!(conversion, b'd' | b'i') && (number as i64) < 0;
+        let magnitude = if negative {
+            number.wrapping_neg()
+        } else {
+            number
+        };
+        let (digits, mut start) = integer_digits(magnitude, conversion);
+        if number == 0 && field.precision == Some(0) {
+            start = digits.len();
+        }
+        let mut zeroes = field
+            .precision
+            .unwrap_or(0)
+            .saturating_sub(digits.len() - start);
+        if conversion == b'o' && flags.alternate && (start == digits.len() || digits[start] != b'0')
+        {
+            zeroes = zeroes.max(1);
+        }
+        let prefix = integer_prefix(number, conversion, flags);
+        let mut padding = field
+            .width
+            .saturating_sub(prefix.len() + zeroes + digits.len() - start);
+        if flags.zero && !field.left && field.precision.is_none() {
+            zeroes += padding;
+            padding = 0;
+        }
+        Self {
+            digits,
+            start,
+            prefix,
+            zeroes,
+            padding,
+            left: field.left,
+        }
+    }
+    async fn print(&self, printer: &mut Printer<'_>) -> Result<(), i32> {
+        if !self.left {
+            printer.padding(self.padding, b' ').await?;
+        }
+        printer.operand(self.prefix, false).await?;
+        printer.padding(self.zeroes, b'0').await?;
+        printer.operand(&self.digits[self.start..], false).await?;
+        if self.left {
+            printer.padding(self.padding, b' ').await?;
+        }
+        Ok(())
+    }
+}
+
+fn integer_digits(mut magnitude: u64, conversion: u8) -> ([u8; 22], usize) {
+    let radix = match conversion {
+        b'o' => 8,
+        b'x' | b'X' => 16,
+        _ => 10,
+    };
+    let alphabet = if conversion == b'X' {
+        b"0123456789ABCDEF"
+    } else {
+        b"0123456789abcdef"
+    };
+    let mut digits = [0u8; 22];
+    let mut offset = digits.len();
+    loop {
+        offset -= 1;
+        digits[offset] = alphabet[(magnitude % radix) as usize];
+        magnitude /= radix;
+        if magnitude == 0 {
+            return (digits, offset);
+        }
+    }
+}
+
+fn integer_prefix(number: u64, conversion: u8, flags: Flags) -> &'static [u8] {
+    if matches!(conversion, b'd' | b'i') {
+        if (number as i64) < 0 {
+            return b"-";
+        }
+        if flags.plus {
+            return b"+";
+        }
+        if flags.space {
+            return b" ";
+        }
+        return b"";
+    }
+    if number == 0 || !flags.alternate {
+        return b"";
+    }
+    match conversion {
+        b'x' => b"0x",
+        b'X' => b"0X",
+        _ => b"",
     }
 }
 

@@ -3511,8 +3511,7 @@ fn cancellation_keeps_completed_rhs_effects_and_restores_local_prefix_frames() {
 
 #[test]
 fn frozen_scalar_error_observations_keep_exact_status_and_output() {
-    // Verbatim scripts and observations from the committed oracle. No fixture
-    // membership, classifications, identities or expected statuses are changed.
+    // Verbatim scripts and observations from the committed oracle.
     for (source, error) in [
         (
             "empty=''\necho ${empty:?'is em'pty}  # test eval of error\necho should not get here\n\n",
@@ -4128,3 +4127,6 @@ mod printf_fields;
 mod printf_integers;
 #[path = "words/printf_unsigned.rs"]
 mod printf_unsigned;
+
+#[path = "words/printf_integer_fields.rs"]
+mod printf_integer_fields;

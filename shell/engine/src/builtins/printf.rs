@@ -7,7 +7,7 @@ use crate::{
     io::FdTable,
     state::{SharedState, State},
 };
-use fields::{Arguments, NumberRange, StringField};
+use fields::{Arguments, Field};
 
 pub(super) async fn run(
     args: &[String],
@@ -196,9 +196,7 @@ impl<'a> Printer<'a> {
         if fd == 1 {
             self.append_output(bytes).await
         } else {
-            // Keep stdout buffered while the diagnostic is attempted. This
-            // preserves one small invocation write and gives aliased stderr
-            // the Bash-visible diagnostic-before-output order. If stderr is
+            // With aliased stderr, Bash diagnoses before stdout. If stderr is
             // closed, expose the already-buffered stdout prefix before
             // returning the real diagnostic I/O failure. Cancellation does
             // not flush undelivered bytes.
@@ -229,16 +227,18 @@ impl<'a> Printer<'a> {
             _ => Ok(()),
         }
     }
-    async fn padding(&mut self, mut count: usize) -> Result<(), i32> {
+    async fn padding(&mut self, mut count: usize, byte: u8) -> Result<(), i32> {
         if self.work.is_some() {
             self.remaining = self.remaining.checked_sub(count).ok_or(2)?;
             return self.scan(count).await;
         }
         const SPACES: [u8; WRITE_CHUNK] = [b' '; WRITE_CHUNK];
+        const ZEROES: [u8; WRITE_CHUNK] = [b'0'; WRITE_CHUNK];
+        let bytes = if byte == b'0' { &ZEROES } else { &SPACES };
         while count != 0 {
             let chunk = count.min(WRITE_CHUNK);
             self.scan(chunk).await?;
-            self.emit(1, &SPACES[..chunk]).await?;
+            self.emit(1, &bytes[..chunk]).await?;
             count -= chunk;
         }
         Ok(())
@@ -363,18 +363,6 @@ async fn conversion(
         printer.emit(1, b"%").await?;
         return Ok(false);
     }
-    if let Some(conversion @ (b'd' | b'i' | b'u' | b'o' | b'x' | b'X')) = input.get(*offset) {
-        printer.scan(1).await?;
-        *offset += 1;
-        let range = if matches!(conversion, b'd' | b'i') {
-            NumberRange::Signed
-        } else {
-            NumberRange::Unsigned
-        };
-        let number = args.number(printer, range).await?;
-        print_integer(number, *conversion, printer).await?;
-        return Ok(false);
-    }
     if input.get(*offset) == Some(&b'b') {
         printer.scan(1).await?;
         *offset += 1;
@@ -386,7 +374,7 @@ async fn conversion(
         }
         return Ok(stop);
     }
-    if let Some(field) = StringField::parse(input, offset, printer).await? {
+    if let Some(field) = Field::parse(input, offset, printer).await? {
         return field.print(args, printer).await;
     }
     printer
@@ -394,41 +382,6 @@ async fn conversion(
         .await?;
     args.status = 2;
     Ok(true)
-}
-
-async fn print_integer(number: u64, conversion: u8, printer: &mut Printer<'_>) -> Result<(), i32> {
-    let negative = matches!(conversion, b'd' | b'i') && (number as i64) < 0;
-    let radix = match conversion {
-        b'o' => 8,
-        b'x' | b'X' => 16,
-        _ => 10,
-    };
-    let alphabet = if conversion == b'X' {
-        b"0123456789ABCDEF"
-    } else {
-        b"0123456789abcdef"
-    };
-    let mut digits = [0u8; 22];
-    let mut offset = digits.len();
-    let mut magnitude = if negative {
-        number.wrapping_neg()
-    } else {
-        number
-    };
-    loop {
-        offset -= 1;
-        digits[offset] = alphabet[(magnitude % radix) as usize];
-        magnitude /= radix;
-        if magnitude == 0 {
-            break;
-        }
-    }
-    if negative {
-        offset -= 1;
-        digits[offset] = b'-';
-    }
-    printer.operand(&digits[offset..], false).await?;
-    Ok(())
 }
 
 #[derive(Clone, Copy, PartialEq)]

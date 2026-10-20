@@ -26,7 +26,8 @@ with cancellation and actual I/O failures preserved. Failed numeric warnings on
 closed stderr do not stop output. `%b` with `\c` clears numeric-error status only
 after successful operand processing; it cannot hide output or admission failures.
 
-Numeric flags, width and precision, floats, time and `-v` remain unsupported.
+[Integer flags, width and precision](printf-integer-fields.md) are also supported.
+Floats, time and `-v` remain unsupported.
 No runtime or locale implementation changes. The existing Bash source-line
 annotation difference and extra Bash closed-stdout diagnostic remain disclosed.
 Raw stdout/status, raw stderr and normalized diagnostics are separate checks.

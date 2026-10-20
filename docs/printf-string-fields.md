@@ -33,11 +33,10 @@ Both walks resolve the same operands and produce the same bytes. Dispatch contin
 to own the printer's live memory charge. Allocation/work failures emit no output;
 I/O errors and delivery cancellation can retain only a genuinely written prefix.
 
-Bare `%d` and `%b` conversion support is unchanged. This does not add numeric field
-formatting, `%q`, `%c`, floats, time directives, `printf -v`, option parsing or
-echo/read behavior.
-The old unsupported-field regression now uses `%08d` instead of the newly supported
-`%08s`; its assertions and unsupported-conversion coverage are unchanged.
+[Integer fields](printf-integer-fields.md) now share the field/count parser.
+`%q`, `%c`, floats, time directives, `printf -v` and option parsing remain unsupported.
+The unsupported-field regression uses `%08f`; string and integer fields have
+separate supported-format coverage.
 
 The native/WASI `words::printf_fields` tests cover byte edges, argument consumption,
 field overflow, output admission, chunking and cancellation in both walks. The
