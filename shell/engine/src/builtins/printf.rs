@@ -1,5 +1,3 @@
-//! Original byte-oriented printf and default-Bash echo escape adapter. Admission and delivery walk the
-//! same borrowed inputs: no decoded String or whole-result buffer is allocated.
 mod fields;
 use super::{endpoint, error_status, write};
 use crate::{
@@ -20,15 +18,6 @@ pub(super) async fn run(
 ) -> Result<(), i32> {
     args.first().ok_or(2)?;
     let utf8 = character_locale(state, context, work).await?;
-    // Printer stays inline in this future, which is owned by the interpreter's
-    // dispatch execution frame. crate::exec::Scope::frame admits its complete future
-    // size (including the fixed output buffer) before boxing, and refunds it on
-    // completion or drop. A separate 4096-byte ticket would double-charge it.
-    // Admit the complete repeated output and work before the first write, so
-    // expansion/work admission failures emit nothing. Delivery needs constant
-    // space and cannot discover a new expansion/work allocation limit.
-    // I/O failures and cancellation are not atomic: they can leave a genuine
-    // streamed prefix, including when writing a later warning to closed stderr.
     let mut printer = Printer::new(fds, context, work, utf8);
     format(args, &mut printer).await?;
     printer.work = None;
@@ -52,8 +41,6 @@ pub(super) async fn character_locale(
             .scalar_parameter(name)
             .filter(|value| !value.is_empty())
         {
-            // The engine's byte locales are C/POSIX and UTF-8. Check fixed-size
-            // codeset suffixes without copying or scanning an arbitrary value.
             utf8 = ["UTF-8", "UTF8"].iter().any(|encoding| {
                 locale.eq_ignore_ascii_case(encoding)
                     || locale
@@ -185,9 +172,6 @@ impl<'a> Printer<'a> {
         if self.output_len == 0 {
             return Ok(());
         }
-        // A full or final buffer is one logical printf write. Clear it even on
-        // I/O failure: any bytes accepted before the failure are a genuine
-        // streamed prefix and must not be duplicated by recovery code.
         let result = write(self.fds, &self.output[..self.output_len], self.context).await;
         self.output_len = 0;
         result
@@ -657,8 +641,6 @@ mod tests {
             ("echo error >&-", 1),
         ] {
             assert_eq!(finish(&ex, shell.start(source).unwrap()), status);
-            // Reserving the entire pool proves no fixed-buffer/frame ticket is
-            // retained once the last command future has been dropped.
             drop(shell.state().borrow().admit_temporary(limit).unwrap());
         }
         assert_eq!(output.bytes(), b"okprefixA\xff");
@@ -718,15 +700,11 @@ mod tests {
         fds.insert(1, out);
         fds.insert(2, err);
         shell.set_descriptors(fds).unwrap();
-        // Retain a peer's charge, leaving less than one buffer of headroom.
         let held = shell
             .state()
             .borrow()
             .admit_temporary(limit - WRITE_CHUNK + 1)
             .unwrap();
-        // Dispatch admits its whole future before selecting a builtin. The
-        // same tight headroom must reject non-printf commands too, rather than
-        // suggesting that this limit isolates just the printf output buffer.
         for source in ["true", "echo hidden", r"printf 'prefixA\xZ'"] {
             assert_eq!(finish(&ex, shell.start(source).unwrap()), 2, "{source}");
             assert!(output.bytes().is_empty(), "{source}");

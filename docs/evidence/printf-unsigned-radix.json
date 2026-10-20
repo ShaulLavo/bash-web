@@ -213,20 +213,20 @@
     "exact-main checks"
   ],
   "sourceSha256": {
-    "shell/engine/src/builtins/printf.rs": "d60f2f37cc3f464c1de58ebde497564b73e3572c0e44a0686f31ce4ce5f15cb3",
+    "shell/engine/src/builtins/printf.rs": "5bde696448de44f323e4bcbaf26f2207a8bc660cf0886cafcccd6d962dcd61be",
     "shell/engine/src/builtins/printf/fields.rs": "b85eb489609b7c24cd7095ddf15c73265f3ae196c34b6c8cd4923283fcc5212b",
-    "shell/engine/tests/words.rs": "8ced09846e4ab61e6f6bb5125ce812fdd00eea55af6c5d236af5ce5920d4e6cd",
-    "shell/engine/tests/words/printf.rs": "0057d1aecdb1bf4e36b4bc346b82aa92a82325a360e5ed69c0daac3c69a60977",
+    "shell/engine/tests/words.rs": "bf2116bd046e17c47ce5e489798375acfb3483f10ab8bf3d851654c5301e2f70",
+    "shell/engine/tests/words/printf.rs": "d08a38625fff969824d468090de8302f8cc7ff027b5829b9034fd2a953a5762c",
     "shell/engine/tests/words/printf_integers.rs": "933192f6df2cf8543f24ae6e44ae70048b70c4d07c844142d2b8032c01d28b4e",
     "shell/engine/tests/words/printf_unsigned.rs": "f4baf163a920e72c3e801c08448d8781ce1961f0fc246198cbee3b9e61c87dbe",
-    "package.json": "40f78f0fc04ac2aa053ef7f007eebc7025f58c29b50ae12d952992cb7fba1d82",
+    "package.json": "b0fae67ad16b011691da961ebcde6380eb0e0386b273395cb73ef9ded42319fd",
     "package-lock.json": "90647fc16ac45e01bf1a3a1e94e3f0011396d5f39f5973f73d37cfc7f77095a2",
     "shell/engine/Cargo.toml": "8cc5f0dac572cb6838728cbdc5661c34439eca1b6bfcbf1e5af8cbbabfc5c7ed",
     "shell/Cargo.lock": "eb999cc645b698a153d2f0248c80215b29756a57cac9370649a57ce62cfa1f9c",
     "sources.lock.json": "d413e2395f1c4595dafc5755e0d05de2f860d17d2a13ffd463495aa1536c11d1",
     "docs/printf-integer-operands.md": "c1b96040cf90f9a2212ffc0e2e825db525eae6b3c2dae64c578d0645dc6c683d",
     "docs/printf-unsigned-radix.md": "c928e050c52dd7952818b3d1a22d6a96bc1c54b3c0363e4ecf3c4c4cfe57d1f9",
-    "docs/evidence/engine-layers.json": "314aeb02e80bf2387c217abecffb52d058d27aed01ae59028cec37310c8c6b06",
+    "docs/evidence/engine-layers.json": "1ea62d80a20b3d3ba46d8ff127bd94d3ee69772d4e7d8f16eb12484cb2a577bb",
     "docs/evidence/own-shell-baseline.json": "682eace04b4e621b8c7ef419e21a19a4a34f4a1772ceee6a394c99d48277fabe",
     "plans/004-own-shell.md": "f577d60b9ca8b9c286b195ca4368885d328fc2eceba27d9153e7a0054abf441a"
   },
@@ -276,5 +276,42 @@
     "cleanup": "/work/reports/bash-web/hill-climb/printf-unsigned-radix/remove-after-review.sh",
     "removalCondition": "After parent/reviewer consumers stop; consumer audit, clean tree and git worktree remove. Reports remain parent-owned evidence."
   },
-  "reportDirectory": "/work/reports/bash-web/hill-climb/printf-unsigned-radix"
+  "reportDirectory": "/work/reports/bash-web/hill-climb/printf-unsigned-radix",
+  "measuredRevision": "1d19561a692823a4ce978276bb99b74fc78d5a8f",
+  "measuredSourceSha256": {
+    "shell/engine/src/builtins/printf.rs": "d60f2f37cc3f464c1de58ebde497564b73e3572c0e44a0686f31ce4ce5f15cb3",
+    "shell/engine/src/builtins/printf/fields.rs": "b85eb489609b7c24cd7095ddf15c73265f3ae196c34b6c8cd4923283fcc5212b",
+    "shell/engine/tests/words.rs": "8ced09846e4ab61e6f6bb5125ce812fdd00eea55af6c5d236af5ce5920d4e6cd",
+    "shell/engine/tests/words/printf.rs": "0057d1aecdb1bf4e36b4bc346b82aa92a82325a360e5ed69c0daac3c69a60977",
+    "shell/engine/tests/words/printf_integers.rs": "933192f6df2cf8543f24ae6e44ae70048b70c4d07c844142d2b8032c01d28b4e",
+    "shell/engine/tests/words/printf_unsigned.rs": "f4baf163a920e72c3e801c08448d8781ce1961f0fc246198cbee3b9e61c87dbe",
+    "package.json": "40f78f0fc04ac2aa053ef7f007eebc7025f58c29b50ae12d952992cb7fba1d82",
+    "package-lock.json": "90647fc16ac45e01bf1a3a1e94e3f0011396d5f39f5973f73d37cfc7f77095a2",
+    "shell/engine/Cargo.toml": "8cc5f0dac572cb6838728cbdc5661c34439eca1b6bfcbf1e5af8cbbabfc5c7ed",
+    "shell/Cargo.lock": "eb999cc645b698a153d2f0248c80215b29756a57cac9370649a57ce62cfa1f9c",
+    "sources.lock.json": "d413e2395f1c4595dafc5755e0d05de2f860d17d2a13ffd463495aa1536c11d1",
+    "docs/printf-integer-operands.md": "c1b96040cf90f9a2212ffc0e2e825db525eae6b3c2dae64c578d0645dc6c683d",
+    "docs/printf-unsigned-radix.md": "c928e050c52dd7952818b3d1a22d6a96bc1c54b3c0363e4ecf3c4c4cfe57d1f9",
+    "docs/evidence/engine-layers.json": "314aeb02e80bf2387c217abecffb52d058d27aed01ae59028cec37310c8c6b06",
+    "docs/evidence/own-shell-baseline.json": "682eace04b4e621b8c7ef419e21a19a4a34f4a1772ceee6a394c99d48277fabe",
+    "plans/004-own-shell.md": "f577d60b9ca8b9c286b195ca4368885d328fc2eceba27d9153e7a0054abf441a"
+  },
+  "commentOnlyFollowup": {
+    "priorRevision": "1d19561a692823a4ce978276bb99b74fc78d5a8f",
+    "removedCommentSpans": 36,
+    "removedRustCommentLines": 59,
+    "removedSkipLibCheckTokens": 2,
+    "typechecks": {
+      "layers": "passed without --skipLibCheck",
+      "guestBuild": "passed without --skipLibCheck"
+    },
+    "correspondence": "Only accepted complete Rust line comments removed; exact remaining source and literal-preserving noncomment token equality verified against measuredRevision. All assertions and protected comments retained. No new Rust binary, targeted execution or frozen replay is claimed. Earlier tests and artifact hashes describe the historical measured sources; sourceSha256 describes current source and metadata.",
+    "semanticSha256": {
+      "shell/engine/src/builtins/printf.rs": "e2d905c6f2b9e8979bb6d4c40ce6d768eddf7207b1c41b0d32603f7bdc6de11f",
+      "shell/engine/tests/words.rs": "fd739af00c640582c8d26b16c3a3e2914d512f4538ddf69cc3b609a319804fbc",
+      "shell/engine/tests/words/printf.rs": "d8cbb1598060abd3f1f7e80dc8589b6835bd9028ed15fda9e948fe143922b945"
+    },
+    "proof": "/work/reports/bash-web/hill-climb/printf-unsigned-radix/comment-fixes-r1.ts",
+    "report": "/work/reports/bash-web/hill-climb/printf-unsigned-radix/comment-fixes-r1.md"
+  }
 }
