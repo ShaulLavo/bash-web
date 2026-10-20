@@ -37,3 +37,9 @@ upstream implementation. New native/WASI tests live in
 See [the measurement receipt](evidence/printf-quoting.json) for raw-byte controls,
 frozen gains and remaining differences. Stderr remains separately retained and
 unscored; merged Bash source-line annotations are not hidden in strict scores.
+
+The native Darwin classifier also differs from GNU libc. For the measured
+control, Darwin quotes U+00AD, U+200B and U+FEFF but leaves U+2028 printable;
+GNU libc does the reverse. The Darwin test keeps an explicit native expectation
+and checks it against the installed `/bin/bash` builtin. This platform control
+is separate from the frozen GNU Bash 5.3.15 oracle and does not change its ruler.

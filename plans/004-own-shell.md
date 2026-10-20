@@ -1787,3 +1787,14 @@ are removed and actual rustc target cfg expansion. The unchanged comparator
 still accepts the saved replay; no new gain, second replay or Darwin execution
 is inferred from those checks. See `review-fixes-r1.md` in the report directory
 for separate hosted Darwin results and current delivery/source correspondence.
+
+The first actual hosted Darwin run, `39515015387/job/118944969036`, compiled
+successfully and passed 14/15 quoting tests, including initial-C-locale `%q`/`%Q`.
+Its sole failure was the GNU-specific Unicode expected output at
+`printf_quoting.rs:126`. Darwin escaped U+00AD, U+200B and U+FEFF while leaving
+U+2028 literal; the retained GNU expectation did the reverse. The narrow test
+correction preserves the non-Apple expectation and requires the recorded Apple
+bytes to match actual native `/bin/bash` `%q` output. The gate also records
+native `iswprint_l` observations. No skip, filtered assertion, portable Unicode
+table or scoring change is included. Raw first-failure and follow-up logs stay
+in the report directory under `review-fixes-r1-darwin*`.

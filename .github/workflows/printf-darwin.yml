@@ -32,5 +32,7 @@ jobs:
           workspaces: shell -> ../.build/printf-darwin
       - name: Confirm Darwin UTF-8 locale
         run: locale -a | grep -Fx en_US.UTF-8
+      - name: Identify native Bash oracle
+        run: /bin/bash --version
       - name: Printf quoting from the initial C process locale
-        run: cargo test --locked --manifest-path shell/Cargo.toml -p shell-engine --test words -j2 printf_quoting -- --test-threads=1
+        run: cargo test --locked --manifest-path shell/Cargo.toml -p shell-engine --test words -j2 printf_quoting -- --test-threads=1 --show-output

@@ -123,10 +123,14 @@ fn printf_quoting_unicode_classification_is_local_and_preserves_printable_sequen
         "é\u{80}\u{a0}\u{ad}\u{200b}\u{2028}\u{feff}\u{ffff}",
     );
     assert_eq!(rig.run("printf '%q' \"$value\""), 0);
-    assert_eq!(
-        rig.output.bytes(),
-        "$'é\\302\\200\u{a0}\u{ad}\u{200b}\\342\\200\\250\u{feff}\\357\\277\\277'".as_bytes()
-    );
+    #[cfg(not(target_vendor = "apple"))]
+    let expected = "$'é\\302\\200\u{a0}\u{ad}\u{200b}\\342\\200\\250\u{feff}\\357\\277\\277'";
+    #[cfg(target_vendor = "apple")]
+    let expected =
+        "$'é\\302\\200\u{a0}\\302\\255\\342\\200\\213\u{2028}\\357\\273\\277\\357\\277\\277'";
+    assert_eq!(rig.output.bytes(), expected.as_bytes());
+    #[cfg(target_vendor = "apple")]
+    assert_darwin_unicode_quoting(expected.as_bytes());
     assert_eq!(rig.run("LC_ALL=C; printf '|%q' é"), 0);
     assert!(rig.output.bytes().ends_with(br"|$'\303\251'"));
 }
@@ -235,4 +239,48 @@ fn printf_quoting_darwin_utf8_from_initial_c_process_locale() {
     assert_eq!(rig.output.bytes(), "[é][é]".as_bytes());
     assert!(rig.errors.bytes().is_empty());
     assert_eq!(process_locale().as_bytes(), b"C");
+}
+
+#[cfg(target_vendor = "apple")]
+fn assert_darwin_unicode_quoting(expected: &[u8]) {
+    let value = "é\u{80}\u{a0}\u{ad}\u{200b}\u{2028}\u{feff}\u{ffff}";
+    let bash = std::process::Command::new("/bin/bash")
+        .args([
+            "--noprofile",
+            "--norc",
+            "-c",
+            "printf '%q' \"$1\"",
+            "bash",
+            value,
+        ])
+        .env("LC_ALL", "en_US.UTF-8")
+        .output()
+        .unwrap();
+    println!("Darwin Bash stdout bytes: {:?}", bash.stdout);
+    println!("Darwin Bash stderr bytes: {:?}", bash.stderr);
+    assert!(bash.status.success());
+    assert!(bash.stderr.is_empty());
+    assert_eq!(bash.stdout, expected);
+    unsafe extern "C" {
+        fn newlocale(
+            mask: i32,
+            name: *const std::ffi::c_char,
+            base: *mut std::ffi::c_void,
+        ) -> *mut std::ffi::c_void;
+        fn iswprint_l(character: u32, locale: *mut std::ffi::c_void) -> i32;
+        fn freelocale(locale: *mut std::ffi::c_void) -> i32;
+    }
+    let locale = unsafe { newlocale(1 << 1, c"en_US.UTF-8".as_ptr(), std::ptr::null_mut()) };
+    assert!(!locale.is_null());
+    let classifications: Vec<_> = value
+        .chars()
+        .map(|character| {
+            (
+                u32::from(character),
+                unsafe { iswprint_l(u32::from(character), locale) } != 0,
+            )
+        })
+        .collect();
+    assert_eq!(unsafe { freelocale(locale) }, 0);
+    println!("Darwin libc iswprint_l: {classifications:?}");
 }
