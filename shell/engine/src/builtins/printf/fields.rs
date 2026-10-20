@@ -128,12 +128,12 @@ impl Field {
         } else {
             None
         };
-        let Some(&conversion @ (b's' | b'd' | b'i' | b'u' | b'o' | b'x' | b'X')) =
+        let Some(&conversion @ (b's' | b'c' | b'd' | b'i' | b'u' | b'o' | b'x' | b'X')) =
             input.get(*offset)
         else {
             return Ok(None);
         };
-        if conversion != b's' && flags.grouping {
+        if !matches!(conversion, b's' | b'c') && flags.grouping {
             return Ok(None);
         }
         printer.scan(1).await?;
@@ -174,13 +174,18 @@ impl Field {
         printer: &mut Printer<'_>,
     ) -> Result<bool, i32> {
         let field = self.resolve(args, printer).await?;
-        if self.conversion == b's' {
-            let Some(field) = field else {
+        if matches!(self.conversion, b's' | b'c') {
+            let Some(mut field) = field else {
                 return field_overflow(args, printer).await;
             };
-            field
-                .print_string(args.take().unwrap_or("").as_bytes(), printer)
-                .await?;
+            let value = args.take().unwrap_or("").as_bytes();
+            let value = if self.conversion == b'c' {
+                field.precision = None;
+                value.get(..1).unwrap_or(b"\0")
+            } else {
+                value
+            };
+            field.print_string(value, printer).await?;
             return Ok(false);
         }
         let range = if matches!(self.conversion, b'd' | b'i') {

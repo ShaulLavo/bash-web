@@ -7,15 +7,15 @@ use shell_engine::{
 use std::{cell::RefCell, rc::Rc};
 
 #[derive(Clone)]
-struct RecordedEndpoint(Rc<RefCell<Vec<Vec<u8>>>>);
+struct RecordedEndpoint(Rc<RefCell<Vec<Vec<u8>>>>, usize);
 impl HostEndpoint for RecordedEndpoint {
     fn read<'a>(&'a self, _output: &'a mut [u8]) -> LocalBoxFuture<'a, Result<usize, IoError>> {
         async { Ok(0) }.boxed_local()
     }
     fn write<'a>(&'a self, input: &'a [u8]) -> LocalBoxFuture<'a, Result<usize, IoError>> {
         let records = self.0.clone();
-        let bytes = input.to_owned();
-        let length = input.len();
+        let length = input.len().min(self.1);
+        let bytes = input[..length].to_owned();
         async move {
             records.borrow_mut().push(bytes);
             Ok(length)
@@ -25,9 +25,13 @@ impl HostEndpoint for RecordedEndpoint {
 }
 
 pub(super) fn recorded_endpoint() -> (Endpoint, Rc<RefCell<Vec<Vec<u8>>>>) {
+    recorded_endpoint_with_limit(usize::MAX)
+}
+
+pub(super) fn recorded_endpoint_with_limit(limit: usize) -> (Endpoint, Rc<RefCell<Vec<Vec<u8>>>>) {
     let records = Rc::new(RefCell::new(Vec::new()));
     (
-        Endpoint::host(Rc::new(RecordedEndpoint(records.clone()))),
+        Endpoint::host(Rc::new(RecordedEndpoint(records.clone(), limit))),
         records,
     )
 }
@@ -629,4 +633,44 @@ pub(super) fn assert_admission_cancellation(source: &str) {
         rig.ex.drive(1);
     }
     interrupt_empty(&rig, job);
+}
+
+pub(super) fn assert_field_overflow(field: &str, values: &str, warnings: &str) {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run(&format!("printf 'prefix%{field}%bBAD' {values} '\\c'")),
+        1
+    );
+    assert_eq!(rig.output.bytes(), b"prefix");
+    assert_eq!(
+        rig.errors.bytes(),
+        format!("{warnings}/usr/bin/bash: printf: Value too large for defined data type\n")
+            .as_bytes()
+    );
+}
+
+pub(super) fn assert_pipe_delivery(source: &str, first: u8, padding: u8) {
+    for cancel in [true, false] {
+        let rig = Rig::new(Limits::default());
+        let (reader, writer) = pipe();
+        replace_output(&rig, writer);
+        let job = rig.shell.start(source).unwrap();
+        assert_eq!(read_first_byte(&rig, &reader), first);
+        assert!(!job.is_finished());
+        if !cancel {
+            drop(reader);
+            assert_eq!(rig.finish(job), 141);
+            continue;
+        }
+        rig.shell.interrupt();
+        assert_eq!(rig.finish(job), 130);
+        let mut remaining = vec![0; shell_engine::io::PIPE_CAPACITY];
+        let Some(Ok(length)) = reader.read(&mut remaining).now_or_never() else {
+            panic!("expected already-written printf padding");
+        };
+        assert!(length > 0);
+        assert!(remaining[..length].iter().all(|byte| *byte == padding));
+        assert!(reader.read(&mut [0]).now_or_never().is_none());
+        assert_eq!(rig.run("true"), 0);
+    }
 }
