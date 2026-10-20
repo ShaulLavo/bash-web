@@ -955,7 +955,7 @@
       "shell/engine/src/builtins/printf.rs": "29a1d8f5f2216829beba01a98242728a5dd7d105795a8761be7bc2bb321f5520",
       "shell/engine/src/builtins/printf/fields.rs": "ade4ef48219b57ab0439a78bfbbebc2195e58eb6578087e927531495660f8c28",
       "shell/engine/src/builtins/printf/quoting.rs": "135c6d4c99987460b91f3fb249bceefb857f5749da652fdb19c338bfb063c8a9",
-      "shell/engine/tests/words/printf_quoting.rs": "f769f6529d5e495b76efef120b9ea190622b2a6aa791317c36bbd89cd97a3c4e",
+      "shell/engine/tests/words/printf_quoting.rs": "f223eddda8eee236935412375b29c1ee5dafcdba874f45236d066b8547097573",
       "shell/engine/tests/words/printf.rs": "987690518f60e3882f8bcd042c044583bcc8b5f50a35f4a560ba4542fe0df070",
       "shell/engine/tests/words.rs": "09a3bdd2da070329e4fcb5a2876836fcca00fba35dea71eebc544f1bee2ab8e1",
       "sources.lock.json": "c0301211dcc9b7b83795b521c02c2fa88c2149e8d89421d50c0f828076e0eaec"
@@ -965,6 +965,6 @@
     "darwinGate": ".github/workflows/printf-darwin.yml runs the actual engine quoting tests on hosted macOS, confirms en_US.UTF-8 exists and asserts UTF-8 printf output from initial process C locale without changing global locale. Its execution result is separate from all historical Linux/WASI measurements and is recorded in review-fixes-r1.md.",
     "localMac": "Mesh control transport timed out; documented SSH recovery returned No route to host before setup. No local Mac execution or resources.",
     "evidenceDirectory": "/work/reports/bash-web/hill-climb/printf-quoting/",
-    "darwinClassification": "The first hosted macOS run confirmed en_US.UTF-8 and passed the initial-C-locale regression, but its existing Unicode test failed because the GNU expected bytes differ from native Darwin libc. The follow-up keeps those GNU bytes unchanged for non-Apple targets, uses the recorded Darwin bytes on Apple, and additionally requires identical actual /bin/bash printf output. Direct native iswprint_l observations and Bash version/output are retained by the focused gate. No portable classifier or frozen-oracle change."
+    "darwinClassification": "The first hosted macOS run confirmed en_US.UTF-8 and passed the initial-C-locale regression, but its existing Unicode test failed on GNU-specific expected bytes. The non-Apple expectation stays unchanged. The recorded Apple bytes are checked against direct native iswprint_l classifications. Actual /bin/bash is version 3.2.57 and emits distinct byte-level quotes, not the sealed GNU 5.3.15 representation. Its raw output and round-trip check are separate host observations, not byte-equality assertions against the scalar-based formatter. No portable classifier, old-Bash emulation or frozen-oracle change."
   }
 }

@@ -130,7 +130,7 @@ fn printf_quoting_unicode_classification_is_local_and_preserves_printable_sequen
         "$'é\\302\\200\u{a0}\\302\\255\\342\\200\\213\u{2028}\\357\\273\\277\\357\\277\\277'";
     assert_eq!(rig.output.bytes(), expected.as_bytes());
     #[cfg(target_vendor = "apple")]
-    assert_darwin_unicode_quoting(expected.as_bytes());
+    assert_darwin_unicode_classification();
     assert_eq!(rig.run("LC_ALL=C; printf '|%q' é"), 0);
     assert!(rig.output.bytes().ends_with(br"|$'\303\251'"));
 }
@@ -242,25 +242,8 @@ fn printf_quoting_darwin_utf8_from_initial_c_process_locale() {
 }
 
 #[cfg(target_vendor = "apple")]
-fn assert_darwin_unicode_quoting(expected: &[u8]) {
+fn assert_darwin_unicode_classification() {
     let value = "é\u{80}\u{a0}\u{ad}\u{200b}\u{2028}\u{feff}\u{ffff}";
-    let bash = std::process::Command::new("/bin/bash")
-        .args([
-            "--noprofile",
-            "--norc",
-            "-c",
-            "printf '%q' \"$1\"",
-            "bash",
-            value,
-        ])
-        .env("LC_ALL", "en_US.UTF-8")
-        .output()
-        .unwrap();
-    println!("Darwin Bash stdout bytes: {:?}", bash.stdout);
-    println!("Darwin Bash stderr bytes: {:?}", bash.stderr);
-    assert!(bash.status.success());
-    assert!(bash.stderr.is_empty());
-    assert_eq!(bash.stdout, expected);
     unsafe extern "C" {
         fn newlocale(
             mask: i32,
@@ -283,4 +266,39 @@ fn assert_darwin_unicode_quoting(expected: &[u8]) {
         .collect();
     assert_eq!(unsafe { freelocale(locale) }, 0);
     println!("Darwin libc iswprint_l: {classifications:?}");
+    assert_eq!(
+        classifications,
+        [
+            (0xe9, true),
+            (0x80, false),
+            (0xa0, true),
+            (0xad, false),
+            (0x200b, false),
+            (0x2028, true),
+            (0xfeff, false),
+            (0xffff, false),
+        ]
+    );
+    let bash = darwin_bash_quoting("printf '%q' \"$1\"", value);
+    println!("Darwin Bash stdout bytes: {:?}", bash.stdout);
+    println!("Darwin Bash stderr bytes: {:?}", bash.stderr);
+    assert!(bash.status.success());
+    assert!(bash.stderr.is_empty());
+    let roundtrip = darwin_bash_quoting(
+        "quoted=$(printf '%q' \"$1\"); eval \"set -- $quoted\"; printf '%s' \"$1\"",
+        value,
+    );
+    println!("Darwin Bash roundtrip bytes: {:?}", roundtrip.stdout);
+    assert!(roundtrip.status.success());
+    assert!(roundtrip.stderr.is_empty());
+    assert_eq!(roundtrip.stdout, value.as_bytes());
+}
+
+#[cfg(target_vendor = "apple")]
+fn darwin_bash_quoting(source: &str, value: &str) -> std::process::Output {
+    std::process::Command::new("/bin/bash")
+        .args(["--noprofile", "--norc", "-c", source, "bash", value])
+        .env("LC_ALL", "en_US.UTF-8")
+        .output()
+        .unwrap()
 }
