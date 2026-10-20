@@ -1,0 +1,952 @@
+{
+  "schema": 1,
+  "status": "Review-ready implementation and measured membership update. Parent owns independent source/comment review, hosted CI, merge and exact-main acceptance.",
+  "baseRevision": "46a6bb090e1bdcc3d447bc2c70a3a7f4c72fd4b4",
+  "measuredRevision": "e050d54ae26c54ba3af9da72ee6186f05914d82d",
+  "revisionCorrespondence": "The versioned native/WASI release rebuild and exactly one full frozen replay use measuredRevision. Earlier failing-first, focused native/WASI, I/O and unchanged printf/echo fixture checks use identical formatter/test source before the version-only root 0.0.69 / engine 0.0.39 bump. Their separate pre-version artifact hashes remain in the report. Later delivery changes only this receipt, measured gained memberships and plan status/evidence. No second full replay.",
+  "model": "gpt-6.1-sol",
+  "provider": "Existing cli-proxy verified read-only. No nested agents, fallback, provider, credential or settings changes.",
+  "versions": {
+    "root": "0.0.69",
+    "engine": "0.0.39"
+  },
+  "scope": "Printf %q/%Q with empty/missing input, printable/metacharacter/ANSI-C quoting, existing C/UTF-8 locale selection, byte width/precision, stars, alternate form, ignored flags, argument reuse and count warnings. No successful -v, help, floats/time/length modifiers/positional formats, padded %b, parser/expansion/eval/runtime changes or dependencies.",
+  "classification": "Original local Rust observed against GNU Bash 5.3.15. No upstream implementation copied or adapted.",
+  "implementation": "Borrowed input with empty/backslash/single/ANSI style and fixed pieces of at most four bytes. Cooperative style scan and precision-limited measurement/delivery through existing two-pass Printer. No expanded quote allocation. Keep 4096-byte buffering, admission/no output on rejection, partial writes, cancellation, descriptor alias ordering and %b stop.",
+  "behaviorOracle": {
+    "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "executable": "/usr/bin/bash",
+    "sha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5"
+  },
+  "changedBaselineMemberships": 34,
+  "frozenDelta": {
+    "ok": true,
+    "corpora": {
+      "oils": {
+        "before": 1006,
+        "after": 1012,
+        "gained": [
+          "oils:builtin-printf:792",
+          "oils:builtin-printf:805",
+          "oils:serialize:12",
+          "oils:serialize:36",
+          "oils:serialize:52",
+          "oils:serialize:94"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "brush-suite": {
+        "before": 989,
+        "after": 1001,
+        "gained": [
+          "brush-suite:builtins/printf:14",
+          "brush-suite:builtins/printf:15",
+          "brush-suite:builtins/printf:36",
+          "brush-suite:builtins/printf:62",
+          "brush-suite:builtins/printf:64",
+          "brush-suite:builtins/printf:65",
+          "brush-suite:builtins/printf:66",
+          "brush-suite:builtins/printf:67",
+          "brush-suite:builtins/printf:68",
+          "brush-suite:builtins/printf:70",
+          "brush-suite:builtins/printf:71",
+          "brush-suite:builtins/printf:72"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "bashkit-suite": {
+        "before": 1388,
+        "after": 1404,
+        "gained": [
+          "bashkit-suite:bashbox-printf:139",
+          "bashkit-suite:bashbox-printf:182",
+          "bashkit-suite:printf:208",
+          "bashkit-suite:printf:215",
+          "bashkit-suite:printf:222",
+          "bashkit-suite:printf:229",
+          "bashkit-suite:printf:236",
+          "bashkit-suite:printf:245",
+          "bashkit-suite:printf:286",
+          "bashkit-suite:quote:285",
+          "bashkit-suite:quote:293",
+          "bashkit-suite:quote:301",
+          "bashkit-suite:quote:309",
+          "bashkit-suite:quote:317",
+          "bashkit-suite:quote:325",
+          "bashkit-suite:quote:333"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      }
+    }
+  },
+  "frozenIdentity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "sourcePins": {
+    "oils": {
+      "revision": "bdc8364c253ce921e033bbc2399ea2ce0be41825"
+    },
+    "brush-suite": {
+      "revision": "4cfba081f2f8bcda8150010a57203d020f14f0cc"
+    },
+    "bashkit-suite": {
+      "revision": "491c3281f668b76d64b15210b8f5d7bf97244be0"
+    }
+  },
+  "waffle": {
+    "repository": "https://github.com/ShaulLavo/waffle",
+    "revision": "33ece68f9f484d99b8a57a675de71d847e248051",
+    "version": "0.0.50"
+  },
+  "frozenProof": {
+    "records": 9221,
+    "scored": 5792,
+    "skipped": 3429,
+    "singleCompleteRealWaffleReplay": true,
+    "jobs": 1,
+    "record": 0,
+    "replayExit": 1,
+    "replayExitMeaning": "Saved complete result. Old-baseline strict membership rejects new passes. Update only measured gains and derived counts, then unchanged strict comparator passes offline on the same replay.",
+    "unchangedOtherBaselineRecords": 9187,
+    "retainedHistoricalFailPayloadDifferences": [
+      "oils:unicode:125",
+      "oils:unicode:150",
+      "oils:var-op-slice:107",
+      "oils:var-op-slice:124",
+      "oils:array-assoc:540",
+      "oils:builtin-printf:38",
+      "oils:builtin-printf:115",
+      "oils:builtin-printf:910",
+      "oils:builtin-read:100",
+      "oils:serialize:76",
+      "oils:serialize:111",
+      "brush-suite:builtins/command:35",
+      "brush-suite:builtins/echo:5",
+      "brush-suite:builtins/echo:6",
+      "brush-suite:builtins/printf:3",
+      "brush-suite:builtins/printf:6",
+      "brush-suite:builtins/printf:7",
+      "brush-suite:builtins/printf:47",
+      "brush-suite:builtins/printf:63",
+      "brush-suite:builtins/printf:69",
+      "brush-suite:builtins/printf:73",
+      "brush-suite:builtins/printf:74",
+      "brush-suite:builtins/read:54",
+      "brush-suite:nameref:47",
+      "brush-suite:prompt:14",
+      "bashkit-suite:background:1",
+      "bashkit-suite:bashbox-declare:31",
+      "bashkit-suite:bashbox-declare:335",
+      "bashkit-suite:bashbox-declare:345",
+      "bashkit-suite:bashbox-declare:364",
+      "bashkit-suite:bashbox-printf:111",
+      "bashkit-suite:bashbox-printf:175",
+      "bashkit-suite:bashbox-read-names:5",
+      "bashkit-suite:heredoc-read-escapes:36",
+      "bashkit-suite:printf:194",
+      "bashkit-suite:printf:201",
+      "bashkit-suite:printf:273",
+      "bashkit-suite:printf:293",
+      "bashkit-suite:printf:311"
+    ],
+    "noWholeOutputEqualityClaim": true,
+    "originalDeadlinesScoringExclusionsAndGates": true
+  },
+  "comparison": "Frozen scores compare raw stdout bytes and status, with stderr retained but unscored. Targeted diagnostics separately remove only Bash source-line annotations. Raw merged stdout differences remain mismatches. No scoring normalization or scorer change.",
+  "targeted": [
+    {
+      "mode": "native",
+      "controls": 747,
+      "beforeRawStdoutStatus": 2,
+      "afterRawStdoutStatus": 736,
+      "candidateInventoryMatches": 34,
+      "candidateInventoryTotal": 41,
+      "remainingRawDifferences": [
+        {
+          "locale": "C",
+          "script": "printf '[%q][%Q][%#q]' $'\\xff' $'\\xce\\xce\\xbc' $'\\xff'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b24275c333737275d5b24275c3331365c3331365c323734275d5b24275c333737275d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5b24275c3330335c323737275d5b24275c3330335c3231365c3330335c3231365c3330325c323734275d5b24275c3330335c323737275d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C",
+          "script": "printf '[%*q]' 6x 'a b' 2>&1",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 1,
+            "stdoutHex": "2f7573722f62696e2f626173683a206c696e6520313a207072696e74663a2036783a20696e76616c6964206e756d6265720a5b2020615c20625d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 1,
+            "stdoutHex": "2f7573722f62696e2f626173683a207072696e74663a2036783a20696e76616c6964206e756d6265720a5b2020615c20625d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%q][%Q][%#q]' $'\\xff' $'\\xce\\xce\\xbc' $'\\xff'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b24275c333737275d5b24275c333136cebc275d5b24275c333737275d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5bc3bf5d5bc38ec38ec2bc5d5b27c3bf275d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%*q]' 6x 'a b' 2>&1",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 1,
+            "stdoutHex": "2f7573722f62696e2f626173683a206c696e6520313a207072696e74663a2036783a20696e76616c6964206e756d6265720a5b2020615c20625d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 1,
+            "stdoutHex": "2f7573722f62696e2f626173683a207072696e74663a2036783a20696e76616c6964206e756d6265720a5b2020615c20625d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "val='\"quoted\" with spaces and \\'\n\nprintf -v foo %q \"$val\"\neval \"bar=$foo\"\n\n\ntest \"$bar\" = \"$val\" && echo OK\n",
+          "id": "oils:builtin-printf:38",
+          "outputStatus": false,
+          "diagnostics": false,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "4f4b0a",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 1,
+            "stdoutHex": "",
+            "stderrHex": "2f7573722f62696e2f626173683a207072696e74663a202d763a2061737369676e6d656e74206973206e6f7420737570706f727465640a7072696e74663a2075736167653a207072696e7466205b2d76207661725d20666f726d6174205b617267756d656e74735d0a"
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "case $SH in mksh|zsh|dash|ash) echo not implemented; exit ;; esac\ndollar='dollar'\nf() {\n  local mylocal=foo\n  printf -v dollar %q '$'  # assign foo to a quoted dollar\n  printf -v mylocal %q 'mylocal'\n  echo dollar=$dollar\n  echo mylocal=$mylocal\n}\necho dollar=$dollar\necho --\nf\necho --\necho dollar=$dollar\necho mylocal=$mylocal\n",
+          "id": "oils:builtin-printf:115",
+          "outputStatus": false,
+          "diagnostics": false,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "646f6c6c61723d646f6c6c61720a2d2d0a646f6c6c61723d5c240a6d796c6f63616c3d6d796c6f63616c0a2d2d0a646f6c6c61723d5c240a6d796c6f63616c3d0a",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "646f6c6c61723d646f6c6c61720a2d2d0a646f6c6c61723d646f6c6c61720a6d796c6f63616c3d666f6f0a2d2d0a646f6c6c61723d646f6c6c61720a6d796c6f63616c3d0a",
+            "stderrHex": "2f7573722f62696e2f626173683a207072696e74663a202d763a2061737369676e6d656e74206973206e6f7420737570706f727465640a7072696e74663a2075736167653a207072696e7466205b2d76207661725d20666f726d6174205b617267756d656e74735d0a2f7573722f62696e2f626173683a207072696e74663a202d763a2061737369676e6d656e74206973206e6f7420737570706f727465640a7072696e74663a2075736167653a207072696e7466205b2d76207661725d20666f726d6174205b617267756d656e74735d0a"
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "case $SH in ash) return ;; esac  # yash and ash don't implement this\n\nunprintable=$'\\xff'\nprintf '%q\\n' \"$unprintable\"\n\n",
+          "id": "oils:serialize:76",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "24275c333737270a",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "c3bf0a",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "case $SH in ash) return ;; esac\n\nunicode=$'\\xce'\nprintf '%q\\n' \"$unicode\"\n\nunicode=$'\\xce\\xce\\xbc'\nprintf '%q\\n' \"$unicode\"\n\nunicode=$'\\xce\\xbc\\xce'\nprintf '%q\\n' \"$unicode\"\n\ncase $SH in mksh) return ;; esac  # it prints unprintable chars here!\n\nunicode=$'\\xcea'\nprintf '%q\\n' \"$unicode\"\nunicode=$'a\\xce'\nprintf '%q\\n' \"$unicode\"\n",
+          "id": "oils:serialize:111",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "24275c333136270a24275c333136cebc270a2427cebc5c333136270a24275c33313661270a2427615c333136270a",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "c38e0ac38ec38ec2bc0ac38ec2bcc38e0ac38e610a61c38e0a",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '<%*q>\\n' 12 'foo bar'\nprintf '<%.*Q>\\n' 5 'foo bar'\nprintf '<%2$q>\\n' first second\n",
+          "id": "brush-suite:builtins/printf:69",
+          "outputStatus": false,
+          "diagnostics": false,
+          "bash": {
+            "status": 1,
+            "stdoutHex": "3c20202020666f6f5c206261723e0a3c666f6f5c20623e0a3c",
+            "stderrHex": "2f7573722f62696e2f626173683a206c696e6520333a207072696e74663a206024273a20696e76616c696420666f726d6174206368617261637465720a"
+          },
+          "actual": {
+            "status": 2,
+            "stdoutHex": "3c20202020666f6f5c206261723e0a3c666f6f5c20623e0a3c",
+            "stderrHex": "2f7573722f62696e2f626173683a207072696e74663a20756e737570706f7274656420666f726d617420636f6e76657273696f6e0a"
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%ld|%lld|%hhx|%Lf|%zd|%jd|%td|%qd]\\n' 1 2 255 1.5 3 4 6 5\n",
+          "id": "bashkit-suite:bashbox-printf:118",
+          "outputStatus": false,
+          "diagnostics": false,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b317c327c66667c312e3530303030307c337c347c367c35645d0a",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 2,
+            "stdoutHex": "5b",
+            "stderrHex": "2f7573722f62696e2f626173683a207072696e74663a20756e737570706f7274656420666f726d617420636f6e76657273696f6e0a"
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%05b|%05q|%05Q]\\n' 'a\\tb' 'c d' e\n",
+          "id": "bashkit-suite:bashbox-printf:132",
+          "outputStatus": false,
+          "diagnostics": false,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b20206109627c20635c20647c20202020655d0a",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 2,
+            "stdoutHex": "5b",
+            "stderrHex": "2f7573722f62696e2f626173683a207072696e74663a20756e737570706f7274656420666f726d617420636f6e76657273696f6e0a"
+          }
+        }
+      ]
+    },
+    {
+      "mode": "waffle",
+      "controls": 747,
+      "beforeRawStdoutStatus": 2,
+      "afterRawStdoutStatus": 720,
+      "candidateInventoryMatches": 34,
+      "candidateInventoryTotal": 41,
+      "remainingRawDifferences": [
+        {
+          "locale": "C",
+          "script": "printf '[%q][%Q][%#q]' $'\\xff' $'\\xce\\xce\\xbc' $'\\xff'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b24275c333737275d5b24275c3331365c3331365c323734275d5b24275c333737275d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5b24275c3330335c323737275d5b24275c3330335c3231365c3330335c3231365c3330325c323734275d5b24275c3330335c323737275d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C",
+          "script": "printf '[%*q]' 6x 'a b' 2>&1",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 1,
+            "stdoutHex": "2f7573722f62696e2f626173683a206c696e6520313a207072696e74663a2036783a20696e76616c6964206e756d6265720a5b2020615c20625d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 1,
+            "stdoutHex": "2f7573722f62696e2f626173683a207072696e74663a2036783a20696e76616c6964206e756d6265720a5b2020615c20625d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%q]' '͸'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b24275c3331355c323730275d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5bcdb85d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%Q]' '͸'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b24275c3331355c323730275d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5bcdb85d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%#q]' '͸'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b24275c3331355c323730275d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5b27cdb8275d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%#Q]' '͸'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b24275c3331355c323730275d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5b27cdb8275d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%12q]' '͸'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b2024275c3331355c323730275d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5b20202020202020202020cdb85d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%-12q]' '͸'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b24275c3331355c32373027205d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5bcdb8202020202020202020205d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%012q]' '͸'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b2024275c3331355c323730275d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5b20202020202020202020cdb85d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%+ q]' '͸'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b24275c3331355c323730275d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5bcdb85d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%'\\''q]' '͸'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b24275c3331355c323730275d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5bcdb85d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%.1q]' '͸'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b245d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5bcd5d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%.2q]' '͸'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b24275d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5bcdb85d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%.5q]' '͸'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b24275c33315d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5bcdb85d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%.2Q]' '͸'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b24275c3331355c323730275d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5bcdb85d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%.5Q]' '͸'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b24275c3331355c323730275d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5bcdb85d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%#12.5q]' '͸'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b2020202020202024275c33315d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5b202020202020202027cdb8275d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%#12.5Q]' '͸'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b2024275c3331355c323730275d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5b202020202020202027cdb8275d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%q][%Q][%#q]' $'\\xff' $'\\xce\\xce\\xbc' $'\\xff'",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b24275c333737275d5b24275c333136cebc275d5b24275c333737275d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "5bc3bf5d5bc38ec38ec2bc5d5b27c3bf275d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%*q]' 6x 'a b' 2>&1",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 1,
+            "stdoutHex": "2f7573722f62696e2f626173683a206c696e6520313a207072696e74663a2036783a20696e76616c6964206e756d6265720a5b2020615c20625d",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 1,
+            "stdoutHex": "2f7573722f62696e2f626173683a207072696e74663a2036783a20696e76616c6964206e756d6265720a5b2020615c20625d",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "val='\"quoted\" with spaces and \\'\n\nprintf -v foo %q \"$val\"\neval \"bar=$foo\"\n\n\ntest \"$bar\" = \"$val\" && echo OK\n",
+          "id": "oils:builtin-printf:38",
+          "outputStatus": false,
+          "diagnostics": false,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "4f4b0a",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 1,
+            "stdoutHex": "",
+            "stderrHex": "2f7573722f62696e2f626173683a207072696e74663a202d763a2061737369676e6d656e74206973206e6f7420737570706f727465640a7072696e74663a2075736167653a207072696e7466205b2d76207661725d20666f726d6174205b617267756d656e74735d0a"
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "case $SH in mksh|zsh|dash|ash) echo not implemented; exit ;; esac\ndollar='dollar'\nf() {\n  local mylocal=foo\n  printf -v dollar %q '$'  # assign foo to a quoted dollar\n  printf -v mylocal %q 'mylocal'\n  echo dollar=$dollar\n  echo mylocal=$mylocal\n}\necho dollar=$dollar\necho --\nf\necho --\necho dollar=$dollar\necho mylocal=$mylocal\n",
+          "id": "oils:builtin-printf:115",
+          "outputStatus": false,
+          "diagnostics": false,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "646f6c6c61723d646f6c6c61720a2d2d0a646f6c6c61723d5c240a6d796c6f63616c3d6d796c6f63616c0a2d2d0a646f6c6c61723d5c240a6d796c6f63616c3d0a",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "646f6c6c61723d646f6c6c61720a2d2d0a646f6c6c61723d646f6c6c61720a6d796c6f63616c3d666f6f0a2d2d0a646f6c6c61723d646f6c6c61720a6d796c6f63616c3d0a",
+            "stderrHex": "2f7573722f62696e2f626173683a207072696e74663a202d763a2061737369676e6d656e74206973206e6f7420737570706f727465640a7072696e74663a2075736167653a207072696e7466205b2d76207661725d20666f726d6174205b617267756d656e74735d0a2f7573722f62696e2f626173683a207072696e74663a202d763a2061737369676e6d656e74206973206e6f7420737570706f727465640a7072696e74663a2075736167653a207072696e7466205b2d76207661725d20666f726d6174205b617267756d656e74735d0a"
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "case $SH in ash) return ;; esac  # yash and ash don't implement this\n\nunprintable=$'\\xff'\nprintf '%q\\n' \"$unprintable\"\n\n",
+          "id": "oils:serialize:76",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "24275c333737270a",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "c3bf0a",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "case $SH in ash) return ;; esac\n\nunicode=$'\\xce'\nprintf '%q\\n' \"$unicode\"\n\nunicode=$'\\xce\\xce\\xbc'\nprintf '%q\\n' \"$unicode\"\n\nunicode=$'\\xce\\xbc\\xce'\nprintf '%q\\n' \"$unicode\"\n\ncase $SH in mksh) return ;; esac  # it prints unprintable chars here!\n\nunicode=$'\\xcea'\nprintf '%q\\n' \"$unicode\"\nunicode=$'a\\xce'\nprintf '%q\\n' \"$unicode\"\n",
+          "id": "oils:serialize:111",
+          "outputStatus": false,
+          "diagnostics": true,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "24275c333136270a24275c333136cebc270a2427cebc5c333136270a24275c33313661270a2427615c333136270a",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 0,
+            "stdoutHex": "c38e0ac38ec38ec2bc0ac38ec2bcc38e0ac38e610a61c38e0a",
+            "stderrHex": ""
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '<%*q>\\n' 12 'foo bar'\nprintf '<%.*Q>\\n' 5 'foo bar'\nprintf '<%2$q>\\n' first second\n",
+          "id": "brush-suite:builtins/printf:69",
+          "outputStatus": false,
+          "diagnostics": false,
+          "bash": {
+            "status": 1,
+            "stdoutHex": "3c20202020666f6f5c206261723e0a3c666f6f5c20623e0a3c",
+            "stderrHex": "2f7573722f62696e2f626173683a206c696e6520333a207072696e74663a206024273a20696e76616c696420666f726d6174206368617261637465720a"
+          },
+          "actual": {
+            "status": 2,
+            "stdoutHex": "3c20202020666f6f5c206261723e0a3c666f6f5c20623e0a3c",
+            "stderrHex": "2f7573722f62696e2f626173683a207072696e74663a20756e737570706f7274656420666f726d617420636f6e76657273696f6e0a"
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%ld|%lld|%hhx|%Lf|%zd|%jd|%td|%qd]\\n' 1 2 255 1.5 3 4 6 5\n",
+          "id": "bashkit-suite:bashbox-printf:118",
+          "outputStatus": false,
+          "diagnostics": false,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b317c327c66667c312e3530303030307c337c347c367c35645d0a",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 2,
+            "stdoutHex": "5b",
+            "stderrHex": "2f7573722f62696e2f626173683a207072696e74663a20756e737570706f7274656420666f726d617420636f6e76657273696f6e0a"
+          }
+        },
+        {
+          "locale": "C.UTF-8",
+          "script": "printf '[%05b|%05q|%05Q]\\n' 'a\\tb' 'c d' e\n",
+          "id": "bashkit-suite:bashbox-printf:132",
+          "outputStatus": false,
+          "diagnostics": false,
+          "bash": {
+            "status": 0,
+            "stdoutHex": "5b20206109627c20635c20647c20202020655d0a",
+            "stderrHex": ""
+          },
+          "actual": {
+            "status": 2,
+            "stdoutHex": "5b",
+            "stderrHex": "2f7573722f62696e2f626173683a207072696e74663a20756e737570706f7274656420666f726d617420636f6e76657273696f6e0a"
+          }
+        }
+      ]
+    }
+  ],
+  "finalVersionNarrowControls": "4 additional native count/star overflow diagnostic-order controls pass against Bash; count-order-controls.json retains raw bytes.",
+  "failingFirst": {
+    "newTestsFailingBefore": 4,
+    "newTestsPassingAfter": 14,
+    "rawBashObservations": 706,
+    "realWaffleExample": {
+      "id": "oils:builtin-printf:792",
+      "bash": {
+        "stdoutHex": "5b615c20625d0a",
+        "status": 0
+      },
+      "before": {
+        "stdoutHex": "5b",
+        "status": 2
+      }
+    },
+    "logs": [
+      "red-tests.log",
+      "green-tests.log",
+      "before.json",
+      "after.json",
+      "base-artifacts.sha256"
+    ]
+  },
+  "gates": [
+    {
+      "command": "cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2",
+      "result": "PASS, including engine lib 268, words 653, parser 192; all workspace suites pass"
+    },
+    {
+      "command": "cargo clippy --locked --manifest-path shell/Cargo.toml --workspace --all-targets -j2 -- -D warnings",
+      "result": "PASS"
+    },
+    {
+      "command": "cargo test --locked --manifest-path shell/Cargo.toml -p shell-engine --test words printf -j2 --target wasm32-wasip1 -- --test-threads=1",
+      "result": "PASS 102, includes 14 new quoting tests"
+    },
+    {
+      "command": "cargo test --locked --manifest-path shell/Cargo.toml -p shell-engine --test words echo -j2 --target wasm32-wasip1 -- --test-threads=1",
+      "result": "PASS 10"
+    },
+    {
+      "command": "cargo test --locked --manifest-path shell/Cargo.toml -p shell-engine --lib builtins::printf -j2 --target wasm32-wasip1 -- --test-threads=1",
+      "result": "PASS 2 memory-budget tests"
+    },
+    {
+      "command": "cargo clippy --locked --manifest-path shell/Cargo.toml --workspace --all-targets -j2 --target wasm32-wasip1 -- -D warnings",
+      "result": "PASS"
+    },
+    {
+      "command": "cargo fmt --manifest-path shell/Cargo.toml --all --check; node scripts/check-shell-parser.mjs",
+      "result": "PASS"
+    },
+    {
+      "command": "report/quality.sh",
+      "result": "PASS sources, worker build, format, duplicate checks, lint, typecheck, Knip, capabilities, layers. Zero new duplicate clones; layer violations 0, same 42 production and 28 test-only edges."
+    },
+    {
+      "command": "node report/io-controls.ts",
+      "result": "PASS 50 native/real-Waffle records: 20 separate raw streams, 20 merged-order controls with only source-line annotation removed, 6 silent admission rejections, 4 closed-output controls"
+    },
+    {
+      "command": "npm run test:fuzz-shell-printf; npm run fuzz:shell-printf:ci -- --shell TARGET/release/shell-cli; node report/printf-waffle.ts",
+      "result": "PASS unchanged printf seeds 1/42: native 1122/1122 and actual Waffle 1122/1122"
+    },
+    {
+      "command": "npm run fuzz:shell-echo:ci -- --shell TARGET/release/shell-cli; npm run fuzz:shell-echo:ci -- --waffle --shell TARGET/wasm32-wasip1/release/shell-runtime.wasm",
+      "result": "PASS unchanged echo fixtures: native 492/492 and actual Waffle 492/492"
+    },
+    {
+      "command": "report/build-version.sh",
+      "result": "PASS native/WASI release rebuild with root 0.0.69 and engine 0.0.39; all WASI guest memory/filesystem import checks pass"
+    },
+    {
+      "command": "report/frozen.sh; node report/update-membership.ts",
+      "result": "Exactly one full production-Waffle replay, JOBS=1, RECORD=0. Zero lost passes; unchanged strict membership comparator passes offline after gain-only baseline update."
+    }
+  ],
+  "notRunLocally": [
+    "Full browser/terminal/Full-Lite capability compile-and-test matrices and other unrelated fuzz families. Existing blocking workflow checks unchanged; parent owns hosted CI.",
+    "No independent source/comment review, CI watch, merge or exact-main acceptance by this worker."
+  ],
+  "limitations": [
+    {
+      "kind": "Existing invalid-byte word transport",
+      "reproducer": "LC_ALL=C.UTF-8; printf '%q' $'\\xff'",
+      "bashStdoutHex": "24275c33373727",
+      "waffleStdoutHex": "c3bf",
+      "reason": "The lexer already converted byte ff to U+00FF. No guessing, parser repair or byte-preserving input gain claimed."
+    },
+    {
+      "kind": "Existing-library printability boundary",
+      "reproducer": "LC_ALL=C.UTF-8; printf '[%q]' '͸'",
+      "bashAndNativeStdoutHex": "5b24275c3331355c323730275d",
+      "waffleStdoutHex": "5bcdb85d",
+      "status": 0,
+      "affectedTargetedRows": 16,
+      "reason": "Pinned WASI musl and GNU libc classify this unassigned scalar differently. No single-character workaround or replacement Unicode table."
+    },
+    {
+      "kind": "Mixed prerequisites",
+      "reason": "Inventory -v, float/length modifier, positional format and padded-%b rows retain unsupported behavior. No gains promised from text selection."
+    },
+    {
+      "kind": "Unresolved earlier four-case CI stall",
+      "reason": "Preserved Approved finding and unchanged observer/command in plan 004. No diagnosis, pre-existing/flaky label, repair or side quest."
+    }
+  ],
+  "deviations": [
+    "One new test had a shell quoting typo, corrected before final tests; failed log retained as build-final-test-fixture-error.log.",
+    "One external I/O probe hit Linux argv E2BIG, replaced by a 90000-byte operand reused three times; failed log retained as controls-host-E2BIG.log. Neither changed ruler or formatter behavior."
+  ],
+  "artifactSha256": {
+    "/work/tmp/bash-web-printf-quoting/target/release/shell-cli": "b02f86cc46a818d7cd40c2d95bbc120ee1c7ec4f2c4a87a38940860404feef6e",
+    "/work/tmp/bash-web-printf-quoting/target/wasm32-wasip1/release/shell-cli.wasm": "0441d70ce064ebb30e02a521e57a08b50b1cb4a8e2165076aa9efb5a53f29e06",
+    "/work/tmp/bash-web-printf-quoting/target/wasm32-wasip1/release/shell-runtime.wasm": "ed555ca15ef2cc8762e4fb4f809e3d20010dce632799e5dd0c62ab72ba438a44"
+  },
+  "preVersionArtifactSha256": {
+    "/work/tmp/bash-web-printf-quoting/target/release/shell-cli": "4b904cb673f25a095777c99ca17af44dcacbbf765c38e973651da844af696539",
+    "/work/tmp/bash-web-printf-quoting/target/wasm32-wasip1/release/shell-cli.wasm": "6084a21b8dc68ecd9374824f2fe6879b57cf613426a874b3f450a2e47ee88b42",
+    "/work/tmp/bash-web-printf-quoting/target/wasm32-wasip1/release/shell-runtime.wasm": "fb49941bd0ea6c2c412872e2e47286bac0fff83a796b516ae5f0bfcc5b721012"
+  },
+  "sourceSha256": {
+    "shell/engine/src/builtins/printf.rs": "29a1d8f5f2216829beba01a98242728a5dd7d105795a8761be7bc2bb321f5520",
+    "shell/engine/src/builtins/printf/fields.rs": "ade4ef48219b57ab0439a78bfbbebc2195e58eb6578087e927531495660f8c28",
+    "shell/engine/src/builtins/printf/quoting.rs": "3e534725bcc16185f06bebe9bda257764f5c1ebf09274ee2c0d2d0b48dd28e0c",
+    "shell/engine/tests/words/printf_quoting.rs": "c1a10ea9119439b87f77ed5097974b182272d25e7d912324bc0a36532e720693",
+    "shell/engine/tests/words/printf.rs": "987690518f60e3882f8bcd042c044583bcc8b5f50a35f4a560ba4542fe0df070",
+    "shell/engine/tests/words.rs": "09a3bdd2da070329e4fcb5a2876836fcca00fba35dea71eebc544f1bee2ab8e1",
+    "sources.lock.json": "c0301211dcc9b7b83795b521c02c2fa88c2149e8d89421d50c0f828076e0eaec"
+  },
+  "reportDirectory": "/work/reports/bash-web/hill-climb/printf-quoting",
+  "reportEvidenceSha256": {
+    "frozen.json": "3e777fb68ec1de235b35b0e8e4c6ebf959abdbb76de7f4bbb519b7187b99f945",
+    "frozen.log": "dd789c1fcd5333c411b84e93c1987b02b7fc9ed869b615e16cc9217bf838a18b",
+    "proof.json": "c3b45419144d87dd3624a83deccd47afda684e842c23b54d0441031197487919",
+    "before.json": "fc280b1cf4f9d21a01fddceea243637f4339fb2e79cdbcffc25e6de43bc3f1f8",
+    "after.json": "a6ce85c0e5642cecb1d0f3251fb84776f83884f2a1adea6c1ff71dc300ce418c",
+    "bash-observations.json": "1920354d8ad9d3167841fc85b698f9315f26fa92e1ccf7a1f76a805aee07603f",
+    "io-controls.json": "586df7de2b322ae9f74854d6bfdae6728521bcf0629c734e7a37f58582d40287",
+    "printf-waffle.json": "b7458b80bce2bbb30ab9d2d42e1d57f6ef726de0fc5c1d40e605bff117948dab",
+    "measured-source.sha256": "52f319baa361acc061196eabdddbf1db324bb104dd78509ab62954bfef69a482",
+    "count-order-controls.json": "c6b5ad0c9da40407a6b3f395e70e141fde07d6ee809561bf27a5fc946aadea6d"
+  },
+  "cleanup": "PC job-local scratch removed by installed traps. Warm target/dependencies and exclusive worktree retained only for immediate parent review, parent cleanup owner on acceptance or abandonment. See actual-host cleanup-audit.json/resources.md and guarded check-only cleanup-check.py in the report. No services, routes, containers, images, mounts or remote transfers created. Shared caches preserved."
+}

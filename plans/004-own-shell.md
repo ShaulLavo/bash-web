@@ -1690,8 +1690,9 @@ or compatibility gain is claimed by this diagnostic change.
 
 ## Printf shell quoting, 2026-10-21
 
-Status: Approved, implementation and frozen measurement in progress. Parent owns
-independent review, hosted CI, merge and exact-main acceptance.
+Status: Approved, implementation and one frozen measurement finished. Parent owns
+independent review, hosted CI, merge and exact-main acceptance. This is review-ready,
+not accepted or merged.
 
 Implement `%q` and `%Q` inside the existing formatter, with byte-counted width,
 precision, stars, alternate quoting, argument reuse and named/octal escapes.
@@ -1722,3 +1723,27 @@ this mismatch; no gain or byte-preserving input support is claimed for it.
 The earlier four-case compatibility CI stall remains unresolved. Its Approved
 finding and unchanged observer/command above are preserved. No CI diagnosis or
 infrastructure change is part of this unit.
+
+### Measured result
+
+Measured source `e050d54ae26c54ba3af9da72ee6186f05914d82d`, accepted base
+`46a6bb090e1bdcc3d447bc2c70a3a7f4c72fd4b4`. Exactly one production-Waffle
+replay, JOBS=1 and RECORD=0: 9,221 records, 5,792 scored, 3,429 unchanged skips.
+
+- oils: 1006 -> 1012, gained 6, lost 0.
+- brush-suite: 989 -> 1001, gained 12, lost 0.
+- bashkit-suite: 1388 -> 1404, gained 16, lost 0.
+
+Only 34 proven gained rows and derived baseline counts change. Every other
+baseline record retains its historical payload. The unchanged strict comparator
+passes offline on the saved replay. Oracle, cases, environment, source pins,
+exclusions, scorer, fixtures, deadlines and blocking gates are unchanged.
+Raw stdout/status define scores; stderr is retained but unscored.
+
+Full native workspace tests and native/WASI all-target Clippy pass. Focused WASI
+checks pass 102 printf, 10 echo and two memory-budget tests. Unchanged printf
+fixtures pass 1,122 each on native and actual Waffle; echo passes 492 each.
+Fifty I/O/admission/closed-descriptor controls pass. Four quoting regressions
+failed first; all 14 new tests now pass. See the receipt for exact commands,
+artifacts, version-only rebuild correspondence, retained raw differences and
+skipped local checks. Parent owns independent reviews and all hosted gates.
