@@ -4159,3 +4159,5 @@ mod read_count;
 
 #[path = "words/printf_fields.rs"]
 mod printf_fields;
+#[path = "words/printf_integers.rs"]
+mod printf_integers;

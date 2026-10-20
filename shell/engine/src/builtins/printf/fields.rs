@@ -11,17 +11,21 @@ impl<'a> Arguments<'a> {
         self.index += 1;
         value
     }
-    async fn number(&mut self, printer: &mut Printer<'_>) -> Result<i64, i32> {
+    pub(super) async fn number(
+        &mut self,
+        printer: &mut Printer<'_>,
+        range: NumberRange,
+    ) -> Result<i64, i32> {
         let Some(value) = self.take() else {
             return Ok(0);
         };
         printer.scan(value.len()).await?;
-        let (number, diagnostic) = star_number(value, printer.utf8);
+        let (number, diagnostic) = parse_number(value, printer.utf8, range);
         if let Some(diagnostic) = diagnostic {
             self.status = 1;
-            printer.star_warning(b"/usr/bin/bash: printf: ").await?;
-            printer.star_warning(value.as_bytes()).await?;
-            printer.star_warning(diagnostic).await?;
+            printer.numeric_warning(b"/usr/bin/bash: printf: ").await?;
+            printer.numeric_warning(value.as_bytes()).await?;
+            printer.numeric_warning(diagnostic).await?;
         }
         Ok(number)
     }
@@ -62,7 +66,7 @@ impl Count {
     ) -> Result<i64, i32> {
         match self {
             Self::Literal(value) => Ok(i64::from(value)),
-            Self::Star => args.number(printer).await,
+            Self::Star => args.number(printer, NumberRange::Star).await,
             Self::Overflow => Err(1),
         }
     }
@@ -144,7 +148,29 @@ impl StringField {
     }
 }
 
-fn star_number(value: &str, utf8: bool) -> (i64, Option<&'static [u8]>) {
+#[derive(Clone, Copy)]
+pub(super) enum NumberRange {
+    Star,
+    Signed,
+}
+impl NumberRange {
+    fn limit(self, negative: bool) -> u64 {
+        let maximum = match self {
+            Self::Star => i32::MAX as u64,
+            Self::Signed => i64::MAX as u64,
+        };
+        maximum + u64::from(negative)
+    }
+    fn overflow(self, negative: bool) -> i64 {
+        match self {
+            Self::Star => -1,
+            Self::Signed if negative => i64::MIN,
+            Self::Signed => i64::MAX,
+        }
+    }
+}
+
+fn parse_number(value: &str, utf8: bool, range: NumberRange) -> (i64, Option<&'static [u8]>) {
     let input = value.as_bytes();
     if matches!(input.first(), Some(b'\'' | b'"')) {
         let character = if utf8 {
@@ -165,7 +191,7 @@ fn star_number(value: &str, utf8: bool) -> (i64, Option<&'static [u8]>) {
     if matches!(input.get(offset), Some(b'+' | b'-')) {
         offset += 1;
     }
-    let radix = star_radix(input, &mut offset);
+    let radix = number_radix(input, &mut offset);
     let start = offset;
     let mut number = 0u64;
     while let Some(digit) = input
@@ -178,30 +204,30 @@ fn star_number(value: &str, utf8: bool) -> (i64, Option<&'static [u8]>) {
             .saturating_add(u64::from(digit));
         offset += 1;
     }
-    let limit = i32::MAX as u64 + u64::from(negative);
+    let limit = range.limit(negative);
     let range_error = (number > limit).then_some(&b": Numerical result out of range\n"[..]);
     let number = if range_error.is_some() {
-        -1
+        range.overflow(negative)
     } else if negative {
-        -(number as i64)
+        (number as i64).wrapping_neg()
     } else {
         number as i64
     };
     let diagnostic = if offset == start || offset != input.len() {
-        Some(star_invalid_number(input))
+        Some(invalid_number(input))
     } else {
         range_error
     };
     (number, diagnostic)
 }
-fn star_invalid_number(input: &[u8]) -> &'static [u8] {
+fn invalid_number(input: &[u8]) -> &'static [u8] {
     match input {
         [b'0', b'0'..=b'9', ..] => b": invalid octal number\n",
         [b'0', b'x', ..] => b": invalid hex number\n",
         _ => b": invalid number\n",
     }
 }
-fn star_radix(input: &[u8], offset: &mut usize) -> u32 {
+fn number_radix(input: &[u8], offset: &mut usize) -> u32 {
     if input.get(*offset) != Some(&b'0') {
         return 10;
     }
