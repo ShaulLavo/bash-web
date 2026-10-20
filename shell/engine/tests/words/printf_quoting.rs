@@ -217,3 +217,22 @@ fn printf_quoting_closed_outputs_and_diagnostic_backpressure_keep_status() {
     }
     printf::assert_diagnostic_backpressure_cancellation(r"printf '[%*q]%bBAD' 7x 'a b' '\c'", 2);
 }
+
+#[cfg(target_vendor = "apple")]
+#[test]
+fn printf_quoting_darwin_utf8_from_initial_c_process_locale() {
+    unsafe extern "C" {
+        fn setlocale(category: i32, name: *const std::ffi::c_char) -> *mut std::ffi::c_char;
+    }
+    let process_locale = || {
+        let name = unsafe { setlocale(2, std::ptr::null()) };
+        assert!(!name.is_null());
+        unsafe { std::ffi::CStr::from_ptr(name) }.to_owned()
+    };
+    assert_eq!(process_locale().as_bytes(), b"C");
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("LC_ALL=C.UTF-8; printf '[%q][%Q]' é é"), 0);
+    assert_eq!(rig.output.bytes(), "[é][é]".as_bytes());
+    assert!(rig.errors.bytes().is_empty());
+    assert_eq!(process_locale().as_bytes(), b"C");
+}

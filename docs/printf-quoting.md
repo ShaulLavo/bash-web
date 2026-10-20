@@ -15,20 +15,12 @@ A zero precision therefore prints nothing with `%q`, but `''` with `%Q`.
 Stars consume width, precision and value in that order before format reuse.
 Count overflow keeps Bash's warning/status and quoting-specific fallback.
 
-The formatter borrows input bytes and generates at most four bytes at a time.
-It measures the precision-limited result before padding, using the existing
-cooperative work budget. Two-pass admission rejects excessive escaped output
-or width before any output or diagnostic writes. Delivery still uses the
-4096-byte buffer, handles partial writes and cancellation, and preserves aliased
-diagnostic ordering and `%b`'s stop-output behavior. No expanded quoted string
-is allocated.
-
 Locale selection uses the existing `LC_ALL`, `LC_CTYPE`, `LANG` precedence.
 C quotes high bytes as octal. UTF-8 keeps printable multibyte characters and
 quotes incomplete byte sequences, including those cut by `%Q` precision.
-Native checks use an owned C.UTF-8 character classifier without changing process
-locale; WASI uses its existing musl Unicode classifier. These classifiers are
-not identical for every scalar. For example, Bash and native GNU libc quote
+Native checks use an owned UTF-8 character classifier without changing process
+locale, C.UTF-8 on Linux and en_US.UTF-8 on Darwin. WASI uses its existing musl
+Unicode classifier. These classifiers are not identical for every scalar. For example, Bash and native GNU libc quote
 unassigned U+0378, while the pinned WASI libc considers it printable. Exact Bash
 classification of all unassigned characters is not claimed or repaired here.
 

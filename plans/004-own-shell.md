@@ -1696,8 +1696,7 @@ not accepted or merged.
 
 Implement `%q` and `%Q` inside the existing formatter, with byte-counted width,
 precision, stars, alternate quoting, argument reuse and named/octal escapes.
-The quoting helper borrows input and streams fixed-size pieces through the
-existing admission and delivery paths. No parser/runtime changes or dependencies.
+No parser/runtime changes or dependencies.
 See [behavior and boundaries](../docs/printf-quoting.md) and
 [measurement receipt](../docs/evidence/printf-quoting.json).
 
@@ -1747,3 +1746,44 @@ Fifty I/O/admission/closed-descriptor controls pass. Four quoting regressions
 failed first; all 14 new tests now pass. See the receipt for exact commands,
 artifacts, version-only rebuild correspondence, retained raw differences and
 skipped local checks. Parent owns independent reviews and all hosted gates.
+
+### Closed-stdout printf diagnostics, 2026-10-21
+
+Status: Approved, separate shared-Printer repair. Not fixed by the quoting unit.
+At reviewed `8242cd0125b0c40526728ac88dacd384ba2f358f`, independent review
+reproduced missing stderr for `printf '[%q]' 'a b' 1>&-` and
+`printf '[%.0q]' x 1>&-`. Both Bash and the native shell return 1 with empty
+stdout; Bash emits `/usr/bin/bash: line 1: printf: write error: Bad file descriptor\n`,
+while the native shell emits no stderr. The reviewer also reproduced ordinary
+`printf '%s' x 1>&-`; the fix lane independently repeated all three controls
+with the retained measured native binary, with the same results.
+
+Reproduce each source with `/usr/bin/bash -c "$source"` and
+`/work/tmp/bash-web-printf-quoting/target/release/shell-cli -c "$source"`.
+The latter measured binary has SHA-256
+`b02f86cc46a818d7cd40c2d95bbc120ee1c7ec4f2c4a87a38940860404feef6e`.
+Review records and exact stderr hex are in
+`/work/reports/bash-web/hill-climb/printf-quoting/review-r1-native.json`;
+controls reproduce on every one of the three reruns, not intermittently.
+Inspect `Printer::flush_output` at `shell/engine/src/builtins/printf.rs:230-236`,
+its shared `write` error handling and the final flush/status propagation.
+Those paths are unchanged by this PR. This rules out a quoting-only failure,
+not the bug's age or root cause. Repair and test ordinary `%s`, `%q` and `%Q`
+in a bounded follow-up. Stderr is retained but not part of the frozen score.
+
+### Darwin quoting review fix
+
+Review found the Apple locale mask selected messages rather than character
+classification. The narrow correction uses Darwin's `LC_CTYPE_MASK = 1 << 1`,
+`en_US.UTF-8` and the declared `int` return from `freelocale`. A Darwin-only
+regression queries the initial process C locale, exercises actual `%q`/`%Q`
+UTF-8 output, then checks that locale again without changing it. A path-filtered
+hosted macOS gate confirms that locale name exists and runs the quoting tests.
+Local Mac Mesh and documented SSH recovery were unavailable before setup.
+
+The original one-replay result above remains historical. The later delivery's
+Linux/WASI active production source matches the reviewed source after comments
+are removed and actual rustc target cfg expansion. The unchanged comparator
+still accepts the saved replay; no new gain, second replay or Darwin execution
+is inferred from those checks. See `review-fixes-r1.md` in the report directory
+for separate hosted Darwin results and current delivery/source correspondence.

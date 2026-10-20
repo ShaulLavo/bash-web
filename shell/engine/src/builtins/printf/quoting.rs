@@ -10,8 +10,10 @@ unsafe extern "C" {
     fn iswprint_l(character: u32, locale: *mut c_void) -> i32;
     #[cfg(not(target_os = "wasi"))]
     fn newlocale(mask: i32, name: *const std::ffi::c_char, base: *mut c_void) -> *mut c_void;
-    #[cfg(not(target_os = "wasi"))]
+    #[cfg(all(not(target_os = "wasi"), not(target_vendor = "apple")))]
     fn freelocale(locale: *mut c_void);
+    #[cfg(target_vendor = "apple")]
+    fn freelocale(locale: *mut c_void) -> i32;
 }
 
 struct Printability {
@@ -32,7 +34,6 @@ impl Printability {
         Ok(classification)
     }
     fn printable(&self, character: char) -> bool {
-        // WASI's musl classifier uses its Unicode table without global locale state.
         #[cfg(target_os = "wasi")]
         unsafe {
             iswprint(u32::from(character)) != 0
@@ -49,10 +50,12 @@ fn character_locale(utf8: bool) -> Result<*mut c_void, i32> {
         return Ok(std::ptr::null_mut());
     }
     #[cfg(target_vendor = "apple")]
-    const CTYPE_MASK: i32 = 1 << 2;
+    const CTYPE_MASK: i32 = 1 << 1;
     #[cfg(not(target_vendor = "apple"))]
     const CTYPE_MASK: i32 = 1;
-    // Own a character-classification locale without changing process state.
+    #[cfg(target_vendor = "apple")]
+    let locale = unsafe { newlocale(CTYPE_MASK, c"en_US.UTF-8".as_ptr(), std::ptr::null_mut()) };
+    #[cfg(not(target_vendor = "apple"))]
     let locale = unsafe { newlocale(CTYPE_MASK, c"C.UTF-8".as_ptr(), std::ptr::null_mut()) };
     if locale.is_null() {
         return Err(2);
