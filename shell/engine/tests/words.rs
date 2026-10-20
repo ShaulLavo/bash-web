@@ -1643,8 +1643,6 @@ fn whole_word_quotes_override_unmarked_part_flags() {
 
 #[test]
 fn frozen_parent_losses_preserve_whole_word_quoting() {
-    // Every loss from the first replay is kept verbatim here. Expected stdout
-    // comes from docs/evidence/own-shell-oracle.json, not the old scalar engine.
     for (source, expected) in [
         (
             "f() {\n  echo f\n  return \"\"\n}\n\nf\necho status=$?\n",
@@ -2468,7 +2466,6 @@ fn assignment_quote_removal_keeps_surrounding_word_boundaries() {
 
 #[test]
 fn ifs_assignment_splits_the_entire_expanded_word_with_the_new_value() {
-    // Independent GNU Bash observations, including text emitted before the write.
     for (source, expected) in [
         (r#"IFS=; args ${IFS:=:}a:b"#, vec!["", "a:b"]),
         (r#"IFS=; args a:b${IFS:=:}"#, vec!["a", "b"]),
@@ -2678,7 +2675,6 @@ fn deferred_list_splitting_distinguishes_element_spaces_and_word_split_mode() {
     ] {
         check(&format!("IFS=; v='a b\tc\nd:e'; args {word}"), &[&expected]);
     }
-    // These observations use native `unset IFS`, not Bash's startup value.
     for (source, expected) in [
         (
             r#"f() { args "$@"${IFS:=:}; }; f a:b '' c:d"#,
@@ -3511,7 +3507,6 @@ fn cancellation_keeps_completed_rhs_effects_and_restores_local_prefix_frames() {
 
 #[test]
 fn frozen_scalar_error_observations_keep_exact_status_and_output() {
-    // Verbatim scripts and observations from the committed oracle.
     for (source, error) in [
         (
             "empty=''\necho ${empty:?'is em'pty}  # test eval of error\necho should not get here\n\n",

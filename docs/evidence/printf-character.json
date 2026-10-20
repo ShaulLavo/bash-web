@@ -3,7 +3,7 @@
   "status": "Measured implementation; parent owns independent review, hosted CI, merge and exact-main acceptance",
   "baseRevision": "07ad8801561afe1a25457801bd52e1f490058c15",
   "measuredRevision": "5ce47589e53004944beb42a3ec7d9147feb7c555",
-  "revisionCorrespondence": "Build, targeted after-controls and single complete frozen replay use measuredRevision. Later commit changes only evidence, owning plan and proven gained baseline rows. Production and test bytes remain identical.",
+  "revisionCorrespondence": "Build, targeted after-controls and single complete frozen replay use measuredRevision. Later edits update evidence, owning plan and gained baseline rows, then remove five redundant test comment lines and one inline plan comment. Production code and test assertions remain unchanged. measuredSourceSha256 identifies the measured files; sourceSha256 identifies current files.",
   "model": "gpt-6.1-sol",
   "provider": "Existing cli-proxy route, verified read-only; no settings changes or nested agents",
   "versions": {
@@ -634,7 +634,7 @@
   "sourceSha256": {
     "shell/engine/src/builtins/printf.rs": "6612a632d6cdc77e8231995b005a703043919c622009838fe16c8aba731664b3",
     "shell/engine/src/builtins/printf/fields.rs": "cdd5a28c3d979411d168ffa55fa3b7cbf204d3cb00bd864195dd7b367aba8fe0",
-    "shell/engine/tests/words.rs": "ea729967a9b008670d80c1a1bff7898f99a7c434c282cb3f95d26c4abd126d53",
+    "shell/engine/tests/words.rs": "1df74e9e5fb6ae913e7755cf1a2ed322d7b2f394e802979da418b01616941962",
     "shell/engine/tests/words/printf.rs": "8ff1943a0df3598d481b92efb1d9fa2115ad3e55da3cf10a9f9444045dba32d2",
     "shell/engine/tests/words/printf_character.rs": "9c5245b47a79e907102c26335ae35ec6b74e0581b0f545a29f6b7b87713ffdc4",
     "shell/engine/tests/words/printf_integer_fields.rs": "7eb5fed040058ecae2325c1517db6cb8111bf4763e7af8f49b6ed9b9bc773d55"
@@ -670,5 +670,13 @@
     "cleanup": "/work/reports/bash-web/hill-climb/printf-character/remove-after-review.sh",
     "removalCondition": "After review/merge/exact-main consumers stop. Guard requires exact clean head and no live consumers; git worktree remove. Reports retained for parent evidence."
   },
-  "reportDirectory": "/work/reports/bash-web/hill-climb/printf-character"
+  "reportDirectory": "/work/reports/bash-web/hill-climb/printf-character",
+  "measuredSourceSha256": {
+    "shell/engine/src/builtins/printf.rs": "6612a632d6cdc77e8231995b005a703043919c622009838fe16c8aba731664b3",
+    "shell/engine/src/builtins/printf/fields.rs": "cdd5a28c3d979411d168ffa55fa3b7cbf204d3cb00bd864195dd7b367aba8fe0",
+    "shell/engine/tests/words.rs": "ea729967a9b008670d80c1a1bff7898f99a7c434c282cb3f95d26c4abd126d53",
+    "shell/engine/tests/words/printf.rs": "8ff1943a0df3598d481b92efb1d9fa2115ad3e55da3cf10a9f9444045dba32d2",
+    "shell/engine/tests/words/printf_character.rs": "9c5245b47a79e907102c26335ae35ec6b74e0581b0f545a29f6b7b87713ffdc4",
+    "shell/engine/tests/words/printf_integer_fields.rs": "7eb5fed040058ecae2325c1517db6cb8111bf4763e7af8f49b6ed9b9bc773d55"
+  }
 }

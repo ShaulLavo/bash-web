@@ -487,7 +487,7 @@ for index in 0..96 {
     assert_eq!(rig.run(&format!("v{index}=$seed")), 0);
 }
 for source in ["( : )", ": | : | :", ": & wait"] {
-    assert_eq!(rig.run(source), 0); // source-predicted existing behavior
+    assert_eq!(rig.run(source), 0);
 }
 ```
 
@@ -1560,8 +1560,10 @@ After refreshing those five rows and derived counts, strict membership passes
 offline against the saved replay. All 9,216 other baseline rows stay unchanged,
 including 16 historical still-failing payload differences. No repeated full
 replay or re-oracle. Measured production and test source is commit
-`5ce47589e53004944beb42a3ec7d9147feb7c555`; later edits are evidence and baseline
-memberships only. Exact IDs, hashes, unrun gates and cleanup ownership are in
+`5ce47589e53004944beb42a3ec7d9147feb7c555`. Later edits update evidence and
+baseline memberships and remove redundant comments. Production code and test
+assertions remain unchanged. Exact IDs, hashes, unrun gates and cleanup ownership
+are in
 [the evidence receipt](../docs/evidence/printf-character.json) and
 `/work/reports/bash-web/hill-climb/printf-character/`.
 
