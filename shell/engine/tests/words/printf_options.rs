@@ -180,3 +180,16 @@ fn printf_options_do_not_fake_successful_assignment_or_help() {
             .starts_with(b"/usr/bin/bash: printf: --help: unsupported option\n")
     );
 }
+
+#[test]
+fn printf_options_usage_diagnostics_report_broken_pipe_instead_of_usage_status() {
+    let rig = Rig::new(Limits::default());
+    let (reader, writer) = shell_engine::io::pipe();
+    drop(reader);
+    let mut fds = FdTable::default();
+    fds.insert(0, Endpoint::null());
+    fds.insert(1, Endpoint::null());
+    fds.insert(2, writer);
+    rig.shell.set_descriptors(fds).unwrap();
+    assert_eq!(rig.run("printf -x"), 141);
+}

@@ -16,53 +16,72 @@ pub(super) async fn run(
     context: &Context,
     work: &mut Work,
 ) -> Result<(), i32> {
+    let invocation = Invocation::parse(args);
     let utf8 = character_locale(state, context, work).await?;
     let mut printer = Printer::new(fds, context, work, utf8);
-    command(args, &mut printer).await?;
+    invocation.print(&mut printer).await?;
     printer.work = None;
-    let status = command(args, &mut printer).await?;
+    let status = invocation.print(&mut printer).await?;
     printer.flush_output().await?;
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
 const USAGE: &[u8] = b"printf: usage: printf [-v var] format [arguments]\n";
 
-async fn command(args: &[String], printer: &mut Printer<'_>) -> Result<i32, i32> {
-    printer.scan(1).await?;
-    let Some((first, operands)) = args.split_first() else {
-        return usage(printer).await;
-    };
-    if first == "--" && operands.is_empty() {
-        return usage(printer).await;
-    }
-    if first == "--" {
-        return format(operands, printer).await;
-    }
-    if first.len() <= 1 || !first.starts_with('-') {
-        return format(args, printer).await;
-    }
-    if first.starts_with("-v") || first == "--help" {
-        return unsupported_or_missing(args, printer).await;
-    }
-    printer.numeric_warning(b"/usr/bin/bash: printf: -").await?;
-    printer.numeric_warning(&first.as_bytes()[1..2]).await?;
-    printer.numeric_warning(b": invalid option\n").await?;
-    usage(printer).await
+#[derive(Clone, Copy)]
+enum Invocation<'a> {
+    Format(&'a [String]),
+    InvalidOption(u8),
+    Usage,
+    Error(&'static [u8]),
 }
 
-async fn usage(printer: &mut Printer<'_>) -> Result<i32, i32> {
-    printer.numeric_warning(USAGE).await?;
-    Ok(2)
+impl<'a> Invocation<'a> {
+    fn parse(args: &'a [String]) -> Self {
+        let Some((first, operands)) = args.split_first() else {
+            return Self::Usage;
+        };
+        if first == "--" && operands.is_empty() {
+            return Self::Usage;
+        }
+        if first == "--" {
+            return Self::Format(operands);
+        }
+        if first.len() <= 1 || !first.starts_with('-') {
+            return Self::Format(args);
+        }
+        if first == "-v" && operands.is_empty() {
+            return Self::Error(b"/usr/bin/bash: printf: -v: option requires an argument\n");
+        }
+        if first.starts_with("-v") {
+            return Self::Error(b"/usr/bin/bash: printf: -v: assignment is not supported\n");
+        }
+        if first == "--help" {
+            return Self::Error(b"/usr/bin/bash: printf: --help: unsupported option\n");
+        }
+        Self::InvalidOption(first.as_bytes()[1])
+    }
+
+    async fn print(self, printer: &mut Printer<'_>) -> Result<i32, i32> {
+        printer.scan(1).await?;
+        match self {
+            Self::Format(args) => return format(args, printer).await,
+            Self::InvalidOption(byte) => invalid_option(byte, printer).await?,
+            Self::Error(diagnostic) => printer.usage_diagnostic(diagnostic).await?,
+            Self::Usage => {}
+        }
+        // Closed stderr keeps usage status 2; cancellation and broken pipes still win.
+        printer.usage_diagnostic(USAGE).await?;
+        Ok(2)
+    }
 }
 
-async fn unsupported_or_missing(args: &[String], printer: &mut Printer<'_>) -> Result<i32, i32> {
-    let diagnostic = match (args[0].as_str(), args.len()) {
-        ("-v", 1) => b"/usr/bin/bash: printf: -v: option requires an argument\n".as_slice(),
-        ("--help", _) => b"/usr/bin/bash: printf: --help: unsupported option\n".as_slice(),
-        _ => b"/usr/bin/bash: printf: -v: assignment is not supported\n".as_slice(),
-    };
-    printer.numeric_warning(diagnostic).await?;
-    usage(printer).await
+async fn invalid_option(byte: u8, printer: &mut Printer<'_>) -> Result<(), i32> {
+    printer
+        .usage_diagnostic(b"/usr/bin/bash: printf: -")
+        .await?;
+    printer.usage_diagnostic(&[byte]).await?;
+    printer.usage_diagnostic(b": invalid option\n").await
 }
 
 pub(super) async fn character_locale(
@@ -255,6 +274,15 @@ impl<'a> Printer<'a> {
             .write_all(bytes, &self.context.cancel)
             .await
             .map_err(|error| error.status())
+    }
+    async fn usage_diagnostic(&mut self, bytes: &[u8]) -> Result<(), i32> {
+        if self.work.is_some() {
+            return self.emit(2, bytes).await;
+        }
+        match self.write_diagnostic(2, bytes).await {
+            Err(status @ (130 | 141)) => Err(status),
+            _ => Ok(()),
+        }
     }
     async fn numeric_warning(&mut self, bytes: &[u8]) -> Result<(), i32> {
         if self.work.is_some() {
