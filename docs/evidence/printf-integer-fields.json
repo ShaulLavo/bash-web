@@ -3,7 +3,7 @@
   "status": "Measured implementation; independent review, blocking CI, merge and exact-main acceptance owned by parent",
   "baseRevision": "fa9f07983fc2974404bc58493616757669148471",
   "measuredRevision": "8b8ce95b3bfb04405eaa5c494eb7d883ee0b33fd",
-  "revisionCorrespondence": "Final r4 release artifacts and the single frozen replay use this implementation revision. Later commits only update the evidence receipt, plan measurement and gained baseline rows; no production or test source change follows measurement.",
+  "revisionCorrespondence": "Final r4 release artifacts and the single frozen replay use measuredRevision. The reviewed implementation at 04fd04521d46d9279cb9099a25d9d478c1ffea8e has identical production/test bytes. The later parent cleanup trims only two inherited comments, refreshes layer source locations/digests and records that correspondence; executable code, assertions, fixtures and frozen memberships are unchanged.",
   "model": "gpt-6.1-sol",
   "provider": "cli-proxy; selected loopback route verified read-only",
   "scope": "Integer %d/%i/%u/%o/%x/%X literal/star width and precision, flags -, +, space, 0, # only. No floats, time, locale grouping, %c, -v, runtime, architecture or dependency changes",
@@ -238,7 +238,7 @@
     "exact-main checks"
   ],
   "sourceSha256": {
-    "docs/evidence/engine-layers.json": "cb0cfd923ff3aa63bffe473a4ac085bbba2c5150a3d6e8d502adc8f0483dbe89",
+    "docs/evidence/engine-layers.json": "9dc5fe900c376cdfc3347fca44c98b6b2f41a9bf9bc90ad60af613befa58a013",
     "docs/evidence/own-shell-baseline.json": "b0c971e17ea49c730eb763d1ab5ed8465695ac7ee9abb8b00587cb7fb3d94163",
     "docs/printf-integer-fields.md": "17a77aebf824740e47578cdc6fbc6312bd52a3eb0e0dda33dfb9dba491f8fa44",
     "docs/printf-integer-operands.md": "1cec48c9597bb8c403640b3820856e27137a4f37af01551c8f068a692617c197",
@@ -249,9 +249,9 @@
     "plans/004-own-shell.md": "e0d549327641d888412292eca8e7ba8d8d75576f28c8cc45ee7336a8dc348e10",
     "shell/Cargo.lock": "3a7c7b956e13b07238c994045b07e037977f840322a36c23f1fe90bac3699d5a",
     "shell/engine/Cargo.toml": "ba1f8189c8f029584772b73033c70421bde4b04b7ef8c00bced176d9dd66900c",
-    "shell/engine/src/builtins/printf.rs": "5459b582042865966a97271797016df11a594ba997d97a010669b3ca63227d77",
+    "shell/engine/src/builtins/printf.rs": "6612a632d6cdc77e8231995b005a703043919c622009838fe16c8aba731664b3",
     "shell/engine/src/builtins/printf/fields.rs": "0bf32f607c6187044b6921daaa85f67ce988665d5535a95cf18bc99b6a25b9c9",
-    "shell/engine/tests/words.rs": "cde8ee8dec6250f51fdb4bc442d5923159df9f876f3d4775959100527359671b",
+    "shell/engine/tests/words.rs": "44d2c104e86a4d6e482c41fe70712ec78f6bfabe5f5e95f97e86beaafebd1e46",
     "shell/engine/tests/words/printf.rs": "b4b2bcb9f90235821849e1176d394f7f338d6ec990bcf1936ac4800f0871dd21",
     "shell/engine/tests/words/printf_integer_fields.rs": "ec43ca1655c39bcf640875697c1ffaec1c8a11275bef08101fc13f5514d2ddf6",
     "sources.lock.json": "49b9b5acf25e1d4f9cc39e22e0b3bfa05d35aebce1e8f17cb3446213c6e0be70"
@@ -320,5 +320,15 @@
     "cleanup": "/work/reports/bash-web/hill-climb/printf-integer-fields/remove-after-review.sh",
     "removalCondition": "After parent/reviewer consumers stop; live-consumer audit, clean worktree and git worktree remove. Reports remain parent-owned evidence"
   },
-  "reportDirectory": "/work/reports/bash-web/hill-climb/printf-integer-fields"
+  "reportDirectory": "/work/reports/bash-web/hill-climb/printf-integer-fields",
+  "postMeasurementCommentCleanup": {
+    "reviewedRevision": "04fd04521d46d9279cb9099a25d9d478c1ffea8e",
+    "sourceFiles": [
+      "shell/engine/src/builtins/printf.rs",
+      "shell/engine/tests/words.rs"
+    ],
+    "netRemovedCommentLines": 3,
+    "executableCodeAndAssertionsUnchanged": true,
+    "localMeasurementRemainsHistorical": true
+  }
 }

@@ -196,9 +196,7 @@ impl<'a> Printer<'a> {
         if fd == 1 {
             self.append_output(bytes).await
         } else {
-            // Keep stdout buffered while the diagnostic is attempted. This
-            // preserves one small invocation write and gives aliased stderr
-            // the Bash-visible diagnostic-before-output order. If stderr is
+            // With aliased stderr, Bash diagnoses before stdout. If stderr is
             // closed, expose the already-buffered stdout prefix before
             // returning the real diagnostic I/O failure. Cancellation does
             // not flush undelivered bytes.
