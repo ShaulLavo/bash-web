@@ -4129,3 +4129,5 @@ mod printf_character;
 mod printf_integer_fields;
 #[path = "words/printf_options.rs"]
 mod printf_options;
+#[path = "words/printf_quoting.rs"]
+mod printf_quoting;

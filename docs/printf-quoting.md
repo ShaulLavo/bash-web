@@ -1,0 +1,47 @@
+# Printf shell quoting
+
+`%q` quotes one operand for Bash shell input. Empty or missing operands become
+`''`. Printable shell metacharacters use backslashes. Nonprinting input selects
+ANSI-C quoting for the whole word, with named escapes, three-digit octal bytes,
+and literal printable characters. `#` requests single quotes for printable
+input, including the `"'\\''"` sequence for an embedded single quote. ANSI-C
+quoting still wins when the input contains nonprinting characters.
+
+Width counts output bytes and pads with spaces. `-` or negative star width
+pads on the right. Zero, plus, space and grouping flags do not change quoting.
+Precision on `%q` truncates the quoted output bytes, even inside an escape or
+quote. `%Q` instead truncates the original input bytes before choosing quotes.
+A zero precision therefore prints nothing with `%q`, but `''` with `%Q`.
+Stars consume width, precision and value in that order before format reuse.
+Count overflow keeps Bash's warning/status and quoting-specific fallback.
+
+The formatter borrows input bytes and generates at most four bytes at a time.
+It measures the precision-limited result before padding, using the existing
+cooperative work budget. Two-pass admission rejects excessive escaped output
+or width before any output or diagnostic writes. Delivery still uses the
+4096-byte buffer, handles partial writes and cancellation, and preserves aliased
+diagnostic ordering and `%b`'s stop-output behavior. No expanded quoted string
+is allocated.
+
+Locale selection uses the existing `LC_ALL`, `LC_CTYPE`, `LANG` precedence.
+C quotes high bytes as octal. UTF-8 keeps printable multibyte characters and
+quotes incomplete byte sequences, including those cut by `%Q` precision.
+Native checks use an owned C.UTF-8 character classifier without changing process
+locale; WASI uses its existing musl Unicode classifier. These classifiers are
+not identical for every scalar. For example, Bash and native GNU libc quote
+unassigned U+0378, while the pinned WASI libc considers it printable. Exact Bash
+classification of all unassigned characters is not claimed or repaired here.
+
+The shell's word representation still replaces invalid ANSI-C byte escapes
+before printf receives them. `$'\xff'` reaches printf as UTF-8 for U+00FF, not
+byte `ff`. The same limitation affects invalid bytes captured by substitution.
+No parser, expansion, eval or runtime contract changes are included. Successful
+`-v`, help, floats, time, length modifiers, positional formats and padded `%b`
+remain outside this unit.
+
+This is original Rust observed against GNU Bash 5.3.15, not copied or adapted
+upstream implementation. New native/WASI tests live in
+`shell/engine/tests/words/printf_quoting.rs`.
+See [the measurement receipt](evidence/printf-quoting.json) for raw-byte controls,
+frozen gains and remaining differences. Stderr remains separately retained and
+unscored; merged Bash source-line annotations are not hidden in strict scores.

@@ -1687,3 +1687,38 @@ The original saved measurement and strict offline comparator remain the only
 measurement evidence. New diagnostics require independent source review and a
 narrow workflow/lifecycle review before parent acceptance. No semantic repair
 or compatibility gain is claimed by this diagnostic change.
+
+## Printf shell quoting, 2026-10-21
+
+Status: Approved, implementation and frozen measurement in progress. Parent owns
+independent review, hosted CI, merge and exact-main acceptance.
+
+Implement `%q` and `%Q` inside the existing formatter, with byte-counted width,
+precision, stars, alternate quoting, argument reuse and named/octal escapes.
+The quoting helper borrows input and streams fixed-size pieces through the
+existing admission and delivery paths. No parser/runtime changes or dependencies.
+See [behavior and boundaries](../docs/printf-quoting.md) and
+[measurement receipt](../docs/evidence/printf-quoting.json).
+
+### Remaining classifier and byte-input boundaries
+
+The actual Waffle target's pinned WASI libc classifies unassigned U+0378 as
+printable. Native GNU libc and Bash classify it as nonprinting. Reproduce with
+`LC_ALL=C.UTF-8; printf '[%q]' '͸'`. Bash stdout hex is
+`5b24275c3331355c323730275d`, while Waffle emits `5bcdb85d`, both status 0.
+The helper's character classifier is in
+`shell/engine/src/builtins/printf/quoting.rs`. All 16 affected width/precision/
+alternate controls are retained in `after.json` under
+`/work/reports/bash-web/hill-climb/printf-quoting/`. This unit does not introduce
+a replacement Unicode table or a locale architecture. A later classifier unit
+must choose a portable printability contract and measure table differences first.
+
+The earlier invalid-byte word-decoding finding still applies to `%q`.
+`LC_ALL=C.UTF-8; printf '%q' $'\xff'` produces `c3bf` instead of Bash's
+`24275c33373727` because the lexer has already replaced byte `ff` with U+00FF.
+The formatter cannot reconstruct that byte without guessing. Controls preserve
+this mismatch; no gain or byte-preserving input support is claimed for it.
+
+The earlier four-case compatibility CI stall remains unresolved. Its Approved
+finding and unchanged observer/command above are preserved. No CI diagnosis or
+infrastructure change is part of this unit.
