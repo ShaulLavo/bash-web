@@ -56,14 +56,11 @@ function launch(directory: string, command: string, args: string[]) {
 }
 
 function emergencyCleanup(child: ChildProcess, directory: string) {
-  // Registered before launch; the start record identifies the owned session.
   const start = events(directory).find((event) => event.kind === "start");
   if (typeof start?.pid === "number") {
     try {
       process.kill(-start.pid, "SIGKILL");
-    } catch {
-      /* Already gone. */
-    }
+    } catch {}
   }
   child.kill("SIGKILL");
 }

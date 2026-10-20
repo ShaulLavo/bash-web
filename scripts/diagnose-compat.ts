@@ -184,9 +184,7 @@ export function journal(directory: string, limit = segmentBytes) {
     close: () => {
       try {
         if (fd !== undefined) closeSync(fd);
-      } catch {
-        /* Preserve the command outcome. */
-      }
+      } catch {}
     },
   };
 }
@@ -197,9 +195,7 @@ function signalSession(session: number, signal: NodeJS.Signals) {
     if (parseStat(read(`/proc/${stat.pid}/stat`))?.startTicks !== stat.startTicks) continue;
     try {
       process.kill(stat.pid, signal);
-    } catch {
-      /* Exit raced with delivery. */
-    }
+    } catch {}
   }
 }
 
@@ -283,9 +279,7 @@ export async function diagnose(directory: string, command: string, args: readonl
     let remaining: number[] | null = null;
     try {
       remaining = session === undefined ? [] : await cleanup(session);
-    } catch {
-      // A failed process scan must not replace the command's outcome.
-    }
+    } catch {}
     log.event("cleanup", { remaining });
     process.off("SIGINT", interrupt);
     process.off("SIGTERM", terminate);
