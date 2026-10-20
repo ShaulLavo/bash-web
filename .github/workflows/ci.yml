@@ -189,6 +189,7 @@ jobs:
           # The disposable Ubuntu runner must permit bubblewrap's user namespace.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --unshare-all --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 --proc /proc --dev /dev -- /usr/bin/true
+      - run: node --test scripts/test-diagnose-compat.ts
       - run: npm run test:shell:scoreboard
       - uses: actions/download-artifact@v4
         with:
@@ -198,7 +199,8 @@ jobs:
       - run: npm run fuzz:shell-echo:ci -- --waffle --shell "$GITHUB_WORKSPACE/.build/shell/wasm32-wasip1/release/shell-runtime.wasm"
         env:
           TMPDIR: ${{ runner.temp }}
-      - run: npm run compat:shell
+      - name: Observe unchanged compatibility command
+        run: node scripts/diagnose-compat.ts "${{ runner.temp }}/own-shell-diagnostics" -- npm run compat:shell
         env:
           BASH_COMPAT_OUT: ${{ runner.temp }}/own-shell-current.json
           BASH_COMPAT_SCRATCH: ${{ runner.temp }}
@@ -206,7 +208,9 @@ jobs:
         if: always()
         with:
           name: own-shell-current
-          path: ${{ runner.temp }}/own-shell-current.json
+          path: |
+            ${{ runner.temp }}/own-shell-current.json
+            ${{ runner.temp }}/own-shell-diagnostics/
           if-no-files-found: ignore
 
   browser:

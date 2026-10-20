@@ -4127,3 +4127,5 @@ mod printf_unsigned;
 mod printf_character;
 #[path = "words/printf_integer_fields.rs"]
 mod printf_integer_fields;
+#[path = "words/printf_options.rs"]
+mod printf_options;

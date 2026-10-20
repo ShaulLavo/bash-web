@@ -1581,3 +1581,109 @@ byte-preserving word representation needs its own bounded contract decision;
 no runtime/parser rewrite or gain is claimed here. The mixed Brush basic3 case
 also remains blocked on self-invocation and was not chased. Existing merged
 source-line annotations and extra Bash closed-output diagnostics stay disclosed.
+
+## Printf option boundaries, 2026-10-20
+
+Status: Approved, implementation awaiting independent parent review and CI.
+
+Consume one leading `--`, preserve a lone `-` and empty formats, and stop option
+parsing at FORMAT. Missing formats, bare `-v`, and unknown options receive bounded
+usage diagnostics and status 2. Both admission and delivery borrow the same
+argument slice; the formatter and runtime contracts do not change. Supplied
+`-v` and exact `--help` remain explicitly unsupported, with no fabricated
+assignment or help output. See [behavior](../docs/printf-options.md) and
+[measurement receipt](../docs/evidence/printf-options.json).
+
+The existing utility integration control used `printf '-needle\n'` to feed grep.
+Bash rejects that input as option `-n`. Its producer now uses `printf --` so the
+unchanged grep output/status assertions test grep rather than printf's old bug.
+No frozen fixtures, oracle, replay inputs or gates change.
+
+An outer Bash wrapper waits on stdin before exec, then starts `printf -x` with
+its OS stderr reader already closed. The native CLI still returns 2 instead of
+Bash SIGPIPE, recorded in `closed-diagnostic-exec-gated.json`. Earlier
+`closed-diagnostic-before.json` and `closed-diagnostic-after.json` used a read
+inside the target, which was not a reliable native gate because standalone stdin
+is null. Those remain historical observations only. The engine
+closed-reader regression passes with 141 on native and WASI. In
+`shell/engine/src/compat.rs:554-599`, the standalone adapter drives the job before
+draining internal diagnostic pipes and interrupts on host write failure, which
+can arrive after completion. No formatter defect is claimed for this remaining
+adapter behavior, and no runtime work was added. A future adapter unit should
+reproduce through `closed-diagnostic.ts` from the unit report and decide how host
+write failures reach completed jobs.
+
+One unchanged frozen production-Waffle replay at source
+`fe57a8981db097a3969f237050d05b88aacb6de6` predates the accepted comment-only
+delivery delta from source-reviewed `206bae6a271a7f924e59a0bfb7452e7ec86fd8c4`.
+Only K1, K2, R1 and R2 comment spans change; executable, assertion and source-string
+bytes remain unchanged. Original measurement hashes are retained separately from
+delivery source hashes. No rebuild or second full replay ran. That replay measured
+10 gains and zero losses,
+with 9221 records, 5792 scored and 3429 skips. Oils 1003 to 1006, Brush 986 to
+989, Bashkit 1384 to 1388. Only ten gained baseline rows and derived counts
+changed. The strict unchanged comparator passes offline against that saved
+result. The cumulative measured gain is 140, pending parent acceptance. Two
+additional negative `-v` cases pass stdout/status because unsupported-operation
+rejection returns 2, `oils:builtin-printf:76` and
+`bashkit-suite:bashbox-declare:354`. Their diagnostics differ from Bash. They do
+not establish variable-name validation or assignment support. The mixed help
+record remains failing.
+
+### Unresolved compatibility timeout evidence
+
+Status: Approved. PR34 push run 39486769464 timed out on consecutive scored
+ordinals 4260 through 4263 in the unchanged four-worker pool and 10-second case
+deadline. These include two prior passes, UTF-8 lines 49 and 72, and two known
+failures, UTF-8 line 56 and word-expander line 5. Run 39486886987 succeeded with
+the identical Git tree. This does not establish a pre-existing defect, a flake,
+or a resolved failure. The 2,490 completed local candidate/base probes had no
+timeouts. The incomplete local OOM probe does not explain hosted CI. Parent
+subsequently verified all ten jobs across push 39491917246 and PR run 39491923353 succeeded
+at exact 790ccad. That is CI status, not a diagnosis of the earlier stall.
+
+`scripts/diagnose-compat.ts` observes the existing `npm run compat:shell` command
+from a separate Linux process. It inherits all three standard streams and the
+unchanged environment. It does not import the runner, replace Workers, inject
+hooks, set Node flags, add a case deadline, or replay cases. The workflow runs
+its isolated controls once and uploads its trace directory in the existing
+`own-shell-current` artifact, beside the unchanged scored result.
+
+The bounded trace retains `host.jsonl` and `host.previous.jsonl`, each at most
+16 MiB. Read both by `ms`, then align `utc` with the existing job log's
+`[bash-compat] own-shell: N` progress. Each one-second snapshot includes process
+and thread birth ticks, CPU ticks, RSS/high-water/swap in KiB, task state, kernel
+wait channel, scheduler runtime/wait/timeslices, context switches, faults and
+host CPU/memory/pressure counters. `wchar` and `syscw` count host writes, not
+completed cases or guest output. No command lines, environments, process names,
+file contents or guest output are retained. Caps and omitted counts are explicit.
+Sampler gaps and observer CPU/RSS distinguish observation delays from child
+counters. Short-lived threads between snapshots remain unobserved.
+
+Increasing thread CPU with little scheduler wait supports active computation;
+flat CPU with increasing scheduler wait supports host contention. Flat CPU and
+parked threads supports blocked work. Thread disappearance/replacement bounds
+host lifecycle changes. None of these signals alone identifies a guest loop,
+GC, case dispatch, or disposal. In particular, frozen code publishes no case or
+runtime phase events. Attributing dispatch versus disposal, or proving GC,
+remains blocked without an explicitly allowed internal observation mechanism.
+The former probe's replaced Worker/runner cannot supply that evidence for the
+frozen ruler. Do not infer phases from empty scored output.
+
+The observer forwards SIGINT/SIGTERM to its owned detached command session,
+returns the command's exit code or terminating signal, and stops remaining
+session members after the command exits. Birth ticks guard signal delivery.
+Isolated controls cover success, status 37, timeout 124, SIGINT, SIGTERM,
+SIGKILL of the child, stopped-task detection, fast-parent/reparented-descendant
+cleanup, spawn failure and trace rotation. No runtime or guest runs in those
+controls. An unavailable trace destination does not skip the command or replace
+its status. A null `cleanup.remaining` means the cleanup scan failed, not that no
+processes remained. They do not prove cleanup after an uncatchable SIGKILL of the observer
+or for commands that deliberately escape into a new session. There is no new
+cancellation deadline imposed on the scored command. Missing terminal
+`exit`/`cleanup` records mean incomplete evidence, not successful cleanup.
+
+The original saved measurement and strict offline comparator remain the only
+measurement evidence. New diagnostics require independent source review and a
+narrow workflow/lifecycle review before parent acceptance. No semantic repair
+or compatibility gain is claimed by this diagnostic change.
