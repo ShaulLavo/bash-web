@@ -1501,3 +1501,16 @@ changes that are deliberately not rewritten. Exact IDs, byte comparisons,
 source/artifact hashes and unrun CI gates are in
 [the evidence receipt](../docs/evidence/printf-unsigned-radix.json) and
 `/work/reports/bash-web/hill-climb/printf-unsigned-radix/`.
+
+## Printf integer fields, 2026-10-20
+
+Status: Approved. Bounded implementation from accepted main
+`fa9f07983fc2974404bc58493616757669148471`. Parent owns independent review,
+blocking CI, merge and exact-main acceptance. This unit adds literal/star integer
+width and precision and the `-`, `+`, space, `0` and `#` interactions. It shares
+field/count parsing with strings and preserves signed-32 star versus signed and
+unsigned-64 operand policies. Fixed digit storage and chunked padding retain
+admission before delivery, cancellation and stream ordering. No floats, time,
+locale grouping, `%c`, `-v`, dependency, runtime or architecture changes.
+See [integer fields](../docs/printf-integer-fields.md). Measurement evidence and
+newly gained baseline memberships follow after the single frozen replay.

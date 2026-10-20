@@ -4128,3 +4128,6 @@ mod printf_fields;
 mod printf_integers;
 #[path = "words/printf_unsigned.rs"]
 mod printf_unsigned;
+
+#[path = "words/printf_integer_fields.rs"]
+mod printf_integer_fields;

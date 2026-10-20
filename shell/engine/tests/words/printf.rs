@@ -102,8 +102,12 @@ fn quote(value: &str) -> String {
 }
 
 pub(super) fn check_bytes(source: &str, expected: &[u8]) {
+    check_status_bytes(source, expected, 0);
+}
+
+pub(super) fn check_status_bytes(source: &str, expected: &[u8], status: i32) {
     let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run(source), 0, "{source}");
+    assert_eq!(rig.run(source), status, "{source}");
     assert_eq!(rig.output.bytes(), expected, "{source}");
     assert!(rig.errors.bytes().is_empty(), "{source}");
 }
@@ -191,7 +195,7 @@ fn printf_missing_hex_digits_are_diagnostics_not_command_failure() {
 fn printf_unsupported_conversions_do_not_become_supported_by_escape_decoding() {
     for source in [
         r"printf 'prefix%q' x",
-        r"printf 'prefix%08d' x",
+        r"printf 'prefix%08f' x",
         r"printf 'prefix%z' x",
         r"printf 'prefix%'",
     ] {

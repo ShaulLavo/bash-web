@@ -22,7 +22,8 @@ errors remain failures. A later `%b` operand with `\c` clears numeric-warning st
 but cannot hide an actual output failure or rejected admission.
 
 Bare [unsigned/radix conversions](printf-unsigned-radix.md) are also supported.
-Numeric fields, floats, time and `-v` remain unsupported. The existing missing source-line annotation in diagnostics remains.
+[Integer fields and flags](printf-integer-fields.md) are also supported.
+Floats, time and `-v` remain unsupported. The existing missing source-line annotation in diagnostics remains.
 Separate stdout/status comparisons are strict; normalized diagnostic comparisons
 remove only Bash's source-line annotation and retain raw bytes as evidence.
 
