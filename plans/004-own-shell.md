@@ -1581,3 +1581,46 @@ byte-preserving word representation needs its own bounded contract decision;
 no runtime/parser rewrite or gain is claimed here. The mixed Brush basic3 case
 also remains blocked on self-invocation and was not chased. Existing merged
 source-line annotations and extra Bash closed-output diagnostics stay disclosed.
+
+## Printf option boundaries, 2026-10-20
+
+Status: Approved, implementation awaiting independent parent review and CI.
+
+Consume one leading `--`, preserve a lone `-` and empty formats, and stop option
+parsing at FORMAT. Missing formats, bare `-v`, and unknown options receive bounded
+usage diagnostics and status 2. Both admission and delivery borrow the same
+argument slice; the formatter and runtime contracts do not change. Supplied
+`-v` and exact `--help` remain explicitly unsupported, with no fabricated
+assignment or help output. See [behavior](../docs/printf-options.md) and
+[measurement receipt](../docs/evidence/printf-options.json).
+
+The existing utility integration control used `printf '-needle\n'` to feed grep.
+Bash rejects that input as option `-n`. Its producer now uses `printf --` so the
+unchanged grep output/status assertions test grep rather than printf's old bug.
+No frozen fixtures, oracle, replay inputs or gates change.
+
+An outer Bash wrapper waits on stdin before exec, then starts `printf -x` with
+its OS stderr reader already closed. The native CLI still returns 2 instead of
+Bash SIGPIPE, recorded in `closed-diagnostic-exec-gated.json`. Earlier
+`closed-diagnostic-before.json` and `closed-diagnostic-after.json` used a read
+inside the target, which was not a reliable native gate because standalone stdin
+is null. Those remain historical observations only. The engine
+closed-reader regression passes with 141 on native and WASI. In
+`shell/engine/src/compat.rs:554-599`, the standalone adapter drives the job before
+draining internal diagnostic pipes and interrupts on host write failure, which
+can arrive after completion. No formatter defect is claimed for this remaining
+adapter behavior, and no runtime work was added. A future adapter unit should
+reproduce through `closed-diagnostic.ts` from the unit report and decide how host
+write failures reach completed jobs.
+
+One unchanged frozen production-Waffle replay at source
+`fe57a8981db097a3969f237050d05b88aacb6de6` measured 10 gains and zero losses,
+with 9221 records, 5792 scored and 3429 skips. Oils 1003 to 1006, Brush 986 to
+989, Bashkit 1384 to 1388. Only ten gained baseline rows and derived counts
+changed. The strict unchanged comparator passes offline against that saved
+result. The cumulative measured gain is 140, pending parent acceptance. Two
+additional negative `-v` cases pass stdout/status because unsupported-operation
+rejection returns 2, `oils:builtin-printf:76` and
+`bashkit-suite:bashbox-declare:354`. Their diagnostics differ from Bash. They do
+not establish variable-name validation or assignment support. The mixed help
+record remains failing.
