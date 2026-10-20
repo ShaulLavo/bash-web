@@ -4156,3 +4156,6 @@ mod echo;
 
 #[path = "words/read_count.rs"]
 mod read_count;
+
+#[path = "words/printf_fields.rs"]
+mod printf_fields;
