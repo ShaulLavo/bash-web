@@ -1614,7 +1614,12 @@ reproduce through `closed-diagnostic.ts` from the unit report and decide how hos
 write failures reach completed jobs.
 
 One unchanged frozen production-Waffle replay at source
-`fe57a8981db097a3969f237050d05b88aacb6de6` measured 10 gains and zero losses,
+`fe57a8981db097a3969f237050d05b88aacb6de6` predates the accepted comment-only
+delivery delta from source-reviewed `206bae6a271a7f924e59a0bfb7452e7ec86fd8c4`.
+Only K1, K2, R1 and R2 comment spans change; executable, assertion and source-string
+bytes remain unchanged. Original measurement hashes are retained separately from
+delivery source hashes. No rebuild or second full replay ran. That replay measured
+10 gains and zero losses,
 with 9221 records, 5792 scored and 3429 skips. Oils 1003 to 1006, Brush 986 to
 989, Bashkit 1384 to 1388. Only ten gained baseline rows and derived counts
 changed. The strict unchanged comparator passes offline against that saved

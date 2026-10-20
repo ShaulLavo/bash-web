@@ -3,7 +3,7 @@
   "status": "Measured implementation; parent owns independent reviews, hosted CI, merge and exact-main acceptance",
   "baseRevision": "639e8e167ec0a1218297ad29f74db53891e79d0a",
   "measuredRevision": "fe57a8981db097a3969f237050d05b88aacb6de6",
-  "revisionCorrespondence": "Native/WASI final build, final narrow controls and the single frozen production-Waffle replay use measuredRevision. Later edits contain docs/evidence, owning plan and proven gained baseline rows only. All measured production/test files remain byte-identical, checked by hashes and Git blobs.",
+  "revisionCorrespondence": "Native/WASI final build, final narrow controls and the single frozen production-Waffle replay use measuredRevision fe57a8981db097a3969f237050d05b88aacb6de6. The source review approved 206bae6a271a7f924e59a0bfb7452e7ec86fd8c4. Subsequent delivery changes only accepted comment spans K1, K2, R1 and R2, the official layer receipt and provenance wording. Executable, assertion and source-string bytes remain unchanged against that approved revision. measuredSourceSha256 retains original measurement hashes; sourceSha256 records delivery source hashes and is not claimed byte-identical to measured source. No rebuild or second full replay.",
   "model": "gpt-6.1-sol",
   "provider": "Existing cli-proxy, verified read-only; no settings/credential changes or nested agents",
   "versions": {
@@ -654,11 +654,11 @@
     "shell/utilities/tests/streaming.rs": "023f6350c3b7f12e0fa34635e4cc755a7dac4ca9b4587f3f77c32d516126f81a"
   },
   "sourceSha256": {
-    "shell/engine/src/builtins/printf.rs": "a45b44396be2210e7a05efc82f958b40c297e6a2ec7c550959cfe29dc135d770",
+    "shell/engine/src/builtins/printf.rs": "5fcc86a332701bc0eed10aca6c9e3000b69c3b324976f2cc2908e235fdc9e8c1",
     "shell/engine/src/builtins/printf/fields.rs": "cdd5a28c3d979411d168ffa55fa3b7cbf204d3cb00bd864195dd7b367aba8fe0",
     "shell/engine/tests/words.rs": "0a058b2d9150d8208f6595cea87475884990288817e9b0181237907f3772cc9f",
     "shell/engine/tests/words/printf_options.rs": "4d2d7698eb77da55a8b27e3beb1f05f24760ecd66cc25663e03e40e0553dc1dc",
-    "shell/utilities/tests/streaming.rs": "023f6350c3b7f12e0fa34635e4cc755a7dac4ca9b4587f3f77c32d516126f81a"
+    "shell/utilities/tests/streaming.rs": "87f0aa2f19b314e44d7cc260ed566eb42ed7a56e1a40fd5610be73bc47e03ab8"
   },
   "artifactSha256": {
     "/work/tmp/bash-web-printf-options/target/release/shell-cli": "053ab9614713792ef885833cb1bbb3b928c2842688537fe69c77921a0df31c94",

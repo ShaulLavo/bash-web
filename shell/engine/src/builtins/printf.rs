@@ -70,7 +70,7 @@ impl<'a> Invocation<'a> {
             Self::Error(diagnostic) => printer.usage_diagnostic(diagnostic).await?,
             Self::Usage => {}
         }
-        // Closed stderr keeps usage status 2; cancellation and broken pipes still win.
+        // GNU Bash keeps usage status 2 when stderr is closed.
         printer.usage_diagnostic(USAGE).await?;
         Ok(2)
     }
@@ -254,10 +254,7 @@ impl<'a> Printer<'a> {
         if fd == 1 {
             self.append_output(bytes).await
         } else {
-            // With aliased stderr, Bash diagnoses before stdout. If stderr is
-            // closed, expose the already-buffered stdout prefix before
-            // returning the real diagnostic I/O failure. Cancellation does
-            // not flush undelivered bytes.
+            // With aliased stderr, Bash diagnoses before stdout.
             let result = self.write_diagnostic(fd, bytes).await;
             match result {
                 Ok(()) => Ok(()),
