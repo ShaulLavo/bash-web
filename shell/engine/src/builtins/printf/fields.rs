@@ -15,7 +15,7 @@ impl<'a> Arguments<'a> {
         &mut self,
         printer: &mut Printer<'_>,
         range: NumberRange,
-    ) -> Result<i64, i32> {
+    ) -> Result<u64, i32> {
         let Some(value) = self.take() else {
             return Ok(0);
         };
@@ -66,7 +66,7 @@ impl Count {
     ) -> Result<i64, i32> {
         match self {
             Self::Literal(value) => Ok(i64::from(value)),
-            Self::Star => args.number(printer, NumberRange::Star).await,
+            Self::Star => Ok(args.number(printer, NumberRange::Star).await? as i64),
             Self::Overflow => Err(1),
         }
     }
@@ -152,25 +152,27 @@ impl StringField {
 pub(super) enum NumberRange {
     Star,
     Signed,
+    Unsigned,
 }
 impl NumberRange {
     fn limit(self, negative: bool) -> u64 {
         let maximum = match self {
             Self::Star => i32::MAX as u64,
             Self::Signed => i64::MAX as u64,
+            Self::Unsigned => return u64::MAX,
         };
         maximum + u64::from(negative)
     }
-    fn overflow(self, negative: bool) -> i64 {
+    fn overflow(self, negative: bool) -> u64 {
         match self {
-            Self::Star => -1,
-            Self::Signed if negative => i64::MIN,
-            Self::Signed => i64::MAX,
+            Self::Star | Self::Unsigned => u64::MAX,
+            Self::Signed if negative => i64::MIN as u64,
+            Self::Signed => i64::MAX as u64,
         }
     }
 }
 
-fn parse_number(value: &str, utf8: bool, range: NumberRange) -> (i64, Option<&'static [u8]>) {
+fn parse_number(value: &str, utf8: bool, range: NumberRange) -> (u64, Option<&'static [u8]>) {
     let input = value.as_bytes();
     if matches!(input.first(), Some(b'\'' | b'"')) {
         let character = if utf8 {
@@ -178,7 +180,7 @@ fn parse_number(value: &str, utf8: bool, range: NumberRange) -> (i64, Option<&'s
         } else {
             u32::from(input.get(1).copied().unwrap_or(0))
         };
-        return (i64::from(character), None);
+        return (u64::from(character), None);
     }
     let mut offset = 0;
     while input
@@ -193,25 +195,26 @@ fn parse_number(value: &str, utf8: bool, range: NumberRange) -> (i64, Option<&'s
     }
     let radix = number_radix(input, &mut offset);
     let start = offset;
-    let mut number = 0u64;
+    let mut number = Some(0u64);
     while let Some(digit) = input
         .get(offset)
         .and_then(|byte| super::hex(*byte))
         .filter(|n| *n < radix)
     {
-        number = number
-            .saturating_mul(u64::from(radix))
-            .saturating_add(u64::from(digit));
+        number = number.and_then(|n| {
+            n.checked_mul(u64::from(radix))?
+                .checked_add(u64::from(digit))
+        });
         offset += 1;
     }
     let limit = range.limit(negative);
-    let range_error = (number > limit).then_some(&b": Numerical result out of range\n"[..]);
-    let number = if range_error.is_some() {
-        range.overflow(negative)
-    } else if negative {
-        (number as i64).wrapping_neg()
-    } else {
-        number as i64
+    let range_error = number
+        .is_none_or(|n| n > limit)
+        .then_some(&b": Numerical result out of range\n"[..]);
+    let number = match number.filter(|n| *n <= limit) {
+        Some(n) if negative => n.wrapping_neg(),
+        Some(n) => n,
+        None => range.overflow(negative),
     };
     let diagnostic = if offset == start || offset != input.len() {
         Some(invalid_number(input))

@@ -150,34 +150,18 @@ fn printf_integer_admission_rejects_output_and_warning_cost_before_emission() {
         format!("printf '{}%d' 1 2 3 4", "x".repeat(300)),
         format!("printf 'prefix%d' {}", "3x ".repeat(30)),
     ] {
-        let rig = Rig::new(Limits {
-            expansion_bytes: 1024,
-            ..Limits::default()
-        });
-        printf::assert_recovery(&rig, &source, 2);
-        assert!(
-            !rig.errors
-                .bytes()
-                .windows(b"invalid number".len())
-                .any(|bytes| bytes == b"invalid number")
-        );
+        printf::assert_warning_admission(&source);
     }
 }
 
 #[test]
 fn printf_integer_admission_cancellation_is_silent() {
-    let rig = Rig::new(Limits::default());
     let source = format!(
         "started=yes; printf '{}%d' {}; echo bad",
         "x".repeat(1000),
         "1 ".repeat(300)
     );
-    let job = rig.shell.start(&source).unwrap();
-    rig.drive_until_variable("started", "yes");
-    for _ in 0..500 {
-        rig.ex.drive(1);
-    }
-    printf::interrupt_empty(&rig, job);
+    printf::assert_admission_cancellation(&source);
 }
 
 #[test]

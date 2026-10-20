@@ -15,14 +15,14 @@ hexadecimal distinctions documented for [string stars](printf-string-fields.md).
 Star width and precision retain their distinct signed-32 range and -1 fallback.
 
 The lexical scanner is shared, not the range policy. Decimal output uses a fixed
-20-byte stack array. The existing printer admits the complete repeated operation,
+22-byte stack array. The existing printer admits the complete repeated operation,
 including diagnostics, before emitting anything, and delivers fixed-size chunks.
 Numeric warnings to closed stderr do not stop output. Cancellation and stdout
 errors remain failures. A later `%b` operand with `\c` clears numeric-warning status
 but cannot hide an actual output failure or rejected admission.
 
-Numeric fields, unsigned/radix output conversions, floats, time and `-v` remain
-unsupported. The existing missing source-line annotation in diagnostics remains.
+Bare [unsigned/radix conversions](printf-unsigned-radix.md) are also supported.
+Numeric fields, floats, time and `-v` remain unsupported. The existing missing source-line annotation in diagnostics remains.
 Separate stdout/status comparisons are strict; normalized diagnostic comparisons
 remove only Bash's source-line annotation and retain raw bytes as evidence.
 

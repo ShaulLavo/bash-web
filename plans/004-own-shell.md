@@ -1468,3 +1468,36 @@ passes offline against that saved replay. No full rerun or re-oracle is claimed.
 All 9,209 other baseline rows remain unchanged, including 25 historical failing
 payload differences. Exact case IDs, source pins, hashes and reproducer logs are
 in the evidence receipt and `/work/reports/bash-web/hill-climb/printf-integer-operands/`.
+
+## Printf unsigned and radix operands, 2026-10-20
+
+Status: Approved. Bounded implementation from accepted main
+`2b2b86b54c5b4824163731416a180c7a915096f7`. Parent owns independent review,
+blocking CI, merge and exact-main acceptance. These are measured gains only.
+
+Bare `%u`, `%o`, `%x` and `%X` now use the full unsigned-64 operand range.
+Checked accumulation distinguishes exact maximum from overflow. In-range
+negative input wraps; either overflow sign saturates to maximum. Signed-64 and
+string-star signed-32 policies remain separate. A fixed 22-byte integer renderer
+preserves two-pass admission, diagnostic ordering, cancellation and real I/O.
+Numeric fields, floats, time, `-v`, locale and runtime changes remain outside scope.
+See [unsigned behavior](../docs/printf-unsigned-radix.md) and `sources.lock.json`.
+
+Failing-first native and real-Waffle controls match 55/446 strict stdout/status
+pairs. The same scripts now match 444/446 per target. Raw stderr is retained and
+checked separately; merged source-line annotations and the existing extra Bash
+closed-stdout diagnostic remain disclosed. Nine new Rust tests pass on native
+and WASI, alongside prior signed/string/star/echo and resource controls. Frozen
+printf and echo fixtures, duplicate allowances and layer policy are unchanged.
+
+One complete frozen production-Waffle replay preserves 9,221 records, 5,792
+scored cases and every oracle/environment/source/case identity. It measures
+Oils 985 to 996, Brush 969 to 975 and Bashkit 1,367 to 1,373, 23 gains and zero
+lost passes. The complete saved replay exits 1 only at stale membership. After
+updating those 23 gained rows and derived counts, strict membership passes
+offline against the saved replay. No second full replay or re-oracle. All 9,198
+other baseline rows stay unchanged, including 20 historical failing payload
+changes that are deliberately not rewritten. Exact IDs, byte comparisons,
+source/artifact hashes and unrun CI gates are in
+[the evidence receipt](../docs/evidence/printf-unsigned-radix.json) and
+`/work/reports/bash-web/hill-climb/printf-unsigned-radix/`.

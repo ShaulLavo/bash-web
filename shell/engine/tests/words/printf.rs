@@ -1,4 +1,3 @@
-//! Original raw-byte controls for GNU Bash 5.3.15 printf escapes.
 use super::*;
 use futures::future::LocalBoxFuture;
 use shell_engine::{
@@ -201,7 +200,6 @@ fn printf_unsupported_conversions_do_not_become_supported_by_escape_decoding() {
         assert_eq!(rig.run("echo recovered"), 0);
         assert!(rig.output.bytes().ends_with(b"recovered\n"));
     }
-    // An escaped percent is literal, not a conversion introduced by decoding.
     check_bytes(r"printf '\045s' unused", b"%s");
 }
 
@@ -218,8 +216,6 @@ fn printf_repeated_output_is_admitted_before_writing_and_session_recovers() {
 #[test]
 fn printf_cancellation_during_admission_outputs_no_fabricated_success() {
     let rig = Rig::new(Limits::default());
-    // Small expansion, but 300,300 admitted output bytes. Give expansion ample
-    // turns to finish, then interrupt the much longer repeated-format preflight.
     let source = format!(
         "started=yes; printf '{}%s' {}; echo bad",
         "x".repeat(1000),
@@ -605,4 +601,28 @@ pub(super) fn assert_diagnostic_backpressure_cancellation(source: &str, fd: u32)
     let mut byte = [0];
     assert!(reader.read(&mut byte).now_or_never().is_none());
     assert_eq!(rig.run("true"), 0);
+}
+
+pub(super) fn assert_warning_admission(source: &str) {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 1024,
+        ..Limits::default()
+    });
+    assert_recovery(&rig, source, 2);
+    assert!(
+        !rig.errors
+            .bytes()
+            .windows(b"invalid number".len())
+            .any(|bytes| bytes == b"invalid number")
+    );
+}
+
+pub(super) fn assert_admission_cancellation(source: &str) {
+    let rig = Rig::new(Limits::default());
+    let job = rig.shell.start(source).unwrap();
+    rig.drive_until_variable("started", "yes");
+    for _ in 0..500 {
+        rig.ex.drive(1);
+    }
+    interrupt_empty(&rig, job);
 }
