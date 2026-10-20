@@ -108,17 +108,7 @@ fn printf_integer_fields_literal_overflow_follows_numeric_operand_diagnostics() 
             "/usr/bin/bash: printf: bad: invalid number\n",
         ),
     ] {
-        let rig = Rig::new(Limits::default());
-        assert_eq!(
-            rig.run(&format!("printf 'prefix%{field}%bBAD' {values} '\\c'")),
-            1
-        );
-        assert_eq!(rig.output.bytes(), b"prefix");
-        assert_eq!(
-            rig.errors.bytes(),
-            format!("{warnings}/usr/bin/bash: printf: Value too large for defined data type\n")
-                .as_bytes()
-        );
+        printf::assert_field_overflow(field, values, warnings);
     }
 }
 
@@ -175,28 +165,5 @@ fn printf_integer_fields_stream_zeroes_in_bounded_chunks() {
 
 #[test]
 fn printf_integer_fields_real_pipe_cancellation_and_failure_keep_only_delivered_bytes() {
-    use futures::FutureExt;
-    for cancel in [true, false] {
-        let rig = Rig::new(Limits::default());
-        let (reader, writer) = shell_engine::io::pipe();
-        printf::replace_output(&rig, writer);
-        let job = rig.shell.start("printf '%+0200000d' 42; echo bad").unwrap();
-        assert_eq!(printf::read_first_byte(&rig, &reader), b'+');
-        assert!(!job.is_finished());
-        if !cancel {
-            drop(reader);
-            assert_eq!(rig.finish(job), 141);
-            continue;
-        }
-        rig.shell.interrupt();
-        assert_eq!(rig.finish(job), 130);
-        let mut remaining = vec![0; shell_engine::io::PIPE_CAPACITY];
-        let Some(Ok(length)) = reader.read(&mut remaining).now_or_never() else {
-            panic!("expected already-written zero padding");
-        };
-        assert!(length > 0);
-        assert!(remaining[..length].iter().all(|byte| *byte == b'0'));
-        assert!(reader.read(&mut [0]).now_or_never().is_none());
-        assert_eq!(rig.run("true"), 0);
-    }
+    printf::assert_pipe_delivery("printf '%+0200000d' 42; echo bad", b'+', b'0');
 }

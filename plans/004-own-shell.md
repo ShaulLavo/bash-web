@@ -487,7 +487,7 @@ for index in 0..96 {
     assert_eq!(rig.run(&format!("v{index}=$seed")), 0);
 }
 for source in ["( : )", ": | : | :", ": & wait"] {
-    assert_eq!(rig.run(source), 0); // source-predicted existing behavior
+    assert_eq!(rig.run(source), 0);
 }
 ```
 
@@ -1532,3 +1532,52 @@ source is frozen at 8b8ce95b3bfb04405eaa5c494eb7d883ee0b33fd. Exact gains,
 hashes, comparisons, unrun gates and cleanup ownership are in
 [the evidence receipt](../docs/evidence/printf-integer-fields.json) and
 `/work/reports/bash-web/hill-climb/printf-integer-fields/`.
+
+## Printf character conversion, 2026-10-20
+
+Status: Approved. Bounded implementation from accepted main
+`07ad8801561afe1a25457801bd52e1f490058c15`. Parent owns independent review,
+hosted CI, merge and exact-main acceptance. These five gains are measured only.
+
+`%c` now prints the first operand byte, not an integer code or Unicode scalar.
+Missing and empty operands print a real NUL. Literal/star fields keep alignment,
+argument consumption/reuse and count diagnostics; precision is consumed but
+ignored for the character. Borrowed byte/static NUL and existing string padding
+preserve admission before output, fixed buffering, partial writes and cancellation.
+See [character behavior](../docs/printf-character.md).
+
+Failing-first native and production-Waffle controls match 2/160 strict raw
+stdout/status observations per target, improving to 151/160. Normalized stderr
+is checked separately, 157/160. All five direct inventory cases match. Twelve
+character tests pass; the native workspace, focused WASI tests, all-target
+Clippy, frozen printf/echo fixtures and unchanged duplicate/layer gates pass.
+
+One complete frozen production-Waffle replay preserves 9,221 records, 5,792
+scored cases and all case/oracle/environment/source identities. Oils changes
+1,002 to 1,003, Brush 983 to 986 and Bashkit 1,383 to 1,384. Five gains, zero
+losses. The full saved result exits 1 only at the old strict membership check.
+After refreshing those five rows and derived counts, strict membership passes
+offline against the saved replay. All 9,216 other baseline rows stay unchanged,
+including 16 historical still-failing payload differences. No repeated full
+replay or re-oracle. Measured production and test source is commit
+`5ce47589e53004944beb42a3ec7d9147feb7c555`. Later edits update evidence and
+baseline memberships and remove redundant comments. Production code and test
+assertions remain unchanged. Exact IDs, hashes, unrun gates and cleanup ownership
+are in
+[the evidence receipt](../docs/evidence/printf-character.json) and
+`/work/reports/bash-web/hill-climb/printf-character/`.
+
+### Finding outside this unit: invalid byte input
+
+The parser already turns invalid ANSI-C byte escapes into Unicode U+00xx in
+`shell/parser/src/parser/lexer.rs:2000`, `flush_escape_bytes`. Both native and
+Waffle repeat this in C and C.UTF-8. Reproduce with
+`LC_ALL=C; printf '[%c]' $'\xffZ'`. Bash stdout hex is `5bff5d`, the measured
+shell gives `5bc35d`, both status 0. The parser passes `ÿZ` encoded as UTF-8 to
+printf. Valid UTF-8 input still produces its raw first byte, as Bash does.
+`after.json` and `targeted-audit.json` retain all six invalid-input controls per
+target. This is not a numeric or scalar conversion problem in printf. A future
+byte-preserving word representation needs its own bounded contract decision;
+no runtime/parser rewrite or gain is claimed here. The mixed Brush basic3 case
+also remains blocked on self-invocation and was not chased. Existing merged
+source-line annotations and extra Bash closed-output diagnostics stay disclosed.
