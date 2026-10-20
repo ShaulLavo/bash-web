@@ -12,6 +12,10 @@ and an empty string for `%s`. Explicitly empty numeric operands are invalid.
 Star integers follow Bash 5.3's signed decimal, octal, hexadecimal, binary and
 quoted-character rules, not shell arithmetic expressions. Invalid suffixes retain
 the parsed prefix and set status 1; out-of-range star values become -1 with status 1.
+An invalid suffix takes diagnostic precedence over the range warning without
+changing that fallback. Diagnostic names follow the original operand spelling:
+unsigned `0` followed by a digit selects octal, lowercase `0x` selects hexadecimal,
+and signed, whitespace-prefixed or uppercase `0X` spellings use the generic error.
 A later `%b` operand containing `\c` stops the whole invocation with status 0,
 including errors from an earlier format repetition. Numeric warnings still attempt
 stderr, but rejected diagnostic writes do not stop string output. Closed stdout
@@ -51,9 +55,23 @@ Both checks failed first and now pass in native and real-Waffle release builds.
 Native/WASI regression tests also cover precision, repeated formats, closed stdout,
 pre-admission limits and cancellation while the numeric warning is backpressured.
 
-The expanded review matrix retains all raw diagnostics. Its original 222 cases had
-16 mismatches: seven missing bare `%d` defaults, seven stop-status errors, one
-closed-stderr truncation and one source-line annotation difference with `2>&1`.
-The eight introduced errors are fixed. The seven bare `%d` cases and annotation
-case remain outside this change, rather than being removed from the matrix.
-See the checked-in measurement receipt for final artifact hashes and replay results.
+The expanded review matrix retains all raw diagnostics. Its comparator checks
+health, exit status and stdout only. The original 222 cases match 214 by that
+comparison, not by a stderr-normalizing comparison. Seven missing bare `%d`
+defaults and one source-line annotation difference with `2>&1` remain outside
+this change. Every former case remains present.
+
+The second review found two additional diagnostic bugs despite matching stdout
+and status: signed/radix spelling and suffix-error precedence over range warnings.
+Both new raw-byte regressions fail at `f9ca50f` and pass after correction on native
+and WASI. Production native/Waffle checks cover width and precision, both separate
+and merged streams. They retain raw bytes and check diagnostic text separately,
+removing only Bash's source-line annotation for that comparison.
+
+On the same 222 cases, agreement including stderr after only source-line removal
+increases from 206 to 213. The remaining extra difference is Bash's write-error
+message on closed stdout, absent from the unchanged printer. Complete raw
+stdout/status/stderr agreement is 107 of 222 because source-line prefixes remain
+different. The existing seven bare `%d` failures and merged-stream annotation
+limitation remain disclosed, not masked. See the checked-in measurement receipt
+for final artifact hashes and replay results.

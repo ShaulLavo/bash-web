@@ -1417,7 +1417,22 @@ boundaries. A later `%b` `\c` must clear the earlier numeric status, and a rejec
 numeric warning on closed stderr must not truncate stdout. Both failed first on
 `916a761` in native and real Waffle. Four new native/WASI regression tests cover
 these boundaries, repetitions, output/admission failures and warning cancellation.
-The expanded raw-evidence matrix keeps all 222 cases: eight introduced mismatches
-are fixed, while seven disclosed bare `%d` cases and one diagnostic source-line
-annotation case remain outside this unit. The three accepted narration comments
+The expanded matrix keeps all 222 cases and their raw diagnostics. Eight introduced
+stdout/status mismatches are fixed, while seven disclosed bare `%d` cases and one
+diagnostic source-line annotation case remain outside this unit. The three accepted narration comments
 are deleted without changing `sources.lock.json` provenance.
+
+Second diagnostic correction, 2026-10-20: two raw-byte regressions fail first at
+`f9ca50f`. Star diagnostics now use the original spelling rather than the parsed
+radix. Invalid suffixes take precedence over range warnings while preserving the
+numeric fallback. Native/WASI tests assert exact stderr bytes and merged output;
+production native/Waffle checks cover both width and precision. Prior stop-status,
+closed-stderr, cancellation, stdout failure and admission controls stay enabled.
+
+The 222-case comparator checks health, status and stdout only, with 214 matches.
+It never normalizes or compares stderr. A separate source-line-only diagnostic
+audit improves 206 to 213 matches, including stdout and status. The extra remaining
+difference is the unchanged missing write-error message on closed stdout.
+Complete raw stdout/status/stderr agreement remains 107/222 due to Bash's
+source-line annotation. Seven bare `%d` defaults and the `2>&1` annotation case
+remain outside scope. No oracle, fixture, score or exclusion is changed.

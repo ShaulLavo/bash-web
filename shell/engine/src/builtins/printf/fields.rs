@@ -179,20 +179,27 @@ fn star_number(value: &str, utf8: bool) -> (i64, Option<&'static [u8]>) {
         offset += 1;
     }
     let limit = i32::MAX as u64 + u64::from(negative);
-    if number > limit {
-        return (-1, Some(b": Numerical result out of range\n"));
-    }
-    let number = if negative {
+    let range_error = (number > limit).then_some(&b": Numerical result out of range\n"[..]);
+    let number = if range_error.is_some() {
+        -1
+    } else if negative {
         -(number as i64)
     } else {
         number as i64
     };
-    let diagnostic = (offset == start || offset != input.len()).then_some(match radix {
-        8 => &b": invalid octal number\n"[..],
-        16 => &b": invalid hex number\n"[..],
-        _ => &b": invalid number\n"[..],
-    });
+    let diagnostic = if offset == start || offset != input.len() {
+        Some(star_invalid_number(input))
+    } else {
+        range_error
+    };
     (number, diagnostic)
+}
+fn star_invalid_number(input: &[u8]) -> &'static [u8] {
+    match input {
+        [b'0', b'0'..=b'9', ..] => b": invalid octal number\n",
+        [b'0', b'x', ..] => b": invalid hex number\n",
+        _ => b": invalid number\n",
+    }
 }
 fn star_radix(input: &[u8], offset: &mut usize) -> u32 {
     if input.get(*offset) != Some(&b'0') {

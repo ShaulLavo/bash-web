@@ -201,3 +201,57 @@ fn printf_string_stop_does_not_hide_output_or_admission_errors() {
 fn printf_string_star_diagnostic_cancellation_stays_cancelled() {
     printf::assert_diagnostic_backpressure_cancellation(r"printf '[%*s]%bBAD' 3x abc '\c'", 2);
 }
+
+#[test]
+fn printf_string_star_diagnostics_preserve_operand_spelling() {
+    for (value, diagnostic) in [
+        ("-08", "invalid number"),
+        ("+08", "invalid number"),
+        ("-0x", "invalid number"),
+        ("+0x", "invalid number"),
+        ("0X", "invalid number"),
+        ("0XG", "invalid number"),
+        ("0z", "invalid number"),
+        (" 08", "invalid number"),
+        ("\t0x", "invalid number"),
+        ("00x", "invalid octal number"),
+        ("08", "invalid octal number"),
+        ("0x", "invalid hex number"),
+        ("0xG", "invalid hex number"),
+    ] {
+        assert_star_diagnostic(value, "[]", diagnostic);
+    }
+}
+
+#[test]
+fn printf_string_star_suffix_errors_precede_range_warnings() {
+    for (value, diagnostic) in [
+        ("2147483648x", "invalid number"),
+        ("-2147483649x", "invalid number"),
+        ("0x80000000z", "invalid hex number"),
+        ("-0x80000001z", "invalid number"),
+        ("2147483648", "Numerical result out of range"),
+        ("-2147483649", "Numerical result out of range"),
+    ] {
+        assert_star_diagnostic(value, "[abc]", diagnostic);
+    }
+}
+
+fn assert_star_diagnostic(value: &str, expected: &str, diagnostic: &str) {
+    let message = format!("/usr/bin/bash: printf: {value}: {diagnostic}\n");
+    for redirect in ["", " 2>&1"] {
+        let rig = Rig::new(Limits::default());
+        rig.variable("number", value);
+        assert_eq!(
+            rig.run(&format!("printf '[%.*s]' \"$number\" abc{redirect}")),
+            1
+        );
+        let (stdout, stderr) = if redirect.is_empty() {
+            (expected.to_owned(), message.clone())
+        } else {
+            (format!("{message}{expected}"), String::new())
+        };
+        assert_eq!(rig.output.bytes(), stdout.as_bytes(), "{value}{redirect}");
+        assert_eq!(rig.errors.bytes(), stderr.as_bytes(), "{value}{redirect}");
+    }
+}
