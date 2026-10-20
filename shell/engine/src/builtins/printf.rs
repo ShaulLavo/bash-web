@@ -16,14 +16,53 @@ pub(super) async fn run(
     context: &Context,
     work: &mut Work,
 ) -> Result<(), i32> {
-    args.first().ok_or(2)?;
     let utf8 = character_locale(state, context, work).await?;
     let mut printer = Printer::new(fds, context, work, utf8);
-    format(args, &mut printer).await?;
+    command(args, &mut printer).await?;
     printer.work = None;
-    let status = format(args, &mut printer).await?;
+    let status = command(args, &mut printer).await?;
     printer.flush_output().await?;
     if status == 0 { Ok(()) } else { Err(status) }
+}
+
+const USAGE: &[u8] = b"printf: usage: printf [-v var] format [arguments]\n";
+
+async fn command(args: &[String], printer: &mut Printer<'_>) -> Result<i32, i32> {
+    printer.scan(1).await?;
+    let Some((first, operands)) = args.split_first() else {
+        return usage(printer).await;
+    };
+    if first == "--" && operands.is_empty() {
+        return usage(printer).await;
+    }
+    if first == "--" {
+        return format(operands, printer).await;
+    }
+    if first.len() <= 1 || !first.starts_with('-') {
+        return format(args, printer).await;
+    }
+    if first.starts_with("-v") || first == "--help" {
+        return unsupported_or_missing(args, printer).await;
+    }
+    printer.numeric_warning(b"/usr/bin/bash: printf: -").await?;
+    printer.numeric_warning(&first.as_bytes()[1..2]).await?;
+    printer.numeric_warning(b": invalid option\n").await?;
+    usage(printer).await
+}
+
+async fn usage(printer: &mut Printer<'_>) -> Result<i32, i32> {
+    printer.numeric_warning(USAGE).await?;
+    Ok(2)
+}
+
+async fn unsupported_or_missing(args: &[String], printer: &mut Printer<'_>) -> Result<i32, i32> {
+    let diagnostic = match (args[0].as_str(), args.len()) {
+        ("-v", 1) => b"/usr/bin/bash: printf: -v: option requires an argument\n".as_slice(),
+        ("--help", _) => b"/usr/bin/bash: printf: --help: unsupported option\n".as_slice(),
+        _ => b"/usr/bin/bash: printf: -v: assignment is not supported\n".as_slice(),
+    };
+    printer.numeric_warning(diagnostic).await?;
+    usage(printer).await
 }
 
 pub(super) async fn character_locale(

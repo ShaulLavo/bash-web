@@ -67,7 +67,7 @@ fn grep_options_match_gnu_subset_and_statuses() {
         ("printf 'x\\r\\n' | grep 'x$'", 1, ""),
         ("printf '\\n' | grep -n ''", 0, "1:\n"),
         ("printf '' | grep -c ''", 1, "0\n"),
-        ("printf '-needle\\n' | grep -- -needle", 0, "-needle\n"),
+        ("printf -- '-needle\\n' | grep -- -needle", 0, "-needle\n"),
     ] {
         let rig = Rig::new();
         assert_eq!(rig.run(script), status, "{script}: {}", rig.text());
