@@ -112,8 +112,8 @@ test("each moved current-main gate has one owner", () => {
       "check:capabilities",
     ],
     wasi: ["test:shell:wasi"],
-    browser: ["build:browser:assets", "test:runtime:terminal", "test:browser"],
-    "own-shell-compatibility": ["test:shell:scoreboard", "compat:shell"],
+    browser: ["build:browser:assets:ci", "test:runtime:terminal", "test:browser"],
+    "own-shell-compatibility": ["test:shell:scoreboard", "compat:shell:prebuilt"],
   };
   const ownership = Object.entries(workflowJobs).flatMap(([owner, job]) =>
     Array.from(commands(job).matchAll(/npm run ([\w:-]+)/g), (match) => ({
@@ -188,7 +188,7 @@ test("compatibility keeps frozen identity, diagnostics, echo and target baseline
   assert.match(run, /node --test scripts\/test-diagnose-compat.ts/);
   assert.match(
     run,
-    /node scripts\/diagnose-compat.ts "\$\{\{ runner.temp \}\}\/own-shell-diagnostics" -- npm run compat:shell/,
+    /node scripts\/diagnose-compat.ts "\$\{\{ runner.temp \}\}\/own-shell-diagnostics" -- npm run compat:shell:prebuilt/,
   );
   assert.match(
     run,
@@ -201,4 +201,59 @@ test("compatibility keeps frozen identity, diagnostics, echo and target baseline
   );
   assert.ok(object(darwin.jobs)["printf-darwin"]);
   assert.match(commands(object(darwin.jobs)["printf-darwin"]), /en_US.UTF-8/);
+});
+
+function recipes(): Record<string, unknown> {
+  return object(
+    object(JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"))).scripts,
+  );
+}
+
+function expanded(command: string, ancestors: readonly string[] = []): string {
+  return command.replace(/npm run ([\w:-]+)/g, (_, name: string) => {
+    assert.ok(!ancestors.includes(name), `recursive npm recipe ${name}`);
+    const recipe = recipes()[name];
+    assert.equal(typeof recipe, "string", `missing npm recipe ${name}`);
+    return expanded(String(recipe), ancestors.concat([name]));
+  });
+}
+
+test("shell notices have exactly one native producer and a Cargo-free browser consumer", () => {
+  const owners = Object.entries(jobs()).flatMap(([owner, job]) =>
+    Array.from(expanded(commands(job)).matchAll(/node scripts\/notices\.mjs/g), () => owner),
+  );
+  assert.deepEqual(owners, ["native"]);
+  const browser = expanded(commands(jobs().browser));
+  assert.equal(browser.match(/node scripts\/browser-notices\.mjs/g)?.length, 1);
+  assert.match(browser, /node scripts\/ci-artifacts\.ts notices \.build\/ci-native/);
+  assert.doesNotMatch(browser, /\b(cargo|rustup)\b|scripts\/notices\.mjs/);
+  const native = expanded(commands(jobs().native));
+  assert.ok(
+    native.indexOf("node scripts/notices.mjs") <
+      native.indexOf("node scripts/ci-artifacts.ts pack"),
+  );
+  assert.match(expanded("npm run build:browser:assets"), /node scripts\/notices\.mjs/);
+  assert.equal(browser.match(/vite build/g)?.length, 1);
+});
+
+test("compatibility reuses its same-job node build while standalone commands still build fresh", () => {
+  const compat = expanded(commands(jobs()["own-shell-compatibility"]));
+  assert.equal(compat.match(/node scripts\/build-node-harness\.ts/g)?.length, 1);
+  assert.equal(compat.match(/node scripts\/bash-compat\.mjs/g)?.length, 1);
+  const run = commands(jobs()["own-shell-compatibility"]);
+  assert.ok(
+    run.indexOf("npm run test:shell:scoreboard") < run.indexOf("npm run fuzz:shell-echo:ci"),
+  );
+  assert.ok(
+    run.indexOf("npm run fuzz:shell-echo:ci") < run.indexOf("npm run compat:shell:prebuilt"),
+  );
+  assert.equal(
+    expanded("npm run compat:shell"),
+    "node scripts/build-node-harness.ts && BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell BASH_COMPAT_UTILITY_DIR=${CARGO_TARGET_DIR:-.build/shell}/wasm32-wasip1/release node scripts/bash-compat.mjs",
+  );
+  for (const name of ["test:shell:scoreboard", "compat:shell"])
+    assert.equal(
+      expanded(`npm run ${name}`).match(/node scripts\/build-node-harness\.ts/g)?.length,
+      1,
+    );
 });

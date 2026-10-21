@@ -21,7 +21,7 @@ const cliFiles = ["shell-engine", "shell-cli", "cli-sha256.txt", "cli-source.txt
 export const nativeArtifactFiles = cliFiles.concat(
   programs,
   utilityNames.map((name) => `utility-artifacts/${name}.wasm`),
-  ["utility-artifacts/source-sha256.txt", "inputs"],
+  ["utility-artifacts/source-sha256.txt", "inputs", "THIRD_PARTY_NOTICES.txt"],
   wasiTestFiles.map((name) => `wasi-tests/${name}`),
 );
 
@@ -87,9 +87,25 @@ export function packCiArtifacts(root: string, directory: string) {
       resolve(root, ".build/utility-artifacts", name),
       resolve(directory, "utility-artifacts", name),
     );
+  copy(
+    resolve(root, "dist/THIRD_PARTY_NOTICES.txt"),
+    resolve(directory, "THIRD_PARTY_NOTICES.txt"),
+  );
   writeFileSync(resolve(directory, "inputs"), `${ciInputs("HEAD", root).native}\n`);
   writeFileSync(resolve(directory, "SHA256SUMS"), checksums(directory));
   verifyCiArtifacts(root, directory);
+}
+
+function copyNotices(root: string, directory: string) {
+  copy(
+    resolve(directory, "THIRD_PARTY_NOTICES.txt"),
+    resolve(root, "dist/THIRD_PARTY_NOTICES.txt"),
+  );
+}
+
+export function stageCiNotices(root: string, directory: string) {
+  verifyCiArtifacts(root, directory);
+  copyNotices(root, directory);
 }
 
 export function stageCiArtifacts(root: string, directory: string) {
@@ -121,6 +137,7 @@ export function stageCiArtifacts(root: string, directory: string) {
     resolve(directory, "shell-runtime.wasm"),
     resolve(root, "public/programs/shell-engine.wasm"),
   );
+  copyNotices(root, directory);
   for (const name of utilityNames) {
     copy(resolve(directory, `${name}.wasm`), resolve(root, `public/programs/${name}.wasm`));
     copy(resolve(directory, `${name}.wasm`), resolve(root, `dist/${name}.wasm`));
@@ -130,8 +147,9 @@ export function stageCiArtifacts(root: string, directory: string) {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const root = resolve(import.meta.dirname, "..");
   const [command, directory] = process.argv.slice(2);
-  assert.ok(directory && process.argv.length === 4, "Use pack|stage <artifact directory>");
+  assert.ok(directory && process.argv.length === 4, "Use pack|stage|notices <artifact directory>");
   if (command === "pack") packCiArtifacts(root, resolve(directory));
   else if (command === "stage") stageCiArtifacts(root, resolve(directory));
-  else throw new Error("Use pack|stage <artifact directory>");
+  else if (command === "notices") stageCiNotices(root, resolve(directory));
+  else throw new Error("Use pack|stage|notices <artifact directory>");
 }
