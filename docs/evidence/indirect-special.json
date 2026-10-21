@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "family": "Bare indirection to positional and special parameters",
-  "measuredRevision": "00c2958e0a6bd64b0383d770aac2be8f44f885df",
-  "mergedBase": "f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb",
+  "measuredRevision": "316b1a9ec91ea673b8f2d29397f46c065e8bb4ca",
+  "mergedBase": "77b3963d904599932c2cd59fe46409f0ab7a6c9a",
   "implementation": {
     "model": "claude-opus-5-5",
     "reason": "Sol provider policy refusal on ordinary shell/build/test work; owner standing exception. Review stays on Sol."
@@ -15,14 +15,14 @@
     "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
   },
   "replay": {
-    "command": "BASH_COMPAT_JOBS=1 BASH_COMPAT_SKIP_BUILD=1 BASH_COMPAT_RECORD=0 BASH_COMPAT_BASE_REF=f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb npm run compat:shell:prebuilt",
+    "command": "BASH_COMPAT_JOBS=1 BASH_COMPAT_SKIP_BUILD=1 BASH_COMPAT_RECORD=0 BASH_COMPAT_BASE_REF=77b3963d904599932c2cd59fe46409f0ab7a6c9a npm run compat:shell:prebuilt",
     "host": "PC shared heavy queue, suite class, one worker; build and gates Rust -j2",
     "node": "v26.7.0",
-    "shellRuntimeSha256": "ca2c903ca7338ee12baf2454bc847adcf40399f2a8e5c35f3e5aad7c7a2e905b",
-    "shellRuntimeBytes": 1866831,
-    "resultSha256": "4cb16f73e42a1588501683602254b9e5bcbfea6fa463409deb46c4d7698cd3f8",
+    "shellRuntimeSha256": "fb147feb8b5bcb40af8db5360e7acae5a3dadef8f02a668c58adb60b6914625a",
+    "shellRuntimeBytes": 1908558,
+    "resultSha256": "17582a9f402c628402962433dceaa04cf3ce90d478f0404010b8dea3e4a76995",
     "actualExit": 1,
-    "exitReason": "Only the expected stale candidate baseline assertion naming four gained IDs. Complete replay written before assertion; zero lost passes, timeouts or crashes on prior passes.",
+    "exitReason": "Complete replay exited only for stale candidate pass membership. Offline comparison proves exact updated membership and no previous-pass losses.",
     "deadlinesAndClassifier": "unchanged",
     "total": 9221,
     "scored": 5792,
@@ -31,8 +31,9 @@
   "corpora": {
     "oils": {
       "scored": 1682,
-      "before": 1051,
-      "after": 1054,
+      "before": 1096,
+      "after": 1099,
+      "replay": 1099,
       "gained": [
         "oils:var-ref:129",
         "oils:var-ref:137",
@@ -42,8 +43,9 @@
     },
     "brush-suite": {
       "scored": 1888,
-      "before": 1057,
-      "after": 1058,
+      "before": 1079,
+      "after": 1080,
+      "replay": 1080,
       "gained": [
         "brush-suite:word_expansion/params:17"
       ],
@@ -51,8 +53,9 @@
     },
     "bashkit-suite": {
       "scored": 2222,
-      "before": 1443,
-      "after": 1443,
+      "before": 1469,
+      "after": 1469,
+      "replay": 1469,
       "gained": [],
       "lost": []
     }
@@ -70,36 +73,39 @@
     "model": "gpt-6.1-sol",
     "provider": "cli-proxy",
     "reasoningEffort": "high",
+    "round": "integrated-r2",
     "reviewedRepairHead": "631b161db370a1889e5c649b65b214c0f40fedab",
+    "prerequisiteMerge43": "77b3963d904599932c2cd59fe46409f0ab7a6c9a",
+    "prerequisiteObservedAt": "2026-10-22T02:27:38+03:00",
     "indirectSourceSha256": "c3eb2bd0fa5a505730a610db172ee6c64020f7a33717b68ba0cfa533d311a02f",
     "indirectSourceUnchanged": true,
     "preservedMainContracts": [
       "FileSubstitution(Vec<Command>)",
       "getopts state",
+      "builtin wrapper dispatch",
+      "scalar Transformation handling and provenance",
+      "positive extglob implementation and all 121 frozen Bash5.3.15 test observations",
       "all blocking CI commands",
-      "both file-substitution and indirect-special production test selections"
+      "file-substitution, extglob and indirect-special production test selections"
     ],
     "standaloneFamilyGain": {
       "oils": 2,
       "brush-suite": 1,
       "bashkit-suite": 0
     },
-    "additionalEnabledByMain": {
-      "oils:var-ref:475": "Main now supplies OPTIND startup and local state; unchanged indirect code resolves it to each positional argument."
-    },
-    "baselineInput": "Byte-identical immutable main baseline, then recomputed from this complete replay. Four outcome flips plus derived counts only; all original row fields, historical actual payloads, ordered metadata and skip membership preserved.",
+    "baselineInput": "Byte-identical immutable main baseline, then outcome-only proven gains and derived counts. All original row fields and historical failure payloads retained. Ordered metadata and skip membership unchanged.",
     "strictOfflineComparatorExit": 0,
     "firstQueueExit": 1,
     "postBaselineQueueExit": 0,
     "counts": {
-      "nativePassed": 1341,
+      "nativePassed": 1394,
       "nativeFailed": 0,
       "nativeIgnored": 0,
-      "scoreboardPassed": 549
+      "scoreboardPassed": 670
     },
     "layerEvidence": {
       "kind": "lexical-source-scan",
-      "engineSourceSha256": "e543bb66b8e28b8b5fdac7890e281717337c1781061e90c71d8e93ccf7281afa",
+      "engineSourceSha256": "a99169e532e4a154da858f76f5bc03974b5d0be49e84ff465a41cdef782cfcc4",
       "binaryBuild": null
     },
     "initialCommands": [
@@ -125,7 +131,7 @@
       },
       {
         "exit": 0,
-        "command": "env LAYERS_BASE_REF=f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb npm run check:layers"
+        "command": "env LAYERS_BASE_REF=77b3963d904599932c2cd59fe46409f0ab7a6c9a npm run check:layers"
       },
       {
         "exit": 0,
@@ -144,6 +150,10 @@
         "command": "npm run test:shell:scoreboard"
       },
       {
+        "exit": 0,
+        "command": "node --test scripts/test-own-shell-indirect-special.ts"
+      },
+      {
         "exit": 1,
         "command": "BASH_COMPAT_JOBS=1 BASH_COMPAT_SKIP_BUILD=1 BASH_COMPAT_RECORD=0 BASH_COMPAT_BASE_REF=<integrated-main> npm run compat:shell:prebuilt"
       }
@@ -151,11 +161,15 @@
     "postBaselineValidation": [
       {
         "exit": 0,
-        "command": "node /work/reports/bash-web/hill-climb/expansion/indirect-special/integrated-r1/offline-score.ts"
+        "command": "node /work/reports/bash-web/hill-climb/expansion/indirect-special/integrated-r2/frozen-preservation.ts"
       },
       {
         "exit": 0,
-        "command": "env LAYERS_BASE_REF=f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb npm run check:layers"
+        "command": "node /work/reports/bash-web/hill-climb/expansion/indirect-special/integrated-r2/offline-score.ts"
+      },
+      {
+        "exit": 0,
+        "command": "env LAYERS_BASE_REF=77b3963d904599932c2cd59fe46409f0ab7a6c9a npm run check:layers"
       },
       {
         "exit": 0,
@@ -171,44 +185,91 @@
       },
       {
         "exit": 0,
-        "command": "sha256sum --check /work/reports/bash-web/hill-climb/expansion/indirect-special/integrated-r1/artifacts.sha256"
+        "command": "sha256sum --check /work/reports/bash-web/hill-climb/expansion/indirect-special/integrated-r2/artifacts.sha256"
       }
     ],
+    "testOnlyRecording": {
+      "cases": 16,
+      "originalObservationsUnchanged": true,
+      "assertionsAndNormalizationUnchanged": true,
+      "bash": "5.3.15(1)-release",
+      "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+      "fixturePath": "scripts/fixtures/shell-indirect-special.json",
+      "fixtureSha256": "11fa36114b5d3e03bab7e0f0fc4ae289137be6dcef4db92c0737758bc6450a1c",
+      "testSha256": "b824072af342f1d7bdc4a46b06fc1356f6c9300d9acd3b01be50091afa31692d",
+      "referenceRecordingExit": 0,
+      "queueExit": 0,
+      "commands": [
+        {
+          "exit": 0,
+          "command": "node --test scripts/test-own-shell-indirect-special.ts"
+        },
+        {
+          "exit": 0,
+          "command": "npm run quality:js"
+        },
+        {
+          "exit": 0,
+          "command": "npm run typecheck:ci"
+        },
+        {
+          "exit": 0,
+          "command": "npm run test:ci"
+        },
+        {
+          "exit": 0,
+          "command": "npm run test:shell:scoreboard"
+        },
+        {
+          "exit": 0,
+          "command": "node /work/reports/bash-web/hill-climb/expansion/indirect-special/integrated-r2/frozen-preservation.ts"
+        },
+        {
+          "exit": 0,
+          "command": "node /work/reports/bash-web/hill-climb/expansion/indirect-special/integrated-r2/offline-score.ts"
+        },
+        {
+          "exit": 0,
+          "command": "sha256sum --check /work/reports/bash-web/hill-climb/expansion/indirect-special/integrated-r2/artifacts.sha256"
+        }
+      ],
+      "replayNotRepeated": "Test-only extraction after the measured production replay, no production, ruler, expected result, script, membership, normalization or assertion changes."
+    },
     "artifacts": {
       "argv-py.wasm": {
-        "sha256": "3cfdbedbd20dd9da3c98310cde3fd425d083ffe705c1e86ab81c198d8bcf0eae",
+        "sha256": "7416f146e7e8d8cc6dbc59b678de4130dd1991aec787781a112b7a8c1a97b20f",
         "bytes": 234231
       },
       "cat.wasm": {
-        "sha256": "41df7380efca8db964f51de965200f6a1c8091e459c9a15939b71b0dbbf1b2b6",
+        "sha256": "4b9bed703b58ef5903378bcdbf434f6dbcfeedab0527d2f3b9187ac56117b0b9",
         "bytes": 234123
       },
       "grep.wasm": {
-        "sha256": "b094f019d75b96bb84044e57c09f7d3686e5f97f088a35d0d1dfec92391a995b",
+        "sha256": "797365a8494effc1ef40c7e7e7eedcef67f23570e7e8e15c63a69a40213e5d56",
         "bytes": 1300952
       },
       "mkdir.wasm": {
-        "sha256": "0310cafb0680fe4fb4458d6104ec2172e9367418daf0ec90a3654e591b8e115c",
+        "sha256": "bca17668eedd8e50199259a1e0e9c35ce0c50d61a6727eb365fedf82aaa4c825",
         "bytes": 229639
       },
       "printenv-py.wasm": {
-        "sha256": "9d98c9e930827e573d355eef808e215f75540ee3495bac2b731ac14379a4a24e",
+        "sha256": "e3155443f9271815dc01fdebf0f1cf0de0302cfa0bc6f253a7916296ef33824d",
         "bytes": 234239
       },
       "seq.wasm": {
-        "sha256": "1643a7207962df96b7fc67f5e605f8d35495aebadc56058e94fb5ba0b5b6aac2",
+        "sha256": "1ae0bb04a8a8a50d5a7f0fb62cd79f0aad5db38561a6863bfef955d5505e7421",
         "bytes": 223324
       },
       "shell-engine.wasm": {
-        "sha256": "068580ed44ed3183e784563da50debd3d80546e3e4c5719c2fd066f6eb221b55",
-        "bytes": 1922110
+        "sha256": "0d6d4ee488bb7979e88282375d450d112b8f36c4f15b282d7146456b05734f51",
+        "bytes": 1963841
       },
       "shell-runtime.wasm": {
-        "sha256": "ca2c903ca7338ee12baf2454bc847adcf40399f2a8e5c35f3e5aad7c7a2e905b",
-        "bytes": 1866831
+        "sha256": "fb147feb8b5bcb40af8db5360e7acae5a3dadef8f02a668c58adb60b6914625a",
+        "bytes": 1908558
       }
     },
-    "reportDirectory": "/work/reports/bash-web/hill-climb/expansion/indirect-special/integrated-r1",
+    "reportDirectory": "/work/reports/bash-web/hill-climb/expansion/indirect-special/integrated-r2",
     "hostedWasiBrowserCI": "Parent-owned after push. Worker does not watch CI or merge."
   }
 }
