@@ -22,6 +22,8 @@ The existing ASCII input and locale domain is unchanged: C, POSIX, C.UTF-8 and
 C.utf8. Non-ASCII input, other locales, collating/equivalence elements and GNU
 stacked quantifiers remain unsupported. Unbalanced groups are rejected.
 
+Interval counts above 32,767 return status 2, including for empty groups.
+
 A resource-admitted expression arena and an iterative compiler emit the existing
 Thompson states. At most 64 groups may be active. Every scan/compiler iteration
 charges the shared work account and checks cancellation; vectors reserve storage

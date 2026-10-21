@@ -395,7 +395,10 @@ async fn repetition(
             } else {
                 Some(min)
             };
-            if !active(pattern, *index, '}') || max.is_some_and(|max| min > max) {
+            if !active(pattern, *index, '}')
+                || min > 32767
+                || max.is_some_and(|max| min > max || max > 32767)
+            {
                 return Err(2.into());
             }
             (min, max)
