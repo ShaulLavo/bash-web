@@ -61,5 +61,6 @@ redirected destination, lazy skipped-operand and cancellation/refund assertions.
 Only the explicitly named new `builtin` message slots ignore decimal coordinates
 in those semantic controls. Their original coordinate assertions remain at
 `0253be6:shell/engine/tests/words/builtin_wrapper.rs` and in the deferred report
-inputs. This is not whole-output parity. The complete 207-script probe and frozen
-9,221-case replay compare raw complete outputs without that projection.
+inputs. This is not whole-output parity. The complete 207-script probe compares
+stdout, stderr and status without projection. The frozen 9,221-case replay keeps
+its unchanged stdout/status scoring and records stderr separately.
