@@ -359,9 +359,30 @@ mod tests {
         panic!("bounded matcher did not finish");
     }
 
+    fn assert_cases(cases: &[(&str, &str, bool)]) {
+        for (source, value, expected) in cases {
+            let mut work = Work::new(100000, 100000, 16);
+            assert_eq!(
+                finish(pattern(source).matches_full(value, &mut work, &Cancel::new())).ok(),
+                Some(*expected),
+                "{source}: {value}"
+            );
+        }
+    }
+
+    fn assert_cancelled_after_yield<T>(
+        future: impl std::future::Future<Output = Result<T, Error>>,
+        cancel: &Cancel,
+    ) {
+        let mut pending = Box::pin(future);
+        assert!(pending.as_mut().now_or_never().is_none());
+        cancel.cancel();
+        assert!(matches!(finish(pending), Err(Error::Status(130))));
+    }
+
     #[test]
     fn positive_operators_nested_empty_and_nullable_cycles() {
-        for (source, value, expected) in [
+        assert_cases(&[
             ("@(a|ab)c", "abc", true),
             ("?(@(a)|b)c", "c", true),
             ("+(a|aa)", "aaaa", true),
@@ -373,19 +394,12 @@ mod tests {
             ("*(|a)*(b|)", "aabz", false),
             ("@(?)+(?)", "é🙂", true),
             ("@([|]|[)])", ")", true),
-        ] {
-            let mut work = Work::new(100000, 100000, 16);
-            assert_eq!(
-                finish(pattern(source).matches_full(value, &mut work, &Cancel::new())).ok(),
-                Some(expected),
-                "{source}: {value}"
-            );
-        }
+        ]);
     }
 
     #[test]
     fn literal_parentheses_and_brackets_preserve_group_boundaries() {
-        for (source, value, expected) in [
+        assert_cases(&[
             ("@(a(b)c|x)", "a(b)c", true),
             ("@(a(b|c)d|x)", "a(b|c)d", true),
             ("@(a((b|c))d|x)", "x", true),
@@ -401,14 +415,7 @@ mod tests {
             ("@([a|b)@(x)", "@([a|b)@(x)", true),
             ("*(a", "zz(a", false),
             ("[a", "[a", true),
-        ] {
-            let mut work = Work::new(100000, 100000, 16);
-            assert_eq!(
-                finish(pattern(source).matches_full(value, &mut work, &Cancel::new())).ok(),
-                Some(expected),
-                "{source}: {value}"
-            );
-        }
+        ]);
     }
 
     #[test]
@@ -427,10 +434,7 @@ mod tests {
         ));
         let source = pattern(&format!("@({})", "a".repeat(8192)));
         let mut work = Work::new(1000000, 1000000, 16);
-        let mut pending = Box::pin(group_boundaries(&source, &mut work, &cancel));
-        assert!(pending.as_mut().now_or_never().is_none());
-        cancel.cancel();
-        assert!(matches!(finish(pending), Err(Error::Status(130))));
+        assert_cancelled_after_yield(group_boundaries(&source, &mut work, &cancel), &cancel);
     }
 
     #[test]
@@ -534,9 +538,6 @@ mod tests {
         let cancel = Cancel::new();
         let input = "a".repeat(8192);
         let pattern = pattern("*(a|aa)");
-        let mut pending = Box::pin(matches(&pattern, &input, &mut work, &cancel));
-        assert!(pending.as_mut().now_or_never().is_none());
-        cancel.cancel();
-        assert!(matches!(finish(pending), Err(Error::Status(130))));
+        assert_cancelled_after_yield(matches(&pattern, &input, &mut work, &cancel), &cancel);
     }
 }
