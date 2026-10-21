@@ -19,8 +19,8 @@ fn baseline(names: &[&'static str]) -> Vec<&'static str> {
 }
 
 const BUILTINS: &[&str] = &[
-    ":", "[", "break", "cd", "command", "continue", "declare", "echo", "eval", "exec", "exit",
-    "export", "false", "jobs", "kill", "let", "local", "printf", "pwd", "read", "readonly",
+    ":", "[", "break", "builtin", "cd", "command", "continue", "declare", "echo", "eval", "exec",
+    "exit", "export", "false", "jobs", "kill", "let", "local", "printf", "pwd", "read", "readonly",
     "return", "set", "shift", "shopt", "test", "true", "typeset", "unset", "wait",
 ];
 
@@ -66,6 +66,7 @@ fn adapter_dispatch_preserves_the_old_dispatch_set_not_the_old_is_builtin_set() 
     // exec/eval/let always lived in interpreter-owned phases.
     for (name, expected) in [
         ("command", Handler::Command),
+        ("builtin", Handler::BuiltinWrapper),
         ("exec", Handler::Exec),
         ("eval", Handler::Eval),
         ("let", Handler::Let),
