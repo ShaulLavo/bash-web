@@ -162,15 +162,7 @@ fn printf_options_usage_diagnostics_retry_partial_writes() {
 }
 
 #[test]
-fn printf_options_do_not_fake_successful_assignment_or_help() {
-    for option in ["-v saved", "-vsaved"] {
-        let rig = Rig::new(Limits::default());
-        rig.variable("saved", "original");
-        assert_eq!(rig.run(&format!("printf {option} %s changed")), 2);
-        assert!(rig.output.bytes().is_empty());
-        assert_eq!(rig.run("printf %s \"$saved\""), 0);
-        assert_eq!(rig.output.bytes(), b"original");
-    }
+fn printf_options_do_not_fake_help() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("printf --help"), 2);
     assert!(rig.output.bytes().is_empty());

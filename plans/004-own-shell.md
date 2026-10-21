@@ -1833,3 +1833,141 @@ expectation against direct native `iswprint_l` classifications. Native Bash
 and round-trip check are independent observations, not the GNU 5.3.15 oracle. No skip, filtered assertion, portable Unicode
 table or scoring change is included. Raw first-failure and follow-up logs stay
 in the report directory under `review-fixes-r1-darwin*`.
+
+## Printf scalar assignment, 2026-10-21
+
+Approved.
+
+Measured source `286dd4cd0bc59410bda90348992044812a208dd3`, accepted base
+`50ab6a7f3cdf6c4c7a7e1ad875d4e804e76da5fd`. Plain and attached `printf -v` capture
+through the existing two-pass formatter, then use existing scalar bindings for
+dynamic locals, namerefs, readonly and IFS. No stdout writes occur. Capture and
+assignment storage remain budgeted and cancellable. NUL output shrinks to its
+stored prefix; invalid UTF-8 before NUL returns 2 without replacing the old value.
+No array lvalues, attributes, float/time formats or parser/runtime changes.
+See [behavior](../docs/printf-scalar-assignment.md) and
+[the measurement receipt](../docs/evidence/printf-scalar-assignment.json).
+
+Exactly one full production-Waffle replay, JOBS=1 and RECORD=0, retained all
+9,221 records, 5,792 scored and 3,429 unchanged skips. Waffle stays pinned to
+`fc58a532f0d7a617e631ea4b7580a190915d4ed6`.
+
+- oils: 1013 -> 1015, gained 2, lost 0.
+- brush-suite: 1001 -> 1007, gained 6, lost 0.
+- bashkit-suite: 1406 -> 1412, gained 6, lost 0.
+
+Only actually gained outcome fields and derived baseline counts change; all
+historical payloads remain. The unchanged strict membership comparator passes
+offline against the saved replay. Cases, oracle, environment, source pins,
+classification, scorer, fixtures, deadlines, exclusions and blocking gates stay
+unchanged. Full evidence and reproducer are in
+`/work/reports/bash-web/hill-climb/printf-scalar-assignment/`.
+
+Native/WASI Clippy, native workspace and selected WASI suites pass, including
+113 printf and 9 echo word tests per target and existing low-memory controls.
+The real-Waffle controls pass 29 Bash comparisons and four explicit boundaries.
+Scoreboard controls pass 107/107. Quality, unchanged duplicate gates and layer
+checks pass, with zero layer violations. Browser verification passes 228 tests
+with 16 existing skips in Chromium/Firefox, plus 143 runtime-terminal tests.
+No local Darwin claim; the unchanged hosted gate remains parent-owned.
+
+### Review fixes after the full measurement
+
+Source `c29fab56685afceadc7449e7b2e15f59b7ca3aed` fixes the closed-stderr
+PR37 review finding. Capture-mode malformed escape warnings tolerate a closed
+stderr without losing assignment. Cancellation and broken pipes still abort.
+Its indirect-IFS cache approximation was incomplete and has been removed under
+the approved parent decision. Printf now uses `State::assign_parameter`, exactly
+as ordinary scalar assignment does. Resolved IFS writes refresh the ordinary
+derived caches from the new value. This is safe semantics, not a claim of Bash
+equality for the confirmed nondeterministic cases. Fresh independent review and
+hosted compatibility remain required.
+
+Historical c29fab5 checks used source different from the full replay's measured
+source above. Native and WASI focused tests and Clippy passed. Its production-Waffle
+controls passed 44 Bash comparisons and four explicit boundaries. Its separate
+bounded check passed all 392 committed passes in the printf, nameref, IFS and
+word-split files plus the historical gains, including all 14 gains. Historical
+follow-up evidence is
+`/work/reports/bash-web/hill-climb/printf-scalar-assignment/review-fixes-r1.md`.
+
+Final safe-IFS production-Waffle evidence records 62 controls: 45 stable Bash
+comparisons, four preserved boundaries and 13 declared-safe controls. Its separate
+bounded check passed 392 committed passes, including all 14 historical gains.
+Neither stage changes membership or scorer. No second full replay ran, and the
+historical 14 gains and zero losses are not claimed as a complete measurement of
+the final source. Final evidence is
+`/work/reports/bash-web/hill-climb/printf-scalar-assignment/safe-ifs-r3.md`.
+
+### Finding retained at the existing builtin-prefix boundary
+
+At the measured source, run
+`x=outer; x=prefix printf -v x %s assigned; echo "$x"` through the production
+Waffle control in `scripts/test-own-shell-printf-assignment.ts`. Bash 5.3.15
+prints `assigned\n`; this shell prints `outer\n`, both status 0 with empty
+stderr. This reproduces every run. The control logs both raw byte observations
+in `final-controls.log`. Ordinary scalar assignment, nested local scope and
+nameref assignment pass their Bash comparisons; the discrepancy requires a
+temporary command prefix.
+
+`PrefixFrame::builtin` in `shell/engine/src/state.rs` keeps private restoration
+saves and its drop restores them. `State::assign_parameter` updates expansion
+saves, not builtin saves. There is no selective durable-write operation for the
+builtin guard. A follow-up should give the guard
+an explicit way to retain a builtin's successful writes, with admission,
+cancellation, readonly, local/nameref and IFS tests. None of this unit's eleven
+candidate observations uses a temporary command prefix. Invalid UTF-8, arrays
+and unsupported conversions remain separately named boundaries, not scored gains.
+
+### Indirect-IFS review blocker
+
+The original PR37 review blocker 2 concerns supported ASCII scalar, nameref
+and IFS behavior, not an exclusion or a deferred feature. The approved safe
+assignment decision below addresses the production design, not the original
+review verdict or final acceptance. The initial three observations
+recorded one Bash result, `<a:b;c>\n`, for the following custom-prior case.
+The starting PR37 source printed `<a>\n<b>\n<c>\n`; source c29fab5 printed
+`<a>\n<b;c>\n`. Those raw results remain in the report directory.
+
+```sh
+IFS=:; declare -n ref=IFS; printf -v ref ':;'; set -- 'a:b;c'
+for y in $1; do echo "<$y>"; done
+```
+
+The continuation repeated identical commands 1,000 times with the same Bash
+5.3.15 binary and explicit `PATH`, `LC_ALL=C` and `LANG=C`. The exact original
+default-IFS review reproduction produced five distinct stdout values. The
+custom-prior case above produced eight. An empty prior IFS produced seven;
+an alias-chain and changed-separator case produced 21. Unset prior IFS,
+direct printf-to-IFS and ordinary nameref assignment controls each produced
+one stable result. All returned 0 with empty stderr. The source, per-output
+counts and raw base64 streams are in `ifs-exact-repeat.ts` and its log under
+`review-fixes-r1-evidence/`. An earlier 84-case matrix and 24-by-100 repetition
+probe cover additional prior values and separators there.
+
+A debugger trace of the actual installed binary confirms that
+`builtin_bind_variable` frees the buffer still referenced by `ifs_value` during
+printf assignment. At the next `list_string` call the separator argument is
+that same freed address, now containing different bytes. This happens for
+default, custom and empty prior IFS. Unset IFS instead references a stable
+default literal. `ifs-free-argument.log` retains the trace and binary identity.
+The inspected GNU Bash 5.3 source explains the path: printf refreshes special
+variables using the requested alias name, while the variable owner frees the
+resolved IFS value. The splitter retains a borrowed pointer, a byte map and a
+separately copied first separator.
+
+The parent approved normal resolved scalar assignment in
+`/work/reports/bash-web/hill-climb/printf-scalar-assignment/parent-ifs-decision.md`.
+The PR37-specific old-member-map and old-`$*`-separator restoration are removed.
+`State::assign_parameter` resolves the destination, enforces readonly/storage
+rules, updates the one binding and refreshes IFS-derived state from the new value.
+Existing local and prefix guards retain their ordinary scope restoration rules.
+Focused tests declare safe splitting and `$*` semantics for default, custom,
+unset and empty priors, alias chains, changed and empty separators, and local
+scope restoration. They do not compare nondeterministic Bash output. Stable
+direct-IFS and ordinary nameref writes remain separate Bash equality controls.
+No majority-output choice, allocator emulation, frozen-ruler change or scored
+failure waiver follows from this decision. The original review and all raw
+observations above remain retained. Final source checks and cleanup are in
+`/work/reports/bash-web/hill-climb/printf-scalar-assignment/safe-ifs-r3.md`.
+Historical replay and 14 gained memberships remain unchanged.
