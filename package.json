@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.71",
+  "version": "0.0.72",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -60,7 +60,7 @@
     "fuzz:shell-path:ci": "node scripts/fuzz-shell-path.ts --replay scripts/fixtures/shell-path-seed-1.json --replay scripts/fixtures/shell-path-seed-42.json",
     "sources:browser": "node scripts/sources.mjs",
     "build:shell:browser": "node scripts/build-shell-browser.mjs",
-    "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:utilities && npm run build:test-guest && npm run notices:browser && vite build && node scripts/finish-build.mjs",
+    "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:utilities && npm run build:test-guest && npm run build:browser:assets",
     "typecheck:browser": "tsc --noEmit",
     "test:browser": "playwright test",
     "test:runtime:terminal": "node --expose-gc scripts/test-runtime-terminal.mjs",
@@ -84,7 +84,7 @@
     "check:duplicates": "node scripts/check-duplicates.mjs",
     "check:rust": "node scripts/check-rust-quality.mjs",
     "test:quality-gates": "node --test scripts/test-quality-gates.mjs",
-    "quality": "npm run sources:browser && npm run build:worker && npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates && npm run check:rust",
+    "quality": "npm run sources:browser && npm run build:worker && npm run quality:js && npm run check:rust && cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast",
     "build:utilities": "node scripts/build-utilities.ts",
     "build:node-harness": "node scripts/build-node-harness.ts",
     "build:compat-control": "node scripts/build-compat-control.ts",
@@ -92,7 +92,12 @@
     "typecheck:guest-build": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-shell-capabilities.ts scripts/wasi-build.ts scripts/utility-artifacts.ts scripts/test-utility-artifacts.ts scripts/build-utilities.ts scripts/build-compat-control.ts scripts/test-build-compat-control.ts scripts/test-utility-packaging.ts scripts/test-shell-wasi.ts scripts/test-wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts",
     "fuzz:shell-echo": "node scripts/fuzz-shell-echo.ts",
     "test:fuzz-shell-echo": "node --test scripts/test-fuzz-shell-echo.ts",
-    "fuzz:shell-echo:ci": "node scripts/fuzz-shell-echo.ts --replay scripts/fixtures/shell-echo.json"
+    "fuzz:shell-echo:ci": "node scripts/fuzz-shell-echo.ts --replay scripts/fixtures/shell-echo.json",
+    "quality:js": "npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates",
+    "build:browser:assets": "npm run notices:browser && vite build && node scripts/finish-build.mjs",
+    "test:ci": "node --test scripts/test-ci-inputs.ts scripts/test-ci-workflow.ts scripts/test-prepare-wasi-tests.ts scripts/test-ci-artifacts.ts",
+    "prepare:wasi-tests": "node scripts/prepare-wasi-tests.ts .build/ci-native/wasi-tests",
+    "typecheck:ci": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/ci-inputs.ts scripts/ci-artifacts.ts scripts/prepare-wasi-tests.ts scripts/test-ci*.ts scripts/test-prepare-wasi-tests.ts"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",

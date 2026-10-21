@@ -4,8 +4,9 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import { stageUtilityArtifacts, utilityNames, writeUtilityArtifacts } from "./utility-artifacts.ts";
 
+import { cappedWasiFixture as wasm } from "./wasi-artifact-fixture.ts";
+
 const root = resolve(import.meta.dirname, "..");
-const wasm = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0, 5, 5, 1, 1, 1, 128, 32);
 
 function fixture(run: (source: string, output: string, target: string) => void) {
   mkdirSync(resolve(root, ".build"), { recursive: true });

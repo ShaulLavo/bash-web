@@ -5,87 +5,73 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
 import { shellTargetDirectory, wasiBuildEnvironment } from "./wasi-build.ts";
+import { verifyCiArtifacts } from "./ci-artifacts.ts";
+import { wasiTestArguments, wasiTestFiles, wasiTestTargets } from "./prepare-wasi-tests.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
 const root = resolve(import.meta.dirname, "..");
-const cargoEnv = wasiBuildEnvironment(root, shellTargetDirectory(root));
-const cargo = (
-  args: readonly string[],
-  options: import("node:child_process").ExecFileSyncOptions = {},
-) => execFileSync("cargo", args, { cwd: root, stdio: "inherit", env: cargoEnv, ...options });
-const manifest = ["--locked", "--manifest-path", "shell/Cargo.toml"];
-const env = {
-  ...cargoEnv,
-  CARGO_TARGET_WASM32_WASIP1_RUNNER:
-    process.env.CARGO_TARGET_WASM32_WASIP1_RUNNER || "wasmtime run",
-};
-cargo(
-  ["test"].concat(manifest, [
-    "--target",
-    "wasm32-wasip1",
-    "-p",
-    "shell-parser",
-    "--lib",
-    "--test",
-    "api",
-    "--test",
-    "conditional",
-    "--test",
-    "command_print",
-    "-j2",
-    "--",
-    "--test-threads=1",
-  ]),
-  { env },
+const prebuilt = process.argv[2] === "--prebuilt" ? process.argv[3] : undefined;
+assert.ok(
+  process.argv.length === 2 || (prebuilt && process.argv.length === 4),
+  "Use --prebuilt <artifact directory> or no arguments",
 );
-cargo(
-  ["test"].concat(manifest, [
-    "--target",
-    "wasm32-wasip1",
-    "-p",
-    "shell-engine",
-    "--lib",
-    "--test",
-    "streaming",
-    "--test",
-    "terminal_display",
-    "--test",
-    "words",
-    "--test",
-    "capabilities",
-    "-j2",
-    "--",
-    "--test-threads=1",
-  ]),
-  { env },
-);
-cargo(
-  ["test"].concat(manifest, [
-    "--target",
-    "wasm32-wasip1",
-    "-p",
-    "shell-utilities",
-    "--test",
-    "streaming",
-    "-j2",
-    "--",
-    "--test-threads=1",
-  ]),
-  { env },
-);
-cargo(
-  ["build"].concat(manifest, [
-    "--target",
-    "wasm32-wasip1",
-    "-p",
-    "shell-engine",
-    "-p",
-    "shell-utilities",
-    "--release",
-    "-j2",
-  ]),
-);
-const wasm = resolve(shellTargetDirectory(root), "wasm32-wasip1/release/shell-engine.wasm");
+if (prebuilt) {
+  verifyCiArtifacts(root, resolve(prebuilt));
+  for (const binary of wasiTestFiles)
+    execFileSync(
+      "wasmtime",
+      [
+        "run",
+        "-W",
+        "max-memory-size=268435456",
+        resolve(prebuilt, "wasi-tests", binary),
+        "--test-threads=1",
+      ],
+      { stdio: "inherit" },
+    );
+} else {
+  const cargoEnv = wasiBuildEnvironment(root, shellTargetDirectory(root));
+  const env = {
+    ...cargoEnv,
+    CARGO_TARGET_WASM32_WASIP1_RUNNER:
+      process.env.CARGO_TARGET_WASM32_WASIP1_RUNNER || "wasmtime run",
+  };
+  for (const target of wasiTestTargets)
+    execFileSync(
+      "cargo",
+      [
+        "test",
+        "--locked",
+        "--manifest-path",
+        "shell/Cargo.toml",
+        "--target",
+        "wasm32-wasip1",
+      ].concat(wasiTestArguments(target), ["-j2", "--", "--test-threads=1"]),
+      { cwd: root, stdio: "inherit", env },
+    );
+  execFileSync(
+    "cargo",
+    [
+      "build",
+      "--locked",
+      "--manifest-path",
+      "shell/Cargo.toml",
+      "--target",
+      "wasm32-wasip1",
+      "-p",
+      "shell-engine",
+      "-p",
+      "shell-utilities",
+      "--release",
+      "-j2",
+    ],
+    { cwd: root, stdio: "inherit", env: cargoEnv },
+  );
+}
+const release = prebuilt
+  ? resolve(prebuilt)
+  : resolve(shellTargetDirectory(root), "wasm32-wasip1/release");
+const wasm = resolve(release, "shell-engine.wasm");
 verifyWasiGuest(wasm);
 const output = execFileSync(
   "wasmtime",
@@ -126,7 +112,6 @@ const size = (label: string, path: string) => {
   );
   return brotli.length;
 };
-const release = resolve(shellTargetDirectory(root), "wasm32-wasip1/release");
 const core = size("Shell core release WASI (standalone embedding)", wasm);
 assert.ok(core <= 1_000_000, "shell core exceeds Brush's 1.0 MB brotli guardrail");
 size("Shell core release WASI (browser runtime)", resolve(release, "shell-runtime.wasm"));

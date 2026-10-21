@@ -61,14 +61,14 @@ import { installCat } from "bash-web/utilities/cat";
 
 const cat = await installCat(runtime);
 try {
-	const shell = await createShell({ runtime, script: "printf hello | cat" });
-	try {
-		await shell.done;
-	} finally {
-		await shell.dispose();
-	}
+  const shell = await createShell({ runtime, script: "printf hello | cat" });
+  try {
+    await shell.done;
+  } finally {
+    await shell.dispose();
+  }
 } finally {
-	await cat.dispose();
+  await cat.dispose();
 }
 ```
 
@@ -86,11 +86,11 @@ The application still owns the Runtime. A failed install keeps its path reserved
 registration release and marker rollback have settled. Concurrent attempts conflict
 during rollback; afterward a fresh install may retry.
 
-CI's shell job builds and verifies the four utility guests once. Its artifact
+CI's native producer builds and verifies the four utility guests once. Its artifact
 contains the exact Git source SHA and each guest's SHA-256. Compatibility and
 browser builds check that receipt and the patched-libc/memory contract before
-staging those guests, without compiling utility binaries again. This utility-only
-handoff does not replace the separately owned CI-speed work on native/core builds.
+staging those guests, without compiling utility binaries again. The same-run
+[CI handoff](ci.md) also supplies the core, CLIs, fixture guests and WASI tests.
 Local builds without `BASH_WEB_UTILITY_ARTIFACTS` compile normally. Hosted cache
 hits still need confirmation from the publication run's logs.
 

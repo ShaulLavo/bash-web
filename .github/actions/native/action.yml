@@ -1,0 +1,11 @@
+name: Restore checked native binaries
+description: Reuse this run's source-exact CLI, WASI guests and utility receipts
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: native-${{ github.sha }}
+        path: .build/ci-native
+    - shell: bash
+      run: node scripts/ci-artifacts.ts stage .build/ci-native
