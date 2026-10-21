@@ -14,17 +14,65 @@
   },
   "graph": {
     "executor": [],
-    "io": ["executor"],
-    "process": ["executor", "io"],
-    "runtime": ["executor", "io", "process"],
-    "exec": ["executor"],
-    "state": ["executor", "exec"],
-    "parse": ["executor", "exec"],
-    "commands": ["parse", "exec"],
-    "ast_copy": ["executor", "exec", "parse"],
-    "arithmetic": ["executor", "exec", "state", "expand", "parse"],
-    "expand": ["executor", "exec", "state", "parse", "arithmetic", "ast_copy", "io", "interpreter"],
-    "builtins": ["executor", "exec", "state", "parse", "commands", "expand", "interpreter", "io"],
+    "io": [
+      "executor"
+    ],
+    "process": [
+      "executor",
+      "io"
+    ],
+    "runtime": [
+      "executor",
+      "io",
+      "process"
+    ],
+    "exec": [
+      "executor"
+    ],
+    "state": [
+      "executor",
+      "exec"
+    ],
+    "parse": [
+      "executor",
+      "exec"
+    ],
+    "commands": [
+      "parse",
+      "exec"
+    ],
+    "ast_copy": [
+      "executor",
+      "exec",
+      "parse"
+    ],
+    "arithmetic": [
+      "executor",
+      "exec",
+      "state",
+      "expand",
+      "parse"
+    ],
+    "expand": [
+      "executor",
+      "exec",
+      "state",
+      "parse",
+      "arithmetic",
+      "ast_copy",
+      "io",
+      "interpreter"
+    ],
+    "builtins": [
+      "executor",
+      "exec",
+      "state",
+      "parse",
+      "commands",
+      "expand",
+      "interpreter",
+      "io"
+    ],
     "interpreter": [
       "executor",
       "exec",
@@ -40,10 +88,18 @@
     ]
   },
   "testFixtureEdges": {
-    "builtins": ["process"],
-    "expand": ["process"],
-    "process": ["interpreter"],
-    "runtime": ["interpreter"]
+    "builtins": [
+      "process"
+    ],
+    "expand": [
+      "process"
+    ],
+    "process": [
+      "interpreter"
+    ],
+    "runtime": [
+      "interpreter"
+    ]
   },
   "compositionRoots": {
     "lib": [
@@ -61,13 +117,33 @@
       "parse",
       "commands"
     ],
-    "main": ["compat", "executor", "interpreter", "io", "process", "state"],
-    "runtime_main": ["terminal", "executor", "interpreter", "io", "runtime", "state"],
-    "compat": ["executor", "io", "process"],
+    "main": [
+      "compat",
+      "executor",
+      "interpreter",
+      "io",
+      "process",
+      "state"
+    ],
+    "runtime_main": [
+      "terminal",
+      "executor",
+      "interpreter",
+      "io",
+      "runtime",
+      "state"
+    ],
+    "compat": [
+      "executor",
+      "io",
+      "process"
+    ],
     "terminal": []
   },
   "rootInlineModules": {
-    "runtime_main": ["guest"]
+    "runtime_main": [
+      "guest"
+    ]
   },
   "rootReexports": {
     "Limits": "interpreter",
@@ -77,12 +153,16 @@
     {
       "name": "arithmetic",
       "kind": "layer",
-      "files": ["shell/engine/src/arithmetic.rs"]
+      "files": [
+        "shell/engine/src/arithmetic.rs"
+      ]
     },
     {
       "name": "ast_copy",
       "kind": "layer",
-      "files": ["shell/engine/src/ast_copy.rs"]
+      "files": [
+        "shell/engine/src/ast_copy.rs"
+      ]
     },
     {
       "name": "builtins",
@@ -100,22 +180,31 @@
     {
       "name": "commands",
       "kind": "layer",
-      "files": ["shell/engine/src/commands.rs", "shell/engine/src/commands/tests.rs"]
+      "files": [
+        "shell/engine/src/commands.rs",
+        "shell/engine/src/commands/tests.rs"
+      ]
     },
     {
       "name": "compat",
       "kind": "composition-root",
-      "files": ["shell/engine/src/compat.rs"]
+      "files": [
+        "shell/engine/src/compat.rs"
+      ]
     },
     {
       "name": "exec",
       "kind": "layer",
-      "files": ["shell/engine/src/exec.rs"]
+      "files": [
+        "shell/engine/src/exec.rs"
+      ]
     },
     {
       "name": "executor",
       "kind": "layer",
-      "files": ["shell/engine/src/executor.rs"]
+      "files": [
+        "shell/engine/src/executor.rs"
+      ]
     },
     {
       "name": "expand",
@@ -152,27 +241,38 @@
     {
       "name": "io",
       "kind": "layer",
-      "files": ["shell/engine/src/io.rs"]
+      "files": [
+        "shell/engine/src/io.rs"
+      ]
     },
     {
       "name": "lib",
       "kind": "composition-root",
-      "files": ["shell/engine/src/lib.rs"]
+      "files": [
+        "shell/engine/src/lib.rs"
+      ]
     },
     {
       "name": "main",
       "kind": "composition-root",
-      "files": ["shell/engine/src/main.rs"]
+      "files": [
+        "shell/engine/src/main.rs"
+      ]
     },
     {
       "name": "parse",
       "kind": "layer",
-      "files": ["shell/engine/src/parse.rs", "shell/engine/src/parse/tests.rs"]
+      "files": [
+        "shell/engine/src/parse.rs",
+        "shell/engine/src/parse/tests.rs"
+      ]
     },
     {
       "name": "process",
       "kind": "layer",
-      "files": ["shell/engine/src/process.rs"]
+      "files": [
+        "shell/engine/src/process.rs"
+      ]
     },
     {
       "name": "runtime",
@@ -186,17 +286,24 @@
     {
       "name": "runtime_main",
       "kind": "composition-root",
-      "files": ["shell/engine/src/runtime_main.rs"]
+      "files": [
+        "shell/engine/src/runtime_main.rs"
+      ]
     },
     {
       "name": "state",
       "kind": "layer",
-      "files": ["shell/engine/src/state.rs", "shell/engine/src/state/bindings_tests.rs"]
+      "files": [
+        "shell/engine/src/state.rs",
+        "shell/engine/src/state/bindings_tests.rs"
+      ]
     },
     {
       "name": "terminal",
       "kind": "composition-root",
-      "files": ["shell/engine/src/terminal.rs"]
+      "files": [
+        "shell/engine/src/terminal.rs"
+      ]
     }
   ],
   "edges": [
