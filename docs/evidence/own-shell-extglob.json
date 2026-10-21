@@ -1,0 +1,167 @@
+{
+  "schema": 1,
+  "scope": "Positive @/?/+/* extglob groups in case and conditional full-pattern matching only",
+  "baseCommit": "361992834804c5d9325022ddc3580f5e9899bcee",
+  "verifiedSourceCommit": "5c04da7e8640892b357650da9e430ebd105cd3fd",
+  "identity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "records": 9221,
+  "scored": 5792,
+  "skipped": 3429,
+  "corpora": {
+    "oils": {
+      "before": 1015,
+      "after": 1037,
+      "gained": [
+        "oils:extglob-match:8",
+        "oils:extglob-match:16",
+        "oils:extglob-match:26",
+        "oils:extglob-match:53",
+        "oils:extglob-match:75",
+        "oils:extglob-match:92",
+        "oils:extglob-match:101",
+        "oils:extglob-match:109",
+        "oils:extglob-match:117",
+        "oils:extglob-match:125",
+        "oils:extglob-match:141",
+        "oils:extglob-match:151",
+        "oils:extglob-match:161",
+        "oils:extglob-match:170",
+        "oils:extglob-match:178",
+        "oils:extglob-match:186",
+        "oils:extglob-match:198",
+        "oils:extglob-match:207",
+        "oils:extglob-match:220",
+        "oils:extglob-match:295",
+        "oils:extglob-match:334",
+        "oils:case_:211"
+      ],
+      "lost": [],
+      "newlyFailing": []
+    },
+    "brush-suite": {
+      "before": 1008,
+      "after": 1014,
+      "gained": [
+        "brush-suite:extended_tests:19",
+        "brush-suite:line_continuation:6",
+        "brush-suite:options/set-e:139",
+        "brush-suite:patterns/patterns:4",
+        "brush-suite:word_expansion/command_substitution:48",
+        "brush-suite:word_expansion/command_substitution:49"
+      ],
+      "lost": [],
+      "newlyFailing": []
+    },
+    "bashkit-suite": {
+      "before": 1413,
+      "after": 1429,
+      "gained": [
+        "bashkit-suite:bashbox-shopt-pattern:92",
+        "bashkit-suite:blackbox-exploration:861",
+        "bashkit-suite:blackbox-exploration:868",
+        "bashkit-suite:blackbox-exploration:875",
+        "bashkit-suite:blackbox-exploration:882",
+        "bashkit-suite:extglob:1",
+        "bashkit-suite:extglob:9",
+        "bashkit-suite:extglob:17",
+        "bashkit-suite:extglob:25",
+        "bashkit-suite:extglob:33",
+        "bashkit-suite:extglob:41",
+        "bashkit-suite:extglob:49",
+        "bashkit-suite:extglob:57",
+        "bashkit-suite:extglob:65",
+        "bashkit-suite:extglob:73",
+        "bashkit-suite:extglob:97"
+      ],
+      "lost": [],
+      "newlyFailing": []
+    }
+  },
+  "baselineUpdate": "Only proven gained outcomes and derived counts; historical diagnostics preserved exactly",
+  "production": {
+    "runtime": "real Waffle, production shell-runtime guest",
+    "jobs": 1,
+    "deadlineChanged": false,
+    "guestSha256": "6c17504707eb9d81d17362c886d42202eab96b870852083ac2df04c2eacb89a3",
+    "resultSha256": "1b535bc56bc17d8caa38e524417ce3405bda074aa519df994a027fcd090f8fae"
+  },
+  "verification": {
+    "nativeTests": 1309,
+    "wasiTests": 1289,
+    "scoreboardTests": 202,
+    "ciTests": 105,
+    "guestBuildTests": 18,
+    "layerTests": 34,
+    "positiveProductionControls": {
+      "beforePass": 3,
+      "beforeFail": 27,
+      "afterPass": 30,
+      "afterFail": 0
+    },
+    "deepNestedGroups": 4096,
+    "workStorageAndCancellation": "pass",
+    "rustHostWasiClippy": "pass",
+    "jsQuality": "pass",
+    "layerViolations": {
+      "production": 0,
+      "testOnly": 0
+    }
+  },
+  "sizes": {
+    "browserRuntime": {
+      "before": {
+        "raw": 1819673,
+        "gzip9": 529997,
+        "brotli11": 410766,
+        "sha256": "1c0b3f532b39a070a1db54fa03254af909c56b3757fddef6aca0f1cef9e638fa"
+      },
+      "after": {
+        "raw": 1830639,
+        "gzip9": 533558,
+        "brotli11": 413011,
+        "sha256": "6c17504707eb9d81d17362c886d42202eab96b870852083ac2df04c2eacb89a3"
+      },
+      "delta": {
+        "raw": 10966,
+        "gzip9": 3561,
+        "brotli11": 2245
+      }
+    },
+    "standaloneCoreBrotli11": 430295,
+    "limit": 1000000,
+    "addOnsBrotli11": {
+      "cat": 56972,
+      "grep": 267619,
+      "mkdir": 55675,
+      "seq": 53991
+    },
+    "addOnDeltas": "not separately measured; no add-on source changes"
+  },
+  "deferred": {
+    "negativeGroupsAndConditionalSyntax": [
+      "oils:extglob-match:133",
+      "oils:extglob-match:255",
+      "oils:extglob-match:266",
+      "oils:extglob-match:286",
+      "bashkit-suite:extglob:81",
+      "bashkit-suite:extglob:89"
+    ],
+    "scalarTrimReplacement": [
+      "oils:extglob-match:349",
+      "oils:extglob-match:361"
+    ],
+    "wordPathnameAndNoglob": [
+      "oils:extglob-files:305",
+      "oils:extglob-files:345"
+    ],
+    "additionalYshBuiltinAndUtilityPrerequisites": [
+      "oils:extglob-files:293"
+    ]
+  }
+}
