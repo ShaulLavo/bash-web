@@ -515,7 +515,7 @@ fn async_identity_obeys_nounset_before_launch_and_is_bound_after_completion() {
         b"/usr/bin/bash: line 1: !: unbound variable\n"
     );
     assert_eq!(rig.run(r#"false & pid=$!; wait "$pid"; args "$?" "$!""#), 0);
-    let pid = rig.shell.state().borrow().bindings()["pid"].to_string();
+    let pid = rig.value("pid").unwrap();
     assert_eq!(*rig.calls.borrow(), [vec!["1".to_owned(), pid]]);
 }
 
@@ -592,7 +592,7 @@ fn bounded_wait_history_evicts_completed_handles_without_evicting_pending_jobs()
     for round in 0..32 {
         assert_eq!(rig.run(r#"false & pid=$!; wait "$pid"; wait "$pid""#), 1);
         if round == 0 {
-            oldest = rig.shell.state().borrow().bindings()["pid"].to_string();
+            oldest = rig.value("pid").unwrap();
         }
         assert_eq!(rig.shell.background_jobs(), 1);
         assert_eq!(rig.host.active_count(), 1);
@@ -626,7 +626,7 @@ fn async_identity_expands_in_nested_operands_and_arithmetic_without_reparsing_a_
         rig.run(r#"false & pid=$!; args "${u:-$!}" "${u:-${!}}" "$(( $! > 0 ))"; wait "$pid""#),
         1
     );
-    let pid = rig.shell.state().borrow().bindings()["pid"].to_string();
+    let pid = rig.value("pid").unwrap();
     assert_eq!(
         *rig.calls.borrow(),
         [vec![pid.clone(), pid, "1".to_owned()]]
@@ -648,7 +648,7 @@ fn braced_async_identity_is_empty_before_launch_and_readable_under_nounset_after
         rig.run(r#"false & pid=$!; set -u; args "$!" "${!}" "${u:-${!}}"; wait "$pid""#),
         1
     );
-    let pid = rig.shell.state().borrow().bindings()["pid"].to_string();
+    let pid = rig.value("pid").unwrap();
     assert_eq!(*rig.calls.borrow(), [vec![pid.clone(), pid.clone(), pid]]);
 
     let rig = Rig::new(Limits::default());
@@ -674,7 +674,7 @@ fn async_scalar_operators_test_presence_lazily_in_direct_and_nested_operands() {
         assert_eq!(rig.run(
             r#"false & pid=$!; args "${!-fallback}" "${!:-fallback}" "${!+set}" "${!:+set}" "${u:-${!+set}}" "${!:=unused}" "${!:?$missing}"; wait "$pid""#
         ), 1);
-        let pid = rig.shell.state().borrow().bindings()["pid"].to_string();
+        let pid = rig.value("pid").unwrap();
         assert_eq!(
             rig.calls.borrow()[1],
             [

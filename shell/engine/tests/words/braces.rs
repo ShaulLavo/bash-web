@@ -365,15 +365,7 @@ fn brace_scanning_range_emission_and_products_cooperate_with_cancellation() {
             ))
             .unwrap();
         rig.drive_until_variable("started", "yes");
-        assert_eq!(
-            rig.shell
-                .state()
-                .borrow()
-                .bindings()
-                .get("scope")
-                .map(|value| value.as_str()),
-            Some("inside"),
-        );
+        assert_eq!(rig.value("scope").as_deref(), Some("inside"),);
         let peer = rig.ex.spawn(async { 42 });
         rig.ex.drive(4);
         assert!(peer.is_finished(), "peer starved for {word}");

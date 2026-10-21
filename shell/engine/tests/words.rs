@@ -62,6 +62,40 @@ impl Rig {
             fs,
         }
     }
+    fn value(&self, name: &str) -> Option<String> {
+        self.shell
+            .state()
+            .borrow()
+            .bindings()
+            .get(name)
+            .map(|value| value.as_str().to_owned())
+    }
+    fn drive_until_value(&self, turns: usize, name: &str, expected: &str) {
+        for _ in 0..turns {
+            self.ex.drive(1);
+            if self.value(name).as_deref() == Some(expected) {
+                break;
+            }
+        }
+        assert_eq!(self.value(name).as_deref(), Some(expected));
+    }
+    fn start_until_value(
+        &self,
+        source: &str,
+        turns: usize,
+        name: &str,
+        expected: &str,
+    ) -> JoinHandle<i32> {
+        let job = self.shell.start(source).unwrap();
+        self.drive_until_value(turns, name, expected);
+        job
+    }
+    fn interrupt_without_calls(&self, job: JoinHandle<i32>) {
+        assert!(!job.is_finished());
+        self.shell.interrupt();
+        assert_eq!(self.finish(job), 130);
+        assert!(self.calls.borrow().is_empty());
+    }
     fn finish(&self, job: JoinHandle<i32>) -> i32 {
         for _ in 0..100_000 {
             if job.is_finished() {
@@ -1179,15 +1213,7 @@ fn trim_selected_substitution_patterns_reach_default_assignment_and_error_operan
             rig.variable("v", "abc");
             assert_eq!(rig.run(&format!("args {form}")), 0, "{form}");
             assert_eq!(*rig.calls.borrow(), &[vec!["pattern"], vec!["bc"]]);
-            assert_eq!(
-                rig.shell
-                    .state()
-                    .borrow()
-                    .bindings()
-                    .get("u")
-                    .map(|value| value.as_str()),
-                assigned.then_some("bc"),
-            );
+            assert_eq!(rig.value("u").as_deref(), assigned.then_some("bc"),);
         }
         let rig = Rig::new(Limits::default());
         rig.variable("v", "abc");
@@ -1959,24 +1985,7 @@ fn long_splitting_yields_and_cancellation_restores_frames() {
         .shell
         .start("f() { local IFS=' '; args $v; }; f inner")
         .unwrap();
-    for _ in 0..200 {
-        rig.ex.drive(1);
-        if rig
-            .shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("IFS")
-            .map(|value| value.as_str())
-            == Some(" ")
-        {
-            break;
-        }
-    }
-    assert_eq!(
-        rig.shell.state().borrow().bindings().get("IFS").unwrap(),
-        " "
-    );
+    rig.drive_until_value(200, "IFS", " ");
     let peer = rig.ex.spawn(async { 42 });
     rig.ex.drive(4);
     assert!(
@@ -2233,15 +2242,7 @@ fn selected_operand_scanning_yields_and_cancellation_restores_local_frames() {
     let job = rig.shell.start(&source).unwrap();
     for _ in 0..200 {
         rig.ex.drive(1);
-        if rig
-            .shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("v")
-            .map(|value| value.as_str())
-            == Some("inner")
-        {
+        if rig.value("v").as_deref() == Some("inner") {
             break;
         }
     }
@@ -2301,15 +2302,7 @@ fn cancellation_during_nested_token_admission_never_dispatches() {
     let job = rig.shell.start(&source).unwrap();
     for _ in 0..100 {
         rig.ex.drive(1);
-        if rig
-            .shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("v")
-            .map(|value| value.as_str())
-            == Some("inner")
-        {
+        if rig.value("v").as_deref() == Some("inner") {
             break;
         }
     }
@@ -2821,15 +2814,7 @@ fn deferred_list_separator_replay_yields_and_cancels_after_the_ifs_write() {
     let job = rig.shell.start(&source).unwrap();
     for _ in 0..1000 {
         rig.ex.drive(1);
-        if rig
-            .shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("IFS")
-            .map(|value| value.as_str())
-            == Some(":")
-        {
+        if rig.value("IFS").as_deref() == Some(":") {
             break;
         }
     }
@@ -2901,24 +2886,7 @@ fn deferred_ifs_splitting_yields_and_cancels_after_the_parameter_write() {
         .shell
         .start("f() { local IFS=; args ${v}${IFS:= }; }; f")
         .unwrap();
-    for _ in 0..1000 {
-        rig.ex.drive(1);
-        if rig
-            .shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("IFS")
-            .map(|value| value.as_str())
-            == Some(" ")
-        {
-            break;
-        }
-    }
-    assert_eq!(
-        rig.shell.state().borrow().bindings().get("IFS").unwrap(),
-        " "
-    );
+    rig.drive_until_value(1000, "IFS", " ");
     let peer = rig.ex.spawn(async { 42 });
     rig.ex.drive(4);
     assert!(peer.is_finished());
@@ -3470,27 +3438,9 @@ fn cancellation_keeps_completed_rhs_effects_and_restores_local_prefix_frames() {
         "f() {{ local v=; a=${{saved:=yes}} b=${{v:=inner}} c=${{long:={}}} args; }}; f arg",
         "x".repeat(100_000)
     );
-    let job = rig.shell.start(&source).unwrap();
-    for _ in 0..500 {
-        rig.ex.drive(1);
-        if rig.shell.state().borrow().bindings().contains_key("saved") {
-            break;
-        }
-    }
-    assert_eq!(
-        rig.shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("saved")
-            .map(|value| value.as_str()),
-        Some("yes")
-    );
+    let job = rig.start_until_value(&source, 500, "saved", "yes");
     rig.ex.drive(4);
-    assert!(!job.is_finished());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert!(rig.calls.borrow().is_empty());
+    rig.interrupt_without_calls(job);
     assert_eq!(rig.run(r#"args "$saved" "$v" "$a" "$b" "$long" "$#""#), 0);
     assert_eq!(
         *rig.calls.borrow(),
@@ -3532,26 +3482,8 @@ fn cancellation_during_error_operand_keeps_effects_without_partial_diagnostic() 
         "f() {{ local v=inside; args ${{u:?${{saved:=yes}}{}}}; }}; f arg",
         "x".repeat(100_000)
     );
-    let job = rig.shell.start(&source).unwrap();
-    for _ in 0..500 {
-        rig.ex.drive(1);
-        if rig.shell.state().borrow().bindings().contains_key("saved") {
-            break;
-        }
-    }
-    assert_eq!(
-        rig.shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("saved")
-            .map(|value| value.as_str()),
-        Some("yes")
-    );
-    assert!(!job.is_finished());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert!(rig.calls.borrow().is_empty());
+    let job = rig.start_until_value(&source, 500, "saved", "yes");
+    rig.interrupt_without_calls(job);
     assert!(rig.errors.bytes().is_empty());
     assert_eq!(rig.run(r#"args "$saved" "$v" "$#""#), 0);
     assert_eq!(*rig.calls.borrow(), &[vec!["yes", "", "0"]]);
@@ -4030,22 +3962,7 @@ fn cancellation_during_redirect_target_keeps_effects_and_restores_frames() {
         "f() {{ local v=inner; echo body 2>&1 >${{u:?${{saved:=yes}}{}}}; }}; f arg",
         "x".repeat(100_000)
     );
-    let job = rig.shell.start(&source).unwrap();
-    for _ in 0..500 {
-        rig.ex.drive(1);
-        if rig.shell.state().borrow().bindings().contains_key("saved") {
-            break;
-        }
-    }
-    assert_eq!(
-        rig.shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("saved")
-            .map(|value| value.as_str()),
-        Some("yes")
-    );
+    let job = rig.start_until_value(&source, 500, "saved", "yes");
     assert!(!job.is_finished());
     rig.shell.interrupt();
     assert_eq!(rig.finish(job), 130);

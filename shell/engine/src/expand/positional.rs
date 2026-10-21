@@ -9,11 +9,7 @@ impl Expansion<'_> {
         state: &SharedState,
         protected: bool,
     ) -> Result<(), Error> {
-        crate::state::State::admit_scalar_access(state, name, self.cancel, self.work).await?;
-        let index =
-            arithmetic::evaluate(index, state, self.cancel, self.raw_remaining, self.work).await?;
-        self.ifs = None;
-        self.ifs_changed = true;
+        let index = self.indexed_index(name, index, state).await?;
         let value = {
             let state = state.borrow();
             let value = state.array_element(name, index);
@@ -42,8 +38,8 @@ impl Expansion<'_> {
         state: &SharedState,
         protected: bool,
     ) -> Result<(), Error> {
-        crate::state::State::admit_scalar_access(state, name, self.cancel, self.work).await?;
         if matches!(index, "@" | "*") {
+            crate::state::State::admit_scalar_access(state, name, self.cancel, self.work).await?;
             self.indexed_require_bound(name, None, state)?;
             let count = if name == "PIPESTATUS" {
                 state.borrow().pipeline_status().len()
@@ -59,10 +55,7 @@ impl Expansion<'_> {
                 )
                 .await;
         }
-        let index =
-            arithmetic::evaluate(index, state, self.cancel, self.raw_remaining, self.work).await?;
-        self.ifs = None;
-        self.ifs_changed = true;
+        let index = self.indexed_index(name, index, state).await?;
         self.indexed_require_bound(name, Some(index), state)?;
         let (value, utf8) = {
             let state = state.borrow();
@@ -78,11 +71,7 @@ impl Expansion<'_> {
                 .is_some_and(super::utf8_locale);
             (value.to_owned(), utf8)
         };
-        let mut count = 0usize;
-        for byte in value.bytes() {
-            self.work.checkpoint(self.cancel).await?;
-            count += usize::from(!utf8 || byte & 0xc0 != 0x80);
-        }
+        let count = self.character_count(&value, utf8).await?;
         self.work.admit_storage(20)?;
         self.segment(
             &count.to_string(),
@@ -90,6 +79,20 @@ impl Expansion<'_> {
             protected,
         )
         .await
+    }
+
+    async fn indexed_index(
+        &mut self,
+        name: &str,
+        index: &str,
+        state: &SharedState,
+    ) -> Result<i64, Error> {
+        crate::state::State::admit_scalar_access(state, name, self.cancel, self.work).await?;
+        let index =
+            arithmetic::evaluate(index, state, self.cancel, self.raw_remaining, self.work).await?;
+        self.ifs = None;
+        self.ifs_changed = true;
+        Ok(index)
     }
 
     fn indexed_require_bound(

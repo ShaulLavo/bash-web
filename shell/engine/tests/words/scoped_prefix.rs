@@ -60,24 +60,8 @@ fn builtin_prefixes_preserve_local_export_and_readonly_rules() {
             .contains("locked")
     );
     assert_eq!(rig.run("IFS=temporary locked=changed read line < input"), 1);
-    assert_eq!(
-        rig.shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("IFS")
-            .map(|value| value.as_str()),
-        Some("global")
-    );
-    assert_eq!(
-        rig.shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("locked")
-            .map(|value| value.as_str()),
-        Some("kept")
-    );
+    assert_eq!(rig.value("IFS").as_deref(), Some("global"));
+    assert_eq!(rig.value("locked").as_deref(), Some("kept"));
 }
 
 #[test]

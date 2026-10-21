@@ -1228,11 +1228,7 @@ impl Expansion<'_> {
                 .find(|v| !v.is_empty());
             (value, locale.is_some_and(|v| utf8_locale(v)))
         };
-        let mut count = 0usize;
-        for byte in value.bytes() {
-            self.work.checkpoint(self.cancel).await?;
-            count += usize::from(!utf8 || byte & 0xc0 != 0x80);
-        }
+        let count = self.character_count(&value, utf8).await?;
         let offset =
             crate::arithmetic::evaluate(offset, state, self.cancel, self.raw_remaining, self.work)
                 .await?;
@@ -1295,6 +1291,16 @@ impl Expansion<'_> {
         self.segment(result, Protection::expansion(protected, state), protected)
             .await
     }
+    async fn character_count(&mut self, value: &str, utf8: bool) -> Result<usize, Error> {
+        let mut count = 0usize;
+        for byte in value.bytes() {
+            self.work.checkpoint(self.cancel).await?;
+            // Rust strings are valid UTF-8. C/POSIX count every byte.
+            count += usize::from(!utf8 || byte & 0xc0 != 0x80);
+        }
+        Ok(count)
+    }
+
     async fn length(
         &mut self,
         name: &str,
@@ -1327,13 +1333,7 @@ impl Expansion<'_> {
                 .find(|value| !value.is_empty());
             (value, locale.is_some_and(|value| utf8_locale(value)))
         };
-        let mut count = 0usize;
-        for byte in value.bytes() {
-            self.work.checkpoint(self.cancel).await?;
-            // Rust strings are valid UTF-8. Count each leading byte as one
-            // scalar, including combining marks; C/POSIX count every byte.
-            count += usize::from(!utf8 || byte & 0xc0 != 0x80);
-        }
+        let count = self.character_count(&value, utf8).await?;
         if self.pattern_snapshots {
             self.work.admit_storage(20)?;
         }
@@ -2030,27 +2030,16 @@ fn list_value(
     work: &mut Work,
 ) -> Result<String, Error> {
     let s = state.borrow();
-    match part {
-        WordPart::Variable(_) => {
-            let value = s.positional().get(index).map(String::as_str).unwrap_or("");
-            if value.len() > max {
-                return Err(2.into());
-            }
-            work.admit_storage(value.len())?;
-            bounded(Cow::Borrowed(value), max)
-        }
+    let value = match part {
+        WordPart::Variable(_) => s.positional().get(index).map(String::as_str).unwrap_or(""),
         WordPart::ArrayAccess { name, .. } if name != "PIPESTATUS" => {
             let (next, value) = s.array_next(name, *array_index).ok_or(2)?;
             *array_index = Some(next);
-            if value.len() > max {
-                return Err(2.into());
-            }
-            work.admit_storage(value.len())?;
-            bounded(Cow::Borrowed(value), max)
+            value
         }
         WordPart::ArrayAccess { .. } => {
             work.admit_storage(20)?;
-            bounded(
+            return bounded(
                 Cow::Owned(
                     s.pipeline_status()
                         .get(index)
@@ -2058,10 +2047,15 @@ fn list_value(
                         .unwrap_or_default(),
                 ),
                 max,
-            )
+            );
         }
-        _ => Err(2.into()),
+        _ => return Err(2.into()),
+    };
+    if value.len() > max {
+        return Err(2.into());
     }
+    work.admit_storage(value.len())?;
+    bounded(Cow::Borrowed(value), max)
 }
 fn is_list(part: &WordPart) -> bool {
     match part {
