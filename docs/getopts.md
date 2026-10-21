@@ -67,16 +67,30 @@ The complete frozen replay at `339a5b9` also gained 28 Oils, 43 Brush and
 23 Bashkit cases with zero losses across all 9,221 records and 5,792 scored
 cases. Its exit 1 reported exactly 94 stale gained baseline memberships; the
 complete result comparison confirmed the unchanged identities and membership.
-A second complete replay at normal-main merge `0c50cc5`, based on `753c00c`,
+The previous complete replay at normal-main merge `0c50cc5`, based on `753c00c`,
 records 1051 Oils, 1055 Brush and 1438 Bashkit passes. It gains the same 94
-cases relative to that main and loses none. The committed baseline is the
-whole merged-source result, not selected hunks. The runner again exited 1 only
-for those gained memberships before this refresh.
+cases relative to that main and loses none. Its evidence remains separately
+retained under `integration/`.
+
+The current complete replay at normal-main merge `38ebb98`, based on `2f0bf11`,
+records 1051 Oils, 1057 Brush and 1443 Bashkit passes. It gains the same 94
+cases against 1023/1014/1420 main passes and loses none. The committed baseline
+is the whole merged-source result, not selected hunks. The runner exited 1 only
+for those gained memberships before refresh. All 9,221 records and 5,792 scored
+cases retain their frozen identities, exclusions and classification. The three
+inherited timeout failures remain unchanged, with no new abnormal outcomes or
+gains from resource events. Exact IDs and observations are retained in
+`integration-2f0/abnormal-outcomes.json` beside the complete proof.
 
 Focused controls include publication failure preserving every binding and the
 active cluster, successful 360448-byte attached arguments, and cancellation with
-recovery. The merged source passes 1328 native and 1308 WASI tests, Rust and
-JS quality checks, exact/structural duplicate gates and layer controls.
+recovery. The current merged source passes 1338 native and 1318 WASI tests, Rust and
+JS quality checks, exact/structural duplicate gates, layer controls and the
+impacted file-substitution and CI-workflow controls. All 74 probes retain 61
+exact matches with no losses. Scanner, state and shared writer source remain
+identical to independently approved repair checkpoint `339a5b9`; that approval
+is bounded to the repairs and later small deltas, not full-family or merge
+approval.
 
 Exact binding and own-option line prefixes remain unimplemented. Six
 whole-output checks are deferred by a missing shared source-provenance contract;
