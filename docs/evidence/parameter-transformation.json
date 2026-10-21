@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "status": "Measured membership update, review-ready. Parent owns independent review, hosted gates, merge and exact-main acceptance.",
+  "acceptedBase": "361992834804c5d9325022ddc3580f5e9899bcee",
+  "implementer": "Claude (claude-opus-5-5) after a Sol provider refusal; review stays on gpt-6.1-sol",
+  "versions": {
+    "root": "0.0.76",
+    "engine": "0.0.43"
+  },
+  "classification": "Original local Rust implementation observed against GNU Bash 5.3.15. No copied or adapted upstream implementation.",
+  "scope": "Scalar ${name@op} for Q, E, u, U, L, K, k, A and a. Arrays, ${@@op}, indirect names, @P and nested operand transformations stay unsupported.",
+  "sourceSha256": {
+    "shell/engine/src/expand.rs": "0a9212241ffed002163754733486589eed12270ed4d135cc857a890c628de0e2",
+    "shell/engine/src/expand/transformation.rs": "e9217213b1fa39420e2158fdedd0a9fcfcb5b48b3ee57026dab82575d151d2e2",
+    "shell/engine/src/expand/printable.rs": "a29d11692b0e214158d6decbbd0e84be8ca368b256278e0e70d1ceadf1089685",
+    "shell/engine/src/state.rs": "85b5996708e15453fa03c966dd8d210abe49b8dcf3f2458420284320ff5ff5b4",
+    "shell/engine/src/builtins/printf/quoting.rs": "5a92859fe3aab4602a567426af629d75c169568d6aa225581e99e67059082ed4"
+  },
+  "replay": {
+    "harness": "npm run compat:shell:prebuilt, BASH_COMPAT_MODE=frozen, RECORD=0, JOBS=2, production shell-runtime.wasm on real Waffle",
+    "records": 9221,
+    "result": "18 gained, 0 lost, no nonpass outcome regressed; the strict comparator exits 1 on the new passes only after saving the full result"
+  },
+  "corpora": {
+    "oils": {
+      "before": 1015,
+      "after": 1022,
+      "gained": [
+        "oils:var-op-bash:163",
+        "oils:var-op-bash:182",
+        "oils:var-op-bash:264",
+        "oils:var-op-bash:381",
+        "oils:var-op-bash:410",
+        "oils:builtin-printf:95",
+        "oils:serialize:193"
+      ],
+      "lost": []
+    },
+    "brush-suite": {
+      "before": 1008,
+      "after": 1013,
+      "gained": [
+        "brush-suite:nameref:102",
+        "brush-suite:word_expansion/param_transformation:5",
+        "brush-suite:word_expansion/param_transformation:9",
+        "brush-suite:word_expansion/param_transformation:10",
+        "brush-suite:word_expansion/param_transformation:12"
+      ],
+      "lost": []
+    },
+    "bashkit-suite": {
+      "before": 1413,
+      "after": 1419,
+      "gained": [
+        "bashkit-suite:variables:377",
+        "bashkit-suite:variables:384",
+        "bashkit-suite:variables:391",
+        "bashkit-suite:variables:398",
+        "bashkit-suite:variables:405",
+        "bashkit-suite:variables:795"
+      ],
+      "lost": []
+    }
+  },
+  "shellRuntimeWasmSha256": "b4451677d172cacd3896f4d23d8eac737f8f25f0ab0e607f5bb4f63ca76568bf"
+}

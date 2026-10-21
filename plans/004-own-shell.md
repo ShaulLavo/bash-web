@@ -2014,3 +2014,32 @@ See [the behavior notes](../docs/printf-escaped-fields.md) and
 [measurement receipt](../docs/evidence/printf-escaped-fields.json). The complete
 saved replay, original exit, before-and-after controls, offline comparator and
 cleanup receipt remain in `/work/reports/bash-web/hill-climb/printf-b-fields`.
+
+## Scalar parameter transformations, 2026-10-21
+
+Approved bounded unit, implemented by Claude after a Sol provider refusal. Review
+stays on Sol; the expansion track owns review, merge and exact-main acceptance.
+
+`${name@op}` now supports Q, E, u, U, L, K, k, A and a on scalar, nameref, special
+and positional names, in the new `expand/transformation.rs`. Quoting matches
+Bash's reusable quoting, `@E` matches `$'...'` decoding, case operators reuse the
+existing locale mapper and `@A`/`@a` read readonly and export state. The locale
+printability classifier moved unchanged from printf quoting into `expand` so both
+share it. Arrays, `${@@op}`, indirect names, `@P` and transformations nested in
+other operands remain unsupported and fail closed.
+
+One frozen production-Waffle replay against main
+`361992834804c5d9325022ddc3580f5e9899bcee` preserves all 9,221 IDs, frozen
+identities and exclusions, with zero lost passes:
+
+- Oils: 1,015 to 1,022, gained `oils:var-op-bash:163`, `:182`, `:264`, `:381`,
+  `:410`, `oils:builtin-printf:95`, `oils:serialize:193`.
+- Brush suite: 1,008 to 1,013, gained `brush-suite:nameref:102` and
+  `word_expansion/param_transformation:5`, `:9`, `:10`, `:12`.
+- Bashkit suite: 1,413 to 1,419, gained `bashkit-suite:variables:377`, `:384`,
+  `:391`, `:398`, `:405`, `:795`.
+
+Remaining scored transformation failures need arrays, positional lists, integer
+or case attributes, `@P` or indirect names. See
+[the behavior notes](../docs/parameter-transformation.md) and
+[the receipt](../docs/evidence/parameter-transformation.json).
