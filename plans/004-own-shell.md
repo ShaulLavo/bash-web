@@ -1836,8 +1836,7 @@ in the report directory under `review-fixes-r1-darwin*`.
 
 ## Printf scalar assignment, 2026-10-21
 
-Approved. Review-ready implementation; parent owns independent correctness and
-comment reviews, hosted CI, fixes coordination, merge and exact-main acceptance.
+Approved.
 
 Measured source `286dd4cd0bc59410bda90348992044812a208dd3`, accepted base
 `50ab6a7f3cdf6c4c7a7e1ad875d4e804e76da5fd`. Plain and attached `printf -v` capture
@@ -1886,8 +1885,7 @@ temporary command prefix.
 `PrefixFrame::builtin` in `shell/engine/src/state.rs` keeps private restoration
 saves and its drop restores them. `State::assign_parameter` updates expansion
 saves, not builtin saves. There is no selective durable-write operation for the
-builtin guard. This unit deliberately preserves that shared binding contract
-rather than changing interpreter ownership. A follow-up should give the guard
+builtin guard. A follow-up should give the guard
 an explicit way to retain a builtin's successful writes, with admission,
 cancellation, readonly, local/nameref and IFS tests. None of this unit's eleven
 candidate observations uses a temporary command prefix. Invalid UTF-8, arrays
