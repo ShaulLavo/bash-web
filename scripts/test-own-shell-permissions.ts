@@ -279,10 +279,10 @@ test("grep descriptor operands enforce the inode's current permissions", () =>
     await file(runtime, fs, "/permissions/grep-denied", 0o200);
     const deniedRead = await shell(
       runtime,
-      "exec 3>/permissions/grep-denied; grep payload /dev/fd/3; printf '%s\\n' \"$?\"",
+      "grep payload /permissions/grep-denied; printf '%s\\n' \"$?\"; exec 3>/permissions/grep-denied; grep payload /dev/fd/3; printf '%s\\n' \"$?\"",
     );
     assert.equal(deniedRead.status, 0);
-    assert.equal(deniedRead.stdout, "2\n");
+    assert.equal(deniedRead.stdout, "2\n2\n");
     assert.match(deniedRead.stderr, /^grep: /);
     await file(runtime, fs, "/permissions/grep-readable", 0o600);
     const allowedRead = await shell(
