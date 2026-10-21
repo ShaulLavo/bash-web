@@ -79,16 +79,7 @@ fn getopts_failed_argument_admission_leaves_cursor_and_bindings() {
     });
     assert_eq!(rig.run(&format!("set -- '-a{}'", "x".repeat(3500))), 0);
     assert_eq!(rig.run("getopts a: result"), 2);
-    assert_eq!(
-        rig.run("echo \"$OPTIND:${result-unset}:${OPTARG-unset}\""),
-        0
-    );
-    assert_eq!(rig.output.bytes(), b"1:unset:unset\n");
-    assert_eq!(
-        rig.run("getopts a result -a; echo \"$?:$result:$OPTIND\""),
-        0
-    );
-    assert!(rig.output.bytes().ends_with(b"0:a:2\n"));
+    check_getopts_recovery(&rig);
 }
 
 #[test]
@@ -102,16 +93,7 @@ fn getopts_large_positional_scan_is_cancellable_and_refunded() {
     assert!(!job.is_finished());
     rig.shell.interrupt();
     assert_eq!(rig.finish(job), 130);
-    assert_eq!(
-        rig.run("echo \"$OPTIND:${result-unset}:${OPTARG-unset}\""),
-        0
-    );
-    assert_eq!(rig.output.bytes(), b"1:unset:unset\n");
-    assert_eq!(
-        rig.run("getopts a result -a; echo \"$?:$result:$OPTIND\""),
-        0
-    );
-    assert!(rig.output.bytes().ends_with(b"0:a:2\n"));
+    check_getopts_recovery(&rig);
 }
 
 #[test]
@@ -159,4 +141,17 @@ fn getopts_empty_and_unset_opterr_keep_diagnostics_enabled() {
         rig.errors.bytes(),
         b"/usr/bin/bash: illegal option -- x\n/usr/bin/bash: illegal option -- y\n"
     );
+}
+
+fn check_getopts_recovery(rig: &Rig) {
+    assert_eq!(
+        rig.run("echo \"$OPTIND:${result-unset}:${OPTARG-unset}\""),
+        0
+    );
+    assert_eq!(rig.output.bytes(), b"1:unset:unset\n");
+    assert_eq!(
+        rig.run("getopts a result -a; echo \"$?:$result:$OPTIND\""),
+        0
+    );
+    assert!(rig.output.bytes().ends_with(b"0:a:2\n"));
 }

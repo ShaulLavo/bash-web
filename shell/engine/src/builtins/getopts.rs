@@ -1,6 +1,6 @@
 //! Option scanning adapted from Bashkit's execute_getopts at 491c3281.
 //! The bounded argument snapshots, binding publication and cursor owner are original.
-use super::{diagnose, error_status, valid_name, write};
+use super::{diagnose, error_status, scan_bytes, valid_name, write};
 use crate::{
     expand::Work,
     interpreter::{Context, Outcome},
@@ -111,7 +111,7 @@ pub(super) async fn run(
     if !silent && let Some(problem) = parsed.problem {
         diagnostic(problem, state, fds, context, work).await?;
     }
-    scan(args[1].len(), context, work).await?;
+    scan_bytes(args[1].len(), context, work).await?;
     if !valid_name(&args[1]) {
         message(
             fds,
@@ -128,15 +128,6 @@ pub(super) async fn run(
         return Err(2);
     }
     Ok(Outcome::status(parsed.status))
-}
-
-async fn scan(bytes: usize, context: &Context, work: &mut Work) -> Result<(), i32> {
-    for _ in 0..bytes {
-        work.checkpoint(&context.cancel)
-            .await
-            .map_err(error_status)?;
-    }
-    Ok(())
 }
 
 fn snapshot(value: &str, context: &Context, work: &mut Work) -> Result<Argument, i32> {
@@ -160,7 +151,7 @@ async fn argument(
         None => state.borrow().positional().get(index).map(String::len),
     };
     let Some(bytes) = bytes else { return Ok(None) };
-    scan(bytes, context, work).await?;
+    scan_bytes(bytes, context, work).await?;
     match explicit {
         Some(args) => args
             .get(index)
@@ -351,7 +342,7 @@ async fn diagnostic(
         .borrow()
         .scalar_parameter("OPTERR")
         .map_or(0, str::len);
-    scan(bytes, context, work).await?;
+    scan_bytes(bytes, context, work).await?;
     if !diagnostics_enabled(state.borrow().scalar_parameter("OPTERR").unwrap_or("")) {
         return Ok(());
     }
@@ -395,7 +386,7 @@ async fn message(
 ) -> Result<(), i32> {
     diagnose(fds, "/usr/bin/bash: ", context).await?;
     for piece in pieces {
-        scan(piece.len(), context, work).await?;
+        scan_bytes(piece.len(), context, work).await?;
         diagnose(fds, piece, context).await?;
     }
     Ok(())

@@ -960,3 +960,12 @@ async fn readonly_diagnostic(
     }
     Ok(())
 }
+
+async fn scan_bytes(bytes: usize, context: &Context, work: &mut Work) -> Result<(), i32> {
+    for _ in 0..bytes {
+        work.checkpoint(&context.cancel)
+            .await
+            .map_err(error_status)?;
+    }
+    Ok(())
+}
