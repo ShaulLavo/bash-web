@@ -97,7 +97,7 @@
     },
     "brush-suite": {
       "total": 2894,
-      "passed": 1012,
+      "passed": 1014,
       "skipped": 1006,
       "categories": {
         "and_or": {
@@ -672,7 +672,7 @@
         },
         "word_expansion/command_substitution": {
           "total": 57,
-          "passed": 29,
+          "passed": 31,
           "skipped": 18
         },
         "word_expansion/param_transformation": {
@@ -704,7 +704,7 @@
     },
     "bashkit-suite": {
       "total": 3835,
-      "passed": 1415,
+      "passed": 1420,
       "skipped": 1613,
       "categories": {
         "alias": {
@@ -1244,7 +1244,7 @@
         },
         "command-subst": {
           "total": 41,
-          "passed": 30,
+          "passed": 35,
           "skipped": 2
         },
         "command-word-expansion": {
@@ -7274,9 +7274,9 @@
 {"id":"brush-suite:word_expansion/command_substitution:25","corpus":"brush-suite","category":"word_expansion/command_substitution","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:word_expansion/command_substitution:26","corpus":"brush-suite","category":"word_expansion/command_substitution","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:word_expansion/command_substitution:27","corpus":"brush-suite","category":"word_expansion/command_substitution","kind":"builtins-only","outcome":"pass"},
-{"id":"brush-suite:word_expansion/command_substitution:28","corpus":"brush-suite","category":"word_expansion/command_substitution","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"eDogCg==","stderr":""}},
+{"id":"brush-suite:word_expansion/command_substitution:28","corpus":"brush-suite","category":"word_expansion/command_substitution","kind":"builtins-only","outcome":"pass","actual":{"status":0,"stdout":"eDogCg==","stderr":""}},
 {"id":"brush-suite:word_expansion/command_substitution:29","corpus":"brush-suite","category":"word_expansion/command_substitution","outcome":"skip","excluded":"needs Brush harness arguments, files, environment, terminal or a skip marker"},
-{"id":"brush-suite:word_expansion/command_substitution:30","corpus":"brush-suite","category":"word_expansion/command_substitution","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"eDogCg==","stderr":""}},
+{"id":"brush-suite:word_expansion/command_substitution:30","corpus":"brush-suite","category":"word_expansion/command_substitution","kind":"builtins-only","outcome":"pass","actual":{"status":0,"stdout":"eDogCg==","stderr":""}},
 {"id":"brush-suite:word_expansion/command_substitution:31","corpus":"brush-suite","category":"word_expansion/command_substitution","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:word_expansion/command_substitution:32","corpus":"brush-suite","category":"word_expansion/command_substitution","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:word_expansion/command_substitution:33","corpus":"brush-suite","category":"word_expansion/command_substitution","kind":"needs-commands","outcome":"skip"},
@@ -9176,13 +9176,13 @@
 {"id":"bashkit-suite:command-subst:227","corpus":"bashkit-suite","category":"command-subst","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:command-subst:238","corpus":"bashkit-suite","category":"command-subst","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:command-subst:249","corpus":"bashkit-suite","category":"command-subst","kind":"builtins-only","outcome":"pass"},
-{"id":"bashkit-suite:command-subst:257","corpus":"bashkit-suite","category":"command-subst","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"W10K","stderr":""}},
-{"id":"bashkit-suite:command-subst:266","corpus":"bashkit-suite","category":"command-subst","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"W10K","stderr":""}},
-{"id":"bashkit-suite:command-subst:276","corpus":"bashkit-suite","category":"command-subst","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"W10K","stderr":""}},
+{"id":"bashkit-suite:command-subst:257","corpus":"bashkit-suite","category":"command-subst","kind":"builtins-only","outcome":"pass","actual":{"status":0,"stdout":"W10K","stderr":""}},
+{"id":"bashkit-suite:command-subst:266","corpus":"bashkit-suite","category":"command-subst","kind":"builtins-only","outcome":"pass","actual":{"status":0,"stdout":"W10K","stderr":""}},
+{"id":"bashkit-suite:command-subst:276","corpus":"bashkit-suite","category":"command-subst","kind":"builtins-only","outcome":"pass","actual":{"status":0,"stdout":"W10K","stderr":""}},
 {"id":"bashkit-suite:command-subst:285","corpus":"bashkit-suite","category":"command-subst","kind":"builtins-only","outcome":"pass"},
-{"id":"bashkit-suite:command-subst:293","corpus":"bashkit-suite","category":"command-subst","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"W10K","stderr":""}},
+{"id":"bashkit-suite:command-subst:293","corpus":"bashkit-suite","category":"command-subst","kind":"builtins-only","outcome":"pass","actual":{"status":0,"stdout":"W10K","stderr":""}},
 {"id":"bashkit-suite:command-subst:302","corpus":"bashkit-suite","category":"command-subst","kind":"needs-commands","outcome":"skip"},
-{"id":"bashkit-suite:command-subst:312","corpus":"bashkit-suite","category":"command-subst","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"MAo=","stderr":""}},
+{"id":"bashkit-suite:command-subst:312","corpus":"bashkit-suite","category":"command-subst","kind":"builtins-only","outcome":"pass","actual":{"status":0,"stdout":"MAo=","stderr":""}},
 {"id":"bashkit-suite:command-subst:321","corpus":"bashkit-suite","category":"command-subst","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:command-subst:335","corpus":"bashkit-suite","category":"command-subst","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:command-word-expansion:5","corpus":"bashkit-suite","category":"command-word-expansion","kind":"builtins-only","outcome":"pass"},
