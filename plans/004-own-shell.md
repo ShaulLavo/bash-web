@@ -2029,14 +2029,14 @@ share it. Arrays, `${@@op}`, indirect names, `@P` and transformations nested in
 other operands remain unsupported and fail closed.
 
 One frozen production-Waffle replay against main
-`361992834804c5d9325022ddc3580f5e9899bcee` preserves all 9,221 IDs, frozen
+`753c00cc24ed02ea068251206bae4ea7c584d854` preserves all 9,221 IDs, frozen
 identities and exclusions, with zero lost passes:
 
-- Oils: 1,015 to 1,022, gained `oils:var-op-bash:163`, `:182`, `:264`, `:381`,
+- Oils: 1,023 to 1,030, gained `oils:var-op-bash:163`, `:182`, `:264`, `:381`,
   `:410`, `oils:builtin-printf:95`, `oils:serialize:193`.
-- Brush suite: 1,008 to 1,013, gained `brush-suite:nameref:102` and
+- Brush suite: 1,012 to 1,017, gained `brush-suite:nameref:102` and
   `word_expansion/param_transformation:5`, `:9`, `:10`, `:12`.
-- Bashkit suite: 1,413 to 1,419, gained `bashkit-suite:variables:377`, `:384`,
+- Bashkit suite: 1,415 to 1,421, gained `bashkit-suite:variables:377`, `:384`,
   `:391`, `:398`, `:405`, `:795`.
 
 Remaining scored transformation failures need arrays, positional lists, integer
