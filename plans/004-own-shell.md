@@ -2180,8 +2180,18 @@ without wiping the sentinel; SAFE never falls back. Both ordinary redirects and
 the file-substitution shortcut pass host-fd translation controls after integration.
 The eight short/large here-input observations above are reverified unchanged.
 
-Status: Approved, implementation review-ready after normal PR47/main integration
-and full recomputation. The root hold is lifted. Parent alone owns exact-head
-independent review, hosted CI and merge. The Approved local-buffer follow-up above
-remains required before claiming full alias removal. This receipt claims neither
-that parity nor merged status.
+Status: Approved, implementation integration-ready, with final acceptance pending
+wrapper PR50/main integration. Root issued a new hold at
+2026-10-21T21:51:10.286107Z, with a two-hour ceiling of
+2026-10-21T23:51:10.286107Z. PR50 remains open at this checkpoint. Main is now
+`016b8be51f9be63543208ec009483b7bf0b99186`, with totals 1058/1062/1449. The
+completed PR47-integrated replay above is diagnostic/supporting evidence, not a
+claim of acceptance against that newer main.
+
+After PR50 lands, normally merge main, rerun relevant source/build gates and
+recompute all frozen memberships against immutable integrated main before final
+review-ready status. Do not hand-pick baseline hunks or dispatch the final replay
+before that integration. Parent alone owns exact-head independent review, hosted
+CI and merge. The Approved local-buffer follow-up above remains required before
+claiming full alias removal. This receipt claims neither that parity nor merged
+status.

@@ -61,7 +61,7 @@ exact complete selection asserted in `scripts/test-ci-workflow.ts`. Storage test
 cover the actual standalone entry in both configured browsers.
 
 
-## Measured result
+## PR47 supporting measurement
 
 The integrated production source `6d8fd8bea2321ad3072d7e618e237b48536fbd0c`
 normally merges main `f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb`, including getopts.
@@ -98,5 +98,20 @@ pass 145. Chromium/Firefox pass 234 browser cases with 16 unchanged skips,
 including shared terminals, Waiting, Restart, SAFE rejection and foreign format
 preservation. Source/artifact hashes and remote teardown are recorded. Engine
 layers retain zero violations and 42 production/28 test-only edges. All local
-gates pass. The root hold is lifted; exact-head independent review, hosted CI and
-merge still belong to the parent. This is not a merged-status claim.
+gates pass for the PR47-integrated source above. This is diagnostic evidence,
+not final acceptance against current main.
+
+## Integration checkpoint
+
+Root issued a new hold at 2026-10-21T21:51:10.286107Z for wrapper PR50, with a
+two-hour ceiling of 2026-10-21T23:51:10.286107Z. PR50 remains open at this
+checkpoint. Main has moved to `016b8be51f9be63543208ec009483b7bf0b99186`, with
+Oils/Brush/Bashkit totals 1058/1062/1449. Those are main's results, not a new
+measurement of this branch.
+
+The implementation is integration-ready, not final review-ready. After PR50 lands,
+normally merge main, rerun the relevant source/build gates and recompute the full
+frozen membership against that immutable integrated main. Do not dispatch that
+final replay before integration. Preserve the completed PR47 replay above as
+supporting evidence. Parent alone owns independent review, hosted CI and merge;
+this checkpoint claims neither current-main acceptance nor merged status.

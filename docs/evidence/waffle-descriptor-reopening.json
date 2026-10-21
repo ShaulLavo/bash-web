@@ -1,5 +1,5 @@
 {
-  "status": "review-ready; exact-head independent review and hosted CI pending",
+  "status": "integration-ready; final PR50/main integration and full frozen recomputation pending",
   "date": "2026-10-22",
   "measuredHead": "6d8fd8bea2321ad3072d7e618e237b48536fbd0c",
   "integratedMain": "f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb",
@@ -83,5 +83,20 @@
     "browserTeardown": "ok",
     "shellRuntimeSha256": "e4e9d2b070b98736ec5f3d8cdf8d5d358c038255bc9011c072d5ac2e3ed73aa4",
     "grepSha256": "d2eb8e8d385e00bf4a8f326e9e0876e68009d617c1130a3fb308c8934aa91196"
+  },
+  "measurementPurpose": "PR47 diagnostic/supporting evidence; not final-current-main acceptance",
+  "landing": {
+    "hold": "active",
+    "requiredDependency": "PR50",
+    "dependencyStateAtCheckpoint": "OPEN",
+    "receivedAt": "2026-10-21T21:51:10.286107Z",
+    "expiresAt": "2026-10-21T23:51:10.286107Z",
+    "knownMain": "016b8be51f9be63543208ec009483b7bf0b99186",
+    "knownMainCounts": {
+      "oils": 1058,
+      "brush-suite": 1062,
+      "bashkit-suite": 1449
+    },
+    "remaining": "Normally merge main after PR50; rebuild/check integrated source and recompute full frozen membership before final review-ready status. Parent owns review, CI and merge."
   }
 }
