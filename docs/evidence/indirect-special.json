@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "family": "Bare indirection to positional and special parameters",
-  "measuredRevision": "713c456198e38e90b089fd32177fa0e98a157a21",
-  "mergedBase": "753c00cc24ed02ea068251206bae4ea7c584d854",
+  "measuredRevision": "00c2958e0a6bd64b0383d770aac2be8f44f885df",
+  "mergedBase": "f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb",
   "implementation": {
     "model": "claude-opus-5-5",
     "reason": "Sol provider policy refusal on ordinary shell/build/test work; owner standing exception. Review stays on Sol."
@@ -15,28 +15,35 @@
     "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
   },
   "replay": {
-    "command": "BASH_COMPAT_JOBS=1 BASH_COMPAT_SKIP_BUILD=1 npm run compat:shell:prebuilt",
-    "host": "PC shared heavy queue, suite class, one worker",
+    "command": "BASH_COMPAT_JOBS=1 BASH_COMPAT_SKIP_BUILD=1 BASH_COMPAT_RECORD=0 BASH_COMPAT_BASE_REF=f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb npm run compat:shell:prebuilt",
+    "host": "PC shared heavy queue, suite class, one worker; build and gates Rust -j2",
     "node": "v26.7.0",
-    "shellRuntimeSha256": "e0aa18e3bc859b80238ae633ba670bbd27df1f6e8a254b316bd6d06f52a0f30b",
-    "resultSha256": "dca0de69aa27c806b94f5caf803adc2040003a7809c315da0ecf0b92a51fa288",
-    "deadlinesAndClassifier": "unchanged"
+    "shellRuntimeSha256": "ca2c903ca7338ee12baf2454bc847adcf40399f2a8e5c35f3e5aad7c7a2e905b",
+    "shellRuntimeBytes": 1866831,
+    "resultSha256": "4cb16f73e42a1588501683602254b9e5bcbfea6fa463409deb46c4d7698cd3f8",
+    "actualExit": 1,
+    "exitReason": "Only the expected stale candidate baseline assertion naming four gained IDs. Complete replay written before assertion; zero lost passes, timeouts or crashes on prior passes.",
+    "deadlinesAndClassifier": "unchanged",
+    "total": 9221,
+    "scored": 5792,
+    "skipped": 3429
   },
   "corpora": {
     "oils": {
       "scored": 1682,
-      "before": 1023,
-      "after": 1025,
+      "before": 1051,
+      "after": 1054,
       "gained": [
         "oils:var-ref:129",
-        "oils:var-ref:137"
+        "oils:var-ref:137",
+        "oils:var-ref:475"
       ],
       "lost": []
     },
     "brush-suite": {
       "scored": 1888,
-      "before": 1012,
-      "after": 1013,
+      "before": 1057,
+      "after": 1058,
       "gained": [
         "brush-suite:word_expansion/params:17"
       ],
@@ -44,8 +51,8 @@
     },
     "bashkit-suite": {
       "scored": 2222,
-      "before": 1415,
-      "after": 1415,
+      "before": 1443,
+      "after": 1443,
       "gained": [],
       "lost": []
     }
@@ -56,8 +63,152 @@
     "candidate": "16/16 pass"
   },
   "notClaimed": {
-    "oils:var-ref:475": "needs OPTIND startup default (getopts/builtins track)",
     "oils:var-ref:168": "needs FUNCNAME (callstack track)",
     "oils:var-ref:33 oils:var-ref:458 oils:var-ref:467": "Bash discards only the current input line on invalid indirection; abort-versus-discard is decided for all expansion errors in interpreter.rs, outside this family"
+  },
+  "integration": {
+    "model": "gpt-6.1-sol",
+    "provider": "cli-proxy",
+    "reasoningEffort": "high",
+    "reviewedRepairHead": "631b161db370a1889e5c649b65b214c0f40fedab",
+    "indirectSourceSha256": "c3eb2bd0fa5a505730a610db172ee6c64020f7a33717b68ba0cfa533d311a02f",
+    "indirectSourceUnchanged": true,
+    "preservedMainContracts": [
+      "FileSubstitution(Vec<Command>)",
+      "getopts state",
+      "all blocking CI commands",
+      "both file-substitution and indirect-special production test selections"
+    ],
+    "standaloneFamilyGain": {
+      "oils": 2,
+      "brush-suite": 1,
+      "bashkit-suite": 0
+    },
+    "additionalEnabledByMain": {
+      "oils:var-ref:475": "Main now supplies OPTIND startup and local state; unchanged indirect code resolves it to each positional argument."
+    },
+    "baselineInput": "Byte-identical immutable main baseline, then recomputed from this complete replay. Four outcome flips plus derived counts only; all original row fields, historical actual payloads, ordered metadata and skip membership preserved.",
+    "strictOfflineComparatorExit": 0,
+    "firstQueueExit": 1,
+    "postBaselineQueueExit": 0,
+    "counts": {
+      "nativePassed": 1341,
+      "nativeFailed": 0,
+      "nativeIgnored": 0,
+      "scoreboardPassed": 549
+    },
+    "layerEvidence": {
+      "kind": "lexical-source-scan",
+      "engineSourceSha256": "e543bb66b8e28b8b5fdac7890e281717337c1781061e90c71d8e93ccf7281afa",
+      "binaryBuild": null
+    },
+    "initialCommands": [
+      {
+        "exit": 0,
+        "command": "npm run build:shell"
+      },
+      {
+        "exit": 0,
+        "command": "npm run test:rust"
+      },
+      {
+        "exit": 0,
+        "command": "npm run check:rust"
+      },
+      {
+        "exit": 0,
+        "command": "npm run quality:js"
+      },
+      {
+        "exit": 0,
+        "command": "npm run test:check-layers"
+      },
+      {
+        "exit": 0,
+        "command": "env LAYERS_BASE_REF=f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb npm run check:layers"
+      },
+      {
+        "exit": 0,
+        "command": "npm run typecheck:layers"
+      },
+      {
+        "exit": 0,
+        "command": "npm run test:ci"
+      },
+      {
+        "exit": 0,
+        "command": "npm run typecheck:ci"
+      },
+      {
+        "exit": 0,
+        "command": "npm run test:shell:scoreboard"
+      },
+      {
+        "exit": 1,
+        "command": "BASH_COMPAT_JOBS=1 BASH_COMPAT_SKIP_BUILD=1 BASH_COMPAT_RECORD=0 BASH_COMPAT_BASE_REF=<integrated-main> npm run compat:shell:prebuilt"
+      }
+    ],
+    "postBaselineValidation": [
+      {
+        "exit": 0,
+        "command": "node /work/reports/bash-web/hill-climb/expansion/indirect-special/integrated-r1/offline-score.ts"
+      },
+      {
+        "exit": 0,
+        "command": "env LAYERS_BASE_REF=f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb npm run check:layers"
+      },
+      {
+        "exit": 0,
+        "command": "npm run test:shell:scoreboard"
+      },
+      {
+        "exit": 0,
+        "command": "npm run test:ci"
+      },
+      {
+        "exit": 0,
+        "command": "npm run typecheck:ci"
+      },
+      {
+        "exit": 0,
+        "command": "sha256sum --check /work/reports/bash-web/hill-climb/expansion/indirect-special/integrated-r1/artifacts.sha256"
+      }
+    ],
+    "artifacts": {
+      "argv-py.wasm": {
+        "sha256": "3cfdbedbd20dd9da3c98310cde3fd425d083ffe705c1e86ab81c198d8bcf0eae",
+        "bytes": 234231
+      },
+      "cat.wasm": {
+        "sha256": "41df7380efca8db964f51de965200f6a1c8091e459c9a15939b71b0dbbf1b2b6",
+        "bytes": 234123
+      },
+      "grep.wasm": {
+        "sha256": "b094f019d75b96bb84044e57c09f7d3686e5f97f088a35d0d1dfec92391a995b",
+        "bytes": 1300952
+      },
+      "mkdir.wasm": {
+        "sha256": "0310cafb0680fe4fb4458d6104ec2172e9367418daf0ec90a3654e591b8e115c",
+        "bytes": 229639
+      },
+      "printenv-py.wasm": {
+        "sha256": "9d98c9e930827e573d355eef808e215f75540ee3495bac2b731ac14379a4a24e",
+        "bytes": 234239
+      },
+      "seq.wasm": {
+        "sha256": "1643a7207962df96b7fc67f5e605f8d35495aebadc56058e94fb5ba0b5b6aac2",
+        "bytes": 223324
+      },
+      "shell-engine.wasm": {
+        "sha256": "068580ed44ed3183e784563da50debd3d80546e3e4c5719c2fd066f6eb221b55",
+        "bytes": 1922110
+      },
+      "shell-runtime.wasm": {
+        "sha256": "ca2c903ca7338ee12baf2454bc847adcf40399f2a8e5c35f3e5aad7c7a2e905b",
+        "bytes": 1866831
+      }
+    },
+    "reportDirectory": "/work/reports/bash-web/hill-climb/expansion/indirect-special/integrated-r1",
+    "hostedWasiBrowserCI": "Parent-owned after push. Worker does not watch CI or merge."
   }
 }
