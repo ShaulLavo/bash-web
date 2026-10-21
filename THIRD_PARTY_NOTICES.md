@@ -639,3 +639,12 @@ command/execution storage admission, cooperative cancellation and diagnostic
 integration are original adapters. Readonly, prefix/reset, alias and resource
 controls use GNU Bash observations, not copied Bash implementation. See
 [Getopts](docs/getopts.md) for the supported boundary and verification.
+
+### Input-only substitution eligibility
+
+The owned parser's backtick-origin metadata and dedicated file-substitution AST
+variant are original local modifications to the Bashkit-derived parser at
+`491c3281f668b76d64b15210b8f5d7bf97244be0`. The file capture adapter and GNU Bash
+5.3.15 controls are original. GNU Bash 5.3 source was inspected to explain the
+observed optimization boundaries; no upstream implementation was copied.
+See `sources.lock.json:shellFileSubstitution` and `docs/file-substitution.md`.
