@@ -77,7 +77,27 @@ for (const delimiter of ["|", "(", ")", "!"])
       `p='${slash}'; [[ 'a${delimiter}b' == @(a$p'${delimiter}'b|c) ]]; echo $?; [[ b == @(a$p'${delimiter}'b|c) ]]; echo $?; [[ c == @(a$p'${delimiter}'b|c) ]]; echo $?; [[ 'a\\${delimiter}b' == @(a$p'${delimiter}'b|c) ]]; echo $?`,
       `shopt -s extglob\np='${slash}'; case 'a${delimiter}b' in @(a$p'${delimiter}'b|c)) echo match;; *) echo miss;; esac; case b in @(a$p'${delimiter}'b|c)) echo match;; *) echo miss;; esac`,
     );
-for (const script of cases.concat(reviewCases))
+const quote = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
+const literalTailCases = [
+  "@([\\]|x)",
+  "@([|a)\\*",
+  "@([|a)\\?",
+  "@([|a)\\\\",
+  "@([|a)\\b",
+  "@([\\]|x)\\*",
+  "z@([|a)\\*",
+  "*@([|a)\\*",
+  "@(@([\\]|x)|y)",
+].map((pattern) => {
+  const plain = pattern.replaceAll("\\", "");
+  return `shopt -s extglob; p=${quote(pattern)}; for v in ${quote(pattern)} ${quote(plain)}; do [[ $v == $p ]]; echo $?; case $v in $p) echo 0;; *) echo 1;; esac; done`;
+});
+for (const ch of ["!", "#", "%", "(", ")", "*", "-", ".", ":", "=", "?", "[", "\\", "]", "^", "|", "b", "@", "+", "é"])
+  for (const prefix of ["", "$q"])
+    literalTailCases.push(
+      `shopt -s extglob; m='@([|a)'; q='\\'; for v in ${quote("@([|a)" + ch)} ${quote("@([|a)\\" + ch)} ${quote("@([|a)\\\\" + ch)}; do [[ $v == $m${prefix}${quote(ch)} ]]; echo $?; case $v in $m${prefix}${quote(ch)}) echo 0;; *) echo 1;; esac; done`,
+    );
+for (const script of cases.concat(reviewCases, literalTailCases))
   test(`production Waffle positive extglob: ${script}`, { timeout: 10000 }, async () => {
     const bash = spawnSync("/usr/bin/bash", ["--noprofile", "--norc", "-c", script], {
       env,
