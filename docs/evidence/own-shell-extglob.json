@@ -1,8 +1,21 @@
 {
   "schema": 1,
   "scope": "Positive @/?/+/* extglob groups in case and conditional full-pattern matching only",
-  "baseCommit": "753c00cc24ed02ea068251206bae4ea7c584d854",
-  "verifiedSourceCommit": "b318254a95ae36d89f6ccd6efd5d045ca3dc854f",
+  "baseCommit": "34c21edc7bef1aacc7883b3ce22f66af886154f0",
+  "verifiedSourceCommit": "057c934de6a52f91f0fffeea008c4c12bf2f9423",
+  "reviewedCheckpoint": "1ea77930327b193f8c454652e64d7b2544fd30d4",
+  "review": {
+    "verdict": "APPROVE 1ea7793",
+    "url": "https://github.com/ShaulLavo/bash-web/pull/43#issuecomment-6327042021",
+    "productionConflicts": [],
+    "reviewedMatcherAndControlBytesUnchanged": {
+      "shell/engine/src/expand/pattern.rs": "1a9c6ce117235e07022a8703979f481ac2a62ad3f3514d2ac707e6204a9cc180",
+      "shell/engine/src/expand/pattern/extglob.rs": "7ad768f068932149d4dd0cfe311b12f5b39c9d29e79c20161955249768c4f8a1",
+      "shell/engine/src/expand/glob.rs": "c06aab667cf2d1e975edd0cb32f958566cef99c7f97f43400b2ce58c7c6dc105",
+      "scripts/test-own-shell-extglob.ts": "aba7f959d08e90c86b15ca27eda62aa1879f7c8cb3fea5e985131c83e5c38936"
+    },
+    "providerRefusalDisclosure": "Recovery review transferred to a separate Claude reviewer only after Sol provider refusal under the owner exception. Original author, repair and integration remain Sol."
+  },
   "identity": {
     "schema": 1,
     "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
@@ -15,8 +28,10 @@
   "skipped": 3429,
   "corpora": {
     "oils": {
-      "before": 1023,
-      "after": 1045,
+      "scored": 1682,
+      "before": 1074,
+      "after": 1096,
+      "replay": 1096,
       "gained": [
         "oils:extglob-match:8",
         "oils:extglob-match:16",
@@ -41,12 +56,13 @@
         "oils:extglob-match:334",
         "oils:case_:211"
       ],
-      "lost": [],
-      "newlyFailing": []
+      "lost": []
     },
     "brush-suite": {
-      "before": 1012,
-      "after": 1018,
+      "scored": 1888,
+      "before": 1073,
+      "after": 1079,
+      "replay": 1079,
       "gained": [
         "brush-suite:extended_tests:19",
         "brush-suite:line_continuation:6",
@@ -55,12 +71,13 @@
         "brush-suite:word_expansion/command_substitution:48",
         "brush-suite:word_expansion/command_substitution:49"
       ],
-      "lost": [],
-      "newlyFailing": []
+      "lost": []
     },
     "bashkit-suite": {
-      "before": 1415,
-      "after": 1432,
+      "scored": 2222,
+      "before": 1452,
+      "after": 1469,
+      "replay": 1469,
       "gained": [
         "bashkit-suite:bashbox-shopt-pattern:92",
         "bashkit-suite:bashbox-shopt-pattern:101",
@@ -80,112 +97,131 @@
         "bashkit-suite:extglob:73",
         "bashkit-suite:extglob:97"
       ],
-      "lost": [],
-      "newlyFailing": []
+      "lost": []
     }
   },
-  "baselineUpdate": "Only proven gained outcomes and derived counts; historical diagnostics preserved exactly",
+  "baselineUpdate": "Only fresh-replay-proven gained outcomes and derived counts changed. Exact ordered metadata, skips and every historical diagnostic field are preserved.",
   "production": {
-    "runtime": "real Waffle, production shell-runtime guest",
+    "runtime": "real Waffle and production patched-WASI shell-runtime guest",
     "jobs": 1,
+    "recording": false,
     "deadlineChanged": false,
-    "guestSha256": "9d94b9502ebeb1291b4493c6762d421d5fca76c07175aac743330540e7dcf3df",
-    "resultSha256": "4c073a26645157928d3b62b8cbec65fe1665968e01c6de81d52d556a646bb56c",
-    "recomputedMembership": "Recording permits outcome recomputation only; unchanged validateScore and compareScores enforce the frozen ruler and exact regenerated membership offline against original, reviewed and merged-main baselines."
-  },
-  "verification": {
-    "nativeTests": 1316,
-    "wasiTests": 1296,
-    "scoreboardTests": 493,
-    "ciTests": 105,
-    "guestBuildTests": 18,
-    "layerTests": 34,
-    "positiveProductionControls": {
-      "beforePass": 3,
-      "beforeFail": 27,
-      "afterPass": 72,
-      "afterFail": 0,
-      "baseGuestCommit": "361992834804c5d9325022ddc3580f5e9899bcee",
-      "beforeControlCount": 30,
-      "afterIncludesReviewRegressions": true
-    },
-    "deepNestedGroups": 4096,
-    "workStorageAndCancellation": "pass",
-    "rustHostWasiClippy": "pass",
-    "jsQuality": "pass",
-    "layerViolations": {
-      "production": 0,
-      "testOnly": 0
-    },
-    "reviewRegressions": {
-      "initialBefore": {
-        "tests": 54,
-        "pass": 39,
-        "fail": 15
-      },
-      "neighborBefore": {
-        "tests": 68,
-        "pass": 65,
-        "fail": 3
-      },
-      "malformedTailBefore": {
-        "tests": 72,
-        "pass": 68,
-        "fail": 4
-      },
-      "after": {
-        "tests": 72,
-        "pass": 72,
-        "fail": 0
-      },
-      "neighborMatrix": {
-        "scripts": 116,
-        "observations": 1020,
-        "mismatches": 0
-      },
-      "reviewReproducerMatches": 9,
-      "deferredNegativeAssertion": "status:2\nafter\n",
-      "liveNodeWorkersAfterEachRun": 0,
-      "materialMatcherRedesign": false,
-      "additionalFrozenGain": {
-        "id": "bashkit-suite:bashbox-shopt-pattern:101",
-        "code": "p='@(a'; [[ '@(a' == $p ]] && echo lit\n",
-        "beforeStatus": 2,
-        "afterStatus": 0,
-        "afterStdout": "lit\n"
+    "guestSha256": "4329f221150ce4c89f028aa1a42432118f5c168da03aeadf12dbfa392373c5b5",
+    "resultSha256": "59500e18f22df87c3da879a40e62d62da98b269ec12771ae4120633ef248e61c",
+    "replayExit": 1,
+    "replayExitReason": "Full replay completed with zero former-pass losses. Stale candidate pass membership was the sole failure. Exact saved observations then validated offline against the recomputed candidate.",
+    "offlineExactMembership": true,
+    "artifactReceipt": {
+      "source": "057c934de6a52f91f0fffeea008c4c12bf2f9423",
+      "base": "34c21edc7bef1aacc7883b3ce22f66af886154f0",
+      "shellTree": "2f38c80d929bd1647951346536b7a40720493cc7",
+      "runtime": "real Waffle and production patched-WASI shell-runtime guest",
+      "wasmTarget": "wasm32-wasip1",
+      "rustJobs": 2,
+      "wasiLibcRecipeIdentity": "9f4d251e0e2c0a259e505a8a52f12773a14be5d7e088cad0cbbc0343dbc10627",
+      "sdk": "/work/cache/wasi-sdk-34.0-x86_64-linux",
+      "artifacts": {
+        "shell-runtime": {
+          "raw": 1898208,
+          "gzip9": 558555,
+          "brotli11": 432206,
+          "sha256": "4329f221150ce4c89f028aa1a42432118f5c168da03aeadf12dbfa392373c5b5"
+        },
+        "shell-engine": {
+          "raw": 1953510,
+          "gzip9": 579416,
+          "brotli11": 449256,
+          "sha256": "b1d7332ef92fde7ae2ee46823a6dd71d8f2e20e8b7b285413b9ecd5758f99054"
+        },
+        "argv-py": {
+          "raw": 234235,
+          "gzip9": 66670,
+          "brotli11": 55684,
+          "sha256": "537f5bcbf7e1c4feb214202b2081aebfb95635f57d2c5be9ecd88714c93205f5"
+        },
+        "printenv-py": {
+          "raw": 234243,
+          "gzip9": 66666,
+          "brotli11": 55706,
+          "sha256": "94a737b7e1ba4794ba763191c6669a33ecdeb2687d8bfc130b1ac3dad4b003ee"
+        },
+        "cat": {
+          "raw": 234127,
+          "gzip9": 68311,
+          "brotli11": 56902,
+          "sha256": "b39fa2a2930623aac8dce738b8c98eff439a895f69d2330663522e1f3490719a"
+        },
+        "grep": {
+          "raw": 1300955,
+          "gzip9": 388699,
+          "brotli11": 267528,
+          "sha256": "696698531b04c3306c5e9eec4fe65e26960fbdd974b1d3129a62c1604c7ea5de"
+        },
+        "mkdir": {
+          "raw": 229643,
+          "gzip9": 66652,
+          "brotli11": 55763,
+          "sha256": "918f97710845fcbdbe04948ddb7038bab30cd7181f697dbb9a8525fdbd7b9aa9"
+        },
+        "seq": {
+          "raw": 223328,
+          "gzip9": 64673,
+          "brotli11": 53923,
+          "sha256": "9d2436639fd90270813aa44c65e1ce0e54e830d7ef1332097869e500e7559fb7"
+        }
       }
     }
   },
-  "sizes": {
-    "browserRuntime": {
-      "before": {
-        "raw": 1819673,
-        "gzip9": 529997,
-        "brotli11": 410766,
-        "sha256": "1c0b3f532b39a070a1db54fa03254af909c56b3757fddef6aca0f1cef9e638fa"
-      },
-      "after": {
-        "raw": 1838654,
-        "gzip9": 536020,
-        "brotli11": 415155,
-        "sha256": "9d94b9502ebeb1291b4493c6762d421d5fca76c07175aac743330540e7dcf3df"
-      },
-      "delta": {
-        "raw": 18981,
-        "gzip9": 6023,
-        "brotli11": 4389
-      },
-      "comparison": "Original pre-extglob base to integrated candidate; includes grouped-regex changes from main. No isolated R1-only size claim."
+  "verification": {
+    "nativeTests": 1391,
+    "scoreboardTests": 654,
+    "ciTests": 105,
+    "layerTests": 34,
+    "positiveProductionControls": {
+      "tests": 121,
+      "passed": 121,
+      "failed": 0
     },
-    "standaloneCoreBrotli11": 432543,
-    "limit": 1000000,
-    "addOnsBrotli11": {
-      "cat": 56970,
-      "grep": 267322,
-      "mkdir": 55691,
-      "seq": 53931
+    "focusedControls": {
+      "tests": 11,
+      "matched": 11,
+      "liveWorkers": 0
     },
-    "addOnDeltas": "not separately measured; no add-on source changes"
+    "gateExits": {
+      "build": 0,
+      "native": 0,
+      "rust-quality": 0,
+      "js-quality": 0,
+      "layer-tests": 0,
+      "layers": 0,
+      "layer-types": 0,
+      "ci": 0,
+      "ci-types": 0,
+      "scoreboard": 0,
+      "extglob": 0,
+      "focused": 0,
+      "replay": 1
+    },
+    "localWasiTests": "Not rerun for this integration. Required WASI and browser qualification remains in unchanged hosted CI, owned by the expansion parent.",
+    "layerViolations": {
+      "production": 0,
+      "testOnly": 0
+    }
+  },
+  "historicalReviewEvidence": {
+    "scope": "Historical only, not rerun or claimed as fresh integration qualification",
+    "source": "1ea77930327b193f8c454652e64d7b2544fd30d4",
+    "guestSha256": "112088764cfa16f168aca812dc5f0aa84a841bf3cc88e0dba11a8894167fbdbf",
+    "nativeTests": 1319,
+    "wasiTests": 1299,
+    "oldMatrix": {
+      "observations": 2772,
+      "mismatches": 0
+    },
+    "newMatrix": {
+      "observations": 3960,
+      "mismatches": 0
+    }
   },
   "deferred": {
     "negativeGroupsAndConditionalSyntax": [
@@ -208,143 +244,12 @@
       "oils:extglob-files:293"
     ]
   },
-  "originalBaseCommit": "361992834804c5d9325022ddc3580f5e9899bcee",
-  "cumulativeFromOriginalBase": {
-    "oils": {
-      "before": 1015,
-      "after": 1045,
-      "gained": [
-        "oils:extglob-match:8",
-        "oils:extglob-match:16",
-        "oils:extglob-match:26",
-        "oils:extglob-match:53",
-        "oils:extglob-match:75",
-        "oils:extglob-match:92",
-        "oils:extglob-match:101",
-        "oils:extglob-match:109",
-        "oils:extglob-match:117",
-        "oils:extglob-match:125",
-        "oils:extglob-match:141",
-        "oils:extglob-match:151",
-        "oils:extglob-match:161",
-        "oils:extglob-match:170",
-        "oils:extglob-match:178",
-        "oils:extglob-match:186",
-        "oils:extglob-match:198",
-        "oils:extglob-match:207",
-        "oils:extglob-match:220",
-        "oils:extglob-match:295",
-        "oils:extglob-match:334",
-        "oils:regex:70",
-        "oils:regex:90",
-        "oils:regex:95",
-        "oils:regex:318",
-        "oils:regex:329",
-        "oils:regex:343",
-        "oils:regex:371",
-        "oils:regex:630",
-        "oils:case_:211"
-      ],
-      "lost": [],
-      "newlyFailing": []
-    },
-    "brush-suite": {
-      "before": 1008,
-      "after": 1018,
-      "gained": [
-        "brush-suite:extended_tests:19",
-        "brush-suite:extended_tests:23",
-        "brush-suite:extended_tests:33",
-        "brush-suite:extended_tests:34",
-        "brush-suite:extended_tests:36",
-        "brush-suite:line_continuation:6",
-        "brush-suite:options/set-e:139",
-        "brush-suite:patterns/patterns:4",
-        "brush-suite:word_expansion/command_substitution:48",
-        "brush-suite:word_expansion/command_substitution:49"
-      ],
-      "lost": [],
-      "newlyFailing": []
-    },
-    "bashkit-suite": {
-      "before": 1413,
-      "after": 1432,
-      "gained": [
-        "bashkit-suite:bashbox-parser:214",
-        "bashkit-suite:bashbox-shopt-pattern:92",
-        "bashkit-suite:bashbox-shopt-pattern:101",
-        "bashkit-suite:blackbox-exploration:861",
-        "bashkit-suite:blackbox-exploration:868",
-        "bashkit-suite:blackbox-exploration:875",
-        "bashkit-suite:blackbox-exploration:882",
-        "bashkit-suite:conditional:266",
-        "bashkit-suite:extglob:1",
-        "bashkit-suite:extglob:9",
-        "bashkit-suite:extglob:17",
-        "bashkit-suite:extglob:25",
-        "bashkit-suite:extglob:33",
-        "bashkit-suite:extglob:41",
-        "bashkit-suite:extglob:49",
-        "bashkit-suite:extglob:57",
-        "bashkit-suite:extglob:65",
-        "bashkit-suite:extglob:73",
-        "bashkit-suite:extglob:97"
-      ],
-      "lost": [],
-      "newlyFailing": []
-    }
-  },
-  "comparisonToReviewedHead": {
-    "head": "9b2c39b045dc4dac6cac567f3838f65e6b180c5c",
-    "includesIntegratedMain": true,
-    "corpora": {
-      "oils": {
-        "before": 1037,
-        "after": 1045,
-        "gained": [
-          "oils:regex:70",
-          "oils:regex:90",
-          "oils:regex:95",
-          "oils:regex:318",
-          "oils:regex:329",
-          "oils:regex:343",
-          "oils:regex:371",
-          "oils:regex:630"
-        ],
-        "lost": [],
-        "newlyFailing": []
-      },
-      "brush-suite": {
-        "before": 1014,
-        "after": 1018,
-        "gained": [
-          "brush-suite:extended_tests:23",
-          "brush-suite:extended_tests:33",
-          "brush-suite:extended_tests:34",
-          "brush-suite:extended_tests:36"
-        ],
-        "lost": [],
-        "newlyFailing": []
-      },
-      "bashkit-suite": {
-        "before": 1429,
-        "after": 1432,
-        "gained": [
-          "bashkit-suite:bashbox-parser:214",
-          "bashkit-suite:bashbox-shopt-pattern:101",
-          "bashkit-suite:conditional:266"
-        ],
-        "lost": [],
-        "newlyFailing": []
-      }
-    }
-  },
   "sourceSha256": {
-    "shell/engine/src/expand.rs": "45044151c024211e75c7985507562835d7643e904741c9fd2b5d0eb5e1111947",
+    "shell/engine/src/expand.rs": "5b44ebae875e5d8d2540582a53d0abac388913f8d640ba715ec7a8c913720b2e",
     "shell/engine/src/expand/glob.rs": "c06aab667cf2d1e975edd0cb32f958566cef99c7f97f43400b2ce58c7c6dc105",
-    "shell/engine/src/expand/pattern.rs": "969d1bd6bec243a8649f2f7254a80071ef58168f4ecb3924df474b58c24b1db7",
-    "shell/engine/src/expand/pattern/extglob.rs": "9ecabfb55a2951bd3b70c6a7f5beca68783d5b1249c22a0dbbabe3a6b0496719",
+    "shell/engine/src/expand/pattern.rs": "1a9c6ce117235e07022a8703979f481ac2a62ad3f3514d2ac707e6204a9cc180",
+    "shell/engine/src/expand/pattern/extglob.rs": "7ad768f068932149d4dd0cfe311b12f5b39c9d29e79c20161955249768c4f8a1",
     "shell/engine/tests/words/test_builtin.rs": "3ecf80ac4b0f8764df9285bd43bc2842c7b13363e9b845bd02a05c908d93607a",
-    "scripts/test-own-shell-extglob.ts": "9b8be6ca3b1e5a8c02b5e228a192e8ef358e8d7b6f099ee8bd8ce2b7054a032f"
+    "scripts/test-own-shell-extglob.ts": "aba7f959d08e90c86b15ca27eda62aa1879f7c8cb3fea5e985131c83e5c38936"
   }
 }
