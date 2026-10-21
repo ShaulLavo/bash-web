@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "387acc2362b9eadc9bc9553560238b79f4963dd282f3d0cf161093c2974f82ae",
+    "engineSourceSha256": "ce1c95c7c803f79659f9aaaeea47afd3b0312980f39e3717faa15cc00ef8a89e",
     "binaryBuild": null
   },
   "contract": {
@@ -234,7 +234,8 @@
         "shell/engine/src/interpreter/conditional/regex.rs",
         "shell/engine/src/interpreter/control.rs",
         "shell/engine/src/interpreter/eval.rs",
-        "shell/engine/src/interpreter/file_substitution.rs"
+        "shell/engine/src/interpreter/file_substitution.rs",
+        "shell/engine/src/interpreter/select.rs"
       ]
     },
     {
@@ -542,7 +543,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 1614,
+        "line": 1617,
         "column": 33
       }
     },
@@ -572,7 +573,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 84,
+        "line": 85,
         "column": 30
       }
     },
@@ -852,7 +853,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3698,
+        "line": 3701,
         "column": 25
       }
     },
@@ -862,7 +863,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 5011,
+        "line": 5014,
         "column": 17
       }
     },
@@ -882,7 +883,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3684,
+        "line": 3687,
         "column": 17
       }
     },
@@ -892,7 +893,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3684,
+        "line": 3687,
         "column": 31
       }
     },

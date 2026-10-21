@@ -23,6 +23,7 @@ mod conditional;
 mod control;
 pub(crate) mod eval;
 mod file_substitution;
+mod select;
 
 #[derive(Clone, Debug)]
 pub struct Limits {
@@ -1452,6 +1453,7 @@ async fn compound_command(
         CompoundCommand::Arithmetic(_)
             | CompoundCommand::Case(_)
             | CompoundCommand::For(_)
+            | CompoundCommand::Select(_)
             | CompoundCommand::ArithmeticFor(_)
             | CompoundCommand::Test(_)
     )
@@ -1524,6 +1526,7 @@ fn execute_compound_body<'a>(
             Outcome::status,
         ),
         CompoundCommand::For(loop_) => control::run_for(loop_, state, fds, context, work),
+        CompoundCommand::Select(loop_) => select::run(loop_, state, fds, context, work),
         CompoundCommand::ArithmeticFor(loop_) => {
             control::run_arithmetic_for(loop_, state, fds, context)
         }
