@@ -178,3 +178,31 @@ fn transformation_unsupported_forms_fail_closed() {
         assert!(rig.calls.borrow().is_empty(), "{source}");
     }
 }
+
+#[test]
+fn transformation_case_locale_reads_through_namerefs() {
+    let rig = Rig::new(Limits::default());
+    rig.variable("LANG", "C.UTF-8");
+    assert_eq!(
+        rig.run(r#"loc=C; declare -n LC_ALL=loc; x=é; args "${x@U}" "${x@u}""#),
+        0
+    );
+    assert_eq!(*rig.calls.borrow(), &[&["é", "é"]]);
+}
+
+#[test]
+fn transformation_array_backed_parameters_fail_closed() {
+    let failures: Vec<String> = [
+        ("false | true", "${PIPESTATUS@Q}"),
+        ("false | true", "${PIPESTATUS@A}"),
+        ("false | true", "${PIPESTATUS@a}"),
+    ]
+    .into_iter()
+    .map(|(setup, form)| format!(r#"{setup}; args "{form}""#))
+    .filter(|source| {
+        let rig = Rig::new(Limits::default());
+        rig.run(source) != 2 || !rig.calls.borrow().is_empty()
+    })
+    .collect();
+    assert!(failures.is_empty(), "{failures:?}");
+}

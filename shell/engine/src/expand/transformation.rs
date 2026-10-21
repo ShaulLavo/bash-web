@@ -63,6 +63,10 @@ impl Expansion<'_> {
             let ScalarResolution::Target(target) = s.resolve_scalar_target(name) else {
                 return Ok(subject);
             };
+            // Array-backed targets stay outside this scalar adapter.
+            if target == "PIPESTATUS" || !operand::scalar_name(target) {
+                return Err(2.into());
+            }
             self.work.admit_storage(target.len())?;
             subject.target = target.to_owned();
             subject.readonly = s.is_readonly(target);
@@ -74,7 +78,7 @@ impl Expansion<'_> {
         }
         if s.dynamic_parameter(name) {
             self.work.admit_storage(State::DYNAMIC_PARAMETER_BYTES)?;
-        } else if matches!(name, "?" | "#") {
+        } else if name == "?" {
             self.work.admit_storage(20)?;
         } else {
             self.work.admit_storage(s.parameter(name).len())?;
@@ -155,22 +159,25 @@ impl Expansion<'_> {
             ansi |= !printable(ch, utf8, &printability);
         }
         if !ansi {
-            self.push_text(out, "'").await?;
-            let mut buffer = [0; 4];
-            for ch in value.chars() {
-                let text = if ch == '\'' {
-                    "'\\''"
-                } else {
-                    char_text(ch, &mut buffer)
-                };
-                self.push_text(out, text).await?;
-            }
-            return self.push_text(out, "'").await;
+            return self.single_quote(value, out).await;
         }
         self.push_text(out, "$'").await?;
         for ch in value.chars() {
             self.ansi_character(ch, printable(ch, utf8, &printability), out)
                 .await?;
+        }
+        self.push_text(out, "'").await
+    }
+    async fn single_quote(&mut self, value: &str, out: &mut String) -> Result<(), Error> {
+        self.push_text(out, "'").await?;
+        let mut buffer = [0; 4];
+        for ch in value.chars() {
+            let text = if ch == '\'' {
+                "'\\''"
+            } else {
+                char_text(ch, &mut buffer)
+            };
+            self.push_text(out, text).await?;
         }
         self.push_text(out, "'").await
     }
@@ -213,20 +220,25 @@ impl Expansion<'_> {
             let unit = decode(&bytes[index..], utf8.unwrap_or(false))?;
             index += unit.consumed();
             let mut buffer = [0; 4];
-            let decoded = unit.bytes(&mut buffer);
-            let end = decoded.iter().position(|&byte| byte == 0);
-            for &byte in &decoded[..end.unwrap_or(decoded.len())] {
-                if out.len() >= self.raw_remaining {
-                    return Err(2.into());
-                }
-                admit_vec_slot(&mut out, self.work)?;
-                out.push(byte);
-            }
-            if end.is_some() {
+            if self.push_decoded(&mut out, unit.bytes(&mut buffer))? {
                 break;
             }
         }
         String::from_utf8(out).map_err(|_| 2.into())
+    }
+    /// Appends decoded bytes up to a NUL, and reports whether one ended the value.
+    fn push_decoded(&mut self, out: &mut Vec<u8>, decoded: &[u8]) -> Result<bool, Error> {
+        for &byte in decoded {
+            if byte == 0 {
+                return Ok(true);
+            }
+            if out.len() >= self.raw_remaining {
+                return Err(2.into());
+            }
+            admit_vec_slot(out, self.work)?;
+            out.push(byte);
+        }
+        Ok(false)
     }
     async fn change(
         &mut self,
@@ -235,7 +247,7 @@ impl Expansion<'_> {
         state: &SharedState,
         out: &mut String,
     ) -> Result<(), Error> {
-        let locale = Locale::from_state(state)?;
+        let locale = self.locale(state, case_locale).await??;
         for (index, ch) in value.chars().enumerate() {
             let mapped = match operator {
                 'u' if index > 0 => ch,
@@ -247,14 +259,18 @@ impl Expansion<'_> {
         Ok(())
     }
     async fn utf8(&mut self, state: &SharedState) -> Result<bool, Error> {
+        self.locale(state, utf8_locale).await
+    }
+    /// The effective locale name, read through namerefs like any parameter.
+    async fn locale<T>(&mut self, state: &SharedState, select: fn(&str) -> T) -> Result<T, Error> {
         for name in ["LC_ALL", "LC_CTYPE", "LANG"] {
             State::admit_scalar_access(state, name, self.cancel, self.work).await?;
             let s = state.borrow();
             if let Some(locale) = s.scalar_parameter(name).filter(|value| !value.is_empty()) {
-                return Ok(utf8_locale(locale));
+                return Ok(select(locale));
             }
         }
-        Ok(false)
+        Ok(select("C"))
     }
     async fn push_text(&mut self, out: &mut String, text: &str) -> Result<(), Error> {
         self.work.checkpoint(self.cancel).await?;
@@ -267,16 +283,25 @@ impl Expansion<'_> {
     }
 }
 
-/// Scalar, special and positional names. `${!name@op}` and array forms are
-/// outside this adapter.
+/// Scalar names, `$?` and positional names. `${!name@op}` and array forms are
+/// outside this adapter; the parser does not route `${#@op}` here.
 fn transformable(name: &str) -> bool {
     operand::scalar_name(name)
-        || matches!(name, "?" | "#")
+        || name == "?"
         || (!name.is_empty() && name.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
+/// The case mapper's supported locales, matching `${v^^}`.
+fn case_locale(name: &str) -> Result<Locale, Error> {
+    match name {
+        "C" | "POSIX" => Ok(Locale::C),
+        "C.UTF-8" | "C.utf8" => Ok(Locale::Utf8),
+        _ => Err(2.into()),
+    }
+}
+
 fn parameter_set(state: &State, name: &str) -> bool {
-    if matches!(name, "?" | "#" | "0") {
+    if matches!(name, "?" | "0") {
         return true;
     }
     if operand::scalar_name(name) {
