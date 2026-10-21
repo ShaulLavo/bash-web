@@ -1440,7 +1440,7 @@
     "predicates": "Use original argv test/[ semantics and parse-time [[ ]] expressions with shared real filesystem metadata predicates. MemoryFs tracks virtual identity, access policy, size and timestamps; the WASI adapter uses path_filestat_get without opening a probe descriptor. Unavailable metadata capabilities return unsupported status 2. Original Thompson no-capture ERE compilation/matching charges storage before growth and checkpoints compilation, closure and scans; non-ASCII patterns/input, unsupported effective LC_CTYPE/LC_COLLATE locales, groups/backreferences and locale collation remain explicit unsupported status 2. Supported ASCII matching selects LC_ALL, the category and LANG in precedence order and accepts C/POSIX/C.UTF-8/C.utf8 only.",
     "stack": "Isolate large command constructors and nonrecursive expansion/assignment clauses outside recursive poll frames. Replace the existing FutureExt::map evaluation wrapper with a safely pin-projected wrapper that owns the same live allocation guard, admits its concrete size before boxing, and releases admission on readiness or cancellation. No parser, execution, storage or stack limits increase; native/WASI regressions execute deepest admitted if/for/arithmetic-for nesting.",
     "gate": "New original deterministic control-flow generator and seed1/42 oracle fixtures only; existing generators and fixtures remain byte-identical. Each seed has 1,848 structured plus 600 generated cases at depths 0-3. Oracle-only capture is explicit; strict replay rejects unsupported results and status/stdout mismatches. Process groups and per-observation cwd scratch are task-owned and cleaned before exit.",
-    "prerequisites": "Original shopt state/query/printing supports inherit_errexit, extglob and nullglob, preserving snapshots and conditional command-substitution errexit inheritance; extglob matching remains unsupported. For-list-only quote-aware pathname expansion uses incremental directory readers, bounded admitted buffers and cancellation-safe descriptor guards; legacy argv expansion is unchanged. EPOCHREALTIME reads dynamic wall time, preserves unset-disable state in snapshots and uses six fractional decimal digits."
+    "prerequisites": "Original shopt state/query/printing supports inherit_errexit, extglob and nullglob, preserving snapshots and conditional command-substitution errexit inheritance; positive full-pattern extglob matching is recorded separately in shellExtglob. For-list-only quote-aware pathname expansion uses incremental directory readers, bounded admitted buffers and cancellation-safe descriptor guards; legacy argv expansion is unchanged. EPOCHREALTIME reads dynamic wall time, preserves unset-disable state in snapshots and uses six fractional decimal digits."
   },
   "shellFunctions": {
     "classification": "Original function-frame, dynamic scalar binding, positional, call-policy, lastpipe and command-lookup adapters; GNU Bash 5.3.15 is a behavior oracle, not copied implementation.",
@@ -1587,6 +1587,21 @@
       "reason": "Original bounded echo case matrix reuses local escape inputs, raw process observations, strict result-byte validation, and real Waffle execution. No external upstream implementation copied or adapted."
     },
     "deferred": "xpg_echo, POSIX echo mode and non-UTF-8 locale encodings remain unsupported; no shopt/set subsystem added."
+  },
+  "shellExtglob": {
+    "classification": "Original iterative positive extglob compiler, matcher and controls. GNU Bash 5.3.15 is a behavior oracle, not copied implementation. Existing basic atoms and quote masks reuse the local adaptation recorded in shellParameterTrim.",
+    "baseRevision": "361992834804c5d9325022ddc3580f5e9899bcee",
+    "paths": [
+      "shell/engine/src/expand/pattern.rs",
+      "shell/engine/src/expand/pattern/extglob.rs",
+      "shell/engine/src/expand/glob.rs",
+      "shell/engine/src/expand.rs",
+      "shell/engine/tests/words/test_builtin.rs",
+      "scripts/test-own-shell-extglob.ts"
+    ],
+    "implementation": "Compile positive @, ?, + and * groups with nested alternatives into an epsilon-NFA using iterative group frames. Bounded state sets and queues terminate nullable cycles without recursive matching or backtracking. Admit instruction, frame, state and queue capacity before allocation; checkpoint compilation, closure, transitions and resets against shared work and cancellation. Preserve quote masks and existing basic character classes. Case patterns obey extglob; conditional equality always enables it. The only expansion adapter change supplies that option. Pathname expansion retains the basic-only compiler.",
+    "deferred": "Negative groups, pathname extglob, and extglob in scalar trim, replacement or case conversion remain unsupported. No state bindings, arrays, parser or runtime changes.",
+    "gate": "Thirty independent Bash-versus-production-Waffle controls, native and WASI budget/cancellation/deep-group tests, and the unchanged frozen 9221-case per-ID production replay. Only proven gained baseline outcomes and derived counts change; historical diagnostic payloads remain intact. Exact gained/lost IDs are recorded in docs/evidence/own-shell-extglob.json."
   },
   "shellReadCount": {
     "classification": "Original local counted scalar read implementation and controls; GNU Bash 5.3.15 is a behavior oracle. No upstream implementation copied or adapted.",

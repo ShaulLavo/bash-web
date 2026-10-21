@@ -571,7 +571,9 @@ Bash-compatible unset behavior. `shopt` stores and reports
 enabled, and in `[[ == ]]` and `[[ != ]]` regardless of that option. Quote masks
 keep protected punctuation literal. An iterative, work-bounded NFA avoids
 recursive matching and backtracking. Negative groups, pathname extglob, and
-extglob in scalar trim or replacement remain unsupported. For-list pathname expansion uses quote metadata and incremental
+extglob in scalar trim or replacement remain unsupported. The
+[extglob receipt](evidence/own-shell-extglob.json) records exact production gains
+and losses. For-list pathname expansion uses quote metadata and incremental
 filesystem directory reads, including real positive matches and nullglob misses.
 
 The new control-flow generator has its own two recorded GNU Bash 5.3.15 seed
