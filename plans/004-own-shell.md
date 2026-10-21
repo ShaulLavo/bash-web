@@ -2042,25 +2042,28 @@ verification remain required.
 
 ### Separate follow-up: independently reopen regular-file descriptor aliases
 
+Historical finding, addressed by the bounded adoption below. Its local-buffer
+exception remains an Approved follow-up, not full alias-removal parity.
+
 Approved separate CONTROL family after the Waffle owner supplies an actual
 merged independent-reopen contract. Do not block the bounded shorthand family
 on it, change the shared I/O helper here, add path blacklists or restore offsets
 by guessing. Preserve pipe/terminal sharing and all current frozen passes.
 
 Exact reproduction: `printf 'one\ntwo\n' >f; exec 3<f; x=$(</dev/fd/3); IFS= read -r y <&3; printf 'x=<%s> y=<%s>\n' "$x" "$y"`.
-GNU Bash 5.3.15 prints `y=<one>`; both the native candidate and production Waffle
-print `y=<>`, all status 0. Replacing the shorthand with
+GNU Bash 5.3.15 prints `y=<one>`; before adoption, both the native candidate and
+production Waffle printed `y=<>`, all status 0. Replacing the shorthand with
 `$(cat </dev/fd/3)` reproduces the same production mismatch. Observed once per
 form in the bounded probe; the source behavior is deterministic.
-`io.rs::device_endpoint` returns the identical endpoint, so reads consume the
-inherited regular file offset. Neither `FileSystem` nor `HostEndpoint` currently
-exposes independent reopening. This rules out the new capture decoder as the
+The old `io.rs::device_endpoint` returned the identical endpoint, so reads consumed
+the inherited regular file offset. At that pin neither `FileSystem` nor
+`HostEndpoint` exposed independent reopening. This rules out the new capture decoder as the
 cause. Evidence and exact script are retained in
 `/work/reports/bash-web/hill-climb/control/file-substitution/fd-observation.json`;
 no worker, route or container is retained. Root accepted this boundary and routed
-the runtime contract to Waffle. The future family must first reproduce both
-forms, test fresh regular-file offsets versus shared pipes/terminals, preserve
-cancellation and lifetime ownership, then replay the unchanged frozen ruler.
+the runtime contract to Waffle. The bounded adoption below first reproduces both
+forms, tests fresh regular-file offsets versus shared pipes/terminals, preserves
+cancellation and lifetime ownership, then replays the unchanged frozen ruler.
 
 ## Waffle descriptor paths and retained here-input boundary, 2026-10-21
 
@@ -2086,12 +2089,13 @@ an independent regular-file reopen.
 Exact Bash 5.3.15 versus production Waffle reproducer, with N=3 and N=65536 and
 both a here-document and the equivalent `<<<"$payload"` here-string:
 
-```bash
-payload=$(printf '%*s' "$N" '' | tr ' ' x)
-code='{ IFS= read -r x </dev/stdin; IFS= read -r y; printf "%s:%s\n" "${#x}" "${#y}"; }'
-# Run code with a here-document containing "$payload", then "last".
-# Before export: N=3 gives 3:4 on both; N=65536 gives 65536:65536 on Bash,
-# but 65536:4 on production Waffle.
+```python
+# Generate the exact guest script. Use N=3 or N=65536.
+N = 65536
+body = '{ IFS= read -r x </dev/stdin; IFS= read -r y; printf "%s:%s\\n" "${#x}" "${#y}"; }'
+payload = "x" * N
+print(body + " <<'END'\n" + payload + "\nlast\nEND")
+# Here-string alternative: print(body + " <<<'" + payload + "\nlast'")
 ```
 
 For an exact generated script without relying on shell interpolation, the retained
@@ -2114,3 +2118,26 @@ after export, without copied snapshots or invented metadata. It must preserve
 actual pipe sharing, process/session cleanup and every frozen individual pass.
 Until then, only production host-backed regular-file paths are the gain claim.
 See [descriptor contracts and consumer audit](../docs/descriptor-reopening.md).
+
+
+### Adoption measurement and landing gate
+
+The integrated candidate `7283f602fb91c6ca5d217318aa9c6ffbdebcd3d0` normally merges
+PR44/main `2f0bf1176703a2a397bd0e35af480d7df322e67e`. Both ordinary redirects and
+PR44's `interpreter/file_substitution.rs` use the same logical-to-physical helper.
+The full production-Waffle replay preserves all 9,221 identities and every outcome.
+Oils/Brush/Bashkit stay 1023/1014/1420; gained and lost IDs are empty in every corpus.
+The baseline and its historical failure payloads are unchanged. See the
+[measurement receipt](../docs/evidence/waffle-descriptor-reopening.json).
+
+Native/WASI suites pass 1,317/1,297 tests, the exact scoreboard recipe passes 557,
+and runtime controls pass 145. Chromium and Firefox pass 232 browser cases with
+16 existing skips, plus both real shared-terminal descriptor controls. Foreign
+format errors survive Restart without wiping the sentinel. SAFE never falls back.
+The one duplicate fixture setup found by the quality gate is extracted and
+reverified before handoff.
+
+Status: Approved, implementation awaiting parent review and hosted CI. The root
+merge hold remains in force. Parent alone merges after PR47/main normal integration
+and a fresh complete frozen membership recomputation. This receipt does not claim
+PR47 integration, hosted CI acceptance, full local-buffer parity or merged status.

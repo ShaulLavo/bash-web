@@ -270,39 +270,43 @@ async function foreignWorkspace(page: Page, name: string) {
     }),
   );
   await page.goto("/storage-seed");
-  await page.evaluate(async (workspace) => {
-    const request = indexedDB.open(workspace, 1);
-    request.onupgradeneeded = () => request.result.createObjectStore("foreign");
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    const transaction = db.transaction("foreign", "readwrite");
-    transaction.objectStore("foreign").put("owner-data", "sentinel");
-    await new Promise<void>((resolve, reject) => {
-      transaction.oncomplete = () => resolve();
-      transaction.onabort = () => reject(transaction.error);
-    });
-    db.close();
-  }, name);
+  await preservedWorkspace(page, name, "seed");
 }
 
-async function preservedWorkspace(page: Page, name: string) {
-  return page.evaluate(async (workspace) => {
-    const request = indexedDB.open(workspace);
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    const stores = Array.from(db.objectStoreNames);
-    const read = db.transaction("foreign").objectStore("foreign").get("sentinel");
-    const value = await new Promise<unknown>((resolve, reject) => {
-      read.onsuccess = () => resolve(read.result);
-      read.onerror = () => reject(read.error);
-    });
-    db.close();
-    return { stores, value };
-  }, name);
+async function preservedWorkspace(page: Page, name: string, action: "seed" | "read" = "read") {
+  return page.evaluate(
+    async ({ workspace, action }) => {
+      const request = indexedDB.open(workspace, 1);
+      request.onupgradeneeded = () => {
+        if (action === "seed") request.result.createObjectStore("foreign");
+        else request.transaction?.abort();
+      };
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      try {
+        const stores = Array.from(db.objectStoreNames);
+        const transaction = db.transaction("foreign", action === "seed" ? "readwrite" : "readonly");
+        const completed = new Promise<void>((resolve, reject) => {
+          transaction.oncomplete = () => resolve();
+          transaction.onabort = () => reject(transaction.error);
+        });
+        const store = transaction.objectStore("foreign");
+        if (action === "seed") store.put("owner-data", "sentinel");
+        const read = store.get("sentinel");
+        const value = await new Promise<unknown>((resolve, reject) => {
+          read.onsuccess = () => resolve(read.result);
+          read.onerror = () => reject(read.error);
+        });
+        await completed;
+        return { stores, value };
+      } finally {
+        db.close();
+      }
+    },
+    { workspace: name, action },
+  );
 }
 
 test("foreign IndexedDB shows INVALID_VFS_FORMAT and Restart never wipes owner data", async ({

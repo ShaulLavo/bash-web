@@ -56,3 +56,20 @@ Run `npm run build:shell`, `npm run build:node-harness`, then
 The descriptor test is part of the unchanged blocking scoreboard recipe, with its
 exact complete selection asserted in `scripts/test-ci-workflow.ts`. Storage tests
 cover the actual standalone entry in both configured browsers.
+
+
+## Measured result
+
+The full integrated production replay at `7283f602` preserves all 9,221 records
+against PR44/main `2f0bf117`. Oils stays 1,023/1,682 scored, Brush stays 1,014/1,888,
+and Bashkit stays 1,420/2,222. Every gained/lost ID list is empty, with no other
+outcome changes. No baseline update is needed. The host-backed descriptor controls
+are the new behavior; the frozen inventory contains no descriptor-path cases.
+See [the exact receipt](evidence/waffle-descriptor-reopening.json).
+
+Native/WASI tests pass 1,317/1,297 cases, the complete scoreboard test recipe passes
+557, and runtime unit tests pass 145. Chromium/Firefox pass 232 browser cases with
+16 unchanged skips, plus the two added real shared-terminal controls. Browser
+runs use source/artifact hashes and verified remote teardown. Final review and
+hosted CI belong to the parent. The root hold also requires normal PR47/main
+integration and a complete frozen recomputation before landing.

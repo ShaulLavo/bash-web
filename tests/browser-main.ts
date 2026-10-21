@@ -19,8 +19,8 @@ function filesystemOptions(): SharedFilesystemOptions {
     workerURL: filesystemWorkerUrl,
   } satisfies SharedFilesystemOptions;
   if (query.get("test") !== "1") return defaults;
-  if (query.get("storage") === "safe") return { ...defaults, mode: "safe" };
   const name = query.get("workspace") ?? undefined;
+  if (query.get("storage") === "safe") return { ...defaults, name, mode: "safe" };
   const whenBusy = query.get("whenBusy");
   if (query.get("storage") === "opfs") {
     if (whenBusy === "takeover") throw new TypeError('OPFS storage only supports whenBusy: "wait"');
