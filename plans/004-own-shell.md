@@ -2014,3 +2014,56 @@ See [the behavior notes](../docs/printf-escaped-fields.md) and
 [measurement receipt](../docs/evidence/printf-escaped-fields.json). The complete
 saved replay, original exit, before-and-after controls, offline comparator and
 cleanup receipt remain in `/work/reports/bash-web/hill-climb/printf-b-fields`.
+
+## Waffle descriptor paths and retained here-input boundary, 2026-10-21
+
+Approved adoption of exact Waffle 0.0.63 pin
+`c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289`, from actual main's 0.0.58 pin
+`fc58a532f0d7a617e631ea4b7580a190915d4ed6`. Translate logical shell fds through
+`Endpoint::runtime_fd`, then use real `path_open`; do not clone regular host
+endpoints. Native MemoryFs reopens use the same inode with a new description in
+its owning I/O implementation. This adoption adds no generic I/O trait, export
+pump, producer/session owner or compatibility fallback.
+
+### Approved follow-up: remove the remaining local buffer alias boundary
+
+The follow-up is not implemented in this bounded adoption. The source boundary is
+`io.rs::Open::Bytes`, `buffered_source`, `export_buffer` and `reopen_descriptor`,
+plus the existing runtime child-export machinery. Unexported buffers share their
+cursor; exported buffers use an actual host pipe. Native local pipes deliberately
+duplicate their shared description, capture/null fixtures remain local, and opaque
+Host endpoints without `runtime_fd` return Unsupported. Native regular endpoints
+are no longer aliases. No copied data, fabricated offsets or metadata stand in for
+an independent regular-file reopen.
+
+Exact Bash 5.3.15 versus production Waffle reproducer, with N=3 and N=20000 and
+both a here-document and the equivalent `<<<"$payload"` here-string:
+
+```bash
+payload=$(printf '%*s' "$N" '' | tr ' ' x)
+code='{ IFS= read -r x </dev/stdin; IFS= read -r y; printf "%s:%s\n" "${#x}" "${#y}"; }'
+# Run code with a here-document containing "$payload", then "last".
+# Before export: N=3 gives 3:4 on both; N=20000 gives 20000:20000 on Bash,
+# but 20000:4 on production Waffle.
+```
+
+For an exact generated script without relying on shell interpolation, the retained
+`/work/reports/bash-web/hill-climb/control/waffle-reopen/buffer-controls.ts` builds
+`{ IFS= read -r x </dev/stdin; IFS= read -r y; printf '%s:%s\n' "${#x}" "${#y}"; }`
+followed by `<<'END'`, N literal `x` bytes, `last`, `END`, each on its own line.
+Its here-string form appends `<<<'` plus N literal `x` bytes, newline, `last'`.
+The report's JSON contains all eight Bash/production observations.
+
+After export, replace that body with
+`{ cat /dev/stdin >copy; if IFS= read -r x </dev/stdin; then printf 'next=%s\n' "${#x}"; else printf 'EOF\n'; fi; IFS= read -r y <copy; printf 'copy=%s\n' "${#y}"; }`.
+Short input gives `EOF` then `copy=3` on both. Large input gives `next=20000`
+then `copy=20000` on Bash, but `EOF` then `copy=20000` on production Waffle.
+This proves actual post-export pipe sharing, not large here-input parity.
+The committed production controls retain both sizes and both here-input forms.
+
+Removal condition: a separately authorized bounded design must give buffered
+here-inputs Bash's actual reopen identity, offset and lifetime behavior before and
+after export, without copied snapshots or invented metadata. It must preserve
+actual pipe sharing, process/session cleanup and every frozen individual pass.
+Until then, only production host-backed regular-file paths are the gain claim.
+See [descriptor contracts and consumer audit](../docs/descriptor-reopening.md).

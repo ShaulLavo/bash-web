@@ -68,11 +68,12 @@
   },
   "waffle": {
     "repository": "https://github.com/ShaulLavo/waffle",
-    "revision": "fc58a532f0d7a617e631ea4b7580a190915d4ed6",
+    "revision": "c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289",
     "package": "waffle",
-    "version": "0.0.58",
-    "specifier": "git+https://github.com/ShaulLavo/waffle.git#fc58a532f0d7a617e631ea4b7580a190915d4ed6",
+    "version": "0.0.63",
+    "specifier": "git+https://github.com/ShaulLavo/waffle.git#c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289",
     "license": "MIT",
+    "descriptorAdapter": "Original local Rust logical-to-physical fd translation and WASI path_open flags/rights adapter, from docs/host-abi.md at the selected revision. No copied runtime implementation. Native MemoryFs uses its own same-node/new-description operation; unexported buffers retain their explicit boundary. See docs/descriptor-reopening.md and plan 004.",
     "permissionAdapter": "Original local Rust adapter from runtime_fs.path_permissions_get documentation at the selected revision. No copied upstream implementation. Preserve the four-word supported-mode/access contract; query metadata without opening payloads. Test-only storage conformance imports fs/vfs-internal.ts from the same pinned source module as SharedFilesystem; product composition stays default FAST and the frozen runner stays public memory.",
     "strategy": "Required peer imported by the JavaScript shell adapter; exact same Git pin used as development dependency for browser builds and tests. One application-created runtime per page owns shared services. No runtime source tree is vendored. Waffle reports runtime_proc startup failures only through typed parent outcomes and full host diagnostics, without child-stdio bytes even before adapter entry. Host-root reporting stays unchanged. Waffle owns lowest-free preopen placement and the single wasi-libc scanner patch; every locally built WASI guest final-links the patched sysroot."
   },

@@ -14,8 +14,12 @@ import filesystemWorkerUrl from "../.build/browser/fs-worker.js?url";
 
 function filesystemOptions(): SharedFilesystemOptions {
   const query = new URLSearchParams(location.search);
-  const defaults = { workerURL: filesystemWorkerUrl };
+  const defaults = {
+    mode: "fast",
+    workerURL: filesystemWorkerUrl,
+  } satisfies SharedFilesystemOptions;
   if (query.get("test") !== "1") return defaults;
+  if (query.get("storage") === "safe") return { ...defaults, mode: "safe" };
   const name = query.get("workspace") ?? undefined;
   const whenBusy = query.get("whenBusy");
   if (query.get("storage") === "opfs") {

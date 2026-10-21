@@ -252,3 +252,20 @@ async function abiControls(runtime: Runtime, fs: FilesystemClient) {
     wasi.descriptors.dispose();
   }
 }
+
+test("descriptor reopen checks the inode's current access, not the source rights", () =>
+  withRuntime(async (runtime, fs) => {
+    await file(runtime, fs, "/permissions/reopen-denied", 0o200);
+    const deniedRead = await shell(
+      runtime,
+      "exec 3>/permissions/reopen-denied; read -r x </dev/fd/3",
+    );
+    assert.notEqual(deniedRead.status, 0);
+    assert.equal(deniedRead.stderr, "");
+    await file(runtime, fs, "/permissions/reopen-readable", 0o600);
+    const allowedRead = await shell(
+      runtime,
+      "exec 3>>/permissions/reopen-readable; IFS= read -r x </proc/self/fd/3; printf '%s\\n' \"$x\"",
+    );
+    assert.deepEqual(allowedRead, { status: 0, stdout: "payload\n", stderr: "" });
+  }));
