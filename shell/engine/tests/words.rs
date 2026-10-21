@@ -4283,16 +4283,21 @@ fn indexed_r1_cancelled_staging_preserves_live_array_and_refunds_invocation() {
 #[test]
 fn indexed_r1_resource_rejection_rolls_back_completed_writes() {
     let rig = Rig::new(Limits {
-        expansion_bytes: 32,
+        expansion_bytes: 4096,
         ..Limits::default()
     });
     assert_eq!(rig.run("a=(saved kept); x=old"), 0);
-    rig.variable("VALUE", "123456789012345678901234567890");
+    rig.variable("VALUE", &"x".repeat(4090));
     for source in ["a[0]=new b=$VALUE", "a+=(new) b=$VALUE", "x=new b=$VALUE"] {
         assert_eq!(rig.run(source), 2, "{source}");
         assert_eq!(rig.run("args \"${a[@]}\" \"$x\""), 0);
     }
-    assert!(rig.calls.borrow().iter().all(|call| call == &["saved", "kept", "old"]));
+    assert!(
+        rig.calls
+            .borrow()
+            .iter()
+            .all(|call| call == &["saved", "kept", "old"])
+    );
 }
 
 #[test]
@@ -4308,5 +4313,23 @@ fn indexed_r1_cancellation_rolls_back_completed_writes() {
         assert_eq!(rig.finish(job), 130);
         assert_eq!(rig.run("args \"${a[@]}\" \"$x\""), 0);
     }
-    assert!(rig.calls.borrow().iter().all(|call| call == &["saved", "kept", "old"]));
+    assert!(
+        rig.calls
+            .borrow()
+            .iter()
+            .all(|call| call == &["saved", "kept", "old"])
+    );
+}
+
+#[test]
+fn indexed_r1_cancellation_keeps_later_durable_rhs_writes_to_completed_targets() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=('' kept); x=old"), 0);
+    let job = rig.shell.start("a[0]= x= y=${a:=durable} z=${x:=effect} b=$(while true; do :; done)").unwrap();
+    rig.ex.drive(256);
+    assert!(!job.is_finished());
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    assert_eq!(rig.run("args \"${a[@]}\" \"$x\" \"$y\" \"$z\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["durable", "kept", "effect", "", ""]]);
 }
