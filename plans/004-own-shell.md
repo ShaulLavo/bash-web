@@ -1833,3 +1833,62 @@ expectation against direct native `iswprint_l` classifications. Native Bash
 and round-trip check are independent observations, not the GNU 5.3.15 oracle. No skip, filtered assertion, portable Unicode
 table or scoring change is included. Raw first-failure and follow-up logs stay
 in the report directory under `review-fixes-r1-darwin*`.
+
+## Printf scalar assignment, 2026-10-21
+
+Approved. Review-ready implementation; parent owns independent correctness and
+comment reviews, hosted CI, fixes coordination, merge and exact-main acceptance.
+
+Measured source `286dd4cd0bc59410bda90348992044812a208dd3`, accepted base
+`50ab6a7f3cdf6c4c7a7e1ad875d4e804e76da5fd`. Plain and attached `printf -v` capture
+through the existing two-pass formatter, then use existing scalar bindings for
+dynamic locals, namerefs, readonly and IFS. No stdout writes occur. Capture and
+assignment storage remain budgeted and cancellable. NUL output shrinks to its
+stored prefix; invalid UTF-8 before NUL returns 2 without replacing the old value.
+No array lvalues, attributes, float/time formats or parser/runtime changes.
+See [behavior](../docs/printf-scalar-assignment.md) and
+[the measurement receipt](../docs/evidence/printf-scalar-assignment.json).
+
+Exactly one full production-Waffle replay, JOBS=1 and RECORD=0, retained all
+9,221 records, 5,792 scored and 3,429 unchanged skips. Waffle stays pinned to
+`fc58a532f0d7a617e631ea4b7580a190915d4ed6`.
+
+- oils: 1013 -> 1015, gained 2, lost 0.
+- brush-suite: 1001 -> 1007, gained 6, lost 0.
+- bashkit-suite: 1406 -> 1412, gained 6, lost 0.
+
+Only actually gained outcome fields and derived baseline counts change; all
+historical payloads remain. The unchanged strict membership comparator passes
+offline against the saved replay. Cases, oracle, environment, source pins,
+classification, scorer, fixtures, deadlines, exclusions and blocking gates stay
+unchanged. Full evidence and reproducer are in
+`/work/reports/bash-web/hill-climb/printf-scalar-assignment/`.
+
+Native/WASI Clippy, native workspace and selected WASI suites pass, including
+113 printf and 9 echo word tests per target and existing low-memory controls.
+The real-Waffle controls pass 29 Bash comparisons and four explicit boundaries.
+Scoreboard controls pass 107/107. Quality, unchanged duplicate gates and layer
+checks pass, with zero layer violations. Browser verification passes 228 tests
+with 16 existing skips in Chromium/Firefox, plus 143 runtime-terminal tests.
+No local Darwin claim; the unchanged hosted gate remains parent-owned.
+
+### Finding retained at the existing builtin-prefix boundary
+
+At the measured source, run
+`x=outer; x=prefix printf -v x %s assigned; echo "$x"` through the production
+Waffle control in `scripts/test-own-shell-printf-assignment.ts`. Bash 5.3.15
+prints `assigned\n`; this shell prints `outer\n`, both status 0 with empty
+stderr. This reproduces every run. The control logs both raw byte observations
+in `final-controls.log`. Ordinary scalar assignment, nested local scope and
+nameref assignment pass their Bash comparisons; the discrepancy requires a
+temporary command prefix.
+
+`PrefixFrame::builtin` in `shell/engine/src/state.rs` keeps private restoration
+saves and its drop restores them. `State::assign_parameter` updates expansion
+saves, not builtin saves. There is no selective durable-write operation for the
+builtin guard. This unit deliberately preserves that shared binding contract
+rather than changing interpreter ownership. A follow-up should give the guard
+an explicit way to retain a builtin's successful writes, with admission,
+cancellation, readonly, local/nameref and IFS tests. None of this unit's eleven
+candidate observations uses a temporary command prefix. Invalid UTF-8, arrays
+and unsupported conversions remain separately named boundaries, not scored gains.

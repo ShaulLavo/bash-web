@@ -39,5 +39,6 @@ This is original local Rust observed against GNU Bash 5.3.15, not copied code.
 
 See [the measurement receipt](evidence/printf-scalar-assignment.json). Focused
 controls compare raw stdout and status, and separately compare stderr after
-removing only Bash source-line annotations. The frozen score does not normalize
-stdout, change stderr policy, or alter any case, fixture, exclusion or deadline.
+removing only Bash source-line annotations. This unit adds no stdout normalization
+and leaves the frozen path-normalization and stderr policies unchanged. No case,
+fixture, exclusion or deadline changes.
