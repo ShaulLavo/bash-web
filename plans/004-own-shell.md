@@ -2014,3 +2014,32 @@ See [the behavior notes](../docs/printf-escaped-fields.md) and
 [measurement receipt](../docs/evidence/printf-escaped-fields.json). The complete
 saved replay, original exit, before-and-after controls, offline comparator and
 cleanup receipt remain in `/work/reports/bash-web/hill-climb/printf-b-fields`.
+
+## Follow-up: all-zero and overflowing digit parameters, 2026-10-22
+
+Status: Approved. Fix this in the direct parameter adapter, not in indirection.
+Bare `${!p}` reaches digit targets through the same direct read, so one fix
+covers both spellings.
+
+The review of the indirect special-target unit (PR #46) compared GNU Bash
+5.3.15 with the release Waffle guest (sha256 `e0aa18e3…`) after
+`set -- a b c d e f g h i j`:
+
+| Form | Bash | Waffle |
+| --- | --- | --- |
+| `"${00}"`, `"${000}"`, `r=00; "${!r}"` | `$0` (`/usr/bin/bash`) | empty |
+| `"${18446744073709551616}"` and its `${!r}` form | `a` | empty |
+| `"${9999999999999999999999999999999999999999}"` and its `${!r}` form | `i` | empty |
+| the two overflowing forms under `set -u` | `a` / `i`, status 0 | fatal `unbound variable`, status 127 |
+
+`r=01` and `r=0010` already match Bash. Suspected cause:
+`State::parameter` (`shell/engine/src/state.rs:343`) matches `$0` only on
+the literal `"0"`, so `00` parses to 0, fails `checked_sub(1)` and reads as
+empty. Overflowing digit strings fail `parse::<usize>()` and also read as
+empty. `require_bound` (`shell/engine/src/expand.rs:668`) treats the failed
+parse as unset under nounset. Bash converts the digits with wrapping
+arithmetic and selects the resulting positional. Derive the exact wrap rule
+from Bash's source and check it against controls before changing the code.
+Evidence: `/work/reports/bash-web/hill-climb/expansion/indirect-special-review-r2/controls.json`
+(rows `direct:00:` through `indirect:9999…:set -u; `). No frozen scored case
+has been checked against this; claim no gain unless a replay proves one.

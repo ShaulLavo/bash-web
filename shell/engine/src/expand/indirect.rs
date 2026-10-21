@@ -380,31 +380,37 @@ mod tests {
         special_expand(state, target, source, false)
     }
 
-    #[test]
-    fn bare_special_targets_match_their_direct_parameters() {
-        // Each indirect form must equal the direct spelling of its target in
-        // the same field and scalar contexts, including list IFS joins.
-        let targets = ["1", "2", "3", "4", "01", "#", "?", "@", "*"];
+    /// Compares each indirect shape for `r=target` with the direct spelling
+    /// of the target, in both field and scalar contexts.
+    fn assert_matches_direct(state: &crate::state::SharedState, target: &str, ifs: Option<&str>) {
         let shapes = [
             ("${!r}", "${T}"),
             ("\"${!r}\"", "\"${T}\""),
             ("x${!r}y", "x${T}y"),
         ];
+        let direct = if target == "01" { "1" } else { target };
+        for (indirect, plain) in shapes {
+            let plain = plain.replace('T', direct);
+            let expected = special_fields(state, target, &plain)
+                .unwrap_or_else(|_| panic!("direct {plain} must expand"));
+            let actual = special_fields(state, target, indirect)
+                .unwrap_or_else(|_| panic!("{indirect} with r={target} must expand"));
+            assert_eq!(actual, expected, "{indirect} r={target} IFS={ifs:?}");
+            let expected = special_expand(state, target, &plain, true).ok();
+            let actual = special_expand(state, target, indirect, true).ok();
+            assert_eq!(actual, expected, "scalar {indirect} r={target} IFS={ifs:?}");
+        }
+    }
+
+    #[test]
+    fn bare_special_targets_match_their_direct_parameters() {
+        // Each indirect form must equal the direct spelling of its target in
+        // the same field and scalar contexts, including list IFS joins.
+        let targets = ["1", "2", "3", "4", "01", "#", "?", "@", "*"];
         for ifs in [None, Some(""), Some(":")] {
             let state = special_state(ifs);
             for target in targets {
-                let direct = if target == "01" { "1" } else { target };
-                for (indirect, plain) in shapes {
-                    let plain = plain.replace('T', direct);
-                    let expected = special_fields(&state, target, &plain)
-                        .unwrap_or_else(|_| panic!("direct {plain} must expand"));
-                    let actual = special_fields(&state, target, indirect)
-                        .unwrap_or_else(|_| panic!("{indirect} with r={target} must expand"));
-                    assert_eq!(actual, expected, "{indirect} r={target} IFS={ifs:?}");
-                    let expected = special_expand(&state, target, &plain, true).ok();
-                    let actual = special_expand(&state, target, indirect, true).ok();
-                    assert_eq!(actual, expected, "scalar {indirect} r={target} IFS={ifs:?}");
-                }
+                assert_matches_direct(&state, target, ifs);
             }
         }
         let state = special_state(None);
