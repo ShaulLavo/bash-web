@@ -956,6 +956,10 @@ impl State {
     pub(crate) fn getopts_numeric(&self, name: &str) -> bool {
         name == "OPTIND" && self.getopts_numeric
     }
+    #[cfg(test)]
+    pub(crate) fn getopts_publication_budget(&self) -> Option<crate::exec::StorageBudget> {
+        self.memory.clone()
+    }
     pub(crate) fn reserve_getopts_publication(
         &self,
         names: &[(&str, usize); 3],

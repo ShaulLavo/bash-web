@@ -501,3 +501,6 @@ async fn message(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;
