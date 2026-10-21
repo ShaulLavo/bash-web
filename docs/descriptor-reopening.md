@@ -28,6 +28,9 @@ controls happen to match Bash's pipes; that does not make Bytes a pipe. Plan 004
 Approved follow-up records the reproducer and removal condition. Descriptor metadata
 predicates and lexical path normalization also retain their existing limitations;
 this change does not claim virtual symlink/stat or path traversal parity.
+The old parser also accepts a leading plus in `/dev/fd/+3`, unlike Linux and
+Waffle, and `test` does not normalize `/dev//fd/3` before its descriptor lookup.
+Those pre-existing behaviors remain outside this adoption.
 
 ## Consumer audit
 
@@ -42,7 +45,7 @@ The previous actual pin was Waffle 0.0.58, `fc58a532`, not 0.0.50. The adopted p
 | Localhost networking and shared-worker additions | Additive, not enabled by this adoption. |
 | Opt-in local publication and cross-page guard/private transport after 0.0.58 | Not enabled. Preserve one application-created Runtime and borrowed-runtime ownership. |
 | Reject save completion after disposal | Adopt through the exact pin; existing physical teardown tests remain blocking. |
-| Descriptor path reopening | Translate logical fd, then use real path_open. Test offsets, flags, permissions, missing fds, remapping and shared streams. |
+| Descriptor path reopening | Redirects, file substitutions, cat and grep operands translate logical fd, then use real path_open. Test offsets, flags, permissions, missing fds, remapping and shared streams. |
 
 ## Provenance and verification
 
@@ -64,7 +67,11 @@ The full integrated production replay at `7283f602` preserves all 9,221 records
 against PR44/main `2f0bf117`. Oils stays 1,023/1,682 scored, Brush stays 1,014/1,888,
 and Bashkit stays 1,420/2,222. Every gained/lost ID list is empty, with no other
 outcome changes. No baseline update is needed. The host-backed descriptor controls
-are the new behavior; the frozen inventory contains no descriptor-path cases.
+are the new behavior. The frozen inventory contains 16 descriptor-path cases:
+10 pass, four are excluded command-dependent cases, and two fail for unrelated
+syntax or missing-builtin behavior. This replay preserves all 10 existing passes.
+The failures are `oils:redirect:543` for `{var}` redirects and
+`brush-suite:builtins/dot:8` for the missing `.` builtin.
 See [the exact receipt](evidence/waffle-descriptor-reopening.json).
 
 Native/WASI tests pass 1,317/1,297 cases, the complete scoreboard test recipe passes

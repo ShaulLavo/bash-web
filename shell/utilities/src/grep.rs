@@ -7,7 +7,7 @@ use super::{Context, endpoint, write};
 use regex::bytes::{Regex, RegexBuilder};
 use shell_engine::{
     executor::Budget,
-    io::{Endpoint, FdTable, IoError, OpenOptions},
+    io::{Endpoint, FdTable, IoError, OpenOptions, open_path},
     state::absolute,
 };
 
@@ -297,6 +297,26 @@ impl Scan<'_> {
     }
 }
 
+async fn open_input(
+    file: &str,
+    cwd: &str,
+    fds: &FdTable,
+    context: &Context,
+) -> Result<Endpoint, i32> {
+    if file == "-" {
+        return endpoint(fds, 0).map_err(|_| 2);
+    }
+    let path = absolute(cwd, file);
+    let options = OpenOptions::default();
+    let opening = open_path(&path, fds, &options).map_err(io_status)?;
+    context
+        .cancel
+        .run(opening.open(context.fs(), &options))
+        .await
+        .map_err(|_| 130)?
+        .map_err(io_status)
+}
+
 pub(crate) async fn run(
     args: Vec<String>,
     cwd: &str,
@@ -326,17 +346,7 @@ pub(crate) async fn run(
     let mut budget = Budget::default();
     for file in files {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-        let input = if file == "-" {
-            endpoint(fds, 0).map_err(|_| 2)
-        } else {
-            let path = absolute(cwd, &file);
-            context
-                .cancel
-                .run(context.fs().open(&path, &OpenOptions::default()))
-                .await
-                .map_err(|_| 130)?
-                .map_err(io_status)
-        };
+        let input = open_input(&file, cwd, fds, context).await;
         let mut scan = Scan {
             options: &options,
             matcher: &matcher,
