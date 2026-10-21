@@ -1,0 +1,186 @@
+{
+  "schema": 1,
+  "bash": "5.3.15(1)-release",
+  "cases": [
+    {
+      "script": "set -u\nprintf \"%s\\n\" \"$((missing))\"\nprintf BAD\n",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 2: missing: unbound variable\n"
+    },
+    {
+      "script": "set -u\nprintf \"%s\\n\" \"$((missing+5))\"\nprintf BAD\n",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 2: missing: unbound variable\n"
+    },
+    {
+      "script": "set -u\nprintf \"%s\\n\" \"$((missing++))\"\nprintf BAD\n",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 2: missing: unbound variable\n"
+    },
+    {
+      "script": "set -u\nprintf \"%s\\n\" \"$((++missing))\"\nprintf BAD\n",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 2: missing: unbound variable\n"
+    },
+    {
+      "script": "set -u\nprintf \"%s\\n\" \"$((--missing))\"\nprintf BAD\n",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 2: missing: unbound variable\n"
+    },
+    {
+      "script": "set -u\nprintf \"%s\\n\" \"$((missing--))\"\nprintf BAD\n",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 2: missing: unbound variable\n"
+    },
+    {
+      "script": "set -u\nprintf \"%s\\n\" \"$((missing+=2))\"\nprintf BAD\n",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 2: missing: unbound variable\n"
+    },
+    {
+      "script": "set -u\nprintf \"%s\\n\" \"$((missing*=2))\"\nprintf BAD\n",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 2: missing: unbound variable\n"
+    },
+    {
+      "script": "set -o nounset\nx=$(( y + 5 ))\necho \"should not get here: x=${x:-<unset>}\"\n\n",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 2: y: unbound variable\n"
+    },
+    {
+      "script": "set -u; empty=; printf \"%s\\n\" \"$((empty))\"; printf \"m=<%s>\\n\" \"${missing-unset}\"",
+      "status": 0,
+      "stdout": "0\nm=<unset>\n",
+      "stderr": ""
+    },
+    {
+      "script": "set -u; empty=; printf \"%s\\n\" \"$((0&&missing))\"; printf \"m=<%s>\\n\" \"${missing-unset}\"",
+      "status": 0,
+      "stdout": "0\nm=<unset>\n",
+      "stderr": ""
+    },
+    {
+      "script": "set -u; empty=; printf \"%s\\n\" \"$((1||missing))\"; printf \"m=<%s>\\n\" \"${missing-unset}\"",
+      "status": 0,
+      "stdout": "1\nm=<unset>\n",
+      "stderr": ""
+    },
+    {
+      "script": "set -u; empty=; printf \"%s\\n\" \"$((1?7:missing))\"; printf \"m=<%s>\\n\" \"${missing-unset}\"",
+      "status": 0,
+      "stdout": "7\nm=<unset>\n",
+      "stderr": ""
+    },
+    {
+      "script": "set -u; empty=; printf \"%s\\n\" \"$((0?missing:7))\"; printf \"m=<%s>\\n\" \"${missing-unset}\"",
+      "status": 0,
+      "stdout": "7\nm=<unset>\n",
+      "stderr": ""
+    },
+    {
+      "script": "set -u; empty=; printf \"%s\\n\" \"$((0&&(missing+=1)))\"; printf \"m=<%s>\\n\" \"${missing-unset}\"",
+      "status": 0,
+      "stdout": "0\nm=<unset>\n",
+      "stderr": ""
+    },
+    {
+      "script": "set -u; empty=; printf \"%s\\n\" \"$((1||(missing++)))\"; printf \"m=<%s>\\n\" \"${missing-unset}\"",
+      "status": 0,
+      "stdout": "1\nm=<unset>\n",
+      "stderr": ""
+    },
+    {
+      "script": "set -u; empty=; printf \"%s\\n\" \"$((1?7:++missing))\"; printf \"m=<%s>\\n\" \"${missing-unset}\"",
+      "status": 0,
+      "stdout": "7\nm=<unset>\n",
+      "stderr": ""
+    },
+    {
+      "script": "set -u; empty=; printf \"%s\\n\" \"$((0?missing--:7))\"; printf \"m=<%s>\\n\" \"${missing-unset}\"",
+      "status": 0,
+      "stdout": "7\nm=<unset>\n",
+      "stderr": ""
+    },
+    {
+      "script": "set -u; empty=; printf \"%s\\n\" \"$((missing=4))\"; printf \"m=<%s>\\n\" \"${missing-unset}\"",
+      "status": 0,
+      "stdout": "4\nm=<4>\n",
+      "stderr": ""
+    },
+    {
+      "script": "set -u; empty=; printf \"%s\\n\" \"$((missing=4,missing+=2))\"; printf \"m=<%s>\\n\" \"${missing-unset}\"",
+      "status": 0,
+      "stdout": "6\nm=<6>\n",
+      "stderr": ""
+    },
+    {
+      "script": "set -u; empty=; printf \"%s\\n\" \"$((missing=4,missing++))\"; printf \"m=<%s>\\n\" \"${missing-unset}\"",
+      "status": 0,
+      "stdout": "4\nm=<5>\n",
+      "stderr": ""
+    },
+    {
+      "script": "set +u; printf \"%s:%s:%s\\n\" \"$((missing))\" \"$((missing++))\" \"$missing\"",
+      "status": 0,
+      "stdout": "0:0:1\n",
+      "stderr": ""
+    },
+    {
+      "script": "set -u; ((missing=4)); let \"missing+=2\"; printf \"%s\\n\" \"$missing\"",
+      "status": 0,
+      "stdout": "6\n",
+      "stderr": ""
+    },
+    {
+      "script": "set -u; i=0; while ((i<3)); do ((i+=1)); done; printf \"%s\\n\" \"$i\"",
+      "status": 0,
+      "stdout": "3\n",
+      "stderr": ""
+    },
+    {
+      "script": "set -u; value=$(printf before; printf \"%s\" \"$((missing))\"; printf BAD); printf \"rc=%s value=<%s>\\n\" \"$?\" \"$value\"; printf done",
+      "status": 0,
+      "stdout": "rc=1 value=<before>\ndone",
+      "stderr": "/usr/bin/bash: line 1: missing: unbound variable\n"
+    },
+    {
+      "script": "set -u; (printf \"%s\" \"$((missing))\"; printf BAD); printf \"rc=%s\\n\" \"$?\"; printf done",
+      "status": 0,
+      "stdout": "rc=1\ndone",
+      "stderr": "/usr/bin/bash: line 1: missing: unbound variable\n"
+    },
+    {
+      "script": "set -u\nf() { printf \"%s\" \"$((missing))\"; printf BAD; }\nf\nprintf BAD\n",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 2: missing: unbound variable\n"
+    },
+    {
+      "script": "set -u; printf \"%s\" \"$((saved=9,missing))\"; printf BAD\nprintf BAD\n",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: missing: unbound variable\n"
+    },
+    {
+      "script": "set -u; printf \"%s:%s\\n\" \"$((0&&missing))\" \"${missing-unset}\"",
+      "status": 0,
+      "stdout": "0:unset\n",
+      "stderr": ""
+    }
+  ],
+  "environment": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "LC_ALL": "C.UTF-8"
+  }
+}

@@ -612,3 +612,51 @@ fn a_later_word_error_remains_visible_after_an_arithmetic_read_unit_error() {
     assert_eq!(rig.run("args $((1/0))\nargs \"${v:1>(+(2))}\""), 127);
     assert!(rig.calls.borrow().is_empty());
 }
+
+fn nounset_failure(source: &str) -> Rig {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run(source), 127, "{source}");
+    assert!(rig.calls.borrow().is_empty(), "{source}");
+    assert!(
+        !rig.shell
+            .state()
+            .borrow()
+            .bindings()
+            .contains_key("missing")
+    );
+    rig
+}
+
+#[test]
+fn arithmetic_nounset_reads_abort_without_creating_or_overwriting_targets() {
+    for expression in ["missing", "missing++", "++missing", "missing+=2"] {
+        let source = format!("set -u; ((saved=9,{expression})); args BAD\nargs BAD");
+        let rig = nounset_failure(&source);
+        assert_eq!(rig.shell.state().borrow().bindings()["saved"], "9");
+        assert_eq!(rig.run("args recovered"), 0);
+        assert_eq!(*rig.calls.borrow(), [vec!["recovered"]]);
+    }
+}
+
+#[test]
+fn arithmetic_nounset_expansion_keeps_source_line_and_aborts_read_units() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("set -u\nx=$((missing+5)); args BAD\nargs BAD"), 127);
+    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: line 2: missing: unbound variable\n"
+    );
+    assert!(!rig.shell.state().borrow().bindings().contains_key("x"));
+}
+
+#[test]
+fn arithmetic_nounset_let_and_cached_loop_reads_remain_fatal() {
+    for source in [
+        "set -u; let 'missing+=1'; args BAD\nargs BAD",
+        "set -u; i=0; while ((i<2)); do ((i+=1,missing++)); args BAD; done; args BAD\nargs BAD",
+        "set -u; while ((missing)); do args BAD; done; args BAD\nargs BAD",
+    ] {
+        nounset_failure(source);
+    }
+}

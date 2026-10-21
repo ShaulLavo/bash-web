@@ -536,6 +536,13 @@ async fn read(
         return Ok(0);
     }
     State::admit_scalar_access(state, name, cancel, work).await?;
+    if state.borrow().nounset && !state.borrow().scalar_is_set(name) {
+        work.admit_storage(name.len().saturating_mul(2).saturating_add(128))?;
+        return Err(Error::Unbound {
+            name: name.to_owned(),
+            line: None,
+        });
+    }
     let value = {
         let s = state.borrow();
         if s.dynamic_parameter(name) {
@@ -716,6 +723,38 @@ mod tests {
             ex.drive(64);
         }
         panic!("arithmetic exceeded bounded executor turns");
+    }
+
+    #[test]
+    fn nounset_diagnostic_is_admitted_before_owning_the_name() {
+        let ex = Executor::new();
+        let job = ex.spawn(async {
+            let state = State::default().shared();
+            state.borrow_mut().nounset = true;
+            let cancel = Cancel::new();
+            let mut work = Work::new(100_000, 0, 1);
+            assert!(matches!(
+                read("missing", false, &state, &cancel, 4096, &mut work, 0).await,
+                Ok(0)
+            ));
+            assert!(matches!(
+                read("missing", true, &state, &cancel, 4096, &mut work, 0).await,
+                Err(Error::Status(2))
+            ));
+            let mut work = Work::new(100_000, 142, 1);
+            assert!(matches!(
+                read("missing", true, &state, &cancel, 4096, &mut work, 0).await,
+                Err(Error::Unbound { name, line: None }) if name == "missing"
+            ));
+            assert_eq!(work.storage_left(), 0);
+            cancel.cancel();
+            assert!(matches!(
+                read("missing", true, &state, &cancel, 4096, &mut work, 0).await,
+                Err(Error::Status(130))
+            ));
+            assert!(!state.borrow().scalar_is_set("missing"));
+        });
+        finish(&ex, job);
     }
 
     #[test]
