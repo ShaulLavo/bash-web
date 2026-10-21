@@ -1748,8 +1748,8 @@
       "shell/engine/tests/words/read_count.rs",
       "tests/external-commands.spec.ts"
     ],
-    "implementation": "Original incremental counted input with one-byte reads, bounded UTF-8 validation, escape/continuation processing, NUL skipping, scalar IFS-whitespace trimming, count validation and exact-boundary stopping. Reuses the existing local locale selector and state/endpoint/work admission. Shared live buffer admission remains retained through assignment; cancellation and errors drop it. Uncounted line-reader implementation is moved unchanged from the exact base.",
-    "deferred": "Uncounted escapes and splitting, multiple destinations, arrays, -N/-d, terminal/editor/timeouts, other locale encodings and malformed UTF-8 scalar representation. No runtime metadata or permissions changes.",
+    "implementation": "Original incremental counted input with one-byte reads, bounded UTF-8 validation, escape/continuation processing, NUL skipping, scalar IFS-whitespace trimming, count validation and exact-boundary stopping. Reuses the existing local locale selector and state/endpoint/work admission. Shared live buffer admission remains retained through assignment; cancellation and errors drop it. The later shellReadScalar adaptation extends this reader to ordinary logical lines and multiple destinations.",
+    "deferred": "Arrays, -N/-d, terminal/editor/timeouts, other locale encodings and malformed UTF-8 scalar representation. No runtime metadata or permissions changes.",
     "gate": "Failing-first original Rust controls, exact raw stdout and status differentials on native shell-cli and production shell-runtime on real Waffle, native/WASI suites, browser external-guest pipe, unchanged frozen 9221-record oracle and zero-lost membership comparison."
   },
   "shellFileSubstitution": {
@@ -1813,5 +1813,33 @@
       "non-ASCII option bytes, which cannot be represented individually by the existing UTF-8 scalar binding storage",
       "byte-identical GNU Bash --help prose"
     ]
+  },
+  "shellReadScalar": {
+    "repository": "https://github.com/everruns/bashkit",
+    "revision": "491c3281f668b76d64b15210b8f5d7bf97244be0",
+    "license": "MIT",
+    "classification": "Adapted scalar field boundaries, last-destination remainder and selected examples; original bounded reader, protection and state adapters.",
+    "implementationSources": [
+      {
+        "path": "crates/bashkit/src/builtins/read.rs",
+        "sha256": "0dfc47078882811b7a6bb4bcff39a37f349de5ce62842185c523447ff4caaa2a",
+        "items": [
+          "split_fields scalar IFS boundaries and last-field versus remainder distinction",
+          "read_record escape, continuation and EOF observations",
+          "multiple-destination, IFS and trimming test examples"
+        ]
+      }
+    ],
+    "implementationDestinations": [
+      "shell/engine/src/builtins/read.rs",
+      "shell/engine/src/builtins/read/fields.rs"
+    ],
+    "testDestinations": [
+      "shell/engine/tests/words/read_scalar.rs",
+      "scripts/test-own-shell-read-scalar.ts"
+    ],
+    "changes": "Use the existing counted incremental reader for ordinary logical lines. Replace upstream protected-character placeholders with an admitted one-bit-per-byte map, avoiding collisions with real Unicode input. Return borrowed source spans instead of a field vector, preserve the last destination remainder, snapshot existing IFS membership before assignments, and use the existing state write API. Keep byte-at-a-time endpoint reads, count/UTF-8 boundaries, command and live storage admission, cancellation and exact-sized retained values. Stop options at the first name; preserve writes before a later invalid name.",
+    "deferred": "No arrays/read-a/mapfile, new option families, general attributes, nameref or scope implementation. Existing state owns scalar resolution and IFS membership.",
+    "oracle": "GNU Bash 5.3.15; exact stdout bytes and exit status through production Waffle, plus native/WASI resource controls."
   }
 }
