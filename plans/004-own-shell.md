@@ -1971,3 +1971,46 @@ failure waiver follows from this decision. The original review and all raw
 observations above remain retained. Final source checks and cleanup are in
 `/work/reports/bash-web/hill-climb/printf-scalar-assignment/safe-ifs-r3.md`.
 Historical replay and 14 gained memberships remain unchanged.
+
+## Escaped printf fields, 2026-10-21
+
+Approved bounded unit. Review-ready, not merged or accepted. Parent owns final
+membership and PR-body audit, hosted gates, merge and exact-main acceptance.
+
+`%b` now applies width and alignment to decoded bytes, with space padding for the
+zero flag. The borrowed counting walk reuses the existing decoder, reports escape
+diagnostics once and preserves byte precision, whole-command `\c` stop, scalar
+capture and chunked output. Literal width or precision overflow recovers as zero
+only for `%b`. Bare `%b`, ordinary `%s` and the runtime remain unchanged. The parent
+closed the independent literal-precision finding after reviewing the exact fix
+and raw native/Waffle before-and-after controls.
+
+Exactly one frozen production-Waffle replay measured immutable
+`ec8b801c8ded5ada99d9be9edc847ff856936ad3` against accepted main
+`6f292e1ecafdb0f1638860092d0f4e96722480ac`. It preserves all 9,221 IDs,
+classifications, exclusions and frozen identities, with 5,792 scored and 3,429
+skipped. Measured changes are:
+
+- Oils: 1,015 unchanged, no gained or lost pass.
+- Brush suite: 1,007 to 1,008, gained `brush-suite:builtins/printf:34`, lost zero.
+- Bashkit suite: 1,412 to 1,413, gained `bashkit-suite:bashbox-printf:132`, lost zero.
+
+No nonpass outcome changed. Twenty-five failure payloads differ from historical
+observations without changing their fail outcomes. The report retains those
+observations, and the baseline preserves every historical payload. Only the two
+proven gained memberships and derived counts change. The original replay exits 1
+because the strict comparator rejects those new passes after saving the complete
+result. That unchanged comparator then passes offline on the same saved result.
+No second full replay ran.
+
+Exact-source focused native and WASI printf checks each pass 138 tests. Production
+printf/scalar checks pass 98 tests. The two candidates, 12 preservation cases,
+25 nearby probes and 14 review-finding controls match Bash on native and Waffle.
+Quality and layers pass. After updating membership, the scoreboard suite passes
+172 tests. No runtime pin, deadline, exclusion, migration rule or blocking gate
+changed. Root is 0.0.74, engine 0.0.42, Vite 8.3.3 and Waffle remains `fc58a532`.
+
+See [the behavior notes](../docs/printf-escaped-fields.md) and
+[measurement receipt](../docs/evidence/printf-escaped-fields.json). The complete
+saved replay, original exit, before-and-after controls, offline comparator and
+cleanup receipt remain in `/work/reports/bash-web/hill-climb/printf-b-fields`.

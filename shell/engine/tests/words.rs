@@ -4116,6 +4116,8 @@ mod echo;
 #[path = "words/read_count.rs"]
 mod read_count;
 
+#[path = "words/printf_escaped_fields.rs"]
+mod printf_escaped_fields;
 #[path = "words/printf_fields.rs"]
 mod printf_fields;
 #[path = "words/printf_integers.rs"]
