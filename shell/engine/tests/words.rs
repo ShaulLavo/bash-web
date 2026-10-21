@@ -4136,5 +4136,8 @@ mod printf_options;
 #[path = "words/printf_quoting.rs"]
 mod printf_quoting;
 
+#[path = "words/getopts.rs"]
+mod getopts;
+
 #[path = "words/select.rs"]
 mod select;

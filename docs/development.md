@@ -346,9 +346,10 @@ These are intentionally different views, not one generic builtin predicate:
   command-local context. Functions take precedence before command-wrapper
   unwrapping.
 - Queries still choose keyword, function, reportable builtin, then PATH. Keyword
-  visibility does not claim syntax support: `select`, `time` and `coproc` are
-  explicitly unsupported execution syntax. Availability distinguishes included
-  core commands from unsupported syntax, without build presets or feature filters.
+  visibility does not claim syntax support: `time` and `coproc` are
+  explicitly unsupported execution syntax. Noninteractive `select` is included.
+  Availability distinguishes included core commands from unsupported syntax,
+  without build presets or feature filters.
 - The interpreter retains early direct `exec`, wrapper parsing/function bypass,
   function frames, and `let`/`eval` phases. Prefix restoration, status/diagnostics,
   PATH admission, cancellation and lazy expansion remain with their old owners.
