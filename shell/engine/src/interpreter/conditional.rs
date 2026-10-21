@@ -251,7 +251,9 @@ async fn binary(
         )
         .await?;
         regex::locale(state)?;
-        return regex::matches(&pattern, &left, work, &context.cancel).await;
+        return regex::matches(&pattern, &left, work, &context.cancel)
+            .await
+            .map(|value| value.is_some());
     }
     let right = scalar(right, state, context, work).await?;
     if matches!(operator, "<" | ">") {

@@ -1,4 +1,4 @@
-//! Original bounded no-capture ERE adapter for `[[ =~ ]]`.
+//! Original bounded ERE adapter for `[[ =~ ]]`.
 //!
 //! Shell quoting is retained by expansion, not reconstructed from strings.
 //! Thompson states avoid backtracking. Compilation, epsilon closure, character
@@ -7,7 +7,8 @@
 //! ASCII pattern/input only, in C/POSIX/C.UTF-8/C.utf8 character and collation
 //! locales. Other input/locale combinations fail closed rather than pretending
 //! Unicode classes or byte-oriented C-locale matching have been implemented.
-//! Groups affect matching only: BASH_REMATCH belongs to the arrays subarea.
+//! Matching selects the leftmost-longest span. A reverse reachability table
+//! reconstructs left-alternative/greedy captures without speculative input scans.
 //! Backreferences and locale collating/equivalence constructs fail closed (2).
 use crate::{
     executor::Cancel,
@@ -74,7 +75,7 @@ enum Atom {
 enum Expression {
     Empty,
     Atom(Atom),
-    Group(usize),
+    Group(usize, usize),
     Sequence(usize, usize),
     Alternative(usize, usize),
     Repeat {
@@ -85,6 +86,7 @@ enum Expression {
 }
 #[derive(Default)]
 struct Group {
+    number: usize,
     sequence: Option<usize>,
     alternatives: Option<usize>,
 }
@@ -132,6 +134,9 @@ enum Node {
     Split(usize, usize),
     Start(usize),
     End(usize),
+    Save(usize, usize),
+    Begin { repeat: usize, next: usize },
+    Repeat { body: usize, next: usize },
 }
 
 fn push<T>(values: &mut Vec<T>, value: T, work: &mut Work) -> Result<usize, Error> {
@@ -473,21 +478,25 @@ async fn parse(
     pattern: &Pattern,
     work: &mut Work,
     cancel: &Cancel,
-) -> Result<(Vec<Expression>, usize), Error> {
+) -> Result<(Vec<Expression>, usize, usize), Error> {
     let mut expressions = Vec::new();
     let mut groups = Vec::new();
     let mut group = Group::default();
+    let mut count = 0usize;
     let mut index = 0;
     while pattern.regex_character(index).is_some() {
         work.checkpoint(cancel).await?;
         if active(pattern, index, '(') {
             open_group(&mut groups, &mut group, work)?;
+            count = count.checked_add(1).ok_or(2)?;
+            group.number = count;
             index += 1;
             continue;
         }
         if active(pattern, index, ')') {
+            let number = group.number;
             let child = group.finish(&mut expressions, work)?;
-            let child = push(&mut expressions, Expression::Group(child), work)?;
+            let child = push(&mut expressions, Expression::Group(child, number), work)?;
             group = groups.pop().ok_or(2)?;
             index += 1;
             let child =
@@ -509,7 +518,7 @@ async fn parse(
         return Err(2.into());
     }
     let root = group.finish(&mut expressions, work)?;
-    Ok((expressions, root))
+    Ok((expressions, root, count))
 }
 
 #[derive(Clone, Copy)]
@@ -521,6 +530,8 @@ enum Compile {
         next: usize,
     },
     Join(usize),
+    Capture(usize),
+    Begin(usize),
     Copies {
         child: usize,
         required: usize,
@@ -588,8 +599,11 @@ fn visit(
     match expression {
         Expression::Empty => return Ok(next),
         Expression::Atom(atom) => return push(nodes, atom_node(atom, next), work),
-        Expression::Group(child) => {
-            push(tasks, Compile::Visit(child, next), work)?;
+        Expression::Group(child, number) => {
+            let slot = number.checked_mul(2).ok_or(2)?;
+            let end = push(nodes, Node::Save(slot + 1, next), work)?;
+            push(tasks, Compile::Capture(slot), work)?;
+            push(tasks, Compile::Visit(child, end), work)?;
         }
         Expression::Sequence(left, right) => {
             push(tasks, Compile::Sequence(left), work)?;
@@ -619,7 +633,8 @@ fn visit(
             min,
             max: None,
         } => {
-            let split = push(nodes, Node::Split(0, next), work)?;
+            let split = push(nodes, Node::Repeat { body: 0, next }, work)?;
+            push(tasks, Compile::Begin(split), work)?;
             push(
                 tasks,
                 Compile::Copies {
@@ -656,6 +671,17 @@ fn compile_task(
             push(tasks, Compile::Visit(left, next), work)?;
         }
         Compile::Join(right) => result = push(nodes, Node::Split(result, right), work)?,
+        Compile::Capture(slot) => result = push(nodes, Node::Save(slot, result), work)?,
+        Compile::Begin(repeat) => {
+            result = push(
+                nodes,
+                Node::Begin {
+                    repeat,
+                    next: result,
+                },
+                work,
+            )?;
+        }
         Compile::Copies {
             child,
             required,
@@ -663,7 +689,7 @@ fn compile_task(
         } => copies(child, required, optional, result, tasks, work)?,
         Compile::Optional(next) => result = push(nodes, Node::Split(result, next), work)?,
         Compile::Loop { split, next } => {
-            nodes[split] = Node::Split(result, next);
+            nodes[split] = Node::Repeat { body: result, next };
             result = split;
         }
     }
@@ -674,8 +700,8 @@ async fn compile(
     pattern: &Pattern,
     work: &mut Work,
     cancel: &Cancel,
-) -> Result<(Vec<Node>, usize), Error> {
-    let (expressions, root) = parse(pattern, work, cancel).await?;
+) -> Result<(Vec<Node>, usize, usize), Error> {
+    let (expressions, root, count) = parse(pattern, work, cancel).await?;
     let mut nodes = Vec::new();
     push(&mut nodes, Node::Accept, work)?;
     let mut tasks = Vec::new();
@@ -685,7 +711,7 @@ async fn compile(
         work.checkpoint(cancel).await?;
         result = compile_task(task, &expressions, &mut nodes, &mut tasks, work, result)?;
     }
-    Ok((nodes, result))
+    Ok((nodes, result, count))
 }
 fn slots<T: Clone>(count: usize, value: T, work: &mut Work) -> Result<Vec<T>, Error> {
     work.admit_storage(count.checked_mul(size_of::<T>()).ok_or(2)?)?;
@@ -697,38 +723,358 @@ fn slots<T: Clone>(count: usize, value: T, work: &mut Work) -> Result<Vec<T>, Er
     let _ = value;
     Ok(result)
 }
+fn epsilon(node: Node) -> (Option<usize>, Option<usize>) {
+    match node {
+        Node::Split(left, right) => (Some(left), Some(right)),
+        Node::Repeat { body, next } => (Some(body), Some(next)),
+        Node::Save(_, next) | Node::Start(next) | Node::End(next) | Node::Begin { next, .. } => {
+            (Some(next), None)
+        }
+        _ => (None, None),
+    }
+}
+fn anchor(node: Node, position: usize, length: usize) -> bool {
+    !matches!(node, Node::Start(_) if position != 0)
+        && !matches!(node, Node::End(_) if position != length)
+}
 async fn closure(
     nodes: &[Node],
-    states: &mut [bool],
+    states: &mut [usize],
     stack: &mut Vec<usize>,
     seed: usize,
+    origin: usize,
     position: std::ops::Range<usize>,
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<(), Error> {
-    if !states[seed] {
-        states[seed] = true;
-        stack.push(seed);
+    if states[seed] <= origin {
+        return Ok(());
     }
+    states[seed] = origin;
+    stack.push(seed);
     while let Some(index) = stack.pop() {
         work.checkpoint(cancel).await?;
-        let mut add = |next: usize| {
-            if !states[next] {
-                states[next] = true;
-                stack.push(next);
+        if !anchor(nodes[index], position.start, position.end) {
+            continue;
+        }
+        let origin = states[index];
+        let (left, right) = epsilon(nodes[index]);
+        for next in left.into_iter().chain(right) {
+            if states[next] <= origin {
+                continue;
             }
-        };
-        match nodes[index] {
-            Node::Split(left, right) => {
-                add(left);
-                add(right);
-            }
-            Node::Start(next) if position.start == 0 => add(next),
-            Node::End(next) if position.start == position.end => add(next),
-            _ => {}
+            states[next] = origin;
+            stack.push(next);
         }
     }
     Ok(())
+}
+async fn longest(
+    nodes: &[Node],
+    start: usize,
+    pattern: &Pattern,
+    value: &str,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<Option<(usize, usize)>, Error> {
+    let mut current = initialized(nodes.len(), usize::MAX, work, cancel).await?;
+    let mut next = initialized(nodes.len(), usize::MAX, work, cancel).await?;
+    let mut stack = slots(nodes.len(), 0usize, work)?;
+    let mut found = None;
+    for position in 0..=value.len() {
+        closure(
+            nodes,
+            &mut current,
+            &mut stack,
+            start,
+            position,
+            position..value.len(),
+            work,
+            cancel,
+        )
+        .await?;
+        if current[0] != usize::MAX && found.is_none_or(|(begin, _)| current[0] <= begin) {
+            found = Some((current[0], position));
+        }
+        let Some(ch) = value.as_bytes().get(position) else {
+            break;
+        };
+        for state in &mut next {
+            work.checkpoint(cancel).await?;
+            *state = usize::MAX;
+        }
+        for (index, node) in nodes.iter().enumerate() {
+            work.checkpoint(cancel).await?;
+            let Node::Consume(atom, destination) = *node else {
+                continue;
+            };
+            if current[index] == usize::MAX {
+                continue;
+            }
+            if !atom_matches(atom, char::from(*ch), pattern, work, cancel).await? {
+                continue;
+            }
+            closure(
+                nodes,
+                &mut next,
+                &mut stack,
+                destination,
+                current[index],
+                position + 1..value.len(),
+                work,
+                cancel,
+            )
+            .await?;
+        }
+        std::mem::swap(&mut current, &mut next);
+    }
+    Ok(found)
+}
+async fn initialized<T: Copy>(
+    count: usize,
+    value: T,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<Vec<T>, Error> {
+    let mut result = slots(count, value, work)?;
+    for _ in 0..count {
+        work.checkpoint(cancel).await?;
+        result.push(value);
+    }
+    Ok(result)
+}
+
+// Reverse epsilon edges let each input row reach a fixed point in O(nodes).
+// Bits cover only the chosen match, not unmatched prefixes/suffixes.
+struct Reachable {
+    bits: Vec<u64>,
+    width: usize,
+    begin: usize,
+}
+impl Reachable {
+    fn get(&self, node: usize, position: usize) -> bool {
+        let bit = (position - self.begin) * self.width + node;
+        self.bits[bit / 64] & (1 << (bit % 64)) != 0
+    }
+    fn insert(&mut self, node: usize, position: usize) -> bool {
+        let bit = (position - self.begin) * self.width + node;
+        let mask = 1 << (bit % 64);
+        let old = self.bits[bit / 64];
+        self.bits[bit / 64] |= mask;
+        old & mask == 0
+    }
+}
+async fn reachability(
+    nodes: &[Node],
+    pattern: &Pattern,
+    value: &str,
+    span: (usize, usize),
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<Reachable, Error> {
+    let count = (span.1 - span.0 + 1).checked_mul(nodes.len()).ok_or(2)?;
+    let bits = initialized(count.div_ceil(64), 0u64, work, cancel).await?;
+    let mut result = Reachable {
+        bits,
+        width: nodes.len(),
+        begin: span.0,
+    };
+    let mut heads = initialized(nodes.len(), None, work, cancel).await?;
+    let mut edges = Vec::new();
+    for (index, node) in nodes.iter().enumerate() {
+        let (left, right) = epsilon(*node);
+        for next in left.into_iter().chain(right) {
+            work.checkpoint(cancel).await?;
+            let edge = push(&mut edges, (index, heads[next]), work)?;
+            heads[next] = Some(edge);
+        }
+    }
+    let mut stack = slots(nodes.len(), 0usize, work)?;
+    for position in (span.0..=span.1).rev() {
+        if position == span.1 {
+            result.insert(0, position);
+            stack.push(0);
+        }
+        for (index, node) in nodes.iter().enumerate() {
+            work.checkpoint(cancel).await?;
+            let Node::Consume(atom, next) = *node else {
+                continue;
+            };
+            if position == span.1 || !result.get(next, position + 1) {
+                continue;
+            }
+            if !atom_matches(
+                atom,
+                char::from(value.as_bytes()[position]),
+                pattern,
+                work,
+                cancel,
+            )
+            .await?
+            {
+                continue;
+            }
+            result.insert(index, position);
+            stack.push(index);
+        }
+        while let Some(index) = stack.pop() {
+            work.checkpoint(cancel).await?;
+            let mut edge = heads[index];
+            while let Some(id) = edge {
+                work.checkpoint(cancel).await?;
+                let (prior, previous) = edges[id];
+                edge = previous;
+                if !anchor(nodes[prior], position, value.len()) {
+                    continue;
+                }
+                if result.insert(prior, position) {
+                    stack.push(prior);
+                }
+            }
+        }
+    }
+    Ok(result)
+}
+
+#[derive(Clone, Copy, Default)]
+struct Iteration {
+    position: usize,
+    progressed: bool,
+}
+#[derive(Clone, Copy)]
+enum Undo {
+    Slot(usize, Option<usize>),
+    Iteration(usize, Iteration),
+    Branch(usize),
+}
+struct Trace {
+    slots: Vec<Option<usize>>,
+    iterations: Vec<Iteration>,
+    seen: Vec<bool>,
+    undo: Vec<Undo>,
+}
+impl Trace {
+    fn restore(&mut self) -> Option<usize> {
+        while let Some(undo) = self.undo.pop() {
+            match undo {
+                Undo::Slot(slot, old) => self.slots[slot] = old,
+                Undo::Iteration(id, old) => self.iterations[id] = old,
+                Undo::Branch(next) => return Some(next),
+            }
+        }
+        None
+    }
+    fn iteration(&mut self, id: usize, value: Iteration, work: &mut Work) -> Result<(), Error> {
+        push(
+            &mut self.undo,
+            Undo::Iteration(id, self.iterations[id]),
+            work,
+        )?;
+        self.iterations[id] = value;
+        Ok(())
+    }
+    fn step(
+        &mut self,
+        nodes: &[Node],
+        index: usize,
+        position: usize,
+        work: &mut Work,
+    ) -> Result<Option<usize>, Error> {
+        let seen = self.seen[index];
+        self.seen[index] = true;
+        if let Node::Repeat { next, .. } = nodes[index]
+            && seen
+        {
+            return Ok((!self.iterations[index].progressed).then_some(next));
+        }
+        if seen {
+            return Ok(None);
+        }
+        match nodes[index] {
+            Node::Split(left, right) => {
+                push(&mut self.undo, Undo::Branch(right), work)?;
+                Ok(Some(left))
+            }
+            Node::Repeat { body, next } => {
+                let old = self.iterations[index];
+                self.iteration(
+                    index,
+                    Iteration {
+                        position,
+                        progressed: old.progressed || position > old.position,
+                    },
+                    work,
+                )?;
+                push(&mut self.undo, Undo::Branch(next), work)?;
+                Ok(Some(body))
+            }
+            Node::Begin { repeat, next } => {
+                self.iteration(
+                    repeat,
+                    Iteration {
+                        position,
+                        progressed: false,
+                    },
+                    work,
+                )?;
+                Ok(Some(next))
+            }
+            Node::Save(slot, next) => {
+                push(&mut self.undo, Undo::Slot(slot, self.slots[slot]), work)?;
+                self.slots[slot] = Some(position);
+                Ok(Some(next))
+            }
+            Node::Start(next) | Node::End(next) => Ok(Some(next)),
+            _ => Ok(None),
+        }
+    }
+}
+async fn captures(
+    nodes: &[Node],
+    start: usize,
+    count: usize,
+    reachable: &Reachable,
+    span: (usize, usize),
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<Vec<Option<(usize, usize)>>, Error> {
+    let count = count.checked_add(1).ok_or(2)?;
+    let mut trace = Trace {
+        slots: initialized(count.checked_mul(2).ok_or(2)?, None, work, cancel).await?,
+        iterations: initialized(nodes.len(), Iteration::default(), work, cancel).await?,
+        seen: initialized(nodes.len(), false, work, cancel).await?,
+        undo: Vec::new(),
+    };
+    let mut index = start;
+    let mut position = span.0;
+    while index != 0 || position != span.1 {
+        work.checkpoint(cancel).await?;
+        if !reachable.get(index, position) {
+            index = trace.restore().ok_or(2)?;
+            continue;
+        }
+        if let Node::Consume(_, next) = nodes[index] {
+            position += 1;
+            index = next;
+            trace.undo.clear();
+            for seen in &mut trace.seen {
+                work.checkpoint(cancel).await?;
+                *seen = false;
+            }
+            continue;
+        }
+        index = trace
+            .step(nodes, index, position, work)?
+            .or_else(|| trace.restore())
+            .ok_or(2)?;
+    }
+    let mut result = slots(count, None, work)?;
+    result.push(Some(span));
+    for pair in trace.slots[2..].chunks_exact(2) {
+        work.checkpoint(cancel).await?;
+        result.push(pair[0].zip(pair[1]));
+    }
+    Ok(result)
 }
 
 pub(super) async fn matches(
@@ -736,71 +1082,21 @@ pub(super) async fn matches(
     value: &str,
     work: &mut Work,
     cancel: &Cancel,
-) -> Result<bool, Error> {
+) -> Result<Option<Vec<Option<(usize, usize)>>>, Error> {
     ascii(pattern, value, work, cancel).await?;
-    let (nodes, start) = compile(pattern, work, cancel).await?;
-    let mut current = slots(nodes.len(), false, work)?;
-    let mut next = slots(nodes.len(), false, work)?;
-    let mut stack: Vec<usize> = slots(nodes.len(), 0, work)?;
-    for _ in 0..nodes.len() {
-        work.checkpoint(cancel).await?;
-        current.push(false);
-        next.push(false);
+    let (nodes, start, count) = compile(pattern, work, cancel).await?;
+    let Some(span) = longest(&nodes, start, pattern, value, work, cancel).await? else {
+        return Ok(None);
+    };
+    if count == 0 {
+        let mut result = slots(1, None, work)?;
+        result.push(Some(span));
+        return Ok(Some(result));
     }
-    closure(
-        &nodes,
-        &mut current,
-        &mut stack,
-        start,
-        0..value.len(),
-        work,
-        cancel,
-    )
-    .await?;
-    if current[0] {
-        return Ok(true);
-    }
-    for (position, ch) in value.char_indices() {
-        work.checkpoint(cancel).await?;
-        let after = position + ch.len_utf8();
-        for state in &mut next {
-            work.checkpoint(cancel).await?;
-            *state = false;
-        }
-        for index in 0..nodes.len() {
-            work.checkpoint(cancel).await?;
-            if current[index]
-                && let Node::Consume(atom, destination) = nodes[index]
-                && atom_matches(atom, ch, pattern, work, cancel).await?
-            {
-                closure(
-                    &nodes,
-                    &mut next,
-                    &mut stack,
-                    destination,
-                    after..value.len(),
-                    work,
-                    cancel,
-                )
-                .await?;
-            }
-        }
-        closure(
-            &nodes,
-            &mut next,
-            &mut stack,
-            start,
-            after..value.len(),
-            work,
-            cancel,
-        )
-        .await?;
-        std::mem::swap(&mut current, &mut next);
-        if current[0] {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    let reachable = reachability(&nodes, pattern, value, span, work, cancel).await?;
+    captures(&nodes, start, count, &reachable, span, work, cancel)
+        .await
+        .map(Some)
 }
 
 #[cfg(test)]
@@ -837,6 +1133,37 @@ mod tests {
             &mut work,
         ))
         .unwrap_or_else(|_| panic!("pattern expansion must succeed"))
+    }
+    #[test]
+    fn bash_capture_order_and_leftmost_longest_spans() {
+        for (source, value, expected) in [
+            ("(a|aa)(a?)", "aa", vec!["aa", "a", "a"]),
+            ("(a*)(a*)", "aa", vec!["aa", "aa", ""]),
+            ("(a|aa)*", "aa", vec!["aa", "a"]),
+            ("(a?)*", "aa", vec!["aa", "a"]),
+            ("(a?)*", "", vec!["", ""]),
+            ("(a*)*", "aa", vec!["aa", "aa"]),
+            ("(a*)+", "aa", vec!["aa", "aa"]),
+            ("(a*){1,3}", "aa", vec!["aa", ""]),
+            ("^(()|a?)*$", "aa", vec!["aa", "a", ""]),
+            ("((a)|(b))*", "aba", vec!["aba", "a", "a", "b"]),
+            ("(a(b)?)*", "aba", vec!["aba", "a", "b"]),
+            ("((a*)*)", "aa", vec!["aa", "aa", "aa"]),
+            ("a|aa", "xaa", vec!["aa"]),
+            ("[0-9]+", "x12z345", vec!["12"]),
+            ("(a)?(b*)", "z", vec!["", "", ""]),
+        ] {
+            let pattern = self::pattern(source);
+            let mut work = Work::new(10_000_000, 10_000_000, 16);
+            let ranges = finish(matches(&pattern, value, &mut work, &Cancel::new()))
+                .unwrap_or_else(|_| panic!("capture failed: {source:?} on {value:?}"))
+                .unwrap();
+            let actual: Vec<_> = ranges
+                .into_iter()
+                .map(|range| range.map_or("", |(start, end)| &value[start..end]))
+                .collect();
+            assert_eq!(actual, expected, "{source:?} on {value:?}");
+        }
     }
     #[test]
     fn state_vector_admission_precedes_growth() {
@@ -878,7 +1205,7 @@ mod tests {
         let job = executor.spawn(async move {
             let mut work = Work::new(100_000_000, 1_000_000, 1);
             match matches(&pattern, &text, &mut work, &child_cancel).await {
-                Ok(value) => i32::from(!value),
+                Ok(value) => i32::from(value.is_none()),
                 Err(Error::Status(status)) => status,
                 Err(_) => panic!("unexpected non-status ERE error"),
             }

@@ -1,0 +1,1658 @@
+{
+  "schema": 1,
+  "bash": "5.3.15(1)-release",
+  "cases": [
+    {
+      "name": "oils:regex:611",
+      "script": "str='(hi)'\n[[ \"${str}\" =~ ^^([][{}\\(\\)^@])|^(~@)|(\\\"(\\\\.|[^\\\\\\\"])*\\\")|^(;[^$'\\n']*)|^([~\\'\\`])|^([^][ ~\\`\\'\\\";{}\\(\\)^@\\,]+)|^[,]|^[[:space:]]+ ]]\necho status=$?\n\nm=${BASH_REMATCH[0]}\necho m=$m\n\n",
+      "status": 0,
+      "stdoutBase64": "c3RhdHVzPTAKbT0oCg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "brush-suite:extended_tests:29",
+      "script": "pattern='(Hello), ([a-z]+)\\.'\nif [[ \"Hello, world.\" =~ ${pattern} ]]; then\n    echo \"Match found!\"\n    for i in \"${!BASH_REMATCH[@]}\"; do\n        echo \"$i: '${BASH_REMATCH[$i]}'\"\n    done\nfi\n",
+      "status": 0,
+      "stdoutBase64": "TWF0Y2ggZm91bmQhCjA6ICdIZWxsbywgd29ybGQuJwoxOiAnSGVsbG8nCjI6ICd3b3JsZCcK",
+      "stderrBase64": ""
+    },
+    {
+      "name": "brush-suite:extended_tests:30",
+      "script": "pattern='(Hello)(,?) ([a-z]+)\\.'\nif [[ \"Hello world.\" =~ ${pattern} ]]; then\n    echo \"Match found!\"\n    for i in \"${!BASH_REMATCH[@]}\"; do\n        echo \"$i: '${BASH_REMATCH[$i]}'\"\n    done\nfi\n",
+      "status": 0,
+      "stdoutBase64": "TWF0Y2ggZm91bmQhCjA6ICdIZWxsbyB3b3JsZC4nCjE6ICdIZWxsbycKMjogJycKMzogJ3dvcmxkJwo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "brush-suite:extended_tests:35",
+      "script": "[[ \"x\" =~ (a| *) ]]   && echo \"1. Matched\"\n[[ \"a b\" =~ ^(a |b) ]] && echo \"2. Matched: [${BASH_REMATCH[0]}]\"\n[[ \"a b\" =~ ^(a |b)$ ]] || echo \"3. No match\"\n[[ \" \" =~ ^( )$ ]]    && echo \"4. Matched: [${BASH_REMATCH[1]}]\"\n",
+      "status": 0,
+      "stdoutBase64": "MS4gTWF0Y2hlZAoyLiBNYXRjaGVkOiBbYSBdCjMuIE5vIG1hdGNoCjQuIE1hdGNoZWQ6IFsgXQo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "brush-suite:extended_tests:70",
+      "script": "s=$'a\\nb'\n[[ $s =~ ^b ]] && echo \"wrong 1\" || echo \"ok 1\"\n[[ $s =~ a$ ]] && echo \"wrong 2\" || echo \"ok 2\"\n[[ $s =~ ^a.b$ ]] && echo \"ok 3\"\nt=$' \\t\\nabc \\t\\n'\nre=$'[ \\t\\n]+$'\n[[ $t =~ $re ]] && printf '[%s]\\n' \"${t::${#t}-${#BASH_REMATCH}}\"\n",
+      "status": 0,
+      "stdoutBase64": "b2sgMQpvayAyCm9rIDMKWyAJCmFiY10K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "bashkit-suite:bashbox-interpreter-core:871",
+      "script": "re='('; [[ a =~ $re ]]; echo $?; re='[[:foo:]]'; [[ a =~ $re ]]; echo $?; [[ abc =~ b(c) ]]; echo $? ${BASH_REMATCH[@]}\n",
+      "status": 0,
+      "stdoutBase64": "MgoyCjAgYmMgYwo=",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBbWzogaW52YWxpZCByZWd1bGFyIGV4cHJlc3Npb24gYCgnOiBVbm1hdGNoZWQgKCBvciBcKAovdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IFtbOiBpbnZhbGlkIHJlZ3VsYXIgZXhwcmVzc2lvbiBgW1s6Zm9vOl1dJzogSW52YWxpZCBjaGFyYWN0ZXIgY2xhc3MgbmFtZQo="
+    },
+    {
+      "name": "bashkit-suite:bashbox-parser:221",
+      "script": "[[ \"a b\" =~ (a b) ]] && echo ${BASH_REMATCH[0]}\n",
+      "status": 0,
+      "stdoutBase64": "YSBiCg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "bashkit-suite:blackbox-exploration:1104",
+      "script": "[[ \"hello123\" =~ ^hello([0-9]+)$ ]]; echo ${BASH_REMATCH[0]}; echo ${BASH_REMATCH[1]}\n",
+      "status": 0,
+      "stdoutBase64": "aGVsbG8xMjMKMTIzCg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "bashkit-suite:conditional:92",
+      "script": "[[ \"hello-world\" =~ ^([a-z]+)-([a-z]+)$ ]] && echo \"${BASH_REMATCH[1]} ${BASH_REMATCH[2]}\"\n",
+      "status": 0,
+      "stdoutBase64": "aGVsbG8gd29ybGQK",
+      "stderrBase64": ""
+    },
+    {
+      "name": "bashkit-suite:conditional:99",
+      "script": "[[ \"abc123\" =~ [0-9]+ ]] && echo \"${BASH_REMATCH[0]}\"\n",
+      "status": 0,
+      "stdoutBase64": "MTIzCg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "bashkit-suite:conditional:229",
+      "script": "l=\"## Title\"\n[[ $l =~ ^(#+)[[:space:]](.+)$ ]] && echo \"${BASH_REMATCH[1]}|${BASH_REMATCH[2]}\"\n",
+      "status": 0,
+      "stdoutBase64": "IyN8VGl0bGUK",
+      "stderrBase64": ""
+    },
+    {
+      "name": "bashkit-suite:conditional:247",
+      "script": "[[ \"a b\" =~ (a b) ]] && echo \"${BASH_REMATCH[1]}\"\n",
+      "status": 0,
+      "stdoutBase64": "YSBiCg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "bashkit-suite:conditional:259",
+      "script": "r=\"#\"\n[[ \"#\" =~ ($r) ]] && echo \"${BASH_REMATCH[1]}\"\n",
+      "status": 0,
+      "stdoutBase64": "Iwo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "bashkit-suite:control-flow:348",
+      "script": "x=\"hello123world\"\n[[ \"$x\" =~ ([0-9]+) ]]\necho \"${BASH_REMATCH[0]}\"\necho \"${BASH_REMATCH[1]}\"\n",
+      "status": 0,
+      "stdoutBase64": "MTIzCjEyMwo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "bashkit-suite:control-flow:359",
+      "script": "[[ \"2024-01-15\" =~ ^([0-9]{4})-([0-9]{2})-([0-9]{2})$ ]]\necho \"${BASH_REMATCH[0]}\"\necho \"${BASH_REMATCH[1]}\"\necho \"${BASH_REMATCH[2]}\"\necho \"${BASH_REMATCH[3]}\"\n",
+      "status": 0,
+      "stdoutBase64": "MjAyNC0wMS0xNQoyMDI0CjAxCjE1Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "bashkit-suite:control-flow:373",
+      "script": "[[ \"foo123bar\" =~ (foo([0-9]+)bar) ]]\necho \"${BASH_REMATCH[0]}\"\necho \"${BASH_REMATCH[1]}\"\necho \"${BASH_REMATCH[2]}\"\n",
+      "status": 0,
+      "stdoutBase64": "Zm9vMTIzYmFyCmZvbzEyM2JhcgoxMjMK",
+      "stderrBase64": ""
+    },
+    {
+      "name": "bashkit-suite:control-flow:385",
+      "script": "[[ \"abc123\" =~ ([0-9]+) ]]\necho \"before: ${#BASH_REMATCH[@]}\"\n[[ \"abc\" =~ ([0-9]+) ]]\necho \"after: ${#BASH_REMATCH[@]}\"\n",
+      "status": 0,
+      "stdoutBase64": "YmVmb3JlOiAyCmFmdGVyOiAwCg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "bashkit-suite:control-flow:444",
+      "script": "x=\"error: line 42\"\nif [[ \"$x\" =~ error:\\ line\\ ([0-9]+) ]]; then\n  echo \"line ${BASH_REMATCH[1]}\"\nelse\n  echo \"no match\"\nfi\n",
+      "status": 0,
+      "stdoutBase64": "bGluZSA0Mgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|aa)(a?)' on ''",
+      "script": "p='(a|aa)(a?)'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|aa)(a?)' on 'a'",
+      "script": "p='(a|aa)(a?)'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|aa)(a?)' on 'aa'",
+      "script": "p='(a|aa)(a?)'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YWE+CjxhPgo8YT4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|aa)(a?)' on 'aba'",
+      "script": "p='(a|aa)(a?)'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|aa)(a?)' on 'ab'",
+      "script": "p='(a|aa)(a?)'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|aa)(a?)' on 'bc'",
+      "script": "p='(a|aa)(a?)'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|aa)(a?)' on 'cababc'",
+      "script": "p='(a|aa)(a?)'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|aa)(a?)' on 'x12z345'",
+      "script": "p='(a|aa)(a?)'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)(a*)' on ''",
+      "script": "p='(a*)(a*)'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)(a*)' on 'a'",
+      "script": "p='(a*)(a*)'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)(a*)' on 'aa'",
+      "script": "p='(a*)(a*)'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YWE+CjxhYT4KPD4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)(a*)' on 'aba'",
+      "script": "p='(a*)(a*)'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)(a*)' on 'ab'",
+      "script": "p='(a*)(a*)'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)(a*)' on 'bc'",
+      "script": "p='(a*)(a*)'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)(a*)' on 'cababc'",
+      "script": "p='(a*)(a*)'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)(a*)' on 'x12z345'",
+      "script": "p='(a*)(a*)'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|aa)*' on ''",
+      "script": "p='(a|aa)*'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|aa)*' on 'a'",
+      "script": "p='(a|aa)*'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPGE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|aa)*' on 'aa'",
+      "script": "p='(a|aa)*'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YWE+CjxhPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|aa)*' on 'aba'",
+      "script": "p='(a|aa)*'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPGE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|aa)*' on 'ab'",
+      "script": "p='(a|aa)*'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPGE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|aa)*' on 'bc'",
+      "script": "p='(a|aa)*'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|aa)*' on 'cababc'",
+      "script": "p='(a|aa)*'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|aa)*' on 'x12z345'",
+      "script": "p='(a|aa)*'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((a)|(b))*' on ''",
+      "script": "p='((a)|(b))*'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NAo8Pgo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((a)|(b))*' on 'a'",
+      "script": "p='((a)|(b))*'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NAo8YT4KPGE+CjxhPgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((a)|(b))*' on 'aa'",
+      "script": "p='((a)|(b))*'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NAo8YWE+CjxhPgo8YT4KPD4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((a)|(b))*' on 'aba'",
+      "script": "p='((a)|(b))*'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NAo8YWJhPgo8YT4KPGE+CjxiPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((a)|(b))*' on 'ab'",
+      "script": "p='((a)|(b))*'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NAo8YWI+CjxiPgo8YT4KPGI+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((a)|(b))*' on 'bc'",
+      "script": "p='((a)|(b))*'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NAo8Yj4KPGI+Cjw+CjxiPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((a)|(b))*' on 'cababc'",
+      "script": "p='((a)|(b))*'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NAo8Pgo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((a)|(b))*' on 'x12z345'",
+      "script": "p='((a)|(b))*'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NAo8Pgo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a(b)?)*' on ''",
+      "script": "p='(a(b)?)*'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a(b)?)*' on 'a'",
+      "script": "p='(a(b)?)*'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a(b)?)*' on 'aa'",
+      "script": "p='(a(b)?)*'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YWE+CjxhPgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a(b)?)*' on 'aba'",
+      "script": "p='(a(b)?)*'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YWJhPgo8YT4KPGI+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a(b)?)*' on 'ab'",
+      "script": "p='(a(b)?)*'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YWI+CjxhYj4KPGI+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a(b)?)*' on 'bc'",
+      "script": "p='(a(b)?)*'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a(b)?)*' on 'cababc'",
+      "script": "p='(a(b)?)*'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a(b)?)*' on 'x12z345'",
+      "script": "p='(a(b)?)*'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((a*)*)' on ''",
+      "script": "p='((a*)*)'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((a*)*)' on 'a'",
+      "script": "p='((a*)*)'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+CjxhPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((a*)*)' on 'aa'",
+      "script": "p='((a*)*)'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YWE+CjxhYT4KPGFhPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((a*)*)' on 'aba'",
+      "script": "p='((a*)*)'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+CjxhPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((a*)*)' on 'ab'",
+      "script": "p='((a*)*)'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+CjxhPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((a*)*)' on 'bc'",
+      "script": "p='((a*)*)'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((a*)*)' on 'cababc'",
+      "script": "p='((a*)*)'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((a*)*)' on 'x12z345'",
+      "script": "p='((a*)*)'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'^(()|a?)*$' on ''",
+      "script": "p='^(()|a?)*$'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'^(()|a?)*$' on 'a'",
+      "script": "p='^(()|a?)*$'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'^(()|a?)*$' on 'aa'",
+      "script": "p='^(()|a?)*$'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YWE+CjxhPgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'^(()|a?)*$' on 'aba'",
+      "script": "p='^(()|a?)*$'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'^(()|a?)*$' on 'ab'",
+      "script": "p='^(()|a?)*$'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'^(()|a?)*$' on 'bc'",
+      "script": "p='^(()|a?)*$'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'^(()|a?)*$' on 'cababc'",
+      "script": "p='^(()|a?)*$'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'^(()|a?)*$' on 'x12z345'",
+      "script": "p='^(()|a?)*$'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?)*' on ''",
+      "script": "p='(a?)*'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?)*' on 'a'",
+      "script": "p='(a?)*'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPGE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?)*' on 'aa'",
+      "script": "p='(a?)*'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YWE+CjxhPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?)*' on 'aba'",
+      "script": "p='(a?)*'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPGE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?)*' on 'ab'",
+      "script": "p='(a?)*'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPGE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?)*' on 'bc'",
+      "script": "p='(a?)*'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?)*' on 'cababc'",
+      "script": "p='(a?)*'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?)*' on 'x12z345'",
+      "script": "p='(a?)*'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)*' on ''",
+      "script": "p='(a*)*'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)*' on 'a'",
+      "script": "p='(a*)*'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPGE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)*' on 'aa'",
+      "script": "p='(a*)*'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YWE+CjxhYT4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)*' on 'aba'",
+      "script": "p='(a*)*'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPGE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)*' on 'ab'",
+      "script": "p='(a*)*'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPGE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)*' on 'bc'",
+      "script": "p='(a*)*'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)*' on 'cababc'",
+      "script": "p='(a*)*'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)*' on 'x12z345'",
+      "script": "p='(a*)*'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|)(a*)' on ''",
+      "script": "p='(a|)(a*)'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|)(a*)' on 'a'",
+      "script": "p='(a|)(a*)'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|)(a*)' on 'aa'",
+      "script": "p='(a|)(a*)'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YWE+CjxhPgo8YT4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|)(a*)' on 'aba'",
+      "script": "p='(a|)(a*)'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|)(a*)' on 'ab'",
+      "script": "p='(a|)(a*)'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|)(a*)' on 'bc'",
+      "script": "p='(a|)(a*)'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|)(a*)' on 'cababc'",
+      "script": "p='(a|)(a*)'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|)(a*)' on 'x12z345'",
+      "script": "p='(a|)(a*)'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a)?(b*)' on ''",
+      "script": "p='(a)?(b*)'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a)?(b*)' on 'a'",
+      "script": "p='(a)?(b*)'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a)?(b*)' on 'aa'",
+      "script": "p='(a)?(b*)'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a)?(b*)' on 'aba'",
+      "script": "p='(a)?(b*)'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YWI+CjxhPgo8Yj4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a)?(b*)' on 'ab'",
+      "script": "p='(a)?(b*)'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YWI+CjxhPgo8Yj4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a)?(b*)' on 'bc'",
+      "script": "p='(a)?(b*)'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Yj4KPD4KPGI+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a)?(b*)' on 'cababc'",
+      "script": "p='(a)?(b*)'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a)?(b*)' on 'x12z345'",
+      "script": "p='(a)?(b*)'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((x)|a)' on ''",
+      "script": "p='((x)|a)'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((x)|a)' on 'a'",
+      "script": "p='((x)|a)'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((x)|a)' on 'aa'",
+      "script": "p='((x)|a)'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((x)|a)' on 'aba'",
+      "script": "p='((x)|a)'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((x)|a)' on 'ab'",
+      "script": "p='((x)|a)'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((x)|a)' on 'bc'",
+      "script": "p='((x)|a)'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((x)|a)' on 'cababc'",
+      "script": "p='((x)|a)'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YT4KPGE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((x)|a)' on 'x12z345'",
+      "script": "p='((x)|a)'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8eD4KPHg+Cjx4Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'()' on ''",
+      "script": "p='()'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'()' on 'a'",
+      "script": "p='()'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'()' on 'aa'",
+      "script": "p='()'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'()' on 'aba'",
+      "script": "p='()'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'()' on 'ab'",
+      "script": "p='()'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'()' on 'bc'",
+      "script": "p='()'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'()' on 'cababc'",
+      "script": "p='()'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'()' on 'x12z345'",
+      "script": "p='()'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(x){0}' on ''",
+      "script": "p='(x){0}'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(x){0}' on 'a'",
+      "script": "p='(x){0}'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(x){0}' on 'aa'",
+      "script": "p='(x){0}'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(x){0}' on 'aba'",
+      "script": "p='(x){0}'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(x){0}' on 'ab'",
+      "script": "p='(x){0}'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(x){0}' on 'bc'",
+      "script": "p='(x){0}'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(x){0}' on 'cababc'",
+      "script": "p='(x){0}'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(x){0}' on 'x12z345'",
+      "script": "p='(x){0}'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'' on ''",
+      "script": "p=''; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'' on 'a'",
+      "script": "p=''; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'' on 'aa'",
+      "script": "p=''; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'' on 'aba'",
+      "script": "p=''; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'' on 'ab'",
+      "script": "p=''; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'' on 'bc'",
+      "script": "p=''; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'' on 'cababc'",
+      "script": "p=''; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'' on 'x12z345'",
+      "script": "p=''; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?){1,3}' on ''",
+      "script": "p='(a?){1,3}'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?){1,3}' on 'a'",
+      "script": "p='(a?){1,3}'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPD4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?){1,3}' on 'aa'",
+      "script": "p='(a?){1,3}'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YWE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?){1,3}' on 'aba'",
+      "script": "p='(a?){1,3}'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPD4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?){1,3}' on 'ab'",
+      "script": "p='(a?){1,3}'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPD4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?){1,3}' on 'bc'",
+      "script": "p='(a?){1,3}'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?){1,3}' on 'cababc'",
+      "script": "p='(a?){1,3}'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?){1,3}' on 'x12z345'",
+      "script": "p='(a?){1,3}'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*){1,3}' on ''",
+      "script": "p='(a*){1,3}'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*){1,3}' on 'a'",
+      "script": "p='(a*){1,3}'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPD4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*){1,3}' on 'aa'",
+      "script": "p='(a*){1,3}'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YWE+Cjw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*){1,3}' on 'aba'",
+      "script": "p='(a*){1,3}'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPD4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*){1,3}' on 'ab'",
+      "script": "p='(a*){1,3}'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPD4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*){1,3}' on 'bc'",
+      "script": "p='(a*){1,3}'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*){1,3}' on 'cababc'",
+      "script": "p='(a*){1,3}'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*){1,3}' on 'x12z345'",
+      "script": "p='(a*){1,3}'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?)+' on ''",
+      "script": "p='(a?)+'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?)+' on 'a'",
+      "script": "p='(a?)+'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPGE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?)+' on 'aa'",
+      "script": "p='(a?)+'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YWE+CjxhPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?)+' on 'aba'",
+      "script": "p='(a?)+'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPGE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?)+' on 'ab'",
+      "script": "p='(a?)+'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPGE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?)+' on 'bc'",
+      "script": "p='(a?)+'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?)+' on 'cababc'",
+      "script": "p='(a?)+'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a?)+' on 'x12z345'",
+      "script": "p='(a?)+'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)+' on ''",
+      "script": "p='(a*)+'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)+' on 'a'",
+      "script": "p='(a*)+'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPGE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)+' on 'aa'",
+      "script": "p='(a*)+'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YWE+CjxhYT4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)+' on 'aba'",
+      "script": "p='(a*)+'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPGE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)+' on 'ab'",
+      "script": "p='(a*)+'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8YT4KPGE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)+' on 'bc'",
+      "script": "p='(a*)+'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)+' on 'cababc'",
+      "script": "p='(a*)+'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a*)+' on 'x12z345'",
+      "script": "p='(a*)+'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(^)*' on ''",
+      "script": "p='(^)*'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(^)*' on 'a'",
+      "script": "p='(^)*'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(^)*' on 'aa'",
+      "script": "p='(^)*'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(^)*' on 'aba'",
+      "script": "p='(^)*'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(^)*' on 'ab'",
+      "script": "p='(^)*'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(^)*' on 'bc'",
+      "script": "p='(^)*'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(^)*' on 'cababc'",
+      "script": "p='(^)*'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(^)*' on 'x12z345'",
+      "script": "p='(^)*'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'($)+' on ''",
+      "script": "p='($)+'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'($)+' on 'a'",
+      "script": "p='($)+'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'($)+' on 'aa'",
+      "script": "p='($)+'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'($)+' on 'aba'",
+      "script": "p='($)+'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'($)+' on 'ab'",
+      "script": "p='($)+'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'($)+' on 'bc'",
+      "script": "p='($)+'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'($)+' on 'cababc'",
+      "script": "p='($)+'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'($)+' on 'x12z345'",
+      "script": "p='($)+'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((^|$)*)+' on ''",
+      "script": "p='((^|$)*)+'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((^|$)*)+' on 'a'",
+      "script": "p='((^|$)*)+'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((^|$)*)+' on 'aa'",
+      "script": "p='((^|$)*)+'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((^|$)*)+' on 'aba'",
+      "script": "p='((^|$)*)+'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((^|$)*)+' on 'ab'",
+      "script": "p='((^|$)*)+'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((^|$)*)+' on 'bc'",
+      "script": "p='((^|$)*)+'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((^|$)*)+' on 'cababc'",
+      "script": "p='((^|$)*)+'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'((^|$)*)+' on 'x12z345'",
+      "script": "p='((^|$)*)+'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Pgo8Pgo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|b)(c|d)' on ''",
+      "script": "p='(a|b)(c|d)'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|b)(c|d)' on 'a'",
+      "script": "p='(a|b)(c|d)'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|b)(c|d)' on 'aa'",
+      "script": "p='(a|b)(c|d)'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|b)(c|d)' on 'aba'",
+      "script": "p='(a|b)(c|d)'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|b)(c|d)' on 'ab'",
+      "script": "p='(a|b)(c|d)'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|b)(c|d)' on 'bc'",
+      "script": "p='(a|b)(c|d)'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YmM+CjxiPgo8Yz4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|b)(c|d)' on 'cababc'",
+      "script": "p='(a|b)(c|d)'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8YmM+CjxiPgo8Yz4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'(a|b)(c|d)' on 'x12z345'",
+      "script": "p='(a|b)(c|d)'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'^((ab|c){2,3})+$' on ''",
+      "script": "p='^((ab|c){2,3})+$'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'^((ab|c){2,3})+$' on 'a'",
+      "script": "p='^((ab|c){2,3})+$'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'^((ab|c){2,3})+$' on 'aa'",
+      "script": "p='^((ab|c){2,3})+$'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'^((ab|c){2,3})+$' on 'aba'",
+      "script": "p='^((ab|c){2,3})+$'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'^((ab|c){2,3})+$' on 'ab'",
+      "script": "p='^((ab|c){2,3})+$'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'^((ab|c){2,3})+$' on 'bc'",
+      "script": "p='^((ab|c){2,3})+$'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'^((ab|c){2,3})+$' on 'cababc'",
+      "script": "p='^((ab|c){2,3})+$'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49Mwo8Y2FiYWJjPgo8YWJjPgo8Yz4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'^((ab|c){2,3})+$' on 'x12z345'",
+      "script": "p='^((ab|c){2,3})+$'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'[0-9]+' on ''",
+      "script": "p='[0-9]+'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'[0-9]+' on 'a'",
+      "script": "p='[0-9]+'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'[0-9]+' on 'aa'",
+      "script": "p='[0-9]+'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'[0-9]+' on 'aba'",
+      "script": "p='[0-9]+'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'[0-9]+' on 'ab'",
+      "script": "p='[0-9]+'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'[0-9]+' on 'bc'",
+      "script": "p='[0-9]+'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'[0-9]+' on 'cababc'",
+      "script": "p='[0-9]+'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'[0-9]+' on 'x12z345'",
+      "script": "p='[0-9]+'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8MTI+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'a|aa' on ''",
+      "script": "p='a|aa'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'a|aa' on 'a'",
+      "script": "p='a|aa'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8YT4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'a|aa' on 'aa'",
+      "script": "p='a|aa'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8YWE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'a|aa' on 'aba'",
+      "script": "p='a|aa'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8YT4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'a|aa' on 'ab'",
+      "script": "p='a|aa'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8YT4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'a|aa' on 'bc'",
+      "script": "p='a|aa'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'a|aa' on 'cababc'",
+      "script": "p='a|aa'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8YT4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'a|aa' on 'x12z345'",
+      "script": "p='a|aa'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'a*' on ''",
+      "script": "p='a*'; [[ '' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'a*' on 'a'",
+      "script": "p='a*'; [[ 'a' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8YT4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'a*' on 'aa'",
+      "script": "p='a*'; [[ 'aa' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8YWE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'a*' on 'aba'",
+      "script": "p='a*'; [[ 'aba' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8YT4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'a*' on 'ab'",
+      "script": "p='a*'; [[ 'ab' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8YT4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'a*' on 'bc'",
+      "script": "p='a*'; [[ 'bc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'a*' on 'cababc'",
+      "script": "p='a*'; [[ 'cababc' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "'a*' on 'x12z345'",
+      "script": "p='a*'; [[ 'x12z345' =~ $p ]]; s=$?; printf 's=%s n=%s\\n' \"$s\" \"${#BASH_REMATCH[@]}\"; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MQo8Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "local captures restore global",
+      "script": "BASH_REMATCH=(global); f(){ local BASH_REMATCH=(local spare); [[ abc123 =~ ([0-9]+) ]]; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"; }; f; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "PDEyMz4KPDEyMz4KPGdsb2JhbD4K",
+      "stderrBase64": ""
+    },
+    {
+      "name": "invalid preserves captures",
+      "script": "[[ abc =~ (b) ]]; p='('; [[ abc =~ $p ]]; printf '%s:<%s>\\n' \"$?\" \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "Mjo8Yj4KYjo8Pgo=",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBbWzogaW52YWxpZCByZWd1bGFyIGV4cHJlc3Npb24gYCgnOiBVbm1hdGNoZWQgKCBvciBcKAo="
+    }
+  ]
+}
