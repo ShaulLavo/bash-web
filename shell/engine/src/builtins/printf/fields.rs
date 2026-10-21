@@ -163,8 +163,10 @@ impl<'a> Field<'a> {
             Some(count) => count.resolve(args, printer).await?,
             None => Some(-1),
         };
+        let recovery = (self.conversion == b'b').then_some(0);
         Ok(width
-            .zip(precision)
+            .or(recovery)
+            .zip(precision.or(recovery))
             .map(|(width, precision)| ResolvedField {
                 left: self.flags.left || width < 0,
                 width: width.unsigned_abs() as usize,
@@ -181,9 +183,9 @@ impl<'a> Field<'a> {
             Some(count) => count.resolve(args, printer).await?,
             None => Some(-1),
         };
-        quote_count_warning(self.width, args, printer).await?;
+        count_warning(self.width, args, printer).await?;
         if let Some(count) = self.precision {
-            quote_count_warning(count, args, printer).await?;
+            count_warning(count, args, printer).await?;
         }
         let precision = precision.unwrap_or(if self.conversion == b'q' { 0 } else { -1 });
         let mut field = ResolvedField {
@@ -213,6 +215,32 @@ impl<'a> Field<'a> {
         }
         Ok(false)
     }
+    async fn print_escaped(
+        self,
+        field: ResolvedField,
+        args: &mut Arguments<'_>,
+        printer: &mut Printer<'_>,
+    ) -> Result<bool, i32> {
+        let value = args.take().unwrap_or("").as_bytes();
+        // Decode diagnostics precede count warnings and padding, even at zero precision.
+        let (length, _) = printer.escaped_field(value, field.precision, false).await?;
+        count_warning(self.width, args, printer).await?;
+        if let Some(count) = self.precision {
+            count_warning(count, args, printer).await?;
+        }
+        let padding = field.width.saturating_sub(length);
+        if !field.left {
+            printer.padding(padding, b' ').await?;
+        }
+        let (_, stop) = printer.escaped_field(value, field.precision, true).await?;
+        if field.left {
+            printer.padding(padding, b' ').await?;
+        }
+        if stop {
+            args.status = 0;
+        }
+        Ok(stop)
+    }
     pub async fn print(
         self,
         args: &mut Arguments<'_>,
@@ -226,13 +254,7 @@ impl<'a> Field<'a> {
             let Some(field) = field else {
                 return field_overflow(args, printer).await;
             };
-            let stop = field
-                .print_escaped(args.take().unwrap_or("").as_bytes(), printer)
-                .await?;
-            if stop {
-                args.status = 0;
-            }
-            return Ok(stop);
+            return self.print_escaped(field, args, printer).await;
         }
         if matches!(self.conversion, b's' | b'c') {
             let Some(mut field) = field else {
@@ -263,7 +285,7 @@ impl<'a> Field<'a> {
         Ok(false)
     }
 }
-async fn quote_count_warning(
+async fn count_warning(
     count: Count<'_>,
     args: &mut Arguments<'_>,
     printer: &mut Printer<'_>,
@@ -291,19 +313,6 @@ async fn field_overflow(args: &mut Arguments<'_>, printer: &mut Printer<'_>) -> 
 }
 
 impl ResolvedField {
-    async fn print_escaped(&self, value: &[u8], printer: &mut Printer<'_>) -> Result<bool, i32> {
-        // Decode diagnostics precede padding, even when precision hides their bytes.
-        let (length, _) = printer.escaped_field(value, self.precision, false).await?;
-        let padding = self.width.saturating_sub(length);
-        if !self.left {
-            printer.padding(padding, b' ').await?;
-        }
-        let (_, stop) = printer.escaped_field(value, self.precision, true).await?;
-        if self.left {
-            printer.padding(padding, b' ').await?;
-        }
-        Ok(stop)
-    }
     async fn print_string(&self, value: &[u8], printer: &mut Printer<'_>) -> Result<(), i32> {
         let length = self.precision.map_or(value.len(), |n| value.len().min(n));
         let padding = self.width.saturating_sub(length);

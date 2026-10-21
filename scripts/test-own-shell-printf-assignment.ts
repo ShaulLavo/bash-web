@@ -13,6 +13,20 @@ const runner = await createWaffleRunner({
   env: { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C", LANG: "C" },
 });
 const cases = [
+  "printf '[%.2147483648b]TAIL' x",
+  "printf '[%5.2147483648b]TAIL' 'x\\cignored'",
+  "printf '[%.2147483648b]TAIL' '\\xZ'",
+  "printf '[%5.2147483648b]' x y",
+  "printf '[%5.2147483648b]TAIL' 'x\\cignored' 2>&-",
+  "printf '[%-5.2147483648b]TAIL' 'x\\cignored'",
+  "printf '[%5.2147483648b]TAIL' '\\xZ\\cignored'",
+  "printf '[%.2147483648b]TAIL' '\\xZ' 2>&-",
+  "printf '[%2147483648b]TAIL' 'a\\tb'",
+  "printf '[%2147483648.2147483648b]TAIL' '\\xZ'",
+  "printf '[%*.2147483648b]TAIL' 5x '\\xZ\\cignored'",
+  "printf -v x '[%5.2147483648b]TAIL' 'a\\cignored'; echo \"$?:<$x>\"",
+  "printf '[%5.2147483648s]TAIL' x",
+  "printf '[%b]TAIL' '\\xZ\\cignored'",
   "printf '[%8b][%-8b][%08b]\\n' 'a\\tb' 'a\\tb' 'a\\tb'",
   "printf '[%*b][%*b]\\n' 8 'a\\tb' -8 'a\\tb'",
   "printf '[%05b|%05q|%05Q]\\n' 'a\\tb' 'c d' e",
@@ -164,6 +178,36 @@ test("production Waffle escaped field warns before leading padding flushes", asy
       Buffer.from("/usr/bin/bash: printf: missing hex digit for \\x\n["),
       Buffer.alloc(4996, " "),
       Buffer.from("a\\xZ]tail:0\n"),
+    ]),
+  );
+});
+
+test("production Waffle escaped field overflow orders star decode count and padding", async () => {
+  const actual = await runner("printf '[%*.2147483648b]TAIL' 5x '\\xZ\\cignored' 2>&1");
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.status, 0);
+  assert.equal(actual.stderr.length, 0);
+  assert.deepEqual(
+    actual.stdout,
+    Buffer.from(
+      "/usr/bin/bash: printf: 5x: invalid number\n/usr/bin/bash: printf: missing hex digit for \\x\n/usr/bin/bash: printf: 2147483648: Numerical result out of range\n[     ",
+    ),
+  );
+});
+
+test("production Waffle escaped field overflow warns before leading padding flushes", async () => {
+  const actual = await runner("printf '[%5000.2147483648b]TAIL' '\\xZ' 2>&1");
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.status, 1);
+  assert.equal(actual.stderr.length, 0);
+  assert.deepEqual(
+    actual.stdout,
+    Buffer.concat([
+      Buffer.from(
+        "/usr/bin/bash: printf: missing hex digit for \\x\n/usr/bin/bash: printf: 2147483648: Numerical result out of range\n[",
+      ),
+      Buffer.alloc(5000, " "),
+      Buffer.from("]TAIL"),
     ]),
   );
 });

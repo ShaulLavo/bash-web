@@ -19,6 +19,11 @@ A `\c` escape stops the whole command after this field, including its padding.
 It suppresses later format text, fields and reused operands. Precision limits
 output bytes, even within a multibyte escape, but does not hide a later `\c` or
 escape diagnostic. Zero precision still decodes the operand for those effects.
+Literal width or precision above the signed 32-bit maximum warns and recovers
+as zero for `%b`. Escape diagnostics come first. A zero precision still decodes
+the operand, so `\c` stops the invocation after padding and clears warning status.
+Ordinary `%s` literal overflow still stops with status 1.
+
 The bare `%b` path is unchanged.
 
 Scalar `-v` capture uses the same field behavior and retains its existing first-NUL

@@ -224,3 +224,101 @@ fn printf_escaped_field_warning_on_closed_stderr_does_not_stop_output() {
         );
     }
 }
+
+#[test]
+fn printf_escaped_field_literal_count_overflow_recovers_and_reuses() {
+    let warning = b"/usr/bin/bash: printf: 2147483648: Numerical result out of range\n";
+    for (source, expected, warnings) in [
+        (r"printf '[%.2147483648b]TAIL' x", &b"[]TAIL"[..], 1),
+        (r"printf '[%5.2147483648b]' x y", &b"[     ][     ]"[..], 2),
+        (r"printf '[%2147483648b]TAIL' 'a\tb'", &b"[a\tb]TAIL"[..], 1),
+        (r"printf '[%5.2147483648b]TAIL'", &b"[     ]TAIL"[..], 1),
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 1, "{source}");
+        assert_eq!(rig.output.bytes(), expected, "{source}");
+        assert_eq!(rig.errors.bytes(), warning.repeat(warnings), "{source}");
+    }
+}
+
+#[test]
+fn printf_escaped_field_precision_overflow_still_observes_stop_after_padding() {
+    for source in [
+        r"printf '[%5.2147483648b]TAIL' 'x\cignored'",
+        r"printf '[%-5.2147483648b]TAIL' 'x\cignored'",
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 0, "{source}");
+        assert_eq!(rig.output.bytes(), b"[     ");
+        assert_eq!(
+            rig.errors.bytes(),
+            b"/usr/bin/bash: printf: 2147483648: Numerical result out of range\n"
+        );
+    }
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run(r#"printf -v x '[%5.2147483648b]TAIL' 'a\cignored'; echo "$?:<$x>""#),
+        0
+    );
+    assert_eq!(rig.output.bytes(), b"0:<[     >\n");
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: printf: 2147483648: Numerical result out of range\n"
+    );
+}
+
+#[test]
+fn printf_escaped_field_overflow_warnings_follow_decode_diagnostics_once() {
+    for (source, expected, warnings) in [
+        (r"printf '[%.2147483648b]TAIL' '\xZ'", &b"[]TAIL"[..], 1),
+        (
+            r"printf '[%2147483648.2147483648b]TAIL' '\xZ'",
+            &b"[]TAIL"[..],
+            2,
+        ),
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 1, "{source}");
+        assert_eq!(rig.output.bytes(), expected);
+        let mut diagnostics = b"/usr/bin/bash: printf: missing hex digit for \\x\n".to_vec();
+        diagnostics.extend_from_slice(
+            &b"/usr/bin/bash: printf: 2147483648: Numerical result out of range\n".repeat(warnings),
+        );
+        assert_eq!(rig.errors.bytes(), diagnostics);
+    }
+}
+
+#[test]
+fn printf_escaped_field_overflow_on_closed_stderr_keeps_output_and_status() {
+    for (source, expected, status) in [
+        (
+            r"printf '[%5.2147483648b]TAIL' 'x\cignored' 2>&-",
+            &b"[     "[..],
+            0,
+        ),
+        (
+            r"printf '[%.2147483648b]TAIL' '\xZ' 2>&-",
+            &b"[]TAIL"[..],
+            1,
+        ),
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), status, "{source}");
+        assert_eq!(rig.output.bytes(), expected);
+        assert!(rig.errors.bytes().is_empty());
+    }
+}
+
+#[test]
+fn printf_escaped_field_overflow_aliased_stderr_orders_star_decode_count_and_padding() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run(r"printf '[%*.2147483648b]TAIL' 5x '\xZ\cignored' 2>&1"),
+        0
+    );
+    assert_eq!(
+        rig.output.bytes(),
+        b"/usr/bin/bash: printf: 5x: invalid number\n/usr/bin/bash: printf: missing hex digit for \\x\n/usr/bin/bash: printf: 2147483648: Numerical result out of range\n[     "
+    );
+    assert!(rig.errors.bytes().is_empty());
+}
