@@ -141,6 +141,12 @@
       "stderrBase64": ""
     },
     {
+      "script": "x=$(printf '%0700000d' 0); set -- $x; echo ${#1}; set -- \"$x\"; echo ${#1}",
+      "status": 0,
+      "stdoutBase64": "NzAwMDAwCjcwMDAwMAo=",
+      "stderrBase64": ""
+    },
+    {
       "script": "cd \"$TMP\"; : > a; : > ab; v=a*; printf '<%s>\\n' \"$v\"; declare w=a?; printf '<%s>\\n' \"$w\"",
       "status": 0,
       "stdoutBase64": "PGEqPgo8YT8+Cg==",
