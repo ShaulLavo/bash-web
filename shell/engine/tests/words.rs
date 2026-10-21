@@ -4279,3 +4279,34 @@ fn indexed_r1_cancelled_staging_preserves_live_array_and_refunds_invocation() {
             .all(|call| call == &["saved", "kept"])
     );
 }
+
+#[test]
+fn indexed_r1_resource_rejection_rolls_back_completed_writes() {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 32,
+        ..Limits::default()
+    });
+    assert_eq!(rig.run("a=(saved kept); x=old"), 0);
+    rig.variable("VALUE", "123456789012345678901234567890");
+    for source in ["a[0]=new b=$VALUE", "a+=(new) b=$VALUE", "x=new b=$VALUE"] {
+        assert_eq!(rig.run(source), 2, "{source}");
+        assert_eq!(rig.run("args \"${a[@]}\" \"$x\""), 0);
+    }
+    assert!(rig.calls.borrow().iter().all(|call| call == &["saved", "kept", "old"]));
+}
+
+#[test]
+fn indexed_r1_cancellation_rolls_back_completed_writes() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(saved kept); x=old"), 0);
+    for prefix in ["a[0]=new", "a+=(new)", "x=new"] {
+        let source = format!("{prefix} b=$(while true; do :; done)");
+        let job = rig.shell.start(&source).unwrap();
+        rig.ex.drive(128);
+        assert!(!job.is_finished());
+        rig.shell.interrupt();
+        assert_eq!(rig.finish(job), 130);
+        assert_eq!(rig.run("args \"${a[@]}\" \"$x\""), 0);
+    }
+    assert!(rig.calls.borrow().iter().all(|call| call == &["saved", "kept", "old"]));
+}
