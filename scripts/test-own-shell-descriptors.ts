@@ -101,3 +101,11 @@ for (const size of [3, 65536]) {
       ));
   }
 }
+
+for (const path of ["/dev/fd/3", "/proc/self/fd/3"]) {
+  test(`integrated shorthand ${path} also uses host-fd translation`, () =>
+    output(
+      `printf 'one\\ntwo\\n' >f; exec 3<f; x=$(<${path}); IFS= read -r y <&3; printf 'x=<%s> y=<%s>\\n' "$x" "$y"`,
+      "x=<one\ntwo> y=<one>\n",
+    ));
+}

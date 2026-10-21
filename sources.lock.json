@@ -604,6 +604,18 @@
         "paths": ["shell/parser/src/parser/mod.rs"],
         "change": "Consume optional boxed parser results in the existing non-inlined pipeline/list append helpers; return whether a command was present.",
         "reason": "Keep large AST temporaries off recursive WASI parser frames while passing target-specific Clippy boxed_local checks without an allowance."
+      },
+      {
+        "paths": [
+          "shell/parser/src/parser/file_substitution.rs",
+          "shell/parser/src/parser/ast.rs",
+          "shell/parser/src/parser/mod.rs",
+          "shell/parser/src/parser/lexer.rs",
+          "shell/parser/src/parser/budget.rs",
+          "shell/parser/src/parser/print_cmd.rs"
+        ],
+        "change": "Retain typed file-read substitution eligibility and lexical backtick origins through quote and scalar assignment transformations. Keep legacy numeric redirect and trailing-input distinctions, escaped newlines and mixed-quote backticks. Traverse and print the dedicated AST variant.",
+        "reason": "GNU Bash 5.3.15 treats one input-only command as a parent-side file capture, while specific backtick spellings disable the shortcut. No upstream test removed."
       }
     ],
     "removedUpstreamTests": [
@@ -1603,5 +1615,24 @@
     "implementation": "Original incremental counted input with one-byte reads, bounded UTF-8 validation, escape/continuation processing, NUL skipping, scalar IFS-whitespace trimming, count validation and exact-boundary stopping. Reuses the existing local locale selector and state/endpoint/work admission. Shared live buffer admission remains retained through assignment; cancellation and errors drop it. Uncounted line-reader implementation is moved unchanged from the exact base.",
     "deferred": "Uncounted escapes and splitting, multiple destinations, arrays, -N/-d, terminal/editor/timeouts, other locale encodings and malformed UTF-8 scalar representation. No runtime metadata or permissions changes.",
     "gate": "Failing-first original Rust controls, exact raw stdout and status differentials on native shell-cli and production shell-runtime on real Waffle, native/WASI suites, browser external-guest pipe, unchanged frozen 9221-record oracle and zero-lost membership comparison."
+  },
+  "shellFileSubstitution": {
+    "classification": "Original local Rust parser metadata, file capture and TypeScript runtime controls. GNU Bash 5.3.15 observations define behavior; no copied upstream implementation.",
+    "oracle": "GNU Bash 5.3.15(1)-release",
+    "referenceSources": [
+      "GNU Bash 5.3 subst.c:command_substitute/optimize_cat_file",
+      "GNU Bash 5.3 builtins/evalstring.c:can_optimize_cat_file",
+      "GNU Bash 5.3 parse.y:parse_string_to_command"
+    ],
+    "implementationDestinations": [
+      "shell/parser/src/parser/file_substitution.rs",
+      "shell/engine/src/expand/command.rs",
+      "shell/engine/src/interpreter/file_substitution.rs"
+    ],
+    "testDestinations": [
+      "shell/engine/tests/words/file_substitution.rs",
+      "scripts/test-own-shell-file-substitution.ts"
+    ],
+    "strategy": "Capture one eligible input-only redirect through the existing bounded UTF-8/NUL/newline decoder. Expand its filename against caller state, preserve splitting/pathname/ambiguity and statuses, and use the existing descriptor/FS boundary without a new process or runtime API. Ordinary command captures retain their streaming producer supervisor. The existing regular-file /dev/fd alias offset limitation and invalid UTF-8 boundary remain explicit in docs/file-substitution.md."
   }
 }
