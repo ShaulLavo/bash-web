@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "family": "Bare indirection to positional and special parameters",
+  "measuredRevision": "713c456198e38e90b089fd32177fa0e98a157a21",
+  "mergedBase": "753c00cc24ed02ea068251206bae4ea7c584d854",
+  "implementation": {
+    "model": "claude-opus-5-5",
+    "reason": "Sol provider policy refusal on ordinary shell/build/test work; owner standing exception. Review stays on Sol."
+  },
+  "identity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "replay": {
+    "command": "BASH_COMPAT_JOBS=1 BASH_COMPAT_SKIP_BUILD=1 npm run compat:shell:prebuilt",
+    "host": "PC shared heavy queue, suite class, one worker",
+    "node": "v26.7.0",
+    "shellRuntimeSha256": "e0aa18e3bc859b80238ae633ba670bbd27df1f6e8a254b316bd6d06f52a0f30b",
+    "resultSha256": "dca0de69aa27c806b94f5caf803adc2040003a7809c315da0ecf0b92a51fa288",
+    "deadlinesAndClassifier": "unchanged"
+  },
+  "corpora": {
+    "oils": {
+      "scored": 1682,
+      "before": 1023,
+      "after": 1025,
+      "gained": [
+        "oils:var-ref:129",
+        "oils:var-ref:137"
+      ],
+      "lost": []
+    },
+    "brush-suite": {
+      "scored": 1888,
+      "before": 1012,
+      "after": 1013,
+      "gained": [
+        "brush-suite:word_expansion/params:17"
+      ],
+      "lost": []
+    },
+    "bashkit-suite": {
+      "scored": 2222,
+      "before": 1415,
+      "after": 1415,
+      "gained": [],
+      "lost": []
+    }
+  },
+  "productionChecks": {
+    "file": "scripts/test-own-shell-indirect-special.ts",
+    "baseGuest": "16 cases: 15 fail on main 3619928 guest (1c0b3f53)",
+    "candidate": "16/16 pass"
+  },
+  "notClaimed": {
+    "oils:var-ref:475": "needs OPTIND startup default (getopts/builtins track)",
+    "oils:var-ref:168": "needs FUNCNAME (callstack track)",
+    "oils:var-ref:33 oils:var-ref:458 oils:var-ref:467": "Bash discards only the current input line on invalid indirection; abort-versus-discard is decided for all expansion errors in interpreter.rs, outside this family"
+  }
+}
