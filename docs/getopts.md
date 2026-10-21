@@ -67,11 +67,20 @@ The complete frozen replay at `339a5b9` also gained 28 Oils, 43 Brush and
 23 Bashkit cases with zero losses across all 9,221 records and 5,792 scored
 cases. Its exit 1 reported exactly 94 stale gained baseline memberships; the
 complete result comparison confirmed the unchanged identities and membership.
-This proof is separate from the subsequent normal-main integration replay.
+A second complete replay at normal-main merge `0c50cc5`, based on `753c00c`,
+records 1051 Oils, 1055 Brush and 1438 Bashkit passes. It gains the same 94
+cases relative to that main and loses none. The committed baseline is the
+whole merged-source result, not selected hunks. The runner again exited 1 only
+for those gained memberships before this refresh.
 
 Focused controls include publication failure preserving every binding and the
 active cluster, successful 360448-byte attached arguments, and cancellation with
-recovery. The merged-source replay and exact source-line binding diagnostics
-remain pending integration. Reports, commands, raw streams and the resource-kill history
+recovery. The merged source passes 1328 native and 1308 WASI tests, Rust and
+JS quality checks, exact/structural duplicate gates and layer controls.
+
+Exact binding and own-option line prefixes remain unimplemented. Six
+whole-output checks are deferred by a missing shared source-provenance contract;
+the wrapper PR does not provide it. No competing tracker, constant line or
+lexical fallback is added. Ordinary option diagnostics remain prefix-free. Reports, commands, raw streams and the resource-kill history
 are retained under
 `/work/reports/bash-web/hill-climb/builtins/getopts/`.
