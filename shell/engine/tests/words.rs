@@ -664,7 +664,6 @@ fn unsupported_case_targets_transformations_and_selected_patterns_fail_closed() 
         "${PIPESTATUS[@],,}",
         "${PIPESTATUS^^}",
         "${!v^^}",
-        "${v@U}",
         "${v~}",
         "${v~~}",
         "${v^^~}",
@@ -4115,6 +4114,9 @@ mod echo;
 
 #[path = "words/read_count.rs"]
 mod read_count;
+
+#[path = "words/transformation.rs"]
+mod transformation;
 
 #[path = "words/printf_escaped_fields.rs"]
 mod printf_escaped_fields;

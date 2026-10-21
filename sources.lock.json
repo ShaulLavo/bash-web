@@ -1752,6 +1752,23 @@
     "deferred": "Uncounted escapes and splitting, multiple destinations, arrays, -N/-d, terminal/editor/timeouts, other locale encodings and malformed UTF-8 scalar representation. No runtime metadata or permissions changes.",
     "gate": "Failing-first original Rust controls, exact raw stdout and status differentials on native shell-cli and production shell-runtime on real Waffle, native/WASI suites, browser external-guest pipe, unchanged frozen 9221-record oracle and zero-lost membership comparison."
   },
+  "shellParameterTransformation": {
+    "classification": "Original scalar parameter transformation adapter; GNU Bash 5.3.15 is a behavior oracle. No upstream implementation copied or adapted.",
+    "baseRevision": "361992834804c5d9325022ddc3580f5e9899bcee",
+    "paths": [
+      "shell/engine/src/expand.rs",
+      "shell/engine/src/expand/transformation.rs",
+      "shell/engine/src/expand/printable.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/builtins/printf/quoting.rs",
+      "shell/engine/tests/words.rs",
+      "shell/engine/tests/words/transformation.rs",
+      "docs/parameter-transformation.md"
+    ],
+    "implementation": "${name@op} for Q, E, u, U, L, K, k, A and a on scalar, nameref, special and positional names. Reusable quoting picks '', single quotes or ANSI-C quoting by locale printability; @E decodes $'...' escapes, stops at NUL and rejects results that are not UTF-8. Case operators reuse the existing locale mapper. @A and @a report readonly and export attributes from existing state; @A spells current-function locals with declare through a read-only state accessor. Nounset is checked before the operator. The locale printability classifier moved unchanged from printf quoting into expand so both share it.",
+    "deferred": "Arrays (PIPESTATUS and namerefs to subscripts fail closed), locale variables that are namerefs (fail closed), ${@@op}, ${*@op}, ${#@op} (rejected as a bad substitution with status 1 when the expansion is reached), indirect ${!name@op}, prompt expansion @P, transformations nested inside other operands, attributes the state does not store (integer, case, array), and non-UTF-8 \\u escapes.",
+    "gate": "Failing-first native Rust controls, full native suite and clippy, and one frozen 9,221-record production-Waffle replay with 18 gains and zero losses; only gained baseline memberships and derived counts change."
+  },
   "shellFileSubstitution": {
     "classification": "Original local Rust parser metadata, file capture and TypeScript runtime controls. GNU Bash 5.3.15 observations define behavior; no copied upstream implementation.",
     "oracle": "GNU Bash 5.3.15(1)-release",
