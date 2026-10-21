@@ -624,6 +624,22 @@ requires its actual dispatch message. A bypass mutation must fail that assertion
 This standalone CLI fixture uses Node WASI, not Waffle's browser worker; no runtime
 built-in capture behavior is changed for instrumentation.
 
+### Getopts scanner
+
+`getopts` adapts `execute_getopts`, `execute_getopts_inner`, `unset_optarg` and
+`set_getopts_name` from Bashkit's `crates/bashkit/src/interpreter/mod.rs` at
+`491c3281f668b76d64b15210b8f5d7bf97244be0`, MIT, Copyright 2024–2026 Everruns.
+Cluster, required-argument and local-OPTIND examples adapt
+`crates/bashkit/tests/spec_cases/bash/getopts.test.sh` and
+`getopts-local-optind.test.sh` at that revision. The retained license is
+`shell/parser/LICENSE`; `sources.lock.json` records source hashes and destinations.
+
+The constant-size cursor, scoped restoration, bounded argument snapshots,
+command/execution storage admission, cooperative cancellation and diagnostic
+integration are original adapters. Readonly, prefix/reset, alias and resource
+controls use GNU Bash observations, not copied Bash implementation. See
+[Getopts](docs/getopts.md) for the supported boundary and verification.
+
 ### Input-only substitution eligibility
 
 The owned parser's backtick-origin metadata and dedicated file-substitution AST
