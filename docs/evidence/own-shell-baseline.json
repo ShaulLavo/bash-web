@@ -10,7 +10,7 @@
   "counts": {
     "oils": {
       "total": 2492,
-      "passed": 1012,
+      "passed": 1013,
       "skipped": 810,
       "categories": {
         "Quoting and word splitting": {
@@ -55,7 +55,7 @@
         },
         "Conditionals, test, [[ ]] and case": {
           "total": 164,
-          "passed": 123,
+          "passed": 124,
           "skipped": 18
         },
         "Grammar, functions and control flow": {
@@ -704,7 +704,7 @@
     },
     "bashkit-suite": {
       "total": 3835,
-      "passed": 1404,
+      "passed": 1406,
       "skipped": 1613,
       "categories": {
         "alias": {
@@ -1909,7 +1909,7 @@
         },
         "test-operators": {
           "total": 29,
-          "passed": 24,
+          "passed": 26,
           "skipped": 3
         },
         "test-tty": {
@@ -3267,7 +3267,7 @@
 {"id":"oils:builtin-bracket:244","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:builtin-bracket:257","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:builtin-bracket:268","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"needs-commands","outcome":"skip"},
-{"id":"oils:builtin-bracket:280","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"c3RhdHVzPTIKc3RhdHVzPTIK","stderr":"L3Vzci9iaW4vYmFzaDogdGVzdDogLWs6IHVuc3VwcG9ydGVkIHByZWRpY2F0ZQovdXNyL2Jpbi9iYXNoOiB0ZXN0OiAtazogdW5zdXBwb3J0ZWQgcHJlZGljYXRlCg=="}},
+{"id":"oils:builtin-bracket:280","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"pass","actual":{"status":0,"stdout":"c3RhdHVzPTIKc3RhdHVzPTIK","stderr":"L3Vzci9iaW4vYmFzaDogdGVzdDogLWs6IHVuc3VwcG9ydGVkIHByZWRpY2F0ZQovdXNyL2Jpbi9iYXNoOiB0ZXN0OiAtazogdW5zdXBwb3J0ZWQgcHJlZGljYXRlCg=="}},
 {"id":"oils:builtin-bracket:294","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:builtin-bracket:319","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-bracket:325","corpus":"oils","category":"Conditionals, test, [[ ]] and case","kind":"builtins-only","outcome":"pass"},
@@ -10867,8 +10867,8 @@
 {"id":"bashkit-suite:test-operators:9","corpus":"bashkit-suite","category":"test-operators","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:test-operators:16","corpus":"bashkit-suite","category":"test-operators","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:test-operators:24","corpus":"bashkit-suite","category":"test-operators","kind":"builtins-only","outcome":"pass"},
-{"id":"bashkit-suite:test-operators:32","corpus":"bashkit-suite","category":"test-operators","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogWzogLXI6IHVuc3VwcG9ydGVkIHByZWRpY2F0ZQo="}},
-{"id":"bashkit-suite:test-operators:40","corpus":"bashkit-suite","category":"test-operators","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogWzogLXc6IHVuc3VwcG9ydGVkIHByZWRpY2F0ZQo="}},
+{"id":"bashkit-suite:test-operators:32","corpus":"bashkit-suite","category":"test-operators","kind":"builtins-only","outcome":"pass","actual":{"status":2,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogWzogLXI6IHVuc3VwcG9ydGVkIHByZWRpY2F0ZQo="}},
+{"id":"bashkit-suite:test-operators:40","corpus":"bashkit-suite","category":"test-operators","kind":"builtins-only","outcome":"pass","actual":{"status":2,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogWzogLXc6IHVuc3VwcG9ydGVkIHByZWRpY2F0ZQo="}},
 {"id":"bashkit-suite:test-operators:48","corpus":"bashkit-suite","category":"test-operators","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:test-operators:56","corpus":"bashkit-suite","category":"test-operators","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:test-operators:64","corpus":"bashkit-suite","category":"test-operators","kind":"builtins-only","outcome":"pass"},
