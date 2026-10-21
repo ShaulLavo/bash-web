@@ -1687,3 +1687,115 @@ The original saved measurement and strict offline comparator remain the only
 measurement evidence. New diagnostics require independent source review and a
 narrow workflow/lifecycle review before parent acceptance. No semantic repair
 or compatibility gain is claimed by this diagnostic change.
+
+## Printf shell quoting, 2026-10-21
+
+Status: Approved, implementation and one frozen measurement finished. Parent owns
+independent review, hosted CI, merge and exact-main acceptance. This is review-ready,
+not accepted or merged.
+
+Implement `%q` and `%Q` inside the existing formatter, with byte-counted width,
+precision, stars, alternate quoting, argument reuse and named/octal escapes.
+No parser/runtime changes or dependencies.
+See [behavior and boundaries](../docs/printf-quoting.md) and
+[measurement receipt](../docs/evidence/printf-quoting.json).
+
+### Remaining classifier and byte-input boundaries
+
+The actual Waffle target's pinned WASI libc classifies unassigned U+0378 as
+printable. Native GNU libc and Bash classify it as nonprinting. Reproduce with
+`LC_ALL=C.UTF-8; printf '[%q]' '͸'`. Bash stdout hex is
+`5b24275c3331355c323730275d`, while Waffle emits `5bcdb85d`, both status 0.
+The helper's character classifier is in
+`shell/engine/src/builtins/printf/quoting.rs`. All 16 affected width/precision/
+alternate controls are retained in `after.json` under
+`/work/reports/bash-web/hill-climb/printf-quoting/`. This unit does not introduce
+a replacement Unicode table or a locale architecture. A later classifier unit
+must choose a portable printability contract and measure table differences first.
+
+The earlier invalid-byte word-decoding finding still applies to `%q`.
+`LC_ALL=C.UTF-8; printf '%q' $'\xff'` produces `c3bf` instead of Bash's
+`24275c33373727` because the lexer has already replaced byte `ff` with U+00FF.
+The formatter cannot reconstruct that byte without guessing. Controls preserve
+this mismatch; no gain or byte-preserving input support is claimed for it.
+
+The earlier four-case compatibility CI stall remains unresolved. Its Approved
+finding and unchanged observer/command above are preserved. No CI diagnosis or
+infrastructure change is part of this unit.
+
+### Measured result
+
+Measured source `e050d54ae26c54ba3af9da72ee6186f05914d82d`, accepted base
+`46a6bb090e1bdcc3d447bc2c70a3a7f4c72fd4b4`. Exactly one production-Waffle
+replay, JOBS=1 and RECORD=0: 9,221 records, 5,792 scored, 3,429 unchanged skips.
+
+- oils: 1006 -> 1012, gained 6, lost 0.
+- brush-suite: 989 -> 1001, gained 12, lost 0.
+- bashkit-suite: 1388 -> 1404, gained 16, lost 0.
+
+Only 34 proven gained rows and derived baseline counts change. Every other
+baseline record retains its historical payload. The unchanged strict comparator
+passes offline on the saved replay. Oracle, cases, environment, source pins,
+exclusions, scorer, fixtures, deadlines and blocking gates are unchanged.
+Raw stdout/status define scores; stderr is retained but unscored.
+
+Full native workspace tests and native/WASI all-target Clippy pass. Focused WASI
+checks pass 102 printf, 10 echo and two memory-budget tests. Unchanged printf
+fixtures pass 1,122 each on native and actual Waffle; echo passes 492 each.
+Fifty I/O/admission/closed-descriptor controls pass. Four quoting regressions
+failed first; all 14 new tests now pass. See the receipt for exact commands,
+artifacts, version-only rebuild correspondence, retained raw differences and
+skipped local checks. Parent owns independent reviews and all hosted gates.
+
+### Closed-stdout printf diagnostics, 2026-10-21
+
+Status: Approved, separate shared-Printer repair. Not fixed by the quoting unit.
+At reviewed `8242cd0125b0c40526728ac88dacd384ba2f358f`, independent review
+reproduced missing stderr for `printf '[%q]' 'a b' 1>&-` and
+`printf '[%.0q]' x 1>&-`. Both Bash and the native shell return 1 with empty
+stdout; Bash emits `/usr/bin/bash: line 1: printf: write error: Bad file descriptor\n`,
+while the native shell emits no stderr. The reviewer also reproduced ordinary
+`printf '%s' x 1>&-`; the fix lane independently repeated all three controls
+with the retained measured native binary, with the same results.
+
+Reproduce each source with `/usr/bin/bash -c "$source"` and
+`/work/tmp/bash-web-printf-quoting/target/release/shell-cli -c "$source"`.
+The latter measured binary has SHA-256
+`b02f86cc46a818d7cd40c2d95bbc120ee1c7ec4f2c4a87a38940860404feef6e`.
+Review records and exact stderr hex are in
+`/work/reports/bash-web/hill-climb/printf-quoting/review-r1-native.json`;
+controls reproduce on every one of the three reruns, not intermittently.
+Inspect `Printer::flush_output` at `shell/engine/src/builtins/printf.rs:230-236`,
+its shared `write` error handling and the final flush/status propagation.
+Those paths are unchanged by this PR. This rules out a quoting-only failure,
+not the bug's age or root cause. Repair and test ordinary `%s`, `%q` and `%Q`
+in a bounded follow-up. Stderr is retained but not part of the frozen score.
+
+### Darwin quoting review fix
+
+Review found the Apple locale mask selected messages rather than character
+classification. The narrow correction uses Darwin's `LC_CTYPE_MASK = 1 << 1`,
+`en_US.UTF-8` and the declared `int` return from `freelocale`. A Darwin-only
+regression queries the initial process C locale, exercises actual `%q`/`%Q`
+UTF-8 output, then checks that locale again without changing it. A path-filtered
+hosted macOS gate confirms that locale name exists and runs the quoting tests.
+Local Mac Mesh and documented SSH recovery were unavailable before setup.
+
+The original one-replay result above remains historical. The later delivery's
+Linux/WASI active production source matches the reviewed source after comments
+are removed and actual rustc target cfg expansion. The unchanged comparator
+still accepts the saved replay; no new gain, second replay or Darwin execution
+is inferred from those checks. See `review-fixes-r1.md` in the report directory
+for separate hosted Darwin results and current delivery/source correspondence.
+
+The first actual hosted Darwin run, `39515015387/job/118944969036`, compiled
+successfully and passed 14/15 quoting tests, including initial-C-locale `%q`/`%Q`.
+Its sole failure was the GNU-specific Unicode expected output at
+`printf_quoting.rs:126`. Darwin escaped U+00AD, U+200B and U+FEFF while leaving
+U+2028 literal; the retained GNU expectation did the reverse. The narrow test
+correction preserves the non-Apple expectation and checks the recorded Apple
+expectation against direct native `iswprint_l` classifications. Native Bash
+3.2.57 emits a distinct byte-level quote representation; its captured output
+and round-trip check are independent observations, not the GNU 5.3.15 oracle. No skip, filtered assertion, portable Unicode
+table or scoring change is included. Raw first-failure and follow-up logs stay
+in the report directory under `review-fixes-r1-darwin*`.

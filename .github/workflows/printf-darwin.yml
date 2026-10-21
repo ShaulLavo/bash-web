@@ -1,0 +1,38 @@
+name: Darwin printf quoting
+on:
+  pull_request:
+    paths:
+      - shell/engine/**
+      - shell/parser/**
+      - shell/Cargo.toml
+      - shell/Cargo.lock
+      - .github/workflows/printf-darwin.yml
+  push:
+    branches: [main]
+    paths:
+      - shell/engine/**
+      - shell/parser/**
+      - shell/Cargo.toml
+      - shell/Cargo.lock
+      - .github/workflows/printf-darwin.yml
+permissions:
+  contents: read
+jobs:
+  printf-darwin:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    env:
+      CARGO_TARGET_DIR: .build/printf-darwin
+      LC_ALL: C
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.98.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: shell -> ../.build/printf-darwin
+      - name: Confirm Darwin UTF-8 locale
+        run: locale -a | grep -Fx en_US.UTF-8
+      - name: Identify installed Bash control
+        run: /bin/bash --version
+      - name: Printf quoting from the initial C process locale
+        run: cargo test --locked --manifest-path shell/Cargo.toml -p shell-engine --test words -j2 printf_quoting -- --test-threads=1 --show-output

@@ -32,14 +32,14 @@ impl<'a> Arguments<'a> {
 }
 
 #[derive(Clone, Copy)]
-enum Count {
+enum Count<'a> {
     Literal(u32),
     Star,
-    Overflow,
+    Overflow(&'a [u8]),
 }
-impl Count {
+impl<'a> Count<'a> {
     async fn parse(
-        input: &[u8],
+        input: &'a [u8],
         offset: &mut usize,
         printer: &mut Printer<'_>,
     ) -> Result<Self, i32> {
@@ -48,6 +48,7 @@ impl Count {
             *offset += 1;
             return Ok(Self::Star);
         }
+        let start = *offset;
         let mut value = Some(0u32);
         while let Some(digit @ b'0'..=b'9') = input.get(*offset) {
             printer.scan(1).await?;
@@ -56,7 +57,7 @@ impl Count {
         }
         Ok(match value.filter(|n| *n <= i32::MAX as u32) {
             Some(value) => Self::Literal(value),
-            None => Self::Overflow,
+            None => Self::Overflow(&input[start..*offset]),
         })
     }
     async fn resolve(
@@ -67,7 +68,7 @@ impl Count {
         match self {
             Self::Literal(value) => Ok(Some(i64::from(value))),
             Self::Star => Ok(Some(args.number(printer, NumberRange::Star).await? as i64)),
-            Self::Overflow => Ok(None),
+            Self::Overflow(_) => Ok(None),
         }
     }
 }
@@ -102,10 +103,10 @@ impl Flags {
     }
 }
 
-pub(super) struct Field {
+pub(super) struct Field<'a> {
     flags: Flags,
-    width: Count,
-    precision: Option<Count>,
+    width: Count<'a>,
+    precision: Option<Count<'a>>,
     conversion: u8,
 }
 struct ResolvedField {
@@ -113,9 +114,9 @@ struct ResolvedField {
     width: usize,
     precision: Option<usize>,
 }
-impl Field {
+impl<'a> Field<'a> {
     pub async fn parse(
-        input: &[u8],
+        input: &'a [u8],
         offset: &mut usize,
         printer: &mut Printer<'_>,
     ) -> Result<Option<Self>, i32> {
@@ -128,12 +129,13 @@ impl Field {
         } else {
             None
         };
-        let Some(&conversion @ (b's' | b'c' | b'd' | b'i' | b'u' | b'o' | b'x' | b'X')) =
-            input.get(*offset)
+        let Some(
+            &conversion @ (b's' | b'c' | b'd' | b'i' | b'u' | b'o' | b'x' | b'X' | b'q' | b'Q'),
+        ) = input.get(*offset)
         else {
             return Ok(None);
         };
-        if !matches!(conversion, b's' | b'c') && flags.grouping {
+        if !matches!(conversion, b's' | b'c' | b'q' | b'Q') && flags.grouping {
             return Ok(None);
         }
         printer.scan(1).await?;
@@ -150,8 +152,8 @@ impl Field {
         args: &mut Arguments<'_>,
         printer: &mut Printer<'_>,
     ) -> Result<Option<ResolvedField>, i32> {
-        let overflow = matches!(self.width, Count::Overflow)
-            || matches!(self.precision, Some(Count::Overflow));
+        let overflow = matches!(self.width, Count::Overflow(_))
+            || matches!(self.precision, Some(Count::Overflow(_)));
         if self.conversion == b's' && overflow {
             return Ok(None);
         }
@@ -168,11 +170,56 @@ impl Field {
                 precision: (precision >= 0).then_some(precision as usize),
             }))
     }
+    async fn print_quoted(
+        self,
+        args: &mut Arguments<'_>,
+        printer: &mut Printer<'_>,
+    ) -> Result<bool, i32> {
+        let width = self.width.resolve(args, printer).await?.unwrap_or(0);
+        let precision = match self.precision {
+            Some(count) => count.resolve(args, printer).await?,
+            None => Some(-1),
+        };
+        quote_count_warning(self.width, args, printer).await?;
+        if let Some(count) = self.precision {
+            quote_count_warning(count, args, printer).await?;
+        }
+        let precision = precision.unwrap_or(if self.conversion == b'q' { 0 } else { -1 });
+        let mut field = ResolvedField {
+            left: self.flags.left || width < 0,
+            width: width.unsigned_abs() as usize,
+            precision: (precision >= 0).then_some(precision as usize),
+        };
+        let value = args.take().unwrap_or("").as_bytes();
+        let value = if self.conversion == b'Q' {
+            let length = field
+                .precision
+                .take()
+                .map_or(value.len(), |n| value.len().min(n));
+            &value[..length]
+        } else {
+            value
+        };
+        let quoted = super::quoting::Quoted::new(value, self.flags.alternate, printer).await?;
+        let length = quoted.walk(field.precision, false, printer).await?;
+        let padding = field.width.saturating_sub(length);
+        if !field.left {
+            printer.padding(padding, b' ').await?;
+        }
+        quoted.walk(field.precision, true, printer).await?;
+        if field.left {
+            printer.padding(padding, b' ').await?;
+        }
+        Ok(false)
+    }
     pub async fn print(
         self,
         args: &mut Arguments<'_>,
         printer: &mut Printer<'_>,
     ) -> Result<bool, i32> {
+        if matches!(self.conversion, b'q' | b'Q') {
+            return self.print_quoted(args, printer).await;
+        }
         let field = self.resolve(args, printer).await?;
         if matches!(self.conversion, b's' | b'c') {
             let Some(mut field) = field else {
@@ -203,6 +250,22 @@ impl Field {
         Ok(false)
     }
 }
+async fn quote_count_warning(
+    count: Count<'_>,
+    args: &mut Arguments<'_>,
+    printer: &mut Printer<'_>,
+) -> Result<(), i32> {
+    let Count::Overflow(value) = count else {
+        return Ok(());
+    };
+    args.status = 1;
+    printer.numeric_warning(b"/usr/bin/bash: printf: ").await?;
+    printer.numeric_warning(value).await?;
+    printer
+        .numeric_warning(b": Numerical result out of range\n")
+        .await
+}
+
 async fn field_overflow(args: &mut Arguments<'_>, printer: &mut Printer<'_>) -> Result<bool, i32> {
     printer
         .emit(
