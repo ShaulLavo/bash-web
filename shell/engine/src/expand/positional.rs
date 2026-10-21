@@ -55,6 +55,7 @@ impl Expansion<'_> {
                 )
                 .await;
         }
+        let subscript = index;
         let index = self.indexed_index(name, index, state).await?;
         self.indexed_require_bound(name, Some(index), state)?;
         let (value, utf8) = {
@@ -62,11 +63,15 @@ impl Expansion<'_> {
             let special;
             let value = if name == "PIPESTATUS" {
                 self.work.admit_storage(20)?;
-                special = usize::try_from(index)
-                    .ok()
-                    .and_then(|index| state.pipeline_status().get(index))
-                    .map(i32::to_string)
-                    .unwrap_or_default();
+                special = pipeline_length_index(
+                    index,
+                    state.pipeline_status().len(),
+                    subscript,
+                    self.work,
+                )?
+                .and_then(|index| state.pipeline_status().get(index))
+                .map(i32::to_string)
+                .unwrap_or_default();
                 special.as_str()
             } else {
                 state.array_element(name, index).unwrap_or("")
@@ -213,6 +218,23 @@ impl Expansion<'_> {
         self.work.admit_storage(value.len())?;
         Ok(value.clone())
     }
+}
+
+fn pipeline_length_index(
+    index: i64,
+    count: usize,
+    subscript: &str,
+    work: &mut super::Work,
+) -> Result<Option<usize>, Error> {
+    let resolved = slice_start(index, count);
+    if index >= 0 || resolved.is_some() {
+        return Ok(resolved);
+    }
+    work.admit_storage(subscript.len().saturating_add(128))?;
+    Err(Error::BadArraySubscript {
+        name: format!("[{subscript}]"),
+        line: None,
+    })
 }
 
 fn slice_start(offset: i64, count: usize) -> Option<usize> {
