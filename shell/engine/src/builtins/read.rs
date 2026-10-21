@@ -169,7 +169,9 @@ async fn assign(
 ) -> Result<Outcome, i32> {
     let text = std::str::from_utf8(&reader.bytes).map_err(|_| 2)?;
     if options.names.is_empty() {
-        assign_value("REPLY", text, state, context, work).await?;
+        assign_value("REPLY", text, state, context, work)
+            .await
+            .map_err(|status| destination_status(status, false))?;
         return Ok(Outcome::status(code));
     }
     let mut fields = fields::Fields::new(text, &reader.protected, &reader.ifs);
@@ -177,9 +179,20 @@ async fn assign(
         validate_name(name, fds, context, work).await?;
         let last = index + 1 == options.names.len();
         let value = fields.value(last, context, work).await?;
-        assign_value(name, value, state, context, work).await?;
+        assign_value(name, value, state, context, work)
+            .await
+            .map_err(|status| destination_status(status, last))?;
     }
     Ok(Outcome::status(code))
+}
+
+/// Bash's read returns 2 when REPLY or a non-final destination rejects its
+/// value (readonly, for example); only the final named destination keeps 1.
+fn destination_status(status: i32, last: bool) -> i32 {
+    if status == 1 && !last {
+        return 2;
+    }
+    status
 }
 
 struct Reader {

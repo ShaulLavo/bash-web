@@ -54,7 +54,27 @@ const cases = [" ", ":", ": ", "", "é"]
     "IFS='é¢'; read IFS a b <<<'xéâz¢q'; printf '[%s][%s][%s]\\n' \"$IFS\" \"$a\" \"$b\"",
     "IFS='é¢'; read -r a b <<<'a\\éâ¢b'; printf '[%s][%s]\\n' \"$a\" \"$b\"",
     "IFS='é¢'; read a b <<<'a\\éâ¢b'; printf '[%s][%s]\\n' \"$a\" \"$b\"",
-  ]);
+    "IFS='éš'; read a b <<<'oneátwo'; printf '[%s][%s]\\n' \"$a\" \"$b\"",
+  ])
+  .concat(
+    ["-r", "-n4", "-rn4"].map(
+      (options) => `IFS='éš'; read ${options} a <<<'abcá'; printf '%s:[%s]\\n' "$?" "$a"`,
+    ),
+  )
+  .concat(
+    ["", "-r", "-n4", "-rn4", "-n0"].flatMap((options) =>
+      ["a", "b", "c"].map(
+        (readonly) =>
+          `a=oldA; b=oldB; c=oldC; readonly ${readonly}; read ${options} a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\\n' "$r" "$a" "$b" "$c"; exit "$r"`,
+      ),
+    ),
+  )
+  .concat(
+    ["", "-r", "-n2", "-n0"].map(
+      (options) =>
+        `REPLY=old; readonly REPLY; read ${options} <<<'xyz'; r=$?; printf '%s:[%s]\\n' "$r" "$REPLY"; exit "$r"`,
+    ),
+  );
 for (const script of cases)
   test(`production Waffle scalar read: ${script}`, async () => {
     const bash = spawnSync("/usr/bin/bash", ["--noprofile", "--norc", "-c", script], { env });

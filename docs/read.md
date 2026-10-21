@@ -12,7 +12,9 @@ Backslash-newline continues the logical line; a trailing backslash at EOF is
 removed. NUL bytes are ignored. EOF assigns the collected value and returns 1;
 a newline or the requested count returns 0. Invalid first names return 1 without
 consuming input. A later invalid name leaves earlier assignments in place and
-later destinations unchanged. Options stop at the first destination.
+later destinations unchanged. A readonly destination stops assignment the same
+way; it returns 2 for `REPLY` or a non-final name and 1 for the final name.
+Its Bash diagnostic is not printed yet. Options stop at the first destination.
 
 `-n` counts output characters and stops without reading the next byte, including
 a following newline. Zero assigns empty values without reading. Decimal counts

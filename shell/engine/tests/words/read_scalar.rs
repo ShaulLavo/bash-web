@@ -105,3 +105,46 @@ fn scalar_multibyte_ifs_membership() {
         "[aéâ][b]\n",
     );
 }
+
+#[test]
+fn scalar_readonly_destination_status() {
+    for options in ["", "-r", "-n4", "-rn4", "-n0"] {
+        for (readonly, line, empty) in [
+            ("a", "2:[oldA][oldB][oldC]", "2:[oldA][oldB][oldC]"),
+            ("b", "2:[x][oldB][oldC]", "2:[][oldB][oldC]"),
+            ("c", "1:[x][y][oldC]", "1:[][][oldC]"),
+        ] {
+            let expected = if options == "-n0" { empty } else { line };
+            check_output(
+                &format!(
+                    r#"a=oldA; b=oldB; c=oldC; readonly {readonly}; read {options} a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\n' "$r" "$a" "$b" "$c""#
+                ),
+                &format!("{expected}\n"),
+            );
+        }
+    }
+    for options in ["", "-r", "-n2", "-n0"] {
+        check_output(
+            &format!(
+                r#"REPLY=old; readonly REPLY; read {options} <<<'xyz'; printf '%s:[%s]\n' "$?" "$REPLY""#
+            ),
+            "2:[old]\n",
+        );
+    }
+}
+
+#[test]
+fn scalar_multibyte_ifs_byte_collisions() {
+    for options in ["-r", "-n4", "-rn4"] {
+        check_output(
+            &format!(
+                r#"LC_ALL=C.UTF-8; IFS='éš'; read {options} a <<<'abcá'; printf '%s:[%s]\n' "$?" "$a""#
+            ),
+            "0:[abcá]\n",
+        );
+    }
+    check_output(
+        r#"IFS='éš'; read a b <<<'oneátwo'; printf '[%s][%s]\n' "$a" "$b""#,
+        "[oneátwo][]\n",
+    );
+}
