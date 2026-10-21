@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "bash": "5.3.15(1)-release",
-  "provenance": "Recorded by independent R1b reviewer, path-results.json. No CI host Bash invocation. Original fixture cwd is retained for virtual Waffle; selected native cases have cwd-independent stdout. Six longer delimiter-run controls were recorded from the same verified Bash version during repair, colon-observations.json. No candidate output was recorded as reference.",
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "provenance": "Recorded by independent R1b reviewer, path-results.json. No CI host Bash invocation. Original fixture cwd is retained for virtual Waffle; selected native cases have cwd-independent stdout. Six longer delimiter-run controls were recorded from the same verified Bash version during repair, colon-observations.json. No candidate output was recorded as reference. Exact local --version first line is retained in type/colon-observations.json; reviewer reference streams are retained unchanged in type-review-r1b/path-results.json.",
   "cases": [
     {
       "id": "path-",

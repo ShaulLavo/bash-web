@@ -119,18 +119,12 @@ fn type_path_review_recorded_empty_elements_and_unset_path() {
         "../../../../scripts/fixtures/shell-type-path.json"
     ))
     .unwrap();
-    assert_eq!(fixture["bash"], "5.3.15(1)-release");
+    assert_eq!(
+        fixture["bash"],
+        "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)"
+    );
     for case in fixture["cases"].as_array().unwrap() {
-        let rig = Rig::new(Limits::default());
-        for path in [
-            "/home/guest/probe",
-            "/home/guest/a/probe",
-            "/home/guest/b/probe",
-        ] {
-            rig.host.register(path, |_, _| {
-                async { panic!("type must not spawn") }.boxed_local()
-            });
-        }
+        let rig = type_path_review_rig();
         assert_eq!(
             rig.run(case["code"].as_str().unwrap()),
             i32::try_from(case["status"].as_i64().unwrap()).unwrap(),
@@ -160,27 +154,31 @@ fn type_path_review_preserves_one_shot_unset_and_explicit_slash() {
         ("-P", "/home/guest/probe\n"),
         ("-t", "file\n"),
     ] {
-        let rig = Rig::new(Limits::default());
-        rig.host.register("/home/guest/probe", |_, _| {
-            async { panic!("type must not spawn") }.boxed_local()
-        });
+        let rig = type_path_review_rig();
         assert_eq!(rig.run(&format!("unset PATH; type {mode} probe")), 0);
         assert_eq!(rig.output.bytes(), expected.as_bytes());
     }
-    let rig = Rig::new(Limits::default());
-    rig.host.register("/home/guest/probe", |_, _| {
-        async { panic!("type must not spawn") }.boxed_local()
-    });
+    let rig = type_path_review_rig();
     assert_eq!(
         rig.run("unset PATH; type -aP ./probe; PATH=: type -p probe"),
         0
     );
     assert_eq!(rig.output.bytes(), b"./probe\n./probe\n");
-    let rig = Rig::new(Limits::default());
-    rig.host.register("/home/guest/probe", |_, _| {
-        async { panic!("type must not spawn") }.boxed_local()
-    });
+    let rig = type_path_review_rig();
     assert_eq!(rig.run("unset PATH; type -a probe"), 1);
     assert!(rig.output.bytes().is_empty());
     assert!(rig.errors.bytes().ends_with(b"type: probe: not found\n"));
+}
+
+fn type_path_review_rig() -> Rig {
+    let rig = Rig::new(Limits::default());
+    for path in [
+        "/home/guest/probe",
+        "/home/guest/a/probe",
+        "/home/guest/b/probe",
+    ] {
+        rig.host
+            .register(path, |_, _| panic!("type must not spawn"));
+    }
+    rig
 }

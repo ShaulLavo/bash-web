@@ -52,8 +52,8 @@ formatting and dependency checks, JavaScript quality, capability and layer check
 533 scoreboard tests, all 12 committed native fuzz families, 246 generator and
 CI-helper tests, and 492 production-Waffle echo controls. The new type tests use
 fixed observations, not the CI host's Bash. Browser end-to-end and hosted CI are
-still parent-owned gates. That immutable checkpoint is superseded by a bounded review repair for empty
-PATH elements and unset PATH in all-match queries. Its raw proof remains intact.
+still parent-owned gates. That immutable checkpoint is superseded by a bounded
+review repair for empty PATH elements and unset PATH in all-match queries. Its raw proof remains intact.
 
 Exact gained IDs, frozen identities, both raw probe streams, the full replay and
 strict offline comparison are retained under the report directory above. Alias,
@@ -70,7 +70,29 @@ their existing behavior. Failure classification is extracted from the shared
 resolver without changing host access, metadata fallback or admission owners.
 
 `scripts/fixtures/shell-type-path.json` retains 28 cwd-independent observations
-from Bash 5.3.15, including the reviewer's discriminators and six longer colon-run controls. Native/WASI regressions replay these fixed
-bytes and status, never the CI host's Bash. Original one-shot and slash controls
+from Bash 5.3.15, including the reviewer's discriminators and six longer colon-run
+controls. Native/WASI regressions replay these fixed bytes and status, never the CI host's Bash. Original one-shot and slash controls
 also remain. The two findings reproduced before repair on actual native and
 production-Waffle artifacts, including the duplicate-entry discriminators.
+
+Repair source `af1531ef6ff1bdec0fcc88f38f47cc8e2521a5a0` passed the same full
+launch-base replay once, recording disabled. It retains all 70 gains, with zero
+lost memberships or newly abnormal outcomes. The complete baseline was recomputed
+and strictly validated in the report directory, not installed into source.
+Immutable repair guards passed 1,386 native and 1,366 WASI tests, native/WASI
+Clippy, formatting, dependency checks, JavaScript quality, layers, capabilities
+and 533 scoreboard tests. The precommit dirty repair builds also matched all 28
+recorded controls through both native and production Waffle. Their report now
+separates observed Git HEAD from build provenance; the original bytes remain.
+
+The final test-only delta records the full locally observed Bash version line
+and extracts fixture registration to keep test nesting bounded. All 28 oracle
+observations and every production source byte remain unchanged from the repair.
+Actual-main integration and its final replay still await the parent's merge slot.
+
+The final delta passed all nine focused type tests natively and under WASI,
+formatting and the exact layer check. All 12 committed native fuzz fixture
+families also passed on repaired production code. Two report-runner setup errors
+were corrected without source changes: missing WASI sysroot environment and an
+unsupported echo-runner queue flag. Their failed logs remain beside the passing
+focused and fixture receipts. No additional full build or replay was used.
