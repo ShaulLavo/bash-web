@@ -256,10 +256,7 @@
       },
       {
         "classification": "Original browser acceptance harness with source-built generic guests and explicit missing external launcher capability",
-        "destinationPaths": [
-          "tests/browser-main.ts",
-          "tests/helpers/test-programs.ts"
-        ],
+        "destinationPaths": ["tests/browser-main.ts", "tests/helpers/test-programs.ts"],
         "changes": "Create the page-owned Waffle runtime and own its source-guest lease. Register compiled test-guest with cooperative:true and source-admitted/instrumented test-spin through the existing shell adapter on that same runtime; no runtime or ABI-host implementation is copied. The documented public installBunAdapters(runtime,{workerUrl,wasmUrl?}) contract specifies future composition and cleanup without depending on unpublished code; the unused executable placeholder was removed. No Bun host package, guest payload, licenses or implementation source is included; four genuinely Bun-specific cases remain skipped until the published installer/worker and verified guest descriptor exist, separately from three original known-failure cases."
       },
       {
@@ -592,10 +589,7 @@
         "reason": "A job label must represent its actual shell command, including compound and pipeline commands, rather than a simple-command-only special case or an unbounded reconstructed string. Reusing the existing typed bounded printer keeps display formatting separate from execution and shell job membership."
       },
       {
-        "paths": [
-          "src/parser/mod.rs",
-          "src/parser/print_cmd.rs"
-        ],
+        "paths": ["src/parser/mod.rs", "src/parser/print_cmd.rs"],
         "change": "Remove unreachable internal helpers and duplicate printer wrappers; derive default printer state.",
         "reason": "Keep the owned parser warning-free under all-target Clippy without suppressing dead code. Test-only printer entrypoints retain their coverage."
       },
@@ -1398,7 +1392,10 @@
       "shell/engine/src/runtime.rs",
       "shell/engine/src/runtime/wasi.rs"
     ],
-    "testDestinations": ["shell/utilities/tests/streaming.rs", "shell/engine/tests/support/streaming.rs"],
+    "testDestinations": [
+      "shell/utilities/tests/streaming.rs",
+      "shell/engine/tests/support/streaming.rs"
+    ],
     "strategy": "Port only the grep behaviors needed by step 1 acceptance. Read descriptors in 8 KiB chunks, retain at most min(Limits.line_bytes, 64 KiB) per record, write selected records immediately with descriptor backpressure, and checkpoint cancellation while reading/scanning. Pattern input is at most 4096 bytes; the linear-time regex crate has 256 KiB compiled-program and DFA-cache limits and nesting limit 64. An original small BRE translator supplies unescaped literal versus escaped operator rules and preserves caret/dollar anchors only at BRE branch boundaries, including escaped groups and alternation (GNU grep oracle regressions); do not import Bashkit grep_pattern, backtracking engines, whole-file reads, output buffers or the bug25 buffering architecture. Preserve record bytes including CR, NUL and invalid UTF-8 instead of binary-file suppression. Multiple operands get filename prefixes; count is per input; -q stops at the first selected record. Original mkdir and -p resolve against shell cwd and use FileSystem plus preview1 path_create_directory/path_filestat_get, validating an existing directory rather than accepting files. The memory filesystem tracks bounded directory metadata. Runtime metadata calls share the explicitly deferred synchronous-filesystem stall/cancellation limitation; there is no compatibility fallback. General utilities remain plan 004 step 4.",
     "excluded": [
       "grep long options, -e/-f, recursive traversal, context and binary-file classification",
@@ -1602,5 +1599,48 @@
     "implementation": "Original incremental counted input with one-byte reads, bounded UTF-8 validation, escape/continuation processing, NUL skipping, scalar IFS-whitespace trimming, count validation and exact-boundary stopping. Reuses the existing local locale selector and state/endpoint/work admission. Shared live buffer admission remains retained through assignment; cancellation and errors drop it. Uncounted line-reader implementation is moved unchanged from the exact base.",
     "deferred": "Uncounted escapes and splitting, multiple destinations, arrays, -N/-d, terminal/editor/timeouts, other locale encodings and malformed UTF-8 scalar representation. No runtime metadata or permissions changes.",
     "gate": "Failing-first original Rust controls, exact raw stdout and status differentials on native shell-cli and production shell-runtime on real Waffle, native/WASI suites, browser external-guest pipe, unchanged frozen 9221-record oracle and zero-lost membership comparison."
+  },
+  "shellGetopts": {
+    "repository": "https://github.com/everruns/bashkit",
+    "revision": "491c3281f668b76d64b15210b8f5d7bf97244be0",
+    "license": "MIT",
+    "classification": "Adapted option scanner and getopts examples with original state, admission and diagnostic adapters.",
+    "implementationSources": [
+      {
+        "path": "crates/bashkit/src/interpreter/mod.rs",
+        "sha256": "e5e4a9bf14f406a520030ea0d1d1aae828158c40ec002d1ca443925aa90c2062",
+        "items": [
+          "execute_getopts and execute_getopts_inner option/argument and silent-error scanning",
+          "unset_optarg and set_getopts_name publication ordering"
+        ]
+      }
+    ],
+    "testSources": [
+      {
+        "path": "crates/bashkit/tests/spec_cases/bash/getopts.test.sh",
+        "sha256": "1884f981d87afbfd85bbf9c7f5be600f0fd4012af1662ff5b0dc233bd34828a5"
+      },
+      {
+        "path": "crates/bashkit/tests/spec_cases/bash/getopts-local-optind.test.sh",
+        "sha256": "3c95cb1c3e7c69c5d021f76e9f91d758884d48c5c42b3a3f907681fc687e55de"
+      }
+    ],
+    "implementationDestinations": [
+      "shell/engine/src/builtins/getopts.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/commands.rs",
+      "shell/engine/src/builtins.rs"
+    ],
+    "testDestinations": [
+      "shell/engine/tests/words/getopts.rs",
+      "shell/engine/src/state/bindings_tests.rs"
+    ],
+    "originalAdapters": "Constant-size shell-owned option cursor, local OPTIND save/restore, prefix/reset and subshell ownership, readonly publication, borrowed optstring and only current/required-next argument snapshots, pre-copy command/execution storage admission, cooperative cancellation and source-owned diagnostics. No hidden user-visible _OPTCHAR_IDX, argv-vector clone, upstream interpreter loop or unchecked character collection is retained.",
+    "documentation": "docs/getopts.md",
+    "excluded": [
+      "array/subscript destinations and indexed namerefs, owned by the variables family",
+      "non-ASCII option bytes, which cannot be represented individually by the existing UTF-8 scalar binding storage",
+      "byte-identical GNU Bash --help prose"
+    ]
   }
 }
