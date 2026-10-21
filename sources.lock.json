@@ -1863,6 +1863,15 @@
       "declarations, arrays and grammar prerequisites",
       "byte-identical GNU Bash help and execution-coordinate diagnostics"
     ],
-    "documentation": "docs/type.md"
+    "documentation": "docs/type.md",
+    "recordedObservationFixtures": [
+      {
+        "path": "scripts/fixtures/shell-type-path.json",
+        "sha256": "d5bbf3233ae0c58118f1b5959458a0d7a7fb132f2ddc297d1517d94d34ebe82c",
+        "bash": "5.3.15(1)-release",
+        "origin": "Independent R1b path-results.json observations plus six verified-version longer delimiter-run controls recorded during repair. CI replays fixed stdout, stderr and status; it does not invoke host Bash.",
+        "classification": "Original fixture adapter for recorded GNU Bash observations, not copied implementation."
+      }
+    ]
   }
 }

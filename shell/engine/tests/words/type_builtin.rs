@@ -1,5 +1,5 @@
-//! Adapted type examples from pinned Bashkit introspect/type cases; original
-//! precedence, descriptor and admission controls run natively and on WASI.
+//! Type examples adapt Bashkit's type.test.sh at sources.lock.json::shellType.
+//! Precedence, descriptor and admission controls are original.
 use super::*;
 
 #[test]
@@ -111,4 +111,76 @@ fn type_preserves_relative_paths_and_filters_directories_and_nonexecutables() {
     assert_eq!(rig.run("type -a probe"), 1);
     assert_eq!(rig.run("type ./probe"), 1);
     assert_eq!(rig.run("type directory"), 1);
+}
+
+#[test]
+fn type_path_review_recorded_empty_elements_and_unset_path() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../scripts/fixtures/shell-type-path.json"
+    ))
+    .unwrap();
+    assert_eq!(fixture["bash"], "5.3.15(1)-release");
+    for case in fixture["cases"].as_array().unwrap() {
+        let rig = Rig::new(Limits::default());
+        for path in [
+            "/home/guest/probe",
+            "/home/guest/a/probe",
+            "/home/guest/b/probe",
+        ] {
+            rig.host.register(path, |_, _| {
+                async { panic!("type must not spawn") }.boxed_local()
+            });
+        }
+        assert_eq!(
+            rig.run(case["code"].as_str().unwrap()),
+            i32::try_from(case["status"].as_i64().unwrap()).unwrap(),
+            "{}",
+            case["id"]
+        );
+        assert_eq!(
+            rig.output.bytes(),
+            case["stdout"].as_str().unwrap().as_bytes(),
+            "{}",
+            case["id"]
+        );
+        assert_eq!(
+            rig.errors.bytes(),
+            case["stderr"].as_str().unwrap().as_bytes(),
+            "{}",
+            case["id"]
+        );
+    }
+}
+
+#[test]
+fn type_path_review_preserves_one_shot_unset_and_explicit_slash() {
+    for (mode, expected) in [
+        ("", "probe is /home/guest/probe\n"),
+        ("-p", "/home/guest/probe\n"),
+        ("-P", "/home/guest/probe\n"),
+        ("-t", "file\n"),
+    ] {
+        let rig = Rig::new(Limits::default());
+        rig.host.register("/home/guest/probe", |_, _| {
+            async { panic!("type must not spawn") }.boxed_local()
+        });
+        assert_eq!(rig.run(&format!("unset PATH; type {mode} probe")), 0);
+        assert_eq!(rig.output.bytes(), expected.as_bytes());
+    }
+    let rig = Rig::new(Limits::default());
+    rig.host.register("/home/guest/probe", |_, _| {
+        async { panic!("type must not spawn") }.boxed_local()
+    });
+    assert_eq!(
+        rig.run("unset PATH; type -aP ./probe; PATH=: type -p probe"),
+        0
+    );
+    assert_eq!(rig.output.bytes(), b"./probe\n./probe\n");
+    let rig = Rig::new(Limits::default());
+    rig.host.register("/home/guest/probe", |_, _| {
+        async { panic!("type must not spawn") }.boxed_local()
+    });
+    assert_eq!(rig.run("unset PATH; type -a probe"), 1);
+    assert!(rig.output.bytes().is_empty());
+    assert!(rig.errors.bytes().ends_with(b"type: probe: not found\n"));
 }
