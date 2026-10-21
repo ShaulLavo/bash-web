@@ -67,7 +67,7 @@ fn getopts_temporary_optind_and_nonreset_assignment() {
 fn getopts_readonly_specials_keep_hidden_progress() {
     check(
         r#"readonly OPTIND=1 OPTARG=old; getopts ab o -ab; echo "$?:$o:$OPTIND:$OPTARG"; getopts ab o -ab; echo "$?:$o:$OPTIND:$OPTARG"; getopts ab o -ab; echo "$?:$o:$OPTIND:$OPTARG""#,
-        "0:a:1:old\n0:b:1:old\n1:?:1:old\n",
+        "0:a:1:old\n0:b:1:old\n1:?:1:\n",
     );
 }
 
@@ -154,4 +154,106 @@ fn check_getopts_recovery(rig: &Rig) {
         0
     );
     assert!(rig.output.bytes().ends_with(b"0:a:2\n"));
+}
+
+#[test]
+fn getopts_review_attached_argument_moves_without_duplicate_copies() {
+    check(
+        r#"x=a; i=0; while test $i -lt 18; do x=$x$x; i=$((i+1)); done; y=${x:0:16384}; j=0; while test $j -lt 6; do x=$x$y; j=$((j+1)); done; set -- "-ba$x"; getopts ba: o; getopts ba: o; echo "$?:$o:$OPTIND:${#OPTARG}""#,
+        "0:a:2:360448\n",
+    );
+}
+
+#[test]
+fn getopts_review_publication_failure_keeps_all_bindings_and_cluster() {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 8192,
+        ..Limits::default()
+    });
+    assert_eq!(
+        rig.run(&format!(
+            "set -- '-ba{}'; getopts ba: o; OPTARG=old",
+            "x".repeat(3000)
+        )),
+        0
+    );
+    rig.shell
+        .state()
+        .borrow_mut()
+        .assign_parameter("name".into(), "n".repeat(3000))
+        .unwrap();
+    assert_eq!(rig.run("getopts ba: \"$name\""), 2);
+    assert_eq!(
+        rig.run("echo \"$OPTIND:$o:$OPTARG\"; getopts ba: o; echo \"$?:$OPTIND:$o:${#OPTARG}\""),
+        0
+    );
+    assert_eq!(rig.output.bytes(), b"1:b:old\n0:2:a:3000\n");
+}
+
+#[test]
+fn getopts_review_error_unbinds_optarg_without_following_reference() {
+    check(
+        r#"readonly OPTARG=old; getopts a o x; echo "$?:$o:${OPTARG-unset}"; declare -n OPTARG=target; target=old; OPTIND=1; getopts a o x; target=new; echo "${target-unset}:${OPTARG-unset}"; OPTARG=g; f() { local OPTARG=l; readonly OPTARG; OPTIND=1; getopts a o x; echo "f:${OPTARG-unset}"; }; f; echo "$OPTARG""#,
+        "1:?:unset\nnew:unset\nf:unset\ng\n",
+    );
+}
+
+#[test]
+fn getopts_review_larger_assignment_continues_original_cluster() {
+    check(
+        r#"getopts abc o -abc -xyz; echo "$o:$OPTIND"; OPTIND=2; getopts abcxyz o -abc -xyz; echo "$o:$OPTIND"; getopts abcxyz o -abc -xyz; echo "$o:$OPTIND""#,
+        "a:1\nb:2\nc:3\n",
+    );
+}
+
+#[test]
+fn getopts_review_callee_unset_rederives_revealed_optind() {
+    check(
+        r#"g() { unset OPTIND; getopts ab o -ab; echo "g:$o:$OPTIND"; }; f() { local OPTIND; getopts ab o -ab; g; getopts ab o -ab; echo "f:$o:$OPTIND"; }; getopts ab o -ab; f; getopts ab o -ab; echo "$o:$OPTIND""#,
+        "g:a:1\nf:b:2\n?:2\n",
+    );
+}
+
+#[test]
+fn getopts_review_double_dash_ends_invocation_options() {
+    check(
+        r#"getopts -- -a o -a; echo "$?:$o:$OPTIND"; OPTIND=1; getopts -- --help o; echo "$?""#,
+        "0:a:2\n1\n",
+    );
+}
+
+#[test]
+fn getopts_review_diagnostic_order_pending_source_line() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("readonly OPTIND; getopts a o -x; echo \"$?:$o:$OPTIND\""),
+        0
+    );
+    assert_eq!(rig.output.bytes(), b"0:?:1\n");
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: illegal option -- x\n/usr/bin/bash: OPTIND: readonly variable\n"
+    );
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("readonly o OPTARG; getopts :a o -x"), 2);
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: o: readonly variable\n/usr/bin/bash: OPTARG: readonly variable\n"
+    );
+}
+
+#[test]
+fn getopts_review_atoi_and_vertical_tab() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("set -- -a -b -c; unset OPTIND; OPTIND=3abc; getopts abc o; echo \"$?:$o:$OPTIND\"; OPTIND=1; OPTERR=$'\\v1'; getopts a o -x"), 0);
+    assert_eq!(rig.output.bytes(), b"0:c:4\n");
+    assert_eq!(rig.errors.bytes(), b"/usr/bin/bash: illegal option -- x\n");
+}
+
+#[test]
+fn getopts_review_unset_and_local_optind_destinations_are_strings() {
+    check(
+        r#"unset OPTIND; getopts ab OPTIND -ab; echo "$?:$OPTIND"; f() { local OPTIND; getopts ab OPTIND -ab; echo "$?:$OPTIND"; }; f"#,
+        "0:a\n0:a\n",
+    );
 }

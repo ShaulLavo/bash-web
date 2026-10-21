@@ -7,23 +7,37 @@ end-of-options and ordinary scalar nameref destinations. It does not change `$@`
 `OPTIND` and `OPTERR` start at 1 without becoming exported by default.
 
 The cursor belongs to shell state, not a user-visible helper variable. Setting
-`OPTIND=0` or `OPTIND=1` restarts scanning. A changed larger index starts a new
-argument; assigning the current larger index preserves its cluster position.
-A local `OPTIND` saves/restores the caller's cursor. Snapshots isolate subshells.
-Readonly destinations preserve their values while scanning still advances.
+`OPTIND=0` or `OPTIND=1` restarts scanning. A larger assignment changes the
+visible index while preserving the active cluster's argument position.
+A local `OPTIND` saves/restores the caller's cursor. Unsetting a caller's local
+instead derives the cursor from the revealed binding. Snapshots isolate subshells.
+Readonly assignments preserve their values while scanning still advances.
+End-of-options and non-silent errors remove the nearest `OPTARG` binding itself,
+including readonly or nameref bindings, without changing a nameref's target.
 
 The scanner adapts Bashkit at the revision and source hashes in
 `sources.lock.json` under `shellGetopts`. State ownership, diagnostic policy,
 argument snapshots and resource controls are original. Only the current and
 required next argument are copied, after cooperative scanning and command plus
-execution-memory admission. Their execution tickets drop on success, error or
-cancellation. The optstring is borrowed and checked cooperatively. No whole
-argument-vector copy or option-character collection is made.
+execution-memory admission. An attached argument reuses the current argument's
+owned buffer. Publication moves that buffer into the binding rather than copying
+it twice. A saved prefix binding can require a separate copy, which is admitted.
+All name scans, publication admission and local binding growth are checked before
+the cursor or any binding changes. Execution tickets stay with the prepared
+values until publication finishes, or drop on error or cancellation.
+The optstring is borrowed and checked cooperatively. No whole argument-vector
+copy or option-character collection is made.
 
 Array/subscript destinations stay with the variables family. Non-ASCII option
 bytes remain unsupported because the engine's UTF-8 scalar strings cannot store
 Bash's individual invalid UTF-8 bytes. Required argument values retain UTF-8.
 The `--help` response is concise, not a copy of GNU Bash's help prose.
+Integer attributes and builtin temporary-assignment write-through remain with the
+variables family. The default OPTIND destination retains the existing numeric
+approximation; unset and local OPTIND destinations store option text literally.
+Arithmetic syntax errors for integer OPTIND destinations remain pending that
+attribute contract. Empty or unset OPTERR enables ordinary diagnostics; nonempty
+values use a C-style numeric prefix, including vertical-tab whitespace.
 
 ## Verification
 
@@ -38,9 +52,20 @@ pass. The first production candidate passes 86 cases, gains 28 Oils, 43 Brush
 and 14 Bashkit cases, and keeps the existing pass. The remaining Brush case
 needs an indexed nameref. This selected replay is not the full zero-loss proof.
 
-Focused native controls cover clusters, errors, local restoration, reset,
-subshell isolation, aliases, readonly bindings, temporary assignments, resource
-rejection and cancellation/recovery. Full candidate verification and exact
-source-line binding diagnostics are pending integration. Reports, commands,
-raw streams and the resource-kill history are retained under
+A complete replay at the superseded `e00819b` checkpoint recorded gains of
+28 Oils, 43 Brush and 23 Bashkit cases, with no losses. Its runner exited 1 because
+the committed baseline lacked those 94 gained memberships. The complete JSON
+comparison confirmed unchanged case membership and identities. That checkpoint
+is not acceptance evidence for the subsequent review repairs.
+
+The independent source review found eight scanner/state defects. Its 74 scripts
+were rerun against Bash and production Waffle before repairs, recording 47 exact
+status/stdout/stderr matches. The first repair increased this to 61, with no lost
+exact matches. Remaining mismatches belong to pending source-line diagnostics,
+integer attributes, temporary-assignment write-through and non-ASCII option bytes.
+Focused controls include publication failure preserving every binding and the
+active cluster, successful 360448-byte attached arguments, and cancellation with
+recovery. Final full replay and exact source-line binding diagnostics remain
+pending integration. Reports, commands, raw streams and the resource-kill history
+are retained under
 `/work/reports/bash-web/hill-climb/builtins/getopts/`.

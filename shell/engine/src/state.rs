@@ -52,7 +52,7 @@ impl IfsMembers {
 
 #[derive(Clone, Debug)]
 pub(crate) struct LocalVariable {
-    getopts: Option<GetoptsState>,
+    getopts: Option<(GetoptsState, bool)>,
     previous: Option<String>,
     nameref: Option<String>,
     exported: bool,
@@ -67,22 +67,44 @@ pub(crate) struct LocalVariable {
 pub(crate) struct GetoptsState {
     pub(crate) index: usize,
     pub(crate) offset: usize,
+    pub(crate) argument: usize,
 }
 impl Default for GetoptsState {
     fn default() -> Self {
         Self {
             index: 1,
             offset: 0,
+            argument: 0,
         }
     }
 }
 impl GetoptsState {
     fn assigned(value: &str) -> Self {
         Self {
-            index: value.trim().parse::<i64>().unwrap_or(0).max(1) as usize,
+            index: getopts_number(value).max(1) as usize,
             offset: 0,
+            argument: 0,
         }
     }
+}
+
+pub(crate) fn getopts_number(value: &str) -> i32 {
+    let number = value.trim_start_matches([' ', '\t', '\n', '\r', '\x0b', '\x0c']);
+    let digits = number
+        .strip_prefix('+')
+        .or_else(|| number.strip_prefix('-'))
+        .unwrap_or(number);
+    let length = digits.bytes().take_while(u8::is_ascii_digit).count();
+    if length == 0 {
+        return 0;
+    }
+    let length = number.len() - digits.len() + length;
+    let overflow = if number.starts_with('-') {
+        i64::MIN
+    } else {
+        i64::MAX
+    };
+    number[..length].parse::<i64>().unwrap_or(overflow) as i32
 }
 
 #[derive(Clone, Debug)]
@@ -123,6 +145,7 @@ pub struct State {
     ifs_members: Option<IfsMembers>,
     positional: Vec<String>,
     pub(crate) getopts: GetoptsState,
+    getopts_numeric: bool,
     locals: Vec<BTreeMap<String, LocalVariable>>,
     pub(crate) function_calls: usize,
     memory: Option<crate::exec::StorageBudget>,
@@ -159,6 +182,7 @@ impl Default for State {
             ifs_members: None,
             positional: Vec::new(),
             getopts: GetoptsState::default(),
+            getopts_numeric: true,
             locals: Vec::new(),
             function_calls: 0,
             memory: None,
@@ -338,6 +362,7 @@ impl State {
             ifs_members: state.ifs_members,
             positional,
             getopts: state.getopts,
+            getopts_numeric: state.getopts_numeric,
             function_calls: state.function_calls,
             memory: state.memory.clone(),
             positional_memory,
@@ -756,12 +781,12 @@ impl State {
             return;
         }
         let assigned = GetoptsState::assigned(value);
-        if assigned.index == 1 || assigned.index != self.getopts.index {
+        if assigned.index == 1 {
             self.getopts.offset = 0;
         }
         self.getopts.index = assigned.index;
     }
-    pub(crate) fn unset_getopts_argument(&mut self, target: &str) -> Result<(), i32> {
+    pub(crate) fn clear_getopts_argument(&mut self, target: &str) -> Result<(), i32> {
         if self.is_readonly(target) {
             return Err(1);
         }
@@ -769,6 +794,67 @@ impl State {
         self.variables.remove(target);
         self.exported.remove(target);
         Ok(())
+    }
+    pub(crate) fn unset_getopts_argument(&mut self) {
+        self.reserve_local_value("OPTARG", 0)
+            .expect("shrinking a local binding");
+        self.variables.remove("OPTARG");
+        self.namerefs.remove("OPTARG");
+        self.exported.remove("OPTARG");
+        self.readonly.remove("OPTARG");
+        if let Some(local) = self
+            .locals
+            .iter_mut()
+            .rev()
+            .find_map(|frame| frame.get_mut("OPTARG"))
+        {
+            local.readonly = false;
+        }
+    }
+    fn restore_getopts(&mut self, saved: Option<(GetoptsState, bool)>) {
+        if let Some((cursor, numeric)) = saved {
+            self.getopts = cursor;
+            self.getopts_numeric = numeric;
+        }
+    }
+    pub(crate) fn getopts_numeric(&self, name: &str) -> bool {
+        name == "OPTIND" && self.getopts_numeric
+    }
+    pub(crate) fn reserve_getopts_publication(
+        &self,
+        names: &[(&str, usize); 3],
+    ) -> Result<Option<crate::exec::StorageAllocation>, i32> {
+        let mut growth = [("", 0usize); 3];
+        for (index, (name, bytes)) in names.iter().enumerate() {
+            let target = self.scalar_target(name)?.ok_or(2)?;
+            let bytes = self.getopts_local_growth(target, *bytes)?;
+            if let Some(previous) = growth[..index].iter().position(|(name, _)| *name == target) {
+                growth[previous].1 = growth[previous].1.max(bytes);
+                continue;
+            }
+            growth[index] = (target, bytes);
+        }
+        self.admit_temporary(
+            growth
+                .iter()
+                .try_fold(0usize, |sum, (_, bytes)| sum.checked_add(*bytes).ok_or(2))?,
+        )
+    }
+    fn getopts_local_growth(&self, name: &str, bytes: usize) -> Result<usize, i32> {
+        if self.is_readonly(name) {
+            return Ok(0);
+        }
+        let Some(local) = self.locals.iter().rev().find_map(|frame| frame.get(name)) else {
+            return Ok(0);
+        };
+        let Some(memory) = &local.memory else {
+            return Ok(0);
+        };
+        Ok(local
+            .storage_base
+            .checked_add(bytes)
+            .ok_or(2)?
+            .saturating_sub(memory.borrow().bytes()))
     }
     pub(crate) fn publish_getopts_index(&mut self, value: String) -> Result<(), i32> {
         let cursor = self.getopts;
@@ -881,6 +967,7 @@ impl State {
         }
         if name == "OPTIND" {
             self.getopts = GetoptsState::default();
+            self.getopts_numeric = false;
         }
         let was_dynamic =
             name == "EPOCHREALTIME" && self.epoch_realtime && !self.epoch_realtime_shadowed();
@@ -895,9 +982,6 @@ impl State {
             && index + 1 != self.locals.len()
         {
             let local = self.locals[index].remove(name).ok_or(1)?;
-            if let Some(cursor) = local.getopts {
-                self.getopts = cursor;
-            }
             restore_nameref(&mut self.namerefs, name, local.nameref);
             if local.exported {
                 self.exported.insert(name.to_owned());
@@ -909,6 +993,13 @@ impl State {
                 Some(value) => self.variables.insert(name.to_owned(), value),
                 None => self.variables.remove(name),
             };
+            if let Some((_, numeric)) = local.getopts {
+                self.getopts_numeric = numeric;
+                self.getopts = self
+                    .scalar_parameter("OPTIND")
+                    .map(GetoptsState::assigned)
+                    .unwrap_or_default();
+            }
             if name == "IFS" {
                 self.refresh_star_separator();
             }
@@ -970,6 +1061,7 @@ impl State {
         self.namerefs.remove(&name);
         let direct_ifs = name == "IFS";
         if name == "OPTIND" {
+            self.getopts_numeric = false;
             self.getopts = value
                 .as_deref()
                 .map(GetoptsState::assigned)
@@ -1012,7 +1104,7 @@ impl State {
                 .transpose()?
                 .map(|ticket| Rc::new(RefCell::new(ticket)));
             let previous = LocalVariable {
-                getopts: (name == "OPTIND").then_some(self.getopts),
+                getopts: (name == "OPTIND").then_some((self.getopts, self.getopts_numeric)),
                 previous: self.variables.remove(name),
                 nameref: self.namerefs.remove(name),
                 exported: self.exported.contains(name),
@@ -1574,7 +1666,7 @@ impl Drop for FunctionFrame {
         for _ in 0..if self.prefix { 2 } else { 1 } {
             let Some(locals) = s.locals.pop() else { break };
             for (name, local) in locals {
-                s.getopts = local.getopts.unwrap_or(s.getopts);
+                s.restore_getopts(local.getopts);
                 restore_nameref(&mut s.namerefs, &name, local.nameref);
                 // Only local declarations restore their export attribute;
                 // ordinary export changes in functions belong to the caller.

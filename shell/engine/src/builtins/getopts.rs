@@ -5,7 +5,7 @@ use crate::{
     expand::Work,
     interpreter::{Context, Outcome},
     io::FdTable,
-    state::{GetoptsState, SharedState, State},
+    state::{GetoptsState, SharedState, State, getopts_number},
 };
 
 const USAGE: &str = "getopts: usage: getopts optstring name [arg ...]\n";
@@ -31,7 +31,11 @@ impl Parsed {
         Self {
             option: b'?',
             argument: None,
-            cursor: GetoptsState { index, offset: 0 },
+            cursor: GetoptsState {
+                index,
+                offset: 0,
+                argument: 0,
+            },
             problem: None,
             status: 1,
         }
@@ -54,23 +58,25 @@ pub(super) async fn run(
         .await?;
         return Err(2);
     }
-    let args = if args.first().is_some_and(|arg| arg == "--") {
-        &args[1..]
-    } else {
-        args
-    };
-    if args.len() < 2 {
-        diagnose(fds, USAGE, context).await?;
-        return Err(2);
-    }
-    if args[0].starts_with('-') && args[0] != "-" {
+    let options_ended = args.first().is_some_and(|arg| arg == "--");
+    let args = if options_ended { &args[1..] } else { args };
+    if !options_ended
+        && args
+            .first()
+            .is_some_and(|arg| arg.starts_with('-') && arg != "-")
+    {
+        let option = &args[0][..1 + args[0][1..].chars().next().map_or(0, char::len_utf8)];
         message(
             fds,
-            &["getopts: ", &args[0], ": invalid option\n", USAGE],
+            &["getopts: ", option, ": invalid option\n", USAGE],
             context,
             work,
         )
         .await?;
+        return Err(2);
+    }
+    if args.len() < 2 {
+        diagnose(fds, USAGE, context).await?;
         return Err(2);
     }
     let specification = args[0].strip_prefix(':').unwrap_or(&args[0]);
@@ -92,27 +98,69 @@ pub(super) async fn run(
             work,
         )?);
     }
-    state.borrow_mut().getopts = parsed.cursor;
+    scan_bytes(args[1].len(), context, work).await?;
+    let valid = valid_name(&args[1]);
+    let enabled = if !silent && parsed.problem.is_some() {
+        diagnostic_enabled(state, context, work).await?
+    } else {
+        false
+    };
     work.admit_storage(20).map_err(error_status)?;
     let index = parsed.cursor.index.to_string();
-    publish("OPTIND", Some(&index), state, fds, context, work).await?;
-    publish(
-        "OPTARG",
-        parsed
-            .argument
-            .as_ref()
-            .map(|argument| argument.value.as_str()),
-        state,
-        fds,
-        context,
-        work,
-    )
-    .await?;
-    if !silent && let Some(problem) = parsed.problem {
-        diagnostic(problem, state, fds, context, work).await?;
+    let index = Some(snapshot(&index, context, work)?);
+    let option = [parsed.option];
+    let option = std::str::from_utf8(&option).map_err(|_| 2)?;
+    let destination = if valid {
+        Some(snapshot(option, context, work)?)
+    } else {
+        None
+    };
+    let error_path = parsed.problem.is_some() || parsed.status != 0;
+    let unbind = error_path && parsed.argument.is_none();
+    let mut publications = [
+        prepare("OPTIND", index, false, state, context, work).await?,
+        prepare("OPTARG", parsed.argument, unbind, state, context, work).await?,
+        prepare(
+            if valid { &args[1] } else { "" },
+            destination,
+            false,
+            state,
+            context,
+            work,
+        )
+        .await?,
+    ];
+    if error_path && valid {
+        publications.swap(1, 2);
     }
-    scan_bytes(args[1].len(), context, work).await?;
-    if !valid_name(&args[1]) {
+    let bindings = publications.each_ref().map(|publication| {
+        (
+            if publication.unbind {
+                ""
+            } else {
+                publication.name.as_str()
+            },
+            publication.value.as_ref().map_or(0, String::len),
+        )
+    });
+    let reservation = state.borrow().reserve_getopts_publication(&bindings)?;
+    let (failures, destination_ok) = commit_all(
+        &mut publications,
+        parsed.cursor,
+        &args[1],
+        state,
+        reservation,
+    )?;
+    if !silent
+        && enabled
+        && let Some(problem) = parsed.problem
+    {
+        diagnostic(problem, fds, context).await?;
+    }
+    for target in failures.iter().flatten() {
+        binding_message(fds, target, context).await?;
+    }
+    if !valid {
         message(
             fds,
             &["getopts: `", &args[1], "': not a valid identifier\n"],
@@ -122,12 +170,138 @@ pub(super) async fn run(
         .await?;
         return Err(1);
     }
-    let option = [parsed.option];
-    let option = std::str::from_utf8(&option).map_err(|_| 2)?;
-    if !publish(&args[1], Some(option), state, fds, context, work).await? {
+    if !destination_ok {
         return Err(2);
     }
     Ok(Outcome::status(parsed.status))
+}
+
+struct Publication {
+    name: String,
+    value: Option<String>,
+    _value_storage: Option<crate::exec::Allocation>,
+    _storage: crate::exec::Allocation,
+    unbind: bool,
+}
+
+async fn prepare(
+    name: &str,
+    value: Option<Argument>,
+    unbind: bool,
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Result<Publication, i32> {
+    let bytes = value.as_ref().map_or(0, |argument| argument.value.len());
+    if !name.is_empty() && !unbind {
+        State::admit_assignment(state, name, bytes, &context.cancel, work)
+            .await
+            .map_err(error_status)?;
+    }
+    let storage = state
+        .borrow()
+        .declaration_storage(name, false)
+        .map_err(error_status)?;
+    let target_bytes = if unbind {
+        0
+    } else {
+        state.borrow().scalar_target(name)?.map_or(0, str::len)
+    };
+    let copies = storage
+        .saturating_add(name.len())
+        .saturating_add(target_bytes.saturating_mul(2));
+    work.admit_storage(copies).map_err(error_status)?;
+    let (prefix_bytes, direct) = if unbind {
+        (0, true)
+    } else {
+        let state = state.borrow();
+        let target = state.scalar_target(name)?.ok_or(2)?;
+        (
+            if value.is_some() && state.prefix_saved(target) {
+                bytes
+            } else {
+                0
+            },
+            target == name,
+        )
+    };
+    if direct {
+        work.admit_storage(prefix_bytes).map_err(error_status)?;
+    }
+    let storage = context.admit_builtin_buffer(copies.saturating_add(prefix_bytes))?;
+    let (value, value_storage) = match value {
+        Some(argument) => (Some(argument.value), Some(argument._storage)),
+        None => (None, None),
+    };
+    Ok(Publication {
+        name: name.to_owned(),
+        value,
+        _value_storage: value_storage,
+        _storage: storage,
+        unbind,
+    })
+}
+
+fn commit_all(
+    publications: &mut [Publication; 3],
+    cursor: GetoptsState,
+    destination: &str,
+    state: &SharedState,
+    reservation: Option<crate::exec::StorageAllocation>,
+) -> Result<([Option<String>; 3], bool), i32> {
+    let mut failures = [None, None, None];
+    let mut destination_ok = true;
+    let mut state = state.borrow_mut();
+    // All fallible scans and resource admissions precede the cursor commit.
+    // Transfer the aggregate reservation to local tickets without yielding.
+    drop(reservation);
+    state.getopts = cursor;
+    for (publication, failure) in publications.iter_mut().zip(&mut failures) {
+        let result = commit(publication, &mut state)?;
+        if publication.name == destination && result.is_some() {
+            destination_ok = false;
+        }
+        *failure = result;
+    }
+    Ok((failures, destination_ok))
+}
+
+fn commit(publication: &mut Publication, state: &mut State) -> Result<Option<String>, i32> {
+    if publication.name.is_empty() {
+        return Ok(None);
+    }
+    if publication.unbind {
+        state.unset_getopts_argument();
+        return Ok(None);
+    }
+    let target = state.assignment_name(publication.name.clone())?;
+    let Some(mut value) = publication.value.take() else {
+        return match state.clear_getopts_argument(&target) {
+            Ok(()) => Ok(None),
+            Err(1) => Ok(Some(target)),
+            Err(status) => Err(status),
+        };
+    };
+    if state.getopts_numeric(&target) && value.bytes().any(|byte| !byte.is_ascii_digit()) {
+        value.clear();
+        value.push('0');
+    }
+    let result = if publication.name == "OPTIND" {
+        state.publish_getopts_index(value)
+    } else {
+        state.assign_parameter(publication.name.clone(), value)
+    };
+    match result {
+        Ok(()) => Ok(None),
+        Err(1) => Ok(Some(target)),
+        Err(status) => Err(status),
+    }
+}
+
+async fn binding_message(fds: &FdTable, target: &str, context: &Context) -> Result<(), i32> {
+    diagnose(fds, "/usr/bin/bash: ", context).await?;
+    diagnose(fds, target, context).await?;
+    diagnose(fds, ": readonly variable\n", context).await
 }
 
 fn snapshot(value: &str, context: &Context, work: &mut Work) -> Result<Argument, i32> {
@@ -176,7 +350,15 @@ async fn parse(
     let cursor = state.borrow().getopts;
     let count = explicit.map_or_else(|| state.borrow().positional().len(), <[String]>::len);
     let index = cursor.index.clamp(1, count.saturating_add(1));
-    let Some(current) = argument(index - 1, explicit, state, context, work).await? else {
+    if index > count {
+        return Ok(Parsed::end(index));
+    }
+    let position = if cursor.offset == 0 {
+        index - 1
+    } else {
+        cursor.argument
+    };
+    let Some(current) = argument(position, explicit, state, context, work).await? else {
         return Ok(Parsed::end(index));
     };
     let value = &current.value;
@@ -198,11 +380,13 @@ async fn parse(
             GetoptsState {
                 index,
                 offset: offset + 1,
+                argument: position,
             }
         } else {
             GetoptsState {
                 index: index + 1,
                 offset: 0,
+                argument: 0,
             }
         },
         problem: None,
@@ -217,7 +401,7 @@ async fn parse(
     if definition == Some(false) {
         return Ok(result);
     }
-    required(value, offset, explicit, state, context, work, &mut result).await?;
+    required(current, offset, explicit, state, context, work, &mut result).await?;
     Ok(result)
 }
 
@@ -239,7 +423,7 @@ async fn definition(
 }
 
 async fn required(
-    current: &str,
+    mut current: Argument,
     offset: usize,
     explicit: Option<&[String]>,
     state: &SharedState,
@@ -255,86 +439,32 @@ async fn required(
     result.cursor = GetoptsState {
         index: index + 1,
         offset: 0,
+        argument: 0,
     };
-    if offset + 1 < current.len() {
-        let value = &current[offset + 1..];
-        result.argument = Some(snapshot(value, context, work)?);
+    if offset + 1 < current.value.len() {
+        current.value.drain(..offset + 1);
+        result.argument = Some(current);
         return Ok(());
     }
+    let option = current.value.as_bytes()[offset];
+    let bytes = current.value.len();
+    drop(current);
+    work.release_storage(bytes);
     if let Some(value) = argument(index, explicit, state, context, work).await? {
         result.argument = Some(value);
         result.cursor.index += 1;
         return Ok(());
     }
     result.option = b'?';
-    result.problem = Some(Problem::Missing(current.as_bytes()[offset]));
+    result.problem = Some(Problem::Missing(option));
     Ok(())
 }
 
-async fn publish(
-    name: &str,
-    value: Option<&str>,
+async fn diagnostic_enabled(
     state: &SharedState,
-    fds: &FdTable,
     context: &Context,
     work: &mut Work,
 ) -> Result<bool, i32> {
-    State::admit_assignment(
-        state,
-        name,
-        value.map_or(0, str::len),
-        &context.cancel,
-        work,
-    )
-    .await
-    .map_err(error_status)?;
-    let storage = state
-        .borrow()
-        .declaration_storage(name, false)
-        .map_err(error_status)?;
-    work.admit_storage(
-        storage
-            .saturating_add(name.len())
-            .saturating_add(value.map_or(0, str::len)),
-    )
-    .map_err(error_status)?;
-    let target_bytes = state.borrow().scalar_target(name)?.ok_or(2)?.len();
-    work.admit_storage(target_bytes).map_err(error_status)?;
-    let _target_storage = context.admit_builtin_buffer(target_bytes)?;
-    let target = state.borrow().assignment_name(name.to_owned())?;
-    let value = value.map(|value| {
-        if target == "OPTIND" && value.bytes().any(|byte| !byte.is_ascii_digit()) {
-            "0"
-        } else {
-            value
-        }
-    });
-    let result = match value {
-        None => state.borrow_mut().unset_getopts_argument(&target),
-        Some(value) if name == "OPTIND" => {
-            state.borrow_mut().publish_getopts_index(value.to_owned())
-        }
-        Some(value) => state
-            .borrow_mut()
-            .assign_parameter(name.to_owned(), value.to_owned()),
-    };
-    if let Err(status) = result {
-        if status != 1 {
-            return Err(status);
-        }
-        message(fds, &[&target, ": readonly variable\n"], context, work).await?;
-        return Ok(false);
-    }
-    Ok(true)
-}
-
-async fn diagnostic(
-    problem: Problem,
-    state: &SharedState,
-    fds: &FdTable,
-    context: &Context,
-    work: &mut Work,
-) -> Result<(), i32> {
     State::admit_scalar_access(state, "OPTERR", &context.cancel, work)
         .await
         .map_err(error_status)?;
@@ -343,9 +473,12 @@ async fn diagnostic(
         .scalar_parameter("OPTERR")
         .map_or(0, str::len);
     scan_bytes(bytes, context, work).await?;
-    if !diagnostics_enabled(state.borrow().scalar_parameter("OPTERR").unwrap_or("")) {
-        return Ok(());
-    }
+    let state = state.borrow();
+    let value = state.scalar_parameter("OPTERR").unwrap_or("");
+    Ok(value.is_empty() || getopts_number(value) != 0)
+}
+
+async fn diagnostic(problem: Problem, fds: &FdTable, context: &Context) -> Result<(), i32> {
     let (prefix, option) = match problem {
         Problem::Unknown(option) => ("/usr/bin/bash: illegal option -- ", option),
         Problem::Missing(option) => ("/usr/bin/bash: option requires an argument -- ", option),
@@ -356,37 +489,14 @@ async fn diagnostic(
     diagnose(fds, "\n", context).await
 }
 
-fn diagnostics_enabled(value: &str) -> bool {
-    if value.is_empty() {
-        return true;
-    }
-    let number = value.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
-    let digits = number
-        .strip_prefix('+')
-        .or_else(|| number.strip_prefix('-'))
-        .unwrap_or(number);
-    let length = digits.bytes().take_while(u8::is_ascii_digit).count();
-    if length == 0 {
-        return false;
-    }
-    let length = number.len() - digits.len() + length;
-    let overflow = if number.starts_with('-') {
-        i64::MIN
-    } else {
-        i64::MAX
-    };
-    number[..length].parse::<i64>().unwrap_or(overflow) as i32 != 0
-}
-
 async fn message(
     fds: &FdTable,
     pieces: &[&str],
     context: &Context,
-    work: &mut Work,
+    _work: &mut Work,
 ) -> Result<(), i32> {
     diagnose(fds, "/usr/bin/bash: ", context).await?;
     for piece in pieces {
-        scan_bytes(piece.len(), context, work).await?;
         diagnose(fds, piece, context).await?;
     }
     Ok(())
