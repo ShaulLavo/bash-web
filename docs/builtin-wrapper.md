@@ -67,15 +67,15 @@ its unchanged stdout/status scoring and records stderr separately.
 
 ## Integrated measurement
 
-Measured source `8191260f82b59cc8ce7bdc8d3c374f746d83ae6b` normally merges
-main `f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb`, including getopts. The full
-9,221-case production-Waffle replay gains 16 Oils passes, 1,051 to 1,067,
-11 Brush-suite passes, 1,057 to 1,068, and three Bashkit-suite passes,
-1,443 to 1,446. Every corpus loses zero accepted passes. The same three inherited
-timeouts stay failed, and no new abnormal outcome appears. Recording is disabled.
-The complete generated score replaces the baseline after unchanged identity,
-zero-loss and strict offline membership checks. Oracle, exclusions, scoring and
-runtime pins do not change. Required integrated gates pass 1,365 native and
-1,345 WASI tests. All 28 complete existing-main preservation observations match.
+Measured source `bb6125c928369c01dbac107ba41c33e524aa7ada` normally merges
+main `016b8be51f9be63543208ec009483b7bf0b99186`, including getopts and scalar
+transformations. The full 9,221-case production-Waffle replay gains 16 Oils passes,
+1,058 to 1,074, 11 Brush-suite passes, 1,062 to 1,073, and three Bashkit-suite
+passes, 1,449 to 1,452. Every corpus loses zero accepted passes. The same three
+inherited timeouts stay failed, and no new abnormal outcome appears. Recording is
+disabled. The complete generated score replaces the baseline after unchanged
+identity, zero-loss and strict offline membership checks. Oracle, exclusions,
+scoring and runtime pins do not change. Required integrated gates pass 1,377 native
+and 1,357 WASI tests. All 28 complete existing-main preservation observations match.
 Independent dispatch approval is on `0e8d384`; hosted CI and merge remain
 parent-owned. These results do not clear the deferred coordinate family.
