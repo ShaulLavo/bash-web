@@ -6,6 +6,8 @@ use super::{Error, Protection, Work, admit_string_growth, admit_vec_slot, case};
 use crate::executor::Cancel;
 use std::mem::size_of;
 
+mod extglob;
+
 #[derive(Clone, Copy)]
 struct Character {
     value: char,
@@ -16,6 +18,7 @@ struct Character {
 #[derive(Default)]
 pub(crate) struct Pattern {
     chars: Vec<Character>,
+    extglob: bool,
     quoted_empty: bool,
     /// Case matching selects the first field from a quoted multi-value `$@`.
     /// Continue evaluating the remaining source, but discard its emitted text.
@@ -30,9 +33,10 @@ impl Pattern {
         self.chars.get(index).map(|ch| (ch.value, ch.protected))
     }
 
-    pub(super) fn with_joined_positionals(join_positionals: bool) -> Self {
+    pub(super) fn with_options(join_positionals: bool, extglob: bool) -> Self {
         Self {
             join_positionals,
+            extglob,
             ..Self::default()
         }
     }
@@ -257,9 +261,18 @@ impl Pattern {
         })
     }
 
-    /// Shell case, conditional equality and pathname components share these
-    /// quote-boundary rules, unlike scalar trim and case conversion.
     pub(crate) async fn matches_full(
+        &mut self,
+        value: &str,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<bool, Error> {
+        self.normalize_pathname(work, cancel).await?;
+        extglob::matches(self, value, work, cancel).await
+    }
+
+    /// Keep pathname expansion on the basic-glob compiler.
+    pub(super) async fn matches_pathname(
         &mut self,
         value: &str,
         work: &mut Work,
@@ -289,15 +302,30 @@ impl Pattern {
         work: &mut Work,
         cancel: &Cancel,
     ) -> Result<(Atom, usize), Error> {
+        if self.group_operator(index).is_some() {
+            return Err(2.into());
+        }
+        self.basic_atom(index, work, cancel).await
+    }
+    fn group_operator(&self, index: usize) -> Option<char> {
+        let ch = self.chars[index];
+        (!ch.protected
+            && matches!(ch.value, '@' | '?' | '*' | '+' | '!')
+            && self.active(index + 1, '('))
+        .then_some(ch.value)
+    }
+    async fn basic_atom(
+        &self,
+        index: usize,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<(Atom, usize), Error> {
         let ch = self.chars[index];
         if ch.escaped_protected {
             return Ok((Atom::Never, index + 1));
         }
         if ch.protected {
             return Ok((Atom::Literal(ch.value), index + 1));
-        }
-        if matches!(ch.value, '@' | '?' | '*' | '+' | '!') && self.active(index + 1, '(') {
-            return Err(2.into());
         }
         if ch.value == '[' {
             if let Some(class) = self.bracket(index + 1, work, cancel).await? {
@@ -584,6 +612,7 @@ impl Search {
     }
 }
 
+#[derive(Clone, Copy)]
 enum Atom {
     Literal(char),
     Never,

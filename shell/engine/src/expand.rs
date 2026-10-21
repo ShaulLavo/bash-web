@@ -2476,7 +2476,10 @@ async fn pattern_with_positionals(
     let mut expansion = Expansion {
         segments: Segments::default(),
         captured: None,
-        pattern: Some(pattern::Pattern::with_joined_positionals(join_positionals)),
+        pattern: Some(pattern::Pattern::with_options(
+            join_positionals,
+            state.borrow().extglob || join_positionals,
+        )),
         replacement: None,
         pattern_context: true,
         pattern_snapshots: true,

@@ -1,0 +1,411 @@
+//! Positive full-pattern groups compiled to an epsilon-NFA, without backtracking.
+use super::{Atom, Cancel, Error, Pattern, Work, admit_vec_slot};
+use crate::expand::admit_vec_exact;
+
+#[derive(Clone, Copy)]
+enum Instruction {
+    Consume(Atom, usize),
+    Split(usize, usize),
+    Jump(usize),
+    Accept,
+}
+
+struct Group {
+    choice: usize,
+    arm: usize,
+    exit: usize,
+    repeat: usize,
+}
+
+struct Compiler {
+    code: Vec<Instruction>,
+    groups: Vec<Group>,
+    tail: usize,
+}
+impl Compiler {
+    fn emit(&mut self, instruction: Instruction, work: &mut Work) -> Result<usize, Error> {
+        admit_vec_slot(&mut self.code, work)?;
+        let index = self.code.len();
+        self.code.push(instruction);
+        Ok(index)
+    }
+
+    fn open(&mut self, operator: char, work: &mut Work) -> Result<(), Error> {
+        if operator == '!' {
+            return Err(2.into());
+        }
+        let exit = self.emit(Instruction::Accept, work)?;
+        let choice = self.emit(Instruction::Accept, work)?;
+        let arm = self.emit(Instruction::Accept, work)?;
+        self.code[self.tail] = match operator {
+            '?' | '*' => Instruction::Split(choice, exit),
+            _ => Instruction::Jump(choice),
+        };
+        self.code[choice] = Instruction::Jump(arm);
+        let repeat = if matches!(operator, '*' | '+') {
+            self.emit(Instruction::Split(choice, exit), work)?
+        } else {
+            exit
+        };
+        admit_vec_slot(&mut self.groups, work)?;
+        self.groups.push(Group {
+            choice,
+            arm,
+            exit,
+            repeat,
+        });
+        self.tail = arm;
+        Ok(())
+    }
+
+    fn alternative(&mut self, work: &mut Work) -> Result<(), Error> {
+        let choice = self.emit(Instruction::Accept, work)?;
+        let arm = self.emit(Instruction::Accept, work)?;
+        let group = self.groups.last_mut().ok_or(2)?;
+        self.code[self.tail] = Instruction::Jump(group.repeat);
+        self.code[group.choice] = Instruction::Split(group.arm, choice);
+        self.code[choice] = Instruction::Jump(arm);
+        group.choice = choice;
+        group.arm = arm;
+        self.tail = arm;
+        Ok(())
+    }
+
+    fn close(&mut self) -> Result<(), Error> {
+        let group = self.groups.pop().ok_or(2)?;
+        self.code[self.tail] = Instruction::Jump(group.repeat);
+        self.tail = group.exit;
+        Ok(())
+    }
+
+    fn consume(&mut self, atom: Atom, work: &mut Work) -> Result<(), Error> {
+        let next = self.emit(Instruction::Accept, work)?;
+        self.code[self.tail] = Instruction::Consume(atom, next);
+        if matches!(atom, Atom::Star) {
+            let consume = self.emit(Instruction::Consume(Atom::Any, self.tail), work)?;
+            self.code[self.tail] = Instruction::Split(consume, next);
+        }
+        self.tail = next;
+        Ok(())
+    }
+}
+
+async fn compile(
+    pattern: &Pattern,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<Vec<Instruction>, Error> {
+    let mut compiler = Compiler {
+        code: Vec::new(),
+        groups: Vec::new(),
+        tail: 0,
+    };
+    compiler.emit(Instruction::Accept, work)?;
+    let mut index = 0;
+    while index < pattern.chars.len() {
+        work.checkpoint(cancel).await?;
+        index = compile_next(pattern, index, &mut compiler, work, cancel).await?;
+    }
+    if !compiler.groups.is_empty() {
+        return Err(2.into());
+    }
+    Ok(compiler.code)
+}
+
+async fn compile_next(
+    pattern: &Pattern,
+    index: usize,
+    compiler: &mut Compiler,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<usize, Error> {
+    if pattern.extglob
+        && let Some(operator) = pattern.group_operator(index)
+    {
+        compiler.open(operator, work)?;
+        return Ok(index + 2);
+    }
+    if !compiler.groups.is_empty() && pattern.active(index, '|') {
+        compiler.alternative(work)?;
+        return Ok(index + 1);
+    }
+    if !compiler.groups.is_empty() && pattern.active(index, ')') {
+        compiler.close()?;
+        return Ok(index + 1);
+    }
+    let (atom, next) = pattern.basic_atom(index, work, cancel).await?;
+    compiler.consume(atom, work)?;
+    Ok(next)
+}
+
+struct States {
+    live: Vec<bool>,
+    pending: Vec<usize>,
+}
+impl States {
+    async fn new(count: usize, work: &mut Work, cancel: &Cancel) -> Result<Self, Error> {
+        let mut live = Vec::new();
+        let mut pending = Vec::new();
+        admit_vec_exact(&mut live, count, work)?;
+        admit_vec_exact(&mut pending, count, work)?;
+        for _ in 0..count {
+            work.checkpoint(cancel).await?;
+            live.push(false);
+        }
+        Ok(Self { live, pending })
+    }
+
+    fn insert(&mut self, index: usize) {
+        if self.live[index] {
+            return;
+        }
+        self.live[index] = true;
+        self.pending.push(index);
+    }
+
+    async fn clear(&mut self, work: &mut Work, cancel: &Cancel) -> Result<(), Error> {
+        self.pending.clear();
+        for live in &mut self.live {
+            work.checkpoint(cancel).await?;
+            *live = false;
+        }
+        Ok(())
+    }
+
+    fn follow(&mut self, instruction: Instruction) {
+        match instruction {
+            Instruction::Jump(target) => self.insert(target),
+            Instruction::Split(left, right) => {
+                self.insert(left);
+                self.insert(right);
+            }
+            _ => {}
+        }
+    }
+
+    async fn close(
+        &mut self,
+        code: &[Instruction],
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<(), Error> {
+        let mut index = 0;
+        while index < self.pending.len() {
+            work.checkpoint(cancel).await?;
+            self.follow(code[self.pending[index]]);
+            index += 1;
+        }
+        Ok(())
+    }
+}
+
+pub(super) async fn matches(
+    pattern: &Pattern,
+    value: &str,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<bool, Error> {
+    let code = compile(pattern, work, cancel).await?;
+    let mut current = States::new(code.len(), work, cancel).await?;
+    let mut next = States::new(code.len(), work, cancel).await?;
+    current.insert(0);
+    current.close(&code, work, cancel).await?;
+    for ch in value.chars() {
+        work.checkpoint(cancel).await?;
+        next.clear(work, cancel).await?;
+        advance(pattern, &code, &current, &mut next, ch, work, cancel).await?;
+        next.close(&code, work, cancel).await?;
+        std::mem::swap(&mut current, &mut next);
+    }
+    for (index, instruction) in code.iter().enumerate() {
+        work.checkpoint(cancel).await?;
+        if current.live[index] && matches!(instruction, Instruction::Accept) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+async fn advance(
+    pattern: &Pattern,
+    code: &[Instruction],
+    current: &States,
+    next: &mut States,
+    value: char,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<(), Error> {
+    for (index, instruction) in code.iter().enumerate() {
+        work.checkpoint(cancel).await?;
+        if !current.live[index] {
+            continue;
+        }
+        let Instruction::Consume(atom, target) = instruction else {
+            continue;
+        };
+        if pattern.matches(atom, value, work, cancel).await? {
+            next.insert(*target);
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::expand::Protection;
+    use futures::FutureExt;
+
+    fn pattern(source: &str) -> Pattern {
+        let mut work = Work::new(usize::MAX, usize::MAX, 16);
+        let mut pattern = Pattern::with_options(false, true);
+        for ch in source.chars() {
+            pattern
+                .push(ch, Protection::None, &mut work)
+                .unwrap_or_else(|_| panic!("pattern fits"));
+        }
+        pattern
+    }
+
+    fn finish<T>(future: impl std::future::Future<Output = T>) -> T {
+        let mut future = Box::pin(future);
+        let mut context = std::task::Context::from_waker(futures::task::noop_waker_ref());
+        for _ in 0..16384 {
+            if let std::task::Poll::Ready(value) = future.as_mut().poll(&mut context) {
+                return value;
+            }
+        }
+        panic!("bounded matcher did not finish");
+    }
+
+    #[test]
+    fn positive_operators_nested_empty_and_nullable_cycles() {
+        for (source, value, expected) in [
+            ("@(a|ab)c", "abc", true),
+            ("?(@(a)|b)c", "c", true),
+            ("+(a|aa)", "aaaa", true),
+            ("+(a|aa)", "", false),
+            ("*(a|aa)", "aaaa", true),
+            ("*(a|aa)", "aaab", false),
+            ("+()", "", true),
+            ("*(|a)*(b|)", "aabb", true),
+            ("*(|a)*(b|)", "aabz", false),
+            ("@(?)+(?)", "é🙂", true),
+            ("@([|]|[)])", ")", true),
+        ] {
+            let mut work = Work::new(100000, 100000, 16);
+            assert_eq!(
+                finish(pattern(source).matches_full(value, &mut work, &Cancel::new())).ok(),
+                Some(expected),
+                "{source}: {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn option_off_is_basic_but_deferred_contexts_still_reject_groups() {
+        let mut basic = Pattern::with_options(false, false);
+        let mut work = Work::new(100000, 100000, 16);
+        for ch in "?(a|b)".chars() {
+            basic
+                .push(ch, Protection::None, &mut work)
+                .unwrap_or_else(|_| panic!("fits"));
+        }
+        assert_eq!(
+            finish(basic.matches_full("x(a|b)", &mut work, &Cancel::new())).ok(),
+            Some(true)
+        );
+        assert!(matches!(
+            finish(pattern("@(a)").matches_pathname("a", &mut work, &Cancel::new())),
+            Err(Error::Status(2))
+        ));
+        assert!(matches!(
+            finish(pattern("@(a)").remove("abc", true, true, &mut work, &Cancel::new())),
+            Err(Error::Status(2))
+        ));
+        assert!(matches!(
+            finish(pattern("!(a)").matches_full("b", &mut work, &Cancel::new())),
+            Err(Error::Status(2))
+        ));
+    }
+
+    #[test]
+    fn deep_groups_compile_and_match_without_recursive_stack() {
+        let source = format!("{}a{}", "@(".repeat(4096), ")".repeat(4096));
+        let mut work = Work::new(1000000, 4000000, 16);
+        assert_eq!(
+            finish(pattern(&source).matches_full("a", &mut work, &Cancel::new())).ok(),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn overlapping_repetition_has_linear_state_storage_and_bounded_work() {
+        let mut work = Work::new(1000000, 100000, 16);
+        let input = format!("{}z", "a".repeat(2048));
+        assert_eq!(
+            finish(pattern("*(a|aa|aaa|aaaa)").matches_full(&input, &mut work, &Cancel::new()))
+                .ok(),
+            Some(false)
+        );
+        assert!(work.storage_remaining > 90000);
+        assert!(work.remaining > 500000);
+    }
+
+    #[test]
+    fn exhausted_work_and_storage_are_errors_not_misses() {
+        for (steps, storage) in [(1, 100000), (100000, 1)] {
+            let mut work = Work::new(steps, storage, 16);
+            assert!(matches!(
+                finish(pattern("*(a|aa)").matches_full("aaaa", &mut work, &Cancel::new())),
+                Err(Error::Status(2))
+            ));
+        }
+    }
+
+    #[test]
+    fn states_and_compiler_admit_capacity_before_allocation() {
+        let mut compiler = Compiler {
+            code: Vec::new(),
+            groups: Vec::new(),
+            tail: 0,
+        };
+        let mut work = Work::new(100000, std::mem::size_of::<Instruction>() - 1, 16);
+        assert!(matches!(
+            compiler.emit(Instruction::Accept, &mut work),
+            Err(Error::Status(2))
+        ));
+        assert_eq!(compiler.code.capacity(), 0);
+        let count = 32;
+        let bytes = count * (std::mem::size_of::<bool>() + std::mem::size_of::<usize>());
+        let mut work = Work::new(100000, bytes - 1, 16);
+        assert!(matches!(
+            finish(States::new(count, &mut work, &Cancel::new())),
+            Err(Error::Status(2))
+        ));
+        let mut work = Work::new(100000, bytes, 16);
+        let states = finish(States::new(count, &mut work, &Cancel::new()))
+            .unwrap_or_else(|_| panic!("exact states fit"));
+        assert_eq!(work.storage_remaining, 0);
+        assert_eq!(states.live.capacity(), count);
+        assert_eq!(states.pending.capacity(), count);
+    }
+
+    #[test]
+    fn cancellation_interrupts_compilation_and_matching_after_yield() {
+        let mut work = Work::new(1000000, 1000000, 16);
+        let cancel = Cancel::new();
+        cancel.cancel();
+        assert!(matches!(
+            finish(pattern("@(a)").matches_full("a", &mut work, &cancel)),
+            Err(Error::Status(130))
+        ));
+        let cancel = Cancel::new();
+        let input = "a".repeat(8192);
+        let pattern = pattern("*(a|aa)");
+        let mut pending = Box::pin(matches(&pattern, &input, &mut work, &cancel));
+        assert!(pending.as_mut().now_or_never().is_none());
+        cancel.cancel();
+        assert!(matches!(finish(pending), Err(Error::Status(130))));
+    }
+}

@@ -31,7 +31,7 @@ const cases = [
   "[[ abc == @(@(a|b)|x)+(b|c) ]]; echo $?; [[ xbcc == @(@(a|b)|x)+(b|c) ]]; echo $?",
   "[[ --no-long-option == --@(help|no-@(long|short)-option) ]]; echo $?",
   "[[ abbb == @([a-c]|x)*(b) ]]; echo $?; [[ zbbb == @([a-c]|x)*(b) ]]; echo $?",
-  "[[ 'a)' == @([)]|a[)]) ]]; echo $?; [[ '|' == @([|]|x) ]]; echo $?",
+  "p='@([)]|a[)])'; [[ 'a)' == $p ]]; echo $?; p='@([|]|x)'; [[ '|' == $p ]]; echo $?",
   "[[ 'a|b' == @('a|b'|x) ]]; echo $?; [[ a == @('a|b'|x) ]]; echo $?",
   "[[ 'a)b' == @('a)b'|x) ]]; echo $?; [[ '*' == @('*'|'?') ]]; echo $?",
   "[[ aa == '@(a)' ]]; echo $?; [[ '@(a)' == '@(a)' ]]; echo $?",
@@ -60,6 +60,7 @@ for (const script of cases)
     });
     assert.equal(bash.error, undefined);
     assert.equal(bash.signal, null);
+    assert.equal(bash.status, 0, bash.stderr.toString());
     const actual = await run(script);
     assert.equal(actual.crash, undefined);
     assert.equal(actual.status, bash.status);

@@ -394,10 +394,10 @@ async fn matches(
                 if name == "." || name == ".." || (name.starts_with('.') && !explicit_dot) {
                     continue;
                 }
-                // matches_full's compiler/state buffers are temporary. Return
+                // matches_pathname's compiler/state buffers are temporary. Return
                 // their exact charge only after the future has dropped them.
                 let storage = work.storage_left();
-                let matched = pattern.matches_full(name, work, cancel).await?;
+                let matched = pattern.matches_pathname(name, work, cancel).await?;
                 let released = storage.saturating_sub(work.storage_left());
                 work.release_storage(released);
                 if !matched {
