@@ -1876,10 +1876,12 @@ No local Darwin claim; the unchanged hosted gate remains parent-owned.
 Source `c29fab56685afceadc7449e7b2e15f59b7ca3aed` fixes the closed-stderr
 PR37 review finding. Capture-mode malformed escape warnings tolerate a closed
 stderr without losing assignment. Cancellation and broken pipes still abort.
-Its indirect-IFS change is incomplete, and review blocker 2 remains open.
-The fixed-size cache snapshot still commits through the existing scalar binding
-owner. Direct printf-to-IFS and ordinary nameref assignments keep their refresh
-behavior. No claim that the indirect-IFS family is fixed is made here.
+Its indirect-IFS cache approximation was incomplete and has been removed under
+the approved parent decision. Printf now uses `State::assign_parameter`, exactly
+as ordinary scalar assignment does. Resolved IFS writes refresh the ordinary
+derived caches from the new value. This is safe semantics, not a claim of Bash
+equality for the confirmed nondeterministic cases. Fresh independent review and
+hosted compatibility remain required.
 
 This source differs from the full replay's measured source above. Native and
 WASI focused tests and Clippy pass. Production-Waffle controls pass 44 Bash
@@ -1912,8 +1914,10 @@ and unsupported conversions remain separately named boundaries, not scored gains
 
 ### Indirect-IFS review blocker
 
-PR37 review blocker 2 remains open. This is supported ASCII scalar, nameref
-and IFS behavior, not an exclusion or a deferred feature. The starting source
+The original PR37 review blocker 2 concerns supported ASCII scalar, nameref
+and IFS behavior, not an exclusion or a deferred feature. The approved safe
+assignment decision below addresses the production design, not the original
+review verdict or final acceptance. The starting source
 being unaccepted does not justify parking it. The initial three observations
 recorded one Bash result, `<a:b;c>\n`, for the following custom-prior case.
 The starting PR37 source printed `<a>\n<b>\n<c>\n`; source c29fab5 printed
@@ -1946,13 +1950,21 @@ variables using the requested alias name, while the variable owner frees the
 resolved IFS value. The splitter retains a borrowed pointer, a byte map and a
 separately copied first separator. No upstream code is copied into this shell.
 
-The current Rust owner safely retains a fixed-size map, then intersects it
-with the new live scalar. That is not a model of Bash's dangling pointer.
-Retaining an owned old string, refreshing the live scalar or disabling splitting
-for set-prior IFS would each choose different deterministic semantics. None can
-match the entire observed family. This lane does not emulate allocator bytes,
-change the frozen oracle, select a majority output or weaken tests. Parent must
-resolve the intended safe behavior and acceptance policy before a further
-assignment/cache change can close this blocker. No broad state rewrite was
-attempted. The continuation changes documentation only, leaving production
-bytes and all historical measurement evidence intact.
+The parent approved normal resolved scalar assignment in
+`/work/reports/bash-web/hill-climb/printf-scalar-assignment/parent-ifs-decision.md`.
+The PR37-specific old-member-map and old-`$*`-separator restoration are removed.
+`State::assign_parameter` resolves the destination, enforces readonly/storage
+rules, updates the one binding and refreshes IFS-derived state from the new value.
+Existing local and prefix guards retain their ordinary scope restoration rules.
+No new state store or general cache rewrite is introduced.
+
+Focused tests declare safe splitting and `$*` semantics for default, custom,
+unset and empty priors, alias chains, changed and empty separators, and local
+scope restoration. They do not compare nondeterministic Bash output. Stable
+direct-IFS and ordinary nameref writes remain separate Bash equality controls.
+No majority-output choice, allocator emulation, frozen-ruler change or scored
+failure waiver follows from this decision. The original review and all raw
+observations above remain retained. Final source checks and cleanup are in
+`/work/reports/bash-web/hill-climb/printf-scalar-assignment/safe-ifs-r3.md`.
+Parent owns fresh independent review, hosted compatibility, merge and exact-main
+acceptance. Historical replay and 14 gained memberships remain unchanged.

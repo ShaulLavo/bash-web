@@ -216,10 +216,38 @@ fn printf_assignment_review_escape_warnings_commit_with_open_or_closed_stderr() 
 }
 
 #[test]
-fn printf_assignment_review_nameref_to_ifs_preserves_splitter_but_updates_scalar() {
+fn printf_assignment_safe_ifs_refreshes_resolved_binding_and_star() {
+    for prior in ["", "IFS=:", "unset IFS", "IFS=''"] {
+        for (alias, value, expected) in [
+            (
+                "declare -n ref=IFS",
+                ":;",
+                "<a>\n<b>\n<c,d x>\nstar=<left:right>\n",
+            ),
+            (
+                "declare -n first=IFS; declare -n ref=first",
+                ",",
+                "<a:b;c>\n<d x>\nstar=<left,right>\n",
+            ),
+            (
+                "declare -n first=IFS; declare -n ref=first",
+                "",
+                "<a:b;c,d x>\nstar=<leftright>\n",
+            ),
+        ] {
+            let source = format!(
+                "{prior}; {alias}; printf -v ref '%s' '{value}'; set -- 'a:b;c,d x'; for y in $1; do echo \"<$y>\"; done; set -- left right; echo \"star=<$*>\""
+            );
+            printf::check_bytes(source.trim_start_matches(';'), expected.as_bytes());
+        }
+    }
+}
+
+#[test]
+fn printf_assignment_safe_local_ifs_restores_outer_scope() {
     printf::check_bytes(
-        "declare -n ref=IFS; printf -v ref ':'; set -- a:b; for y in $1; do echo \"<$y>\"; done; echo \"IFS=<$IFS>\"",
-        b"<a:b>\nIFS=<:>\n",
+        "IFS=:; f() { local IFS=,; local -n ref=IFS; printf -v ref ';'; set -- left right; echo \"inner=<$*>\"; }; f; set -- left right; echo \"outer=<$*>\"",
+        b"inner=<left;right>\nouter=<left:right>\n",
     );
 }
 

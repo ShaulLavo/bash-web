@@ -9,15 +9,15 @@ so a closed stdout descriptor does not prevent assignment.
 Names use the existing ASCII shell identifier rules. Missing names or formats
 and invalid names return 2 without changing the variable. Assignment follows
 the shell's existing dynamic local scope, nameref resolution, readonly checks
-and temporary prefix restoration. Direct IFS writes refresh its special caches.
-Printf through a nameref to IFS remains an open correctness blocker. The
-current implementation retains the prior membership map and quoted `$*`
-separator, but that does not establish Bash-compatible splitting for this
-family. Repeated identical commands in Bash 5.3.15 produce different fields
-when the prior IFS is set, including default, custom and empty values. Unset
-prior IFS behaves differently. Ordinary `ref=:` still refreshes splitting.
-See the exact observations and confirmed stale-pointer cause in
-[plan004](../plans/004-own-shell.md#indirect-ifs-review-blocker).
+and temporary prefix restoration. Direct and resolved nameref writes to IFS use
+the same ordinary assignment path. The new value refreshes field splitting and
+the quoted `$*` separator, including local scope restoration.
+This is a declared safe divergence from Bash 5.3.15's confirmed freed-buffer
+behavior for printf through an IFS nameref. Identical Bash commands produce
+multiple outputs for default, custom and empty prior IFS. These cases assert
+the safe contract, not Bash equality. Stable direct-IFS and ordinary-nameref
+controls remain Bash equality checks. See the retained evidence and parent
+decision in [plan004](../plans/004-own-shell.md#indirect-ifs-review-blocker).
 With `x=prefix printf -v x`,
 the existing builtin prefix guard restores the outer value. Bash instead keeps
 the printf assignment. A readonly target returns 1
@@ -52,6 +52,6 @@ and leaves the frozen path-normalization and stderr policies unchanged. No case,
 fixture, exclusion or deadline changes.
 
 The full replay in that receipt measured `286dd4cd0bc59410bda90348992044812a208dd3`.
-The later warning fix and incomplete indirect-IFS change alter production bytes. Their focused
-checks and 392 affected frozen-case comparisons are separate evidence, not a
-second full replay or a new score claim.
+The later warning fix and safe IFS assignment change alter production bytes.
+Their exact-source focused checks and bounded affected frozen-case comparisons
+are separate evidence, not a second full replay or a new score claim.

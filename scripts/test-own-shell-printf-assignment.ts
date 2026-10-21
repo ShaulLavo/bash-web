@@ -42,6 +42,8 @@ const cases = [
   'readonly x=old; printf -v x; echo "$?:$x"',
   'readonly x=old; printf -v x %s changed 2>&-; echo "$?:$x"',
   "echo -e 'unchanged\\nbytes'; printf '%05d:%q' 42 'a b'",
+  "IFS=:; printf -v IFS ':;'; set -- 'a:b;c'; for y in $1; do echo \"<$y>\"; done; set -- left right; echo \"<$*>\"",
+  "IFS=:; declare -n ref=IFS; ref=':;'; set -- 'a:b;c'; for y in $1; do echo \"<$y>\"; done; set -- left right; echo \"<$*>\"",
 ].concat(
   ["x", "u", "U"].flatMap((code) => [
     `x=old; printf -v x 'prefix\\${code}Z'; echo "$?:$x"`,
@@ -50,7 +52,6 @@ const cases = [
     `x=old; printf -v x '%b' 'prefix\\${code}Z' 2>&-; echo "$?:$x"`,
   ]),
   [
-    "declare -n ref=IFS; printf -v ref ':'; set -- a:b; for y in $1; do echo \"<$y>\"; done",
     'declare -n ref=IFS; ref=:; set -- a:b; for y in $1; do echo "<$y>"; done',
     'x=old; printf -v x "a%d" bad 2>&-; echo "$?:$x"',
   ],
@@ -105,3 +106,30 @@ for (const script of [
         : "2:old\n";
     assert.deepEqual(actual.stdout, Buffer.from(expected));
   });
+
+// Declared safe assignment contract, not equality with Bash's freed-buffer behavior.
+for (const prior of ["", "IFS=:; ", "unset IFS; ", "IFS=''; "])
+  for (const [alias, value, expected] of [
+    ["declare -n ref=IFS", ":;", "<a>\n<b>\n<c,d x>\nstar=<left:right>\n"],
+    ["declare -n first=IFS; declare -n ref=first", ",", "<a:b;c>\n<d x>\nstar=<left,right>\n"],
+    ["declare -n first=IFS; declare -n ref=first", "", "<a:b;c,d x>\nstar=<leftright>\n"],
+  ])
+    test(`production Waffle safe IFS: ${prior}${alias} -> '${value}'`, async () => {
+      const actual = await runner(
+        `${prior}${alias}; printf -v ref '%s' '${value}'; set -- 'a:b;c,d x'; for y in $1; do echo "<$y>"; done; set -- left right; echo "star=<$*>"`,
+      );
+      assert.equal(actual.crash, undefined);
+      assert.equal(actual.status, 0);
+      assert.deepEqual(actual.stdout, Buffer.from(expected));
+      assert.equal(actual.stderr.length, 0);
+    });
+
+test("production Waffle safe local IFS restores outer scope", async () => {
+  const actual = await runner(
+    'IFS=:; f() { local IFS=,; local -n ref=IFS; printf -v ref ";"; set -- left right; echo "inner=<$*>"; }; f; set -- left right; echo "outer=<$*>"',
+  );
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.status, 0);
+  assert.deepEqual(actual.stdout, Buffer.from("inner=<left;right>\nouter=<left:right>\n"));
+  assert.equal(actual.stderr.length, 0);
+});
