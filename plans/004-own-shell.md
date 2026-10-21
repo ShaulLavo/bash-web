@@ -2023,6 +2023,23 @@ commands. The file capture expands its filename in caller state and reuses the
 bounded decoder, while normal substitutions retain their streaming supervisor.
 See [behavior, tests and provenance](../docs/file-substitution.md).
 
+Measured source `3a0268b52d6a643ec7326d376d8746138d7f49c9` completes one frozen
+production-Waffle replay with JOBS=1 and RECORD=0. All 9,221 records, 5,792
+scored cases, 3,429 skips and four frozen identities are unchanged. Oils stays
+1,015. Brush gains two cases, 1,008 to 1,010. Bashkit gains five, 1,413 to 1,418.
+Every corpus loses zero passes. Only seven outcome fields and derived counts
+change; all historical payloads remain. The unchanged strict comparator accepts
+the saved replay after that update. Exact IDs, source/artifact hashes and checks
+are in [the receipt](../docs/evidence/file-substitution.json).
+
+Native/WASI workspace checks pass 1,311/1,291 tests. The 111 production controls
+include 110 Bash stdout/status comparisons and one explicit invalid-UTF-8
+boundary. Runtime tests pass 143, and both browsers pass 228 active cases with
+the same 16 existing skips. The scoreboard suite now includes the new production
+controls; its complete 283-test selection and the nine CI-recipe assertions pass.
+Independent parent review, hosted CI, normal integration and exact-main
+verification remain required.
+
 ### Separate follow-up: independently reopen regular-file descriptor aliases
 
 Approved separate CONTROL family after the Waffle owner supplies an actual

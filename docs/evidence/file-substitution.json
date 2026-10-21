@@ -1,0 +1,295 @@
+{
+  "schema": 1,
+  "status": "Measured membership update; parent owns independent review, hosted CI, integration, merge and exact-main verification.",
+  "acceptedBase": "361992834804c5d9325022ddc3580f5e9899bcee",
+  "measuredRevision": "3a0268b52d6a643ec7326d376d8746138d7f49c9",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "worktree": "/work/worktrees/bash-web/control-file-substitution",
+  "branch": "climb/control-file-substitution",
+  "runtime": "fc58a532f0d7a617e631ea4b7580a190915d4ed6",
+  "versions": {
+    "root": "0.0.76",
+    "engine": "0.0.43",
+    "parser": "0.0.14",
+    "node": "v26.7.0",
+    "bash": "5.3.15(1)-release"
+  },
+  "classification": "Original Rust capture and parser metadata with original TypeScript controls. Existing Bashkit-derived parser provenance remains recorded separately. No new command, dependency, feature preset or runtime API.",
+  "revisionCorrespondence": "The complete local replay measures the final Rust production and regression sources. Subsequent changes update only seven proven memberships, derived counts, evidence/docs and matching package/CI regression selections. Production and Rust regression source bytes match the measured commit.",
+  "sourceSha256": {
+    "scripts/test-own-shell-file-substitution.ts": "fdfce80c594456849a9bb03d7f9b0d851ff305105050944464b8046fa3d552fa",
+    "shell/Cargo.lock": "2f27e76b4045fc36348187367f504ee64f64d17211ac023e9dba73f3ad601918",
+    "shell/engine/Cargo.toml": "594a6896f90daa14903f30901b6a7f4267e5ed6a323607a432bd85b7f299c509",
+    "shell/engine/src/ast_copy.rs": "7b934610171f0eba7628ae18ad2f183b83c12f79c44b8a89b1b26e41f7231528",
+    "shell/engine/src/expand.rs": "bfecf2ea9850afd8f23e4f7dc02bd473d8beb43bdeed2712a3412c0312f4141c",
+    "shell/engine/src/expand/command.rs": "33c9e4a197e793768e1a717c3489cc6930730d951ac54dfc8cd72441bec87491",
+    "shell/engine/src/expand/operand.rs": "297702773e37ccb7228868d478dbfe7800e1a97c4c1ce7d378140903c3a515ce",
+    "shell/engine/src/interpreter.rs": "200907552811066415591df017aa471558b20d3e5dbecbcb98c2c3a7a380fde3",
+    "shell/engine/src/interpreter/file_substitution.rs": "ec69f07c516ba9dadb76e79da8d2e28d5fa7d70afb35c1ba23db148d20dc583d",
+    "shell/engine/tests/words/command.rs": "74e18ed6a493dbaede00928f73957e8990e27a3c98738f56c2320a1c81e9e15e",
+    "shell/engine/tests/words/file_substitution.rs": "8cf2fc1510d2758e7d9073ce3bef67f778705685691aa21ff66797b96c3203b1",
+    "shell/parser/Cargo.toml": "6cd52ed8c0c7336482bd6448aca17bc535ae93edde9ddbe95fdcffb329ee6743",
+    "shell/parser/src/parser/ast.rs": "6f6148ff57e3f0a97030376e9ece16bd8b7b42f08b6a449590e7dd3a7beab64e",
+    "shell/parser/src/parser/budget.rs": "a1506b6e7a0f06b0ca17b931af026291d0eedf34910121ce9ea8c5c591033cab",
+    "shell/parser/src/parser/file_substitution.rs": "0238ad533c9193ad5e9f9fc4e14faec97b9042f45ffed5db936e98944515a0e9",
+    "shell/parser/src/parser/lexer.rs": "e4ebb306724e9f204fd8ba4fcf60c0d108a38a199c97aa0689f90eef278bc8e1",
+    "shell/parser/src/parser/mod.rs": "0dc1f0a5de6f374e94f888b8f7709c7416a832547aced2c5edac3b08324a60b3",
+    "shell/parser/src/parser/print_cmd.rs": "af68cc72533cdabc0a1ed975cea8b93b1e073bb0735c8f37b855f3807a51951d"
+  },
+  "frozenMeasurement": {
+    "command": "CARGO_TARGET_DIR=/work/tmp/bash-web-control-file-substitution/target BASH_COMPAT_BASE_REF=361992834804c5d9325022ddc3580f5e9899bcee BASH_COMPAT_JOBS=1 BASH_COMPAT_RECORD=0 BASH_COMPAT_SKIP_BUILD=1 BASH_COMPAT_SCRATCH=/work/tmp/bash-web-control-file-substitution BASH_COMPAT_OUT=/work/reports/bash-web/hill-climb/control/file-substitution/frozen-final.json node scripts/diagnose-compat.ts /work/reports/bash-web/hill-climb/control/file-substitution/diagnostics-local -- npm run compat:shell",
+    "host": "PC, canonical shared heavy runner, build class",
+    "startedAt": "2026-10-21T19:22:39Z",
+    "endedAt": "2026-10-21T19:30:28Z",
+    "jobs": 1,
+    "record": 0,
+    "records": 9221,
+    "scored": 5792,
+    "skipped": 3429,
+    "identity": {
+      "schema": 1,
+      "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+      "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+      "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+      "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+    },
+    "corpora": {
+      "oils": {
+        "before": 1015,
+        "after": 1015,
+        "gained": [],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "brush-suite": {
+        "before": 1008,
+        "after": 1010,
+        "gained": [
+          "brush-suite:word_expansion/command_substitution:28",
+          "brush-suite:word_expansion/command_substitution:30"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "bashkit-suite": {
+        "before": 1413,
+        "after": 1418,
+        "gained": [
+          "bashkit-suite:command-subst:257",
+          "bashkit-suite:command-subst:266",
+          "bashkit-suite:command-subst:276",
+          "bashkit-suite:command-subst:293",
+          "bashkit-suite:command-subst:312"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      }
+    },
+    "completedFullReplaysOfFinalSource": 1,
+    "originalExit": 1,
+    "exitReason": "The complete result was saved before the unchanged comparator rejected seven newly passing memberships.",
+    "strictOfflineMembership": "pass against the same saved result using unchanged verifyOracle, validateScore and compareScores(requireMembership:true)",
+    "baselineChanges": "Only seven outcome fields and four derived counts. All 9,214 other baseline rows and every historical payload remain unchanged.",
+    "otherHistoricalRecordDifferencesInFreshResult": 46,
+    "nonGainOutcomeChanges": [],
+    "resultSha256": "0734775473f028aa3c584058c8e931f8e61f732d43f4773963ca0e533041dfde",
+    "guest": {
+      "sha256": "d72aa0ed700cb53db24478a56ebe5c23f9cb5b4bf60d8be7c76064d5bd6d1e2a",
+      "bytes": 1830732
+    },
+    "observerCleanupRemaining": []
+  },
+  "failingFirst": {
+    "productionWaffle": "Seven of seven assigned cases reproduced as nonpasses on accepted base, before implementation. before.json retains exact bytes/status.",
+    "native": "Three new regression tests failed before production edits: capture/newlines, parent filename effects and disabled syntax contexts. failing-first-native.log retains output."
+  },
+  "verification": {
+    "nativeWorkspace": {
+      "command": "npm run test:rust",
+      "passed": 1311,
+      "failed": 0,
+      "ignored": 0
+    },
+    "wasiWorkspace": {
+      "command": "npm run test:shell:wasi",
+      "passed": 1291,
+      "failed": 0,
+      "ignored": 0
+    },
+    "rustQuality": "npm run check:rust passes native and WASI all-target Clippy, fmt, parser provenance and cargo-machete.",
+    "productionControls": {
+      "command": "npm run test:file-substitution",
+      "tests": 111,
+      "bashStdoutStatusMatches": 110,
+      "explicitInvalidUtf8Boundary": 1,
+      "failed": 0
+    },
+    "scoreboardAndRunner": {
+      "command": "npm run test:shell:scoreboard",
+      "passed": 283,
+      "failed": 0
+    },
+    "exactCiRecipe": {
+      "command": "node --test scripts/test-ci-workflow.ts",
+      "passed": 9,
+      "failed": 0
+    },
+    "quality": "npm run quality:js passes, including unchanged exact and structural duplicate baselines.",
+    "layers": "34 scanner tests, strict types and check:layers pass with 0 production and 0 test-only violations; 42 production and 28 test-only edges.",
+    "runtimeTerminal": {
+      "command": "npm run test:runtime:terminal",
+      "passed": 143,
+      "failed": 0
+    },
+    "browser": {
+      "command": "BASH_WEB_TEST_PORT=4287 npm run test:browser",
+      "passed": 228,
+      "existingSkipped": 16,
+      "failed": 0,
+      "projects": [
+        "chromium",
+        "firefox"
+      ],
+      "portClosedAfterRun": true
+    },
+    "capabilities": "npm run check:capabilities passes; the core dependency closure still has no regex.",
+    "frozenFixtures": "Twelve unchanged native fixture families pass; final-fixtures.log records the exact final-source rerun.",
+    "sizes": {
+      "standaloneCore": {
+        "raw": 1886397,
+        "brotli11": 431123
+      },
+      "browserCore": {
+        "raw": 1830732,
+        "brotli11": 413957
+      },
+      "brotliCeiling": 1000000
+    }
+  },
+  "boundaries": {
+    "regularFileDescriptorAliases": "Existing shared-open-description offset mismatch retained by explicit parent/root decision. Both shorthand and ordinary $(cat </dev/fd/3) reproduce. No descriptor parity claim. Follow-up is in plan 004 and docs/file-substitution.md.",
+    "invalidUtf8": "Existing explicit status-2 rejection remains. No replacement characters, word-byte rewrite, scoring change or duplicate broad byte plan.",
+    "filesystemStalls": "Existing runtime filesystem-stall boundary is unchanged."
+  },
+  "supersededCloudRun": {
+    "source": "17efa2fd3f896a38ebf5855b9fa581514764a014",
+    "reason": "A narrow diagnostic selection extraction produced final source 3a0268b and a different WASM hash, so final source was measured locally instead.",
+    "status": "Cancelled before completion. No cloud gain/loss result claimed.",
+    "controllerExit": 143,
+    "teardown": "verified ok; actual-host check confirms the owned checkout and staging paths absent",
+    "evidence": "/work/reports/machine-fleet/remote-gate/file-subst-frozen-20261021T191654Z-leoiujst"
+  },
+  "reportDirectory": "/work/reports/bash-web/hill-climb/control/file-substitution",
+  "cleanup": {
+    "resources": {
+      "removedBuildTargetBytes": 7671920755,
+      "retainedArtifactBytes": 10835661,
+      "retainedArtifacts": {
+        "release/shell-cli": {
+          "bytes": 4662000,
+          "sha256": "b8c66d7a53db2522bff74220f2da056bf41f40a4fa7cd6f94178d5a9f3d18d9c"
+        },
+        "wasm32-wasip1/release/shell-engine.wasm": {
+          "bytes": 1886397,
+          "sha256": "6fa7b53310868c38c4ead8141af8bc31cdd70e8028d3c34acbfd09a45cfc39ec"
+        },
+        "wasm32-wasip1/release/shell-runtime.wasm": {
+          "bytes": 1830732,
+          "sha256": "d72aa0ed700cb53db24478a56ebe5c23f9cb5b4bf60d8be7c76064d5bd6d1e2a"
+        },
+        "wasm32-wasip1/release/cat.wasm": {
+          "bytes": 234127,
+          "sha256": "109ca36f33bba771f42ba39d4afddb2c58a1cf724ebb181cd9cd102cf84b6066"
+        },
+        "wasm32-wasip1/release/grep.wasm": {
+          "bytes": 1300956,
+          "sha256": "382961e81aa1306f37eb092853a642f066cba5a8a7f05972cc6e50b2b4cd2e7c"
+        },
+        "wasm32-wasip1/release/mkdir.wasm": {
+          "bytes": 229643,
+          "sha256": "c84f55c266937fc77b14efd51fffdbadbff35dbe8022650ed18c21a29a20e207"
+        },
+        "wasm32-wasip1/release/seq.wasm": {
+          "bytes": 223328,
+          "sha256": "8ced3776050f628a8c927f7cc161fd2c0b6e0d7634ce8a1569c846a82b2534f0"
+        },
+        "wasm32-wasip1/release/argv-py.wasm": {
+          "bytes": 234235,
+          "sha256": "edbc11a613363e0db3832bdaace8b68791790c4504b93fa8eec49f9bdc7b850f"
+        },
+        "wasm32-wasip1/release/printenv-py.wasm": {
+          "bytes": 234243,
+          "sha256": "1c755d33167236c8215ffdd06d01fc2bc3d39957e741c3c156df359078d35657"
+        }
+      },
+      "removedWorktreePayloads": [
+        {
+          "path": "/work/worktrees/bash-web/control-file-substitution/node_modules",
+          "bytes": 224558077
+        },
+        {
+          "path": "/work/worktrees/bash-web/control-file-substitution/.sources",
+          "bytes": 3795252
+        },
+        {
+          "path": "/work/worktrees/bash-web/control-file-substitution/.build",
+          "bytes": 11525494
+        },
+        {
+          "path": "/work/worktrees/bash-web/control-file-substitution/playwright-report",
+          "bytes": 792748
+        },
+        {
+          "path": "/work/worktrees/bash-web/control-file-substitution/test-results",
+          "bytes": 160976
+        }
+      ],
+      "retainedWorktree": {
+        "path": "/work/worktrees/bash-web/control-file-substitution",
+        "bytes": 67224672,
+        "reason": "Independent review and parent integration",
+        "owner": "control parent coordinator",
+        "removalCondition": "After review/integration no longer needs it, use git worktree remove"
+      },
+      "retainedTarget": {
+        "path": "/work/tmp/bash-web-control-file-substitution/target",
+        "owner": "control parent coordinator",
+        "reason": "Only eight verified WASI programs and the final native CLI remain for review",
+        "removalCondition": "Remove with this family scratch after independent review/merge or rejection"
+      },
+      "retainedReports": {
+        "path": "/work/reports/bash-web/hill-climb/control/file-substitution",
+        "reason": "Requested full replay, exact raw observations and review evidence",
+        "owner": "control parent coordinator",
+        "removalCondition": "Archive/retain under the report lifecycle; no live consumer or process"
+      },
+      "local": {
+        "ownedHeavyJobsRemaining": 0,
+        "testPort4287Closed": true,
+        "observerCleanupRemaining": [],
+        "newServices": [],
+        "newContainers": [],
+        "newRoutes": [],
+        "newMounts": []
+      },
+      "remote": {
+        "host": "upcloud-4",
+        "status": "Superseded source run cancelled, exit143, no completed score claimed",
+        "teardown": "ok",
+        "ownedCheckoutAbsent": true,
+        "ownedStagingAbsent": true,
+        "nodeBinaryAndDependenciesRemovedWithOwnedStaging": true,
+        "sharedRuntimesAndOtherJobsPreserved": true
+      }
+    },
+    "reportBytesAtCleanup": 8832923,
+    "remoteEvidenceDirectory": "/work/reports/machine-fleet/remote-gate/file-subst-frozen-20261021T191654Z-leoiujst",
+    "sharedCachesPreserved": [
+      "/work/cache/cargo",
+      "/work/cache/rustup",
+      "/work/cache/npm",
+      "/work/cache/ms-playwright"
+    ]
+  }
+}
