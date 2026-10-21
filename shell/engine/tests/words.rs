@@ -4138,3 +4138,51 @@ fn indexed_arrays_element_length_and_reads_obey_nounset() {
     assert_eq!(rig.run("a=(); args \"${#a[@]}\" \"${a[@]}\""), 0);
     assert_eq!(*rig.calls.borrow(), vec![vec!["0"], vec!["0"]]);
 }
+
+#[test]
+fn indexed_review_rhs_precedes_subscript_side_effects() {
+    check(
+        "a=(x y); i=0; a[i++]=${i} a[i++]=${i}; args \"$i\" \"${a[@]}\"",
+        &[&["2", "0", "1"]],
+    );
+}
+
+#[test]
+fn indexed_review_invalid_negative_assignment_ends_read_unit() {
+    for source in [
+        "a=(); a[-1]=x; args AFTER",
+        "a=(x y); a[-3]=z; args AFTER",
+        "a=(x y); i=-3; a[i]=z; args AFTER",
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 1, "{source}");
+        assert!(rig.calls.borrow().is_empty(), "{source}");
+        assert!(rig.errors.bytes().ends_with(b": bad array subscript\n"));
+    }
+}
+
+#[test]
+fn indexed_review_negative_reads_at_largest_sparse_index() {
+    check(
+        "a=(zero one); a[9223372036854775807]=last; args \"${a[-1]}\" \"${a[-9223372036854775808]}\"",
+        &[&["last", "zero"]],
+    );
+}
+
+#[test]
+fn indexed_review_array_ifs_disables_field_splitting() {
+    for assignment in ["IFS=(, :)", "IFS=()", "IFS=,; IFS[1]=:"] {
+        check(
+            &format!("{assignment}; v='x,y:z q'; args $v; IFS=,; args $v"),
+            &[&["x,y:z q"], &["x,y:z q"]],
+        );
+    }
+}
+
+#[test]
+fn indexed_review_local_scalar_ifs_restores_array_binding() {
+    check(
+        "IFS=(, :); v='x,y:z'; f() { local IFS=,; args $v; }; f; args $v",
+        &[&["x", "y:z"], &["x,y:z"]],
+    );
+}

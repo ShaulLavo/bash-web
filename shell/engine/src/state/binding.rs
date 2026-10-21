@@ -58,8 +58,8 @@ impl Binding {
             return Some(index);
         }
         self.last_index()?
-            .checked_add(1)?
-            .checked_add(index)
+            .checked_add(index)?
+            .checked_add(1)
             .filter(|index| *index >= 0)
     }
     pub(crate) fn next(&self, previous: Option<i64>) -> Option<(i64, &str)> {

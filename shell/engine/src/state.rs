@@ -491,21 +491,12 @@ impl State {
         if name == "PWD" {
             return Some(&self.cwd);
         }
-        self.saved_binding(name, scope).map_or_else(
-            || {
-                self.variables
-                    .get(name)
-                    .and_then(Binding::scalar)
-                    .map(String::as_str)
-            },
-            |local| {
-                local
-                    .previous
-                    .as_ref()
-                    .and_then(Binding::scalar)
-                    .map(String::as_str)
-            },
-        )
+        self.saved_binding(name, scope)
+            .map_or_else(|| self.variables.get(name), |local| local.previous.as_ref())
+            .map(|binding| match binding {
+                Binding::Scalar(value) => value.as_str(),
+                Binding::Indexed(_) => "",
+            })
     }
     fn ifs_scope(&self) -> Option<usize> {
         match self.star_separator {

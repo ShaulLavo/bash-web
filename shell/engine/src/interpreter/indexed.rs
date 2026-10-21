@@ -69,20 +69,30 @@ async fn scalar(
     work: &mut expand::Work,
 ) -> Result<Binding, expand::Error> {
     let limit = context.limits().expansion_bytes;
+    let value = expand::word(word, state, &context.cancel, limit, limit, work).await?;
     let index = match &assignment.index {
         Some(index) => {
             crate::arithmetic::evaluate(index, state, &context.cancel, limit, work).await?
         }
         None => 0,
     };
-    let value = expand::word(word, state, &context.cancel, limit, limit, work).await?;
     let old = previous(&assignment.name, state, context, work).await?;
-    let index = old
-        .as_ref()
-        .map_or((index >= 0).then_some(index), |value| {
-            value.resolve_index(index)
-        })
-        .ok_or(1)?;
+    let Some(index) = old.as_ref().map_or((index >= 0).then_some(index), |value| {
+        value.resolve_index(index)
+    }) else {
+        let subscript = assignment.index.as_deref().unwrap_or("0");
+        work.admit_storage(
+            assignment
+                .name
+                .len()
+                .saturating_add(subscript.len())
+                .saturating_add(160),
+        )?;
+        return Err(expand::Error::BadArraySubscript {
+            name: format!("{}[{subscript}]", assignment.name),
+            line: None,
+        });
+    };
     if assignment.index.is_none() && !matches!(old, Some(Binding::Indexed(_))) {
         return Ok(append(
             old.as_ref().and_then(Binding::scalar),

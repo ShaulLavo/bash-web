@@ -1912,6 +1912,7 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
     } else if matches!(
         error,
         expand::Error::AssignmentDepth
+            | expand::Error::BadArraySubscript { .. }
             | expand::Error::Arithmetic { .. }
             | expand::Error::Readonly { .. }
             | expand::Error::ShellBoundary {
@@ -1930,6 +1931,9 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
         expand::Error::AssignmentDepth => return Outcome { code: 1, flow },
         expand::Error::SpecialAssignment { name, line } => {
             (name, "cannot assign in this way".to_owned(), line, 1)
+        }
+        expand::Error::BadArraySubscript { name, line } => {
+            (name, "bad array subscript".to_owned(), line, 1)
         }
         expand::Error::Readonly { name, line, .. } => {
             (name, "readonly variable".to_owned(), line, 1)
