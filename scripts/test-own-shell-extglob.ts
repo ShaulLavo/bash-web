@@ -51,7 +51,27 @@ const cases = [
   "[[ ab == *(a|)*(|b) ]]; echo $?; [[ z == *(a|)*(|b) ]]; echo $?",
   "[[ '|()' == '|()' ]]; echo $?; [[ 'a|b' == a'|'b ]]; echo $?",
 ];
-for (const script of cases)
+const reviewCases = [
+  "p='@(a(b)c|x)'; [[ x == $p ]]; echo $?; [[ 'a(b)c' == $p ]]; echo $?",
+  "shopt -s extglob; p='@(a(b)c|x)'; case x in $p) echo match;; *) echo miss;; esac; case 'a(b)c' in $p) echo match;; *) echo miss;; esac",
+  "p='@(a(b|c)d|x)'; [[ 'a(b|c)d' == $p ]]; echo $?; [[ x == $p ]]; echo $?; [[ c == $p ]]; echo $?",
+  "shopt -s extglob; p='@(a((b|c))d|x)'; case 'a((b|c))d' in $p) echo match;; *) echo miss;; esac",
+  "p='@(a(@(b|c))d|x)'; [[ 'a(b)d' == $p ]]; echo $?; [[ 'a(c)d' == $p ]]; echo $?; [[ x == $p ]]; echo $?",
+  "p='@([|a)'; [[ a == $p ]]; echo $?; [[ '[' == $p ]]; echo $?; [[ '@([|a)' == $p ]]; echo $?",
+  "shopt -s extglob; p='@([|a)'; case a in $p) echo match;; *) echo miss;; esac",
+  "p='@([a|b)'; [[ b == $p ]]; echo $?; p='@([!|a)'; [[ a == $p ]]; echo $?",
+  "p='@(@([|a)|b)'; [[ b == $p ]]; echo $?; [[ a == $p ]]; echo $?",
+  "p='@([a)|b])'; [[ ')' == $p ]]; echo $?; [[ '|' == $p ]]; echo $?; [[ b == $p ]]; echo $?",
+  "p='[|a)'; [[ '[|a)' == $p ]]; echo $?; p='[a'; [[ '[a' == $p ]]; echo $?",
+  "[[ '' == +(*()|?()) ]]; echo $?; [[ 'é🙂' == +(@(?)|?()) ]]; echo $?",
+];
+for (const delimiter of ["|", "(", ")"])
+  for (const slash of ["\\", "\\\\"])
+    reviewCases.push(
+      `p='${slash}'; [[ 'a${delimiter}b' == @(a$p'${delimiter}'b|c) ]]; echo $?; [[ b == @(a$p'${delimiter}'b|c) ]]; echo $?; [[ c == @(a$p'${delimiter}'b|c) ]]; echo $?`,
+      `shopt -s extglob\np='${slash}'; case 'a${delimiter}b' in @(a$p'${delimiter}'b|c)) echo match;; *) echo miss;; esac; case b in @(a$p'${delimiter}'b|c)) echo match;; *) echo miss;; esac`,
+    );
+for (const script of cases.concat(reviewCases))
   test(`production Waffle positive extglob: ${script}`, { timeout: 10000 }, async () => {
     const bash = spawnSync("/usr/bin/bash", ["--noprofile", "--norc", "-c", script], {
       env,
