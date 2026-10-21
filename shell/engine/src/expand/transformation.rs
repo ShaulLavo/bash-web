@@ -261,11 +261,16 @@ impl Expansion<'_> {
     async fn utf8(&mut self, state: &SharedState) -> Result<bool, Error> {
         self.locale(state, utf8_locale).await
     }
-    /// The effective locale name, read through namerefs like any parameter.
+    /// The effective locale name. Bash fixes the locale when a locale variable
+    /// is assigned, which a nameref's current target need not reflect, so a
+    /// consulted nameref is unsupported.
     async fn locale<T>(&mut self, state: &SharedState, select: fn(&str) -> T) -> Result<T, Error> {
         for name in ["LC_ALL", "LC_CTYPE", "LANG"] {
             State::admit_scalar_access(state, name, self.cancel, self.work).await?;
             let s = state.borrow();
+            if s.is_nameref(name) {
+                return Err(2.into());
+            }
             if let Some(locale) = s.scalar_parameter(name).filter(|value| !value.is_empty()) {
                 return Ok(select(locale));
             }

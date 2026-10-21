@@ -8,10 +8,10 @@
     "engine": "0.0.44"
   },
   "classification": "Original local Rust implementation observed against GNU Bash 5.3.15. No copied or adapted upstream implementation.",
-  "scope": "Scalar ${name@op} for Q, E, u, U, L, K, k, A and a. Arrays (including PIPESTATUS), ${@@op}, ${#@op}, indirect names, @P and nested operand transformations stay unsupported.",
+  "scope": "Scalar ${name@op} for Q, E, u, U, L, K, k, A and a. Arrays (including PIPESTATUS), locale variables that are namerefs, ${@@op}, indirect names, @P and nested operand transformations fail closed with status 2. ${#@op} is rejected as a bad substitution with status 1 before the script runs.",
   "sourceSha256": {
     "shell/engine/src/expand.rs": "0a9212241ffed002163754733486589eed12270ed4d135cc857a890c628de0e2",
-    "shell/engine/src/expand/transformation.rs": "b3d8c84638331a5068325ae8605b5cbb0b50ee844a3d178f707d27ca0e3914c2",
+    "shell/engine/src/expand/transformation.rs": "5f8861bf8f9efe2576e4c4e6fc9fdd62926a7076c58750224dafdbaf4ab19c45",
     "shell/engine/src/expand/printable.rs": "a29d11692b0e214158d6decbbd0e84be8ca368b256278e0e70d1ceadf1089685",
     "shell/engine/src/state.rs": "85b5996708e15453fa03c966dd8d210abe49b8dcf3f2458420284320ff5ff5b4",
     "shell/engine/src/builtins/printf/quoting.rs": "5a92859fe3aab4602a567426af629d75c169568d6aa225581e99e67059082ed4"

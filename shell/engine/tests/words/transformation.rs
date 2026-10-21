@@ -180,14 +180,21 @@ fn transformation_unsupported_forms_fail_closed() {
 }
 
 #[test]
-fn transformation_case_locale_reads_through_namerefs() {
-    let rig = Rig::new(Limits::default());
-    rig.variable("LANG", "C.UTF-8");
-    assert_eq!(
-        rig.run(r#"loc=C; declare -n LC_ALL=loc; x=é; args "${x@U}" "${x@u}""#),
-        0
-    );
-    assert_eq!(*rig.calls.borrow(), &[&["é", "é"]]);
+fn transformation_locale_namerefs_fail_closed() {
+    // Bash fixes the locale when a locale variable is assigned, so reading a
+    // nameref's target at expansion time can disagree in either direction.
+    for source in [
+        r#"loc=C; declare -n LC_ALL=loc; x=é; args "${x@U}""#,
+        r#"declare -n LC_ALL=loc; loc=C; x=é; args "${x@U}""#,
+        r#"declare -n LC_ALL=loc; LC_ALL=C; x=é; args "${x@U}""#,
+        r#"declare -n LC_ALL=loc; loc=C; x=$'é\n'; args "${x@Q}""#,
+        r#"declare -n LC_CTYPE=loc; loc=C; x=é; args "${x@A}""#,
+    ] {
+        let rig = Rig::new(Limits::default());
+        rig.variable("LANG", "C.UTF-8");
+        assert_eq!(rig.run(source), 2, "{source}");
+        assert!(rig.calls.borrow().is_empty(), "{source}");
+    }
 }
 
 #[test]
