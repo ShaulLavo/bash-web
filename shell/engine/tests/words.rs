@@ -4238,6 +4238,48 @@ fn indexed_r1_pipeline_element_lengths_use_special_producer() {
 }
 
 #[test]
+fn indexed_r1_pipeline_negative_element_lengths_use_special_producer() {
+    check(
+        "true | false; args \"${#PIPESTATUS[0]}\" \"${#PIPESTATUS[1]}\" \"${#PIPESTATUS[8]}\" \"${#PIPESTATUS[-1]}\" \"${#PIPESTATUS[-2]}\"",
+        &[&["1", "1", "0", "1", "1"]],
+    );
+}
+
+#[test]
+fn indexed_r1_pipeline_negative_lengths_in_selected_operands() {
+    check(
+        "true | false; args \"${u:-${#PIPESTATUS[-1]}}\" \"${u:-${#PIPESTATUS[-2]}}\"",
+        &[&["1", "1"]],
+    );
+}
+
+#[test]
+fn indexed_r1_pipeline_negative_lengths_obey_nounset_and_missing_policy() {
+    check(
+        "set -u; true | false; args \"${#PIPESTATUS[-1]}\" \"${#PIPESTATUS[-2]}\" \"${#PIPESTATUS[8]}\" \"${#PIPESTATUS[9223372036854775807]}\"",
+        &[&["1", "1", "0", "0"]],
+    );
+}
+
+#[test]
+fn indexed_r1_pipeline_negative_lengths_reject_invalid_boundaries() {
+    for options in ["", "set -u; "] {
+        for subscript in ["-3", "-9223372036854775808"] {
+            let rig = Rig::new(Limits::default());
+            let source = format!(
+                "{options}true | false; args \"${{#PIPESTATUS[{subscript}]}}\"; args AFTER"
+            );
+            assert_eq!(rig.run(&source), 1, "{source}");
+            assert_eq!(
+                rig.errors.bytes(),
+                format!("/usr/bin/bash: line 1: [{subscript}]: bad array subscript\n").as_bytes()
+            );
+            assert!(rig.calls.borrow().is_empty(), "{source}");
+        }
+    }
+}
+
+#[test]
 fn indexed_r1_completed_assignments_survive_later_errors() {
     let rig = Rig::new(Limits::default());
     assert_eq!(
