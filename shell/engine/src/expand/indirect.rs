@@ -239,4 +239,169 @@ mod tests {
         ));
         assert_eq!(work.storage_remaining, 7);
     }
+
+    fn special_state(ifs: Option<&str>) -> crate::state::SharedState {
+        let state = crate::state::State::default().shared();
+        state
+            .borrow_mut()
+            .replace_positional(vec!["a b".into(), String::new(), "c".into()])
+            .unwrap();
+        state.borrow_mut().publish_status(7);
+        if let Some(ifs) = ifs {
+            state
+                .borrow_mut()
+                .assign_parameter("IFS".into(), ifs.into())
+                .unwrap();
+        }
+        state
+    }
+
+    /// Parse the source as a command argument so quotes are real syntax.
+    fn command_word(source: &str) -> Word {
+        let script = shell_parser::Parser::new(&format!("x {source}"))
+            .parse()
+            .expect("fixture word parses");
+        let Some(shell_parser::parser::Command::Simple(command)) = script.commands.first() else {
+            panic!("fixture must be a simple command: {source}");
+        };
+        command.args[0].clone()
+    }
+
+    fn special_fields(
+        state: &crate::state::SharedState,
+        target: &str,
+        source: &str,
+    ) -> Result<Vec<String>, Error> {
+        state
+            .borrow_mut()
+            .assign_parameter("r".into(), target.into())
+            .unwrap();
+        let token = command_word(source);
+        let mut work = Work::new(65536, 1 << 20, 16);
+        let cancel = Cancel::new();
+        fields(&token, state, &cancel, 4096, 16, 4096, &mut work)
+            .now_or_never()
+            .expect("short fixture must not suspend")
+    }
+
+    fn special_word(
+        state: &crate::state::SharedState,
+        target: &str,
+        source: &str,
+    ) -> Result<String, Error> {
+        state
+            .borrow_mut()
+            .assign_parameter("r".into(), target.into())
+            .unwrap();
+        let token = command_word(source);
+        let mut work = Work::new(65536, 1 << 20, 16);
+        let cancel = Cancel::new();
+        word(&token, state, &cancel, 4096, 4096, &mut work)
+            .now_or_never()
+            .expect("short fixture must not suspend")
+    }
+
+    #[test]
+    fn bare_special_targets_match_their_direct_parameters() {
+        // Each indirect form must equal the direct spelling of its target in
+        // the same field and scalar contexts, including list IFS joins.
+        let targets = ["1", "2", "3", "4", "01", "#", "?", "@", "*"];
+        let shapes = [
+            ("${!r}", "${T}"),
+            ("\"${!r}\"", "\"${T}\""),
+            ("x${!r}y", "x${T}y"),
+        ];
+        for ifs in [None, Some(""), Some(":")] {
+            let state = special_state(ifs);
+            for target in targets {
+                let direct = if target == "01" { "1" } else { target };
+                for (indirect, plain) in shapes {
+                    let plain = plain.replace('T', direct);
+                    let expected = special_fields(&state, target, &plain)
+                        .unwrap_or_else(|_| panic!("direct {plain} must expand"));
+                    let actual = special_fields(&state, target, indirect)
+                        .unwrap_or_else(|_| panic!("{indirect} with r={target} must expand"));
+                    assert_eq!(actual, expected, "{indirect} r={target} IFS={ifs:?}");
+                    let expected = special_word(&state, target, &plain).ok();
+                    let actual = special_word(&state, target, indirect).ok();
+                    assert_eq!(actual, expected, "scalar {indirect} r={target} IFS={ifs:?}");
+                }
+            }
+        }
+        let state = special_state(None);
+        assert_eq!(
+            special_fields(&state, "@", "${!r}").ok(),
+            Some(vec!["a".into(), "b".into(), "c".into()])
+        );
+        assert_eq!(
+            special_fields(&state, "@", "\"${!r}\"").ok(),
+            Some(vec!["a b".into(), String::new(), "c".into()])
+        );
+        assert_eq!(
+            special_fields(&state, "2", "\"${!r}\"").ok(),
+            Some(vec![String::new()])
+        );
+        assert_eq!(
+            special_fields(&state, "?", "${!r}").ok(),
+            Some(vec!["7".into()])
+        );
+    }
+
+    #[test]
+    fn special_targets_outside_bare_reads_stay_unsupported() {
+        let state = special_state(None);
+        for (target, source) in [
+            ("1", "${!r:-d}"),
+            ("1", "${!r#a}"),
+            ("@", "${!r:-d}"),
+            ("@", "${u:-${!r}}"),
+            ("*", "${u:-${!r}}"),
+            ("PIPESTATUS", "${!r}"),
+            ("a[0]", "${!r}"),
+        ] {
+            assert!(
+                matches!(
+                    special_fields(&state, target, source),
+                    Err(Error::Status(2))
+                ),
+                "{source} r={target}"
+            );
+        }
+        // Positional pointers keep their existing unsupported status.
+        assert!(matches!(
+            special_fields(&state, "x", "${!1}"),
+            Err(Error::Status(2))
+        ));
+    }
+
+    #[test]
+    fn special_targets_report_the_indirect_expression_when_unbound() {
+        let state = special_state(None);
+        state.borrow_mut().nounset = true;
+        assert!(matches!(
+            special_fields(&state, "4", "${!r}"),
+            Err(Error::Unbound { name, .. }) if name == "!r"
+        ));
+        assert_eq!(
+            special_fields(&state, "3", "${!r}").ok(),
+            Some(vec!["c".into()])
+        );
+        assert_eq!(
+            special_fields(&state, "#", "${!r}").ok(),
+            Some(vec!["3".into()])
+        );
+        assert!(matches!(
+            special_fields(&state, "!", "${!r}"),
+            Err(Error::Status(2))
+        ));
+        state.borrow_mut().replace_positional(Vec::new()).unwrap();
+        assert_eq!(
+            special_fields(&state, "@", "\"${!r}\"").ok(),
+            Some(Vec::new())
+        );
+        assert!(matches!(
+            special_fields(&state, "*", "\"${!r}\""),
+            Err(Error::Unbound { name, .. }) if name == "!r"
+        ));
+    }
 }
