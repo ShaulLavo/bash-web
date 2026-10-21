@@ -1,31 +1,25 @@
 //! Adapted scalar field controls with original byte and resource boundaries.
 use super::*;
 
-fn check(source: &str, expected: &str) {
-    let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run(source), 0, "{source}");
-    assert_eq!(rig.output.bytes(), expected.as_bytes(), "{source}");
-}
-
 #[test]
 fn scalar_fields_and_remainder() {
-    check(
+    check_output(
         r#"read a b c <<<'  a b  c  d  '; printf '[%s][%s][%s]\n' "$a" "$b" "$c""#,
         "[a][b][c  d]\n",
     );
-    check(
+    check_output(
         r#"IFS=: read a b <<<'x::y'; printf '[%s][%s]\n' "$a" "$b""#,
         "[x][:y]\n",
     );
-    check(
+    check_output(
         r#"IFS=': ' read a b <<<'x: y : z : w '; printf '[%s][%s]\n' "$a" "$b""#,
         "[x][y : z : w]\n",
     );
-    check(
+    check_output(
         r#"IFS= read a b <<<'  a b '; printf '[%s][%s]\n' "$a" "$b""#,
         "[  a b ][]\n",
     );
-    check(
+    check_output(
         r#"c=old; read a b c <<<a; printf '[%s][%s][%s]\n' "$a" "$b" "$c""#,
         "[a][][]\n",
     );
@@ -33,20 +27,20 @@ fn scalar_fields_and_remainder() {
 
 #[test]
 fn scalar_escapes_reply_and_eof() {
-    check(
+    check_output(
         r#"read a b <<<'a\ b c\ '; printf '[%s][%s]\n' "$a" "$b""#,
         "[a b][c ]\n",
     );
-    check(r#"read a <<<'a\ b c\ '; printf '[%s]\n' "$a""#, "[a b c]\n");
-    check(
+    check_output(r#"read a <<<'a\ b c\ '; printf '[%s]\n' "$a""#, "[a b c]\n");
+    check_output(
         "read <<'EOF'\n  a\\\n b  \nEOF\nprintf '[%s]\n' \"$REPLY\"",
         "[  a b  ]\n",
     );
-    check(
+    check_output(
         r#"printf 'ab\\' | { read a b; printf '%s:[%s][%s]\n' "$?" "$a" "$b"; }"#,
         "1:[ab][]\n",
     );
-    check(
+    check_output(
         r#"printf 'a\0b c' | { read a b; printf '%s:[%s][%s]\n' "$?" "$a" "$b"; }"#,
         "1:[ab][c]\n",
     );
@@ -54,11 +48,11 @@ fn scalar_escapes_reply_and_eof() {
 
 #[test]
 fn scalar_bad_name_keeps_prior_writes() {
-    check(
+    check_output(
         r#"b=old; read a 1x b <<<'x y z'; printf '%s:[%s][%s]\n' "$?" "$a" "$b""#,
         "1:[x][old]\n",
     );
-    check(
+    check_output(
         r#"read a -r <<<'x y'; printf '%s:[%s]\n' "$?" "$a""#,
         "1:[x]\n",
     );
@@ -66,15 +60,15 @@ fn scalar_bad_name_keeps_prior_writes() {
 
 #[test]
 fn counted_fields_keep_boundary_and_protection() {
-    check(
+    check_output(
         r#"{ read -n5 a b; printf '%s:[%s][%s]\n' "$?" "$a" "$b"; read -r tail; printf '[%s]\n' "$tail"; } <<<'x y zrest'"#,
         "0:[x][y z]\n[rest]\n",
     );
-    check(
+    check_output(
         r#"read -n4 a b <<<'a\ b c'; printf '[%s][%s]\n' "$a" "$b""#,
         "[a b][]\n",
     );
-    check(
+    check_output(
         r#"LC_ALL=C.UTF-8; read -n4 a b <<<'é 中z!'; printf '[%s][%s]\n' "$a" "$b""#,
         "[é][中z]\n",
     );

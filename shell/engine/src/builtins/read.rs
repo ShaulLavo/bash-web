@@ -114,14 +114,24 @@ pub(super) async fn run(
 ) -> Result<Outcome, i32> {
     let options = options(args, context, work).await?;
     if let Some(name) = options.names.first() {
-        super::scan_bytes(name.len(), context, work).await?;
-        if !super::valid_name(name) {
-            invalid_name(name, fds, context).await?;
-            return Err(1);
-        }
+        validate_name(name, fds, context, work).await?;
     }
     let input = endpoint(fds, options.fd)?;
     read_record(&options, &input, state, fds, context, work).await
+}
+
+async fn validate_name(
+    name: &str,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    super::scan_bytes(name.len(), context, work).await?;
+    if super::valid_name(name) {
+        return Ok(());
+    }
+    invalid_name(name, fds, context).await?;
+    Err(1)
 }
 
 async fn invalid_name(name: &str, fds: &FdTable, context: &Context) -> Result<(), i32> {
@@ -164,11 +174,7 @@ async fn assign(
     }
     let mut fields = fields::Fields::new(text, &reader.protected, reader.members);
     for (index, name) in options.names.iter().enumerate() {
-        super::scan_bytes(name.len(), context, work).await?;
-        if !super::valid_name(name) {
-            invalid_name(name, fds, context).await?;
-            return Err(1);
-        }
+        validate_name(name, fds, context, work).await?;
         let last = index + 1 == options.names.len();
         let value = fields.value(last, context, work).await?;
         assign_value(name, value, state, context, work).await?;
