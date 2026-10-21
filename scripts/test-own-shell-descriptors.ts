@@ -85,7 +85,7 @@ test("utility operands and ordinary redirected substitution use the real reopen"
     "one\ntwo:one\ntwo:one\n",
   ));
 
-for (const size of [3, 20000]) {
+for (const size of [3, 65536]) {
   for (const kind of ["here-doc", "here-string"]) {
     const text = "x".repeat(size);
     const redirect = kind === "here-doc" ? `<<'END'\n${text}\nlast\nEND` : `<<<'${text}\nlast'`;

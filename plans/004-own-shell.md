@@ -2036,15 +2036,15 @@ Host endpoints without `runtime_fd` return Unsupported. Native regular endpoints
 are no longer aliases. No copied data, fabricated offsets or metadata stand in for
 an independent regular-file reopen.
 
-Exact Bash 5.3.15 versus production Waffle reproducer, with N=3 and N=20000 and
+Exact Bash 5.3.15 versus production Waffle reproducer, with N=3 and N=65536 and
 both a here-document and the equivalent `<<<"$payload"` here-string:
 
 ```bash
 payload=$(printf '%*s' "$N" '' | tr ' ' x)
 code='{ IFS= read -r x </dev/stdin; IFS= read -r y; printf "%s:%s\n" "${#x}" "${#y}"; }'
 # Run code with a here-document containing "$payload", then "last".
-# Before export: N=3 gives 3:4 on both; N=20000 gives 20000:20000 on Bash,
-# but 20000:4 on production Waffle.
+# Before export: N=3 gives 3:4 on both; N=65536 gives 65536:65536 on Bash,
+# but 65536:4 on production Waffle.
 ```
 
 For an exact generated script without relying on shell interpolation, the retained
@@ -2056,8 +2056,8 @@ The report's JSON contains all eight Bash/production observations.
 
 After export, replace that body with
 `{ cat /dev/stdin >copy; if IFS= read -r x </dev/stdin; then printf 'next=%s\n' "${#x}"; else printf 'EOF\n'; fi; IFS= read -r y <copy; printf 'copy=%s\n' "${#y}"; }`.
-Short input gives `EOF` then `copy=3` on both. Large input gives `next=20000`
-then `copy=20000` on Bash, but `EOF` then `copy=20000` on production Waffle.
+Short input gives `EOF` then `copy=3` on both. Large input gives `next=65536`
+then `copy=65536` on Bash, but `EOF` then `copy=65536` on production Waffle.
 This proves actual post-export pipe sharing, not large here-input parity.
 The committed production controls retain both sizes and both here-input forms.
 
