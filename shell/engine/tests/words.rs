@@ -4149,15 +4149,18 @@ fn indexed_review_rhs_precedes_subscript_side_effects() {
 
 #[test]
 fn indexed_review_invalid_negative_assignment_ends_read_unit() {
-    for source in [
-        "a=(); a[-1]=x; args AFTER",
-        "a=(x y); a[-3]=z; args AFTER",
-        "a=(x y); i=-3; a[i]=z; args AFTER",
+    for (source, subscript) in [
+        ("a=(); a[-1]=x; args AFTER", "-1"),
+        ("a=(x y); a[-3]=z; args AFTER", "-3"),
+        ("a=(x y); i=-3; a[i]=z; args AFTER", "i"),
     ] {
         let rig = Rig::new(Limits::default());
         assert_eq!(rig.run(source), 1, "{source}");
+        assert_eq!(
+            rig.errors.bytes(),
+            format!("/usr/bin/bash: line 1: a[{subscript}]: bad array subscript\n").as_bytes()
+        );
         assert!(rig.calls.borrow().is_empty(), "{source}");
-        assert!(rig.errors.bytes().ends_with(b": bad array subscript\n"));
     }
 }
 
