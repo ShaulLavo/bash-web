@@ -1883,14 +1883,21 @@ derived caches from the new value. This is safe semantics, not a claim of Bash
 equality for the confirmed nondeterministic cases. Fresh independent review and
 hosted compatibility remain required.
 
-This source differs from the full replay's measured source above. Native and
-WASI focused tests and Clippy pass. Production-Waffle controls pass 44 Bash
-comparisons and four explicit boundaries. A separate bounded check passes all
-392 committed passes in the printf, nameref, IFS and word-split files plus the
-historical gains, including all 14 gains. It changes no membership or scorer.
-No second full replay ran, and the historical 14 gains and zero losses are not
-claimed as a complete measurement of this later source. Follow-up evidence is
+Historical c29fab5 checks used source different from the full replay's measured
+source above. Native and WASI focused tests and Clippy passed. Its production-Waffle
+controls passed 44 Bash comparisons and four explicit boundaries. Its separate
+bounded check passed all 392 committed passes in the printf, nameref, IFS and
+word-split files plus the historical gains, including all 14 gains. Historical
+follow-up evidence is
 `/work/reports/bash-web/hill-climb/printf-scalar-assignment/review-fixes-r1.md`.
+
+Final safe-IFS production-Waffle evidence records 62 controls: 45 stable Bash
+comparisons, four preserved boundaries and 13 declared-safe controls. Its separate
+bounded check passed 392 committed passes, including all 14 historical gains.
+Neither stage changes membership or scorer. No second full replay ran, and the
+historical 14 gains and zero losses are not claimed as a complete measurement of
+the final source. Final evidence is
+`/work/reports/bash-web/hill-climb/printf-scalar-assignment/safe-ifs-r3.md`.
 
 ### Finding retained at the existing builtin-prefix boundary
 
@@ -1917,8 +1924,7 @@ and unsupported conversions remain separately named boundaries, not scored gains
 The original PR37 review blocker 2 concerns supported ASCII scalar, nameref
 and IFS behavior, not an exclusion or a deferred feature. The approved safe
 assignment decision below addresses the production design, not the original
-review verdict or final acceptance. The starting source
-being unaccepted does not justify parking it. The initial three observations
+review verdict or final acceptance. The initial three observations
 recorded one Bash result, `<a:b;c>\n`, for the following custom-prior case.
 The starting PR37 source printed `<a>\n<b>\n<c>\n`; source c29fab5 printed
 `<a>\n<b;c>\n`. Those raw results remain in the report directory.
@@ -1948,7 +1954,7 @@ default literal. `ifs-free-argument.log` retains the trace and binary identity.
 The inspected GNU Bash 5.3 source explains the path: printf refreshes special
 variables using the requested alias name, while the variable owner frees the
 resolved IFS value. The splitter retains a borrowed pointer, a byte map and a
-separately copied first separator. No upstream code is copied into this shell.
+separately copied first separator.
 
 The parent approved normal resolved scalar assignment in
 `/work/reports/bash-web/hill-climb/printf-scalar-assignment/parent-ifs-decision.md`.
@@ -1956,8 +1962,6 @@ The PR37-specific old-member-map and old-`$*`-separator restoration are removed.
 `State::assign_parameter` resolves the destination, enforces readonly/storage
 rules, updates the one binding and refreshes IFS-derived state from the new value.
 Existing local and prefix guards retain their ordinary scope restoration rules.
-No new state store or general cache rewrite is introduced.
-
 Focused tests declare safe splitting and `$*` semantics for default, custom,
 unset and empty priors, alias chains, changed and empty separators, and local
 scope restoration. They do not compare nondeterministic Bash output. Stable
@@ -1966,5 +1970,4 @@ No majority-output choice, allocator emulation, frozen-ruler change or scored
 failure waiver follows from this decision. The original review and all raw
 observations above remain retained. Final source checks and cleanup are in
 `/work/reports/bash-web/hill-climb/printf-scalar-assignment/safe-ifs-r3.md`.
-Parent owns fresh independent review, hosted compatibility, merge and exact-main
-acceptance. Historical replay and 14 gained memberships remain unchanged.
+Historical replay and 14 gained memberships remain unchanged.
