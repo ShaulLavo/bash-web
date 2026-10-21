@@ -9,11 +9,13 @@ use std::{
     borrow::Cow,
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
-    rc::Rc,
+    rc::{Rc, Weak},
 };
 
 mod binding;
 pub use binding::Binding;
+use binding::BindingUndo;
+pub(crate) use binding::BindingUpdate;
 pub(crate) use binding::Indexed;
 
 pub type SharedState = Rc<RefCell<State>>;
@@ -107,6 +109,7 @@ pub struct State {
     memory: Option<crate::exec::StorageBudget>,
     positional_memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
     prefixes: Vec<BTreeMap<String, Option<Binding>>>,
+    assignment_undo: AssignmentJournal,
 }
 impl Default for State {
     fn default() -> Self {
@@ -138,6 +141,7 @@ impl Default for State {
             memory: None,
             positional_memory: None,
             prefixes: Vec::new(),
+            assignment_undo: AssignmentJournal::default(),
         }
     }
 }
@@ -317,6 +321,7 @@ impl State {
             positional_memory,
             locals,
             prefixes,
+            assignment_undo: AssignmentJournal::default(),
         })
     }
     fn epoch_realtime_shadowed(&self) -> bool {
@@ -399,6 +404,28 @@ impl State {
             .and_then(Binding::scalar)
             .map(String::as_str)
     }
+    pub(crate) fn admit_binding_update(
+        &self,
+        name: &str,
+        update: &BindingUpdate,
+        work: &mut Work,
+    ) -> Result<(usize, usize), Error> {
+        let ScalarResolution::Target(target) = self.resolve_scalar_target(name) else {
+            return Err(1.into());
+        };
+        let old = self.variables.get(target);
+        let copy = update.copy_bytes(old);
+        let growth = update.growth_bytes(old);
+        let keys = target.len().saturating_mul(2).saturating_add(name.len());
+        work.admit_storage(copy.saturating_add(growth).saturating_add(keys))?;
+        work.admit_storage(snapshot_node_bytes::<Binding>()?)?;
+        Ok((
+            copy,
+            copy.saturating_add(growth)
+                .saturating_add(keys)
+                .saturating_add(update.staged_bytes()),
+        ))
+    }
     pub(crate) fn binding(&self, name: &str) -> Option<&Binding> {
         let ScalarResolution::Target(target) = self.resolve_scalar_target(name) else {
             return None;
@@ -448,6 +475,19 @@ impl State {
         Ok(())
     }
 
+    fn held_local_value(&self, name: &str) -> usize {
+        self.locals
+            .iter()
+            .rev()
+            .find_map(|frame| frame.get(name))
+            .and_then(|local| {
+                local
+                    .memory
+                    .as_ref()
+                    .map(|memory| memory.borrow().bytes().saturating_sub(local.storage_base))
+            })
+            .unwrap_or(0)
+    }
     fn reserve_local_value(&self, name: &str, bytes: usize) -> Result<(), i32> {
         if let Some(local) = self.locals.iter().rev().find_map(|frame| frame.get(name))
             && let Some(memory) = &local.memory
@@ -707,6 +747,9 @@ impl State {
             return Err(1.into());
         };
         work.admit_storage(self.scalar_write_copy_bytes(name)?)?;
+        if let Some(changes) = self.assignment_undo.0.upgrade() {
+            work.admit_storage(changes.borrow().scalar_effect_bytes(target, value_bytes))?;
+        }
         if target == name {
             return Ok(());
         }
@@ -761,7 +804,18 @@ impl State {
             .map_or(0, |value| {
                 value.storage_bytes().saturating_add(Binding::node_bytes())
             });
+        let changes = self.assignment_undo.0.upgrade();
+        if let Some(changes) = &changes {
+            let mut changes = changes.borrow_mut();
+            let bytes = changes.scalar_effect_bytes(&name, value.len());
+            changes
+                .grow(bytes)
+                .map_err(|_| crate::exec::RESOURCE_STATUS)?;
+        }
         self.reserve_local_value(&name, value.len().saturating_add(rest))?;
+        if let Some(changes) = changes {
+            changes.borrow_mut().scalar_effect(&name, &value);
+        }
         if let Some(saved) = self
             .prefixes
             .last_mut()
@@ -1291,6 +1345,137 @@ enum PrefixBindings {
     },
 }
 
+/// Active undo belongs to its executing state, never to an isolated snapshot.
+#[derive(Debug, Default)]
+struct AssignmentJournal(Weak<RefCell<AssignmentChanges>>);
+impl Clone for AssignmentJournal {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+#[derive(Debug)]
+struct AssignmentChanges {
+    undo: Vec<(String, BindingUndo)>,
+    memory: Option<crate::exec::StorageAllocation>,
+}
+/// Resource/cancellation undo for directly committed assignment-only writes.
+/// Ordinary shell errors release this guard without reversing completed writes.
+pub(crate) struct AssignmentFrame {
+    state: SharedState,
+    changes: Rc<RefCell<AssignmentChanges>>,
+    previous: AssignmentJournal,
+    keep: bool,
+}
+impl AssignmentFrame {
+    pub(crate) fn enter(state: SharedState) -> Result<Self, Error> {
+        let memory = state
+            .borrow()
+            .admit_temporary(
+                std::mem::size_of::<RefCell<AssignmentChanges>>()
+                    + 2 * std::mem::size_of::<usize>(),
+            )
+            .map_err(Error::from)?;
+        let changes = Rc::new(RefCell::new(AssignmentChanges {
+            undo: Vec::new(),
+            memory,
+        }));
+        let previous = std::mem::replace(
+            &mut state.borrow_mut().assignment_undo,
+            AssignmentJournal(Rc::downgrade(&changes)),
+        );
+        Ok(Self {
+            state,
+            changes,
+            previous,
+            keep: false,
+        })
+    }
+    pub(crate) fn reserve(&mut self, name: &str, retained: usize) -> Result<(), Error> {
+        let target_len = self.state.borrow().scalar_target(name)?.ok_or(2)?.len();
+        let mut changes = self.changes.borrow_mut();
+        changes.grow(target_len.saturating_add(retained))?;
+        if changes.undo.len() < changes.undo.capacity() {
+            return Ok(());
+        }
+        let old_slots = changes.undo.capacity() * std::mem::size_of::<(String, BindingUndo)>();
+        let capacity = changes.undo.capacity().max(4);
+        let slots = (changes.undo.len() + capacity) * std::mem::size_of::<(String, BindingUndo)>();
+        changes.grow(slots)?;
+        changes.undo.try_reserve_exact(capacity).map_err(|_| 2)?;
+        if let Some(memory) = &mut changes.memory {
+            memory
+                .resize(memory.bytes() - old_slots)
+                .expect("shrinking undo allocation");
+        }
+        Ok(())
+    }
+    pub(crate) fn keep(&mut self) {
+        self.keep = true;
+    }
+}
+impl AssignmentChanges {
+    fn grow(&mut self, bytes: usize) -> Result<(), Error> {
+        if let Some(memory) = &mut self.memory {
+            memory
+                .grow(bytes)
+                .map_err(|_| Error::Status(crate::exec::RESOURCE_STATUS))?;
+        }
+        Ok(())
+    }
+    fn scalar_effect_bytes(&self, name: &str, value_bytes: usize) -> usize {
+        self.undo
+            .iter()
+            .filter(|(target, _)| target == name)
+            .fold(0usize, |bytes, (_, undo)| {
+                bytes.saturating_add(undo.scalar_effect_bytes(value_bytes))
+            })
+    }
+    fn scalar_effect(&mut self, name: &str, value: &str) {
+        for (_, undo) in self.undo.iter_mut().filter(|(target, _)| target == name) {
+            undo.scalar_effect(value);
+        }
+    }
+}
+impl Drop for AssignmentFrame {
+    fn drop(&mut self) {
+        let mut state = self.state.borrow_mut();
+        let mut changes = self.changes.borrow_mut();
+        state.assignment_undo = std::mem::take(&mut self.previous);
+        if !self.keep {
+            for (name, undo) in changes.undo.iter_mut().rev() {
+                let undo = std::mem::replace(undo, BindingUndo::Restore(None));
+                state.restore_assignment(name, undo);
+            }
+        }
+        for (name, _) in &changes.undo {
+            let bytes = state.variables.get(name).map_or(0, Binding::storage_bytes);
+            state
+                .reserve_local_value(name, bytes)
+                .expect("previously admitted local storage");
+            if name == "IFS" {
+                state.refresh_star_separator();
+            }
+        }
+    }
+}
+
+impl State {
+    fn restore_assignment(&mut self, name: &str, undo: BindingUndo) {
+        if matches!(undo, BindingUndo::Restore(None)) {
+            self.variables.remove(name);
+            return;
+        }
+        let live = self
+            .variables
+            .get_mut(name)
+            .expect("completed binding exists");
+        let current = std::mem::replace(live, String::new().into());
+        *live = undo
+            .restore(Some(current))
+            .expect("previous binding exists");
+    }
+}
+
 pub(crate) struct PrefixFrame {
     state: SharedState,
     active: bool,
@@ -1377,7 +1562,14 @@ impl PrefixFrame {
                                 + std::mem::size_of::<usize>())
                             .saturating_mul(16)
                             .saturating_add(target.len().saturating_mul(2))
-                            .saturating_add(value.len()),
+                            .saturating_add(value.len())
+                            .saturating_add(
+                                state_ref
+                                    .variables
+                                    .get(&target)
+                                    .filter(|value| matches!(value, Binding::Indexed(_)))
+                                    .map_or(0, Binding::storage_bytes),
+                            ),
                         )
                         .map_err(|_| Error::Status(crate::exec::RESOURCE_STATUS))?;
                 }
@@ -1446,7 +1638,53 @@ impl PrefixFrame {
         }
         Ok(())
     }
-    pub(crate) fn commit(mut self) -> Result<(), i32> {
+    /// A completed assignment-only write needs no whole-binding undo. All
+    /// expansion, COW admission and cancellation checks precede this commit.
+    pub(crate) fn commit_update(
+        mut self,
+        name: String,
+        update: BindingUpdate,
+        completed: &mut AssignmentFrame,
+    ) -> Result<(), Error> {
+        let mut state = self.state.borrow_mut();
+        assert!(matches!(self.bindings, PrefixBindings::Expansion));
+        assert!(state.prefixes.last().unwrap().is_empty());
+        let name = state.assignment_name(name).map_err(Error::from)?;
+        if state.is_readonly(&name) {
+            return Err(Error::Readonly {
+                name,
+                line: None,
+                expansion: true,
+            });
+        }
+        let storage = update.storage_after(state.variables.get(&name));
+        state
+            .reserve_local_value(&name, storage.max(state.held_local_value(&name)))
+            .map_err(Error::from)?;
+        let direct_ifs = name == "IFS";
+        let undo_name = name.clone();
+        let undo = match state.variables.entry(name) {
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                let previous = std::mem::replace(entry.get_mut(), String::new().into());
+                let (binding, undo) = update.apply_with_undo(Some(previous));
+                *entry.get_mut() = binding;
+                undo
+            }
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                let (binding, undo) = update.apply_with_undo(None);
+                entry.insert(binding);
+                undo
+            }
+        };
+        completed.changes.borrow_mut().undo.push((undo_name, undo));
+        state.prefixes.pop();
+        self.active = false;
+        if direct_ifs {
+            state.refresh_star_separator();
+        }
+        Ok(())
+    }
+    pub(crate) fn commit(mut self, completed: Option<&mut AssignmentFrame>) -> Result<(), i32> {
         assert!(matches!(self.bindings, PrefixBindings::Expansion));
         let mut state = self.state.borrow_mut();
         let saved = state.prefixes.last().unwrap();
@@ -1472,12 +1710,22 @@ impl PrefixFrame {
         // aggregate reservation and moving each part onto its binding ticket.
         drop(reservation);
         for name in saved.keys() {
-            state.reserve_local_value(
-                name,
-                state.variables.get(name).map_or(0, Binding::storage_bytes),
-            )?;
+            let bytes = state.variables.get(name).map_or(0, Binding::storage_bytes);
+            let retained = if completed.is_some() {
+                state.held_local_value(name)
+            } else {
+                0
+            };
+            state.reserve_local_value(name, bytes.max(retained))?;
         }
-        state.prefixes.pop();
+        let saved = state.prefixes.pop().unwrap();
+        if let Some(completed) = completed {
+            completed.changes.borrow_mut().undo.extend(
+                saved
+                    .into_iter()
+                    .map(|(name, old)| (name, BindingUndo::Restore(old))),
+            );
+        }
         self.active = false;
         Ok(())
     }
@@ -2530,7 +2778,7 @@ mod tests {
         let prefix = PrefixFrame::enter(state.clone());
         prefix.reserve("x", 100).unwrap();
         prefix.set("x".into(), "a".repeat(100)).unwrap();
-        prefix.commit().unwrap();
+        prefix.commit(None).unwrap();
         assert_eq!(memory.observation().0, before + 100 - 3);
         assert_eq!(state.borrow().parameter("x").len(), 100);
         drop(outer);
@@ -2552,7 +2800,7 @@ mod tests {
             prefix.set(name.into(), "a".repeat(100)).unwrap();
         }
         let pressure = memory.admit(16_384 - memory.observation().0 - 150).unwrap();
-        assert_eq!(prefix.commit(), Err(RESOURCE_STATUS));
+        assert_eq!(prefix.commit(None), Err(RESOURCE_STATUS));
         assert_eq!(state.borrow().parameter("x"), "old");
         assert_eq!(state.borrow().parameter("y"), "old");
         drop(pressure);

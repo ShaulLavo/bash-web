@@ -30,6 +30,10 @@ pub(super) fn length_name(name: &str) -> bool {
         || matches!(name, "?" | "#")
         || name.bytes().all(|c| c.is_ascii_digit()) && name.bytes().any(|c| c != b'0')
 }
+fn length_operand_name(name: &str) -> bool {
+    length_name(name) || super::indexed_name(name).is_some()
+}
+
 fn basic_name(name: &str) -> bool {
     scalar_name(name)
         || name == "?"
@@ -547,7 +551,7 @@ fn validate_token(token: &str, work: &mut Work) -> Result<(), Error> {
     if basic_name(body) && (!indirect || scalar_name(body)) {
         return Ok(());
     }
-    if !indirect && body.strip_prefix('#').is_some_and(length_name) {
+    if !indirect && body.strip_prefix('#').is_some_and(length_operand_name) {
         return Ok(());
     }
     if !indirect
@@ -586,7 +590,7 @@ fn supported(part: &WordPart) -> bool {
         WordPart::ArithmeticExpansion(_) | WordPart::BadSubstitution(_) => true,
         WordPart::Substring { name, .. } => length_name(name) || name == "@",
         WordPart::Variable(name) => basic_name(name),
-        WordPart::Length(name) => length_name(name),
+        WordPart::Length(name) => length_operand_name(name),
         WordPart::IndirectExpansion { name, operator, .. } => {
             name.is_empty() && operator.is_none()
                 || scalar_name(name) && operator.as_ref().is_none_or(indirect_operator)

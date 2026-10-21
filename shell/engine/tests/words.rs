@@ -4257,27 +4257,31 @@ fn indexed_r1_completed_scalar_assignments_survive_later_errors() {
     assert_eq!(*rig.calls.borrow(), vec![vec!["1", "new"]]);
 }
 
+fn cancel_indexed_assignment(rig: &Rig, source: &str) {
+    let job = rig.shell.start(source).unwrap();
+    rig.ex.drive(256);
+    assert!(!job.is_finished());
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+}
+
+fn assert_indexed_calls(rig: &Rig, expected: &[&str]) {
+    let calls = rig.calls.borrow();
+    assert!(!calls.is_empty());
+    for call in calls.iter() {
+        assert_eq!(call, expected);
+    }
+}
+
 #[test]
 fn indexed_r1_cancelled_staging_preserves_live_array_and_refunds_invocation() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("a=(saved kept)"), 0);
     for _ in 0..8 {
-        let job = rig
-            .shell
-            .start("a=(new $(while true; do :; done))")
-            .unwrap();
-        rig.ex.drive(128);
-        assert!(!job.is_finished());
-        rig.shell.interrupt();
-        assert_eq!(rig.finish(job), 130);
+        cancel_indexed_assignment(&rig, "a=(new $(while true; do :; done))");
         assert_eq!(rig.run("args \"${a[@]}\""), 0);
     }
-    assert!(
-        rig.calls
-            .borrow()
-            .iter()
-            .all(|call| call == &["saved", "kept"])
-    );
+    assert_indexed_calls(&rig, &["saved", "kept"]);
 }
 
 #[test]
@@ -4292,12 +4296,7 @@ fn indexed_r1_resource_rejection_rolls_back_completed_writes() {
         assert_eq!(rig.run(source), 2, "{source}");
         assert_eq!(rig.run("args \"${a[@]}\" \"$x\""), 0);
     }
-    assert!(
-        rig.calls
-            .borrow()
-            .iter()
-            .all(|call| call == &["saved", "kept", "old"])
-    );
+    assert_indexed_calls(&rig, &["saved", "kept", "old"]);
 }
 
 #[test]
@@ -4306,30 +4305,23 @@ fn indexed_r1_cancellation_rolls_back_completed_writes() {
     assert_eq!(rig.run("a=(saved kept); x=old"), 0);
     for prefix in ["a[0]=new", "a+=(new)", "x=new"] {
         let source = format!("{prefix} b=$(while true; do :; done)");
-        let job = rig.shell.start(&source).unwrap();
-        rig.ex.drive(128);
-        assert!(!job.is_finished());
-        rig.shell.interrupt();
-        assert_eq!(rig.finish(job), 130);
+        cancel_indexed_assignment(&rig, &source);
         assert_eq!(rig.run("args \"${a[@]}\" \"$x\""), 0);
     }
-    assert!(
-        rig.calls
-            .borrow()
-            .iter()
-            .all(|call| call == &["saved", "kept", "old"])
-    );
+    assert_indexed_calls(&rig, &["saved", "kept", "old"]);
 }
 
 #[test]
 fn indexed_r1_cancellation_keeps_later_durable_rhs_writes_to_completed_targets() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("a=('' kept); x=old"), 0);
-    let job = rig.shell.start("a[0]= x= y=${a:=durable} z=${x:=effect} b=$(while true; do :; done)").unwrap();
-    rig.ex.drive(256);
-    assert!(!job.is_finished());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
+    cancel_indexed_assignment(
+        &rig,
+        "a[0]= x= y=${a:=durable} z=${x:=effect} b=$(while true; do :; done)",
+    );
     assert_eq!(rig.run("args \"${a[@]}\" \"$x\" \"$y\" \"$z\""), 0);
-    assert_eq!(*rig.calls.borrow(), vec![vec!["durable", "kept", "effect", "", ""]]);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["durable", "kept", "effect", "", ""]]
+    );
 }

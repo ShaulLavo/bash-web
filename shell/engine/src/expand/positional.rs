@@ -59,7 +59,18 @@ impl Expansion<'_> {
         self.indexed_require_bound(name, Some(index), state)?;
         let (value, utf8) = {
             let state = state.borrow();
-            let value = state.array_element(name, index).unwrap_or("");
+            let special;
+            let value = if name == "PIPESTATUS" {
+                self.work.admit_storage(20)?;
+                special = usize::try_from(index)
+                    .ok()
+                    .and_then(|index| state.pipeline_status().get(index))
+                    .map(i32::to_string)
+                    .unwrap_or_default();
+                special.as_str()
+            } else {
+                state.array_element(name, index).unwrap_or("")
+            };
             if value.len() > self.raw_remaining {
                 return Err(2.into());
             }

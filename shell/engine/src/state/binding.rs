@@ -19,20 +19,21 @@ impl Binding {
     }
     pub(crate) fn storage_bytes(&self) -> usize {
         match self {
-            Self::Scalar(value) => value.len(),
-            Self::Indexed(values) => {
-                values.bytes + std::mem::size_of::<Indexed>() + 2 * std::mem::size_of::<usize>()
-            }
+            Self::Scalar(value) => value.capacity(),
+            Self::Indexed(values) => values.storage_bytes() + Self::indexed_header_bytes(),
         }
     }
     pub(crate) fn value_bytes(&self) -> usize {
         match self {
             Self::Scalar(value) => value.len(),
-            Self::Indexed(values) => values.bytes - values.values.len() * Self::node_bytes(),
+            Self::Indexed(values) => values.value_bytes,
         }
     }
     pub(crate) fn node_bytes() -> usize {
-        (std::mem::size_of::<(i64, String)>() + std::mem::size_of::<usize>()) * 16
+        Indexed::tree_bytes(1) + 12 * std::mem::size_of::<usize>()
+    }
+    fn indexed_header_bytes() -> usize {
+        std::mem::size_of::<Indexed>() + 2 * std::mem::size_of::<usize>()
     }
     pub(crate) fn count(&self) -> usize {
         match self {
@@ -44,6 +45,12 @@ impl Binding {
         match self {
             Self::Scalar(_) => Some(0),
             Self::Indexed(values) => values.values.last_key_value().map(|(index, _)| *index),
+        }
+    }
+    pub(crate) fn slot(&self, index: i64) -> Option<&String> {
+        match self {
+            Self::Scalar(value) => (index == 0).then_some(value),
+            Self::Indexed(values) => values.get(index),
         }
     }
     pub(crate) fn element(&self, index: i64) -> Option<&str> {
@@ -127,6 +134,7 @@ impl PartialEq<&str> for Binding {
 pub struct Indexed {
     values: BTreeMap<i64, String>,
     bytes: usize,
+    value_bytes: usize,
 }
 impl Indexed {
     fn from_scalar(value: String) -> Self {
@@ -135,20 +143,269 @@ impl Indexed {
         values
     }
     pub(crate) fn insert(&mut self, index: i64, value: String) {
-        self.bytes = self
-            .bytes
-            .saturating_add(value.len())
-            .saturating_add(Binding::node_bytes());
-        if let Some(old) = self.values.insert(index, value) {
-            self.bytes -= old.len() + Binding::node_bytes();
+        self.replace(index, value);
+    }
+    fn replace(&mut self, index: i64, value: String) -> Option<String> {
+        self.bytes = self.bytes.saturating_add(value.capacity());
+        self.value_bytes = self.value_bytes.saturating_add(value.len());
+        let old = self.values.insert(index, value);
+        if let Some(old) = &old {
+            self.bytes -= old.capacity();
+            self.value_bytes -= old.len();
         }
+        old
+    }
+    fn remove(&mut self, index: i64) -> Option<String> {
+        let old = self.values.remove(&index)?;
+        if self.values.is_empty() {
+            self.values = BTreeMap::new();
+        }
+        self.bytes -= old.capacity();
+        self.value_bytes -= old.len();
+        Some(old)
+    }
+    fn undo_append(&mut self, first: Option<i64>, keep_zero: bool) {
+        while first.is_some_and(|first| {
+            self.values
+                .last_key_value()
+                .is_some_and(|(i, _)| *i >= first)
+        }) {
+            let index = *self.values.last_key_value().unwrap().0;
+            if index == 0 && keep_zero {
+                break;
+            }
+            self.remove(index);
+        }
+    }
+    fn tree_bytes(count: usize) -> usize {
+        if count == 0 {
+            return 0;
+        }
+        // Rust 1.98.1 B-tree nodes hold 11 entries, with >=5 per nonroot.
+        // Root has >=2 children, other internal nodes >=6. See indexed docs.
+        let pointer = std::mem::size_of::<usize>();
+        let alignment = std::mem::align_of::<i64>().max(pointer);
+        let leaf =
+            (pointer + 4 + 11 * (8 + std::mem::size_of::<String>())).next_multiple_of(alignment);
+        let nodes = 1 + (count - 1) / 5;
+        nodes
+            .saturating_mul(leaf)
+            .saturating_add(((nodes + 3) / 6).saturating_mul(12 * pointer))
+    }
+    fn storage_bytes(&self) -> usize {
+        self.bytes
+            .saturating_add(Self::tree_bytes(self.values.len()))
+    }
+    pub(crate) fn insertion_bytes(&self, index: i64) -> usize {
+        let count = self.values.len();
+        Self::tree_bytes(count + usize::from(!self.values.contains_key(&index)))
+            .saturating_sub(Self::tree_bytes(count))
     }
     pub(crate) fn get(&self, index: i64) -> Option<&String> {
         self.values.get(&index)
     }
-    pub(crate) fn next_index(&self) -> Option<i64> {
-        self.values
-            .last_key_value()
-            .map_or(Some(0), |(index, _)| index.checked_add(1))
+}
+
+/// Staged assignment-only changes. No old binding is cloned during expansion.
+pub(crate) enum BindingUpdate {
+    Replace(Binding),
+    Element { index: i64, value: String },
+    Append(Indexed),
+}
+impl BindingUpdate {
+    pub(crate) fn value_bytes(&self) -> usize {
+        match self {
+            Self::Replace(value) => value.value_bytes(),
+            Self::Element { value, .. } => value.len(),
+            Self::Append(values) => values.value_bytes,
+        }
+    }
+    pub(crate) fn staged_bytes(&self) -> usize {
+        match self {
+            Self::Replace(value) => value.storage_bytes(),
+            Self::Element { value, .. } => value.capacity(),
+            Self::Append(values) => values.storage_bytes() + Binding::indexed_header_bytes(),
+        }
+    }
+    pub(crate) fn copy_bytes(&self, old: Option<&Binding>) -> usize {
+        if matches!(self, Self::Replace(_)) {
+            return 0;
+        }
+        match old {
+            Some(binding @ Binding::Indexed(values)) if Rc::strong_count(values) > 1 => {
+                binding.storage_bytes()
+            }
+            _ => 0,
+        }
+    }
+    fn dimensions(old: Option<&Binding>) -> (usize, usize) {
+        match old {
+            Some(Binding::Indexed(values)) => (values.values.len(), values.bytes),
+            Some(Binding::Scalar(value)) => (1, value.capacity()),
+            None => (0, 0),
+        }
+    }
+    pub(crate) fn storage_after(&self, old: Option<&Binding>) -> usize {
+        let (mut count, mut bytes) = Self::dimensions(old);
+        match self {
+            Self::Replace(value) => return value.storage_bytes(),
+            Self::Element { index, value } => {
+                let prior = old.and_then(|old| old.slot(*index));
+                count += usize::from(prior.is_none());
+                bytes = bytes
+                    .saturating_sub(prior.map_or(0, String::capacity))
+                    .saturating_add(value.capacity());
+            }
+            Self::Append(values) => {
+                count += values.values.len();
+                bytes = bytes.saturating_add(values.bytes);
+            }
+        }
+        Binding::indexed_header_bytes() + Indexed::tree_bytes(count) + bytes
+    }
+    pub(crate) fn growth_bytes(&self, old: Option<&Binding>) -> usize {
+        if matches!(self, Self::Replace(_)) {
+            return 0;
+        }
+        let (count, _) = Self::dimensions(old);
+        let next_count = match self {
+            Self::Element { index, .. } => {
+                count + usize::from(old.and_then(|v| v.element(*index)).is_none())
+            }
+            Self::Append(values) => count + values.values.len(),
+            Self::Replace(_) => unreachable!(),
+        };
+        let prior_tree = if matches!(old, Some(Binding::Indexed(_))) {
+            Indexed::tree_bytes(count)
+        } else {
+            0
+        };
+        Indexed::tree_bytes(next_count).saturating_sub(prior_tree)
+            + usize::from(!matches!(old, Some(Binding::Indexed(_))))
+                * Binding::indexed_header_bytes()
+    }
+}
+
+/// Inverse changes retain only overwritten elements for uniquely owned arrays.
+#[derive(Debug)]
+pub(crate) enum BindingUndo {
+    Restore(Option<Binding>),
+    Element {
+        index: i64,
+        old: Option<String>,
+        scalar: bool,
+    },
+    Append {
+        first: Option<i64>,
+        scalar: bool,
+        keep_zero: bool,
+    },
+}
+impl BindingUndo {
+    pub(crate) fn scalar_effect_bytes(&self, value_bytes: usize) -> usize {
+        match self {
+            Self::Restore(Some(binding @ Binding::Indexed(_))) => value_bytes
+                .saturating_add(binding.storage_bytes())
+                .saturating_add(Binding::node_bytes()),
+            Self::Restore(_) | Self::Element { index: 0, .. } => value_bytes,
+            _ => 0,
+        }
+    }
+    pub(crate) fn scalar_effect(&mut self, value: &str) {
+        match self {
+            Self::Restore(binding) => binding
+                .get_or_insert_with(|| "".into())
+                .set_scalar(value.to_owned()),
+            Self::Element { index: 0, old, .. } => *old = Some(value.to_owned()),
+            Self::Append { keep_zero, .. } => *keep_zero = true,
+            _ => {}
+        }
+    }
+    pub(crate) fn restore(self, live: Option<Binding>) -> Option<Binding> {
+        if let Self::Restore(old) = self {
+            return old;
+        }
+        let Binding::Indexed(mut values) = live.expect("committed array exists") else {
+            unreachable!()
+        };
+        let values_mut = Rc::make_mut(&mut values);
+        let scalar = match self {
+            Self::Element { index, old, scalar } => {
+                match old {
+                    Some(old) => values_mut.insert(index, old),
+                    None => {
+                        values_mut.remove(index);
+                    }
+                }
+                scalar
+            }
+            Self::Append {
+                first,
+                scalar,
+                keep_zero,
+            } => {
+                values_mut.undo_append(first, keep_zero);
+                scalar
+            }
+            Self::Restore(_) => unreachable!(),
+        };
+        if scalar {
+            return values_mut.remove(0).map(Binding::Scalar);
+        }
+        Some(Binding::Indexed(values))
+    }
+}
+impl BindingUpdate {
+    pub(crate) fn undo_bytes(&self, old: Option<&Binding>) -> usize {
+        if matches!(self, Self::Replace(_)) || self.copy_bytes(old) > 0 {
+            return old.map_or(0, Binding::storage_bytes);
+        }
+        match self {
+            Self::Element { index, .. } => {
+                old.and_then(|v| v.slot(*index)).map_or(0, String::capacity)
+            }
+            _ => 0,
+        }
+    }
+    pub(crate) fn apply_with_undo(self, old: Option<Binding>) -> (Binding, BindingUndo) {
+        if let Self::Replace(value) = self {
+            return (value, BindingUndo::Restore(old));
+        }
+        let restore = match &old {
+            None => Some(BindingUndo::Restore(None)),
+            Some(Binding::Indexed(values)) if Rc::strong_count(values) > 1 => {
+                Some(BindingUndo::Restore(old.clone()))
+            }
+            _ => None,
+        };
+        let scalar = matches!(old, Some(Binding::Scalar(_)));
+        let mut binding = match old {
+            Some(binding @ Binding::Indexed(_)) => binding,
+            old => Binding::Indexed(Rc::new(old.map(Binding::into_indexed).unwrap_or_default())),
+        };
+        let Binding::Indexed(values) = &mut binding else {
+            unreachable!()
+        };
+        let values = Rc::make_mut(values);
+        let undo = match self {
+            Self::Element { index, value } => BindingUndo::Element {
+                index,
+                old: values.replace(index, value),
+                scalar,
+            },
+            Self::Append(append) => {
+                let first = append.values.first_key_value().map(|(i, _)| *i);
+                for (index, value) in append.values {
+                    values.insert(index, value);
+                }
+                BindingUndo::Append {
+                    first,
+                    scalar,
+                    keep_zero: false,
+                }
+            }
+            Self::Replace(_) => unreachable!(),
+        };
+        (binding, restore.unwrap_or(undo))
     }
 }
