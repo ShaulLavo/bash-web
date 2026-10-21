@@ -64,3 +64,18 @@ in those semantic controls. Their original coordinate assertions remain at
 inputs. This is not whole-output parity. The complete 207-script probe compares
 stdout, stderr and status without projection. The frozen 9,221-case replay keeps
 its unchanged stdout/status scoring and records stderr separately.
+
+## Integrated measurement
+
+Measured source `8191260f82b59cc8ce7bdc8d3c374f746d83ae6b` normally merges
+main `f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb`, including getopts. The full
+9,221-case production-Waffle replay gains 16 Oils passes, 1,051 to 1,067,
+11 Brush-suite passes, 1,057 to 1,068, and three Bashkit-suite passes,
+1,443 to 1,446. Every corpus loses zero accepted passes. The same three inherited
+timeouts stay failed, and no new abnormal outcome appears. Recording is disabled.
+The complete generated score replaces the baseline after unchanged identity,
+zero-loss and strict offline membership checks. Oracle, exclusions, scoring and
+runtime pins do not change. Required integrated gates pass 1,365 native and
+1,345 WASI tests. All 28 complete existing-main preservation observations match.
+Independent dispatch approval is on `0e8d384`; hosted CI and merge remain
+parent-owned. These results do not clear the deferred coordinate family.
