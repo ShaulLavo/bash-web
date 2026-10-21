@@ -571,9 +571,15 @@ async fn set(
     if args.is_empty() {
         return Err(2); // Variable/option listing remains unsupported.
     }
-    let (mut nounset, mut pipefail, mut errexit, mut monitor) = {
+    let mut flags = {
         let state = state.borrow();
-        (state.nounset, state.pipefail, state.errexit, state.monitor)
+        SetFlags {
+            nounset: state.nounset,
+            pipefail: state.pipefail,
+            errexit: state.errexit,
+            monitor: state.monitor,
+            noglob: state.noglob,
+        }
     };
     let mut index = 0;
     let mut explicit = false;
@@ -596,27 +602,11 @@ async fn set(
         let enabled = option.starts_with('-');
         index += 1;
         if matches!(option.as_str(), "-o" | "+o") {
-            set_option(
-                args.get(index).ok_or(2)?,
-                enabled,
-                &mut nounset,
-                &mut pipefail,
-                &mut errexit,
-                &mut monitor,
-            )?;
+            set_option(args.get(index).ok_or(2)?, enabled, &mut flags)?;
             index += 1;
             continue;
         }
-        set_short_options(
-            option,
-            enabled,
-            &mut nounset,
-            &mut errexit,
-            &mut monitor,
-            context,
-            work,
-        )
-        .await?;
+        set_short_options(option, enabled, &mut flags, context, work).await?;
     }
     // All options and work admission complete before any state changes.
     let mut state = state.borrow_mut();
@@ -624,26 +614,30 @@ async fn set(
         args.drain(..index);
         state.replace_positional(args)?;
     }
-    state.nounset = nounset;
-    state.pipefail = pipefail;
-    state.errexit = errexit;
-    state.monitor = monitor;
+    state.nounset = flags.nounset;
+    state.pipefail = flags.pipefail;
+    state.errexit = flags.errexit;
+    state.monitor = flags.monitor;
+    state.noglob = flags.noglob;
     Ok(Outcome::status(0))
 }
 
-fn set_option(
-    option: &str,
-    enabled: bool,
-    nounset: &mut bool,
-    pipefail: &mut bool,
-    errexit: &mut bool,
-    monitor: &mut bool,
-) -> Result<(), i32> {
+/// `set` options staged until every argument has been validated.
+struct SetFlags {
+    nounset: bool,
+    pipefail: bool,
+    errexit: bool,
+    monitor: bool,
+    noglob: bool,
+}
+
+fn set_option(option: &str, enabled: bool, flags: &mut SetFlags) -> Result<(), i32> {
     match option {
-        "nounset" => *nounset = enabled,
-        "pipefail" => *pipefail = enabled,
-        "errexit" => *errexit = enabled,
-        "monitor" => *monitor = enabled,
+        "nounset" => flags.nounset = enabled,
+        "pipefail" => flags.pipefail = enabled,
+        "errexit" => flags.errexit = enabled,
+        "monitor" => flags.monitor = enabled,
+        "noglob" => flags.noglob = enabled,
         _ => return Err(2),
     }
     Ok(())
@@ -652,9 +646,7 @@ fn set_option(
 async fn set_short_options(
     option: &str,
     enabled: bool,
-    nounset: &mut bool,
-    errexit: &mut bool,
-    monitor: &mut bool,
+    flags: &mut SetFlags,
     context: &Context,
     work: &mut Work,
 ) -> Result<(), i32> {
@@ -663,9 +655,10 @@ async fn set_short_options(
             .await
             .map_err(error_status)?;
         match flag {
-            b'u' => *nounset = enabled,
-            b'e' => *errexit = enabled,
-            b'm' => *monitor = enabled,
+            b'u' => flags.nounset = enabled,
+            b'e' => flags.errexit = enabled,
+            b'm' => flags.monitor = enabled,
+            b'f' => flags.noglob = enabled,
             _ => return Err(2),
         }
     }

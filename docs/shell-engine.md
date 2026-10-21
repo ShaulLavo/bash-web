@@ -115,9 +115,10 @@ descriptors. They do not establish real Bun/browser acceptance: that gate awaits
 waffle's inherited job lookup and the corresponding Bun process-service integration.
 
 File predicates use real virtual-filesystem metadata, with unavailable
-capabilities explicitly unsupported. For-list pathname expansion supports
-quote-aware basic patterns, incremental directory enumeration and `nullglob`;
-ordinary command argv pathname expansion remains deferred. `shopt` stores and
+capabilities explicitly unsupported. Command argv and for-list pathname
+expansion support quote-aware basic patterns, incremental directory enumeration,
+`nullglob` and `set -f`; only fields with an unquoted `*`, `?` or `[` keep a
+quote mask, so plain argv stays within its budgets. `shopt` stores and
 reports `nullglob`, `inherit_errexit` and `extglob`, without claiming extended
 pattern matching. `[[ =~ ]]` has a bounded cooperative no-capture ERE subset;
 ASCII patterns and input in C/POSIX/C.UTF-8/C.utf8 locales are supported.
@@ -260,7 +261,7 @@ target changes, while `${!ref}` returns the target name. Resolution is bounded
 and cycle-aware; unset targets remain unset under nounset. Local reference
 bindings and admitted isolated snapshots preserve restoration and isolation.
 Arrays, indexed references and general declaration options remain unsupported.
-Other parameter operators, ordinary argv pathname globbing, arrays, traps,
+Other parameter operators, dotglob/globstar/failglob, arrays, traps,
 aliases, `lastpipe` and full utility option coverage are not implemented. Whole-script parsing retains the original separator policy. Captured
 shell bodies used by substring boundary validation explicitly request
 `Parser::with_strict_command_separators`; nested parsers inherit that policy.

@@ -1,4 +1,4 @@
-//! Original, bounded pathname expansion for admitted control-flow word lists.
+//! Original, bounded pathname expansion for argv and control-flow word lists.
 //! Directory entries are streamed from the shell filesystem, never the host's
 //! working directory. Quote protection survives IFS splitting byte for byte.
 use super::{Error, Protection, Work, admit_vec_slot, pattern::Pattern};
@@ -462,30 +462,91 @@ async fn matches(
     Ok(prefixes)
 }
 
+/// Output bookkeeping. Unadmitted argv fields are never charged: their slots
+/// are not admitted, discarded text is not released and matches are released.
+struct Output {
+    values: Vec<String>,
+    bytes: usize,
+    limits: (usize, usize),
+    charged: bool,
+}
+impl Output {
+    fn keep(&mut self, value: String, work: &mut Work) -> Result<(), Error> {
+        let (max_bytes, max_fields) = self.limits;
+        if self.charged {
+            return push(
+                &mut self.values,
+                value,
+                &mut self.bytes,
+                max_bytes,
+                max_fields,
+                work,
+            );
+        }
+        if self.values.len() >= max_fields || value.len() > max_bytes.saturating_sub(self.bytes) {
+            return Err(2.into());
+        }
+        self.bytes += value.len();
+        self.values.push(value);
+        Ok(())
+    }
+    fn keep_match(&mut self, value: String, work: &mut Work) -> Result<(), Error> {
+        if !self.charged {
+            work.release_storage(value.capacity());
+        }
+        self.keep(value, work)
+    }
+    fn discard(&self, value: String, work: &mut Work) {
+        if self.charged {
+            discard(value, work);
+        }
+    }
+}
+
+/// Split fields with the masks of their pathname candidates only, in field
+/// order. `charged` says whether the fields and their slots were admitted.
+pub(super) struct Candidates {
+    pub(super) fields: Vec<String>,
+    pub(super) patterns: Vec<(usize, Vec<bool>)>,
+    pub(super) charged: bool,
+}
+
 pub(super) async fn expand_fields(
-    fields: Vec<String>,
-    protections: Vec<Vec<bool>>,
+    candidates: Candidates,
     state: &SharedState,
     limits: (usize, usize),
     raw_remaining: &mut usize,
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<Vec<String>, Error> {
-    let (max_bytes, max_fields) = limits;
+    let Candidates {
+        fields,
+        patterns,
+        charged,
+    } = candidates;
+    if patterns.is_empty() {
+        return Ok(fields);
+    }
     let fs = work.substitutions.as_ref().ok_or(2)?.filesystem();
     let (nullglob, extglob) = {
         let state = state.borrow();
         (state.nullglob, state.extglob)
     };
-    let input_slots = fields.capacity() * std::mem::size_of::<String>()
-        + protections.capacity() * std::mem::size_of::<Vec<bool>>();
-    let mut output = Vec::new();
-    let mut bytes = 0;
-    if fields.len() != protections.len() {
-        return Err(2.into());
-    }
-    for (field, protection) in fields.into_iter().zip(protections) {
+    let field_slots = fields.capacity() * std::mem::size_of::<String>();
+    let pattern_slots = patterns.capacity() * std::mem::size_of::<(usize, Vec<bool>)>();
+    let mut output = Output {
+        values: Vec::new(),
+        bytes: 0,
+        limits,
+        charged,
+    };
+    let mut patterns = patterns.into_iter().peekable();
+    for (index, field) in fields.into_iter().enumerate() {
         work.checkpoint(cancel).await?;
+        let Some((_, protection)) = patterns.next_if(|(at, _)| *at == index) else {
+            output.keep(field, work)?;
+            continue;
+        };
         if field.len() != protection.len() {
             return Err(2.into());
         }
@@ -493,21 +554,22 @@ pub(super) async fn expand_fields(
             reject_extglob(&field, &protection, work, cancel).await?;
         }
         if !magic(&field, &protection, work, cancel).await? {
-            push(&mut output, field, &mut bytes, max_bytes, max_fields, work)?;
+            output.keep(field, work)?;
             let freed = protection.capacity();
             drop(protection);
             work.release_storage(freed);
             continue;
         }
         let cwd = copied(&state.borrow().cwd, *raw_remaining, work)?;
+        let (max_bytes, max_fields) = limits;
         let values = matches(
             &field,
             &protection,
             &cwd,
             &fs,
             (
-                max_bytes.saturating_sub(bytes),
-                max_fields.saturating_sub(output.len()),
+                max_bytes.saturating_sub(output.bytes),
+                max_fields.saturating_sub(output.values.len()),
                 *raw_remaining,
             ),
             work,
@@ -520,21 +582,25 @@ pub(super) async fn expand_fields(
         work.release_storage(freed);
         let slots = values.capacity() * std::mem::size_of::<String>();
         if values.is_empty() && !nullglob {
-            push(&mut output, field, &mut bytes, max_bytes, max_fields, work)?;
+            output.keep(field, work)?;
         } else {
-            let freed = field.capacity();
-            drop(field);
-            work.release_storage(freed);
+            output.discard(field, work);
             for value in values {
                 work.checkpoint(cancel).await?;
                 *raw_remaining = raw_remaining.checked_sub(value.len()).ok_or(2)?;
-                push(&mut output, value, &mut bytes, max_bytes, max_fields, work)?;
+                output.keep_match(value, work)?;
             }
         }
         work.release_storage(slots);
     }
-    work.release_storage(input_slots);
-    Ok(output)
+    if patterns.next().is_some() {
+        return Err(2.into());
+    }
+    work.release_storage(pattern_slots);
+    if charged {
+        work.release_storage(field_slots);
+    }
+    Ok(output.values)
 }
 
 #[cfg(test)]

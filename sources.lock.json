@@ -1586,7 +1586,7 @@
     "predicates": "Use original argv test/[ semantics and parse-time [[ ]] expressions with shared real filesystem metadata predicates. MemoryFs tracks virtual identity, access policy, size and timestamps; the WASI adapter uses path_filestat_get without opening a probe descriptor. Unavailable metadata capabilities return unsupported status 2. Original Thompson no-capture ERE compilation/matching charges storage before growth and checkpoints compilation, closure and scans; non-ASCII patterns/input, unsupported effective LC_CTYPE/LC_COLLATE locales, backreferences and locale collation remain explicit unsupported status 2. Supported ASCII matching selects LC_ALL, the category and LANG in precedence order and accepts C/POSIX/C.UTF-8/C.utf8 only. Original grouped-ERE extension uses a storage-admitted expression arena, at most 64 active group frames and an iterative continuation compiler to the same Thompson nodes. Group alternation and repetition preserve quote protection, absolute anchors and cooperative work/cancellation. Captures/BASH_REMATCH remain unsupported and do not write variable state. No upstream implementation is copied.",
     "stack": "Isolate large command constructors and nonrecursive expansion/assignment clauses outside recursive poll frames. Replace the existing FutureExt::map evaluation wrapper with a safely pin-projected wrapper that owns the same live allocation guard, admits its concrete size before boxing, and releases admission on readiness or cancellation. No parser, execution, storage or stack limits increase; native/WASI regressions execute deepest admitted if/for/arithmetic-for nesting.",
     "gate": "New original deterministic control-flow generator and seed1/42 oracle fixtures only; existing generators and fixtures remain byte-identical. Each seed has 1,848 structured plus 600 generated cases at depths 0-3. Oracle-only capture is explicit; strict replay rejects unsupported results and status/stdout mismatches. Process groups and per-observation cwd scratch are task-owned and cleaned before exit.",
-    "prerequisites": "Original shopt state/query/printing supports inherit_errexit, extglob and nullglob, preserving snapshots and conditional command-substitution errexit inheritance; positive full-pattern extglob matching is recorded separately in shellExtglob. For-list-only quote-aware pathname expansion uses incremental directory readers, bounded admitted buffers and cancellation-safe descriptor guards; legacy argv expansion is unchanged. EPOCHREALTIME reads dynamic wall time, preserves unset-disable state in snapshots and uses six fractional decimal digits."
+    "prerequisites": "Original shopt state/query/printing supports inherit_errexit, extglob and nullglob, preserving snapshots and conditional command-substitution errexit inheritance; positive full-pattern extglob matching is recorded separately in shellExtglob. For-list quote-aware pathname expansion uses incremental directory readers, bounded admitted buffers and cancellation-safe descriptor guards; ordinary argv pathname expansion is recorded separately in shellPathname. EPOCHREALTIME reads dynamic wall time, preserves unset-disable state in snapshots and uses six fractional decimal digits."
   },
   "shellFunctions": {
     "classification": "Original function-frame, dynamic scalar binding, positional, call-policy, lastpipe and command-lookup adapters; GNU Bash 5.3.15 is a behavior oracle, not copied implementation.",
@@ -1845,5 +1845,21 @@
       "non-ASCII option bytes, which cannot be represented individually by the existing UTF-8 scalar binding storage",
       "byte-identical GNU Bash --help prose"
     ]
+  },
+  "shellPathname": {
+    "classification": "Original argv pathname admission, sparse quote masks, noglob option and Waffle controls. GNU Bash 5.3.15 is a behavior oracle, not copied implementation. Directory streaming and the basic-only pathname compiler reuse the existing original glob.rs and the local adaptation recorded in shellParameterTrim.",
+    "oracle": "GNU Bash 5.3.15(1)-release",
+    "paths": [
+      "shell/engine/src/expand.rs",
+      "shell/engine/src/expand/glob.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/runtime/tests.rs",
+      "scripts/test-own-shell-pathname.ts",
+      "scripts/fixtures/shell-pathname.json"
+    ],
+    "implementation": "Unquoted non-scalar fields that can run substitutions expand pathnames for command names, arguments, for-lists and file-substitution targets unless set -f or set -o noglob is active. Fields track quote protection as admitted (bytes, protected) runs and expand them into a byte mask only when an unprotected *, ? or [ occurs, so plain argv pays per quote boundary and is returned unchanged. The glob step knows whether its fields were storage-admitted: unadmitted argv slots are not charged, discarded text is not released and matched names are released, while admitted for-list and file-substitution accounting is unchanged. Matches are sorted bytewise, dot files need an explicit leading dot and nullglob removes only unquoted unmatched patterns. Assignment and redirect words stay scalar.",
+    "deferred": "Pathname extglob, dotglob, globstar, nocaseglob, failglob, GLOBIGNORE, compound array assignment globbing and set -o listing remain unsupported. Fields with extglob groups but no basic wildcard stay literal; groups next to a basic wildcard keep the explicit unsupported status 2.",
+    "gate": "Twenty-seven independent Bash-versus-production-Waffle controls, a native runtime control and the unchanged frozen 9221-case per-ID production replay. Only proven gained baseline outcomes and derived counts change; historical diagnostic payloads remain intact."
   }
 }

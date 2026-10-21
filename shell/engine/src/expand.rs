@@ -1,7 +1,7 @@
 //! Quote-aware fields adapted from Bashkit expansion.rs at the revision pinned
 //! in sources.lock.json. Protection and empty fields are structural, never data
 //! sentinels. Scalar parameter operands are lazy and bounded.
-//! Scalar trims and replacements use basic patterns; admitted for-word lists
+//! Scalar trims and replacements use basic patterns; argv and for-word lists
 //! also expand pathname patterns through the shell filesystem.
 use crate::{
     executor::Cancel,
@@ -413,8 +413,13 @@ struct Fields {
     out: Vec<String>,
     current: String,
     pathname: bool,
-    protections: Vec<Vec<bool>>,
-    current_protection: Vec<bool>,
+    /// Byte protections for pathname candidates only, keyed by `out` index.
+    /// Fields without an unprotected `*`, `?` or `[` keep no mask.
+    protections: Vec<(usize, Vec<bool>)>,
+    /// The current field's protection as (bytes, protected) runs, so plain
+    /// argv pays per quote boundary rather than per byte.
+    current_runs: Vec<(usize, bool)>,
+    current_magic: bool,
     present: bool,
     whitespace: bool,
     leading: bool,
@@ -434,7 +439,8 @@ impl Fields {
             current: String::new(),
             pathname: false,
             protections: Vec::new(),
-            current_protection: Vec::new(),
+            current_runs: Vec::new(),
+            current_magic: false,
             present: false,
             whitespace: false,
             leading: true,
@@ -461,13 +467,39 @@ impl Fields {
             }
             self.out.push(std::mem::take(&mut self.current));
             if self.pathname {
-                admit_vec_slot(&mut self.protections, work)?;
-                self.protections
-                    .push(std::mem::take(&mut self.current_protection));
+                self.keep_protection(work)?;
             }
         }
         self.count += 1;
         self.present = false;
+        Ok(())
+    }
+    /// Only pathname candidates expand their runs into a byte mask.
+    fn keep_protection(&mut self, work: &mut Work) -> Result<(), Error> {
+        if !std::mem::take(&mut self.current_magic) {
+            self.current_runs.clear();
+            return Ok(());
+        }
+        let index = self.out.len().checked_sub(1).ok_or(2)?;
+        let mut mask = Vec::new();
+        admit_vec_exact(&mut mask, self.out[index].len(), work)?;
+        for &(bytes, protected) in &self.current_runs {
+            mask.resize(mask.len() + bytes, protected);
+        }
+        self.current_runs.clear();
+        admit_vec_slot(&mut self.protections, work)?;
+        self.protections.push((index, mask));
+        Ok(())
+    }
+    fn protect(&mut self, bytes: usize, protected: bool, work: &mut Work) -> Result<(), Error> {
+        if let Some((length, last)) = self.current_runs.last_mut()
+            && *last == protected
+        {
+            *length += bytes;
+            return Ok(());
+        }
+        admit_vec_slot(&mut self.current_runs, work)?;
+        self.current_runs.push((bytes, protected));
         Ok(())
     }
     async fn segment(
@@ -574,10 +606,8 @@ impl Fields {
         self.bytes += ch.len_utf8();
         self.current.push(ch);
         if self.pathname {
-            for _ in 0..ch.len_utf8() {
-                admit_vec_slot(&mut self.current_protection, work)?;
-                self.current_protection.push(glob_protected);
-            }
+            self.protect(ch.len_utf8(), glob_protected, work)?;
+            self.current_magic |= !glob_protected && matches!(ch, '*' | '?' | '[');
         }
         Ok(())
     }
@@ -2119,27 +2149,40 @@ async fn expand_one(
     *raw_remaining = expansion.raw_remaining;
     expansion.current_ifs(state).await?;
     let ifs = expansion.ifs.take().ok_or(2)?;
-    let pathname = admitted && !scalar && expansion.work.substitutions.is_some();
+    let pathname = !scalar && expansion.work.substitutions.is_some() && !state.borrow().noglob;
     let mut fields = Fields::new(max_bytes, max_fields);
     fields.pathname = pathname;
     let fields = expansion
         .segments
         .collect(ifs, fields, expansion.work, cancel)
         .await?;
-    if pathname {
-        glob::expand_fields(
-            fields.out,
-            fields.protections,
-            state,
-            (max_bytes, max_fields),
-            raw_remaining,
-            expansion.work,
-            cancel,
-        )
-        .await
-    } else {
-        Ok(fields.out)
+    if !pathname {
+        return Ok(fields.out);
     }
+    let Fields {
+        out,
+        protections,
+        current_runs,
+        account_storage,
+        ..
+    } = fields;
+    let spare = current_runs.capacity() * std::mem::size_of::<(usize, bool)>();
+    drop(current_runs);
+    expansion.work.release_storage(spare);
+    let candidates = glob::Candidates {
+        fields: out,
+        patterns: protections,
+        charged: account_storage,
+    };
+    glob::expand_fields(
+        candidates,
+        state,
+        (max_bytes, max_fields),
+        raw_remaining,
+        expansion.work,
+        cancel,
+    )
+    .await
 }
 
 async fn expand(
