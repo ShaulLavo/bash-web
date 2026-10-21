@@ -160,3 +160,102 @@ fn printf_assignment_nul_truncated_locals_keep_only_their_stored_capacity() {
     rig.shell.interrupt();
     assert_eq!(rig.finish(job), 130);
 }
+
+#[test]
+fn printf_assignment_review_escape_warnings_commit_with_open_or_closed_stderr() {
+    for (source, expected, diagnostic) in [
+        (
+            r"printf -v x 'prefix\xZ'",
+            "prefix\\xZ",
+            "missing hex digit for \\x",
+        ),
+        (
+            r"printf -v x 'prefix\uZ'",
+            "prefix\\uZ",
+            "missing unicode digit for \\u",
+        ),
+        (
+            r"printf -v x 'prefix\UZ'",
+            "prefix\\UZ",
+            "missing unicode digit for \\U",
+        ),
+        (
+            r"printf -v x '%b' 'prefix\xZ'",
+            "prefix\\xZ",
+            "missing hex digit for \\x",
+        ),
+        (
+            r"printf -v x '%b' 'prefix\uZ'",
+            "prefix\\uZ",
+            "missing unicode digit for \\u",
+        ),
+        (
+            r"printf -v x '%b' 'prefix\UZ'",
+            "prefix\\UZ",
+            "missing unicode digit for \\U",
+        ),
+    ] {
+        let warning = format!("/usr/bin/bash: printf: {diagnostic}\n");
+        for closed in [false, true] {
+            let rig = Rig::new(Limits::default());
+            rig.variable("x", "old");
+            let redirect = ["", " 2>&-"][usize::from(closed)];
+            assert_eq!(
+                rig.run(&format!("{source}{redirect}")),
+                0,
+                "{source}{redirect}"
+            );
+            assert_eq!(rig.shell.state().borrow().bindings()["x"], expected);
+            assert!(rig.output.bytes().is_empty());
+            assert_eq!(
+                rig.errors.bytes(),
+                [warning.as_bytes(), b""][usize::from(closed)]
+            );
+        }
+    }
+}
+
+#[test]
+fn printf_assignment_review_nameref_to_ifs_preserves_splitter_but_updates_scalar() {
+    printf::check_bytes(
+        "declare -n ref=IFS; printf -v ref ':'; set -- a:b; for y in $1; do echo \"<$y>\"; done; echo \"IFS=<$IFS>\"",
+        b"<a:b>\nIFS=<:>\n",
+    );
+}
+
+#[test]
+fn printf_assignment_review_direct_ifs_still_refreshes_splitting() {
+    printf::check_bytes(
+        "printf -v IFS ':'; set -- a:b; for y in $1; do echo \"<$y>\"; done",
+        b"<a>\n<b>\n",
+    );
+}
+
+#[test]
+fn printf_assignment_review_ordinary_nameref_ifs_write_still_refreshes_splitting() {
+    printf::check_bytes(
+        "declare -n ref=IFS; ref=:; set -- a:b; for y in $1; do echo \"<$y>\"; done",
+        b"<a>\n<b>\n",
+    );
+}
+
+#[test]
+fn printf_assignment_review_escape_warning_broken_pipe_preserves_target() {
+    let rig = Rig::new(Limits::default());
+    rig.variable("x", "old");
+    let (reader, writer) = shell_engine::io::pipe();
+    drop(reader);
+    let mut fds = shell_engine::io::FdTable::default();
+    fds.insert(0, shell_engine::io::Endpoint::null());
+    fds.insert(1, shell_engine::io::Endpoint::null());
+    fds.insert(2, writer);
+    rig.shell.set_descriptors(fds).unwrap();
+    assert_eq!(rig.run(r"printf -v x 'prefix\xZ'"), 141);
+    assert_eq!(rig.shell.state().borrow().bindings()["x"], "old");
+    assert_eq!(rig.run("true"), 0);
+}
+
+#[test]
+fn printf_assignment_review_escape_warning_cancellation_does_not_commit() {
+    printf::assert_diagnostic_backpressure_cancellation(r"printf -v x 'prefix\xZ'", 2);
+}

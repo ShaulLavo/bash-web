@@ -713,6 +713,22 @@ impl State {
         }
         Ok(())
     }
+    pub(crate) fn assign_printf_parameter(
+        &mut self,
+        target: String,
+        value: String,
+        cached_ifs: Option<IfsMembers>,
+    ) -> Result<(), i32> {
+        let Some(members) = cached_ifs else {
+            return self.assign_parameter(target, value);
+        };
+        let separator = self.positional_separator();
+        let scope = self.ifs_scope().unwrap_or(self.locals.len());
+        self.assign_parameter(target, value)?;
+        self.star_separator = StarSeparator::Snapshot { separator, scope };
+        self.ifs_members = Some(members);
+        Ok(())
+    }
     pub(crate) fn assignment_name(&self, name: String) -> Result<String, i32> {
         let ScalarResolution::Target(target) = self.resolve_scalar_target(&name) else {
             return Err(1);

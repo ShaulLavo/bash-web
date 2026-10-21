@@ -42,7 +42,19 @@ const cases = [
   'readonly x=old; printf -v x; echo "$?:$x"',
   'readonly x=old; printf -v x %s changed 2>&-; echo "$?:$x"',
   "echo -e 'unchanged\\nbytes'; printf '%05d:%q' 42 'a b'",
-];
+].concat(
+  ["x", "u", "U"].flatMap((code) => [
+    `x=old; printf -v x 'prefix\\${code}Z'; echo "$?:$x"`,
+    `x=old; printf -v x 'prefix\\${code}Z' 2>&-; echo "$?:$x"`,
+    `x=old; printf -v x '%b' 'prefix\\${code}Z'; echo "$?:$x"`,
+    `x=old; printf -v x '%b' 'prefix\\${code}Z' 2>&-; echo "$?:$x"`,
+  ]),
+  [
+    "declare -n ref=IFS; printf -v ref ':'; set -- a:b; for y in $1; do echo \"<$y>\"; done",
+    'declare -n ref=IFS; ref=:; set -- a:b; for y in $1; do echo "<$y>"; done',
+    'x=old; printf -v x "a%d" bad 2>&-; echo "$?:$x"',
+  ],
+);
 const normalizeDiagnostic = (bytes: Buffer) => bytes.toString().replaceAll(/: line \d+:/g, ":");
 async function observe(script: string) {
   const bash = spawnSync("/usr/bin/bash", ["-c", script], {

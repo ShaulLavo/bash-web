@@ -149,6 +149,15 @@ async fn assign(
     work.admit_storage(storage.saturating_add(bytes).saturating_add(saved_bytes))
         .map_err(error_status)?;
     let target = state.borrow().assignment_name(name.to_owned())?;
+    let cached_ifs = if name != "IFS" && target == "IFS" {
+        Some(
+            State::admit_ifs_members(state, &printer.context.cancel, work)
+                .await
+                .map_err(error_status)?,
+        )
+    } else {
+        None
+    };
     let readonly = state.borrow().is_readonly(&target);
     if readonly {
         printer.readonly_diagnostic(&target).await?;
@@ -168,7 +177,9 @@ async fn assign(
         output.truncate(end);
     }
     let value = String::from_utf8(output.into_boxed_slice().into_vec()).map_err(|_| 2)?;
-    state.borrow_mut().assign_parameter(target, value)?;
+    state
+        .borrow_mut()
+        .assign_printf_parameter(target, value, cached_ifs)?;
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
@@ -427,7 +438,11 @@ impl<'a> Printer<'a> {
         let escape = decode(input, mode, self.utf8);
         self.scan(escape.consumed).await?;
         if let Some(diagnostic) = escape.diagnostic {
-            self.emit(2, diagnostic).await?;
+            if self.capture.is_some() {
+                self.usage_diagnostic(diagnostic).await?;
+            } else {
+                self.emit(2, diagnostic).await?;
+            }
         }
         self.emit(1, &escape.bytes[..escape.len]).await?;
         Ok(escape)
