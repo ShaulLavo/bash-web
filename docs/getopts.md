@@ -63,9 +63,15 @@ were rerun against Bash and production Waffle before repairs, recording 47 exact
 status/stdout/stderr matches. The first repair increased this to 61, with no lost
 exact matches. Remaining mismatches belong to pending source-line diagnostics,
 integer attributes, temporary-assignment write-through and non-ASCII option bytes.
+The complete frozen replay at `339a5b9` also gained 28 Oils, 43 Brush and
+23 Bashkit cases with zero losses across all 9,221 records and 5,792 scored
+cases. Its exit 1 reported exactly 94 stale gained baseline memberships; the
+complete result comparison confirmed the unchanged identities and membership.
+This proof is separate from the subsequent normal-main integration replay.
+
 Focused controls include publication failure preserving every binding and the
 active cluster, successful 360448-byte attached arguments, and cancellation with
-recovery. Final full replay and exact source-line binding diagnostics remain
-pending integration. Reports, commands, raw streams and the resource-kill history
+recovery. The merged-source replay and exact source-line binding diagnostics
+remain pending integration. Reports, commands, raw streams and the resource-kill history
 are retained under
 `/work/reports/bash-web/hill-climb/builtins/getopts/`.
