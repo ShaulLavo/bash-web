@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "status": "Measured membership update, review-ready. Parent owns independent review, hosted gates, merge and exact-main acceptance.",
+  "acceptedBase": "f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb",
+  "implementer": "Claude (claude-opus-5-5) after a Sol provider refusal; review stays on gpt-6.1-sol",
+  "versions": {
+    "root": "0.0.79",
+    "engine": "0.0.46"
+  },
+  "classification": "Original local Rust implementation observed against GNU Bash 5.3.15. No copied or adapted upstream implementation.",
+  "scope": "Scalar ${name@op} for Q, E, u, U, L, K, k, A and a. Arrays (including PIPESTATUS), locale variables that are namerefs, ${@@op}, indirect names, @P and nested operand transformations fail closed with status 2. ${#@op} is rejected as a bad substitution with status 1 when the expansion is reached.",
+  "sourceSha256": {
+    "shell/engine/src/expand.rs": "3374d326e70d8a20081572ea108df4e193de09ba6d9340f1aa8459ca25066123",
+    "shell/engine/src/expand/transformation.rs": "5f8861bf8f9efe2576e4c4e6fc9fdd62926a7076c58750224dafdbaf4ab19c45",
+    "shell/engine/src/expand/printable.rs": "a29d11692b0e214158d6decbbd0e84be8ca368b256278e0e70d1ceadf1089685",
+    "shell/engine/src/state.rs": "5d9955295bab45ba9877c980cefc25f31e6baf6d146fb6817c3cd7d72eeefd0d",
+    "shell/engine/src/builtins/printf/quoting.rs": "5a92859fe3aab4602a567426af629d75c169568d6aa225581e99e67059082ed4"
+  },
+  "replay": {
+    "harness": "npm run compat:shell:prebuilt, BASH_COMPAT_MODE=frozen, RECORD=0, JOBS=2, production shell-runtime.wasm on real Waffle",
+    "records": 9221,
+    "result": "18 gained, 0 lost, no nonpass outcome regressed; the strict comparator exits 1 on the new passes only after saving the full result"
+  },
+  "corpora": {
+    "oils": {
+      "before": 1051,
+      "after": 1058,
+      "gained": [
+        "oils:var-op-bash:163",
+        "oils:var-op-bash:182",
+        "oils:var-op-bash:264",
+        "oils:var-op-bash:381",
+        "oils:var-op-bash:410",
+        "oils:builtin-printf:95",
+        "oils:serialize:193"
+      ],
+      "lost": []
+    },
+    "brush-suite": {
+      "before": 1057,
+      "after": 1062,
+      "gained": [
+        "brush-suite:nameref:102",
+        "brush-suite:word_expansion/param_transformation:5",
+        "brush-suite:word_expansion/param_transformation:9",
+        "brush-suite:word_expansion/param_transformation:10",
+        "brush-suite:word_expansion/param_transformation:12"
+      ],
+      "lost": []
+    },
+    "bashkit-suite": {
+      "before": 1443,
+      "after": 1449,
+      "gained": [
+        "bashkit-suite:variables:377",
+        "bashkit-suite:variables:384",
+        "bashkit-suite:variables:391",
+        "bashkit-suite:variables:398",
+        "bashkit-suite:variables:405",
+        "bashkit-suite:variables:795"
+      ],
+      "lost": []
+    }
+  },
+  "shellRuntimeWasmSha256": "fa8f78dc7bf2800cacf89bb72002755921687b741389036e6a31aaef11a63f83"
+}
