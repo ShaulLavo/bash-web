@@ -603,6 +603,18 @@
         "paths": ["shell/parser/src/parser/mod.rs"],
         "change": "Consume optional boxed parser results in the existing non-inlined pipeline/list append helpers; return whether a command was present.",
         "reason": "Keep large AST temporaries off recursive WASI parser frames while passing target-specific Clippy boxed_local checks without an allowance."
+      },
+      {
+        "paths": [
+          "shell/parser/src/parser/file_substitution.rs",
+          "shell/parser/src/parser/ast.rs",
+          "shell/parser/src/parser/mod.rs",
+          "shell/parser/src/parser/lexer.rs",
+          "shell/parser/src/parser/budget.rs",
+          "shell/parser/src/parser/print_cmd.rs"
+        ],
+        "change": "Retain typed file-read substitution eligibility and lexical backtick origins through quote and scalar assignment transformations. Keep legacy numeric redirect and trailing-input distinctions, escaped newlines and mixed-quote backticks. Traverse and print the dedicated AST variant.",
+        "reason": "GNU Bash 5.3.15 treats one input-only command as a parent-side file capture, while specific backtick spellings disable the shortcut. No upstream test removed."
       }
     ],
     "removedUpstreamTests": [
@@ -1619,5 +1631,24 @@
     "implementation": "${name@op} for Q, E, u, U, L, K, k, A and a on scalar, nameref, special and positional names. Reusable quoting picks '', single quotes or ANSI-C quoting by locale printability; @E decodes $'...' escapes, stops at NUL and rejects results that are not UTF-8. Case operators reuse the existing locale mapper. @A and @a report readonly and export attributes from existing state; @A spells current-function locals with declare through a read-only state accessor. Nounset is checked before the operator. The locale printability classifier moved unchanged from printf quoting into expand so both share it.",
     "deferred": "Arrays (PIPESTATUS and namerefs to subscripts fail closed), locale variables that are namerefs (fail closed), ${@@op}, ${*@op}, ${#@op} (rejected as a bad substitution with status 1 before the script runs), indirect ${!name@op}, prompt expansion @P, transformations nested inside other operands, attributes the state does not store (integer, case, array), and non-UTF-8 \\u escapes.",
     "gate": "Failing-first native Rust controls, full native suite and clippy, and one frozen 9,221-record production-Waffle replay with 18 gains and zero losses; only gained baseline memberships and derived counts change."
+  },
+  "shellFileSubstitution": {
+    "classification": "Original local Rust parser metadata, file capture and TypeScript runtime controls. GNU Bash 5.3.15 observations define behavior; no copied upstream implementation.",
+    "oracle": "GNU Bash 5.3.15(1)-release",
+    "referenceSources": [
+      "GNU Bash 5.3 subst.c:command_substitute/optimize_cat_file",
+      "GNU Bash 5.3 builtins/evalstring.c:can_optimize_cat_file",
+      "GNU Bash 5.3 parse.y:parse_string_to_command"
+    ],
+    "implementationDestinations": [
+      "shell/parser/src/parser/file_substitution.rs",
+      "shell/engine/src/expand/command.rs",
+      "shell/engine/src/interpreter/file_substitution.rs"
+    ],
+    "testDestinations": [
+      "shell/engine/tests/words/file_substitution.rs",
+      "scripts/test-own-shell-file-substitution.ts"
+    ],
+    "strategy": "Capture one eligible input-only redirect through the existing bounded UTF-8/NUL/newline decoder. Expand its filename against caller state, preserve splitting/pathname/ambiguity and statuses, and use the existing descriptor/FS boundary without a new process or runtime API. Ordinary command captures retain their streaming producer supervisor. The existing regular-file /dev/fd alias offset limitation and invalid UTF-8 boundary remain explicit in docs/file-substitution.md."
   }
 }

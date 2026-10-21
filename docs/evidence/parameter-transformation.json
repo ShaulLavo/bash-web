@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "status": "Measured membership update, review-ready. Parent owns independent review, hosted gates, merge and exact-main acceptance.",
-  "acceptedBase": "753c00cc24ed02ea068251206bae4ea7c584d854",
+  "acceptedBase": "2f0bf1176703a2a397bd0e35af480d7df322e67e",
   "implementer": "Claude (claude-opus-5-5) after a Sol provider refusal; review stays on gpt-6.1-sol",
   "versions": {
-    "root": "0.0.77",
-    "engine": "0.0.44"
+    "root": "0.0.78",
+    "engine": "0.0.45"
   },
   "classification": "Original local Rust implementation observed against GNU Bash 5.3.15. No copied or adapted upstream implementation.",
   "scope": "Scalar ${name@op} for Q, E, u, U, L, K, k, A and a. Arrays (including PIPESTATUS), locale variables that are namerefs, ${@@op}, indirect names, @P and nested operand transformations fail closed with status 2. ${#@op} is rejected as a bad substitution with status 1 before the script runs.",
   "sourceSha256": {
-    "shell/engine/src/expand.rs": "0a9212241ffed002163754733486589eed12270ed4d135cc857a890c628de0e2",
+    "shell/engine/src/expand.rs": "3374d326e70d8a20081572ea108df4e193de09ba6d9340f1aa8459ca25066123",
     "shell/engine/src/expand/transformation.rs": "5f8861bf8f9efe2576e4c4e6fc9fdd62926a7076c58750224dafdbaf4ab19c45",
     "shell/engine/src/expand/printable.rs": "a29d11692b0e214158d6decbbd0e84be8ca368b256278e0e70d1ceadf1089685",
     "shell/engine/src/state.rs": "85b5996708e15453fa03c966dd8d210abe49b8dcf3f2458420284320ff5ff5b4",
@@ -37,8 +37,8 @@
       "lost": []
     },
     "brush-suite": {
-      "before": 1012,
-      "after": 1017,
+      "before": 1014,
+      "after": 1019,
       "gained": [
         "brush-suite:nameref:102",
         "brush-suite:word_expansion/param_transformation:5",
@@ -49,8 +49,8 @@
       "lost": []
     },
     "bashkit-suite": {
-      "before": 1415,
-      "after": 1421,
+      "before": 1420,
+      "after": 1426,
       "gained": [
         "bashkit-suite:variables:377",
         "bashkit-suite:variables:384",
@@ -62,5 +62,5 @@
       "lost": []
     }
   },
-  "shellRuntimeWasmSha256": "ec6b60aee392f307332ff6a6557fa44b147e98dedf9697abeb106b3568c5fdf4"
+  "shellRuntimeWasmSha256": "40dd251e60f63f6a47321ba38dc7cf6eed144e9162b1f991220469e131e79995"
 }

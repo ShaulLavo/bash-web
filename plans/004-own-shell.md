@@ -2015,28 +2015,76 @@ See [the behavior notes](../docs/printf-escaped-fields.md) and
 saved replay, original exit, before-and-after controls, offline comparator and
 cleanup receipt remain in `/work/reports/bash-web/hill-climb/printf-b-fields`.
 
+## Input-only substitution and inherited file aliases, 2026-10-21
+
+Approved bounded command-substitution family. Typed parser metadata distinguishes
+Bash's eligible `$(<file)`/legacy backtick shortcut from ordinary redirect-only
+commands. The file capture expands its filename in caller state and reuses the
+bounded decoder, while normal substitutions retain their streaming supervisor.
+See [behavior, tests and provenance](../docs/file-substitution.md).
+
+Measured source `3a0268b52d6a643ec7326d376d8746138d7f49c9` completes one frozen
+production-Waffle replay with JOBS=1 and RECORD=0. All 9,221 records, 5,792
+scored cases, 3,429 skips and four frozen identities are unchanged. Oils stays
+1,015. Brush gains two cases, 1,008 to 1,010. Bashkit gains five, 1,413 to 1,418.
+Every corpus loses zero passes. Only seven outcome fields and derived counts
+change; all historical payloads remain. The unchanged strict comparator accepts
+the saved replay after that update. Exact IDs, source/artifact hashes and checks
+are in [the receipt](../docs/evidence/file-substitution.json).
+
+Native/WASI workspace checks pass 1,311/1,291 tests. The 111 production controls
+include 110 Bash stdout/status comparisons and one explicit invalid-UTF-8
+boundary. Runtime tests pass 143, and both browsers pass 228 active cases with
+the same 16 existing skips. The scoreboard suite now includes the new production
+controls; its complete 283-test selection and the nine CI-recipe assertions pass.
+Independent parent review, hosted CI, normal integration and exact-main
+verification remain required.
+
+### Separate follow-up: independently reopen regular-file descriptor aliases
+
+Approved separate CONTROL family after the Waffle owner supplies an actual
+merged independent-reopen contract. Do not block the bounded shorthand family
+on it, change the shared I/O helper here, add path blacklists or restore offsets
+by guessing. Preserve pipe/terminal sharing and all current frozen passes.
+
+Exact reproduction: `printf 'one\ntwo\n' >f; exec 3<f; x=$(</dev/fd/3); IFS= read -r y <&3; printf 'x=<%s> y=<%s>\n' "$x" "$y"`.
+GNU Bash 5.3.15 prints `y=<one>`; both the native candidate and production Waffle
+print `y=<>`, all status 0. Replacing the shorthand with
+`$(cat </dev/fd/3)` reproduces the same production mismatch. Observed once per
+form in the bounded probe; the source behavior is deterministic.
+`io.rs::device_endpoint` returns the identical endpoint, so reads consume the
+inherited regular file offset. Neither `FileSystem` nor `HostEndpoint` currently
+exposes independent reopening. This rules out the new capture decoder as the
+cause. Evidence and exact script are retained in
+`/work/reports/bash-web/hill-climb/control/file-substitution/fd-observation.json`;
+no worker, route or container is retained. Root accepted this boundary and routed
+the runtime contract to Waffle. The future family must first reproduce both
+forms, test fresh regular-file offsets versus shared pipes/terminals, preserve
+cancellation and lifetime ownership, then replay the unchanged frozen ruler.
+
 ## Scalar parameter transformations, 2026-10-21
 
 Approved bounded unit, implemented by Claude after a Sol provider refusal. Review
 stays on Sol; the expansion track owns review, merge and exact-main acceptance.
 
-`${name@op}` now supports Q, E, u, U, L, K, k, A and a on scalar, nameref, special
+`${name@op}` now supports Q, E, u, U, L, K, k, A and a on scalar, nameref, `$?`
 and positional names, in the new `expand/transformation.rs`. Quoting matches
 Bash's reusable quoting, `@E` matches `$'...'` decoding, case operators reuse the
 existing locale mapper and `@A`/`@a` read readonly and export state. The locale
 printability classifier moved unchanged from printf quoting into `expand` so both
-share it. Arrays, `${@@op}`, indirect names, `@P` and transformations nested in
-other operands remain unsupported and fail closed.
+share it. Arrays, locale variables that are namerefs, `${@@op}`, indirect names,
+`@P` and transformations nested in other operands remain unsupported and fail
+closed.
 
 One frozen production-Waffle replay against main
-`753c00cc24ed02ea068251206bae4ea7c584d854` preserves all 9,221 IDs, frozen
+`2f0bf1176703a2a397bd0e35af480d7df322e67e` preserves all 9,221 IDs, frozen
 identities and exclusions, with zero lost passes:
 
 - Oils: 1,023 to 1,030, gained `oils:var-op-bash:163`, `:182`, `:264`, `:381`,
   `:410`, `oils:builtin-printf:95`, `oils:serialize:193`.
-- Brush suite: 1,012 to 1,017, gained `brush-suite:nameref:102` and
+- Brush suite: 1,014 to 1,019, gained `brush-suite:nameref:102` and
   `word_expansion/param_transformation:5`, `:9`, `:10`, `:12`.
-- Bashkit suite: 1,415 to 1,421, gained `bashkit-suite:variables:377`, `:384`,
+- Bashkit suite: 1,420 to 1,426, gained `bashkit-suite:variables:377`, `:384`,
   `:391`, `:398`, `:405`, `:795`.
 
 Remaining scored transformation failures need arrays, positional lists, integer

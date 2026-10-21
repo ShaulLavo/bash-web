@@ -242,7 +242,9 @@ fn validate_word_part(
     word_is_quoted: bool,
 ) -> Result<(), BudgetError> {
     match part {
-        WordPart::CommandSubstitution(commands) => validate_commands(commands, ctx),
+        WordPart::CommandSubstitution(commands) | WordPart::FileSubstitution(commands) => {
+            validate_commands(commands, ctx)
+        }
         WordPart::ProcessSubstitution { commands, .. } => validate_commands(commands, ctx),
         WordPart::Literal(s) if !word_is_quoted => check_brace_range(s),
         WordPart::CompoundAssignment { elements, .. } => {

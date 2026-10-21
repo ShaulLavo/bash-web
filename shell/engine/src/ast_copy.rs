@@ -293,6 +293,7 @@ pub(crate) async fn admit(
                     push_vec(&mut stack, elements, Visit::Words, work)?;
                 }
                 WordPart::CommandSubstitution(commands)
+                | WordPart::FileSubstitution(commands)
                 | WordPart::ProcessSubstitution {
                     commands,
                     is_input: _,

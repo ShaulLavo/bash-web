@@ -915,6 +915,11 @@ impl Expansion<'_> {
                     )
                     .await;
             }
+            if let WordPart::FileSubstitution(commands) = part {
+                return expansion
+                    .file_substitution(commands, state, quoted, scalar)
+                    .await;
+            }
             if let WordPart::CommandSubstitution(commands) = part {
                 return expansion
                     .command_substitution(commands, state, quoted, scalar)
