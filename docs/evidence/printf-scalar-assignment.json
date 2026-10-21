@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "status": "Review-ready. Parent owns independent correctness and comment reviews, hosted CI, fixes coordination, merge and exact-main acceptance.",
+  "status": "Blocked on indirect-IFS review finding 2. Closed-stderr fix delivered; no family-match or review-ready claim. Parent owns policy, independent review, hosted CI, merge and exact-main acceptance.",
   "acceptedSource": "50ab6a7f3cdf6c4c7a7e1ad875d4e804e76da5fd",
   "measuredSource": "286dd4cd0bc59410bda90348992044812a208dd3",
-  "sourceCorrespondence": "Historical full replay: production implementation, tests, package versions and derived layer evidence froze in measuredSource before exactly one full replay. Evidence/baseline/plan/prose commits followed, including the five approved prose cuts at ad9bdf619e190b07c5b01399f677d43ce51abb01. Review fixes at c29fab56685afceadc7449e7b2e15f59b7ca3aed change printf.rs and state.rs. The original replay did not run on those later production bytes. No second full replay or membership changes in this follow-up.",
+  "sourceCorrespondence": "Historical full replay: production implementation, tests, package versions and derived layer evidence froze in measuredSource before exactly one full replay. Evidence/baseline/plan/prose commits followed, including the five approved prose cuts at ad9bdf619e190b07c5b01399f677d43ce51abb01. Review fixes at c29fab56685afceadc7449e7b2e15f59b7ca3aed change printf.rs and state.rs. The original replay did not run on those later production bytes. No second full replay or membership changes in this follow-up. The continuation from 506745aff7bb213e7353f2d0a2a14e89657ac323 corrects closure claims only; all production and test bytes remain identical to c29fab5.",
   "model": "gpt-6.1-sol",
   "provider": "codex through existing parent-verified cli-proxy. No nested agents or provider/settings/credential changes.",
   "classification": "Original local Rust and TypeScript observed against Bash. No copied or adapted upstream implementation.",
@@ -178,7 +178,7 @@
     "independentReview": "CHANGES REQUESTED comment6307762029 at b3196bb449e594e7f169c2f5f66d6f502fad2d64; no replacement reviewer verdict claimed.",
     "fixes": [
       "Capture-only malformed format and %b escape warnings tolerate closed stderr; cancellation130 and broken-pipe141 still abort before commit.",
-      "Printf-through-nameref to IFS retains the pre-admitted fixed-size membership and separator snapshots while using the existing scalar assignment owner once. Direct printf and ordinary writes still refresh."
+      "Incomplete indirect-IFS attempt at c29fab5 retains the pre-admitted fixed-size membership and separator snapshots while committing through the existing scalar assignment owner once. This is not a complete fix for review blocker 2."
     ],
     "productionSourceSha256": {
       "printf": "3c35c42a7d066f0e0b30b3d67317a686f087bef2a331792679d6807d6d159524",
@@ -203,8 +203,26 @@
       "static": "Changed TypeScript format/lint/strict bundler typecheck, unchanged duplicate gate, 34 layer tests and immutable-base layer gate pass; 0 production/0 test-only violations,42/28 unique edges.",
       "hosted": "Parent-owned. No CI rerun, watch, workflow edit, merge or exact-main acceptance by this lane."
     },
-    "remainingFinding": "Custom prior IFS still differs: IFS=:; declare -n ref=IFS; printf -v ref ':;'; set -- 'a:b;c'; for y in $1; do echo \"<$y>\"; done. Exact before/after bytes are retained in plan004 and review-fixes-r1 evidence. It already failed on the starting source; no compatibility claim for this variation.",
+    "remainingFinding": "OPEN review blocker 2, including default/custom/unset/empty prior IFS, alias chains and changed separators. The exact original Bash reproducer produced 5 distinct stdout values in 1000 identical launches; the exact parent custom-prior reproducer produced 8. Actual installed Bash debugger traces confirm the splitter receives a freed IFS buffer. No deterministic family-match claim, exclusion or baseline-based deferral.",
     "report": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/review-fixes-r1.md",
-    "cleanupReceipt": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/review-fixes-r1-cleanup.json"
+    "cleanupReceipt": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/review-fixes-r1-cleanup.json",
+    "continuation": {
+      "sourceCheckpoint": "506745aff7bb213e7353f2d0a2a14e89657ac323",
+      "productionEdits": false,
+      "reason": "Observed nondeterministic upstream stale-pointer semantics require a parent decision on intended safe behavior and acceptance policy. An exact-reproducer-only patch or allocator emulation is not delivered.",
+      "evidence": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/review-fixes-r1-evidence/ifs-exact-repeat.log and ifs-free-argument.log",
+      "bashSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+      "familyMatrix": 84,
+      "familyRepetitions": {
+        "scripts": 24,
+        "runsEach": 100
+      },
+      "exactRepetitions": {
+        "scripts": 9,
+        "runsEach": 1000
+      },
+      "stableControls": "Unset prior IFS, direct printf-to-IFS and ordinary nameref assignment are each stable in all 1000 launches.",
+      "verificationBoundary": "Existing c29fab5 native/WASI/Waffle and bounded392 results recorded here are unchanged historical focused evidence. No new product builds/tests/replays are needed for this documentation-only continuation; none are claimed. No assertions, memberships or frozen inputs change."
+    }
   }
 }

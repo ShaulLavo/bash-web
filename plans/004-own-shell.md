@@ -1873,12 +1873,13 @@ No local Darwin claim; the unchanged hosted gate remains parent-owned.
 
 ### Review fixes after the full measurement
 
-Source `c29fab56685afceadc7449e7b2e15f59b7ca3aed` fixes the two reproduced
-PR37 review findings. Capture-mode malformed escape warnings tolerate a closed
+Source `c29fab56685afceadc7449e7b2e15f59b7ca3aed` fixes the closed-stderr
+PR37 review finding. Capture-mode malformed escape warnings tolerate a closed
 stderr without losing assignment. Cancellation and broken pipes still abort.
-Printf-through-nameref to IFS uses the existing fixed-size cache snapshot while
-committing through the existing scalar binding owner. Direct printf-to-IFS and
-ordinary nameref assignments keep their refresh behavior.
+Its indirect-IFS change is incomplete, and review blocker 2 remains open.
+The fixed-size cache snapshot still commits through the existing scalar binding
+owner. Direct printf-to-IFS and ordinary nameref assignments keep their refresh
+behavior. No claim that the indirect-IFS family is fixed is made here.
 
 This source differs from the full replay's measured source above. Native and
 WASI focused tests and Clippy pass. Production-Waffle controls pass 44 Bash
@@ -1909,31 +1910,49 @@ cancellation, readonly, local/nameref and IFS tests. None of this unit's eleven
 candidate observations uses a temporary command prefix. Invalid UTF-8, arrays
 and unsupported conversions remain separately named boundaries, not scored gains.
 
-### Additional indirect-IFS discrepancy
+### Indirect-IFS review blocker
 
-The two review reproductions pass after the fixes, but a custom prior separator
-still differs. Run this source with `LC_ALL=C LANG=C` in Bash 5.3.15 and the
-production-Waffle control retained in `review-fixes-r1-evidence/ifs-guards.ts`:
+PR37 review blocker 2 remains open. This is supported ASCII scalar, nameref
+and IFS behavior, not an exclusion or a deferred feature. The starting source
+being unaccepted does not justify parking it. The initial three observations
+recorded one Bash result, `<a:b;c>\n`, for the following custom-prior case.
+The starting PR37 source printed `<a>\n<b>\n<c>\n`; source c29fab5 printed
+`<a>\n<b;c>\n`. Those raw results remain in the report directory.
 
 ```sh
 IFS=:; declare -n ref=IFS; printf -v ref ':;'; set -- 'a:b;c'
 for y in $1; do echo "<$y>"; done
 ```
 
-Bash prints `<a:b;c>\n`. The starting PR37 source prints `<a>\n<b>\n<c>\n`;
-the fixed source prints `<a>\n<b;c>\n`. All return 0 with empty stderr.
-Three native observations per source repeat these results, and the final
-production-Waffle result agrees with the native engine. This was already a
-failure before the two review fixes, not a lost committed pass. The bounded
-392-case check has no lost passes. This additional variation is not fixed or
-counted as compatible here.
+The continuation repeated identical commands 1,000 times with the same Bash
+5.3.15 binary and explicit `PATH`, `LC_ALL=C` and `LANG=C`. The exact original
+default-IFS review reproduction produced five distinct stdout values. The
+custom-prior case above produced eight. An empty prior IFS produced seven;
+an alias-chain and changed-separator case produced 21. Unset prior IFS,
+direct printf-to-IFS and ordinary nameref assignment controls each produced
+one stable result. All returned 0 with empty stderr. The source, per-output
+counts and raw base64 streams are in `ifs-exact-repeat.ts` and its log under
+`review-fixes-r1-evidence/`. An earlier 84-case matrix and 24-by-100 repetition
+probe cover additional prior values and separators there.
 
-The suspected boundary is `State::assign_printf_parameter`'s membership snapshot
-and `expand::Ifs::new`'s intersection with the live scalar. The default-IFS
-review reproduction, alias chains, direct and ordinary writes, readonly checks,
-quoted-star separator, local scope and later cache refresh controls pass.
-A follow-up must establish Bash's custom-prior-IFS behavior before changing that
-shared cache contract. Raw bytes and exact sources are in
-`review-fixes-r1-evidence/ifs-guards.ts`, `budget-and-guards.log` and
-`custom-ifs-before-after.ts` under the report directory above. The native
-before/after observations are in `final-static.log` there.
+A debugger trace of the actual installed binary confirms that
+`builtin_bind_variable` frees the buffer still referenced by `ifs_value` during
+printf assignment. At the next `list_string` call the separator argument is
+that same freed address, now containing different bytes. This happens for
+default, custom and empty prior IFS. Unset IFS instead references a stable
+default literal. `ifs-free-argument.log` retains the trace and binary identity.
+The inspected GNU Bash 5.3 source explains the path: printf refreshes special
+variables using the requested alias name, while the variable owner frees the
+resolved IFS value. The splitter retains a borrowed pointer, a byte map and a
+separately copied first separator. No upstream code is copied into this shell.
+
+The current Rust owner safely retains a fixed-size map, then intersects it
+with the new live scalar. That is not a model of Bash's dangling pointer.
+Retaining an owned old string, refreshing the live scalar or disabling splitting
+for set-prior IFS would each choose different deterministic semantics. None can
+match the entire observed family. This lane does not emulate allocator bytes,
+change the frozen oracle, select a majority output or weaken tests. Parent must
+resolve the intended safe behavior and acceptance policy before a further
+assignment/cache change can close this blocker. No broad state rewrite was
+attempted. The continuation changes documentation only, leaving production
+bytes and all historical measurement evidence intact.

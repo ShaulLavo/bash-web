@@ -10,10 +10,14 @@ Names use the existing ASCII shell identifier rules. Missing names or formats
 and invalid names return 2 without changing the variable. Assignment follows
 the shell's existing dynamic local scope, nameref resolution, readonly checks
 and temporary prefix restoration. Direct IFS writes refresh its special caches.
-For `declare -n ref=IFS; printf -v ref ':'`, the scalar changes but `a:b` remains
-one field and quoted `$*` keeps its prior separator. Ordinary `ref=:` still
-refreshes splitting. Custom-prior-IFS behavior has a remaining discrepancy
-recorded in [plan004](../plans/004-own-shell.md#additional-indirect-ifs-discrepancy).
+Printf through a nameref to IFS remains an open correctness blocker. The
+current implementation retains the prior membership map and quoted `$*`
+separator, but that does not establish Bash-compatible splitting for this
+family. Repeated identical commands in Bash 5.3.15 produce different fields
+when the prior IFS is set, including default, custom and empty values. Unset
+prior IFS behaves differently. Ordinary `ref=:` still refreshes splitting.
+See the exact observations and confirmed stale-pointer cause in
+[plan004](../plans/004-own-shell.md#indirect-ifs-review-blocker).
 With `x=prefix printf -v x`,
 the existing builtin prefix guard restores the outer value. Bash instead keeps
 the printf assignment. A readonly target returns 1
@@ -48,6 +52,6 @@ and leaves the frozen path-normalization and stderr policies unchanged. No case,
 fixture, exclusion or deadline changes.
 
 The full replay in that receipt measured `286dd4cd0bc59410bda90348992044812a208dd3`.
-The later warning and indirect-IFS fixes change production bytes. Their focused
+The later warning fix and incomplete indirect-IFS change alter production bytes. Their focused
 checks and 392 affected frozen-case comparisons are separate evidence, not a
 second full replay or a new score claim.
