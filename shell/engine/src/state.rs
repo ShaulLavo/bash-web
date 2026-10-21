@@ -878,6 +878,12 @@ impl State {
             .find_map(|locals| locals.get(name))
             .map_or_else(|| self.readonly.contains(name), |local| local.readonly)
     }
+    /// Declared by `local` in the innermost function scope.
+    pub(crate) fn is_current_local(&self, name: &str) -> bool {
+        self.locals
+            .last()
+            .is_some_and(|locals| locals.contains_key(name))
+    }
     fn current_local_readonly(&self, name: &str) -> bool {
         self.locals
             .last()

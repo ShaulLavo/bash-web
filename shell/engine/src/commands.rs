@@ -29,6 +29,7 @@ pub(crate) enum Builtin {
 pub(crate) enum Handler {
     Builtin(Builtin),
     Command,
+    BuiltinWrapper,
     Exec,
     Eval,
     Let,
@@ -161,6 +162,12 @@ static COMMANDS: &[Command] = &[
         Class::RegularBuiltin,
         Declaration::Ordinary,
         Handler::Command,
+    ),
+    core(
+        "builtin",
+        Class::RegularBuiltin,
+        Declaration::Ordinary,
+        Handler::BuiltinWrapper,
     ),
     regular("shopt", Builtin::Shopt),
     special("exit", Handler::Builtin(Builtin::ExitReturn)),
