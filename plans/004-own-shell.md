@@ -1300,6 +1300,24 @@ Answer `-k`, `-r`, `-w` (and the related `-u`/`-g`/`-x` family) from runtime met
 - `bashkit-suite:test-operators:40`: Bash status 0, stdout `writable\n`; ours status 2, stdout ``, stderr `/usr/bin/bash: [: -w: unsupported predicate\n`.
 - `oils:builtin-bracket:280`: Bash status 0, stdout `status=1\nstatus=1\n`; ours status 0, stdout `status=2\nstatus=2\n`, stderr `/usr/bin/bash: test: -k: unsupported predicate\n/usr/bin/bash: test: -k: unsupported predicate\n`.
 
+#### Authoritative permissions integration, 2026-10-21
+
+Status: Approved, implementation and measurement in progress. The selected Waffle
+pin is `fc58a532f0d7a617e631ea4b7580a190915d4ed6`, version 0.0.58. The shell now
+consumes its four-word permissions query without changing Preview1 filestat.
+Supported mode/access masks distinguish denied from unknown answers in the shared
+`[ ]`/`[[ ]]` evaluator. Native modes stay unchanged. See
+[the contract and control documentation](../docs/file-permissions.md).
+
+The three candidate failures reproduced first in the real production runner and
+then matched Bash after implementation. Native/WASI and real-runtime controls cover
+actual read/write denial, directory search, metadata-only access, masks and ABI
+errors. The memory selector is an equivalent API update. OPFS conformance tests use
+the selected source's exact internal test helper, not an IndexedDB substitution.
+Frozen identities, fixtures, skips and scoring are unchanged. No score claim is
+made before the single full replay. R3 source and evidence receipts live under
+`/work/reports/bash-web/hill-climb/r1-permissions-integration/`.
+
 ### R2. Background jobs at `-c` exit
 
 Let `shell-runtime -c` exit without cancelling still-running background jobs, as Bash does; their output must drain to the inherited descriptors.

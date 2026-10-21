@@ -3677,3 +3677,29 @@ fn descriptor_terminal_mock_preserves_numeric_range_and_remapped_bindings() {
     assert_eq!(fake.output.bytes(), b"0\n0\n0\n1\n1\n1\n0\n1\n");
     shutdown_session(&executor, &runtime, &fake, session);
 }
+
+#[test]
+fn runtime_permissions_keep_supported_denial_separate_from_unknown_bits() {
+    let mut metadata = decode_filestat(&[0u8; 64]);
+    let mut bytes = [0u8; 16];
+    for (index, word) in [0o400u32, 0o600, 4, 6].into_iter().enumerate() {
+        bytes[index * 4..index * 4 + 4].copy_from_slice(&word.to_le_bytes());
+    }
+    decode_permissions(&mut metadata, &bytes);
+    assert_eq!(metadata.readable, Some(true));
+    assert_eq!(metadata.writable, Some(false));
+    assert_eq!(metadata.executable, None);
+    let mode = metadata.mode.unwrap();
+    assert_eq!(mode.test(0o400), Some(true));
+    assert_eq!(mode.test(0o200), Some(false));
+    assert_eq!(mode.test(0o1000), None);
+    assert_eq!(mode.test(0o4000), None);
+    // Values outside a supported mask do not confer a capability.
+    bytes[..4].copy_from_slice(&0o7777u32.to_le_bytes());
+    bytes[8..12].copy_from_slice(&7u32.to_le_bytes());
+    decode_permissions(&mut metadata, &bytes);
+    assert_eq!(metadata.mode.unwrap().test(0o2000), None);
+    assert_eq!(metadata.executable, None);
+    assert_eq!(metadata.uid, None);
+    assert_eq!(metadata.owned_by_effective_uid, None);
+}

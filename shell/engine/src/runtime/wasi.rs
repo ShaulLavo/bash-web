@@ -45,6 +45,17 @@ unsafe extern "C" {
     #[link_name = "signal"]
     fn proc_signal(signal: i32, disposition: i32) -> i32;
 }
+#[link(wasm_import_module = "runtime_fs")]
+unsafe extern "C" {
+    #[link_name = "path_permissions_get"]
+    fn fs_path_permissions_get(
+        fd: u32,
+        path: *const u8,
+        length: usize,
+        flags: u32,
+        output: *mut u8,
+    ) -> i32;
+}
 // Original shell-launch metadata, separate from the shared runtime_proc ABI.
 #[link(wasm_import_module = "shell_terminal")]
 unsafe extern "C" {
@@ -229,11 +240,28 @@ impl Abi for WasiAbi {
                 bytes.as_mut_ptr(),
             )
         };
-        if errno == 0 {
-            Ok(decode_filestat(&bytes))
-        } else {
-            Err(errno as i32)
+        if errno != 0 {
+            return Err(errno as i32);
         }
+        let mut metadata = decode_filestat(&bytes);
+        let mut permissions = [0u8; 16];
+        // Waffle has no symbolic links. The query's flags must be zero; ordinary
+        // file metadata remains usable when a host cannot answer permissions.
+        let errno = unsafe {
+            fs_path_permissions_get(
+                self.root,
+                path.as_ptr(),
+                path.len(),
+                0,
+                permissions.as_mut_ptr(),
+            )
+        };
+        if errno == 0 {
+            decode_permissions(&mut metadata, &permissions);
+        } else if errno != 58 {
+            return Err(errno);
+        }
+        Ok(metadata)
     }
     fn open_dir(&self, path: &str) -> Result<u32, i32> {
         if !path.starts_with('/') || path.contains('\0') || path.len() > crate::io::MAX_PATH_BYTES {

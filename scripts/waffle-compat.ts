@@ -93,7 +93,7 @@ export async function createWaffleRunner(options: WaffleCaseOptions) {
   const shell = await compiled(options.modulePath);
   return async (code: string): Promise<WaffleCaseResult> => {
     const runtime = waffle.createRuntime({
-      filesystem: { workerURL: new URL("fs.mjs", nodeDirectory), persistence: false },
+      filesystem: { workerURL: new URL("fs.mjs", nodeDirectory), mode: "memory" },
     });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
