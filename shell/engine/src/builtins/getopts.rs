@@ -366,6 +366,9 @@ async fn diagnostic(
 }
 
 fn diagnostics_enabled(value: &str) -> bool {
+    if value.is_empty() {
+        return true;
+    }
     let number = value.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
     let digits = number
         .strip_prefix('+')

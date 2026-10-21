@@ -146,3 +146,17 @@ fn getopts_opterr_and_silent_mode_control_exact_option_diagnostics() {
         b"/usr/bin/bash: illegal option -- x\n/usr/bin/bash: option requires an argument -- a\n"
     );
 }
+
+#[test]
+fn getopts_empty_and_unset_opterr_keep_diagnostics_enabled() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("OPTERR=; getopts a o -x; OPTIND=1; unset OPTERR; getopts a o -y"),
+        0
+    );
+    assert_eq!(rig.output.bytes(), b"");
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: illegal option -- x\n/usr/bin/bash: illegal option -- y\n"
+    );
+}
