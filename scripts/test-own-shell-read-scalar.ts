@@ -76,19 +76,16 @@ const cases = [" ", ":", ": ", "", "é"]
         `REPLY=old; readonly REPLY; read ${options} <<<'xyz'; r=$?; printf '%s:[%s]\\n' "$r" "$REPLY"; exit "$r"`,
     ),
   );
-// Expectations replay recorded GNU Bash 5.3.15 observations, the frozen scoreboard's oracle.
-// Bash 5.2 (hosted Ubuntu 24.04) returns 1 for readonly non-final destinations and REPLY and
-// lets `read IFS ...` change later splitting, so a live host shell is not the oracle.
-// BASH_READ_SCALAR_RECORD re-records every case from /usr/bin/bash 5.3.15.
+// CI Bash is not the pinned oracle; replay locally recorded observations.
 type Recorded = { script: string; status: number; stdoutBase64: string };
-const bashVersion = "5.3.15(1)-release";
+const bashVersion = "GNU bash, version 5.3.15(1)-release ";
 const fixturePath = new URL("fixtures/shell-read-scalar.json", import.meta.url);
 const recordPath = process.env.BASH_READ_SCALAR_RECORD;
 const recorded: Recorded[] = [];
 const fixture: { bash: string; cases: Recorded[] } = recordPath
   ? { bash: liveBashVersion(), cases: [] }
   : JSON.parse(readFileSync(fixturePath, "utf8"));
-assert.equal(fixture.bash, bashVersion);
+assert.ok(fixture.bash.startsWith(bashVersion), fixture.bash);
 const fixtureCases = new Map(fixture.cases.map((entry) => [entry.script, entry]));
 if (!recordPath) assert.equal(fixtureCases.size, new Set(cases).size);
 after(() => {
@@ -100,9 +97,9 @@ after(() => {
 });
 
 function liveBashVersion() {
-  const probe = spawnSync("/usr/bin/bash", ["-c", 'printf %s "$BASH_VERSION"']);
+  const probe = spawnSync("/usr/bin/bash", ["--version"]);
   assert.equal(probe.status, 0);
-  return probe.stdout.toString();
+  return probe.stdout.toString().split("\n")[0];
 }
 
 function expectation(script: string) {
