@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "71f0e9d701d56f1209f2cd100b926142900308e50939faccd1f99e30609ec488",
+    "engineSourceSha256": "4f45b97340b2211d8e78c2987012edde6e4bb8ecd7bbbb2ca5257f16f0010043",
     "binaryBuild": null
   },
   "contract": {
@@ -231,6 +231,7 @@
       "kind": "layer",
       "files": [
         "shell/engine/src/interpreter.rs",
+        "shell/engine/src/interpreter/builtin_wrapper.rs",
         "shell/engine/src/interpreter/command_builtin.rs",
         "shell/engine/src/interpreter/command_builtin/tests.rs",
         "shell/engine/src/interpreter/conditional.rs",
@@ -545,7 +546,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 1614,
+        "line": 1615,
         "column": 33
       }
     },
@@ -575,7 +576,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 84,
+        "line": 85,
         "column": 30
       }
     },
@@ -855,7 +856,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3698,
+        "line": 3728,
         "column": 25
       }
     },
@@ -865,7 +866,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 5011,
+        "line": 5041,
         "column": 17
       }
     },
@@ -885,7 +886,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3684,
+        "line": 3714,
         "column": 17
       }
     },
@@ -895,7 +896,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3684,
+        "line": 3714,
         "column": 31
       }
     },

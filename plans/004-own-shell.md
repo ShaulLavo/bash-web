@@ -2015,6 +2015,108 @@ See [the behavior notes](../docs/printf-escaped-fields.md) and
 saved replay, original exit, before-and-after controls, offline comparator and
 cleanup receipt remain in `/work/reports/bash-web/hill-climb/printf-b-fields`.
 
+## Builtin-wrapper review follow-ups, 2026-10-21
+
+Approved future work, separate from the bounded wrapper repair. At immutable
+`e0a44aa8fe135713a2773cc46ddb660a395db1ec`, the independent observations in
+`/work/reports/bash-web/hill-climb/builtin-wrapper/review-r1/followup-results.json`
+reproduce these inherited failures on each recorded run. The wrapper is not the
+first owner of either behavior.
+
+- Readonly prefixes abort the submitted sequence. Reproduce with
+  `readonly v=old; v=new echo target; echo rc=$? v=$v`, and compare direct `echo`,
+  `command echo`, `builtin echo` and unknown `nocmdq` targets from that JSON.
+  Bash prints `target` then `rc=0 v=old` for the echo forms, diagnoses the readonly
+  binding on stderr, and continues. Native and production Waffle stop at the
+  diagnostic with status one and no stdout. Suspected owners are prefix assignment
+  admission in `shell/engine/src/interpreter.rs:3366-3432` and `expansion_failure`
+  at lines 1902-1926 of that immutable source. Distinguish prefix failure from
+  fatal expansion failure without changing ordinary readonly assignment rules.
+- Production Waffle treats inherited stdin as a writable diagnostic endpoint.
+  Reproduce `printf -z 2<&0; echo rc=$?` with empty inherited stdin. Bash and native
+  print only `rc=2`; Waffle emits the usage diagnostic on stdout before that line.
+  The direct printf control rules out new wrapper dispatch as the cause. The
+  here-string variant `printf -z <<< x 2<&0; echo rc=$?` does not reproduce it.
+  Inspect the host-descriptor bridge at `shell/engine/src/runtime.rs:730-736` and
+  `runtime/wasi.rs:362-363` at that checkpoint, then the pinned Waffle host owner.
+  Endpoint rights must be proved on the actual descriptor, not inferred from open
+  success. A complete host-side root cause has not been established. Runtime/FS
+  fixes and pin changes are outside this wrapper unit.
+
+R1 execution-diagnostic provenance also remains blocked. Keep lexical
+`expansion_line` unchanged and retain the exact diagnostic captures in
+`/work/reports/bash-web/hill-climb/builtin-wrapper/repair-r1-red-review32.json`.
+The repair progress file records the proposed owning data shape and additional
+Bash-only function/assignment controls. No line offset or prose waiver resolves it.
+
+
+## Builtin diagnostic coordinates, later family
+
+Status: Approved, later. Dispatch-only extraction is not R1 coordinate clearance.
+No `Context::diagnostic_line` ships here. Getopts' exact binding-prefix checks
+`root-invalid`, `root-readonly`, `nameref-readonly`, `function-invalid` and
+`eval-invalid` remain blocked. Preserve
+`/work/reports/bash-web/hill-climb/builtins/getopts/binding-diagnostics-pending.json`
+verbatim. Their expected Bash lines are 3, 3, 3, 2 and 3. Ordinary option errors
+stay prefix-free. Retain getopts review controls p19, p23, t05, t08 and q06.
+
+The stopped provenance implementation begins at `6d84037`; its failed r6 head is
+`0253be66210bf88475730134d2e89d640908676b`. Do not add another endpoint switch.
+Establish separate Bash reader, function-definition, redirect-expansion and
+conditional-construction ownership from source before changing metadata. A lexical
+expansion hint, constant fallback or empty getter cannot fulfill that contract.
+Preserve accepted main's canonical existing-expansion line-1 limitation until the
+later family's own decision changes it, even though Bash reports line 2.
+
+Keep R1a through R1d, conditional20, physical3, reduced function4, the broader r5
+failures and r6 inner/caller mismatch. Exact evidence under
+`/work/reports/bash-web/hill-climb/`:
+
+- `builtin-wrapper/review-r1/{targeted,followup}-results.json`, including
+  `retained-extra-2`, assignment versus argument, functions and existing writers.
+- `builtin-wrapper/provenance-review-r2/{main,followup}-results.json` for lazy
+  operands, compound headers, heredoc delimiter endpoints and function connectors.
+- `builtin-wrapper/conditional-repair-r4/{extra-red,extra-green}-results.json`
+  and its complete conditional control set.
+- `builtins/wrapper-review-r4/{main,review,discriminators}-results.json`.
+- `builtins/wrapper-redirect-review-r5/{review,function,main}-results.json`.
+- `builtins/wrapper-function-repair-r6/{first-candidate-cases,first-candidate-results,prior-results,conflicting-probes}.json`,
+  `first-candidate.patch` and `first-candidate.json`.
+- `builtins/wrapper-dispatch/deferred-coordinate-tests.rs`, the exact old tests,
+  and the new unprojected 207-script outcomes, including lost unaccepted matches.
+
+Minimum discriminator, including its initial blank line:
+
+```bash
+
+f() {
+:
+} > "$(builtin redir)out"
+f
+```
+
+Bash/prior84 report line 2; r5 reports line 4, with empty stdout and status 0.
+`f 2>&1` puts the difference in stdout. R6 repairs these but still reports redir
+line 3 instead of 2 in this case:
+
+```bash
+
+f() {
+[[ "$(builtin body)" == "a
+b" ]] > "$(builtin redir)out";
+}
+
+f
+builtin after
+```
+
+Bash's ordered stderr is redir2/body4/after8. R6 is redir3/body4/after8; empty
+stdout, status1. `r5-function-child-reader-does-not-leak` also emits an extra
+caller redirect diagnostic in r6. Keep that complete-output difference, not a
+passing decimal projection. The next worker must preserve every accepted-main
+pass and run the unchanged frozen ruler. Earlier unmerged matches are evidence,
+not accepted baseline memberships.
+
 ## Getopts caller-local dynamic unbind, 2026-10-21
 
 Status: Approved. Owner: Variables track for general dynamic scope/unbind
