@@ -31,13 +31,8 @@ fn getopts_indexed_local_preflight_covers_publication() {
             .unwrap();
         state.variables.insert(name.into(), binding);
     }
-    let reservation = state
-        .borrow()
-        .reserve_getopts_publication(&[("OPTIND", 1), ("OPTARG", 1), ("o", 1)])
-        .unwrap();
-    let hold = memory.admit(CAPACITY - memory.observation().0).unwrap();
-    drop(reservation);
-    assert_eq!(state.borrow_mut().publish_getopts_index("1".into()), Ok(()));
+    let hold =
+        publish_index_at_capacity(&state, &memory, &[("OPTIND", 1), ("OPTARG", 1), ("o", 1)]);
     assert_eq!(
         state
             .borrow_mut()
@@ -53,6 +48,21 @@ fn getopts_indexed_local_preflight_covers_publication() {
     assert_eq!(memory.observation().0, 0);
 }
 
+fn publish_index_at_capacity(
+    state: &SharedState,
+    memory: &StorageBudget,
+    publications: &[(&str, usize); 3],
+) -> crate::exec::StorageAllocation {
+    let reservation = state
+        .borrow()
+        .reserve_getopts_publication(publications)
+        .unwrap();
+    let hold = memory.admit(CAPACITY - memory.observation().0).unwrap();
+    drop(reservation);
+    assert_eq!(state.borrow_mut().publish_getopts_index("1".into()), Ok(()));
+    hold
+}
+
 struct ScanTrial {
     executor: Executor,
     session: Session,
@@ -66,15 +76,12 @@ impl ScanTrial {
     fn new() -> Self {
         let executor = Executor::new();
         let host = InProcessHost::new(executor.clone());
-        let session = Session::new(
-            executor.clone(),
-            Rc::new(host),
-            Rc::new(MemoryFs::new(65_536)),
-            Limits {
-                execution_bytes: CAPACITY,
-                ..Limits::default()
-            },
-        );
+        let fs = MemoryFs::new(CAPACITY);
+        let limits = Limits {
+            execution_bytes: CAPACITY,
+            ..Limits::default()
+        };
+        let session = Session::new(executor.clone(), Rc::new(host), Rc::new(fs), limits);
         let state = session.state();
         let frame = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
         state
@@ -198,13 +205,7 @@ fn getopts_indexed_local_preflight_covers_repeated_alias_publication() {
             .declare_nameref("ref".into(), "OPTIND".into(), false)
             .unwrap();
     }
-    let reservation = state
-        .borrow()
-        .reserve_getopts_publication(&[("OPTIND", 1), ("", 0), ("ref", 1)])
-        .unwrap();
-    let hold = memory.admit(CAPACITY - memory.observation().0).unwrap();
-    drop(reservation);
-    assert_eq!(state.borrow_mut().publish_getopts_index("1".into()), Ok(()));
+    let hold = publish_index_at_capacity(&state, &memory, &[("OPTIND", 1), ("", 0), ("ref", 1)]);
     assert_eq!(
         state
             .borrow_mut()

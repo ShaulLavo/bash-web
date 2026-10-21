@@ -135,7 +135,7 @@ pub(super) async fn run(
     }
     let bindings = publications.each_ref().map(|publication| {
         (
-            if publication.unbind {
+            if publication.unbind || publication.value.is_none() {
                 ""
             } else {
                 publication.name.as_str()

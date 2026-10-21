@@ -859,13 +859,6 @@ impl State {
         if self.is_readonly(&name) {
             return Err(1);
         }
-        let rest = self
-            .variables
-            .get(&name)
-            .filter(|v| matches!(v, Binding::Indexed(_)))
-            .map_or(0, |value| {
-                value.storage_bytes().saturating_add(Binding::node_bytes())
-            });
         let changes = self.assignment_undo.0.upgrade();
         if let Some(changes) = &changes {
             let mut changes = changes.borrow_mut();
@@ -874,7 +867,10 @@ impl State {
                 .grow(bytes)
                 .map_err(|_| crate::exec::RESOURCE_STATUS)?;
         }
-        self.reserve_local_value(&name, value.len().saturating_add(rest))?;
+        self.reserve_local_value(
+            &name,
+            self.scalar_assignment_value_bytes(&name, value.len()),
+        )?;
         if let Some(changes) = &changes {
             changes.borrow_mut().scalar_effect(&name, &value);
         }
@@ -902,6 +898,17 @@ impl State {
             self.refresh_star_separator();
         }
         Ok(())
+    }
+    fn scalar_assignment_value_bytes(&self, name: &str, bytes: usize) -> usize {
+        self.variables
+            .get(name)
+            .filter(|value| matches!(value, Binding::Indexed(_)))
+            .map_or(bytes, |value| {
+                value
+                    .storage_bytes()
+                    .saturating_add(Binding::node_bytes())
+                    .saturating_add(bytes)
+            })
     }
     fn assign_getopts_index(&mut self, name: &str, value: &str) {
         if name != "OPTIND" {
@@ -953,21 +960,33 @@ impl State {
         &self,
         names: &[(&str, usize); 3],
     ) -> Result<Option<crate::exec::StorageAllocation>, i32> {
-        let mut growth = [("", 0usize); 3];
+        let mut growth = [("", 0usize, 0usize); 3];
         for (index, (name, bytes)) in names.iter().enumerate() {
             let target = self.scalar_target(name)?.ok_or(2)?;
-            let bytes = self.getopts_local_growth(target, *bytes)?;
-            if let Some(previous) = growth[..index].iter().position(|(name, _)| *name == target) {
-                growth[previous].1 = growth[previous].1.max(bytes);
-                continue;
-            }
-            growth[index] = (target, bytes);
-        }
-        self.admit_temporary(
-            growth
+            let slot = growth[..index]
                 .iter()
-                .try_fold(0usize, |sum, (_, bytes)| sum.checked_add(*bytes).ok_or(2))?,
-        )
+                .position(|(name, _, _)| *name == target)
+                .unwrap_or(index);
+            let (_, previous_growth, previous_writes) = growth[slot];
+            let requested = self
+                .scalar_assignment_value_bytes(target, *bytes)
+                .checked_add(previous_writes)
+                .ok_or(2)?;
+            let required = self.getopts_local_growth(target, requested)?;
+            let additional = if matches!(self.variables.get(target), Some(Binding::Indexed(_))) {
+                Binding::node_bytes().checked_add(*bytes).ok_or(2)?
+            } else {
+                0
+            };
+            growth[slot] = (
+                target,
+                previous_growth.max(required),
+                previous_writes.checked_add(additional).ok_or(2)?,
+            );
+        }
+        self.admit_temporary(growth.iter().try_fold(0usize, |sum, (_, bytes, _)| {
+            sum.checked_add(*bytes).ok_or(2)
+        })?)
     }
     fn getopts_local_growth(&self, name: &str, bytes: usize) -> Result<usize, i32> {
         if self.is_readonly(name) {
