@@ -4123,6 +4123,8 @@ mod printf_integers;
 #[path = "words/printf_unsigned.rs"]
 mod printf_unsigned;
 
+#[path = "words/printf_assignment.rs"]
+mod printf_assignment;
 #[path = "words/printf_character.rs"]
 mod printf_character;
 #[path = "words/printf_integer_fields.rs"]
