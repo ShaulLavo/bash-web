@@ -1,18 +1,10 @@
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
 import { test } from "node:test";
-import { createWaffleRunner } from "./waffle-compat.ts";
+import { releaseShellRunner } from "./release-shell-runner.ts";
 
 // Bare `${!ref}` whose target is a positional or special parameter, through
 // the release guest on Waffle's process path.
-const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
-const runner = await createWaffleRunner({
-  modulePath: resolve(directory, "shell-runtime.wasm"),
-  fixtureDirectory: directory,
-  utilityDirectory: directory,
-  tmp: "/tmp/spec",
-  env: { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C", LANG: "C" },
-});
+const runner = await releaseShellRunner();
 // GNU Bash 5.3.15 (the frozen oracle's version) observations, recorded so the
 // check does not depend on the CI host's Bash. Diagnostics drop line numbers.
 const cases = [

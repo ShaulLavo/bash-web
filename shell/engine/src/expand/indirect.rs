@@ -348,10 +348,12 @@ mod tests {
         command.args[0].clone()
     }
 
-    fn special_fields(
+    /// Expand `source` with `r` pointing at `target`, as fields or as one scalar.
+    fn special_expand(
         state: &crate::state::SharedState,
         target: &str,
         source: &str,
+        scalar: bool,
     ) -> Result<Vec<String>, Error> {
         state
             .borrow_mut()
@@ -360,26 +362,22 @@ mod tests {
         let token = command_word(source);
         let mut work = Work::new(65536, 1 << 20, 16);
         let cancel = Cancel::new();
-        fields(&token, state, &cancel, 4096, 16, 4096, &mut work)
-            .now_or_never()
-            .expect("short fixture must not suspend")
+        let result = if scalar {
+            word(&token, state, &cancel, 4096, 4096, &mut work)
+                .now_or_never()
+                .map(|value| value.map(|value| vec![value]))
+        } else {
+            fields(&token, state, &cancel, 4096, 16, 4096, &mut work).now_or_never()
+        };
+        result.expect("short fixture must not suspend")
     }
 
-    fn special_word(
+    fn special_fields(
         state: &crate::state::SharedState,
         target: &str,
         source: &str,
-    ) -> Result<String, Error> {
-        state
-            .borrow_mut()
-            .assign_parameter("r".into(), target.into())
-            .unwrap();
-        let token = command_word(source);
-        let mut work = Work::new(65536, 1 << 20, 16);
-        let cancel = Cancel::new();
-        word(&token, state, &cancel, 4096, 4096, &mut work)
-            .now_or_never()
-            .expect("short fixture must not suspend")
+    ) -> Result<Vec<String>, Error> {
+        special_expand(state, target, source, false)
     }
 
     #[test]
@@ -403,8 +401,8 @@ mod tests {
                     let actual = special_fields(&state, target, indirect)
                         .unwrap_or_else(|_| panic!("{indirect} with r={target} must expand"));
                     assert_eq!(actual, expected, "{indirect} r={target} IFS={ifs:?}");
-                    let expected = special_word(&state, target, &plain).ok();
-                    let actual = special_word(&state, target, indirect).ok();
+                    let expected = special_expand(&state, target, &plain, true).ok();
+                    let actual = special_expand(&state, target, indirect, true).ok();
                     assert_eq!(actual, expected, "scalar {indirect} r={target} IFS={ifs:?}");
                 }
             }
