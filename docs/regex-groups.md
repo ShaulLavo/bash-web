@@ -37,3 +37,11 @@ The implementation and new controls are original local code based on bash-web
 `scripts/test-own-shell-regex-groups.ts`; native/WASI controls live in
 `shell/engine/tests/words/regex.rs`. The frozen score retains its existing cases,
 oracle, identities, skips, deadlines and per-case loss gate.
+
+The full frozen production-Waffle replay at source
+`ab1378ab8db7dda387e26e7477687e62a2c8c05e` gains eight Oils, four Brush and
+two Bashkit cases with zero lost cases. The immutable-main control first
+reproduces every committed pass. Only the 14 gained outcome fields and derived
+counts change; historical payloads remain. See the
+[measurement receipt](evidence/regex-groups.json) for exact IDs, identities,
+commands and cleanup ownership. Parent review and hosted acceptance are pending.
