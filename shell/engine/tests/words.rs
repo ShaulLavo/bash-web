@@ -4189,3 +4189,93 @@ fn indexed_review_local_scalar_ifs_restores_array_binding() {
         &[&["x", "y:z"], &["x,y:z"]],
     );
 }
+
+#[test]
+fn indexed_r1_incremental_writes_fit_default_limits() {
+    check(
+        "for ((i=0; i<5000; i++)); do a[i]=x || break; done; args \"$i\" \"${#a[@]}\" \"${a[4999]}\"",
+        &[&["5000", "5000", "x"]],
+    );
+}
+
+#[test]
+fn indexed_r1_incremental_appends_fit_default_limits() {
+    check(
+        "for ((i=0; i<5000; i++)); do a+=(x) || break; done; args \"$i\" \"${#a[@]}\" \"${a[4999]}\"",
+        &[&["5000", "5000", "x"]],
+    );
+}
+
+#[test]
+fn indexed_r1_compound_ten_thousand_elements_fit_default_limits() {
+    check(
+        "a=({1..10000}); args \"$?\" \"${#a[@]}\" \"${a[9999]}\"",
+        &[&["0", "10000", "10000"]],
+    );
+}
+
+#[test]
+fn indexed_r1_explicit_compound_subscripts_fail_closed() {
+    for source in ["a=([0]=x [5]=y)", "a+=([1]+=x)", "a=([$i]=x)"] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run("a=(saved kept)"), 0);
+        assert_eq!(rig.run(source), 2, "{source}");
+        assert_eq!(rig.run("args \"${a[@]}\""), 0);
+        assert_eq!(*rig.calls.borrow(), vec![vec!["saved", "kept"]]);
+    }
+    check(
+        "a=('[0]=x' \"[5]+=y\" \\[7]=z); args \"${a[@]}\"",
+        &[&["[0]=x", "[5]+=y", "[7]=z"]],
+    );
+}
+
+#[test]
+fn indexed_r1_pipeline_element_lengths_use_special_producer() {
+    check(
+        "true | false; args \"${#PIPESTATUS[0]}\" \"${#PIPESTATUS[1]}\" \"${#PIPESTATUS[8]}\"; false; args \"${u:-${#PIPESTATUS[0]}}\"",
+        &[&["1", "1", "0"], &["1"]],
+    );
+}
+
+#[test]
+fn indexed_r1_completed_assignments_survive_later_errors() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("a=(x y)\na[0]=new a[-3]=bad; args SAME\nargs \"$?\" \"${a[@]}\""),
+        0
+    );
+    assert_eq!(*rig.calls.borrow(), vec![vec!["1", "new", "y"]]);
+}
+
+#[test]
+fn indexed_r1_completed_scalar_assignments_survive_later_errors() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("x=old; readonly r\nx=new r=bad\nargs \"$?\" \"$x\""),
+        0
+    );
+    assert_eq!(*rig.calls.borrow(), vec![vec!["1", "new"]]);
+}
+
+#[test]
+fn indexed_r1_cancelled_staging_preserves_live_array_and_refunds_invocation() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(saved kept)"), 0);
+    for _ in 0..8 {
+        let job = rig
+            .shell
+            .start("a=(new $(while true; do :; done))")
+            .unwrap();
+        rig.ex.drive(128);
+        assert!(!job.is_finished());
+        rig.shell.interrupt();
+        assert_eq!(rig.finish(job), 130);
+        assert_eq!(rig.run("args \"${a[@]}\""), 0);
+    }
+    assert!(
+        rig.calls
+            .borrow()
+            .iter()
+            .all(|call| call == &["saved", "kept"])
+    );
+}
