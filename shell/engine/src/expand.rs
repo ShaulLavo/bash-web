@@ -420,6 +420,10 @@ struct Fields {
     /// argv pays per quote boundary rather than per byte.
     current_runs: Vec<(usize, bool)>,
     current_magic: bool,
+    /// Admitted words with extglob on also flag `@(`, `+(` and `!(` groups,
+    /// which pathname expansion rejects instead of treating them literally.
+    extglob_groups: bool,
+    group_prefix: bool,
     present: bool,
     whitespace: bool,
     leading: bool,
@@ -441,6 +445,8 @@ impl Fields {
             protections: Vec::new(),
             current_runs: Vec::new(),
             current_magic: false,
+            extglob_groups: false,
+            group_prefix: false,
             present: false,
             whitespace: false,
             leading: true,
@@ -476,6 +482,7 @@ impl Fields {
     }
     /// Only pathname candidates expand their runs into a byte mask.
     fn keep_protection(&mut self, work: &mut Work) -> Result<(), Error> {
+        self.group_prefix = false;
         if !std::mem::take(&mut self.current_magic) {
             self.current_runs.clear();
             return Ok(());
@@ -498,7 +505,10 @@ impl Fields {
             *length += bytes;
             return Ok(());
         }
-        admit_vec_slot(&mut self.current_runs, work)?;
+        // Unadmitted argv charges neither its text nor these per-segment runs.
+        if self.account_storage {
+            admit_vec_slot(&mut self.current_runs, work)?;
+        }
         self.current_runs.push((bytes, protected));
         Ok(())
     }
@@ -607,7 +617,10 @@ impl Fields {
         self.current.push(ch);
         if self.pathname {
             self.protect(ch.len_utf8(), glob_protected, work)?;
-            self.current_magic |= !glob_protected && matches!(ch, '*' | '?' | '[');
+            let active = !glob_protected;
+            self.current_magic |=
+                active && (matches!(ch, '*' | '?' | '[') || (ch == '(' && self.group_prefix));
+            self.group_prefix = self.extglob_groups && active && matches!(ch, '@' | '+' | '!');
         }
         Ok(())
     }
@@ -2152,6 +2165,7 @@ async fn expand_one(
     let pathname = !scalar && expansion.work.substitutions.is_some() && !state.borrow().noglob;
     let mut fields = Fields::new(max_bytes, max_fields);
     fields.pathname = pathname;
+    fields.extglob_groups = pathname && admitted && state.borrow().extglob;
     let fields = expansion
         .segments
         .collect(ifs, fields, expansion.work, cancel)
@@ -2166,13 +2180,15 @@ async fn expand_one(
         account_storage,
         ..
     } = fields;
-    let spare = current_runs.capacity() * std::mem::size_of::<(usize, bool)>();
-    drop(current_runs);
-    expansion.work.release_storage(spare);
+    if account_storage {
+        let spare = current_runs.capacity() * std::mem::size_of::<(usize, bool)>();
+        drop(current_runs);
+        expansion.work.release_storage(spare);
+    }
     let candidates = glob::Candidates {
         fields: out,
         patterns: protections,
-        charged: account_storage,
+        admitted: account_storage,
     };
     glob::expand_fields(
         candidates,

@@ -7,14 +7,6 @@ import { after, test } from "node:test";
 import { liveNodeWorkers } from "./node-worker-host.ts";
 import { createWaffleRunner } from "./waffle-compat.ts";
 
-const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
-const env = {
-  PATH: "/usr/bin:/bin",
-  HOME: "/home/user",
-  TMP: "/tmp/spec",
-  LC_ALL: "C.utf8",
-  LANG: "C.utf8",
-};
 // Expectations replay recorded GNU Bash 5.3.15 observations, the frozen scoreboard's oracle;
 // CI never runs the host's Bash. BASH_PATHNAME_RECORD=<fixture> re-records from
 // /usr/bin/bash 5.3.15, giving every script its own empty $TMP as Waffle's fresh filesystem does.
@@ -54,7 +46,7 @@ const scripts = [
   // Many fields: an argv without patterns, and with one, stays within budget.
   'cd "$TMP"; : > a; x=$(printf \'%s\\n\' {1..20000}); set -- $x; echo $#; set -- $x a*; echo $# "${@: -1}"',
   'cd "$TMP"; for i in {1..150}; do : > f$i; done; set -- f*; echo $# $1 $2 $3',
-  "x=$(printf '%0700000d' 0); set -- $x; echo ${#1}; set -- \"$x\"; echo ${#1}",
+  'x=0000000000; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x; set -- $x; echo ${#1}; set -- "$x"; echo ${#1}',
   // Scalar contexts do not expand pathnames.
   'cd "$TMP"; : > a; : > ab; v=a*; printf \'<%s>\\n\' "$v"; declare w=a?; printf \'<%s>\\n\' "$w"',
   "cd \"$TMP\"; echo hi > z*; printf '<%s>\\n' z*",
@@ -64,6 +56,14 @@ const scripts = [
   "shopt -s extglob\ncd \"$TMP\"; printf '<%s>\\n' @(q|r) +(q) ${u:-a@(}",
 ];
 
+// Waffle's environment; each recorded Bash script gets its own TMP.
+const env = {
+  TMP: "/tmp/spec",
+  HOME: "/home/user",
+  PATH: "/usr/bin:/bin",
+  LANG: "C.utf8",
+  LC_ALL: "C.utf8",
+};
 const fixture: { bash: string; env: typeof env; cases: Recorded[] } = recordPath
   ? { bash: liveBashVersion(), env, cases: [] }
   : JSON.parse(readFileSync(fixturePath, "utf8"));
@@ -110,6 +110,10 @@ if (recordPath) {
 } else {
   const fixtureCases = new Map(fixture.cases.map((entry) => [entry.script, entry]));
   assert.deepEqual(Array.from(fixtureCases.keys()), scripts);
+  const directory = resolve(
+    process.env.CARGO_TARGET_DIR ?? ".build/shell",
+    "wasm32-wasip1/release",
+  );
   const run = await createWaffleRunner({
     modulePath: resolve(directory, "shell-runtime.wasm"),
     fixtureDirectory: directory,

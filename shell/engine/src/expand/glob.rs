@@ -62,12 +62,12 @@ async fn magic(
     Ok(false)
 }
 
-async fn reject_extglob(
+async fn extglob_group(
     text: &str,
     protection: &[bool],
     work: &mut Work,
     cancel: &Cancel,
-) -> Result<(), Error> {
+) -> Result<bool, Error> {
     let bytes = text.as_bytes();
     let mut index = 0;
     while index + 1 < bytes.len() {
@@ -81,12 +81,12 @@ async fn reject_extglob(
                 && bytes[index + 1] == b'('
                 && !protection[index + 1]
             {
-                return Err(2.into());
+                return Ok(true);
             }
         }
         index += 1;
     }
-    Ok(())
+    Ok(false)
 }
 
 fn copied(value: &str, limit: usize, work: &mut Work) -> Result<String, Error> {
@@ -468,12 +468,12 @@ struct Output {
     values: Vec<String>,
     bytes: usize,
     limits: (usize, usize),
-    charged: bool,
+    admitted: bool,
 }
 impl Output {
     fn keep(&mut self, value: String, work: &mut Work) -> Result<(), Error> {
         let (max_bytes, max_fields) = self.limits;
-        if self.charged {
+        if self.admitted {
             return push(
                 &mut self.values,
                 value,
@@ -491,24 +491,26 @@ impl Output {
         Ok(())
     }
     fn keep_match(&mut self, value: String, work: &mut Work) -> Result<(), Error> {
-        if !self.charged {
+        if !self.admitted {
             work.release_storage(value.capacity());
         }
         self.keep(value, work)
     }
     fn discard(&self, value: String, work: &mut Work) {
-        if self.charged {
+        if self.admitted {
             discard(value, work);
         }
     }
 }
 
 /// Split fields with the masks of their pathname candidates only, in field
-/// order. `charged` says whether the fields and their slots were admitted.
+/// order. `admitted` says whether the fields and their slots were charged.
+/// Admitted lists reject pathname extglob groups with status 2; unadmitted
+/// argv keeps such fields literal, as it did before argv globbing.
 pub(super) struct Candidates {
     pub(super) fields: Vec<String>,
     pub(super) patterns: Vec<(usize, Vec<bool>)>,
-    pub(super) charged: bool,
+    pub(super) admitted: bool,
 }
 
 pub(super) async fn expand_fields(
@@ -522,7 +524,7 @@ pub(super) async fn expand_fields(
     let Candidates {
         fields,
         patterns,
-        charged,
+        admitted,
     } = candidates;
     if patterns.is_empty() {
         return Ok(fields);
@@ -538,7 +540,7 @@ pub(super) async fn expand_fields(
         values: Vec::new(),
         bytes: 0,
         limits,
-        charged,
+        admitted,
     };
     let mut patterns = patterns.into_iter().peekable();
     for (index, field) in fields.into_iter().enumerate() {
@@ -550,10 +552,11 @@ pub(super) async fn expand_fields(
         if field.len() != protection.len() {
             return Err(2.into());
         }
-        if extglob {
-            reject_extglob(&field, &protection, work, cancel).await?;
+        let group = extglob && extglob_group(&field, &protection, work, cancel).await?;
+        if group && admitted {
+            return Err(2.into());
         }
-        if !magic(&field, &protection, work, cancel).await? {
+        if group || !magic(&field, &protection, work, cancel).await? {
             output.keep(field, work)?;
             let freed = protection.capacity();
             drop(protection);
@@ -597,7 +600,7 @@ pub(super) async fn expand_fields(
         return Err(2.into());
     }
     work.release_storage(pattern_slots);
-    if charged {
+    if admitted {
         work.release_storage(field_slots);
     }
     Ok(output.values)

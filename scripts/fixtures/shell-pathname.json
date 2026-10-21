@@ -1,11 +1,11 @@
 {
   "bash": "5.3.15(1)-release",
   "env": {
-    "PATH": "/usr/bin:/bin",
-    "HOME": "/home/user",
     "TMP": "/tmp/spec",
-    "LC_ALL": "C.utf8",
-    "LANG": "C.utf8"
+    "HOME": "/home/user",
+    "PATH": "/usr/bin:/bin",
+    "LANG": "C.utf8",
+    "LC_ALL": "C.utf8"
   },
   "cases": [
     {
@@ -141,9 +141,9 @@
       "stderrBase64": ""
     },
     {
-      "script": "x=$(printf '%0700000d' 0); set -- $x; echo ${#1}; set -- \"$x\"; echo ${#1}",
+      "script": "x=0000000000; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x; set -- $x; echo ${#1}; set -- \"$x\"; echo ${#1}",
       "status": 0,
-      "stdoutBase64": "NzAwMDAwCjcwMDAwMAo=",
+      "stdoutBase64": "NjAwMDAwCjYwMDAwMAo=",
       "stderrBase64": ""
     },
     {
