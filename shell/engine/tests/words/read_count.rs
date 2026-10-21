@@ -14,7 +14,7 @@ fn assert_value(rig: &Rig, name: &str, value: &str) {
             .borrow()
             .bindings()
             .get(name)
-            .map(String::as_str),
+            .map(|value| value.as_str()),
         Some(value)
     );
 }
@@ -216,7 +216,7 @@ fn read_count_short_local_values_do_not_retain_the_reserved_ceiling() {
             let state = rig.shell.state();
             let state = state.borrow();
             let value = state.bindings().get(name).unwrap();
-            (value.len(), value.capacity())
+            (value.len(), value.scalar().unwrap().capacity())
         })
         .into();
     rig.shell.interrupt();

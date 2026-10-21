@@ -25,9 +25,8 @@ pub(super) fn locale(state: &SharedState) -> Result<(), Error> {
     for category in ["LC_CTYPE", "LC_COLLATE"] {
         let locale = ["LC_ALL", category, "LANG"]
             .iter()
-            .filter_map(|name| state.bindings().get(*name))
+            .filter_map(|name| state.scalar_parameter(name))
             .find(|value| !value.is_empty())
-            .map(String::as_str)
             .unwrap_or("C");
         if !matches!(locale, "C" | "POSIX" | "C.UTF-8" | "C.utf8") {
             return Err(2.into());
