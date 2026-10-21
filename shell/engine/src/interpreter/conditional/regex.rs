@@ -7,8 +7,8 @@
 //! ASCII pattern/input only, in C/POSIX/C.UTF-8/C.utf8 character and collation
 //! locales. Other input/locale combinations fail closed rather than pretending
 //! Unicode classes or byte-oriented C-locale matching have been implemented.
-//! Capture groups/backreferences and locale collating/equivalence constructs
-//! also fail closed (status 2): BASH_REMATCH belongs to the future arrays subarea.
+//! Groups affect matching only: BASH_REMATCH belongs to the arrays subarea.
+//! Backreferences and locale collating/equivalence constructs fail closed (2).
 use crate::{
     executor::Cancel,
     expand::{Error, Work, pattern::Pattern},
@@ -70,11 +70,60 @@ enum Atom {
     End,
 }
 #[derive(Clone, Copy)]
-struct Term {
-    atom: Atom,
-    min: usize,
-    max: Option<usize>,
+enum Expression {
+    Empty,
+    Atom(Atom),
+    Group(usize),
+    Sequence(usize, usize),
+    Alternative(usize, usize),
+    Repeat {
+        child: usize,
+        min: usize,
+        max: Option<usize>,
+    },
 }
+#[derive(Default)]
+struct Group {
+    sequence: Option<usize>,
+    alternatives: Option<usize>,
+}
+
+impl Group {
+    fn append(
+        &mut self,
+        child: usize,
+        expressions: &mut Vec<Expression>,
+        work: &mut Work,
+    ) -> Result<(), Error> {
+        self.sequence = Some(match self.sequence {
+            Some(left) => push(expressions, Expression::Sequence(left, child), work)?,
+            None => child,
+        });
+        Ok(())
+    }
+
+    fn branch(&mut self, expressions: &mut Vec<Expression>, work: &mut Work) -> Result<(), Error> {
+        let branch = match self.sequence.take() {
+            Some(sequence) => sequence,
+            None => push(expressions, Expression::Empty, work)?,
+        };
+        self.alternatives = Some(match self.alternatives {
+            Some(left) => push(expressions, Expression::Alternative(left, branch), work)?,
+            None => branch,
+        });
+        Ok(())
+    }
+
+    fn finish(
+        mut self,
+        expressions: &mut Vec<Expression>,
+        work: &mut Work,
+    ) -> Result<usize, Error> {
+        self.branch(expressions, work)?;
+        self.alternatives.ok_or_else(|| 2.into())
+    }
+}
+
 #[derive(Clone, Copy)]
 enum Node {
     Accept,
@@ -322,6 +371,33 @@ async fn decimal(
     }
     Ok(number)
 }
+async fn interval(
+    pattern: &Pattern,
+    index: &mut usize,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<(usize, Option<usize>), Error> {
+    *index += 1;
+    let min = decimal(pattern, index, work, cancel).await?;
+    let max = if active(pattern, *index, ',') {
+        *index += 1;
+        if active(pattern, *index, '}') {
+            None
+        } else {
+            Some(decimal(pattern, index, work, cancel).await?)
+        }
+    } else {
+        Some(min)
+    };
+    if !active(pattern, *index, '}')
+        || min > 32767
+        || max.is_some_and(|max| min > max || max > 32767)
+    {
+        return Err(2.into());
+    }
+    Ok((min, max))
+}
+
 async fn repetition(
     pattern: &Pattern,
     index: &mut usize,
@@ -332,24 +408,7 @@ async fn repetition(
         Some(('*', false)) => (0, None),
         Some(('+', false)) => (1, None),
         Some(('?', false)) => (0, Some(1)),
-        Some(('{', false)) => {
-            *index += 1;
-            let min = decimal(pattern, index, work, cancel).await?;
-            let max = if active(pattern, *index, ',') {
-                *index += 1;
-                if active(pattern, *index, '}') {
-                    None
-                } else {
-                    Some(decimal(pattern, index, work, cancel).await?)
-                }
-            } else {
-                Some(min)
-            };
-            if !active(pattern, *index, '}') || max.is_some_and(|max| min > max) {
-                return Err(2.into());
-            }
-            (min, max)
-        }
+        Some(('{', false)) => interval(pattern, index, work, cancel).await?,
         _ => return Ok((1, Some(1))),
     };
     *index += 1;
@@ -359,85 +418,273 @@ async fn repetition(
     }
     Ok(result)
 }
+async fn repeated(
+    child: usize,
+    expressions: &mut Vec<Expression>,
+    pattern: &Pattern,
+    index: &mut usize,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<usize, Error> {
+    let (min, max) = repetition(pattern, index, work, cancel).await?;
+    if min == 1 && max == Some(1) {
+        return Ok(child);
+    }
+    if matches!(
+        expressions[child],
+        Expression::Atom(Atom::Start | Atom::End)
+    ) {
+        return Err(2.into());
+    }
+    push(expressions, Expression::Repeat { child, min, max }, work)
+}
+
+fn open_group(groups: &mut Vec<Group>, group: &mut Group, work: &mut Work) -> Result<(), Error> {
+    if groups.len() == 64 {
+        return Err(2.into());
+    }
+    push(groups, std::mem::take(group), work)?;
+    Ok(())
+}
+
+async fn parse_atom(
+    pattern: &Pattern,
+    index: &mut usize,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<Atom, Error> {
+    let (ch, protected) = character(pattern, index)?;
+    Ok(match (ch, protected) {
+        ('*' | '+' | '?' | '{', false) => return Err(2.into()),
+        ('[', false) => {
+            let (atom, next) = class_end(pattern, *index, work, cancel).await?;
+            *index = next;
+            atom
+        }
+        ('.', false) => Atom::Any,
+        ('^', false) => Atom::Start,
+        ('$', false) => Atom::End,
+        _ => Atom::Literal(ch),
+    })
+}
+
+async fn parse(
+    pattern: &Pattern,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<(Vec<Expression>, usize), Error> {
+    let mut expressions = Vec::new();
+    let mut groups = Vec::new();
+    let mut group = Group::default();
+    let mut index = 0;
+    while pattern.regex_character(index).is_some() {
+        work.checkpoint(cancel).await?;
+        if active(pattern, index, '(') {
+            open_group(&mut groups, &mut group, work)?;
+            index += 1;
+            continue;
+        }
+        if active(pattern, index, ')') {
+            let child = group.finish(&mut expressions, work)?;
+            let child = push(&mut expressions, Expression::Group(child), work)?;
+            group = groups.pop().ok_or(2)?;
+            index += 1;
+            let child =
+                repeated(child, &mut expressions, pattern, &mut index, work, cancel).await?;
+            group.append(child, &mut expressions, work)?;
+            continue;
+        }
+        if active(pattern, index, '|') {
+            group.branch(&mut expressions, work)?;
+            index += 1;
+            continue;
+        }
+        let atom = parse_atom(pattern, &mut index, work, cancel).await?;
+        let child = push(&mut expressions, Expression::Atom(atom), work)?;
+        let child = repeated(child, &mut expressions, pattern, &mut index, work, cancel).await?;
+        group.append(child, &mut expressions, work)?;
+    }
+    if !groups.is_empty() {
+        return Err(2.into());
+    }
+    let root = group.finish(&mut expressions, work)?;
+    Ok((expressions, root))
+}
+
+#[derive(Clone, Copy)]
+enum Compile {
+    Visit(usize, usize),
+    Sequence(usize),
+    Alternative {
+        left: usize,
+        next: usize,
+    },
+    Join(usize),
+    Copies {
+        child: usize,
+        required: usize,
+        optional: usize,
+    },
+    Optional(usize),
+    Loop {
+        split: usize,
+        next: usize,
+    },
+}
+
+fn copies(
+    child: usize,
+    required: usize,
+    optional: usize,
+    next: usize,
+    tasks: &mut Vec<Compile>,
+    work: &mut Work,
+) -> Result<(), Error> {
+    if optional > 0 {
+        push(
+            tasks,
+            Compile::Copies {
+                child,
+                required,
+                optional: optional - 1,
+            },
+            work,
+        )?;
+        push(tasks, Compile::Optional(next), work)?;
+        push(tasks, Compile::Visit(child, next), work)?;
+        return Ok(());
+    }
+    if required > 0 {
+        push(
+            tasks,
+            Compile::Copies {
+                child,
+                required: required - 1,
+                optional: 0,
+            },
+            work,
+        )?;
+        push(tasks, Compile::Visit(child, next), work)?;
+    }
+    Ok(())
+}
+
+fn atom_node(atom: Atom, next: usize) -> Node {
+    match atom {
+        Atom::Start => Node::Start(next),
+        Atom::End => Node::End(next),
+        _ => Node::Consume(atom, next),
+    }
+}
+
+fn visit(
+    expression: Expression,
+    next: usize,
+    nodes: &mut Vec<Node>,
+    tasks: &mut Vec<Compile>,
+    work: &mut Work,
+) -> Result<usize, Error> {
+    match expression {
+        Expression::Empty => return Ok(next),
+        Expression::Atom(atom) => return push(nodes, atom_node(atom, next), work),
+        Expression::Group(child) => {
+            push(tasks, Compile::Visit(child, next), work)?;
+        }
+        Expression::Sequence(left, right) => {
+            push(tasks, Compile::Sequence(left), work)?;
+            push(tasks, Compile::Visit(right, next), work)?;
+        }
+        Expression::Alternative(left, right) => {
+            push(tasks, Compile::Alternative { left, next }, work)?;
+            push(tasks, Compile::Visit(right, next), work)?;
+        }
+        Expression::Repeat {
+            child,
+            min,
+            max: Some(max),
+        } => {
+            push(
+                tasks,
+                Compile::Copies {
+                    child,
+                    required: min,
+                    optional: max - min,
+                },
+                work,
+            )?;
+        }
+        Expression::Repeat {
+            child,
+            min,
+            max: None,
+        } => {
+            let split = push(nodes, Node::Split(0, next), work)?;
+            push(
+                tasks,
+                Compile::Copies {
+                    child,
+                    required: min,
+                    optional: 0,
+                },
+                work,
+            )?;
+            push(tasks, Compile::Loop { split, next }, work)?;
+            push(tasks, Compile::Visit(child, split), work)?;
+        }
+    }
+    Ok(next)
+}
+
+fn compile_task(
+    task: Compile,
+    expressions: &[Expression],
+    nodes: &mut Vec<Node>,
+    tasks: &mut Vec<Compile>,
+    work: &mut Work,
+    mut result: usize,
+) -> Result<usize, Error> {
+    match task {
+        Compile::Visit(child, next) => {
+            result = visit(expressions[child], next, nodes, tasks, work)?
+        }
+        Compile::Sequence(left) => {
+            push(tasks, Compile::Visit(left, result), work)?;
+        }
+        Compile::Alternative { left, next } => {
+            push(tasks, Compile::Join(result), work)?;
+            push(tasks, Compile::Visit(left, next), work)?;
+        }
+        Compile::Join(right) => result = push(nodes, Node::Split(result, right), work)?,
+        Compile::Copies {
+            child,
+            required,
+            optional,
+        } => copies(child, required, optional, result, tasks, work)?,
+        Compile::Optional(next) => result = push(nodes, Node::Split(result, next), work)?,
+        Compile::Loop { split, next } => {
+            nodes[split] = Node::Split(result, next);
+            result = split;
+        }
+    }
+    Ok(result)
+}
+
 async fn compile(
     pattern: &Pattern,
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<(Vec<Node>, usize), Error> {
+    let (expressions, root) = parse(pattern, work, cancel).await?;
     let mut nodes = Vec::new();
     push(&mut nodes, Node::Accept, work)?;
-    let mut alternatives = Vec::new();
-    let mut terms = Vec::new();
-    let mut index = 0;
-    loop {
+    let mut tasks = Vec::new();
+    push(&mut tasks, Compile::Visit(root, 0), work)?;
+    let mut result = 0;
+    while let Some(task) = tasks.pop() {
         work.checkpoint(cancel).await?;
-        let boundary = pattern.regex_character(index).is_none() || active(pattern, index, '|');
-        if boundary {
-            let mut next = 0;
-            while let Some(term) = terms.pop() {
-                let Term { atom, min, max } = term;
-                if matches!(atom, Atom::Start | Atom::End) {
-                    next = push(
-                        &mut nodes,
-                        if matches!(atom, Atom::Start) {
-                            Node::Start(next)
-                        } else {
-                            Node::End(next)
-                        },
-                        work,
-                    )?;
-                    continue;
-                }
-                if let Some(max) = max {
-                    for _ in min..max {
-                        work.checkpoint(cancel).await?;
-                        let consume = push(&mut nodes, Node::Consume(atom, next), work)?;
-                        next = push(&mut nodes, Node::Split(consume, next), work)?;
-                    }
-                } else {
-                    let split = push(&mut nodes, Node::Split(0, next), work)?;
-                    let consume = push(&mut nodes, Node::Consume(atom, split), work)?;
-                    nodes[split] = Node::Split(consume, next);
-                    next = split;
-                }
-                for _ in 0..min {
-                    work.checkpoint(cancel).await?;
-                    next = push(&mut nodes, Node::Consume(atom, next), work)?;
-                }
-            }
-            push(&mut alternatives, next, work)?;
-            if pattern.regex_character(index).is_none() {
-                break;
-            }
-            index += 1;
-            continue;
-        }
-        let (ch, protected) = character(pattern, &mut index)?;
-        let atom = match (ch, protected) {
-            ('(', false) | (')', false) => return Err(2.into()),
-            ('*' | '+' | '?' | '{', false) => return Err(2.into()),
-            ('[', false) => {
-                let (atom, next) = class_end(pattern, index, work, cancel).await?;
-                index = next;
-                atom
-            }
-            ('.', false) => Atom::Any,
-            ('^', false) => Atom::Start,
-            ('$', false) => Atom::End,
-            _ => Atom::Literal(ch),
-        };
-        let (min, max) = repetition(pattern, &mut index, work, cancel).await?;
-        if matches!(atom, Atom::Start | Atom::End) && (min != 1 || max != Some(1)) {
-            return Err(2.into());
-        }
-        push(&mut terms, Term { atom, min, max }, work)?;
+        result = compile_task(task, &expressions, &mut nodes, &mut tasks, work, result)?;
     }
-    let mut start = alternatives.pop().ok_or(2)?;
-    while let Some(other) = alternatives.pop() {
-        work.checkpoint(cancel).await?;
-        start = push(&mut nodes, Node::Split(other, start), work)?;
-    }
-    Ok((nodes, start))
+    Ok((nodes, result))
 }
 fn slots<T: Clone>(count: usize, value: T, work: &mut Work) -> Result<Vec<T>, Error> {
     work.admit_storage(count.checked_mul(size_of::<T>()).ok_or(2)?)?;
