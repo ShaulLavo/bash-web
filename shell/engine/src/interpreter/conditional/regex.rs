@@ -372,6 +372,33 @@ async fn decimal(
     }
     Ok(number)
 }
+async fn interval(
+    pattern: &Pattern,
+    index: &mut usize,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<(usize, Option<usize>), Error> {
+    *index += 1;
+    let min = decimal(pattern, index, work, cancel).await?;
+    let max = if active(pattern, *index, ',') {
+        *index += 1;
+        if active(pattern, *index, '}') {
+            None
+        } else {
+            Some(decimal(pattern, index, work, cancel).await?)
+        }
+    } else {
+        Some(min)
+    };
+    if !active(pattern, *index, '}')
+        || min > 32767
+        || max.is_some_and(|max| min > max || max > 32767)
+    {
+        return Err(2.into());
+    }
+    Ok((min, max))
+}
+
 async fn repetition(
     pattern: &Pattern,
     index: &mut usize,
@@ -382,27 +409,7 @@ async fn repetition(
         Some(('*', false)) => (0, None),
         Some(('+', false)) => (1, None),
         Some(('?', false)) => (0, Some(1)),
-        Some(('{', false)) => {
-            *index += 1;
-            let min = decimal(pattern, index, work, cancel).await?;
-            let max = if active(pattern, *index, ',') {
-                *index += 1;
-                if active(pattern, *index, '}') {
-                    None
-                } else {
-                    Some(decimal(pattern, index, work, cancel).await?)
-                }
-            } else {
-                Some(min)
-            };
-            if !active(pattern, *index, '}')
-                || min > 32767
-                || max.is_some_and(|max| min > max || max > 32767)
-            {
-                return Err(2.into());
-            }
-            (min, max)
-        }
+        Some(('{', false)) => interval(pattern, index, work, cancel).await?,
         _ => return Ok((1, Some(1))),
     };
     *index += 1;
@@ -629,6 +636,40 @@ fn visit(
     Ok(next)
 }
 
+fn compile_task(
+    task: Compile,
+    expressions: &[Expression],
+    nodes: &mut Vec<Node>,
+    tasks: &mut Vec<Compile>,
+    work: &mut Work,
+    mut result: usize,
+) -> Result<usize, Error> {
+    match task {
+        Compile::Visit(child, next) => {
+            result = visit(expressions[child], next, nodes, tasks, work)?
+        }
+        Compile::Sequence(left) => {
+            push(tasks, Compile::Visit(left, result), work)?;
+        }
+        Compile::Alternative { left, next } => {
+            push(tasks, Compile::Join(result), work)?;
+            push(tasks, Compile::Visit(left, next), work)?;
+        }
+        Compile::Join(right) => result = push(nodes, Node::Split(result, right), work)?,
+        Compile::Copies {
+            child,
+            required,
+            optional,
+        } => copies(child, required, optional, result, tasks, work)?,
+        Compile::Optional(next) => result = push(nodes, Node::Split(result, next), work)?,
+        Compile::Loop { split, next } => {
+            nodes[split] = Node::Split(result, next);
+            result = split;
+        }
+    }
+    Ok(result)
+}
+
 async fn compile(
     pattern: &Pattern,
     work: &mut Work,
@@ -642,29 +683,7 @@ async fn compile(
     let mut result = 0;
     while let Some(task) = tasks.pop() {
         work.checkpoint(cancel).await?;
-        match task {
-            Compile::Visit(child, next) => {
-                result = visit(expressions[child], next, &mut nodes, &mut tasks, work)?
-            }
-            Compile::Sequence(left) => {
-                push(&mut tasks, Compile::Visit(left, result), work)?;
-            }
-            Compile::Alternative { left, next } => {
-                push(&mut tasks, Compile::Join(result), work)?;
-                push(&mut tasks, Compile::Visit(left, next), work)?;
-            }
-            Compile::Join(right) => result = push(&mut nodes, Node::Split(result, right), work)?,
-            Compile::Copies {
-                child,
-                required,
-                optional,
-            } => copies(child, required, optional, result, &mut tasks, work)?,
-            Compile::Optional(next) => result = push(&mut nodes, Node::Split(result, next), work)?,
-            Compile::Loop { split, next } => {
-                nodes[split] = Node::Split(result, next);
-                result = split;
-            }
-        }
+        result = compile_task(task, &expressions, &mut nodes, &mut tasks, work, result)?;
     }
     Ok((nodes, result))
 }
