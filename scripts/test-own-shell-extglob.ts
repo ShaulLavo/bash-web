@@ -63,12 +63,14 @@ const reviewCases = [
   "p='@(@([|a)|b)'; [[ b == $p ]]; echo $?; [[ a == $p ]]; echo $?",
   "p='@([a)|b])'; [[ ')' == $p ]]; echo $?; [[ '|' == $p ]]; echo $?; [[ b == $p ]]; echo $?",
   "p='[|a)'; [[ '[|a)' == $p ]]; echo $?; p='[a'; [[ '[a' == $p ]]; echo $?",
+  "p='[@(a|b)'; [[ '[a' == $p ]]; echo $?; [[ '[b' == $p ]]; echo $?",
+  "shopt -s extglob; p='[@(a|b)'; case '[a' in $p) echo match;; *) echo miss;; esac",
   "[[ '' == +(*()|?()) ]]; echo $?; [[ 'é🙂' == +(@(?)|?()) ]]; echo $?",
 ];
-for (const delimiter of ["|", "(", ")"])
-  for (const slash of ["\\", "\\\\"])
+for (const delimiter of ["|", "(", ")", "!"])
+  for (const slash of ["\\", "\\\\", "\\\\\\"])
     reviewCases.push(
-      `p='${slash}'; [[ 'a${delimiter}b' == @(a$p'${delimiter}'b|c) ]]; echo $?; [[ b == @(a$p'${delimiter}'b|c) ]]; echo $?; [[ c == @(a$p'${delimiter}'b|c) ]]; echo $?`,
+      `p='${slash}'; [[ 'a${delimiter}b' == @(a$p'${delimiter}'b|c) ]]; echo $?; [[ b == @(a$p'${delimiter}'b|c) ]]; echo $?; [[ c == @(a$p'${delimiter}'b|c) ]]; echo $?; [[ 'a\\${delimiter}b' == @(a$p'${delimiter}'b|c) ]]; echo $?`,
       `shopt -s extglob\np='${slash}'; case 'a${delimiter}b' in @(a$p'${delimiter}'b|c)) echo match;; *) echo miss;; esac; case b in @(a$p'${delimiter}'b|c)) echo match;; *) echo miss;; esac`,
     );
 for (const script of cases.concat(reviewCases))
