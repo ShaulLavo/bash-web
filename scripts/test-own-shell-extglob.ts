@@ -92,7 +92,28 @@ const literalTailCases = [
   const plain = pattern.replaceAll("\\", "");
   return `shopt -s extglob; p=${quote(pattern)}; for v in ${quote(pattern)} ${quote(plain)}; do [[ $v == $p ]]; echo $?; case $v in $p) echo 0;; *) echo 1;; esac; done`;
 });
-for (const ch of ["!", "#", "%", "(", ")", "*", "-", ".", ":", "=", "?", "[", "\\", "]", "^", "|", "b", "@", "+", "é"])
+for (const ch of [
+  "!",
+  "#",
+  "%",
+  "(",
+  ")",
+  "*",
+  "-",
+  ".",
+  ":",
+  "=",
+  "?",
+  "[",
+  "\\",
+  "]",
+  "^",
+  "|",
+  "b",
+  "@",
+  "+",
+  "é",
+])
   for (const prefix of ["", "$q"])
     literalTailCases.push(
       `shopt -s extglob; m='@([|a)'; q='\\'; for v in ${quote("@([|a)" + ch)} ${quote("@([|a)\\" + ch)} ${quote("@([|a)\\\\" + ch)}; do [[ $v == $m${prefix}${quote(ch)} ]]; echo $?; case $v in $m${prefix}${quote(ch)}) echo 0;; *) echo 1;; esac; done`,

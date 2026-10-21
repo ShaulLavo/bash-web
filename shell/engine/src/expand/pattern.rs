@@ -13,6 +13,8 @@ struct Character {
     value: char,
     protected: bool,
     escaped_protected: bool,
+    /// Backslashes in Bash's literal spelling of a malformed group suffix.
+    literal_prefix: u8,
 }
 
 #[derive(Default)]
@@ -61,6 +63,27 @@ impl Pattern {
             value,
             protected: protection.protects(value),
             escaped_protected: false,
+            literal_prefix: u8::from(
+                protection.protects(value)
+                    && matches!(
+                        value,
+                        '!' | '#'
+                            | '%'
+                            | '('
+                            | ')'
+                            | '*'
+                            | '-'
+                            | '.'
+                            | ':'
+                            | '='
+                            | '?'
+                            | '['
+                            | '\\'
+                            | ']'
+                            | '^'
+                            | '|'
+                    ),
+            ),
         });
         Ok(())
     }
@@ -117,14 +140,17 @@ impl Pattern {
                     value: '\\',
                     protected: true,
                     escaped_protected: false,
+                    literal_prefix: self.chars[read + 1].literal_prefix,
                 };
                 self.chars[read + 1].protected = false;
+                self.chars[read + 1].literal_prefix = 0;
                 read += 1;
                 write += 1;
                 continue;
             }
             read += usize::from(escape);
             let mut ch = self.chars[read];
+            ch.literal_prefix = ch.literal_prefix.checked_add(u8::from(escape)).ok_or(2)?;
             ch.protected |= escape;
             self.chars[write] = ch;
             read += 1;

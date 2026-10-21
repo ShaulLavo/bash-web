@@ -214,6 +214,10 @@ async fn literal_tail(
 ) -> Result<usize, Error> {
     for ch in &pattern.chars[start..] {
         work.checkpoint(cancel).await?;
+        for _ in 0..ch.literal_prefix {
+            work.checkpoint(cancel).await?;
+            compiler.consume(Atom::Literal('\\'), work)?;
+        }
         compiler.consume(Atom::Literal(ch.value), work)?;
     }
     Ok(pattern.chars.len())
@@ -416,6 +420,82 @@ mod tests {
             ("*(a", "zz(a", false),
             ("[a", "[a", true),
         ]);
+    }
+
+    #[test]
+    fn malformed_group_suffix_retains_raw_backslashes() {
+        assert_cases(&[
+            (r"@([|a)\*", r"@([|a)\*", true),
+            (r"@([|a)\*", "@([|a)*", false),
+            (r"@([\]|x)", r"@([\]|x)", true),
+            (r"@([\]|x)", "@([]|x)", false),
+            (r"@([|a)\b", r"@([|a)\b", true),
+            (r"@([|a)\\", r"@([|a)\\", true),
+            (r"[\]|x", "[]|x", true),
+            (r"@(\[|x)", "[", true),
+            (r"@([\]]|x)", "]", true),
+        ]);
+    }
+
+    #[test]
+    fn malformed_group_quoted_spelling_is_idempotent() {
+        for (prefix, quoted, value) in [
+            ("", '*', r"@([|a)\*"),
+            ("", 'b', "@([|a)b"),
+            (r"\", '*', r"@([|a)\\*"),
+            (r"\", '.', r"@([|a)\\."),
+        ] {
+            let mut source = pattern("@([|a)");
+            let mut work = Work::new(100000, 100000, 16);
+            for ch in prefix.chars() {
+                source
+                    .push(ch, Protection::None, &mut work)
+                    .unwrap_or_else(|_| panic!("fits"));
+            }
+            source
+                .push(quoted, Protection::All, &mut work)
+                .unwrap_or_else(|_| panic!("fits"));
+            for _ in 0..3 {
+                assert_eq!(
+                    finish(source.matches_full(value, &mut work, &Cancel::new())).ok(),
+                    Some(true),
+                    "{prefix}{quoted}: {value}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn literal_suffix_expansion_admits_storage_and_checkpoints_cancellation() {
+        let mut source = pattern(&format!("@([|a){}", r"\*".repeat(8192)));
+        let mut work = Work::new(1000000, 1000000, 16);
+        let cancel = Cancel::new();
+        finish(source.normalize_glob(true, &mut work, &cancel))
+            .unwrap_or_else(|_| panic!("normalization fits"));
+        let mut compiler = Compiler {
+            code: Vec::new(),
+            groups: Vec::new(),
+            tail: 0,
+        };
+        let mut denied = Work::new(1000000, 0, 16);
+        assert!(matches!(
+            finish(literal_tail(
+                &source,
+                0,
+                &mut compiler,
+                &mut denied,
+                &cancel
+            )),
+            Err(Error::Status(2))
+        ));
+        assert_eq!(compiler.code.capacity(), 0);
+        compiler
+            .emit(Instruction::Accept, &mut work)
+            .unwrap_or_else(|_| panic!("fits"));
+        assert_cancelled_after_yield(
+            literal_tail(&source, 0, &mut compiler, &mut work, &cancel),
+            &cancel,
+        );
     }
 
     #[test]
