@@ -436,6 +436,43 @@ impl<'a> Printer<'a> {
         self.emit(1, &escape.bytes[..escape.len]).await?;
         Ok(escape)
     }
+    async fn escaped_field(
+        &mut self,
+        input: &[u8],
+        precision: Option<usize>,
+        emit: bool,
+    ) -> Result<(usize, bool), i32> {
+        let limit = precision.unwrap_or(usize::MAX);
+        let mut output = OperandOutput {
+            remaining: limit,
+            emit,
+        };
+        let mut offset = 0;
+        while offset < input.len() {
+            if input[offset] != b'\\' {
+                let input = &input[offset..input.len().min(offset + WRITE_CHUNK)];
+                let length = input
+                    .iter()
+                    .position(|byte| *byte == b'\\')
+                    .unwrap_or(input.len());
+                self.scan(length).await?;
+                output.piece(&input[..length], self).await?;
+                offset += length;
+                continue;
+            }
+            let escape = decode(&input[offset..], Mode::Operand, self.utf8);
+            self.scan(escape.consumed).await?;
+            if let Some(diagnostic) = escape.diagnostic.filter(|_| !emit) {
+                self.usage_diagnostic(diagnostic).await?;
+            }
+            output.piece(&escape.bytes[..escape.len], self).await?;
+            offset += escape.consumed;
+            if escape.stop {
+                return Ok((limit - output.remaining, true));
+            }
+        }
+        Ok((limit - output.remaining, false))
+    }
     async fn operand(&mut self, input: &[u8], escaped: bool) -> Result<bool, i32> {
         self.operand_mode(input, escaped.then_some(Mode::Operand))
             .await
@@ -462,6 +499,21 @@ impl<'a> Printer<'a> {
             }
         }
         Ok(false)
+    }
+}
+
+struct OperandOutput {
+    remaining: usize,
+    emit: bool,
+}
+impl OperandOutput {
+    async fn piece(&mut self, bytes: &[u8], printer: &mut Printer<'_>) -> Result<(), i32> {
+        let bytes = &bytes[..bytes.len().min(self.remaining)];
+        self.remaining -= bytes.len();
+        if self.emit {
+            printer.emit(1, bytes).await?;
+        }
+        Ok(())
     }
 }
 

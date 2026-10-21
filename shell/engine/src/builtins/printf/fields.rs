@@ -130,12 +130,13 @@ impl<'a> Field<'a> {
             None
         };
         let Some(
-            &conversion @ (b's' | b'c' | b'd' | b'i' | b'u' | b'o' | b'x' | b'X' | b'q' | b'Q'),
+            &conversion @ (b's' | b'b' | b'c' | b'd' | b'i' | b'u' | b'o' | b'x' | b'X' | b'q'
+            | b'Q'),
         ) = input.get(*offset)
         else {
             return Ok(None);
         };
-        if !matches!(conversion, b's' | b'c' | b'q' | b'Q') && flags.grouping {
+        if !matches!(conversion, b's' | b'b' | b'c' | b'q' | b'Q') && flags.grouping {
             return Ok(None);
         }
         printer.scan(1).await?;
@@ -221,6 +222,18 @@ impl<'a> Field<'a> {
             return self.print_quoted(args, printer).await;
         }
         let field = self.resolve(args, printer).await?;
+        if self.conversion == b'b' {
+            let Some(field) = field else {
+                return field_overflow(args, printer).await;
+            };
+            let stop = field
+                .print_escaped(args.take().unwrap_or("").as_bytes(), printer)
+                .await?;
+            if stop {
+                args.status = 0;
+            }
+            return Ok(stop);
+        }
         if matches!(self.conversion, b's' | b'c') {
             let Some(mut field) = field else {
                 return field_overflow(args, printer).await;
@@ -278,6 +291,19 @@ async fn field_overflow(args: &mut Arguments<'_>, printer: &mut Printer<'_>) -> 
 }
 
 impl ResolvedField {
+    async fn print_escaped(&self, value: &[u8], printer: &mut Printer<'_>) -> Result<bool, i32> {
+        // Decode diagnostics precede padding, even when precision hides their bytes.
+        let (length, _) = printer.escaped_field(value, self.precision, false).await?;
+        let padding = self.width.saturating_sub(length);
+        if !self.left {
+            printer.padding(padding, b' ').await?;
+        }
+        let (_, stop) = printer.escaped_field(value, self.precision, true).await?;
+        if self.left {
+            printer.padding(padding, b' ').await?;
+        }
+        Ok(stop)
+    }
     async fn print_string(&self, value: &[u8], printer: &mut Printer<'_>) -> Result<(), i32> {
         let length = self.precision.map_or(value.len(), |n| value.len().min(n));
         let padding = self.width.saturating_sub(length);

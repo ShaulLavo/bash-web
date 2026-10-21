@@ -13,6 +13,25 @@ const runner = await createWaffleRunner({
   env: { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C", LANG: "C" },
 });
 const cases = [
+  "printf '[%8b][%-8b][%08b]\\n' 'a\\tb' 'a\\tb' 'a\\tb'",
+  "printf '[%*b][%*b]\\n' 8 'a\\tb' -8 'a\\tb'",
+  "printf '[%05b|%05q|%05Q]\\n' 'a\\tb' 'c d' e",
+  "printf '[%5b][%5b]\\n' '\\0' '\\377'",
+  "printf '%5b|' a b; echo",
+  "printf '[%8b][%-8b]\\n' '' ''; printf '[%8b]'",
+  "printf '[%8b]TAIL%s\\n' 'a\\cignored' after; echo :$?",
+  "printf '[%-8b]TAIL%s\\n' 'a\\cignored' after; echo :$?",
+  "printf '[%*b]tail' bad 'a\\cignored'; echo :$?",
+  "printf '[%*b]tail' bad 'a\\xZ'; echo :$?",
+  "printf '[%8b]tail' 'a\\c\\xZ'; echo :$?",
+  "printf '[%8.0b]tail' 'a\\cignored'; echo :$?",
+  "printf '[%-8.1b]tail' 'a\\cignored'; echo :$?",
+  "printf '[%8.0b]tail' '\\xZ'; echo :$?",
+  "printf '[%8b]tail' 'a\\xZ' 2>&-; echo :$?",
+  "printf '%8b' 'a\\tb' 1>&- 2>&-; echo :$?",
+  "printf -v x '[%5b]' 'a\\tb'; printf '<%s>\\n' \"$x\"",
+  "printf -v x '[%8b]TAIL' 'a\\cignored'; echo \"$?:<$x>\"",
+  "printf -v x '[%-8b]' '\\0x'; echo \"$?:<$x>\"",
   "printf -v x '%s, %s' Hello world; echo \"$x\"",
   "printf -vx '%s|' a b c; echo \"$x\"",
   'printf -vva value; echo "$va"',
@@ -132,4 +151,19 @@ test("production Waffle safe local IFS restores outer scope", async () => {
   assert.equal(actual.status, 0);
   assert.deepEqual(actual.stdout, Buffer.from("inner=<left;right>\nouter=<left:right>\n"));
   assert.equal(actual.stderr.length, 0);
+});
+
+test("production Waffle escaped field warns before leading padding flushes", async () => {
+  const actual = await runner("printf '[%5000b]tail' 'a\\xZ' 2>&1; echo :$?");
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.status, 0);
+  assert.equal(actual.stderr.length, 0);
+  assert.deepEqual(
+    actual.stdout,
+    Buffer.concat([
+      Buffer.from("/usr/bin/bash: printf: missing hex digit for \\x\n["),
+      Buffer.alloc(4996, " "),
+      Buffer.from("a\\xZ]tail:0\n"),
+    ]),
+  );
 });
