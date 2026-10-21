@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.72",
+  "version": "0.0.73",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -111,7 +111,7 @@
     "oxlint": "1.88.0",
     "remix": "3.0.0",
     "typescript": "7.0.2",
-    "vite": "8.3.1",
+    "vite": "8.3.3",
     "waffle": "git+https://github.com/ShaulLavo/waffle.git#fc58a532f0d7a617e631ea4b7580a190915d4ed6",
     "yaml": "2.9.1"
   },
