@@ -33,3 +33,15 @@ formats or a new locale or runtime contract.
 Focused controls are in `shell/engine/tests/words/printf_escaped_fields.rs` and
 `scripts/test-own-shell-printf-assignment.ts`. Full frozen measurement and accepted
 passing memberships are separate from these targeted comparisons.
+
+## Frozen measurement
+
+One production-Waffle replay of immutable
+`ec8b801c8ded5ada99d9be9edc847ff856936ad3` gained two passes against accepted
+`6f292e1ecafdb0f1638860092d0f4e96722480ac`, with zero lost passes. Oils remains
+1,015. Brush suite increases from 1,007 to 1,008, and Bashkit suite from 1,412
+to 1,413. All 9,221 case classifications and frozen identities remain unchanged.
+Only the two gained memberships and derived counts change in the baseline;
+historical failure payloads stay intact. The unchanged strict comparator passes
+offline on the same saved output. See the [measurement receipt](evidence/printf-escaped-fields.json).
+Final parent review, hosted gates and exact-main acceptance remain pending.
