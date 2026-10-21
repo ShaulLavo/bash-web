@@ -1,4 +1,5 @@
 //! Bash builtins. External commands are installed by the embedding runtime.
+mod getopts;
 mod printf;
 mod read;
 pub(crate) mod test;
@@ -95,6 +96,7 @@ pub(crate) async fn run(
         Builtin::Noop => {}
         Builtin::False => return Err(1),
         Builtin::Test => return test::run(name, &args, &state, &fds, &context, work).await,
+        Builtin::Getopts => return getopts::run(&args, &state, &fds, &context, work).await,
         Builtin::Shopt => return shopt(&args, &state, &fds, &context, work).await,
         Builtin::LoopControl => {
             return loop_control(name, &args, &fds, &context, work).await;
@@ -950,11 +952,14 @@ async fn readonly_diagnostic(
     context: &Context,
 ) -> Result<(), i32> {
     let diagnostic = format!("{builtin}: {key}: readonly variable\n");
-    if let Some(stderr) = fds.get(2) {
-        stderr
-            .write_all(diagnostic.as_bytes(), &context.cancel)
+    diagnose(fds, &diagnostic, context).await
+}
+
+async fn scan_bytes(bytes: usize, context: &Context, work: &mut Work) -> Result<(), i32> {
+    for _ in 0..bytes {
+        work.checkpoint(&context.cancel)
             .await
-            .map_err(|error| error.status())?;
+            .map_err(error_status)?;
     }
     Ok(())
 }

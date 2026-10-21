@@ -19,9 +19,9 @@ fn baseline(names: &[&'static str]) -> Vec<&'static str> {
 }
 
 const BUILTINS: &[&str] = &[
-    ":", "[", "break", "cd", "command", "continue", "declare", "echo", "eval", "exec", "exit",
-    "export", "false", "jobs", "kill", "let", "local", "printf", "pwd", "read", "readonly",
-    "return", "set", "shift", "shopt", "test", "true", "typeset", "unset", "wait",
+    ":", "[", "break", "builtin", "cd", "command", "continue", "declare", "echo", "eval", "exec",
+    "exit", "export", "false", "getopts", "jobs", "kill", "let", "local", "printf", "pwd", "read",
+    "readonly", "return", "set", "shift", "shopt", "test", "true", "typeset", "unset", "wait",
 ];
 
 #[test]
@@ -57,15 +57,16 @@ fn adapter_dispatch_preserves_the_old_dispatch_set_not_the_old_is_builtin_set() 
     assert_eq!(
         names(|command| matches!(command.handler(), Some(Handler::Builtin(_)))),
         baseline(&[
-            ":", "true", "false", "echo", "printf", "read", "export", "local", "readonly",
-            "declare", "typeset", "cd", "pwd", "set", "shift", "shopt", "exit", "return", "jobs",
-            "wait", "kill", "unset", "test", "[", "break", "continue"
+            ":", "true", "false", "echo", "printf", "read", "getopts", "export", "local",
+            "readonly", "declare", "typeset", "cd", "pwd", "set", "shift", "shopt", "exit",
+            "return", "jobs", "wait", "kill", "unset", "test", "[", "break", "continue"
         ])
     );
     // `command` was recognized by is_builtin but never had a builtins::run arm.
     // exec/eval/let always lived in interpreter-owned phases.
     for (name, expected) in [
         ("command", Handler::Command),
+        ("builtin", Handler::BuiltinWrapper),
         ("exec", Handler::Exec),
         ("eval", Handler::Eval),
         ("let", Handler::Let),

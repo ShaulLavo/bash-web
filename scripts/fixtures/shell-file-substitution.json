@@ -1,0 +1,561 @@
+{
+  "schema": 1,
+  "bash": "5.3.15(1)-release",
+  "cases": [
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( 0<f); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`0<f`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( 3<f); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`3<f`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f;); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f;`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f\n); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f\n`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f\n\n); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f\n\n`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f\n#comment\n); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f\n#comment\n`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f #comment\n); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f #comment\n`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f; #comment\n); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f; #comment\n`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f; :); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f; :`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( :; <f); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`:; <f`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( { <f; }); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`{ <f; }`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( ( <f )); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`( <f )`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( ! <f); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`! <f`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f && :); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f && :`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( false || <f); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`false || <f`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f | :); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f | :`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f &); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f &`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f <g); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f <g`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f >out); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f >out`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f 2>err); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f 2>err`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( a=x <f); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`a=x <f`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( $unset <f); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`$unset <f`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f <<<here); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f <<<here`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <>f); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<>f`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <&0); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<&0`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( 0<&3); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`0<&3`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <\"${target:=f}\"); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PGY+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<\"${target:=f}\"`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PGY+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <${target:=f}); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PGY+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<${target:=f}`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PGY+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <$files); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<$files`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <\"$files\"); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PHNwYWNlZD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<\"$files\"`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PHNwYWNlZD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <missing); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<missing`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <*); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<*`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <${unset}); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<${unset}`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f{,}); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f{,}`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIHg9PD4gdGFyZ2V0PTw+Cg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <$(printf f; exit 7)); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<$(printf f; exit 7)`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <$(false; printf f)); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<$(false; printf f)`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( < <(printf streamed)); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PHN0cmVhbWVkPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`< <(printf streamed)`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PHN0cmVhbWVkPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <\"$(printf f)\"); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<\"$(printf f)\"`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <\"${unset:?target-failure}\"); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 127,
+      "stdoutBase64": ""
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<\"${unset:?target-failure}\"`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 127,
+      "stdoutBase64": ""
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <f\\\n); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<f\\\n`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=$( <\\\nf); s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf 'a b\\nc\\n\\n' >f; printf other >g; printf spaced >'a b'; files='a b'; exec 3<f; unset target unset; x=`<\\\nf`; s=$?; printf 's=%s x=<%s> target=<%s>\\n' \"$s\" \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9PGEgYgpjPiB0YXJnZXQ9PD4K"
+    },
+    {
+      "script": "printf data >f123; x=$(<f1*); printf '<%s>' \"$x\"",
+      "status": 0,
+      "stdoutBase64": "PGRhdGE+"
+    },
+    {
+      "script": "printf '%65536s' x >f; x=$(<f); printf '%s' \"${#x}\"",
+      "status": 0,
+      "stdoutBase64": "NjU1MzY="
+    },
+    {
+      "script": "unset IFS; printf 'a:b:c' >:; set -- $(<${IFS:=:}); printf '<%s>' \"$@\"",
+      "status": 0,
+      "stdoutBase64": "PD4="
+    },
+    {
+      "script": "printf data >f; x=$(<missing 2>&-); printf '%s:<%s>' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MTo8Pg=="
+    },
+    {
+      "script": "printf 'a b\\nc\\n' >f; set -- $(<f); printf '%s:<%s>|' \"$#\" \"$@\"",
+      "status": 0,
+      "stdoutBase64": "Mzo8YT58Yjo8Yz58"
+    },
+    {
+      "script": "printf 'a b\\nc\\n' >f; set -- \"$(<f)\"; printf '%s:<%s>|' \"$#\" \"$@\"",
+      "status": 0,
+      "stdoutBase64": "MTo8YSBiCmM+fA=="
+    },
+    {
+      "script": "printf 'a:b::c\\n' >f; IFS=:; set -- $(<f); printf '<%s>\\n' \"$@\"",
+      "status": 0,
+      "stdoutBase64": "PGE+CjxiPgo8Pgo8Yz4K"
+    },
+    {
+      "script": "printf '\\n\\n' >f; set -- $(<f); printf '%s' \"$#\"; set -- \"$(<f)\"; printf ':%s:<%s>' \"$#\" \"$1\"",
+      "status": 0,
+      "stdoutBase64": "MDoxOjw+"
+    },
+    {
+      "script": "printf 'a\\0b\\n\\0\\n' >f; x=$(<f); printf '<%s>' \"$x\"",
+      "status": 0,
+      "stdoutBase64": "PGFiPg=="
+    },
+    {
+      "script": "printf 'é🙂\\n' >f; x=$(<f); printf '<%s>' \"$x\"",
+      "status": 0,
+      "stdoutBase64": "PMOp8J+Zgj4="
+    },
+    {
+      "script": "printf data >f; false; x=$(<f); printf '%s:%s' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MDpkYXRh"
+    },
+    {
+      "script": "x=$(<missing); s=$?; printf '%s:<%s>' \"$s\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MTo8Pg=="
+    },
+    {
+      "script": "set -e; x=$(<missing); printf BAD",
+      "status": 1,
+      "stdoutBase64": ""
+    },
+    {
+      "script": "printf data >f; x=$(<f)$(exit 7); printf '%s:<%s>' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "Nzo8ZGF0YT4="
+    },
+    {
+      "script": "printf data >f; x=$(exit 7)$(<f); printf '%s:<%s>' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MDo8ZGF0YT4="
+    },
+    {
+      "script": "printf data >f; unset target; printf '%s:%s' \"$(<${target:=f})\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "ZGF0YTpm"
+    },
+    {
+      "script": "printf data >f; unset target; x=$(<${target:=f} 2>err); printf '<%s>:<%s>' \"$x\" \"$target\"",
+      "status": 0,
+      "stdoutBase64": "PD46PD4="
+    },
+    {
+      "script": "printf data >f; x=$(<f >out); printf '<%s>:<%s>' \"$x\" \"$(<out)\"",
+      "status": 0,
+      "stdoutBase64": "PD46PD4="
+    },
+    {
+      "script": "printf data >f; printf '<%s>|<%s>' \"$(<f)\" \"`0<f`\"",
+      "status": 0,
+      "stdoutBase64": "PGRhdGE+fDw+"
+    },
+    {
+      "script": "printf data >f; printf '<%s>|<%s>' pre\"`0<f`\" \"`<f`\"post",
+      "status": 0,
+      "stdoutBase64": "PHByZT58PGRhdGFwb3N0Pg=="
+    },
+    {
+      "script": "printf data >f; x=${unset:-`<f`}; printf '<%s>' \"$x\"",
+      "status": 0,
+      "stdoutBase64": "PGRhdGE+"
+    },
+    {
+      "script": "printf data >f; x=${unset:-`0<f`}; printf '<%s>' \"$x\"",
+      "status": 0,
+      "stdoutBase64": "PD4="
+    },
+    {
+      "script": "printf 'pipe\\n' | { x=$(</dev/stdin); printf '<%s>' \"$x\"; }",
+      "status": 0,
+      "stdoutBase64": "PHBpcGU+"
+    },
+    {
+      "script": "exec 3<&-; x=$(</dev/fd/3); printf '%s:<%s>' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MTo8Pg=="
+    },
+    {
+      "script": "printf data >f; x=$(<f); IFS= read -r y <f; printf '%s:%s' \"$x\" \"$y\"",
+      "status": 0,
+      "stdoutBase64": "ZGF0YTpkYXRh"
+    },
+    {
+      "script": "printf data >f; x=$(<f); printf '%s' \"$(printf '%s' \"$x\")\"",
+      "status": 0,
+      "stdoutBase64": "ZGF0YQ=="
+    },
+    {
+      "script": "printf '\\377' >f; printf %s \"$(<f)\"",
+      "status": 0,
+      "stdoutBase64": "/w=="
+    }
+  ]
+}

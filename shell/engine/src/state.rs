@@ -52,6 +52,7 @@ impl IfsMembers {
 
 #[derive(Clone, Debug)]
 pub(crate) struct LocalVariable {
+    getopts: Option<(GetoptsState, bool)>,
     previous: Option<String>,
     nameref: Option<String>,
     exported: bool,
@@ -59,6 +60,51 @@ pub(crate) struct LocalVariable {
     function_prefix: bool,
     storage_base: usize,
     memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
+}
+
+/// Original constant-size cursor. OPTIND's visible binding can be readonly or local.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct GetoptsState {
+    pub(crate) index: usize,
+    pub(crate) offset: usize,
+    pub(crate) argument: usize,
+}
+impl Default for GetoptsState {
+    fn default() -> Self {
+        Self {
+            index: 1,
+            offset: 0,
+            argument: 0,
+        }
+    }
+}
+impl GetoptsState {
+    fn assigned(value: &str) -> Self {
+        Self {
+            index: getopts_number(value).max(1) as usize,
+            offset: 0,
+            argument: 0,
+        }
+    }
+}
+
+pub(crate) fn getopts_number(value: &str) -> i32 {
+    let number = value.trim_start_matches([' ', '\t', '\n', '\r', '\x0b', '\x0c']);
+    let digits = number
+        .strip_prefix('+')
+        .or_else(|| number.strip_prefix('-'))
+        .unwrap_or(number);
+    let length = digits.bytes().take_while(u8::is_ascii_digit).count();
+    if length == 0 {
+        return 0;
+    }
+    let length = number.len() - digits.len() + length;
+    let overflow = if number.starts_with('-') {
+        i64::MIN
+    } else {
+        i64::MAX
+    };
+    number[..length].parse::<i64>().unwrap_or(overflow) as i32
 }
 
 #[derive(Clone, Debug)]
@@ -98,6 +144,8 @@ pub struct State {
     pub(crate) star_separator: StarSeparator,
     ifs_members: Option<IfsMembers>,
     positional: Vec<String>,
+    pub(crate) getopts: GetoptsState,
+    getopts_numeric: bool,
     locals: Vec<BTreeMap<String, LocalVariable>>,
     pub(crate) function_calls: usize,
     memory: Option<crate::exec::StorageBudget>,
@@ -108,7 +156,11 @@ impl Default for State {
     fn default() -> Self {
         Self {
             shell_name: "bash".into(),
-            variables: BTreeMap::from([("IFS".into(), " \t\n".into())]),
+            variables: BTreeMap::from([
+                ("IFS".into(), " \t\n".into()),
+                ("OPTIND".into(), "1".into()),
+                ("OPTERR".into(), "1".into()),
+            ]),
             exported: BTreeSet::new(),
             readonly: BTreeSet::new(),
             namerefs: BTreeMap::new(),
@@ -129,6 +181,8 @@ impl Default for State {
             star_separator: StarSeparator::Live,
             ifs_members: None,
             positional: Vec::new(),
+            getopts: GetoptsState::default(),
+            getopts_numeric: true,
             locals: Vec::new(),
             function_calls: 0,
             memory: None,
@@ -192,6 +246,8 @@ impl State {
     ) {
         self.variables = environment.into_iter().collect();
         self.exported = self.variables.keys().cloned().collect();
+        self.variables.insert("OPTIND".into(), "1".into());
+        self.variables.insert("OPTERR".into(), "1".into());
         self.variables
             .entry("PATH".into())
             .or_insert_with(|| "/usr/bin:/bin".into());
@@ -199,8 +255,12 @@ impl State {
     /// The browser process adapter keeps the engine's default IFS if absent
     /// from the inherited environment, and exports the resulting startup keys.
     pub fn inherit_environment(&mut self, environment: impl IntoIterator<Item = (String, String)>) {
+        self.variables.remove("OPTIND");
+        self.variables.remove("OPTERR");
         self.variables.extend(environment);
         self.exported = self.variables.keys().cloned().collect();
+        self.variables.insert("OPTIND".into(), "1".into());
+        self.variables.insert("OPTERR".into(), "1".into());
     }
     pub(crate) fn with_memory(memory: crate::exec::StorageBudget) -> Self {
         Self {
@@ -301,6 +361,8 @@ impl State {
             star_separator: state.star_separator,
             ifs_members: state.ifs_members,
             positional,
+            getopts: state.getopts,
+            getopts_numeric: state.getopts_numeric,
             function_calls: state.function_calls,
             memory: state.memory.clone(),
             positional_memory,
@@ -707,11 +769,98 @@ impl State {
             *saved = Some(value.clone());
         }
         let direct_ifs = name == "IFS";
+        self.assign_getopts_index(&name, &value);
         self.variables.insert(name, value);
         if direct_ifs {
             self.refresh_star_separator();
         }
         Ok(())
+    }
+    fn assign_getopts_index(&mut self, name: &str, value: &str) {
+        if name != "OPTIND" {
+            return;
+        }
+        let assigned = GetoptsState::assigned(value);
+        if assigned.index == 1 {
+            self.getopts.offset = 0;
+        }
+        self.getopts.index = assigned.index;
+    }
+    pub(crate) fn clear_getopts_argument(&mut self, target: &str) -> Result<(), i32> {
+        if self.is_readonly(target) {
+            return Err(1);
+        }
+        self.reserve_local_value(target, 0)?;
+        self.variables.remove(target);
+        self.exported.remove(target);
+        Ok(())
+    }
+    pub(crate) fn unset_getopts_argument(&mut self) {
+        self.reserve_local_value("OPTARG", 0)
+            .expect("shrinking a local binding");
+        self.variables.remove("OPTARG");
+        self.namerefs.remove("OPTARG");
+        self.exported.remove("OPTARG");
+        self.readonly.remove("OPTARG");
+        if let Some(local) = self
+            .locals
+            .iter_mut()
+            .rev()
+            .find_map(|frame| frame.get_mut("OPTARG"))
+        {
+            local.readonly = false;
+        }
+    }
+    fn restore_getopts(&mut self, saved: Option<(GetoptsState, bool)>) {
+        if let Some((cursor, numeric)) = saved {
+            self.getopts = cursor;
+            self.getopts_numeric = numeric;
+        }
+    }
+    pub(crate) fn getopts_numeric(&self, name: &str) -> bool {
+        name == "OPTIND" && self.getopts_numeric
+    }
+    pub(crate) fn reserve_getopts_publication(
+        &self,
+        names: &[(&str, usize); 3],
+    ) -> Result<Option<crate::exec::StorageAllocation>, i32> {
+        let mut growth = [("", 0usize); 3];
+        for (index, (name, bytes)) in names.iter().enumerate() {
+            let target = self.scalar_target(name)?.ok_or(2)?;
+            let bytes = self.getopts_local_growth(target, *bytes)?;
+            if let Some(previous) = growth[..index].iter().position(|(name, _)| *name == target) {
+                growth[previous].1 = growth[previous].1.max(bytes);
+                continue;
+            }
+            growth[index] = (target, bytes);
+        }
+        self.admit_temporary(
+            growth
+                .iter()
+                .try_fold(0usize, |sum, (_, bytes)| sum.checked_add(*bytes).ok_or(2))?,
+        )
+    }
+    fn getopts_local_growth(&self, name: &str, bytes: usize) -> Result<usize, i32> {
+        if self.is_readonly(name) {
+            return Ok(0);
+        }
+        let Some(local) = self.locals.iter().rev().find_map(|frame| frame.get(name)) else {
+            return Ok(0);
+        };
+        let Some(memory) = &local.memory else {
+            return Ok(0);
+        };
+        Ok(local
+            .storage_base
+            .checked_add(bytes)
+            .ok_or(2)?
+            .saturating_sub(memory.borrow().bytes()))
+    }
+    pub(crate) fn publish_getopts_index(&mut self, value: String) -> Result<(), i32> {
+        let cursor = self.getopts;
+        let result = self.assign_parameter("OPTIND".into(), value);
+        self.getopts = cursor;
+        result
     }
     pub(crate) fn assignment_name(&self, name: String) -> Result<String, i32> {
         let ScalarResolution::Target(target) = self.resolve_scalar_target(&name) else {
@@ -728,6 +877,12 @@ impl State {
             .rev()
             .find_map(|locals| locals.get(name))
             .map_or_else(|| self.readonly.contains(name), |local| local.readonly)
+    }
+    /// Declared by `local` in the innermost function scope.
+    pub(crate) fn is_current_local(&self, name: &str) -> bool {
+        self.locals
+            .last()
+            .is_some_and(|locals| locals.contains_key(name))
     }
     fn current_local_readonly(&self, name: &str) -> bool {
         self.locals
@@ -816,6 +971,10 @@ impl State {
         if self.is_readonly(name) {
             return Err(1);
         }
+        if name == "OPTIND" {
+            self.getopts = GetoptsState::default();
+            self.getopts_numeric = false;
+        }
         let was_dynamic =
             name == "EPOCHREALTIME" && self.epoch_realtime && !self.epoch_realtime_shadowed();
         if was_dynamic {
@@ -840,6 +999,13 @@ impl State {
                 Some(value) => self.variables.insert(name.to_owned(), value),
                 None => self.variables.remove(name),
             };
+            if let Some((_, numeric)) = local.getopts {
+                self.getopts_numeric = numeric;
+                self.getopts = self
+                    .scalar_parameter("OPTIND")
+                    .map(GetoptsState::assigned)
+                    .unwrap_or_default();
+            }
             if name == "IFS" {
                 self.refresh_star_separator();
             }
@@ -900,6 +1066,13 @@ impl State {
         };
         self.namerefs.remove(&name);
         let direct_ifs = name == "IFS";
+        if name == "OPTIND" {
+            self.getopts_numeric = false;
+            self.getopts = value
+                .as_deref()
+                .map(GetoptsState::assigned)
+                .unwrap_or_default();
+        }
         if let Some(value) = value.or(inherited) {
             self.variables.insert(name, value);
         }
@@ -937,6 +1110,7 @@ impl State {
                 .transpose()?
                 .map(|ticket| Rc::new(RefCell::new(ticket)));
             let previous = LocalVariable {
+                getopts: (name == "OPTIND").then_some((self.getopts, self.getopts_numeric)),
                 previous: self.variables.remove(name),
                 nameref: self.namerefs.remove(name),
                 exported: self.exported.contains(name),
@@ -1295,6 +1469,7 @@ impl PrefixFrame {
                         )
                         .map_err(|_| Error::Status(crate::exec::RESOURCE_STATUS))?;
                 }
+                state_ref.assign_getopts_index(&target, value);
                 let previous = state_ref.variables.insert(target.clone(), value.clone());
                 *restore_epoch_realtime |= state_ref.suspend_epoch_realtime(&target);
                 saved.entry(target).or_insert(previous);
@@ -1328,6 +1503,7 @@ impl PrefixFrame {
             return Err(name);
         }
         let direct_ifs = name == "IFS";
+        state.assign_getopts_index(&name, &value);
         let previous = state.variables.insert(name.clone(), value);
         state
             .prefixes
@@ -1400,8 +1576,10 @@ impl Drop for PrefixFrame {
         // restoration synchronously even after cancellation, like FunctionFrame.
         for (name, value) in saved {
             if let Some(value) = value {
+                state.assign_getopts_index(&name, &value);
                 state.variables.insert(name, value);
             } else {
+                state.assign_getopts_index(&name, "1");
                 state.variables.remove(&name);
             }
         }
@@ -1494,6 +1672,7 @@ impl Drop for FunctionFrame {
         for _ in 0..if self.prefix { 2 } else { 1 } {
             let Some(locals) = s.locals.pop() else { break };
             for (name, local) in locals {
+                s.restore_getopts(local.getopts);
                 restore_nameref(&mut s.namerefs, &name, local.nameref);
                 // Only local declarations restore their export attribute;
                 // ordinary export changes in functions belong to the caller.
@@ -1582,6 +1761,7 @@ mod tests {
             + 2 * std::mem::size_of::<usize>()
             + "bash".len()
             + "/home/guest".len()
+            + 2 * (snapshot_node_bytes::<String>().unwrap_or_else(|_| panic!("node fits")) + 7)
             + snapshot_node_bytes::<String>().unwrap_or_else(|_| panic!("node fits"))
             + 6
             + snapshot_node_bytes::<String>().unwrap_or_else(|_| panic!("node fits"))
@@ -2050,6 +2230,7 @@ mod tests {
             source.locals.push(BTreeMap::from([(
                 "local".into(),
                 LocalVariable {
+                    getopts: None,
                     previous: Some("before local".into()),
                     nameref: None,
                     exported: true,
@@ -2094,6 +2275,7 @@ mod tests {
                 state.borrow_mut().locals.push(BTreeMap::from([(
                     "v".into(),
                     LocalVariable {
+                        getopts: None,
                         previous: Some("x".repeat(128 * 1024)),
                         nameref: None,
                         exported: false,

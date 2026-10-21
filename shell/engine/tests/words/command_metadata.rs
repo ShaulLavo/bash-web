@@ -19,8 +19,8 @@ fn metadata_query_baseline_keeps_keywords_builtins_and_standins_distinct() {
     }
     let builtins = [
         ":", "true", "false", "echo", "printf", "read", "export", "local", "readonly", "declare",
-        "typeset", "cd", "pwd", "set", "shift", "command", "shopt", "exit", "return", "jobs",
-        "wait", "kill", "unset", "test", "[", "break", "continue", "exec", "eval", "let",
+        "typeset", "cd", "pwd", "set", "shift", "command", "builtin", "shopt", "exit", "return",
+        "jobs", "wait", "kill", "unset", "test", "[", "break", "continue", "exec", "eval", "let",
     ];
     for name in builtins {
         let before = rig.output.bytes().len();
