@@ -177,3 +177,126 @@ fn select_cancelled_buffers_release_a_small_live_execution_allowance() {
     }
     assert_eq!(rig.run("true"), 0);
 }
+
+#[test]
+fn select_unreadable_input_reports_error_without_changing_bindings() {
+    let rig = Rig::new(Limits::default());
+    rig.variable("x", "old");
+    rig.variable("REPLY", "kept");
+    assert_eq!(rig.run("select x in a; do x=bad; break; done 0>f"), 1);
+    assert_eq!(rig.output.bytes(), b"\n");
+    assert_eq!(
+        rig.errors.bytes(),
+        b"1) a\n#? /usr/bin/bash: line 1: 0: read error: Bad file descriptor\n"
+    );
+    assert_eq!(value(&rig, "x").as_deref(), Some("old"));
+    assert_eq!(value(&rig, "REPLY").as_deref(), Some("kept"));
+}
+
+#[test]
+fn select_fatal_reply_assignment_does_not_print_eof_newline() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("set -e; readonly REPLY=old; select x in a; do break; done <<EOF\n1\nEOF"),
+        1
+    );
+    assert_eq!(rig.output.bytes(), b"");
+    assert_eq!(
+        rig.errors.bytes(),
+        b"1) a\n#? /usr/bin/bash: line 1: REPLY: readonly variable\n"
+    );
+    assert_eq!(value(&rig, "REPLY").as_deref(), Some("old"));
+    assert_eq!(value(&rig, "x"), None);
+}
+
+#[test]
+fn select_invalid_identifier_precedes_choices_and_input() {
+    let rig = Rig::new(Limits::default());
+    let (reader, _writer) = input(&rig, b"1\n", Endpoint::null());
+    rig.variable("i", "0");
+    assert_eq!(rig.run("select 1 in $((i+=1)); do :; done"), 1);
+    assert_eq!(value(&rig, "i").as_deref(), Some("0"));
+    let mut bytes = [0; 2];
+    assert_eq!(reader.read(&mut bytes).now_or_never(), Some(Ok(2)));
+    assert_eq!(bytes, *b"1\n");
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("select 1 in; do :; done"), 1);
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: line 1: `1': not a valid identifier\n"
+    );
+}
+
+struct ReadFailure(shell_engine::io::IoError);
+
+impl shell_engine::io::HostEndpoint for ReadFailure {
+    fn read<'a>(
+        &'a self,
+        _output: &'a mut [u8],
+    ) -> futures::future::LocalBoxFuture<'a, Result<usize, shell_engine::io::IoError>> {
+        futures::future::ready(Err(self.0.clone())).boxed_local()
+    }
+
+    fn write<'a>(
+        &'a self,
+        _input: &'a [u8],
+    ) -> futures::future::LocalBoxFuture<'a, Result<usize, shell_engine::io::IoError>> {
+        futures::future::ready(Err(shell_engine::io::IoError::BadDescriptor)).boxed_local()
+    }
+}
+
+fn failing_input(rig: &Rig, error: shell_engine::io::IoError, stderr: Endpoint) -> Capture {
+    let mut fds = FdTable::default();
+    let (stdout, output) = capture(64);
+    fds.insert(0, Endpoint::host(Rc::new(ReadFailure(error))));
+    fds.insert(1, stdout);
+    fds.insert(2, stderr);
+    rig.shell.set_descriptors(fds).unwrap();
+    output
+}
+
+#[test]
+fn select_read_cancellation_and_limits_are_not_ordinary_read_errors() {
+    use shell_engine::io::IoError;
+    for (error, status) in [(IoError::Cancelled, 130), (IoError::LimitExceeded, 2)] {
+        let rig = Rig::new(Limits::default());
+        let (stderr, errors) = capture(1024);
+        let output = failing_input(&rig, error, stderr);
+        rig.variable("REPLY", "old");
+        assert_eq!(rig.run("select x in a; do break; done"), status);
+        assert_eq!(errors.bytes(), b"1) a\n#? ");
+        assert_eq!(output.bytes(), b"");
+        assert_eq!(value(&rig, "REPLY").as_deref(), Some("old"));
+        assert_eq!(value(&rig, "x"), None);
+    }
+}
+
+#[test]
+fn select_read_error_diagnostics_obey_output_limits_and_cancellation() {
+    use shell_engine::io::IoError;
+    let rig = Rig::new(Limits::default());
+    let (stderr, errors) = capture(8);
+    failing_input(&rig, IoError::Runtime(31), stderr);
+    assert_eq!(rig.run("select x in a; do break; done"), 2);
+    assert_eq!(errors.bytes(), b"1) a\n#? ");
+    let rig = Rig::new(Limits::default());
+    let (reader, writer) = pipe();
+    let bytes = vec![b'x'; shell_engine::io::PIPE_CAPACITY - 8];
+    assert_eq!(writer.write(&bytes).now_or_never(), Some(Ok(bytes.len())));
+    failing_input(&rig, IoError::Runtime(31), writer);
+    let job = rig.shell.start("select x in a; do break; done").unwrap();
+    park(&rig, &job);
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    drop(reader);
+}
+
+#[test]
+fn select_invalid_name_diagnostic_limit_does_not_consume_input() {
+    let rig = Rig::new(Limits::default());
+    let (reader, _writer) = input(&rig, b"1\n", capture(1).0);
+    assert_eq!(rig.run("select 1 in a; do break; done"), 2);
+    let mut bytes = [0; 2];
+    assert_eq!(reader.read(&mut bytes).now_or_never(), Some(Ok(2)));
+    assert_eq!(bytes, *b"1\n");
+}

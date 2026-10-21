@@ -20,6 +20,9 @@ async fn body(
     context: Context,
     work: &mut expand::Work,
 ) -> Outcome {
+    if let Err(code) = validate_name(&command, &fds, &context, work).await {
+        return Outcome::status(code);
+    }
     let choices = match choices(&command, &state, &context, work).await {
         Ok(choices) => choices,
         Err(error) => return expansion_failure(error.into(), &fds, &context).await,
@@ -79,7 +82,7 @@ async fn body(
         let outcome = loop_sequence(&command.body, &state, &fds, &context, None).await;
         match control::loop_step(outcome, context.loop_depth) {
             control::LoopStep::Stop(outcome) => return outcome,
-            control::LoopStep::Normal(_) | control::LoopStep::Continue => {}
+            control::LoopStep::Normal(_) | control::LoopStep::Continue => (),
         }
         let mut work = expansion_work(context.limits());
         if let Err(error) =
@@ -94,15 +97,40 @@ async fn body(
     }
 }
 
+async fn validate_name(
+    command: &SelectCommand,
+    fds: &Descriptors,
+    context: &Context,
+    work: &mut expand::Work,
+) -> Result<(), i32> {
+    for _ in command.variable.bytes() {
+        work.checkpoint(&context.cancel)
+            .await
+            .map_err(admission_status)?;
+    }
+    if builtins::valid_name(&command.variable) {
+        return Ok(());
+    }
+    let bytes = command.variable.len().saturating_add(96);
+    work.admit_storage(bytes).map_err(admission_status)?;
+    let _storage = context.admit_builtin_buffer(bytes)?;
+    let diagnostic = format!(
+        "/usr/bin/bash: line {}: `{}': not a valid identifier\n",
+        command.span.start.line, command.variable,
+    );
+    let stderr = fds.borrow().get(2);
+    if let Some(stderr) = stderr {
+        write(&stderr, diagnostic.as_bytes(), context, work).await?;
+    }
+    Err(1)
+}
+
 async fn choices(
     command: &SelectCommand,
     state: &SharedState,
     context: &Context,
     work: &mut expand::Work,
 ) -> Result<Vec<String>, expand::Error> {
-    if !builtins::valid_name(&command.variable) {
-        return Err(1.into());
-    }
     let mut choices = Vec::new();
     let mut remaining = context.limits().expansion_bytes;
     for word in &command.words {
@@ -173,14 +201,17 @@ async fn read_reply_body(
     }
     let input = fds.borrow().get(0);
     let Some(input) = input else {
-        return Err(closed_input(fds, context, line, &mut work).await);
+        return Err(read_failure(io::IoError::BadDescriptor, fds, context, line, &mut work).await);
     };
     let (reply, eof) = match read(input, context, &mut work).await {
         Ok(value) => value,
-        Err(code) => return Err(Outcome::status(code)),
+        Err(ReadError::Status(code)) => return Err(Outcome::status(code)),
+        Err(ReadError::Io(error)) => {
+            return Err(read_failure(error, fds, context, line, &mut work).await);
+        }
     };
     if let Err(outcome) = assign("REPLY", &reply, state, fds, context, line).await {
-        if outcome.code == 1 {
+        if outcome.code == 1 && outcome.flow == Flow::Normal {
             eof_newline(fds, context).await.map_err(Outcome::status)?;
         }
         return Err(outcome);
@@ -192,7 +223,8 @@ async fn read_reply_body(
     Ok(reply)
 }
 
-async fn closed_input(
+async fn read_failure(
+    error: io::IoError,
     fds: &Descriptors,
     context: &Context,
     line: usize,
@@ -201,7 +233,16 @@ async fn closed_input(
     if work.admit_storage(128).is_err() {
         return Outcome::status(2);
     }
-    let diagnostic = format!("/usr/bin/bash: line {line}: 0: read error: Bad file descriptor\n");
+    let _storage = match context.admit_builtin_buffer(128) {
+        Ok(storage) => storage,
+        Err(code) => return Outcome::status(code),
+    };
+    let message = match error {
+        io::IoError::BadDescriptor => ProcessError::StartFailed(8).to_string(),
+        io::IoError::Runtime(errno) => ProcessError::StartFailed(errno).to_string(),
+        error => error.to_string(),
+    };
+    let diagnostic = format!("/usr/bin/bash: line {line}: 0: read error: {message}\n");
     let stderr = fds.borrow().get(2);
     if let Some(stderr) = stderr
         && let Err(code) = write(&stderr, diagnostic.as_bytes(), context, work).await
@@ -359,11 +400,31 @@ async fn write(
     Ok(())
 }
 
+enum ReadError {
+    Status(i32),
+    Io(io::IoError),
+}
+
+impl From<i32> for ReadError {
+    fn from(code: i32) -> Self {
+        Self::Status(code)
+    }
+}
+
+impl From<io::IoError> for ReadError {
+    fn from(error: io::IoError) -> Self {
+        match error {
+            io::IoError::Cancelled | io::IoError::LimitExceeded => Self::Status(io_status(error)),
+            error => Self::Io(error),
+        }
+    }
+}
+
 async fn read(
     input: io::Endpoint,
     context: &Context,
     work: &mut expand::Work,
-) -> Result<(String, bool), i32> {
+) -> Result<(String, bool), ReadError> {
     let ceiling = context
         .limits()
         .line_bytes
@@ -381,7 +442,7 @@ async fn read(
         let count = input
             .read_cancelled(&mut byte, &context.cancel)
             .await
-            .map_err(io_status)?;
+            .map_err(ReadError::from)?;
         if count == 0 {
             break true;
         }
@@ -400,12 +461,12 @@ async fn read(
             continue;
         }
         if bytes.len() == ceiling {
-            return Err(2);
+            return Err(2.into());
         }
         bytes.push(byte[0]);
         escaped = false;
     };
     String::from_utf8(bytes.into_boxed_slice().into_vec())
         .map(|reply| (reply, eof))
-        .map_err(|_| 2)
+        .map_err(|_| ReadError::Status(2))
 }

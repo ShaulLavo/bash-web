@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { createWaffleRunner } from "./waffle-compat.ts";
 
@@ -30,6 +31,17 @@ const inputs = [
   " ",
   "\v1\f",
 ];
+const repairScripts = [
+  'REPLY=old; x=old; select x in a; do echo BAD; break; done 0>f; printf "s=%s reply=<%s> x=<%s>\\n" "$?" "$REPLY" "$x"',
+  "set -e; select x in a; do echo BAD; break; done 0>f",
+  'REPLY=old; x=old; select x in a; do echo BAD; break; done 0<.; printf "s=%s reply=<%s> x=<%s>\\n" "$?" "$REPLY" "$x"',
+  "set -e; readonly REPLY=old; select x in a; do break; done <<EOF\n1\nEOF",
+  "set -e; readonly REPLY=old; if select x in a; do echo BAD; break; done <<EOF\n1\nEOF\nthen echo yes; else echo no; fi; echo alive",
+  "readonly REPLY=old; select x in a; do break; done <<EOF\n1\nEOF\necho status=$?",
+  "select 1 in; do :; done; echo status=$?",
+  "select 1 in a; do echo BAD; done; echo status=$?",
+  'i=0; select 1 in $((i+=1)); do :; done; echo "$?:$i"',
+];
 const scripts = inputs
   .map((input) => {
     const bytes = Array.from(
@@ -38,43 +50,46 @@ const scripts = inputs
     ).join("");
     return `printf '${bytes}\\n' | ${selection}`;
   })
-  .concat([
-    "echo 1 | select opt in a b c; do echo \"selected: $opt\"; break; done; echo 'after select'",
-    'echo 2 | select item in alpha beta gamma; do echo "got: $item"; break; done',
-    'echo 1 | select x in one two three; do echo "REPLY=$REPLY x=$x"; break; done',
-    "echo 9 | select x in a b c; do echo \"x='$x' REPLY=$REPLY\"; break; done",
-    'printf "1\\n2\\n3\\n" | select x in a b c; do echo "$x"; if [ "$REPLY" = 3 ]; then break; fi; done',
-    'echo 1 | select x in a b; do echo "$x"; done',
-    'x=old; REPLY=old; select x in a b; do echo BAD; done; printf "s=%s reply=<%s> x=<%s>\\n" "$?" "$REPLY" "$x"',
-    "printf 2 | select x in a b; do echo BAD; done",
-    'printf "1\\n" | { readonly x; select x in a; do echo BAD; break; done; echo s=$?; }',
-    'printf "1\\n" | { readonly REPLY=old; select x in a; do echo BAD; break; done; echo s=$?; }',
-    'printf "1\\n" | select x in a; do echo OK; break; done 2>&-; echo s=$?',
-    'REPLY=kept; set -- a b; select x in; do echo BAD; done; echo "$?:$REPLY"',
-    "set --; select x; do echo BAD; done; echo s=$?",
-    'printf "2\\n" | { set -- "a b" c; select x; do printf "<%s>" "$x"; break; done; }',
-    'printf "\\n2\\n" | select x in a b; do echo "$x"; break; done',
-    'printf "1\\n2\\n" | select x in a b; do echo "$x"; REPLY=; done',
-    'printf "1\\n2\\n" | select x in "" "a b"; do printf "<%s>\\n" "$x"; done',
-    'printf "1\\n" | { IFS=1; select x in a b; do printf "<%s>:<%s>" "$x" "$REPLY"; break; done; }',
-    "printf \"1\\n\" | { PS3='$(echo BAD)$x'; select x in a b; do break; done; }",
-    'printf "1\\n2\\n" | { PS3="pick> "; select x in a b; do echo "$x"; PS3="next> "; done; }',
-    'printf "1\\n" | { PS3=; select x in a; do break; done; }',
-    'printf "1\\n" | select x in a b c d e f g h i j k; do break; done',
-    'printf "1\\n2\\n" | { select x in a b; do echo "$x"; continue; echo BAD; done; }',
-    'printf "1\\n2\\n" | { for i in A B; do select x in a b; do echo "$i:$x"; continue 2; done; echo BAD; done; }',
-    'printf "1\\n" | { for i in A B; do select x in a b; do echo "$i:$x"; break 2; done; echo BAD; done; echo done; }',
-    'printf "1\\n2\\n" | { select x in a b; do for y in c d; do echo "$x:$y"; continue 2; done; done; }',
-    'printf "1\\n2\\n" | { select x in a b; do select y in c d; do echo "$x:$y"; break 2; done; done; }',
-    'printf "1\\nTAIL\\n" | { select x in a b; do break; done; read -r tail; echo "$tail"; }',
-    'printf "1\\n" | { v="a b"; select x in $v; do v=changed; echo "$x"; break; done; }',
-    'printf "1\\n" | { select x in "$(printf first)" second; do echo "$x"; break; done; }',
-    'printf "1\\n" | select x in a; do false; break; done; echo s=$?',
-    'set -e; printf "1\\n" | select x in a; do false; done; echo BAD',
-    'printf "1\\n" | { select x in a; do exit 7; done; }',
-    'printf "1\\n" | { f() { select x in a; do return 7; done; }; f; echo s=$?; }',
-    'REPLY=old; x=old; select x in a; do echo BAD; done <&-; printf "s=%s reply=%s x=%s\\n" "$?" "$REPLY" "$x"',
-  ]);
+  .concat(
+    [
+      "echo 1 | select opt in a b c; do echo \"selected: $opt\"; break; done; echo 'after select'",
+      'echo 2 | select item in alpha beta gamma; do echo "got: $item"; break; done',
+      'echo 1 | select x in one two three; do echo "REPLY=$REPLY x=$x"; break; done',
+      "echo 9 | select x in a b c; do echo \"x='$x' REPLY=$REPLY\"; break; done",
+      'printf "1\\n2\\n3\\n" | select x in a b c; do echo "$x"; if [ "$REPLY" = 3 ]; then break; fi; done',
+      'echo 1 | select x in a b; do echo "$x"; done',
+      'x=old; REPLY=old; select x in a b; do echo BAD; done; printf "s=%s reply=<%s> x=<%s>\\n" "$?" "$REPLY" "$x"',
+      "printf 2 | select x in a b; do echo BAD; done",
+      'printf "1\\n" | { readonly x; select x in a; do echo BAD; break; done; echo s=$?; }',
+      'printf "1\\n" | { readonly REPLY=old; select x in a; do echo BAD; break; done; echo s=$?; }',
+      'printf "1\\n" | select x in a; do echo OK; break; done 2>&-; echo s=$?',
+      'REPLY=kept; set -- a b; select x in; do echo BAD; done; echo "$?:$REPLY"',
+      "set --; select x; do echo BAD; done; echo s=$?",
+      'printf "2\\n" | { set -- "a b" c; select x; do printf "<%s>" "$x"; break; done; }',
+      'printf "\\n2\\n" | select x in a b; do echo "$x"; break; done',
+      'printf "1\\n2\\n" | select x in a b; do echo "$x"; REPLY=; done',
+      'printf "1\\n2\\n" | select x in "" "a b"; do printf "<%s>\\n" "$x"; done',
+      'printf "1\\n" | { IFS=1; select x in a b; do printf "<%s>:<%s>" "$x" "$REPLY"; break; done; }',
+      "printf \"1\\n\" | { PS3='$(echo BAD)$x'; select x in a b; do break; done; }",
+      'printf "1\\n2\\n" | { PS3="pick> "; select x in a b; do echo "$x"; PS3="next> "; done; }',
+      'printf "1\\n" | { PS3=; select x in a; do break; done; }',
+      'printf "1\\n" | select x in a b c d e f g h i j k; do break; done',
+      'printf "1\\n2\\n" | { select x in a b; do echo "$x"; continue; echo BAD; done; }',
+      'printf "1\\n2\\n" | { for i in A B; do select x in a b; do echo "$i:$x"; continue 2; done; echo BAD; done; }',
+      'printf "1\\n" | { for i in A B; do select x in a b; do echo "$i:$x"; break 2; done; echo BAD; done; echo done; }',
+      'printf "1\\n2\\n" | { select x in a b; do for y in c d; do echo "$x:$y"; continue 2; done; done; }',
+      'printf "1\\n2\\n" | { select x in a b; do select y in c d; do echo "$x:$y"; break 2; done; done; }',
+      'printf "1\\nTAIL\\n" | { select x in a b; do break; done; read -r tail; echo "$tail"; }',
+      'printf "1\\n" | { v="a b"; select x in $v; do v=changed; echo "$x"; break; done; }',
+      'printf "1\\n" | { select x in "$(printf first)" second; do echo "$x"; break; done; }',
+      'printf "1\\n" | select x in a; do false; break; done; echo s=$?',
+      'set -e; printf "1\\n" | select x in a; do false; done; echo BAD',
+      'printf "1\\n" | { select x in a; do exit 7; done; }',
+      'printf "1\\n" | { f() { select x in a; do return 7; done; }; f; echo s=$?; }',
+      'REPLY=old; x=old; select x in a; do echo BAD; done <&-; printf "s=%s reply=%s x=%s\\n" "$?" "$REPLY" "$x"',
+    ],
+    repairScripts,
+  );
 
 type Observation = { script: string; status: number; stdout: string; stderr: string };
 const fixturePath = new URL("fixtures/shell-select.json", import.meta.url);
@@ -86,20 +101,26 @@ const environment = {
   LC_ALL: "C.UTF-8",
 };
 function observe(script: string): Observation {
-  const result = spawnSync("/usr/bin/bash", ["--noprofile", "--norc", "-c", script], {
-    env: environment,
-    timeout: 10000,
-    maxBuffer: 1024 * 1024,
-  });
-  assert.equal(result.error, undefined);
-  assert.equal(result.signal, null);
-  assert.notEqual(result.status, null);
-  return {
-    script,
-    status: result.status ?? 2,
-    stdout: result.stdout.toString("base64"),
-    stderr: result.stderr.toString("base64"),
-  };
+  const cwd = mkdtempSync(join(tmpdir(), "bash-web-select-observe-"));
+  try {
+    const result = spawnSync("/usr/bin/bash", ["--noprofile", "--norc", "-c", script], {
+      cwd,
+      env: environment,
+      timeout: 10000,
+      maxBuffer: 1024 * 1024,
+    });
+    assert.equal(result.error, undefined);
+    assert.equal(result.signal, null);
+    assert.notEqual(result.status, null);
+    return {
+      script,
+      status: result.status ?? 2,
+      stdout: result.stdout.toString("base64"),
+      stderr: result.stderr.toString("base64"),
+    };
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
 }
 if (record) {
   assert.equal(
@@ -135,7 +156,7 @@ for (const expected of fixture.cases)
     assert.equal(actual.status, expected.status);
     assert.deepEqual(actual.stdout, Buffer.from(expected.stdout, "base64"));
     // Runtime errors retain their own diagnostic spelling. Menu and prompt bytes are exact.
-    if (!expected.script.includes("readonly"))
+    if (!expected.script.includes("readonly") || repairScripts.includes(expected.script))
       assert.deepEqual(actual.stderr, Buffer.from(expected.stderr, "base64"));
     else {
       const stderr = Buffer.from(expected.stderr, "base64");

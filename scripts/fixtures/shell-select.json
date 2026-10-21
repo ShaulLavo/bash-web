@@ -342,6 +342,60 @@
       "status": 0,
       "stdout": "CnM9MSByZXBseT1vbGQgeD1vbGQK",
       "stderr": "MSkgYQojPyAvdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IDA6IHJlYWQgZXJyb3I6IEJhZCBmaWxlIGRlc2NyaXB0b3IK"
+    },
+    {
+      "script": "REPLY=old; x=old; select x in a; do echo BAD; break; done 0>f; printf \"s=%s reply=<%s> x=<%s>\\n\" \"$?\" \"$REPLY\" \"$x\"",
+      "status": 0,
+      "stdout": "CnM9MSByZXBseT08b2xkPiB4PTxvbGQ+Cg==",
+      "stderr": "MSkgYQojPyAvdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IDA6IHJlYWQgZXJyb3I6IEJhZCBmaWxlIGRlc2NyaXB0b3IK"
+    },
+    {
+      "script": "set -e; select x in a; do echo BAD; break; done 0>f",
+      "status": 1,
+      "stdout": "Cg==",
+      "stderr": "MSkgYQojPyAvdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IDA6IHJlYWQgZXJyb3I6IEJhZCBmaWxlIGRlc2NyaXB0b3IK"
+    },
+    {
+      "script": "REPLY=old; x=old; select x in a; do echo BAD; break; done 0<.; printf \"s=%s reply=<%s> x=<%s>\\n\" \"$?\" \"$REPLY\" \"$x\"",
+      "status": 0,
+      "stdout": "CnM9MSByZXBseT08b2xkPiB4PTxvbGQ+Cg==",
+      "stderr": "MSkgYQojPyAvdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IDA6IHJlYWQgZXJyb3I6IElzIGEgZGlyZWN0b3J5Cg=="
+    },
+    {
+      "script": "set -e; readonly REPLY=old; select x in a; do break; done <<EOF\n1\nEOF",
+      "status": 1,
+      "stdout": "",
+      "stderr": "MSkgYQojPyAvdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IFJFUExZOiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "script": "set -e; readonly REPLY=old; if select x in a; do echo BAD; break; done <<EOF\n1\nEOF\nthen echo yes; else echo no; fi; echo alive",
+      "status": 1,
+      "stdout": "",
+      "stderr": "MSkgYQojPyAvdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IFJFUExZOiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "script": "readonly REPLY=old; select x in a; do break; done <<EOF\n1\nEOF\necho status=$?",
+      "status": 0,
+      "stdout": "CnN0YXR1cz0xCg==",
+      "stderr": "MSkgYQojPyAvdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IFJFUExZOiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "script": "select 1 in; do :; done; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgMSc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+    },
+    {
+      "script": "select 1 in a; do echo BAD; done; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgMSc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+    },
+    {
+      "script": "i=0; select 1 in $((i+=1)); do :; done; echo \"$?:$i\"",
+      "status": 0,
+      "stdout": "MTowCg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgMSc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
     }
   ]
 }
