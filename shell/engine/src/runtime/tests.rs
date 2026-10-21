@@ -3694,7 +3694,6 @@ fn runtime_permissions_keep_supported_denial_separate_from_unknown_bits() {
     assert_eq!(mode.test(0o200), Some(false));
     assert_eq!(mode.test(0o1000), None);
     assert_eq!(mode.test(0o4000), None);
-    // Values outside a supported mask do not confer a capability.
     bytes[..4].copy_from_slice(&0o7777u32.to_le_bytes());
     bytes[8..12].copy_from_slice(&7u32.to_le_bytes());
     decode_permissions(&mut metadata, &bytes);

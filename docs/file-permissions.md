@@ -12,6 +12,8 @@ Flags must be zero. Success writes exactly four little-endian `u32` words:
 mode, supported mode bits, effective access, supported access bits. Preview1's
 64-byte filestat remains separate and unchanged. Errors leave the output alone.
 
+See the pinned [host ABI](https://github.com/ShaulLavo/waffle/blob/fc58a532f0d7a617e631ea4b7580a190915d4ed6/docs/host-abi.md#inode-permission-query) and [permission support query](https://github.com/ShaulLavo/waffle/blob/fc58a532f0d7a617e631ea4b7580a190915d4ed6/docs/permissions.md#query).
+
 `FileMetadata.mode` stores both the bits and their support mask. Existing optional
 read/write/execute answers represent effective access. A supported clear bit is
 false; an unsupported bit is unknown. Unknown predicates return status 2 rather
@@ -55,7 +57,4 @@ switch to that backend. Only `src/browser/storage.test.ts` and `tests/browser-ma
 import the exact pinned source's `fs/vfs-internal.ts` helper. The latter selects OPFS
 only under the existing `test=1` query. The helper and runtime share the same module
 and Symbol identity; descriptor and worker-field assertions require `opfs-memory`.
-Non-test composition stays on public default FAST. The existing ownership, waiting,
-disposal, restart, recovery and negative takeover cases retain their purposes and
-timeouts. The separate R3 browser control also inspects real OPFS payload/snapshot
-files, reopens the saved value, and verifies no IndexedDB database was substituted.
+Non-test composition stays on public default FAST.

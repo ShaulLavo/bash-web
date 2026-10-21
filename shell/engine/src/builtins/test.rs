@@ -782,7 +782,6 @@ mod permission_tests {
 
     #[test]
     fn supported_modes_and_access_do_not_answer_unsupported_predicates() {
-        // Labelled unit fixture: the real-runtime controls exercise actual modes.
         let fs = crate::io::MemoryFs::new(1024);
         let mut metadata = fs.stat("/", true).unwrap();
         metadata.mode = Some(FileMode {

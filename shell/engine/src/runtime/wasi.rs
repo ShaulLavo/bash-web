@@ -245,8 +245,7 @@ impl Abi for WasiAbi {
         }
         let mut metadata = decode_filestat(&bytes);
         let mut permissions = [0u8; 16];
-        // Waffle has no symbolic links. The query's flags must be zero; ordinary
-        // file metadata remains usable when a host cannot answer permissions.
+        // Waffle has no symbolic links. The query's flags must be zero.
         let errno = unsafe {
             fs_path_permissions_get(
                 self.root,
