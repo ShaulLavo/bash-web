@@ -3,7 +3,7 @@
   "status": "Review-ready. Parent owns independent correctness and comment reviews, hosted CI, fixes coordination, merge and exact-main acceptance.",
   "acceptedSource": "50ab6a7f3cdf6c4c7a7e1ad875d4e804e76da5fd",
   "measuredSource": "286dd4cd0bc59410bda90348992044812a208dd3",
-  "sourceCorrespondence": "Production implementation, tests, package versions and derived layer evidence froze in measuredSource before exactly one full replay. Later author commits change only this receipt, measured gained memberships, plan004 and the behavior note clarifying that existing frozen path normalization is unchanged. No second full replay.",
+  "sourceCorrespondence": "Historical full replay: production implementation, tests, package versions and derived layer evidence froze in measuredSource before exactly one full replay. Evidence/baseline/plan/prose commits followed, including the five approved prose cuts at ad9bdf619e190b07c5b01399f677d43ce51abb01. Review fixes at c29fab56685afceadc7449e7b2e15f59b7ca3aed change printf.rs and state.rs. The original replay did not run on those later production bytes. No second full replay or membership changes in this follow-up.",
   "model": "gpt-6.1-sol",
   "provider": "codex through existing parent-verified cli-proxy. No nested agents or provider/settings/credential changes.",
   "classification": "Original local Rust and TypeScript observed against Bash. No copied or adapted upstream implementation.",
@@ -50,10 +50,7 @@
       "oils": {
         "before": 1013,
         "after": 1015,
-        "gained": [
-          "oils:builtin-printf:38",
-          "oils:builtin-printf:115"
-        ],
+        "gained": ["oils:builtin-printf:38", "oils:builtin-printf:115"],
         "lost": [],
         "newlyFailing": []
       },
@@ -146,10 +143,7 @@
       "passed": 228,
       "existingSkips": 16,
       "runtimeTerminalTests": 143,
-      "engines": [
-        "Chromium",
-        "Firefox"
-      ],
+      "engines": ["Chromium", "Firefox"],
       "result": "Passed. Disposable server on127.0.0.1:42731 and physically short browser temporary directory owned by teardown."
     },
     "frozen": {
@@ -177,5 +171,40 @@
     "actualHostReceipt": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/cleanup.txt",
     "owner": "Implementation lane until handoff, then parent owns retained small evidence",
     "policy": "Stop only owned consumers. Remove the exclusive worktree with git worktree remove and delete owned scratch/build/browser data. Keep small logs, replay, comparator and reproducer here until parent acceptance. Preserve all shared caches, other-owner PR23 and diagnostic worktree."
+  },
+  "reviewFixes": {
+    "startSource": "ad9bdf619e190b07c5b01399f677d43ce51abb01",
+    "fixedSource": "c29fab56685afceadc7449e7b2e15f59b7ca3aed",
+    "independentReview": "CHANGES REQUESTED comment6307762029 at b3196bb449e594e7f169c2f5f66d6f502fad2d64; no replacement reviewer verdict claimed.",
+    "fixes": [
+      "Capture-only malformed format and %b escape warnings tolerate closed stderr; cancellation130 and broken-pipe141 still abort before commit.",
+      "Printf-through-nameref to IFS retains the pre-admitted fixed-size membership and separator snapshots while using the existing scalar assignment owner once. Direct printf and ordinary writes still refresh."
+    ],
+    "productionSourceSha256": {
+      "printf": "3c35c42a7d066f0e0b30b3d67317a686f087bef2a331792679d6807d6d159524",
+      "state": "e2925901987d64e107d406452fb2c62af0b853cf844f3b286bc601a7da54dda3"
+    },
+    "productionGuestSha256": "ecbacd0c4cb13845c378aa2eebcd29dbf099fdda1ba32b2d1ed4bdf13747062b",
+    "measurementBoundary": "Historical full replay and its 14 gains/0 losses remain unchanged at measuredSource. Final source has focused production-Waffle and bounded affected frozen-case validation only, not a complete new score.",
+    "verification": {
+      "failingFirst": "red.log and red-exact.log reproduce both blockers on the starting production-Waffle and native source; reviewer five raw-byte finding/control pairs repeated against the verified starting-source CI artifact.",
+      "nativeAndWasi": "Engine all-target Clippy, rustfmt, 36 state tests, words filters printf119, echo10, namerefs14, scalar_refs18, readonly15 and unchanged low-memory read1 pass on each target. No assertions weakened.",
+      "realWaffle": "48 passed: 44 Bash comparisons plus four preserved explicit boundaries. Format/%b x/u/U open and closed stderr, exact indirect IFS and separate direct/ordinary controls. Raw stdout/status and existing stderr line-annotation normalization only.",
+      "budget": "9 exact-source budget/cancellation/byte controls pass. Numeric and malformed-escape diagnostic backpressure cancellation preserve the original binding and drain executor/process consumers.",
+      "boundedFrozen": {
+        "selected": 392,
+        "passed": 392,
+        "lostSelectedPasses": 0,
+        "historicalGainsRechecked": 14,
+        "jobs": 1,
+        "timeoutMs": 10000,
+        "selection": "All committed passes in printf, nameref, ifs and word-split files, plus all 14 historical gains. Same worker, runtime, oracle bytes and normalization. No baseline/runner/deadline edits."
+      },
+      "static": "Changed TypeScript format/lint/strict bundler typecheck, unchanged duplicate gate, 34 layer tests and immutable-base layer gate pass; 0 production/0 test-only violations,42/28 unique edges.",
+      "hosted": "Parent-owned. No CI rerun, watch, workflow edit, merge or exact-main acceptance by this lane."
+    },
+    "remainingFinding": "Custom prior IFS still differs: IFS=:; declare -n ref=IFS; printf -v ref ':;'; set -- 'a:b;c'; for y in $1; do echo \"<$y>\"; done. Exact before/after bytes are retained in plan004 and review-fixes-r1 evidence. It already failed on the starting source; no compatibility claim for this variation.",
+    "report": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/review-fixes-r1.md",
+    "cleanupReceipt": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/review-fixes-r1-cleanup.json"
   }
 }

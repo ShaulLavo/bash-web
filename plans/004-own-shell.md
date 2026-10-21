@@ -1871,6 +1871,24 @@ checks pass, with zero layer violations. Browser verification passes 228 tests
 with 16 existing skips in Chromium/Firefox, plus 143 runtime-terminal tests.
 No local Darwin claim; the unchanged hosted gate remains parent-owned.
 
+### Review fixes after the full measurement
+
+Source `c29fab56685afceadc7449e7b2e15f59b7ca3aed` fixes the two reproduced
+PR37 review findings. Capture-mode malformed escape warnings tolerate a closed
+stderr without losing assignment. Cancellation and broken pipes still abort.
+Printf-through-nameref to IFS uses the existing fixed-size cache snapshot while
+committing through the existing scalar binding owner. Direct printf-to-IFS and
+ordinary nameref assignments keep their refresh behavior.
+
+This source differs from the full replay's measured source above. Native and
+WASI focused tests and Clippy pass. Production-Waffle controls pass 44 Bash
+comparisons and four explicit boundaries. A separate bounded check passes all
+392 committed passes in the printf, nameref, IFS and word-split files plus the
+historical gains, including all 14 gains. It changes no membership or scorer.
+No second full replay ran, and the historical 14 gains and zero losses are not
+claimed as a complete measurement of this later source. Follow-up evidence is
+`/work/reports/bash-web/hill-climb/printf-scalar-assignment/review-fixes-r1.md`.
+
 ### Finding retained at the existing builtin-prefix boundary
 
 At the measured source, run
@@ -1890,3 +1908,32 @@ an explicit way to retain a builtin's successful writes, with admission,
 cancellation, readonly, local/nameref and IFS tests. None of this unit's eleven
 candidate observations uses a temporary command prefix. Invalid UTF-8, arrays
 and unsupported conversions remain separately named boundaries, not scored gains.
+
+### Additional indirect-IFS discrepancy
+
+The two review reproductions pass after the fixes, but a custom prior separator
+still differs. Run this source with `LC_ALL=C LANG=C` in Bash 5.3.15 and the
+production-Waffle control retained in `review-fixes-r1-evidence/ifs-guards.ts`:
+
+```sh
+IFS=:; declare -n ref=IFS; printf -v ref ':;'; set -- 'a:b;c'
+for y in $1; do echo "<$y>"; done
+```
+
+Bash prints `<a:b;c>\n`. The starting PR37 source prints `<a>\n<b>\n<c>\n`;
+the fixed source prints `<a>\n<b;c>\n`. All return 0 with empty stderr.
+Three native observations per source repeat these results, and the final
+production-Waffle result agrees with the native engine. This was already a
+failure before the two review fixes, not a lost committed pass. The bounded
+392-case check has no lost passes. This additional variation is not fixed or
+counted as compatible here.
+
+The suspected boundary is `State::assign_printf_parameter`'s membership snapshot
+and `expand::Ifs::new`'s intersection with the live scalar. The default-IFS
+review reproduction, alias chains, direct and ordinary writes, readonly checks,
+quoted-star separator, local scope and later cache refresh controls pass.
+A follow-up must establish Bash's custom-prior-IFS behavior before changing that
+shared cache contract. Raw bytes and exact sources are in
+`review-fixes-r1-evidence/ifs-guards.ts`, `budget-and-guards.log` and
+`custom-ifs-before-after.ts` under the report directory above. The native
+before/after observations are in `final-static.log` there.

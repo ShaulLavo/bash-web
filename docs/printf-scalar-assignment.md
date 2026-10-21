@@ -8,13 +8,20 @@ so a closed stdout descriptor does not prevent assignment.
 
 Names use the existing ASCII shell identifier rules. Missing names or formats
 and invalid names return 2 without changing the variable. Assignment follows
-the shell's existing dynamic local scope, nameref resolution, readonly checks,
-temporary prefix restoration and IFS cache updates. With `x=prefix printf -v x`,
+the shell's existing dynamic local scope, nameref resolution, readonly checks
+and temporary prefix restoration. Direct IFS writes refresh its special caches.
+For `declare -n ref=IFS; printf -v ref ':'`, the scalar changes but `a:b` remains
+one field and quoted `$*` keeps its prior separator. Ordinary `ref=:` still
+refreshes splitting. Custom-prior-IFS behavior has a remaining discrepancy
+recorded in [plan004](../plans/004-own-shell.md#additional-indirect-ifs-discrepancy).
+With `x=prefix printf -v x`,
 the existing builtin prefix guard restores the outer value. Bash instead keeps
 the printf assignment. A readonly target returns 1
 and retains its value. Numeric warnings still diagnose and assign the formatted
-partial result with status 1. `%b` with `\c` keeps the formatter's existing
-stop-output and status rules.
+partial result with status 1. Malformed `\x`, `\u` and `\U` escapes in the
+format or `%b` warn without failing assignment, even with stderr closed.
+Cancellation and a real broken diagnostic pipe still abort before assignment.
+`%b` with `\c` keeps the formatter's existing stop-output and status rules.
 
 Preflight counts stdout bytes separately from diagnostics, then admits the exact
 capture size, variable key and binding storage before allocation or output.
@@ -39,3 +46,8 @@ controls compare raw stdout and status, and separately compare stderr after
 removing only Bash source-line annotations. This unit adds no stdout normalization
 and leaves the frozen path-normalization and stderr policies unchanged. No case,
 fixture, exclusion or deadline changes.
+
+The full replay in that receipt measured `286dd4cd0bc59410bda90348992044812a208dd3`.
+The later warning and indirect-IFS fixes change production bytes. Their focused
+checks and 392 affected frozen-case comparisons are separate evidence, not a
+second full replay or a new score claim.
