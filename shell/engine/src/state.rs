@@ -2097,6 +2097,8 @@ pub fn absolute(cwd: &str, path: &str) -> String {
 
 #[cfg(test)]
 mod bindings_tests;
+#[cfg(test)]
+mod getopts_tests;
 
 #[cfg(test)]
 mod tests {
