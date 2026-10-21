@@ -185,18 +185,10 @@ async fn describe(
     if found && !options.all {
         return Ok(true);
     }
-    let mut cursor = 0;
+    let mut search =
+        command_builtin::ExecutableSearch::new(name, state, false, None, context, lookup)?;
     loop {
-        let resolution = command_builtin::executable_from(
-            name,
-            state,
-            false,
-            None,
-            context,
-            lookup,
-            &mut cursor,
-        )
-        .await?;
+        let resolution = search.next(name, context, lookup).await?;
         let path = match resolution {
             Resolution::Executable(path) => path,
             Resolution::NonExecutable(path, _) if !options.all && !name.contains('/') => path,

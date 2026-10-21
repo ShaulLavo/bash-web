@@ -318,6 +318,11 @@ fn lookup_global_admission_rejects_before_copying_large_path_requests() {
 
 #[test]
 fn lookup_pending_request_keeps_shared_tickets_and_cancel_refunds_them() {
+    for source in ["command -v probe", "type -p probe", "type -aP probe"] {
+        pending_lookup_refunds(source);
+    }
+}
+fn pending_lookup_refunds(source: &str) {
     let rig = Rig::new(Limits {
         execution_bytes: 1024 * 1024,
         ..Limits::default()
@@ -325,7 +330,7 @@ fn lookup_pending_request_keeps_shared_tickets_and_cancel_refunds_them() {
     assert_eq!(rig.run(&format!("PATH={}", "p".repeat(96 * 1024))), 0);
     let before = rig.session.core.execution_storage.observation().0;
     rig.host.stall.set(true);
-    let job = rig.session.start("command -v probe").unwrap();
+    let job = rig.session.start(source).unwrap();
     for _ in 0..100_000 {
         if rig.host.live.get() != 0 || job.is_finished() {
             break;
@@ -357,6 +362,11 @@ fn lookup_pending_request_keeps_shared_tickets_and_cancel_refunds_them() {
 
 #[test]
 fn lookup_scan_fuel_is_shared_by_all_query_operands_but_not_later_commands() {
+    for query in ["command -v", "type -p", "type -aP"] {
+        query_scan_fuel(query);
+    }
+}
+fn query_scan_fuel(query: &str) {
     let rig = Rig::new(Limits {
         source_bytes: 256,
         expansion_bytes: 4096,
@@ -365,11 +375,11 @@ fn lookup_scan_fuel_is_shared_by_all_query_operands_but_not_later_commands() {
         ..Limits::default()
     });
     rig.path(&std::iter::repeat_n("x", 100).collect::<Vec<_>>().join(":"));
-    assert_eq!(rig.run("command -v q0"), 1);
+    assert_eq!(rig.run(&format!("{query} q0")), 1);
     assert_eq!(rig.host.requests.replace(0), 100);
-    let status = rig.run(&format!("command -v{}", " q0".repeat(32)));
+    let status = rig.run(&format!("{query}{}", " q0".repeat(32)));
     let requests = rig.host.requests.replace(0);
-    assert_eq!(rig.run("command -v q0"), 1);
+    assert_eq!(rig.run(&format!("{query} q0")), 1);
     assert_eq!(rig.host.requests.get(), 100);
     rig.shutdown();
     assert_eq!(status, 2);

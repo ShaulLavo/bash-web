@@ -135,12 +135,7 @@ impl LookupWork {
             storage,
         })
     }
-    pub(super) fn join(
-        &self,
-        prefix: &str,
-        name: &str,
-        context: &Context,
-    ) -> Result<PathString, i32> {
+    fn join(&self, prefix: &str, name: &str, context: &Context) -> Result<PathString, i32> {
         let separator = if prefix.ends_with('/') { "" } else { "/" };
         let bytes = prefix
             .len()
@@ -173,34 +168,34 @@ pub(super) async fn executable(
     context: &Context,
     work: &mut LookupWork,
 ) -> Result<Resolution, i32> {
-    executable_from(
-        name,
-        state,
-        default_path,
-        path_override,
-        context,
-        work,
-        &mut 0,
-    )
-    .await
-}
-
-/// Resume the same authoritative PATH scan after its last inspected entry.
-/// The caller keeps one cursor per name and shares LookupWork across all names.
-pub(super) async fn executable_from(
-    name: &str,
-    state: &SharedState,
-    default_path: bool,
-    path_override: Option<&str>,
-    context: &Context,
-    work: &mut LookupWork,
-    cursor: &mut usize,
-) -> Result<Resolution, i32> {
     if name.is_empty() {
         return Ok(Resolution::Missing);
     }
-    let explicit = name.contains('/');
-    let (cwd, path, path_unset, _snapshot_storage) = {
+    ExecutableSearch::new(name, state, default_path, path_override, context, work)?
+        .next(name, context, work)
+        .await
+}
+
+/// One admitted cwd/PATH snapshot and a resumable cursor over that same search.
+/// Repeated `type -a` hits must not recopy the whole PATH for every result.
+pub(super) struct ExecutableSearch {
+    cwd: String,
+    path: String,
+    path_unset: bool,
+    explicit: bool,
+    cursor: usize,
+    _storage: PathStorage,
+}
+impl ExecutableSearch {
+    pub(super) fn new(
+        name: &str,
+        state: &SharedState,
+        default_path: bool,
+        path_override: Option<&str>,
+        context: &Context,
+        work: &LookupWork,
+    ) -> Result<Self, i32> {
+        let explicit = name.contains('/');
         let state = state.borrow();
         let environment_path = path_override.or_else(|| state.scalar_parameter("PATH"));
         let path_unset = environment_path.is_none() && !default_path;
@@ -213,120 +208,142 @@ pub(super) async fn executable_from(
             environment_path.unwrap_or(".")
         };
         let storage = work.admit(cwd_storage(&state.cwd, path)?, context)?;
-        (state.cwd.clone(), path.to_owned(), path_unset, storage)
-    };
-    let Some(remaining) = path.get(*cursor..) else {
-        return Ok(Resolution::Missing);
-    };
-    let mut entries = remaining.split(':');
-    let mut non_executable = None;
-    // Bash remembers the first existing candidate, including a directory. A
-    // directory before a non-runnable regular file suppresses that fallback;
-    // failed metadata lookups (e.g. ENOTDIR ancestors) do not.
-    let mut directory_seen = false;
-    let mut directory_before_fallback = false;
-    loop {
-        let candidate = if explicit {
-            work.copy(name, context)?
-        } else {
-            let Some(directory) = entries.next() else {
-                return Ok(if directory_before_fallback {
-                    Resolution::Missing
-                } else {
-                    non_executable
-                        .map(|path| Resolution::NonExecutable(path, b"Permission denied"))
-                        .unwrap_or(Resolution::Missing)
-                });
-            };
-            *cursor = cursor.saturating_add(directory.len()).saturating_add(1);
-            let prefix = if path_unset {
-                cwd.as_str()
-            } else if directory.is_empty() {
-                "."
+        Ok(Self {
+            cwd: state.cwd.clone(),
+            path: path.to_owned(),
+            path_unset,
+            explicit,
+            cursor: 0,
+            _storage: storage,
+        })
+    }
+    pub(super) async fn next(
+        &mut self,
+        name: &str,
+        context: &Context,
+        work: &mut LookupWork,
+    ) -> Result<Resolution, i32> {
+        if name.is_empty() {
+            return Ok(Resolution::Missing);
+        }
+        let cwd = &self.cwd;
+        let path = &self.path;
+        let path_unset = self.path_unset;
+        let explicit = self.explicit;
+        let cursor = &mut self.cursor;
+        let Some(remaining) = path.get(*cursor..) else {
+            return Ok(Resolution::Missing);
+        };
+        let mut entries = remaining.split(':');
+        let mut non_executable = None;
+        // Bash remembers the first existing candidate, including a directory. A
+        // directory before a non-runnable regular file suppresses that fallback;
+        // failed metadata lookups (e.g. ENOTDIR ancestors) do not.
+        let mut directory_seen = false;
+        let mut directory_before_fallback = false;
+        loop {
+            let candidate = if explicit {
+                work.copy(name, context)?
             } else {
-                directory
-            };
-            work.join(prefix, name, context)?
-        };
-        for _ in candidate.text.bytes() {
-            work.scan
-                .checkpoint(&context.cancel)
-                .await
-                .map_err(admission_status)?;
-        }
-        // Both owned copies are admitted before crossing the host boundary.
-        // Retire their tickets with the completed/cancelled request, not after
-        // the whole search. A retained fallback keeps its own separate ticket.
-        let result = {
-            let _request_storage = work.admit(cwd_storage(&cwd, &candidate.text)?, context)?;
-            context
-                .cancel
-                .run(
-                    context
-                        .core
-                        .host
-                        .access(candidate.text.clone(), cwd.clone()),
-                )
-                .await
-                .map_err(|_| context.cancel_status())?
-        };
-        match result {
-            Ok(()) => return Ok(Resolution::Executable(candidate)),
-            Err(ProcessError::Runtime(errno @ (2 | 31 | 44))) => {
-                // Metadata only classifies failure; it NEVER admits execution.
-                // Absolute candidates can be borrowed without another copy.
-                let absolute = if candidate.text.starts_with('/') {
-                    None
-                } else {
-                    Some(work.join(&cwd, &candidate.text, context)?)
+                let Some(directory) = entries.next() else {
+                    return Ok(if directory_before_fallback {
+                        Resolution::Missing
+                    } else {
+                        non_executable
+                            .map(|path| Resolution::NonExecutable(path, b"Permission denied"))
+                            .unwrap_or(Resolution::Missing)
+                    });
                 };
-                let path = absolute
-                    .as_ref()
-                    .map(|path| path.text.as_str())
-                    .unwrap_or(&candidate.text);
-                let metadata = context
-                    .cancel
-                    .run(context.fs().stat(path, true))
+                *cursor = cursor.saturating_add(directory.len()).saturating_add(1);
+                let prefix = if path_unset {
+                    cwd.as_str()
+                } else if directory.is_empty() {
+                    "."
+                } else {
+                    directory
+                };
+                work.join(prefix, name, context)?
+            };
+            for _ in candidate.text.bytes() {
+                work.scan
+                    .checkpoint(&context.cancel)
                     .await
-                    .map_err(|_| context.cancel_status())?;
-                match metadata {
-                    Ok(metadata) if metadata.kind == io::FileKind::Directory => {
-                        if explicit {
-                            return Ok(Resolution::NonExecutable(candidate, b"Is a directory"));
+                    .map_err(admission_status)?;
+            }
+            // Both owned copies are admitted before crossing the host boundary.
+            // Retire their tickets with the completed/cancelled request, not after
+            // the whole search. A retained fallback keeps its own separate ticket.
+            let result = {
+                let _request_storage = work.admit(cwd_storage(cwd, &candidate.text)?, context)?;
+                context
+                    .cancel
+                    .run(
+                        context
+                            .core
+                            .host
+                            .access(candidate.text.clone(), cwd.clone()),
+                    )
+                    .await
+                    .map_err(|_| context.cancel_status())?
+            };
+            match result {
+                Ok(()) => return Ok(Resolution::Executable(candidate)),
+                Err(ProcessError::Runtime(errno @ (2 | 31 | 44))) => {
+                    // Metadata only classifies failure; it NEVER admits execution.
+                    // Absolute candidates can be borrowed without another copy.
+                    let absolute = if candidate.text.starts_with('/') {
+                        None
+                    } else {
+                        Some(work.join(cwd, &candidate.text, context)?)
+                    };
+                    let path = absolute
+                        .as_ref()
+                        .map(|path| path.text.as_str())
+                        .unwrap_or(&candidate.text);
+                    let metadata = context
+                        .cancel
+                        .run(context.fs().stat(path, true))
+                        .await
+                        .map_err(|_| context.cancel_status())?;
+                    match metadata {
+                        Ok(metadata) if metadata.kind == io::FileKind::Directory => {
+                            if explicit {
+                                return Ok(Resolution::NonExecutable(candidate, b"Is a directory"));
+                            }
+                            directory_seen = true;
                         }
-                        directory_seen = true;
-                    }
-                    Ok(_) => {
-                        if non_executable.is_none() {
-                            directory_before_fallback = directory_seen;
-                            non_executable = Some(candidate);
+                        Ok(_) => {
+                            if non_executable.is_none() {
+                                directory_before_fallback = directory_seen;
+                                non_executable = Some(candidate);
+                            }
                         }
+                        Err(io::IoError::NotDirectory) if explicit => {
+                            return Ok(Resolution::NonExecutable(candidate, b"Not a directory"));
+                        }
+                        Err(io::IoError::NotFound) if errno == 44 => {}
+                        Err(_) if explicit => {
+                            let reason = if errno == 31 {
+                                b"Is a directory".as_slice()
+                            } else {
+                                b"Permission denied".as_slice()
+                            };
+                            return Ok(Resolution::NonExecutable(candidate, reason));
+                        }
+                        Err(_) => {}
                     }
-                    Err(io::IoError::NotDirectory) if explicit => {
-                        return Ok(Resolution::NonExecutable(candidate, b"Not a directory"));
-                    }
-                    Err(io::IoError::NotFound) if errno == 44 => {}
-                    Err(_) if explicit => {
-                        let reason = if errno == 31 {
-                            b"Is a directory".as_slice()
-                        } else {
-                            b"Permission denied".as_slice()
-                        };
-                        return Ok(Resolution::NonExecutable(candidate, reason));
-                    }
-                    Err(_) => {}
                 }
+                Err(ProcessError::Runtime(54)) if explicit => {
+                    return Ok(Resolution::NonExecutable(candidate, b"Not a directory"));
+                }
+                Err(ProcessError::Runtime(54)) => {}
+                Err(_) => return Err(2),
             }
-            Err(ProcessError::Runtime(54)) if explicit => {
-                return Ok(Resolution::NonExecutable(candidate, b"Not a directory"));
+            if explicit {
+                return Ok(non_executable
+                    .map(|path| Resolution::NonExecutable(path, b"Permission denied"))
+                    .unwrap_or(Resolution::Missing));
             }
-            Err(ProcessError::Runtime(54)) => {}
-            Err(_) => return Err(2),
-        }
-        if explicit {
-            return Ok(non_executable
-                .map(|path| Resolution::NonExecutable(path, b"Permission denied"))
-                .unwrap_or(Resolution::Missing));
         }
     }
 }

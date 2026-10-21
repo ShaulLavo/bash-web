@@ -1857,7 +1857,7 @@
     "testDestinations": [
       "shell/engine/tests/words/type_builtin.rs"
     ],
-    "originalAdapters": "Register one interpreter handler in the existing command catalogue. Extend the existing bounded command_builtin executable resolver with a resumable PATH-entry offset, preserving its one-shot wrapper and fallback policy. Extract existing canonical AST function rendering and its admission unchanged for both query callers. Stream through existing descriptors, share command work and live storage, never spawn as a probe. No upstream search_path helpers, parallel builtin registry, buffered output or function-text parser is retained.",
+    "originalAdapters": "Register one interpreter handler in the existing command catalogue. Extend the existing bounded command_builtin executable resolver with one admitted cwd/PATH snapshot and a resumable PATH-entry offset, preserving its one-shot wrapper and fallback policy. Extract existing canonical AST function rendering and its admission unchanged for both query callers. Stream through existing descriptors, share command work and live storage, never spawn as a probe. No upstream search_path helpers, parallel builtin registry, buffered output or function-text parser is retained.",
     "deferred": [
       "aliases and command hash ownership",
       "declarations, arrays and grammar prerequisites",

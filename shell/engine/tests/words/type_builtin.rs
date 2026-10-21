@@ -100,3 +100,15 @@ fn type_closed_output_and_prefix_restore_use_existing_owners() {
     assert_eq!(rig.run("type -P args"), 0);
     assert_eq!(rig.output.bytes(), b"/home/guest/args\n");
 }
+
+#[test]
+fn type_preserves_relative_paths_and_filters_directories_and_nonexecutables() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("mkdir directory"), 0);
+    rig.variable("PATH", ".");
+    assert_eq!(rig.run("printf data > probe; type -p probe; type probe"), 0);
+    assert_eq!(rig.output.bytes(), b"./probe\nprobe is ./probe\n");
+    assert_eq!(rig.run("type -a probe"), 1);
+    assert_eq!(rig.run("type ./probe"), 1);
+    assert_eq!(rig.run("type directory"), 1);
+}
