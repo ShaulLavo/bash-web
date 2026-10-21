@@ -13,12 +13,11 @@ usage. Closed diagnostic descriptors retain usage status 2. Cancellation returns
 well as formatted output before any writes. Existing byte formatting, format
 reuse, partial writes, bounded buffering and `%b` stop-output behavior are unchanged.
 
-Successful `-v` assignment and help rendering are not implemented. Supplied `-v`
-operands and exact `--help` return explicit unsupported diagnostics rather than
-printing those options as successful formats. This includes variable-name
-validation, attached names, and missing formats after supplied `-v`; they are
-not claimed Bash-compatible by this unit. `%q`, floats, parser and runtime work
-are also outside this change.
+Scalar `-v NAME` and attached `-vNAME` assignment are supported by the
+[scalar assignment unit](printf-scalar-assignment.md), including name validation
+and missing formats. Help rendering remains unsupported. Exact `--help` returns
+an explicit unsupported diagnostic rather than printing it as a successful format.
+The original option-boundary measurement below predates scalar assignment.
 
 Observations compare raw stdout and status independently of stderr. Diagnostic
 comparison removes only Bash's source-line annotation; merged streams retain

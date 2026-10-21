@@ -17,10 +17,13 @@ pub(super) async fn run(
     context: &Context,
     work: &mut Work,
 ) -> Result<(), i32> {
-    let invocation = Invocation::parse(args);
+    let invocation = Invocation::parse(args, context, work).await?;
     let utf8 = character_locale(state, context, work).await?;
     let mut printer = Printer::new(fds, context, work, utf8);
     invocation.print(&mut printer).await?;
+    if let Invocation::Assign(name, _) = invocation {
+        return assign(name, invocation, state, &mut printer).await;
+    }
     printer.work = None;
     let status = invocation.print(&mut printer).await?;
     printer.flush_output().await?;
@@ -32,31 +35,58 @@ const USAGE: &[u8] = b"printf: usage: printf [-v var] format [arguments]\n";
 #[derive(Clone, Copy)]
 enum Invocation<'a> {
     Format(&'a [String]),
+    Assign(&'a str, &'a [String]),
+    InvalidVariable(&'a str),
     InvalidOption(u8),
     Usage,
     Error(&'static [u8]),
 }
 
 impl<'a> Invocation<'a> {
-    fn parse(args: &'a [String]) -> Self {
-        let Some((first, operands)) = args.split_first() else {
-            return Self::Usage;
-        };
-        if first == "--" && operands.is_empty() {
-            return Self::Usage;
+    async fn parse(args: &'a [String], context: &Context, work: &mut Work) -> Result<Self, i32> {
+        let mut operands = args;
+        let mut name = None;
+        while let Some((first, rest)) = operands.split_first() {
+            scan_option(first.len().max(1), context, work).await?;
+            if first == "--" {
+                operands = rest;
+                break;
+            }
+            if first.len() <= 1 || !first.starts_with('-') {
+                break;
+            }
+            let Some(attached) = first.strip_prefix("-v") else {
+                return Ok(Self::option_error(first));
+            };
+            let Some((target, rest)) = Self::variable(attached, rest) else {
+                return Ok(Self::Error(
+                    b"/usr/bin/bash: printf: -v: option requires an argument\n",
+                ));
+            };
+            scan_option(target.len(), context, work).await?;
+            if !super::valid_name(target) {
+                return Ok(Self::InvalidVariable(target));
+            }
+            name = Some(target);
+            operands = rest;
         }
-        if first == "--" {
-            return Self::Format(operands);
+        if operands.is_empty() {
+            return Ok(Self::Usage);
         }
-        if first.len() <= 1 || !first.starts_with('-') {
-            return Self::Format(args);
+        Ok(match name {
+            Some(name) => Self::Assign(name, operands),
+            None => Self::Format(operands),
+        })
+    }
+
+    fn variable(attached: &'a str, rest: &'a [String]) -> Option<(&'a str, &'a [String])> {
+        if !attached.is_empty() {
+            return Some((attached, rest));
         }
-        if first == "-v" && operands.is_empty() {
-            return Self::Error(b"/usr/bin/bash: printf: -v: option requires an argument\n");
-        }
-        if first.starts_with("-v") {
-            return Self::Error(b"/usr/bin/bash: printf: -v: assignment is not supported\n");
-        }
+        rest.split_first().map(|(name, rest)| (name.as_str(), rest))
+    }
+
+    fn option_error(first: &str) -> Self {
         if first == "--help" {
             return Self::Error(b"/usr/bin/bash: printf: --help: unsupported option\n");
         }
@@ -66,7 +96,17 @@ impl<'a> Invocation<'a> {
     async fn print(self, printer: &mut Printer<'_>) -> Result<i32, i32> {
         printer.scan(1).await?;
         match self {
-            Self::Format(args) => return format(args, printer).await,
+            Self::Format(args) | Self::Assign(_, args) => return format(args, printer).await,
+            Self::InvalidVariable(name) => {
+                printer
+                    .usage_diagnostic(b"/usr/bin/bash: printf: `")
+                    .await?;
+                printer.usage_diagnostic(name.as_bytes()).await?;
+                printer
+                    .usage_diagnostic(b"': not a valid identifier\n")
+                    .await?;
+                return Ok(2);
+            }
             Self::InvalidOption(byte) => invalid_option(byte, printer).await?,
             Self::Error(diagnostic) => printer.usage_diagnostic(diagnostic).await?,
             Self::Usage => {}
@@ -75,6 +115,61 @@ impl<'a> Invocation<'a> {
         printer.usage_diagnostic(USAGE).await?;
         Ok(2)
     }
+}
+
+async fn scan_option(bytes: usize, context: &Context, work: &mut Work) -> Result<(), i32> {
+    for _ in 0..bytes {
+        work.checkpoint(&context.cancel)
+            .await
+            .map_err(error_status)?;
+    }
+    Ok(())
+}
+
+async fn assign(
+    name: &str,
+    invocation: Invocation<'_>,
+    state: &SharedState,
+    printer: &mut Printer<'_>,
+) -> Result<(), i32> {
+    let bytes = printer.stdout_bytes;
+    let work = printer.work.as_deref_mut().ok_or(2)?;
+    State::admit_assignment(state, name, bytes, &printer.context.cancel, work)
+        .await
+        .map_err(error_status)?;
+    let storage = state
+        .borrow()
+        .declaration_storage(name, false)
+        .map_err(error_status)?;
+    let saved_bytes = if state.borrow().prefix_saved(name) {
+        bytes
+    } else {
+        0
+    };
+    work.admit_storage(storage.saturating_add(bytes).saturating_add(saved_bytes))
+        .map_err(error_status)?;
+    let target = state.borrow().assignment_name(name.to_owned())?;
+    let readonly = state.borrow().is_readonly(&target);
+    if readonly {
+        printer.readonly_diagnostic(&target).await?;
+    }
+    printer.scan(bytes).await?;
+    let _storage = printer.context.admit_builtin_buffer(bytes)?;
+    printer.capture = Some(Vec::with_capacity(bytes));
+    printer.work = None;
+    let status = invocation.print(printer).await?;
+    if readonly {
+        printer.readonly_diagnostic(&target).await?;
+        return Err(1);
+    }
+    let mut output = printer.capture.take().ok_or(2)?;
+    printer.scan(output.len()).await?;
+    if let Some(end) = output.iter().position(|byte| *byte == 0) {
+        output.truncate(end);
+    }
+    let value = String::from_utf8(output.into_boxed_slice().into_vec()).map_err(|_| 2)?;
+    state.borrow_mut().assign_parameter(target, value)?;
+    if status == 0 { Ok(()) } else { Err(status) }
 }
 
 async fn invalid_option(byte: u8, printer: &mut Printer<'_>) -> Result<(), i32> {
@@ -198,6 +293,8 @@ struct Printer<'a> {
     utf8: bool,
     output: [u8; WRITE_CHUNK],
     output_len: usize,
+    stdout_bytes: usize,
+    capture: Option<Vec<u8>>,
 }
 impl<'a> Printer<'a> {
     fn new(fds: &'a FdTable, context: &'a Context, work: &'a mut Work, utf8: bool) -> Self {
@@ -210,6 +307,8 @@ impl<'a> Printer<'a> {
             utf8,
             output: [0; WRITE_CHUNK],
             output_len: 0,
+            stdout_bytes: 0,
+            capture: None,
         }
     }
     async fn scan(&mut self, bytes: usize) -> Result<(), i32> {
@@ -250,10 +349,13 @@ impl<'a> Printer<'a> {
     async fn emit(&mut self, fd: u32, bytes: &[u8]) -> Result<(), i32> {
         if self.work.is_some() {
             self.remaining = self.remaining.checked_sub(bytes.len()).ok_or(2)?;
+            if fd == 1 {
+                self.stdout_bytes += bytes.len();
+            }
             return Ok(());
         }
         if fd == 1 {
-            self.append_output(bytes).await
+            self.emit_output(bytes).await
         } else {
             // With aliased stderr, Bash diagnoses before stdout.
             let result = self.write_diagnostic(fd, bytes).await;
@@ -266,6 +368,18 @@ impl<'a> Printer<'a> {
                 }
             }
         }
+    }
+    async fn emit_output(&mut self, bytes: &[u8]) -> Result<(), i32> {
+        if let Some(output) = &mut self.capture {
+            output.extend_from_slice(bytes);
+            return Ok(());
+        }
+        self.append_output(bytes).await
+    }
+    async fn readonly_diagnostic(&mut self, name: &str) -> Result<(), i32> {
+        self.numeric_warning(b"/usr/bin/bash: ").await?;
+        self.numeric_warning(name.as_bytes()).await?;
+        self.numeric_warning(b": readonly variable\n").await
     }
     async fn write_diagnostic(&self, fd: u32, bytes: &[u8]) -> Result<(), i32> {
         endpoint(self.fds, fd)?
@@ -295,6 +409,7 @@ impl<'a> Printer<'a> {
     async fn padding(&mut self, mut count: usize, byte: u8) -> Result<(), i32> {
         if self.work.is_some() {
             self.remaining = self.remaining.checked_sub(count).ok_or(2)?;
+            self.stdout_bytes += count;
             return self.scan(count).await;
         }
         const SPACES: [u8; WRITE_CHUNK] = [b' '; WRITE_CHUNK];
@@ -654,6 +769,9 @@ mod tests {
         shell.set_descriptors(fds).unwrap();
         for (source, status) in [
             ("printf ok", 0),
+            ("printf -v x '%8193s' hi", 0),
+            (r"printf -v x '%b' '\377'", 2),
+            ("readonly locked=old; printf -v locked %s changed 2>&-", 1),
             (r"printf 'prefixA\xZ' 2>&-", 1),
             (r"echo -ne '\0377'", 0),
             ("echo error >&-", 1),
