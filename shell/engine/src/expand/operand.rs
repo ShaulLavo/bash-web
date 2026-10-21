@@ -453,7 +453,7 @@ impl<'a> Scanner<'a> {
             .await?;
         admit_syntax(body, work)?;
         match parse::backtick_body(body).map_err(|_| Error::Status(2))? {
-            WordPart::CommandSubstitution(commands) => {
+            WordPart::CommandSubstitution(commands) | WordPart::FileSubstitution(commands) => {
                 Ok(WordPart::ProcessSubstitution { commands, is_input })
             }
             // Bash parses the body as it expands; a failure is fatal there.

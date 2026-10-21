@@ -23,6 +23,7 @@ mod conditional;
 mod control;
 pub(crate) mod eval;
 mod indexed;
+mod file_substitution;
 
 #[derive(Clone, Debug)]
 pub struct Limits {

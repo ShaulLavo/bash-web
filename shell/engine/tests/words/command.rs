@@ -1493,3 +1493,6 @@ fn interrupting_a_command_local_heredoc_discards_reader_effects_and_drains_child
     assert_eq!(rig.run("args \"${x-unset}\" recovered"), 0);
     assert_eq!(*rig.calls.borrow(), [vec!["unset", "recovered"]]);
 }
+
+#[path = "file_substitution.rs"]
+mod file_substitution;

@@ -2014,3 +2014,84 @@ See [the behavior notes](../docs/printf-escaped-fields.md) and
 [measurement receipt](../docs/evidence/printf-escaped-fields.json). The complete
 saved replay, original exit, before-and-after controls, offline comparator and
 cleanup receipt remain in `/work/reports/bash-web/hill-climb/printf-b-fields`.
+
+## Getopts caller-local dynamic unbind, 2026-10-21
+
+Status: Approved. Owner: Variables track for general dynamic scope/unbind
+semantics, coordinated with BUILTINS for the getopts caller. This is a separate
+follow-up, not part of the bounded scanner repair.
+
+Independent getopts repair review r3 retained an inherited caller-local OPTARG
+limitation as `F2-caller-local-error`. Run the exact script with Bash 5.3.15 or
+the production Waffle shell:
+
+```sh
+OPTARG=g; g() { getopts a o x; echo "g:${OPTARG-unset}"; }; f() { local OPTARG=l; readonly OPTARG; g; OPTARG=after; echo "f:$OPTARG"; }; f; echo "global:$OPTARG"
+```
+
+Bash prints `g:g\nf:after\nglobal:after\n`. Reviewed shell source
+`339a5b9e635637ffd9734e889d43a1bf3186bc34` prints
+`g:unset\nf:after\nglobal:g\n` on both native and real Waffle. All three return
+status 0 with empty stderr. Exact script and raw observations are the
+`F2-caller-local-error` records in
+`/work/reports/bash-web/hill-climb/builtins/getopts-repair-review-r3/native.json`
+and `waffle.json`; disposition and source inspection are in the adjacent
+`report.md` and `RESULT.json`.
+
+The current direct getopts unbind removes the visible value but does not reveal
+the outer binding when the removed local belongs to a caller. Inspect
+`State::unset_getopts_argument` and local-frame restoration in
+`shell/engine/src/state.rs`. The prior helper had the same visible-value removal
+policy; this is not a new scanner-repair regression. Define general dynamic
+unbind/restoration semantics with the Variables owner, then cover caller-local,
+current-local, readonly, nameref and function-return behavior. Keep the exact
+Bash/native/Waffle control nonpassing until that contract lands. Do not add a
+getopts-only scope rewrite, change score inputs or claim full dynamic-unbind
+parity for the current scanner PR.
+
+## Input-only substitution and inherited file aliases, 2026-10-21
+
+Approved bounded command-substitution family. Typed parser metadata distinguishes
+Bash's eligible `$(<file)`/legacy backtick shortcut from ordinary redirect-only
+commands. The file capture expands its filename in caller state and reuses the
+bounded decoder, while normal substitutions retain their streaming supervisor.
+See [behavior, tests and provenance](../docs/file-substitution.md).
+
+Measured source `3a0268b52d6a643ec7326d376d8746138d7f49c9` completes one frozen
+production-Waffle replay with JOBS=1 and RECORD=0. All 9,221 records, 5,792
+scored cases, 3,429 skips and four frozen identities are unchanged. Oils stays
+1,015. Brush gains two cases, 1,008 to 1,010. Bashkit gains five, 1,413 to 1,418.
+Every corpus loses zero passes. Only seven outcome fields and derived counts
+change; all historical payloads remain. The unchanged strict comparator accepts
+the saved replay after that update. Exact IDs, source/artifact hashes and checks
+are in [the receipt](../docs/evidence/file-substitution.json).
+
+Native/WASI workspace checks pass 1,311/1,291 tests. The 111 production controls
+include 110 Bash stdout/status comparisons and one explicit invalid-UTF-8
+boundary. Runtime tests pass 143, and both browsers pass 228 active cases with
+the same 16 existing skips. The scoreboard suite now includes the new production
+controls; its complete 283-test selection and the nine CI-recipe assertions pass.
+Independent parent review, hosted CI, normal integration and exact-main
+verification remain required.
+
+### Separate follow-up: independently reopen regular-file descriptor aliases
+
+Approved separate CONTROL family after the Waffle owner supplies an actual
+merged independent-reopen contract. Do not block the bounded shorthand family
+on it, change the shared I/O helper here, add path blacklists or restore offsets
+by guessing. Preserve pipe/terminal sharing and all current frozen passes.
+
+Exact reproduction: `printf 'one\ntwo\n' >f; exec 3<f; x=$(</dev/fd/3); IFS= read -r y <&3; printf 'x=<%s> y=<%s>\n' "$x" "$y"`.
+GNU Bash 5.3.15 prints `y=<one>`; both the native candidate and production Waffle
+print `y=<>`, all status 0. Replacing the shorthand with
+`$(cat </dev/fd/3)` reproduces the same production mismatch. Observed once per
+form in the bounded probe; the source behavior is deterministic.
+`io.rs::device_endpoint` returns the identical endpoint, so reads consume the
+inherited regular file offset. Neither `FileSystem` nor `HostEndpoint` currently
+exposes independent reopening. This rules out the new capture decoder as the
+cause. Evidence and exact script are retained in
+`/work/reports/bash-web/hill-climb/control/file-substitution/fd-observation.json`;
+no worker, route or container is retained. Root accepted this boundary and routed
+the runtime contract to Waffle. The future family must first reproduce both
+forms, test fresh regular-file offsets versus shared pipes/terminals, preserve
+cancellation and lifetime ownership, then replay the unchanged frozen ruler.
