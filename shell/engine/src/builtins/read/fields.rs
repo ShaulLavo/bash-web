@@ -1,19 +1,22 @@
-use crate::{expand::Work, interpreter::Context, state::IfsMembers};
+use crate::{
+    expand::{Ifs, Work},
+    interpreter::Context,
+};
 use std::ops::Range;
 
 pub(super) struct Fields<'a> {
     text: &'a str,
     protected: &'a [u8],
-    members: IfsMembers,
+    ifs: &'a Ifs,
     offset: usize,
 }
 
 impl<'a> Fields<'a> {
-    pub(super) fn new(text: &'a str, protected: &'a [u8], members: IfsMembers) -> Self {
+    pub(super) fn new(text: &'a str, protected: &'a [u8], ifs: &'a Ifs) -> Self {
         Self {
             text,
             protected,
-            members,
+            ifs,
             offset: 0,
         }
     }
@@ -24,7 +27,7 @@ impl<'a> Fields<'a> {
             .protected
             .get(self.offset / 8)
             .is_some_and(|bits| bits & (1 << (self.offset % 8)) != 0);
-        if quoted || !self.members.contains(ch) {
+        if quoted || !self.ifs.contains(ch) {
             return None;
         }
         Some((ch, matches!(ch, ' ' | '\t' | '\n')))
@@ -76,7 +79,7 @@ impl<'a> Fields<'a> {
             work.checkpoint(&context.cancel)
                 .await
                 .map_err(super::error_status)?;
-            if !matches!(ch, ' ' | '\t' | '\n') || !self.members.contains(ch) {
+            if !matches!(ch, ' ' | '\t' | '\n') || !self.ifs.contains(ch) {
                 break;
             }
             end -= ch.len_utf8();

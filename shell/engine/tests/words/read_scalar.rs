@@ -85,3 +85,23 @@ fn scalar_line_bound_preserves_bindings() {
     assert_eq!(rig.output.bytes(), b"[old][saved]\n");
     assert!(rig.errors.bytes().is_empty());
 }
+
+#[test]
+fn scalar_multibyte_ifs_membership() {
+    check_output(
+        r#"IFS='é¢'; read a b <<<'âz'; printf '[%s][%s]\n' "$a" "$b""#,
+        "[âz][]\n",
+    );
+    check_output(
+        r#"IFS='é¢'; read IFS a b <<<'xéâz¢q'; printf '[%s][%s][%s]\n' "$IFS" "$a" "$b""#,
+        "[x][âz][q]\n",
+    );
+    check_output(
+        r#"IFS='é¢'; read -r a b <<<'a\éâ¢b'; printf '[%s][%s]\n' "$a" "$b""#,
+        "[a\\][â¢b]\n",
+    );
+    check_output(
+        r#"IFS='é¢'; read a b <<<'a\éâ¢b'; printf '[%s][%s]\n' "$a" "$b""#,
+        "[aéâ][b]\n",
+    );
+}

@@ -28,6 +28,9 @@ One incremental reader serves counted and ordinary reads. Its byte buffer and
 escape-protection bitmap are admitted against command storage and shared live
 memory before input. `line_bytes` bounds the retained record. A borrowed field
 cursor returns source spans without a field vector or delimiter placeholders.
+It reuses expansion's admitted IFS character snapshot, so a multibyte IFS
+character matches only that whole character, as Bash does in a UTF-8 locale.
+Like expansion, it does not model C-locale byte membership.
 Assignments copy only their final bytes, so local values cannot retain the
 record's unused capacity. Every input byte and field scan uses cooperative work;
 reads use cancellable endpoints without read-ahead or descriptor probing.

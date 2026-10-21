@@ -2,7 +2,7 @@ mod fields;
 
 use super::{diagnose, endpoint, error_status, printf};
 use crate::{
-    expand::Work,
+    expand::{Ifs, Work},
     interpreter::{Context, Outcome},
     io::{Endpoint, FdTable},
     state::{SharedState, State},
@@ -172,7 +172,7 @@ async fn assign(
         assign_value("REPLY", text, state, context, work).await?;
         return Ok(Outcome::status(code));
     }
-    let mut fields = fields::Fields::new(text, &reader.protected, reader.members);
+    let mut fields = fields::Fields::new(text, &reader.protected, &reader.ifs);
     for (index, name) in options.names.iter().enumerate() {
         validate_name(name, fds, context, work).await?;
         let last = index + 1 == options.names.len();
@@ -189,7 +189,7 @@ struct Reader {
     utf8: bool,
     pending: [u8; 4],
     pending_len: usize,
-    members: crate::state::IfsMembers,
+    ifs: Ifs,
     trim: [bool; 3],
     protected: Vec<u8>,
     trailing: usize,
@@ -207,17 +207,13 @@ async fn read_record(
 ) -> Result<Outcome, i32> {
     let count = options.count.unwrap_or(usize::MAX);
     let utf8 = options.count.is_some() && printf::character_locale(state, context, work).await?;
-    let members = State::admit_ifs_members(state, &context.cancel, work)
+    let ifs = Ifs::new(state, &context.cancel, usize::MAX, work)
         .await
         .map_err(error_status)?;
     let trim = if options.names.is_empty() {
         [false; 3]
     } else {
-        [
-            members.contains(' '),
-            members.contains('\t'),
-            members.contains('\n'),
-        ]
+        [ifs.contains(' '), ifs.contains('\t'), ifs.contains('\n')]
     };
     let ceiling = count
         .saturating_mul(if utf8 { 4 } else { 1 })
@@ -233,7 +229,7 @@ async fn read_record(
         utf8,
         pending: [0; 4],
         pending_len: 0,
-        members,
+        ifs,
         trim,
         protected: Vec::new(),
         trailing: 0,

@@ -50,6 +50,10 @@ const cases = [" ", ":", ": ", "", "é"]
     "{ read 1bad; printf '%s\\n' \"$?\"; read -r a; printf '[%s]\\n' \"$a\"; } <<<'untouched'",
     "{ read -n3 1bad; printf '%s\\n' \"$?\"; read -r a; printf '[%s]\\n' \"$a\"; } <<<'untouched'",
     "IFS=: read a b <<<'a::b\\ '; printf '[%s][%s]\\n' \"$a\" \"$b\"",
+    "IFS='é¢'; read a b <<<'âz'; printf '[%s][%s]\\n' \"$a\" \"$b\"",
+    "IFS='é¢'; read IFS a b <<<'xéâz¢q'; printf '[%s][%s][%s]\\n' \"$IFS\" \"$a\" \"$b\"",
+    "IFS='é¢'; read -r a b <<<'a\\éâ¢b'; printf '[%s][%s]\\n' \"$a\" \"$b\"",
+    "IFS='é¢'; read a b <<<'a\\éâ¢b'; printf '[%s][%s]\\n' \"$a\" \"$b\"",
   ]);
 for (const script of cases)
   test(`production Waffle scalar read: ${script}`, async () => {
