@@ -1003,12 +1003,12 @@ impl Expansion<'_> {
                 expansion.admit_pattern_length(name, state)?;
                 return expansion.length(name, state, scalar || quoted, depth).await;
             }
-            if let WordPart::ArrayAccess { name, index } = part {
-                if name != "PIPESTATUS" {
-                    return expansion
-                        .indexed_element(name, index, state, scalar || quoted)
-                        .await;
-                }
+            if let WordPart::ArrayAccess { name, index } = part
+                && name != "PIPESTATUS"
+            {
+                return expansion
+                    .indexed_element(name, index, state, scalar || quoted)
+                    .await;
             }
             if let WordPart::Variable(name) = part {
                 return expansion.variable(name, state, quoted, scalar).await;
@@ -2536,6 +2536,11 @@ async fn pattern_with_positionals(
     expansion.pattern.take().ok_or(2.into())
 }
 
+fn indexed_name(name: &str) -> Option<(&str, &str)> {
+    let (name, index) = name.split_once('[')?;
+    Some((name, index.strip_suffix(']')?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2851,9 +2856,4 @@ mod tests {
         cancel.cancel();
         assert!(matches!(join.now_or_never(), Some(Err(Error::Status(130)))));
     }
-}
-
-fn indexed_name(name: &str) -> Option<(&str, &str)> {
-    let (name, index) = name.split_once('[')?;
-    Some((name, index.strip_suffix(']')?))
 }
