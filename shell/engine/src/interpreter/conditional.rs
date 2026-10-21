@@ -8,7 +8,7 @@ use crate::{
     executor::Cancel,
     expand::{self, Error, Work},
     io::{Endpoint, FdTable},
-    state::SharedState,
+    state::{RematchPublication, RematchRejection, RematchWarning, SharedState, State},
 };
 use shell_parser::parser::{TestExpr, Word};
 use std::{cmp::Ordering, mem::size_of};
@@ -219,6 +219,45 @@ async fn scalar(
     .await
 }
 
+async fn rematch_diagnostic(
+    publication: RematchPublication,
+    fds: &Descriptors,
+    context: &Context,
+) -> Result<(), Error> {
+    let pieces: [&str; 3] = match &publication {
+        RematchPublication::Published => return Ok(()),
+        RematchPublication::PublishedWithWarning(RematchWarning::Circular) => {
+            ["warning: BASH_REMATCH: circular name reference\n", "", ""]
+        }
+        RematchPublication::PublishedWithWarning(RematchWarning::DepthExceeded) => [
+            "warning: BASH_REMATCH: maximum nameref depth (8) exceeded\n",
+            "",
+            "",
+        ],
+        RematchPublication::Rejected(RematchRejection::Readonly) => {
+            ["BASH_REMATCH: readonly variable\n", "", ""]
+        }
+        RematchPublication::Rejected(RematchRejection::InvalidIdentifier(target)) => {
+            ["[[: `", target.as_str(), "': not a valid identifier\n"]
+        }
+    };
+    let stderr = fds.borrow().get(2);
+    let Some(stderr) = stderr else {
+        return Ok(());
+    };
+    stderr
+        .write_all(b"/usr/bin/bash: ", &context.cancel)
+        .await
+        .map_err(|error| Error::Status(error.status()))?;
+    for piece in pieces {
+        stderr
+            .write_all(piece.as_bytes(), &context.cancel)
+            .await
+            .map_err(|error| Error::Status(error.status()))?;
+    }
+    Ok(())
+}
+
 async fn binary(
     left: &Word,
     operator: &str,
@@ -251,9 +290,17 @@ async fn binary(
         )
         .await?;
         regex::locale(state)?;
-        return regex::matches(&pattern, &left, work, &context.cancel)
-            .await
-            .map(|value| value.is_some());
+        let captures = regex::matches(&pattern, &left, work, &context.cancel).await?;
+        let publication = State::publish_rematch(
+            state,
+            &left,
+            captures.as_deref().unwrap_or(&[]),
+            work,
+            &context.cancel,
+        )
+        .await?;
+        rematch_diagnostic(publication, fds, context).await?;
+        return Ok(captures.is_some());
     }
     let right = scalar(right, state, context, work).await?;
     if matches!(operator, "<" | ">") {

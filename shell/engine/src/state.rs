@@ -13,10 +13,12 @@ use std::{
 };
 
 mod binding;
+mod rematch;
 pub use binding::Binding;
 use binding::BindingUndo;
 pub(crate) use binding::BindingUpdate;
 pub(crate) use binding::Indexed;
+pub(crate) use rematch::{RematchPublication, RematchRejection, RematchWarning};
 
 pub type SharedState = Rc<RefCell<State>>;
 

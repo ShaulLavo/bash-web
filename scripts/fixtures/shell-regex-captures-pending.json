@@ -1,0 +1,70 @@
+{
+  "bash": "5.3.15(1)-release",
+  "cases": [
+    {
+      "name": "oils:regex:611",
+      "script": "str='(hi)'\n[[ \"${str}\" =~ ^^([][{}\\(\\)^@])|^(~@)|(\\\"(\\\\.|[^\\\\\\\"])*\\\")|^(;[^$'\\n']*)|^([~\\'\\`])|^([^][ ~\\`\\'\\\";{}\\(\\)^@\\,]+)|^[,]|^[[:space:]]+ ]]\necho status=$?\n\nm=${BASH_REMATCH[0]}\necho m=$m\n\n",
+      "status": 0,
+      "stdoutBase64": "c3RhdHVzPTAKbT0oCg==",
+      "stderrBase64": "",
+      "blockedBy": "EXPANSION: ANSI quote provenance in expand/operand.rs scanner"
+    },
+    {
+      "name": "brush-suite:extended_tests:29",
+      "script": "pattern='(Hello), ([a-z]+)\\.'\nif [[ \"Hello, world.\" =~ ${pattern} ]]; then\n    echo \"Match found!\"\n    for i in \"${!BASH_REMATCH[@]}\"; do\n        echo \"$i: '${BASH_REMATCH[$i]}'\"\n    done\nfi\n",
+      "status": 0,
+      "stdoutBase64": "TWF0Y2ggZm91bmQhCjA6ICdIZWxsbywgd29ybGQuJwoxOiAnSGVsbG8nCjI6ICd3b3JsZCcK",
+      "stderrBase64": "",
+      "blockedBy": "VARIABLES: indexed key enumeration"
+    },
+    {
+      "name": "brush-suite:extended_tests:30",
+      "script": "pattern='(Hello)(,?) ([a-z]+)\\.'\nif [[ \"Hello world.\" =~ ${pattern} ]]; then\n    echo \"Match found!\"\n    for i in \"${!BASH_REMATCH[@]}\"; do\n        echo \"$i: '${BASH_REMATCH[$i]}'\"\n    done\nfi\n",
+      "status": 0,
+      "stdoutBase64": "TWF0Y2ggZm91bmQhCjA6ICdIZWxsbyB3b3JsZC4nCjE6ICdIZWxsbycKMjogJycKMzogJ3dvcmxkJwo=",
+      "stderrBase64": "",
+      "blockedBy": "VARIABLES: indexed key enumeration"
+    },
+    {
+      "name": "local captures restore global",
+      "script": "BASH_REMATCH=(global); f(){ local BASH_REMATCH=(local spare); [[ abc123 =~ ([0-9]+) ]]; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"; }; f; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "PDEyMz4KPDEyMz4KPGdsb2JhbD4K",
+      "stderrBase64": "",
+      "blockedBy": "VARIABLES: compound local declaration"
+    },
+    {
+      "name": "readonly nameref target preserves predicate",
+      "script": "readonly -a other=(old spare); declare -n BASH_REMATCH=other; [[ abc =~ (b) ]]; printf 'match=%s\\n' \"$?\"; [[ abc =~ z ]]; printf 'miss=%s\\n' \"$?\"; printf '<%s>\\n' \"${other[@]}\"",
+      "status": 0,
+      "stdoutBase64": "bWF0Y2g9MAptaXNzPTEKPG9sZD4KPHNwYXJlPgo=",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBCQVNIX1JFTUFUQ0g6IHJlYWRvbmx5IHZhcmlhYmxlCi91c3IvYmluL2Jhc2g6IGxpbmUgMTogQkFTSF9SRU1BVENIOiByZWFkb25seSB2YXJpYWJsZQo=",
+      "blockedBy": "VARIABLES: compound readonly declaration"
+    },
+    {
+      "name": "no-match local restoration",
+      "script": "BASH_REMATCH=(global); f(){ local BASH_REMATCH=(local); [[ abc =~ (z) ]]; printf 's=%s n=%s\\n' \"$?\" \"${#BASH_REMATCH[@]}\"; }; f; printf '<%s>\\n' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo8Z2xvYmFsPgo=",
+      "stderrBase64": "",
+      "blockedBy": "VARIABLES: compound local declaration"
+    },
+    {
+      "name": "ANSI quoted ERE RHS provenance",
+      "script": "[[ x =~ [$'\\n'] ]]; printf 's=%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0xCg==",
+      "stderrBase64": "",
+      "blockedBy": "EXPANSION: ANSI quote provenance in expand/operand.rs scanner"
+    },
+    {
+      "name": "invalid nameref target",
+      "script": "declare -n BASH_REMATCH='x[1]'; [[ abc =~ (b) ]]; printf 's=%s x=%s\\n' \"$?\" \"${x-unset}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIHg9dW5zZXQK",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBbWzogYHhbMV0nOiBub3QgYSB2YWxpZCBpZGVudGlmaWVyCg==",
+      "diagnostic": true,
+      "blockedBy": "VARIABLES: declare nameref rejects array-element target before publication"
+    }
+  ]
+}

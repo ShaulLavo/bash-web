@@ -740,17 +740,17 @@ async fn closure(
     nodes: &[Node],
     states: &mut [usize],
     stack: &mut Vec<usize>,
-    seed: usize,
-    origin: usize,
+    candidate: (usize, usize),
     position: std::ops::Range<usize>,
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<(), Error> {
+    let (seed, origin) = candidate;
     if states[seed] <= origin {
         return Ok(());
     }
     states[seed] = origin;
-    stack.push(seed);
+    push(stack, seed, work)?;
     while let Some(index) = stack.pop() {
         work.checkpoint(cancel).await?;
         if !anchor(nodes[index], position.start, position.end) {
@@ -763,7 +763,7 @@ async fn closure(
                 continue;
             }
             states[next] = origin;
-            stack.push(next);
+            push(stack, next, work)?;
         }
     }
     Ok(())
@@ -785,8 +785,7 @@ async fn longest(
             nodes,
             &mut current,
             &mut stack,
-            start,
-            position,
+            (start, position),
             position..value.len(),
             work,
             cancel,
@@ -817,8 +816,7 @@ async fn longest(
                 nodes,
                 &mut next,
                 &mut stack,
-                destination,
-                current[index],
+                (destination, current[index]),
                 position + 1..value.len(),
                 work,
                 cancel,
@@ -845,6 +843,10 @@ async fn initialized<T: Copy>(
 
 // Reverse epsilon edges let each input row reach a fixed point in O(nodes).
 // Bits cover only the chosen match, not unmatched prefixes/suffixes.
+struct Reverse {
+    heads: Vec<Option<usize>>,
+    edges: Vec<(usize, Option<usize>)>,
+}
 struct Reachable {
     bits: Vec<u64>,
     width: usize,
@@ -888,6 +890,7 @@ async fn reachability(
             heads[next] = Some(edge);
         }
     }
+    let reverse = Reverse { heads, edges };
     let mut stack = slots(nodes.len(), 0usize, work)?;
     for position in (span.0..=span.1).rev() {
         if position == span.1 {
@@ -916,23 +919,46 @@ async fn reachability(
             result.insert(index, position);
             stack.push(index);
         }
-        while let Some(index) = stack.pop() {
-            work.checkpoint(cancel).await?;
-            let mut edge = heads[index];
-            while let Some(id) = edge {
-                work.checkpoint(cancel).await?;
-                let (prior, previous) = edges[id];
-                edge = previous;
-                if !anchor(nodes[prior], position, value.len()) {
-                    continue;
-                }
-                if result.insert(prior, position) {
-                    stack.push(prior);
-                }
-            }
-        }
+        reverse_closure(
+            nodes,
+            &reverse,
+            &mut result,
+            &mut stack,
+            position..value.len(),
+            work,
+            cancel,
+        )
+        .await?;
     }
     Ok(result)
+}
+
+async fn reverse_closure(
+    nodes: &[Node],
+    reverse: &Reverse,
+    result: &mut Reachable,
+    stack: &mut Vec<usize>,
+    position: std::ops::Range<usize>,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<(), Error> {
+    while let Some(index) = stack.pop() {
+        work.checkpoint(cancel).await?;
+        let mut edge = reverse.heads[index];
+        while let Some(id) = edge {
+            work.checkpoint(cancel).await?;
+            let (prior, previous) = reverse.edges[id];
+            edge = previous;
+            if !anchor(nodes[prior], position.start, position.end) {
+                continue;
+            }
+            if !result.insert(prior, position.start) {
+                continue;
+            }
+            push(stack, prior, work)?;
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Default)]
@@ -953,15 +979,16 @@ struct Trace {
     undo: Vec<Undo>,
 }
 impl Trace {
-    fn restore(&mut self) -> Option<usize> {
+    async fn restore(&mut self, work: &mut Work, cancel: &Cancel) -> Result<Option<usize>, Error> {
         while let Some(undo) = self.undo.pop() {
+            work.checkpoint(cancel).await?;
             match undo {
                 Undo::Slot(slot, old) => self.slots[slot] = old,
                 Undo::Iteration(id, old) => self.iterations[id] = old,
-                Undo::Branch(next) => return Some(next),
+                Undo::Branch(next) => return Ok(Some(next)),
             }
         }
-        None
+        Ok(None)
     }
     fn iteration(&mut self, id: usize, value: Iteration, work: &mut Work) -> Result<(), Error> {
         push(
@@ -1049,7 +1076,7 @@ async fn captures(
     while index != 0 || position != span.1 {
         work.checkpoint(cancel).await?;
         if !reachable.get(index, position) {
-            index = trace.restore().ok_or(2)?;
+            index = trace.restore(work, cancel).await?.ok_or(2)?;
             continue;
         }
         if let Node::Consume(_, next) = nodes[index] {
@@ -1062,26 +1089,28 @@ async fn captures(
             }
             continue;
         }
-        index = trace
-            .step(nodes, index, position, work)?
-            .or_else(|| trace.restore())
-            .ok_or(2)?;
+        index = match trace.step(nodes, index, position, work)? {
+            Some(next) => next,
+            None => trace.restore(work, cancel).await?.ok_or(2)?,
+        };
     }
     let mut result = slots(count, None, work)?;
     result.push(Some(span));
-    for pair in trace.slots[2..].chunks_exact(2) {
+    for pair in trace.slots[2..].as_chunks::<2>().0 {
         work.checkpoint(cancel).await?;
         result.push(pair[0].zip(pair[1]));
     }
     Ok(result)
 }
 
+pub(super) type Captures = Vec<Option<(usize, usize)>>;
+
 pub(super) async fn matches(
     pattern: &Pattern,
     value: &str,
     work: &mut Work,
     cancel: &Cancel,
-) -> Result<Option<Vec<Option<(usize, usize)>>>, Error> {
+) -> Result<Option<Captures>, Error> {
     ascii(pattern, value, work, cancel).await?;
     let (nodes, start, count) = compile(pattern, work, cancel).await?;
     let Some(span) = longest(&nodes, start, pattern, value, work, cancel).await? else {
@@ -1191,6 +1220,100 @@ mod tests {
         let mut work = Work::new(0, 65536, 1);
         assert!(matches!(
             finish(matches(&pattern, "a", &mut work, &Cancel::new())),
+            Err(Error::Status(2))
+        ));
+    }
+    fn cancel_reconstruction(trace: bool) {
+        let pattern = pattern("(a?)*");
+        let text = "a".repeat(32768);
+        let span = (0, text.len());
+        let cancel = Cancel::new();
+        let mut work = Work::new(100_000_000, 10_000_000, 16);
+        let (nodes, start, count) = finish(compile(&pattern, &mut work, &cancel))
+            .unwrap_or_else(|_| panic!("fixture must compile"));
+        let reachable = trace.then(|| {
+            finish(reachability(
+                &nodes, &pattern, &text, span, &mut work, &cancel,
+            ))
+            .unwrap_or_else(|_| panic!("fixture span must be reachable"))
+        });
+        let executor = Executor::new();
+        let child_cancel = cancel.clone();
+        let job = executor.spawn(async move {
+            let mut work = Work::new(100_000_000, 10_000_000, 16);
+            let result = match reachable {
+                Some(reachable) => captures(
+                    &nodes,
+                    start,
+                    count,
+                    &reachable,
+                    span,
+                    &mut work,
+                    &child_cancel,
+                )
+                .await
+                .map(|_| ()),
+                None => reachability(&nodes, &pattern, &text, span, &mut work, &child_cancel)
+                    .await
+                    .map(|_| ()),
+            };
+            match result {
+                Err(Error::Status(status)) => status,
+                _ => panic!("capture reconstruction must be interrupted"),
+            }
+        });
+        executor.drive(1);
+        assert!(!job.is_finished());
+        cancel.cancel();
+        for _ in 0..16 {
+            executor.drive(1);
+        }
+        assert_eq!(job.now_or_never(), Some(130));
+        assert_eq!(executor.drive(64).pending, 0);
+    }
+    #[test]
+    fn capture_reachability_and_trace_both_yield_and_cancel() {
+        cancel_reconstruction(false);
+        cancel_reconstruction(true);
+    }
+    #[test]
+    fn capture_reconstruction_admits_storage_before_allocating() {
+        let pattern = pattern("(a?)*");
+        let cancel = Cancel::new();
+        let mut work = Work::new(100_000, 100_000, 16);
+        let (nodes, start, count) = finish(compile(&pattern, &mut work, &cancel))
+            .unwrap_or_else(|_| panic!("fixture must compile"));
+        let reachable = finish(reachability(
+            &nodes,
+            &pattern,
+            "aa",
+            (0, 2),
+            &mut work,
+            &cancel,
+        ))
+        .unwrap_or_else(|_| panic!("fixture span must be reachable"));
+        let mut work = Work::new(100_000, 0, 16);
+        assert!(matches!(
+            finish(reachability(
+                &nodes,
+                &pattern,
+                "aa",
+                (0, 2),
+                &mut work,
+                &cancel
+            )),
+            Err(Error::Status(2))
+        ));
+        assert!(matches!(
+            finish(captures(
+                &nodes,
+                start,
+                count,
+                &reachable,
+                (0, 2),
+                &mut work,
+                &cancel
+            )),
             Err(Error::Status(2))
         ));
     }
