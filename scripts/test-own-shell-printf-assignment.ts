@@ -13,19 +13,6 @@ const runner = await createWaffleRunner({
   env: { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C", LANG: "C" },
 });
 const cases = [
-  "printf '[%.2147483648b]TAIL' x",
-  "printf '[%5.2147483648b]TAIL' 'x\\cignored'",
-  "printf '[%.2147483648b]TAIL' '\\xZ'",
-  "printf '[%5.2147483648b]' x y",
-  "printf '[%5.2147483648b]TAIL' 'x\\cignored' 2>&-",
-  "printf '[%-5.2147483648b]TAIL' 'x\\cignored'",
-  "printf '[%5.2147483648b]TAIL' '\\xZ\\cignored'",
-  "printf '[%.2147483648b]TAIL' '\\xZ' 2>&-",
-  "printf '[%2147483648b]TAIL' 'a\\tb'",
-  "printf '[%2147483648.2147483648b]TAIL' '\\xZ'",
-  "printf '[%*.2147483648b]TAIL' 5x '\\xZ\\cignored'",
-  "printf -v x '[%5.2147483648b]TAIL' 'a\\cignored'; echo \"$?:<$x>\"",
-  "printf '[%5.2147483648s]TAIL' x",
   "printf '[%b]TAIL' '\\xZ\\cignored'",
   "printf '[%8b][%-8b][%08b]\\n' 'a\\tb' 'a\\tb' 'a\\tb'",
   "printf '[%*b][%*b]\\n' 8 'a\\tb' -8 'a\\tb'",
@@ -121,6 +108,101 @@ for (const script of cases)
     assert.equal(actual.status, bash.status);
     assert.deepEqual(actual.stdout, bash.stdout);
     assert.equal(normalizeDiagnostic(actual.stderr), normalizeDiagnostic(bash.stderr));
+  });
+
+// Bash 5.3.15 observations. Bash 5.2 differs at this boundary and can emit huge padding.
+const literalCountCases = [
+  {
+    script: "printf '[%.2147483648b]TAIL' x",
+    status: 1,
+    stdout: "[]TAIL",
+    stderr: "/usr/bin/bash: printf: 2147483648: Numerical result out of range\n",
+  },
+  {
+    script: "printf '[%5.2147483648b]TAIL' 'x\\cignored'",
+    status: 0,
+    stdout: "[     ",
+    stderr: "/usr/bin/bash: printf: 2147483648: Numerical result out of range\n",
+  },
+  {
+    script: "printf '[%.2147483648b]TAIL' '\\xZ'",
+    status: 1,
+    stdout: "[]TAIL",
+    stderr:
+      "/usr/bin/bash: printf: missing hex digit for \\x\n/usr/bin/bash: printf: 2147483648: Numerical result out of range\n",
+  },
+  {
+    script: "printf '[%5.2147483648b]' x y",
+    status: 1,
+    stdout: "[     ][     ]",
+    stderr:
+      "/usr/bin/bash: printf: 2147483648: Numerical result out of range\n/usr/bin/bash: printf: 2147483648: Numerical result out of range\n",
+  },
+  {
+    script: "printf '[%5.2147483648b]TAIL' 'x\\cignored' 2>&-",
+    status: 0,
+    stdout: "[     ",
+    stderr: "",
+  },
+  {
+    script: "printf '[%-5.2147483648b]TAIL' 'x\\cignored'",
+    status: 0,
+    stdout: "[     ",
+    stderr: "/usr/bin/bash: printf: 2147483648: Numerical result out of range\n",
+  },
+  {
+    script: "printf '[%5.2147483648b]TAIL' '\\xZ\\cignored'",
+    status: 0,
+    stdout: "[     ",
+    stderr:
+      "/usr/bin/bash: printf: missing hex digit for \\x\n/usr/bin/bash: printf: 2147483648: Numerical result out of range\n",
+  },
+  {
+    script: "printf '[%.2147483648b]TAIL' '\\xZ' 2>&-",
+    status: 1,
+    stdout: "[]TAIL",
+    stderr: "",
+  },
+  {
+    script: "printf '[%2147483648b]TAIL' 'a\\tb'",
+    status: 1,
+    stdout: "[a\tb]TAIL",
+    stderr: "/usr/bin/bash: printf: 2147483648: Numerical result out of range\n",
+  },
+  {
+    script: "printf '[%2147483648.2147483648b]TAIL' '\\xZ'",
+    status: 1,
+    stdout: "[]TAIL",
+    stderr:
+      "/usr/bin/bash: printf: missing hex digit for \\x\n/usr/bin/bash: printf: 2147483648: Numerical result out of range\n/usr/bin/bash: printf: 2147483648: Numerical result out of range\n",
+  },
+  {
+    script: "printf '[%*.2147483648b]TAIL' 5x '\\xZ\\cignored'",
+    status: 0,
+    stdout: "[     ",
+    stderr:
+      "/usr/bin/bash: printf: 5x: invalid number\n/usr/bin/bash: printf: missing hex digit for \\x\n/usr/bin/bash: printf: 2147483648: Numerical result out of range\n",
+  },
+  {
+    script: "printf -v x '[%5.2147483648b]TAIL' 'a\\cignored'; echo \"$?:<$x>\"",
+    status: 0,
+    stdout: "0:<[     >\n",
+    stderr: "/usr/bin/bash: printf: 2147483648: Numerical result out of range\n",
+  },
+  {
+    script: "printf '[%5.2147483648s]TAIL' x",
+    status: 1,
+    stdout: "[",
+    stderr: "/usr/bin/bash: printf: Value too large for defined data type\n",
+  },
+];
+for (const { script, status, stdout, stderr } of literalCountCases)
+  test(`production Waffle fixed literal count contract: ${script}`, async () => {
+    const actual = await runner(script);
+    assert.equal(actual.crash, undefined);
+    assert.equal(actual.status, status);
+    assert.deepEqual(actual.stdout, Buffer.from(stdout));
+    assert.deepEqual(actual.stderr, Buffer.from(stderr));
   });
 
 for (const script of [
