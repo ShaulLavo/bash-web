@@ -1,0 +1,79 @@
+{
+  "acceptedBase": "bf9f62b2049f177fb9d293edc136a307d26a8d2f",
+  "measuredSource": "51b7f366a9a10c9f0a248189ea4cf6f04b2803bc",
+  "waffle": "fc58a532f0d7a617e631ea4b7580a190915d4ed6",
+  "version": "0.0.58",
+  "records": 9221,
+  "scored": 5792,
+  "skips": 3429,
+  "jobs": 1,
+  "fullReplays": 1,
+  "identity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "replaySha256": "c1f3123308cefa84c24fef56c35f87537eb65f7cbeb5c2e60db7a1a1ff7ad561",
+  "baselineBeforeSha256": "e02e617c9f59a509bfa297e9d5e6dbf893bb29e21ce631b4745f611b3f8c6298",
+  "baselineAfterSha256": "3a74ea2104c2db0d550bedae3223ebe959964cfd58419ee05262c0261b747d48",
+  "ok": true,
+  "corpora": {
+    "oils": {
+      "before": 1012,
+      "after": 1013,
+      "gained": [
+        "oils:builtin-bracket:280"
+      ],
+      "lost": [],
+      "newlyFailing": []
+    },
+    "brush-suite": {
+      "before": 1001,
+      "after": 1001,
+      "gained": [],
+      "lost": [],
+      "newlyFailing": []
+    },
+    "bashkit-suite": {
+      "before": 1404,
+      "after": 1406,
+      "gained": [
+        "bashkit-suite:test-operators:32",
+        "bashkit-suite:test-operators:40"
+      ],
+      "lost": [],
+      "newlyFailing": []
+    }
+  },
+  "strictOfflineComparator": "passed",
+  "historicalPayloads": "preserved",
+  "guestSha256": "0af563e923831e3835f882c4e14cfb801e66d5b5c3821078ef0ecaa108eff320",
+  "versions": {
+    "bash-web": "0.0.70",
+    "shell-engine": "0.0.40"
+  },
+  "replay": {
+    "started": "2026-10-21T04:26:06+03:00",
+    "finished": "2026-10-21T04:32:54+03:00",
+    "exit": 1,
+    "reason": "stale candidate membership, exactly three gained cases; no regression",
+    "artifacts": "/work/reports/bash-web/hill-climb/r1-permissions-integration/r3-replay.{json,log}"
+  },
+  "controls": {
+    "failingFirst": "all three gained IDs reproduced through actual production runtime before semantic change",
+    "realRuntime": "supported denied I/O, directory search, shared bracket/conditional predicates, metadata-only query, ABI mask/length/error/rights controls; zero workers after disposal",
+    "browser": "228 passed; 16 unchanged pre-existing skips; actual OPFS stored-data/reopen controls passed Chromium and Firefox without IndexedDB substitution",
+    "scoreboard": "74 passed, including two new permission controls",
+    "runtimeTerminal": "143 passed",
+    "layers": "34 passed; 0 production and 0 test-only violations",
+    "nativeWasi": "native workspace tests, WASI suite, native/WASI all-target Clippy and capability checks passed",
+    "quality": "format, lint, TypeScript, unused/dependency, no-new-duplicate and quality-gate checks passed"
+  },
+  "deliveryChangesAfterMeasuredSource": [
+    "baseline pass memberships and derived counts",
+    "plan and measurement receipt",
+    "move existing blocking scoreboard CI command after its production guest build; no duplicated build or disabled check"
+  ]
+}

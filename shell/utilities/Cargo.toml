@@ -1,0 +1,12 @@
+[package]
+name = "shell-utilities"
+version = "0.0.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+shell-engine = { path = "../engine" }
+futures.workspace = true
+regex = { version = "1.12.2", default-features = false, features = ["std", "perf", "unicode"] }

@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const nativePaths =
-  /^((shell|tests\/guest)\/.*|\.cargo\/.*|rust-toolchain\.toml|sources\.lock\.json|\.github\/.*|scripts\/(ci-inputs|test-ci-inputs|prepare-wasi-tests|test-prepare-wasi-tests|wasi-build|test-wasi-build|verify-wasi-guests|test-verify-wasi-guests|build-shell|build-shell-browser|build-test-guest|test-shell-wasi|check-rust-quality|check-shell-parser)\.(ts|mjs))$/;
+  /^((shell|tests\/guest|\.cargo|\.github|scripts)\/.*|rust-toolchain\.toml|sources\.lock\.json)$/;
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -21,7 +21,12 @@ export function dependencyInputs(text: string) {
   return JSON.stringify(lock);
 }
 
-export function nativeInputs(entries: readonly string[], waffle: unknown, scripts: unknown = {}) {
+export function nativeInputs(
+  entries: readonly string[],
+  waffle: unknown,
+  scripts: unknown = {},
+  dependencies = "",
+) {
   if (
     typeof waffle !== "string" ||
     !waffle.startsWith("git+https://github.com/ShaulLavo/waffle.git#")
@@ -31,6 +36,7 @@ export function nativeInputs(entries: readonly string[], waffle: unknown, script
     entries.filter((entry) => nativePaths.test(entry.split("\t")[1])),
     waffle,
     scripts,
+    dependencies,
   ]);
 }
 
@@ -38,8 +44,8 @@ function hash(text: string) {
   return createHash("sha256").update(text).digest("hex");
 }
 
-export function ciInputs(revision: string) {
-  const git = (args: string[]) => execFileSync("git", args, { encoding: "utf8" });
+export function ciInputs(revision: string, root = resolve(import.meta.dirname, "..")) {
+  const git = (args: string[]) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
   const lock = git(["show", `${revision}:package-lock.json`]);
   const pkg = object(JSON.parse(git(["show", `${revision}:package.json`])));
   const entries = git(["ls-tree", "-rz", "--full-tree", revision]).split("\0").filter(Boolean);
@@ -49,17 +55,8 @@ export function ciInputs(revision: string) {
       nativeInputs(
         entries,
         object(pkg.devDependencies).waffle,
-        Object.fromEntries(
-          Object.entries(object(pkg.scripts)).filter(([key]) =>
-            [
-              "build:shell",
-              "test:shell:wasi",
-              "check:rust",
-              "build:test-guest",
-              "prepare:wasi-tests",
-            ].includes(key),
-          ),
-        ),
+        object(pkg.scripts),
+        hash(dependencyInputs(lock)),
       ),
     ),
   };
@@ -67,9 +64,7 @@ export function ciInputs(revision: string) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const current = ciInputs("HEAD");
-  const baseline = process.argv[2];
-  const changed = !baseline || current.native !== ciInputs(baseline).native;
-  const output = `dependencies=${current.dependencies}\nnative=${current.native}\nnative-changed=${changed}\n`;
+  const output = `dependencies=${current.dependencies}\nnative=${current.native}\n`;
   process.stdout.write(output);
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, output);
 }

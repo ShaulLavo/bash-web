@@ -1,5 +1,5 @@
 //! Word cases adapted from the pinned Bashkit sources in sources.lock.json.
-//! The fixture observes argv directly, without relying on printf's format rules.
+mod support;
 use futures::FutureExt;
 use shell_engine::{
     Limits, Session,
@@ -39,7 +39,6 @@ impl Rig {
             Rc::new(fs.clone()),
             limits,
         );
-        // Stand-in programs live in one explicit directory, including after cd.
         shell
             .state()
             .borrow_mut()
@@ -52,6 +51,7 @@ impl Rig {
         fds.insert(1, out);
         fds.insert(2, err);
         shell.set_descriptors(fds).unwrap();
+        support::register_utilities(&host, &fs, false);
         Self {
             ex,
             shell,
@@ -81,6 +81,20 @@ impl Rig {
             .borrow_mut()
             .assign_parameter(name.into(), value.into())
             .unwrap();
+    }
+    fn prepare_large_matching_input(&self) {
+        assert!(self.calls.borrow().is_empty());
+        self.variable("v", &"a".repeat(12_000));
+    }
+    fn interrupt_after_counting_yields(&self, job: JoinHandle<i32>) {
+        let peer = self.ex.spawn(async { 42 });
+        self.ex.drive(4);
+        assert!(peer.is_finished(), "counting must yield");
+        assert!(!job.is_finished());
+        self.variable("peer", "ran");
+        self.shell.interrupt();
+        assert_eq!(self.finish(job), 130);
+        assert!(self.calls.borrow().is_empty());
     }
     fn drive_until_variable(&self, name: &str, value: &str) {
         for _ in 0..200 {
@@ -116,6 +130,7 @@ impl Drop for Rig {
         panic!("fixture shutdown did not finish");
     }
 }
+
 fn check(source: &str, expected: &[&[&str]]) {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run(source), 0, "{source}");
@@ -393,13 +408,11 @@ fn scalar_replace_snapshots_storage_raw_fields_and_work_are_shared() {
     assert_eq!(rig.run("args recovered"), 0);
 
     for (source, rejected_bytes, expected) in [
-        // Replacement enables accounting after the first capture allocation.
         (
             "args ${x:=$long${v/a/b}}",
             2000,
             format!("{}b", "x".repeat(400)),
         ),
-        // A later assignment capture inherits replacement output accounting.
         (
             "args ${v/a/b}${x:=$long}",
             1800,
@@ -499,9 +512,6 @@ fn scalar_replace_search_and_emission_yield_cancel_and_restore_frames() {
     }
 }
 
-// Scalar cases adapted from Bashkit 491c3281's remove-pattern-glob,
-// param-operand-quotes and variables specs. Other cases use focused GNU Bash
-// probes under LC_ALL=C.UTF-8, with engine-specific limit/cancellation checks.
 // Case examples adapted from Bashkit 491c3281's variables:226-253,
 // string-ops:73-85 and bashbox-word-expander:181-186. Other cases are original
 // bounded GNU Bash controls and engine-specific admission/cancellation checks.
@@ -696,7 +706,6 @@ fn unsupported_case_targets_transformations_and_selected_patterns_fail_closed() 
     assert_eq!(rig.run("f() { args allowed; }; X=${v^^} f"), 0);
     assert_eq!(*rig.calls.borrow(), [vec!["allowed"]]);
     assert!(rig.output.bytes().is_empty());
-    // Both function and builtin prefixes restore their temporary bindings.
     assert_eq!(rig.run("X=${v^^} echo allowed"), 0);
     assert_eq!(rig.output.bytes(), b"allowed\n");
     assert!(!rig.shell.state().borrow().bindings().contains_key("X"));
@@ -791,8 +800,7 @@ fn case_matching_reparsing_and_redirects_share_work_without_a_candidate_cap() {
         )),
         2
     );
-    assert!(rig.calls.borrow().is_empty());
-    rig.variable("v", &"a".repeat(12_000));
+    rig.prepare_large_matching_input();
     assert_eq!(rig.run(r#"args "${v^^*?}""#), 0);
     assert_eq!(rig.calls.borrow()[0][0], "A".repeat(12_000));
 }
@@ -1002,7 +1010,6 @@ fn trim_nested_length_input_cannot_bypass_shared_snapshot_storage() {
         rig.variable("p", &"x".repeat(256));
         assert_eq!(rig.run(&format!("args \"{operand}\"")), 2);
         assert!(rig.calls.borrow().is_empty());
-        // Ordinary length retains PR20's input bound and counting behavior.
         assert_eq!(rig.run("args ${#p}"), 0);
         assert_eq!(*rig.calls.borrow(), &[vec!["256"]]);
     }
@@ -1155,7 +1162,6 @@ fn unsupported_trim_targets_and_selected_patterns_fail_without_dispatch() {
     assert_eq!(rig.run("f() { args allowed; }; X=${v#a} f"), 0);
     assert_eq!(*rig.calls.borrow(), [vec!["allowed"]]);
     assert!(rig.output.bytes().is_empty());
-    // Both function and builtin prefixes restore their temporary bindings.
     assert_eq!(rig.run("X=${v#a} echo allowed"), 0);
     assert_eq!(rig.output.bytes(), b"allowed\n");
     assert!(!rig.shell.state().borrow().bindings().contains_key("X"));
@@ -1269,9 +1275,7 @@ fn trim_matching_and_operand_reparsing_share_command_work() {
     assert_eq!(rig.run(&oversized), 2);
     let deep = format!("args {}${{v#x}}{}", "${u:-".repeat(34), "}".repeat(34));
     assert_eq!(rig.run(&deep), 2);
-    assert!(rig.calls.borrow().is_empty());
-    // More than upstream's 10,000 candidate cap, with no partial result.
-    rig.variable("v", &"a".repeat(12_000));
+    rig.prepare_large_matching_input();
     assert_eq!(rig.run(r#"args "${v##*?}" "${v%%?*}""#), 0);
     assert_eq!(*rig.calls.borrow(), &[vec!["", ""]]);
 }
@@ -1439,7 +1443,6 @@ fn scalar_lengths_accept_positive_decimal_targets_beyond_machine_indices() {
         "length tokens retain their byte cap"
     );
     assert!(rig.calls.borrow().is_empty());
-    // All-zero spellings remain excluded, as do numeric assignment targets.
     for target in ["0".to_owned(), zeros] {
         for source in [
             format!("args ${{#{target}}}"),
@@ -1591,15 +1594,7 @@ fn length_counting_yields_and_cancellation_restores_function_frames() {
             rig.shell.state().borrow().bindings().get("LC_ALL").unwrap(),
             locale
         );
-        let peer = rig.ex.spawn(async { 42 });
-        rig.ex.drive(4);
-        assert!(peer.is_finished(), "counting must yield");
-        assert!(!job.is_finished());
-        // A mutable borrow while suspended also proves counting holds no RefCell borrow.
-        rig.variable("peer", "ran");
-        rig.shell.interrupt();
-        assert_eq!(rig.finish(job), 130);
-        assert!(rig.calls.borrow().is_empty());
+        rig.interrupt_after_counting_yields(job);
         assert_eq!(rig.run(r#"args "$LC_ALL" "$#" "$1" "${TEMP-unset}""#), 0);
         assert_eq!(*rig.calls.borrow(), &[vec!["POSIX", "0", "", "unset"]]);
     }
@@ -1616,7 +1611,6 @@ fn length_rhs_yields_and_cancellation_restores_prefix_frames() {
         rig.variable("s", &"é".repeat(150_000));
         rig.variable("LC_ALL", "POSIX");
         rig.variable("length", "outer");
-        // External-command prefixes expose earlier values while a later RHS yields.
         let job = rig
             .shell
             .start(&format!("TEMP=value LC_ALL={locale} length={operand} args"))
@@ -1626,14 +1620,7 @@ fn length_rhs_yields_and_cancellation_restores_prefix_frames() {
             rig.shell.state().borrow().bindings().get("TEMP").unwrap(),
             "value"
         );
-        let peer = rig.ex.spawn(async { 42 });
-        rig.ex.drive(4);
-        assert!(peer.is_finished(), "counting must yield");
-        assert!(!job.is_finished());
-        rig.variable("peer", "ran");
-        rig.shell.interrupt();
-        assert_eq!(rig.finish(job), 130);
-        assert!(rig.calls.borrow().is_empty());
+        rig.interrupt_after_counting_yields(job);
         assert_eq!(rig.run(r#"args "$LC_ALL" "${TEMP-unset}" "$length""#), 0);
         assert_eq!(*rig.calls.borrow(), &[vec!["POSIX", "unset", "outer"]]);
     }
@@ -1641,8 +1628,6 @@ fn length_rhs_yields_and_cancellation_restores_prefix_frames() {
 
 #[test]
 fn whole_word_quotes_override_unmarked_part_flags() {
-    // Standalone QuotedWord tokens have whole-word quoting, while mixed words
-    // carry explicit true/false part flags. Exercise both through the parser.
     check(
         r#"v=' a  b '; args "$v" "${v}" "" "$missing"; args $v"$v" "$v"$v"#,
         &[
@@ -1658,8 +1643,6 @@ fn whole_word_quotes_override_unmarked_part_flags() {
 
 #[test]
 fn frozen_parent_losses_preserve_whole_word_quoting() {
-    // Every loss from the first replay is kept verbatim here. Expected stdout
-    // comes from docs/evidence/own-shell-oracle.json, not the old scalar engine.
     for (source, expected) in [
         (
             "f() {\n  echo f\n  return \"\"\n}\n\nf\necho status=$?\n",
@@ -2052,7 +2035,6 @@ fn vanished_words_do_not_consume_argument_capacity() {
 
 #[test]
 fn aggregate_work_is_bounded_even_when_every_expansion_disappears() {
-    // Command work is source + expansion bytes + one step per argument slot.
     let rig = Rig::new(Limits {
         source_bytes: 256,
         expansion_bytes: 128,
@@ -2181,7 +2163,6 @@ fn selected_unsupported_operands_and_operator_targets_fail_without_dispatch() {
         assert!(rig.calls.borrow().is_empty(), "{source}");
         assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
     }
-    // Selected command substitutions execute without assigning the default.
     check(
         r#"args ${u:-$(args command; echo selected)} ${u:-`args backtick; echo tick`}; args "${u-unset}""#,
         &[
@@ -2191,7 +2172,6 @@ fn selected_unsupported_operands_and_operator_targets_fail_without_dispatch() {
             &["unset"],
         ],
     );
-    // Brace expansion is supported now; bash leaves this operand's braces.
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("args ${u:-{a,b}}"), 0);
     assert_eq!(*rig.calls.borrow(), &[vec!["{a,b}"]]);
@@ -2230,8 +2210,6 @@ fn operand_fields_bytes_and_parsing_share_command_limits() {
         arguments: 4,
         ..Limits::default()
     });
-    // All selected operands disappear. Repeated small reparses must still spend
-    // the same command work allowance instead of resetting parser fuel per call.
     assert_eq!(
         rig.run(&format!("args {}", "${u:-$missing} ".repeat(25))),
         2
@@ -2247,7 +2225,6 @@ fn operand_reparse_admission_rejects_oversize_and_depth_without_literal_fallback
     let deep = format!("args {}x{}", "${u:-".repeat(34), "}".repeat(34));
     assert_eq!(rig.run(&deep), 2);
     assert!(rig.calls.borrow().is_empty());
-    // Literal operands do not enter the synchronous parser token path.
     assert_eq!(rig.run(&format!("args ${{u:-{}}}", "x".repeat(5000))), 0);
     assert_eq!(rig.calls.borrow()[0][0].len(), 5000);
 }
@@ -2343,8 +2320,6 @@ fn cancellation_during_nested_token_admission_never_dispatches() {
             break;
         }
     }
-    // More than the 3,006 scanner steps, less than the reserved reparse work.
-    // One executor poll advances at most the 64-step cooperative quantum.
     rig.ex.drive(80);
     assert!(!job.is_finished());
     let peer = rig.ex.spawn(async { 42 });
@@ -2491,7 +2466,6 @@ fn assignment_quote_removal_keeps_surrounding_word_boundaries() {
 
 #[test]
 fn ifs_assignment_splits_the_entire_expanded_word_with_the_new_value() {
-    // Independent GNU Bash observations, including text emitted before the write.
     for (source, expected) in [
         (r#"IFS=; args ${IFS:=:}a:b"#, vec!["", "a:b"]),
         (r#"IFS=; args a:b${IFS:=:}"#, vec!["a", "b"]),
@@ -2701,7 +2675,6 @@ fn deferred_list_splitting_distinguishes_element_spaces_and_word_split_mode() {
     ] {
         check(&format!("IFS=; v='a b\tc\nd:e'; args {word}"), &[&expected]);
     }
-    // These observations use native `unset IFS`, not Bash's startup value.
     for (source, expected) in [
         (
             r#"f() { args "$@"${IFS:=:}; }; f a:b '' c:d"#,
@@ -2739,7 +2712,6 @@ fn deferred_list_splitting_distinguishes_element_spaces_and_word_split_mode() {
 fn lexical_escapes_keep_only_the_escaped_character_protected_after_ifs_writes() {
     for (source, expected) in [
         (r#"IFS=; args a:\:b${IFS:=:}"#, vec!["a", ":b"]),
-        // Keep neighboring letters splittable, not just neighboring colons.
         (r#"IFS=; args a\:b${IFS:=ab}"#, vec!["", ":", "", ""]),
         (r#"IFS=; args a\:b${IFS:=a}"#, vec!["", ":b"]),
         (r#"IFS=; args a\:b${IFS:=b}"#, vec!["a:", ""]),
@@ -2816,7 +2788,6 @@ fn deferred_list_separators_keep_raw_output_and_field_bounds() {
         expansion_bytes: 8,
         ..Limits::default()
     });
-    // Nine generated separators exceed raw bytes even though splitting drops them.
     assert_eq!(
         rig.run(r#"f() { IFS=; args "$@"${IFS:= }; }; f '' '' '' '' '' '' '' '' '' ''"#),
         2
@@ -3166,7 +3137,6 @@ fn diagnostic_splitting_does_not_admit_oversized_raw_whitespace() {
         });
         rig.variable("IFS", " :");
         rig.variable("v", &value);
-        // The target and diagnostic reserve leave 157 raw operand bytes.
         assert_eq!(rig.run("args ${bad:?$v}"), 2);
         assert!(rig.calls.borrow().is_empty());
         assert!(rig.output.bytes().is_empty());
@@ -3261,13 +3231,10 @@ fn errors_inside_trim_keep_cumulative_pattern_snapshot_admission() {
     rig.variable("v", "x");
     rig.variable("a", &"x".repeat(80));
     rig.variable("b", &"x".repeat(80));
-    // The trim snapshot, diagnostic reserve and both length inputs exceed
-    // shared storage even though the final diagnostic would be only four bytes.
     assert_eq!(rig.run("args ${v#${bad:?${#a}${#b}}}"), 2);
     assert!(rig.calls.borrow().is_empty());
     assert!(rig.output.bytes().is_empty());
     assert!(rig.errors.bytes().is_empty());
-    // Ordinary diagnostics retain buffers too, so both snapshots share storage.
     assert_eq!(rig.run("args ${bad:?${#a}${#b}}"), 2);
     assert!(rig.calls.borrow().is_empty());
     assert!(rig.output.bytes().is_empty());
@@ -3350,7 +3317,6 @@ fn diagnostic_fields_share_the_remaining_command_ceiling_without_partial_dispatc
 
 #[test]
 fn diagnostic_segment_and_join_storage_share_the_command_allowance() {
-    // A generous field ceiling isolates storage admission from field admission.
     for (bytes, status) in [(256, 2), (1024, 127)] {
         let rig = Rig::new(Limits {
             expansion_bytes: bytes,
@@ -3541,8 +3507,6 @@ fn cancellation_keeps_completed_rhs_effects_and_restores_local_prefix_frames() {
 
 #[test]
 fn frozen_scalar_error_observations_keep_exact_status_and_output() {
-    // Verbatim scripts and observations from the committed oracle. No fixture
-    // membership, classifications, identities or expected statuses are changed.
     for (source, error) in [
         (
             "empty=''\necho ${empty:?'is em'pty}  # test eval of error\necho should not get here\n\n",
@@ -3641,8 +3605,6 @@ fn review_multiline_compound_redirect_errors_keep_source_line() {
 
 #[test]
 fn multiline_parameter_errors_use_bash_parse_time_diagnostic_lines() {
-    // Exact expectations from bounded GNU Bash probes, independent of the
-    // evaluator's location metadata. These native regressions await CI.
     for (case, source, status, stdout, stderr) in [
         (
             "simple continued target",
@@ -4147,3 +4109,25 @@ mod functions;
 mod path;
 #[path = "words/printf.rs"]
 mod printf;
+
+#[path = "words/echo.rs"]
+mod echo;
+
+#[path = "words/read_count.rs"]
+mod read_count;
+
+#[path = "words/printf_fields.rs"]
+mod printf_fields;
+#[path = "words/printf_integers.rs"]
+mod printf_integers;
+#[path = "words/printf_unsigned.rs"]
+mod printf_unsigned;
+
+#[path = "words/printf_character.rs"]
+mod printf_character;
+#[path = "words/printf_integer_fields.rs"]
+mod printf_integer_fields;
+#[path = "words/printf_options.rs"]
+mod printf_options;
+#[path = "words/printf_quoting.rs"]
+mod printf_quoting;

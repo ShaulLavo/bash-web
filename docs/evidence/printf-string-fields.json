@@ -1,0 +1,348 @@
+{
+  "schema": 1,
+  "date": "2026-10-20",
+  "classification": "Original local implementation, regression controls and measurements. GNU Bash is the behavior oracle; no upstream implementation copied or adapted. Parent owns independent provenance/code review.",
+  "baseRevision": "4b063eb5b839f93dc26ff2bc0508b8b8d86fa95a",
+  "model": "gpt-6.1-sol",
+  "routing": "cli-proxy",
+  "executionHost": "pc, canonical shared heavy queue; Cargo -j2; full frozen replay one worker in suite memory class",
+  "tools": {
+    "bash": "5.3.15(1)-release",
+    "bashSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+    "node": "26.7.0",
+    "rust": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "wasmtime": "49.0.3",
+    "wasiSdk": "34.0",
+    "waffleRevision": "33ece68f9f484d99b8a57a675de71d847e248051"
+  },
+  "sourceSha256": {
+    "shell/engine/src/builtins/printf.rs": "720869c20afe36364d733befd224222e17357cd141f7ab4d989437f7692c1437",
+    "shell/engine/src/builtins/printf/fields.rs": "db178e7541d98c23b700fc75a92c962bc303456f165c9ffbc011d0fbc39eeb50",
+    "shell/engine/tests/words/printf_fields.rs": "d13ce522ed2b377298bd6deec16012d80245d2e81cb6704f2ae3217d45ea4e1b",
+    "shell/engine/tests/words/printf.rs": "6ba551bd2c91404496cb7b139641b7288c49e161db8e3727185af3154c44b6a2",
+    "shell/engine/tests/words.rs": "079d04c7773dd65b4ee3c2afd827ad60a81c8e05af7f2656bfb2dd12e3544a90"
+  },
+  "artifactSha256": {
+    "release/shell-cli": "27d2402ca24d389a2724c8d440ab2d4751175539b6fd0cf362f622622f61040b",
+    "wasm32-wasip1/release/shell-cli.wasm": "bd4aa2b0cfdd3eb95d5c838347e59951f864a46b8075f82e34149b5bafbd95a0",
+    "wasm32-wasip1/release/shell-runtime.wasm": "d87ff7a0a97fc3a70e8f7287b5d3c5226fbce1a6799a466799aec7198b693cf0"
+  },
+  "failingFirst": {
+    "native": {
+      "total": 4,
+      "matched": 0
+    },
+    "realWaffle": {
+      "total": 4,
+      "matched": 0
+    },
+    "nativeRegressions": "Four deterministic new tests failed on the exact base before production edits. An earlier test module-path setup error is not counted."
+  },
+  "final": {
+    "native": {
+      "total": 167,
+      "matched": 167
+    },
+    "realWaffle": {
+      "total": 167,
+      "matched": 167
+    },
+    "reviewMatrix": {
+      "comparison": "Unchanged matches() checks health, status and stdout only. No stderr normalization or comparison.",
+      "native": {
+        "total": 222,
+        "matched": 214
+      },
+      "realWaffle": {
+        "total": 222,
+        "matched": 214
+      },
+      "expanded": {
+        "totalPerTarget": 272,
+        "stdoutStatusMatchedPerTarget": 261
+      },
+      "remaining": "Seven missing bare %d defaults and one source-line annotation in stdout with 2>&1. All previous cases retained; expanded controls additionally retain unsupported %q, numeric fields and virtual /dev/full limitations."
+    },
+    "diagnosticAudit": {
+      "comparison": "Independent check adds raw stderr, or removes only /usr/bin/bash: line N: from stderr. Stdout and status remain strict in both counts. This audit does not alter frozen scoring.",
+      "totalPerTarget": 222,
+      "beforeWithNormalizedStderr": 206,
+      "afterWithNormalizedStderr": 213,
+      "withRawStderr": 107,
+      "remainingExtraDiagnosticDifference": "Bash emits an additional write-error diagnostic for closed stdout; the unchanged printer does not.",
+      "evidence": "review-fixes-r2-stderr-audit.json"
+    },
+    "rawDiagnosticControls": {
+      "observationsPerTarget": 108,
+      "matchedPerTarget": 108,
+      "platforms": [
+        "native",
+        "production real Waffle"
+      ],
+      "assertions": "Separate-stream stdout/status and source-line-only diagnostic comparison. Exact raw merged bytes equal each shell raw stderr followed by stdout. Normalized merged diagnostic comparison is separate, not a stdout scoring claim. All original raw bytes retained.",
+      "evidence": "review-fixes-r2-diagnostic-controls.json",
+      "durableTests": "19 operand/error combinations, each checked against exact raw stderr and exact merged output on native and WASI, 38 scenarios per platform."
+    },
+    "rawBoundaryControls": {
+      "total": 18,
+      "matched": 18,
+      "platforms": [
+        "native",
+        "production real Waffle"
+      ],
+      "assertions": "Exact raw stdout and status on the prior boundary controls; stderr bytes retained, not counted as matching Bash prefixes."
+    },
+    "targetedTestsPerPlatform": {
+      "printfWords": 35,
+      "echoWords": 10,
+      "printfLibrary": 2,
+      "total": 47,
+      "platforms": [
+        "native",
+        "WASI"
+      ]
+    },
+    "seededFuzz": "Unchanged printf fixtures 1122/1122 and echo 492/492 on native and production real Waffle after final artifact rebuild. No fixture/deadline changes.",
+    "quality": "Cargo formatting, native/WASI clippy workspace/all test targets with -D warnings, owned parser audit, exact/structural duplicates with unchanged allowances and immutable-base layer gate pass. Full unrelated suites and browser remain owned by blocking hosted CI.",
+    "layers": "Zero production and test-only violations; unchanged 42 production and 28 test-only unique edges. Only source identity refreshed.",
+    "diagnosticsBoundary": "Raw stderr is retained, never masked. The original 222-case comparator checks health, status and stdout only. Independent source-line-only stderr agreement improves 206 to 213, complete raw agreement remains 107. Seven bare %d defaults, merged diagnostic source-line annotations and the unchanged closed-stdout write-error omission remain disclosed."
+  },
+  "frozenIdentity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "frozenDelta": {
+    "ok": true,
+    "corpora": {
+      "oils": {
+        "before": 972,
+        "after": 979,
+        "gained": [
+          "oils:nul-bytes:472",
+          "oils:builtin-printf:170",
+          "oils:builtin-printf:266",
+          "oils:builtin-printf:286",
+          "oils:builtin-printf:302",
+          "oils:builtin-printf:312",
+          "oils:builtin-printf:326"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "brush-suite": {
+        "before": 961,
+        "after": 964,
+        "gained": [
+          "brush-suite:builtins/printf:24",
+          "brush-suite:builtins/printf:42",
+          "brush-suite:builtins/printf:53"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "bashkit-suite": {
+        "before": 1361,
+        "after": 1366,
+        "gained": [
+          "bashkit-suite:bashbox-printf:5",
+          "bashkit-suite:blackbox-edge-cases:431",
+          "bashkit-suite:blackbox-exploration:819",
+          "bashkit-suite:printf:85",
+          "bashkit-suite:printf:92"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      }
+    }
+  },
+  "frozenProof": {
+    "records": 9221,
+    "scored": 5792,
+    "gained": 15,
+    "lost": 0,
+    "unchangedOtherBaselineRecords": 9206,
+    "gate": "Final rebuilt-artifact normal RECORD=0 JOBS=1 replay in canonical suite class, against exact base; candidate pass memberships exact and all 9206 other baseline records unchanged. Frozen oracle/environment/source/classification/exclusions/scoring/per-case deadlines unchanged.",
+    "wholeActualPayloadEquality": false,
+    "retainedHistoricalFailPayloadDifferences": 16,
+    "comparison": "Exact frozen identities, outcomes, pass memberships and counts. All 9206 unrelated committed baseline records remain unchanged. Sixteen still-failing historical actual payloads intentionally differ from current replay; no whole-output equality claim."
+  },
+  "resourceControls": "Borrowed byte precision, bounded numeric parser, complete output/work admission before emission, padding capacity checked before walking spaces, fixed 4096-byte delivery buffer, existing cancellable work/backpressure and live frame memory admission. No reconstructed result String or padding allocation.",
+  "initialFailures": [
+    "The first 159-case matrix exposed one preexisting out-of-scope bare %d invalid/missing-value mismatch. The mixed-format control was corrected to use complete valid numeric operands; no production %d behavior changed. The expanded final 167-case matrix matches both targets.",
+    "The initial frozen RECORD=0 measurement intentionally rejected the stale baseline after writing the complete 15-gain/zero-loss score. Only proven gained records and counts were recorded, then the full normal gate was rerun.",
+    "The first gate orchestration script was edited as its queue slot began, causing shell read-offset parsing failure after WASI passed. No test failed. The remaining unexecuted gates use an immutable separate script; WASI was not repeated.",
+    "Review fix first direct WASI command failed linking because unencoded scratch flags combined with target config; remaining/final commands use canonical wasiBuildEnvironment encoded flags.",
+    "A printf replay CLI attempt rejected unsupported --waffle before tests. Production Waffle replay uses the existing fixture validator and real runner directly.",
+    "Unchanged duplicate gate rejected three initial clones. Shared diagnostic I/O and the existing full-pipe assertion remove them without allowance changes. A local Python quoting edit failed before writes, then the unchanged-source duplicate check failed again; corrected edit passed. Final artifacts were rebuilt and the frozen replay repeated."
+  ],
+  "existingTestExpectation": "The unsupported-fields regression uses %08d instead of newly supported %08s. The assertions and unsupported-field coverage remain strict; no fixture, skip, timeout or allowance changed.",
+  "deferred": [
+    "Numeric fields and new conversions",
+    "printf -v and broad options",
+    "echo/read/runtime changes",
+    "Bash source-line diagnostic annotation"
+  ],
+  "reportDirectory": "/work/reports/bash-web/hill-climb/printf-string-fields",
+  "commands": [
+    "bash review-fixes-r2-red.sh, expected failing-first result",
+    "bash review-fixes-r2-build.sh",
+    "bash review-fixes-r2-suite.sh, controls followed by one final frozen replay"
+  ],
+  "resourceRetention": {
+    "cleanupOwner": "Parent coordinator",
+    "removalCondition": "After independent review and CI consumers stop, run report teardown.sh and remove the exclusive worktree with git worktree remove. Preserve shared caches/services and diagnostic-snapshot/PR23.",
+    "exactBuildRoot": {
+      "path": "/work/tmp/bash-web-printf-string-fields",
+      "allocatedBytes": 4968288256,
+      "reason": "Exact native/WASI release artifacts and warm test target retained for parent review; env.sh and empty browser temp parent retained."
+    },
+    "worktree": {
+      "path": "/work/worktrees/bash-web/climb-printf-string-fields",
+      "allocatedBytes": 322084864,
+      "reason": "Review source plus owned dependencies/build helpers."
+    },
+    "verifiedCleanup": "review-fixes-r2-cleanup.json records zero actual-host process consumers of assigned source/warm roots. All transient review-fixes-r2 subdirectories are absent. review-fixes-r2-queue-final.txt shows no owned job; one unrelated pre-existing browser job is preserved. review-fixes-r2-sizes.json records parent-owned retention sizes/removal conditions."
+  },
+  "priorAuthorValidation": {
+    "revision": "916a7611cef6f778a863853766162f0a89a6c6d4",
+    "results": {
+      "native": {
+        "total": 167,
+        "matched": 167
+      },
+      "realWaffle": {
+        "total": 167,
+        "matched": 167
+      },
+      "diagnosticsBoundary": "Invalid numeric controls suppress stderr on both sides; strict stdout/status and healthy execution checks remain. Raw diagnostics are retained. Existing source-line annotation differences remain outside this unit.",
+      "nativeTests": 1190,
+      "wasiTests": 1170,
+      "browser": {
+        "passed": 228,
+        "preexistingSkipped": 16,
+        "projects": [
+          "chromium",
+          "firefox"
+        ]
+      },
+      "seededFuzz": "All twelve existing native CI replay families passed unchanged, including printf 1122/1122 and echo 492/492. Echo also passed 492/492 on real Waffle. No fixture or deadline changes.",
+      "quality": "Full npm run quality passed, including clippy all test targets, native workspace tests, duplicate checks with unchanged allowances, formatting, lint, typecheck and unused dependency checks.",
+      "layers": "Zero production and test-only violations; unchanged 42 production and 28 test-only unique edges; exact immutable base enforced."
+    },
+    "commands": [
+      "bash run-gates.sh: WASI tests and guest verification",
+      "bash run-gates-remaining.sh: all remaining ordinary blocking gates",
+      "node probe.ts native native-after.json; node probe.ts waffle waffle-after.json",
+      "BASH_COMPAT_RECORD=0 BASH_COMPAT_JOBS=1 BASH_COMPAT_SKIP_BUILD=1 BASH_COMPAT_BASE_REF=4b063eb5b839f93dc26ff2bc0508b8b8d86fa95a npm run compat:shell",
+      "node verify-final.ts"
+    ]
+  },
+  "reviewFixes": {
+    "startingRevision": "916a7611cef6f778a863853766162f0a89a6c6d4",
+    "before": {
+      "native": {
+        "total": 222,
+        "matched": 206
+      },
+      "realWaffle": {
+        "total": 222,
+        "matched": 206
+      },
+      "nativeRegressions": "Two new targeted tests failed first on original production source, for retained status 1 after %b stop and truncated stdout after a numeric warning to closed stderr.",
+      "comparison": "Health, status and stdout only."
+    },
+    "fixes": [
+      "Clear accumulated numeric-star status at the %b operand stop after successful operand processing. Output flush, admission and cancellation errors still propagate.",
+      "Numeric-star warnings tolerate rejected stderr writes, not stdout failures or cancellation. Shared diagnostic writer preserves other escape diagnostics.",
+      "Delete exactly three accepted narration comments; preserve sources.lock.json. Reuse the existing full-pipe cancellation helper to satisfy unchanged duplicate gates."
+    ],
+    "classification": {
+      "originalMismatches": 16,
+      "stopStatusFixed": 7,
+      "closedStderrFixed": 1,
+      "barePercentDDeferred": 7,
+      "sourceLineAnnotationDeferred": 1
+    },
+    "logs": [
+      "review-fixes-r1-red.log",
+      "review-fixes-r1-build-deduplicated.log",
+      "review-fixes-r1-frozen-final.log",
+      "review-fixes-r1-controls-final.log"
+    ],
+    "classificationEvidence": "review-fixes-r1-classification.json"
+  },
+  "priorReviewFixValidation": {
+    "revision": "f9ca50f77f6038d21cf05c104917462c965ea269",
+    "results": {
+      "native": {
+        "total": 167,
+        "matched": 167
+      },
+      "realWaffle": {
+        "total": 167,
+        "matched": 167
+      },
+      "reviewMatrix": {
+        "native": {
+          "total": 222,
+          "matched": 214
+        },
+        "realWaffle": {
+          "total": 222,
+          "matched": 214
+        },
+        "remaining": "Seven disclosed missing bare %d defaults and one source-line annotation in stdout with 2>&1. All 222 cases retained.",
+        "comparison": "Health, status and stdout only; stderr is not compared or normalized."
+      },
+      "rawBoundaryControls": {
+        "total": 18,
+        "matched": 18,
+        "platforms": [
+          "native",
+          "real Waffle"
+        ],
+        "assertions": "Explicit exact raw stdout and exit status; raw stderr retained. Numeric diagnostic source-line annotations remain different."
+      },
+      "targetedTestsPerPlatform": {
+        "printfWords": 33,
+        "echoWords": 10,
+        "printfLibrary": 2,
+        "total": 45,
+        "platforms": [
+          "native",
+          "WASI"
+        ]
+      },
+      "seededFuzz": "Unchanged printf fixtures 1122/1122 and echo 492/492 on both native and production real Waffle, rerun after final artifact rebuild. No fixture/deadline changes.",
+      "quality": "Cargo formatting; clippy workspace/all test targets on native and WASI with -D warnings; owned parser audit; exact and structural duplicates with original allowances; immutable-base layer ratchet. No full unrelated-suite or browser rerun claimed for this fix; hosted CI remains blocking.",
+      "layers": "Zero production and test-only violations; unchanged 42 production and 28 test-only unique edges; source hash refreshed without changing graph/policy.",
+      "diagnosticsBoundary": "Historical 222-case comparator checks health, status and stdout only, not stderr. Its 214 matches include eight extra normalized-stderr discrepancies at f9ca50f: seven introduced diagnostic errors and the unchanged closed-stdout write-error message. Independent source-line-only stderr agreement is 206/222; raw agreement including stdout/status/stderr is 107/222."
+    },
+    "commands": [
+      "bash review-fixes-r1-build-deduplicated.sh",
+      "bash review-fixes-r1-frozen.sh, final log review-fixes-r1-frozen-final.log",
+      "bash review-fixes-r1-controls-final.sh"
+    ],
+    "wordingCorrection": "Earlier receipt incorrectly claimed the 222-case comparator normalized stderr. It never compared stderr. Counts above are independently classified by review-r2.stderr-audit.json."
+  },
+  "reviewFixesRound2": {
+    "startingRevision": "f9ca50f77f6038d21cf05c104917462c965ea269",
+    "failingFirst": "Both new Rust raw-diagnostic regressions fail before production edits. Checksum-verified starting native and production Waffle artifacts reproduce both findings, including merged-stream differences.",
+    "fixes": [
+      "Choose invalid-number diagnostic from the original spelling, not the parsed radix.",
+      "Give unconsumed-suffix errors precedence over range warnings while retaining the same -1 numeric fallback.",
+      "Correct the comparison definition and retain every prior test and raw diagnostic byte."
+    ],
+    "logs": [
+      "review-fixes-r2-red.log",
+      "review-fixes-r2-build.log",
+      "review-fixes-r2-controls.log",
+      "review-fixes-r2-frozen.log"
+    ],
+    "report": "review-fixes-r2.md",
+    "frozenEvidence": "review-fixes-r2-proof.json and review-fixes-r2-final-audit.json verify the same 15 gains, zero losses, unchanged 9206 other baseline records, all outcomes/counts, exact historical 16 failing payload differences and final source/artifact hashes."
+  }
+}

@@ -286,13 +286,15 @@ This is a core-size baseline; the browser process adapter must stay inside
 the same final-shell ceiling. All WASI builds use the
 [shared patched-libc recipe](wasi-libc.md).
 
-`tests/streaming.rs` adapts all sixteen tests across the seven scenarios from
+`tests/streaming.rs` (core, with test-only external fixtures) and
+`shell/utilities/tests/streaming.rs` (the separately linked utility programs as
+external commands) adapt all sixteen tests across the seven scenarios from
 `pipelines.acceptance.spec.ts`: live filtering, all four >1 MiB builtin/external
 pairings, cancellation, seven Bash pipeline-status cases, early reader exit,
 state inheritance, and slow-reader backpressure. Extra tests cover handled EPIPE,
 a continuously ready background loop, independent background lifetime, frame
 unwinding, inherited nonstandard descriptors, bounded captures and a slow terminal.
-All external programs are explicitly stand-ins. Real Bun children, Ctrl+C's
+Every external program there runs on `InProcessHost`, not a browser worker. Real Bun children, Ctrl+C's
 shared interrupt word, worker exit acknowledgment, live shared files and cold
 browser startup require separate browser acceptance; no browser acceptance score
 is claimed by this core suite. `own-shell` participates in the fixed GNU bash

@@ -3,10 +3,15 @@
 use futures::{FutureExt, future::LocalBoxFuture};
 use serde::Deserialize;
 use shell_engine::{
-    executor::{Budget, Cancel},
-    io::{Directory, Endpoint, FileKind, FileMetadata, FileSystem, IoError, MemoryFs, OpenOptions},
+    Limits, Session,
+    executor::{Budget, Cancel, Executor},
+    io::{
+        Directory, Endpoint, FdTable, FileKind, FileMetadata, FileSystem, IoError, MemoryFs,
+        OpenOptions, pipe,
+    },
     process::{InProcessHost, SpawnRequest},
 };
+use std::{io::Write, rc::Rc};
 
 /// Standalone-only mount policy matching the oracle's read-only system tree.
 /// Provision helper files before mounting; writable cwd/tmp stay ordinary MemoryFs.
@@ -392,7 +397,7 @@ pub fn register_fixture(
         .collect())
 }
 
-async fn argv(request: SpawnRequest, cancel: Cancel) -> i32 {
+pub async fn argv(request: SpawnRequest, cancel: Cancel) -> i32 {
     let Some(output) = request.fds.get(1) else {
         return 1;
     };
@@ -413,7 +418,7 @@ async fn argv(request: SpawnRequest, cancel: Cancel) -> i32 {
     0
 }
 
-async fn printenv(request: SpawnRequest, cancel: Cancel) -> i32 {
+pub async fn printenv(request: SpawnRequest, cancel: Cancel) -> i32 {
     let Some(output) = request.fds.get(1) else {
         return 1;
     };
@@ -468,6 +473,128 @@ fn escape(byte: u8, quote: u8, buffer: &mut Vec<u8>) {
                 hex[(byte >> 4) as usize],
                 hex[(byte & 15) as usize],
             ]);
+        }
+    }
+}
+
+/// The standalone harness loop shared by the core-only `shell-engine` entry and the
+/// `shell-cli` test composition. `install` adds external programs to its own host.
+/// Host stdio is touched only between nonblocking executor turns; a bounded
+/// terminal endpoint applies backpressure to tasks. No stage calls WASI fd_read.
+pub fn standalone(install: impl FnOnce(&InProcessHost, &MemoryFs, Rc<dyn FileSystem>)) -> ! {
+    let args: Vec<_> = std::env::args().collect();
+    if args.len() != 3 || args[1] != "-c" {
+        eprintln!("usage: shell-engine -c 'builtins-only script' (process host not installed)");
+        std::process::exit(2);
+    }
+    let executor = Executor::new();
+    let host = InProcessHost::new(executor.clone());
+    let fs = MemoryFs::new(16 * 1024 * 1024);
+    register(&host, &fs);
+    let cwd = std::env::var("PWD").ok();
+    let fixture = std::env::var_os("BASH_WEB_PATH_FIXTURE");
+    let mut denied_directories = Vec::new();
+    if fixture.is_some() && cwd.is_none() {
+        eprintln!("cannot install path fixture without PWD");
+        std::process::exit(2);
+    }
+    // The standalone host selects a virtual cwd from its environment. Create
+    // that directory in its own filesystem before exposing it to the shell.
+    if let Some(cwd) = cwd.as_deref() {
+        if let Err(error) = fs.mkdir(cwd, true) {
+            eprintln!("cannot create virtual working directory: {error:?}");
+            std::process::exit(error.status());
+        }
+        if let Some(raw) = fixture {
+            let Some(raw) = raw.to_str() else {
+                eprintln!("cannot install path fixture: invalid UTF-8");
+                std::process::exit(2);
+            };
+            denied_directories = match register_fixture(&host, &fs, cwd, raw) {
+                Ok(paths) => paths,
+                Err(error) => {
+                    eprintln!("cannot install path fixture: {error}");
+                    std::process::exit(2);
+                }
+            };
+        }
+    }
+    let filesystem: Rc<dyn FileSystem> =
+        Rc::new(ReadOnlyMount::new(fs.clone(), "/usr").with_denied_directories(denied_directories));
+    install(&host, &fs, filesystem.clone());
+    let session = Session::new(
+        executor.clone(),
+        Rc::new(host),
+        filesystem,
+        Limits::default(),
+    );
+    {
+        let state = session.state();
+        let mut state = state.borrow_mut();
+        state.initialize_cli_environment(std::env::vars());
+        if let Some(cwd) = cwd {
+            state.cwd = cwd;
+        }
+    }
+    let (terminal, writer) = pipe();
+    let (diagnostics, error_writer) = pipe();
+    let mut fds = FdTable::default();
+    fds.insert(0, Endpoint::null());
+    fds.insert(1, writer);
+    fds.insert(2, error_writer);
+    session.set_descriptors(fds).unwrap();
+    let job = match session.start(&args[2]) {
+        Ok(job) => job,
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(2);
+        }
+    };
+    let mut output = std::io::stdout().lock();
+    let mut errors = std::io::stderr().lock();
+    let code = loop {
+        executor.drive(256);
+        drain(&terminal, &mut output, &session);
+        drain(&diagnostics, &mut errors, &session);
+        if job.is_finished() {
+            break job.now_or_never().unwrap();
+        }
+        if !executor.drive(0).runnable {
+            // This stand-alone embedding has no external readiness provider.
+            // Browser integration supplies one rather than adding a polling loop.
+            session.interrupt();
+        }
+    };
+    let shutdown = session.shutdown();
+    futures::pin_mut!(shutdown);
+    while shutdown.as_mut().now_or_never().is_none() {
+        executor.drive(256);
+    }
+    executor.drive(256);
+    std::process::exit(code);
+}
+
+fn drain(endpoint: &Endpoint, output: &mut impl Write, session: &Session) {
+    let mut buffer = [0; 8192];
+    loop {
+        let Some(result) = endpoint.read(&mut buffer).now_or_never() else {
+            return;
+        };
+        let count = match result {
+            Ok(0) => return,
+            Ok(count) => count,
+            Err(_) => {
+                session.interrupt();
+                return;
+            }
+        };
+        if output
+            .write_all(&buffer[..count])
+            .and_then(|_| output.flush())
+            .is_err()
+        {
+            session.interrupt();
+            return;
         }
     }
 }

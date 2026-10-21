@@ -390,7 +390,12 @@ fn cancellation_before_a_later_unbound_read_has_no_partial_dispatch_or_diagnosti
 
 #[test]
 fn failed_command_local_heredoc_readers_discard_their_parameter_effects() {
-    for (command, status) in [("cat", "127"), ("", "1"), ("value=kept", "1")] {
+    for (command, status) in [
+        ("cat", "127"),
+        ("missing-command", "127"),
+        ("", "1"),
+        ("value=kept", "1"),
+    ] {
         for body in ["${x:=changed}$missing", "${x:=changed}${missing:?oops}"] {
             let rig = Rig::new(Limits::default());
             let source = format!(
@@ -408,7 +413,7 @@ fn failed_command_local_heredoc_readers_discard_their_parameter_effects() {
 
 #[test]
 fn command_local_heredoc_arithmetic_failure_does_not_discard_the_caller_read_unit() {
-    for command in ["cat", "", "value=kept"] {
+    for command in ["cat", "missing-command", "", "value=kept"] {
         let rig = Rig::new(Limits::default());
         let source = format!(
             "unset x\n{command} <<EOF; args \"$?\" \"${{x-unset}}\"\n${{x:=changed}}$((1/0))\nEOF\n"

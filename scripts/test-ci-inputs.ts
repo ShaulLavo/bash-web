@@ -28,7 +28,7 @@ for (const path of [
   "scripts/wasi-build.ts",
   "scripts/build-shell.ts",
   "scripts/build-test-guest.mjs",
-  "scripts/test-shell-wasi.mjs",
+  "scripts/test-shell-wasi.ts",
   "scripts/check-rust-quality.mjs",
   "scripts/ci-inputs.ts",
   "scripts/test-wasi-build.ts",
@@ -67,5 +67,34 @@ test("native build commands invalidate binaries", () => {
   assert.notEqual(
     nativeInputs([], waffle, { "build:shell": "first" }),
     nativeInputs([], waffle, { "build:shell": "second" }),
+  );
+});
+
+for (const path of [
+  "scripts/ci-artifacts.ts",
+  "scripts/test-ci-artifacts.ts",
+  "scripts/test-ci-workflow.ts",
+  "scripts/utility-artifacts.ts",
+  "scripts/build-utilities.ts",
+  "scripts/check-shell-capabilities.ts",
+  "scripts/test-utility-artifacts.ts",
+  "scripts/build-compat-control.ts",
+  "scripts/test-build-compat-control.ts",
+  "scripts/build-node-harness.ts",
+  "scripts/test-shell-wasi.ts",
+  "scripts/diagnose-compat.ts",
+]) {
+  test(`${path} is included in the complete build and gate input closure`, () => {
+    assert.notEqual(
+      nativeInputs([entry(path)], waffle),
+      nativeInputs([entry(path, "def")], waffle),
+    );
+  });
+}
+
+test("any dependency lock change invalidates the native artifact recipe", () => {
+  assert.notEqual(
+    nativeInputs([], waffle, {}, "first-lock"),
+    nativeInputs([], waffle, {}, "second-lock"),
   );
 });

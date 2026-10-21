@@ -1,5 +1,5 @@
-//! Original byte-oriented printf escape adapter. Admission and delivery walk the
-//! same borrowed inputs: no decoded String or whole-result buffer is allocated.
+mod fields;
+mod quoting;
 use super::{endpoint, error_status, write};
 use crate::{
     executor::Budget,
@@ -8,6 +8,7 @@ use crate::{
     io::FdTable,
     state::{SharedState, State},
 };
+use fields::{Arguments, Field};
 
 pub(super) async fn run(
     args: &[String],
@@ -16,7 +17,79 @@ pub(super) async fn run(
     context: &Context,
     work: &mut Work,
 ) -> Result<(), i32> {
-    args.first().ok_or(2)?;
+    let invocation = Invocation::parse(args);
+    let utf8 = character_locale(state, context, work).await?;
+    let mut printer = Printer::new(fds, context, work, utf8);
+    invocation.print(&mut printer).await?;
+    printer.work = None;
+    let status = invocation.print(&mut printer).await?;
+    printer.flush_output().await?;
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+const USAGE: &[u8] = b"printf: usage: printf [-v var] format [arguments]\n";
+
+#[derive(Clone, Copy)]
+enum Invocation<'a> {
+    Format(&'a [String]),
+    InvalidOption(u8),
+    Usage,
+    Error(&'static [u8]),
+}
+
+impl<'a> Invocation<'a> {
+    fn parse(args: &'a [String]) -> Self {
+        let Some((first, operands)) = args.split_first() else {
+            return Self::Usage;
+        };
+        if first == "--" && operands.is_empty() {
+            return Self::Usage;
+        }
+        if first == "--" {
+            return Self::Format(operands);
+        }
+        if first.len() <= 1 || !first.starts_with('-') {
+            return Self::Format(args);
+        }
+        if first == "-v" && operands.is_empty() {
+            return Self::Error(b"/usr/bin/bash: printf: -v: option requires an argument\n");
+        }
+        if first.starts_with("-v") {
+            return Self::Error(b"/usr/bin/bash: printf: -v: assignment is not supported\n");
+        }
+        if first == "--help" {
+            return Self::Error(b"/usr/bin/bash: printf: --help: unsupported option\n");
+        }
+        Self::InvalidOption(first.as_bytes()[1])
+    }
+
+    async fn print(self, printer: &mut Printer<'_>) -> Result<i32, i32> {
+        printer.scan(1).await?;
+        match self {
+            Self::Format(args) => return format(args, printer).await,
+            Self::InvalidOption(byte) => invalid_option(byte, printer).await?,
+            Self::Error(diagnostic) => printer.usage_diagnostic(diagnostic).await?,
+            Self::Usage => {}
+        }
+        // GNU Bash keeps usage status 2 when stderr is closed.
+        printer.usage_diagnostic(USAGE).await?;
+        Ok(2)
+    }
+}
+
+async fn invalid_option(byte: u8, printer: &mut Printer<'_>) -> Result<(), i32> {
+    printer
+        .usage_diagnostic(b"/usr/bin/bash: printf: -")
+        .await?;
+    printer.usage_diagnostic(&[byte]).await?;
+    printer.usage_diagnostic(b": invalid option\n").await
+}
+
+pub(super) async fn character_locale(
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Result<bool, i32> {
     let mut utf8 = false;
     for name in ["LC_ALL", "LC_CTYPE", "LANG"] {
         State::admit_scalar_access(state, name, &context.cancel, work)
@@ -27,8 +100,6 @@ pub(super) async fn run(
             .scalar_parameter(name)
             .filter(|value| !value.is_empty())
         {
-            // The engine's byte locales are C/POSIX and UTF-8. Check fixed-size
-            // codeset suffixes without copying or scanning an arbitrary value.
             utf8 = ["UTF-8", "UTF8"].iter().any(|encoding| {
                 locale.eq_ignore_ascii_case(encoding)
                     || locale
@@ -43,30 +114,78 @@ pub(super) async fn run(
             break;
         }
     }
-    // Printer stays inline in this future, which is owned by the interpreter's
-    // dispatch execution frame. crate::exec::Scope::frame admits its complete future
-    // size (including the fixed output buffer) before boxing, and refunds it on
-    // completion or drop. A separate 4096-byte ticket would double-charge it.
-    // Admit the complete repeated output and work before the first write, so
-    // expansion/work admission failures emit nothing. Delivery needs constant
-    // space and cannot discover a new expansion/work allocation limit.
-    // I/O failures and cancellation are not atomic: they can leave a genuine
-    // streamed prefix, including when writing a later warning to closed stderr.
-    let mut printer = Printer {
-        fds,
-        context,
-        work: Some(work),
-        budget: Budget::default(),
-        remaining: context.limits().expansion_bytes,
-        utf8,
-        output: [0; WRITE_CHUNK],
-        output_len: 0,
-    };
-    format(args, &mut printer).await?;
+    Ok(utf8)
+}
+
+pub(super) async fn echo(
+    args: &[String],
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    let utf8 = character_locale(state, context, work).await?;
+    let mut printer = Printer::new(fds, context, work, utf8);
+    echo_output(args, &mut printer).await?;
     printer.work = None;
-    let status = format(args, &mut printer).await?;
-    printer.flush_output().await?;
-    if status == 0 { Ok(()) } else { Err(status) }
+    echo_output(args, &mut printer).await?;
+    printer.flush_output().await
+}
+
+#[derive(Clone, Copy, Default)]
+struct EchoOptions {
+    operands: usize,
+    no_newline: bool,
+    escapes: bool,
+}
+impl EchoOptions {
+    async fn parse(args: &[String], printer: &mut Printer<'_>) -> Result<Self, i32> {
+        let mut options = Self::default();
+        for arg in args {
+            printer.scan(1).await?;
+            if !arg.starts_with('-') || arg.len() == 1 {
+                break;
+            }
+            let Some(next) = options.option(arg.as_bytes(), printer).await? else {
+                break;
+            };
+            options = next;
+        }
+        Ok(options)
+    }
+    async fn option(&self, arg: &[u8], printer: &mut Printer<'_>) -> Result<Option<Self>, i32> {
+        let mut next = Self {
+            operands: self.operands + 1,
+            ..*self
+        };
+        for flag in &arg[1..] {
+            printer.scan(1).await?;
+            match flag {
+                b'n' => next.no_newline = true,
+                b'e' => next.escapes = true,
+                b'E' => next.escapes = false,
+                _ => return Ok(None),
+            }
+        }
+        Ok(Some(next))
+    }
+}
+async fn echo_output(args: &[String], printer: &mut Printer<'_>) -> Result<(), i32> {
+    let options = EchoOptions::parse(args, printer).await?;
+    let mode = options.escapes.then_some(Mode::Echo);
+    for (index, arg) in args[options.operands..].iter().enumerate() {
+        printer.scan(1).await?;
+        if index != 0 {
+            printer.emit(1, b" ").await?;
+        }
+        if printer.operand_mode(arg.as_bytes(), mode).await? {
+            return Ok(());
+        }
+    }
+    if !options.no_newline {
+        printer.emit(1, b"\n").await?;
+    }
+    Ok(())
 }
 
 const WRITE_CHUNK: usize = 4096;
@@ -80,7 +199,19 @@ struct Printer<'a> {
     output: [u8; WRITE_CHUNK],
     output_len: usize,
 }
-impl Printer<'_> {
+impl<'a> Printer<'a> {
+    fn new(fds: &'a FdTable, context: &'a Context, work: &'a mut Work, utf8: bool) -> Self {
+        Self {
+            fds,
+            context,
+            work: Some(work),
+            budget: Budget::default(),
+            remaining: context.limits().expansion_bytes,
+            utf8,
+            output: [0; WRITE_CHUNK],
+            output_len: 0,
+        }
+    }
     async fn scan(&mut self, bytes: usize) -> Result<(), i32> {
         for _ in 0..bytes {
             if let Some(work) = &mut self.work {
@@ -100,9 +231,6 @@ impl Printer<'_> {
         if self.output_len == 0 {
             return Ok(());
         }
-        // A full or final buffer is one logical printf write. Clear it even on
-        // I/O failure: any bytes accepted before the failure are a genuine
-        // streamed prefix and must not be duplicated by recovery code.
         let result = write(self.fds, &self.output[..self.output_len], self.context).await;
         self.output_len = 0;
         result
@@ -127,19 +255,8 @@ impl Printer<'_> {
         if fd == 1 {
             self.append_output(bytes).await
         } else {
-            // Keep stdout buffered while the diagnostic is attempted. This
-            // preserves one small invocation write and gives aliased stderr
-            // the Bash-visible diagnostic-before-output order. If stderr is
-            // closed, expose the already-buffered stdout prefix before
-            // returning the real diagnostic I/O failure. Cancellation does
-            // not flush undelivered bytes.
-            let result = match endpoint(self.fds, fd) {
-                Ok(endpoint) => endpoint
-                    .write_all(bytes, &self.context.cancel)
-                    .await
-                    .map_err(|error| error.status()),
-                Err(status) => Err(status),
-            };
+            // With aliased stderr, Bash diagnoses before stdout.
+            let result = self.write_diagnostic(fd, bytes).await;
             match result {
                 Ok(()) => Ok(()),
                 Err(status) if status == 130 => Err(status),
@@ -149,6 +266,47 @@ impl Printer<'_> {
                 }
             }
         }
+    }
+    async fn write_diagnostic(&self, fd: u32, bytes: &[u8]) -> Result<(), i32> {
+        endpoint(self.fds, fd)?
+            .write_all(bytes, &self.context.cancel)
+            .await
+            .map_err(|error| error.status())
+    }
+    async fn usage_diagnostic(&mut self, bytes: &[u8]) -> Result<(), i32> {
+        if self.work.is_some() {
+            return self.emit(2, bytes).await;
+        }
+        match self.write_diagnostic(2, bytes).await {
+            Err(status @ (130 | 141)) => Err(status),
+            _ => Ok(()),
+        }
+    }
+    async fn numeric_warning(&mut self, bytes: &[u8]) -> Result<(), i32> {
+        if self.work.is_some() {
+            return self.emit(2, bytes).await;
+        }
+        let result = self.write_diagnostic(2, bytes).await;
+        match result {
+            Err(130) => Err(130),
+            _ => Ok(()),
+        }
+    }
+    async fn padding(&mut self, mut count: usize, byte: u8) -> Result<(), i32> {
+        if self.work.is_some() {
+            self.remaining = self.remaining.checked_sub(count).ok_or(2)?;
+            return self.scan(count).await;
+        }
+        const SPACES: [u8; WRITE_CHUNK] = [b' '; WRITE_CHUNK];
+        const ZEROES: [u8; WRITE_CHUNK] = [b'0'; WRITE_CHUNK];
+        let bytes = if byte == b'0' { &ZEROES } else { &SPACES };
+        while count != 0 {
+            let chunk = count.min(WRITE_CHUNK);
+            self.scan(chunk).await?;
+            self.emit(1, &bytes[..chunk]).await?;
+            count -= chunk;
+        }
+        Ok(())
     }
     async fn escape(&mut self, input: &[u8], mode: Mode) -> Result<Escape, i32> {
         let escape = decode(input, mode, self.utf8);
@@ -160,10 +318,14 @@ impl Printer<'_> {
         Ok(escape)
     }
     async fn operand(&mut self, input: &[u8], escaped: bool) -> Result<bool, i32> {
+        self.operand_mode(input, escaped.then_some(Mode::Operand))
+            .await
+    }
+    async fn operand_mode(&mut self, input: &[u8], mode: Option<Mode>) -> Result<bool, i32> {
         let mut offset = 0;
         while offset < input.len() {
-            if escaped && input[offset] == b'\\' {
-                let escape = self.escape(&input[offset..], Mode::Operand).await?;
+            if let Some(mode) = mode.filter(|_| input[offset] == b'\\') {
+                let escape = self.escape(&input[offset..], mode).await?;
                 offset += escape.consumed;
                 if escape.stop {
                     return Ok(true);
@@ -172,7 +334,7 @@ impl Printer<'_> {
                 let start = offset;
                 while offset < input.len()
                     && offset - start < 4096
-                    && (!escaped || input[offset] != b'\\')
+                    && (mode.is_none() || input[offset] != b'\\')
                 {
                     offset += 1;
                 }
@@ -186,69 +348,112 @@ impl Printer<'_> {
 
 async fn format(args: &[String], printer: &mut Printer<'_>) -> Result<i32, i32> {
     let input = args[0].as_bytes();
-    let mut index = 1;
+    let mut arguments = Arguments {
+        values: args,
+        index: 1,
+        status: 0,
+    };
     loop {
         printer.scan(1).await?;
-        let mut offset = 0;
-        let mut consumed = false;
-        while offset < input.len() {
-            match input[offset] {
-                b'\\' => {
-                    let escape = printer.escape(&input[offset..], Mode::Format).await?;
-                    offset += escape.consumed;
-                }
-                b'%' => {
-                    printer.scan(1).await?;
-                    offset += 1;
-                    match input.get(offset) {
-                        Some(b'%') => {
-                            printer.scan(1).await?;
-                            printer.emit(1, b"%").await?;
-                        }
-                        Some(conversion @ (b's' | b'd' | b'b')) => {
-                            printer.scan(1).await?;
-                            let arg = args.get(index).map(String::as_bytes).unwrap_or(b"");
-                            index += 1;
-                            consumed = true;
-                            if printer.operand(arg, *conversion == b'b').await? {
-                                return Ok(0);
-                            }
-                        }
-                        _ => {
-                            // Keep unsupported conversions unsupported. In
-                            // particular, decoding an escape must not introduce
-                            // a second interpretation as format syntax.
-                            printer
-                                .emit(2, b"/usr/bin/bash: printf: unsupported format conversion\n")
-                                .await?;
-                            return Ok(2);
-                        }
-                    }
-                    offset += 1;
-                }
-                _ => {
-                    let start = offset;
-                    while offset < input.len()
-                        && offset - start < 4096
-                        && !matches!(input[offset], b'%' | b'\\')
-                    {
-                        offset += 1;
-                    }
-                    printer.scan(offset - start).await?;
-                    printer.emit(1, &input[start..offset]).await?;
-                }
-            }
+        let before = arguments.index;
+        if format_pass(input, &mut arguments, printer).await? {
+            return Ok(arguments.status);
         }
-        if !consumed || index >= args.len() {
-            return Ok(0);
+        if before == arguments.index || arguments.index >= args.len() {
+            return Ok(arguments.status);
         }
     }
+}
+
+async fn format_pass(
+    input: &[u8],
+    args: &mut Arguments<'_>,
+    printer: &mut Printer<'_>,
+) -> Result<bool, i32> {
+    let mut offset = 0;
+    while offset < input.len() {
+        if format_piece(input, &mut offset, args, printer).await? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+async fn format_piece(
+    input: &[u8],
+    offset: &mut usize,
+    args: &mut Arguments<'_>,
+    printer: &mut Printer<'_>,
+) -> Result<bool, i32> {
+    match input[*offset] {
+        b'\\' => {
+            let escape = printer.escape(&input[*offset..], Mode::Format).await?;
+            *offset += escape.consumed;
+        }
+        b'%' => {
+            printer.scan(1).await?;
+            *offset += 1;
+            return conversion(input, offset, args, printer).await;
+        }
+        _ => format_literal(input, offset, printer).await?,
+    }
+    Ok(false)
+}
+
+async fn format_literal(
+    input: &[u8],
+    offset: &mut usize,
+    printer: &mut Printer<'_>,
+) -> Result<(), i32> {
+    let start = *offset;
+    while *offset < input.len()
+        && *offset - start < WRITE_CHUNK
+        && !matches!(input[*offset], b'%' | b'\\')
+    {
+        *offset += 1;
+    }
+    printer.scan(*offset - start).await?;
+    printer.emit(1, &input[start..*offset]).await
+}
+
+async fn conversion(
+    input: &[u8],
+    offset: &mut usize,
+    args: &mut Arguments<'_>,
+    printer: &mut Printer<'_>,
+) -> Result<bool, i32> {
+    if input.get(*offset) == Some(&b'%') {
+        printer.scan(1).await?;
+        *offset += 1;
+        printer.emit(1, b"%").await?;
+        return Ok(false);
+    }
+    if input.get(*offset) == Some(&b'b') {
+        printer.scan(1).await?;
+        *offset += 1;
+        let stop = printer
+            .operand(args.take().unwrap_or("").as_bytes(), true)
+            .await?;
+        if stop {
+            args.status = 0;
+        }
+        return Ok(stop);
+    }
+    if let Some(field) = Field::parse(input, offset, printer).await? {
+        return field.print(args, printer).await;
+    }
+    printer
+        .emit(2, b"/usr/bin/bash: printf: unsupported format conversion\n")
+        .await?;
+    args.status = 2;
+    Ok(true)
 }
 
 #[derive(Clone, Copy, PartialEq)]
 enum Mode {
     Format,
     Operand,
+    Echo,
 }
 struct Escape {
     bytes: [u8; 10],
@@ -297,15 +502,15 @@ fn decode(input: &[u8], mode: Mode, utf8: bool) -> Escape {
         out.push(byte);
         return out;
     }
-    if code == b'c' && mode == Mode::Operand {
+    if code == b'c' && mode != Mode::Format {
         out.stop = true;
         return out;
     }
-    if matches!(code, b'0'..=b'7') {
+    if matches!(code, b'0'..=b'7') && (mode != Mode::Echo || code == b'0') {
         let mut value = u32::from(code - b'0');
-        // Both modes accept nonzero-prefixed octal. Only %b ignores an
-        // initial zero before consuming up to three additional octal digits.
-        let digits = if mode == Mode::Operand && code == b'0' {
+        // Echo requires the zero prefix. Both echo and %b ignore it before
+        // consuming up to three additional octal digits.
+        let digits = if mode != Mode::Format && code == b'0' {
             3
         } else {
             2
@@ -335,7 +540,7 @@ fn decode(input: &[u8], mode: Mode, utf8: bool) -> Escape {
             out.consumed += 1;
         }
         if out.consumed == 2 {
-            out.diagnostic = Some(match code {
+            out.diagnostic = (mode != Mode::Echo).then_some(match code {
                 b'x' => b"/usr/bin/bash: printf: missing hex digit for \\x\n",
                 b'u' => b"/usr/bin/bash: printf: missing unicode digit for \\u\n",
                 _ => b"/usr/bin/bash: printf: missing unicode digit for \\U\n",
@@ -417,9 +622,7 @@ mod tests {
         panic!("printf live-budget control did not finish");
     }
 
-    #[test]
-    fn printf_buffer_live_budget_refunds_after_normal_error_and_cancellation() {
-        let limit = 1024 * 1024;
+    fn budget_session(limit: usize) -> (Executor, Session) {
         let ex = Executor::new();
         let host = InProcessHost::new(ex.clone());
         let shell = Session::new(
@@ -431,19 +634,34 @@ mod tests {
                 ..Limits::default()
             },
         );
+        (ex, shell)
+    }
+
+    #[test]
+    fn printf_buffer_live_budget_refunds_after_normal_error_and_cancellation() {
+        buffer_live_budget_refunds("printf");
+        buffer_live_budget_refunds("echo -ne");
+    }
+
+    fn buffer_live_budget_refunds(command: &str) {
+        let limit = 1024 * 1024;
+        let (ex, shell) = budget_session(limit);
         let (out, output) = capture(4096);
         let mut fds = FdTable::default();
         fds.insert(0, Endpoint::null());
         fds.insert(1, out);
         fds.insert(2, Endpoint::null());
         shell.set_descriptors(fds).unwrap();
-        for (source, status) in [("printf ok", 0), (r"printf 'prefixA\xZ' 2>&-", 1)] {
+        for (source, status) in [
+            ("printf ok", 0),
+            (r"printf 'prefixA\xZ' 2>&-", 1),
+            (r"echo -ne '\0377'", 0),
+            ("echo error >&-", 1),
+        ] {
             assert_eq!(finish(&ex, shell.start(source).unwrap()), status);
-            // Reserving the entire pool proves no fixed-buffer/frame ticket is
-            // retained once the last command future has been dropped.
             drop(shell.state().borrow().admit_temporary(limit).unwrap());
         }
-        assert_eq!(output.bytes(), b"okprefixA");
+        assert_eq!(output.bytes(), b"okprefixA\xff");
         let (reader, writer) = pipe();
         let filler = vec![b'!'; crate::io::PIPE_CAPACITY];
         assert_eq!(writer.write(&filler).now_or_never(), Some(Ok(filler.len())));
@@ -452,7 +670,7 @@ mod tests {
         fds.insert(1, writer);
         fds.insert(2, Endpoint::null());
         shell.set_descriptors(fds).unwrap();
-        let job = shell.start("printf buffered").unwrap();
+        let job = shell.start(&format!("{command} buffered")).unwrap();
         let mut parked = false;
         for _ in 0..100_000 {
             let turn = ex.drive(1);
@@ -492,17 +710,7 @@ mod tests {
     #[test]
     fn printf_buffer_rejects_insufficient_shared_live_memory_before_printf_output() {
         let limit = 1024 * 1024;
-        let ex = Executor::new();
-        let host = InProcessHost::new(ex.clone());
-        let shell = Session::new(
-            ex.clone(),
-            Rc::new(host),
-            Rc::new(MemoryFs::new(64 * 1024)),
-            Limits {
-                execution_bytes: limit,
-                ..Limits::default()
-            },
-        );
+        let (ex, shell) = budget_session(limit);
         let (out, output) = capture(4096);
         let (err, errors) = capture(4096);
         let mut fds = FdTable::default();
@@ -510,15 +718,11 @@ mod tests {
         fds.insert(1, out);
         fds.insert(2, err);
         shell.set_descriptors(fds).unwrap();
-        // Retain a peer's charge, leaving less than one buffer of headroom.
         let held = shell
             .state()
             .borrow()
             .admit_temporary(limit - WRITE_CHUNK + 1)
             .unwrap();
-        // Dispatch admits its whole future before selecting a builtin. The
-        // same tight headroom must reject non-printf commands too, rather than
-        // suggesting that this limit isolates just the printf output buffer.
         for source in ["true", "echo hidden", r"printf 'prefixA\xZ'"] {
             assert_eq!(finish(&ex, shell.start(source).unwrap()), 2, "{source}");
             assert!(output.bytes().is_empty(), "{source}");

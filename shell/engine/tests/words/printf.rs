@@ -1,4 +1,3 @@
-//! Original raw-byte controls for GNU Bash 5.3.15 printf escapes.
 use super::*;
 use futures::future::LocalBoxFuture;
 use shell_engine::{
@@ -8,15 +7,15 @@ use shell_engine::{
 use std::{cell::RefCell, rc::Rc};
 
 #[derive(Clone)]
-struct RecordedEndpoint(Rc<RefCell<Vec<Vec<u8>>>>);
+struct RecordedEndpoint(Rc<RefCell<Vec<Vec<u8>>>>, usize);
 impl HostEndpoint for RecordedEndpoint {
     fn read<'a>(&'a self, _output: &'a mut [u8]) -> LocalBoxFuture<'a, Result<usize, IoError>> {
         async { Ok(0) }.boxed_local()
     }
     fn write<'a>(&'a self, input: &'a [u8]) -> LocalBoxFuture<'a, Result<usize, IoError>> {
         let records = self.0.clone();
-        let bytes = input.to_owned();
-        let length = input.len();
+        let length = input.len().min(self.1);
+        let bytes = input[..length].to_owned();
         async move {
             records.borrow_mut().push(bytes);
             Ok(length)
@@ -25,21 +24,94 @@ impl HostEndpoint for RecordedEndpoint {
     }
 }
 
-fn recorded_endpoint() -> (Endpoint, Rc<RefCell<Vec<Vec<u8>>>>) {
+pub(super) fn recorded_endpoint() -> (Endpoint, Rc<RefCell<Vec<Vec<u8>>>>) {
+    recorded_endpoint_with_limit(usize::MAX)
+}
+
+pub(super) fn recorded_endpoint_with_limit(limit: usize) -> (Endpoint, Rc<RefCell<Vec<Vec<u8>>>>) {
     let records = Rc::new(RefCell::new(Vec::new()));
     (
-        Endpoint::host(Rc::new(RecordedEndpoint(records.clone()))),
+        Endpoint::host(Rc::new(RecordedEndpoint(records.clone(), limit))),
         records,
     )
+}
+
+pub(super) fn replace_output(rig: &Rig, output: Endpoint) {
+    let mut fds = FdTable::default();
+    fds.insert(0, Endpoint::null());
+    fds.insert(1, output);
+    fds.insert(2, Endpoint::null());
+    rig.shell.set_descriptors(fds).unwrap();
+}
+
+pub(super) fn assert_recovery(rig: &Rig, source: &str, status: i32) {
+    assert_eq!(rig.run(source), status);
+    assert!(rig.output.bytes().is_empty());
+    check_recovery(rig);
+}
+
+pub(super) fn check_recovery(rig: &Rig) {
+    assert_eq!(rig.run("echo recovered"), 0);
+    assert_eq!(rig.output.bytes(), b"recovered\n");
+}
+
+pub(super) fn interrupt_empty(rig: &Rig, job: JoinHandle<i32>) {
+    assert!(!job.is_finished());
+    assert!(rig.output.bytes().is_empty());
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    assert!(rig.output.bytes().is_empty());
+    check_recovery(rig);
+}
+
+pub(super) fn interrupt_delivery(rig: &Rig, source: &str) -> Endpoint {
+    let (reader, writer) = pipe();
+    replace_output(rig, writer);
+    let job = rig.shell.start(source).unwrap();
+    assert_eq!(read_first_byte(rig, &reader), 0xff);
+    assert!(!job.is_finished());
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    assert_eq!(rig.run("true"), 0);
+    reader
+}
+
+pub(super) fn read_first_byte(rig: &Rig, reader: &Endpoint) -> u8 {
+    let mut byte = [0];
+    for _ in 0..100_000 {
+        rig.ex.drive(1);
+        if reader.read(&mut byte).now_or_never() == Some(Ok(1)) {
+            return byte[0];
+        }
+    }
+    panic!("expected a streamed printf byte");
+}
+
+pub(super) fn check_chunks(
+    rig: &Rig,
+    records: &Rc<RefCell<Vec<Vec<u8>>>>,
+    source: &str,
+    lengths: &[usize],
+) {
+    records.borrow_mut().clear();
+    assert_eq!(rig.run(source), 0);
+    assert_eq!(
+        records.borrow().iter().map(Vec::len).collect::<Vec<_>>(),
+        lengths
+    );
 }
 
 fn quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
-fn check_bytes(source: &str, expected: &[u8]) {
+pub(super) fn check_bytes(source: &str, expected: &[u8]) {
+    check_status_bytes(source, expected, 0);
+}
+
+pub(super) fn check_status_bytes(source: &str, expected: &[u8], status: i32) {
     let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run(source), 0, "{source}");
+    assert_eq!(rig.run(source), status, "{source}");
     assert_eq!(rig.output.bytes(), expected, "{source}");
     assert!(rig.errors.bytes().is_empty(), "{source}");
 }
@@ -126,8 +198,7 @@ fn printf_missing_hex_digits_are_diagnostics_not_command_failure() {
 #[test]
 fn printf_unsupported_conversions_do_not_become_supported_by_escape_decoding() {
     for source in [
-        r"printf 'prefix%q' x",
-        r"printf 'prefix%08s' x",
+        r"printf 'prefix%08f' x",
         r"printf 'prefix%z' x",
         r"printf 'prefix%'",
     ] {
@@ -136,7 +207,6 @@ fn printf_unsupported_conversions_do_not_become_supported_by_escape_decoding() {
         assert_eq!(rig.run("echo recovered"), 0);
         assert!(rig.output.bytes().ends_with(b"recovered\n"));
     }
-    // An escaped percent is literal, not a conversion introduced by decoding.
     check_bytes(r"printf '\045s' unused", b"%s");
 }
 
@@ -147,17 +217,12 @@ fn printf_repeated_output_is_admitted_before_writing_and_session_recovers() {
         ..Limits::default()
     });
     let source = format!("printf '{}%s' a b c d", "x".repeat(300));
-    assert_eq!(rig.run(&source), 2);
-    assert!(rig.output.bytes().is_empty());
-    assert_eq!(rig.run("echo recovered"), 0);
-    assert_eq!(rig.output.bytes(), b"recovered\n");
+    assert_recovery(&rig, &source, 2);
 }
 
 #[test]
 fn printf_cancellation_during_admission_outputs_no_fabricated_success() {
     let rig = Rig::new(Limits::default());
-    // Small expansion, but 300,300 admitted output bytes. Give expansion ample
-    // turns to finish, then interrupt the much longer repeated-format preflight.
     let source = format!(
         "started=yes; printf '{}%s' {}; echo bad",
         "x".repeat(1000),
@@ -168,13 +233,7 @@ fn printf_cancellation_during_admission_outputs_no_fabricated_success() {
     for _ in 0..500 {
         rig.ex.drive(1);
     }
-    assert!(!job.is_finished());
-    assert!(rig.output.bytes().is_empty());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert!(rig.output.bytes().is_empty());
-    assert_eq!(rig.run("echo recovered"), 0);
-    assert_eq!(rig.output.bytes(), b"recovered\n");
+    interrupt_empty(&rig, job);
 }
 
 #[test]
@@ -296,32 +355,10 @@ fn printf_large_binary_payload_stays_bounded_and_byte_exact() {
 #[test]
 fn printf_delivery_cancellation_preserves_only_real_streamed_prefix() {
     let rig = Rig::new(Limits::default());
-    let (reader, writer) = shell_engine::io::pipe();
-    let (errors, _) = capture(4096);
-    let mut fds = FdTable::default();
-    fds.insert(0, Endpoint::null());
-    fds.insert(1, writer);
-    fds.insert(2, errors);
-    rig.shell.set_descriptors(fds).unwrap();
-    let job = rig
-        .shell
-        .start(&format!(
-            "printf '%b' '{}'; echo bad",
-            r"\377".repeat(12_000)
-        ))
-        .unwrap();
-    let mut first = [0; 1];
-    for _ in 0..100_000 {
-        rig.ex.drive(1);
-        if reader.read(&mut first).now_or_never() == Some(Ok(1)) {
-            break;
-        }
-    }
-    assert_eq!(first, [0xff]);
-    assert!(!job.is_finished());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert_eq!(rig.run("true"), 0);
+    interrupt_delivery(
+        &rig,
+        &format!("printf '%b' '{}'; echo bad", r"\377".repeat(12_000)),
+    );
 }
 
 #[test]
@@ -532,16 +569,21 @@ fn concurrent_printf_writers_on_one_engine_pipe_keep_each_marker_whole() {
 
 #[test]
 fn printf_cancellation_during_failed_diagnostic_prefix_flush_wins_status() {
+    assert_diagnostic_backpressure_cancellation(r"printf 'prefixA\xZ' 2>&-", 1);
+}
+
+pub(super) fn assert_diagnostic_backpressure_cancellation(source: &str, fd: u32) {
     let rig = Rig::new(Limits::default());
     let (reader, writer) = pipe();
     let filler = vec![b'!'; shell_engine::io::PIPE_CAPACITY];
     assert_eq!(writer.write(&filler).now_or_never(), Some(Ok(filler.len())));
     let mut fds = FdTable::default();
     fds.insert(0, Endpoint::null());
-    fds.insert(1, writer);
+    fds.insert(1, Endpoint::null());
     fds.insert(2, Endpoint::null());
+    fds.insert(fd, writer);
     rig.shell.set_descriptors(fds).unwrap();
-    let job = rig.shell.start(r"printf 'prefixA\xZ' 2>&-").unwrap();
+    let job = rig.shell.start(source).unwrap();
     let mut parked = false;
     for _ in 0..100_000 {
         let turn = rig.ex.drive(1);
@@ -566,4 +608,68 @@ fn printf_cancellation_during_failed_diagnostic_prefix_flush_wins_status() {
     let mut byte = [0];
     assert!(reader.read(&mut byte).now_or_never().is_none());
     assert_eq!(rig.run("true"), 0);
+}
+
+pub(super) fn assert_warning_admission(source: &str) {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 1024,
+        ..Limits::default()
+    });
+    assert_recovery(&rig, source, 2);
+    assert!(
+        !rig.errors
+            .bytes()
+            .windows(b"invalid number".len())
+            .any(|bytes| bytes == b"invalid number")
+    );
+}
+
+pub(super) fn assert_admission_cancellation(source: &str) {
+    let rig = Rig::new(Limits::default());
+    let job = rig.shell.start(source).unwrap();
+    rig.drive_until_variable("started", "yes");
+    for _ in 0..500 {
+        rig.ex.drive(1);
+    }
+    interrupt_empty(&rig, job);
+}
+
+pub(super) fn assert_field_overflow(field: &str, values: &str, warnings: &str) {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run(&format!("printf 'prefix%{field}%bBAD' {values} '\\c'")),
+        1
+    );
+    assert_eq!(rig.output.bytes(), b"prefix");
+    assert_eq!(
+        rig.errors.bytes(),
+        format!("{warnings}/usr/bin/bash: printf: Value too large for defined data type\n")
+            .as_bytes()
+    );
+}
+
+pub(super) fn assert_pipe_delivery(source: &str, first: u8, padding: u8) {
+    for cancel in [true, false] {
+        let rig = Rig::new(Limits::default());
+        let (reader, writer) = pipe();
+        replace_output(&rig, writer);
+        let job = rig.shell.start(source).unwrap();
+        assert_eq!(read_first_byte(&rig, &reader), first);
+        assert!(!job.is_finished());
+        if !cancel {
+            drop(reader);
+            assert_eq!(rig.finish(job), 141);
+            continue;
+        }
+        rig.shell.interrupt();
+        assert_eq!(rig.finish(job), 130);
+        let mut remaining = vec![0; shell_engine::io::PIPE_CAPACITY];
+        let Some(Ok(length)) = reader.read(&mut remaining).now_or_never() else {
+            panic!("expected already-written printf padding");
+        };
+        assert!(length > 0);
+        assert!(remaining[..length].iter().all(|byte| *byte == padding));
+        assert!(reader.read(&mut [0]).now_or_never().is_none());
+        assert_eq!(rig.run("true"), 0);
+    }
 }

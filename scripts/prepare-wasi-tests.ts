@@ -1,37 +1,33 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdirSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { wasiBuildEnvironment } from "./wasi-build.ts";
 
 export const wasiTestTargets = [
-  [
-    "-p",
-    "shell-parser",
-    "--lib",
-    "--test",
-    "api",
-    "--test",
-    "conditional",
-    "--test",
-    "command_print",
-  ],
-  [
-    "-p",
-    "shell-engine",
-    "--lib",
-    "--test",
-    "streaming",
-    "--test",
-    "terminal_display",
-    "--test",
-    "words",
-  ],
+  { package: "shell-parser", names: ["shell_parser", "api", "conditional", "command_print"] },
+  {
+    package: "shell-engine",
+    names: ["shell_engine", "streaming", "terminal_display", "words", "capabilities"],
+  },
+  { package: "shell-utilities", names: ["streaming"] },
 ];
 
-export function testExecutables(messages: string): string[] {
-  const executables: string[] = [];
+export function wasiTestArguments(target: (typeof wasiTestTargets)[number]): string[] {
+  return ["-p", target.package].concat(
+    target.names.flatMap((name) =>
+      name === target.package.replaceAll("-", "_") ? ["--lib"] : ["--test", name],
+    ),
+  );
+}
+
+export const wasiTestFiles = wasiTestTargets.flatMap((target) =>
+  target.names.map((name) => `${target.package}-${name}.wasm`),
+);
+
+export function testExecutables(messages: string, names: readonly string[]): string[] {
+  const executables = new Map<string, string>();
   for (const line of messages.split("\n").filter(Boolean)) {
     const value: unknown = JSON.parse(line);
     if (!value || typeof value !== "object" || !("reason" in value)) continue;
@@ -39,16 +35,19 @@ export function testExecutables(messages: string): string[] {
       continue;
     if (!("profile" in value) || !value.profile || typeof value.profile !== "object") continue;
     if (!("test" in value.profile) || value.profile.test !== true) continue;
-    if (typeof value.executable !== "string") throw new Error("Expected a test executable");
-    assert.ok(value.executable.endsWith(".wasm"));
-    executables.push(value.executable);
+    assert.ok("target" in value && value.target && typeof value.target === "object");
+    assert.ok("name" in value.target && typeof value.target.name === "string");
+    assert.equal(typeof value.executable, "string");
+    assert.ok(typeof value.executable === "string" && value.executable.endsWith(".wasm"));
+    assert.ok(!executables.has(value.target.name), "Duplicate WASI test executable");
+    executables.set(value.target.name, value.executable);
   }
-  assert.equal(
-    executables.length,
-    4,
-    "Each WASI package must produce its four existing test targets",
-  );
-  return executables;
+  assert.deepEqual(Array.from(executables.keys()).sort(), names.toSorted(), "WASI test selection");
+  return names.map((name) => {
+    const executable = executables.get(name);
+    assert.ok(executable);
+    return executable;
+  });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
@@ -57,7 +56,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const directory = resolve(process.argv[2]);
   mkdirSync(directory, { recursive: true });
   const env = wasiBuildEnvironment(root, process.env.CARGO_TARGET_DIR ?? ".build/shell");
-  for (const targets of wasiTestTargets) {
+  for (const target of wasiTestTargets) {
     const messages = execFileSync(
       "cargo",
       [
@@ -70,7 +69,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
         "--no-run",
         "--message-format=json",
         "-j2",
-      ].concat(targets),
+      ].concat(wasiTestArguments(target)),
       {
         cwd: root,
         env,
@@ -79,7 +78,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
         maxBuffer: 16 * 1024 * 1024,
       },
     );
-    for (const executable of testExecutables(messages))
-      copyFileSync(executable, resolve(directory, basename(executable)));
+    const executables = testExecutables(messages, target.names);
+    executables.forEach((executable, index) =>
+      copyFileSync(executable, resolve(directory, `${target.package}-${target.names[index]}.wasm`)),
+    );
   }
 }

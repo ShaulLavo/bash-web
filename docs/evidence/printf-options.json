@@ -1,0 +1,697 @@
+{
+  "schema": 1,
+  "status": "Measured implementation; parent owns independent reviews, hosted CI, merge and exact-main acceptance",
+  "baseRevision": "639e8e167ec0a1218297ad29f74db53891e79d0a",
+  "measuredRevision": "fe57a8981db097a3969f237050d05b88aacb6de6",
+  "revisionCorrespondence": "Native/WASI final build, final narrow controls and the single frozen production-Waffle replay use measuredRevision fe57a8981db097a3969f237050d05b88aacb6de6. The source review approved 206bae6a271a7f924e59a0bfb7452e7ec86fd8c4. Subsequent delivery changes only accepted comment spans K1, K2, R1 and R2, the official layer receipt and provenance wording. Executable, assertion and source-string bytes remain unchanged against that approved revision. measuredSourceSha256 retains original measurement hashes; sourceSha256 records delivery source hashes and is not claimed byte-identical to measured source. No rebuild or second full replay.",
+  "model": "gpt-6.1-sol",
+  "provider": "Existing cli-proxy, verified read-only; no settings/credential changes or nested agents",
+  "versions": {
+    "root": "0.0.68",
+    "engine": "0.0.38"
+  },
+  "scope": "One leading option terminator, invalid option diagnostics/status, missing format and bare -v operand. Preserve lone dash, empty format and option-looking arguments after FORMAT. No successful -v assignment, help rendering, %q/%Q, floats, parser/runtime or new dependency work.",
+  "classification": "Original local Rust observed against GNU Bash 5.3.15, no upstream implementation copied or adapted",
+  "implementation": "Borrowed Invocation enum parsed once, reused by admission/delivery. No operand scan past FORMAT. Fixed diagnostic bytes share existing admission and partial-write delivery; closed FD keeps2, cancellation130 and logical broken pipe141. Formatter, signed limits and 4096-byte output buffer unchanged.",
+  "behaviorOracle": {
+    "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "executable": "/usr/bin/bash",
+    "sha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5"
+  },
+  "changedBaselineMemberships": 10,
+  "frozenDelta": {
+    "ok": true,
+    "corpora": {
+      "oils": {
+        "before": 1003,
+        "after": 1006,
+        "gained": [
+          "oils:builtin-printf:76",
+          "oils:builtin-printf:156",
+          "oils:builtin-printf:162"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "brush-suite": {
+        "before": 986,
+        "after": 989,
+        "gained": [
+          "brush-suite:builtins/printf:9",
+          "brush-suite:builtins/printf:12",
+          "brush-suite:builtins/printf:13"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "bashkit-suite": {
+        "before": 1384,
+        "after": 1388,
+        "gained": [
+          "bashkit-suite:bashbox-declare:354",
+          "bashkit-suite:bashbox-declare:371",
+          "bashkit-suite:bashbox-printf:160",
+          "bashkit-suite:printf:301"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      }
+    }
+  },
+  "frozenIdentity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "sourcePins": {
+    "oils": {
+      "revision": "bdc8364c253ce921e033bbc2399ea2ce0be41825"
+    },
+    "brush-suite": {
+      "revision": "4cfba081f2f8bcda8150010a57203d020f14f0cc"
+    },
+    "bashkit-suite": {
+      "revision": "491c3281f668b76d64b15210b8f5d7bf97244be0"
+    }
+  },
+  "waffle": {
+    "repository": "https://github.com/ShaulLavo/waffle",
+    "revision": "33ece68f9f484d99b8a57a675de71d847e248051",
+    "version": "0.0.50"
+  },
+  "frozenProof": {
+    "records": 9221,
+    "scored": 5792,
+    "skipped": 3429,
+    "singleCompleteRealWaffleReplay": true,
+    "jobs": 1,
+    "record": 0,
+    "replayExit": 1,
+    "replayExitMeaning": "Complete result saved. Strict old baseline rejects new passes; only gained rows and derived counts updated, then unchanged strict comparator passes offline on that saved replay. No second replay.",
+    "unchangedOtherBaselineRecords": 9211,
+    "retainedHistoricalFailPayloadDifferences": [
+      "oils:unicode:125",
+      "oils:unicode:150",
+      "oils:var-op-slice:107",
+      "oils:var-op-slice:124",
+      "oils:array-assoc:540",
+      "oils:builtin-printf:38",
+      "oils:builtin-printf:115",
+      "oils:builtin-printf:910",
+      "oils:builtin-read:100",
+      "brush-suite:builtins/command:35",
+      "brush-suite:builtins/echo:5",
+      "brush-suite:builtins/echo:6",
+      "brush-suite:builtins/printf:3",
+      "brush-suite:builtins/printf:6",
+      "brush-suite:builtins/printf:7",
+      "brush-suite:builtins/printf:47",
+      "brush-suite:builtins/printf:63",
+      "brush-suite:builtins/printf:73",
+      "brush-suite:builtins/printf:74",
+      "brush-suite:builtins/read:54",
+      "brush-suite:nameref:47",
+      "brush-suite:prompt:14",
+      "bashkit-suite:background:1",
+      "bashkit-suite:bashbox-declare:31",
+      "bashkit-suite:bashbox-declare:335",
+      "bashkit-suite:bashbox-declare:345",
+      "bashkit-suite:bashbox-declare:364",
+      "bashkit-suite:bashbox-printf:111",
+      "bashkit-suite:bashbox-printf:175",
+      "bashkit-suite:bashbox-read-names:5",
+      "bashkit-suite:heredoc-read-escapes:36",
+      "bashkit-suite:printf:194",
+      "bashkit-suite:printf:201",
+      "bashkit-suite:printf:273",
+      "bashkit-suite:printf:293",
+      "bashkit-suite:printf:311"
+    ],
+    "noWholeOutputEqualityClaim": true,
+    "originalDeadlinesScoringExclusionsAndGates": true
+  },
+  "comparison": "Frozen scoring uses raw stdout bytes and status. Targeted diagnostics separately remove only Bash source-line annotations; merged raw differences stay mismatches, with separately labeled normalized comparisons. No scorer edits.",
+  "targeted": [
+    {
+      "mode": "native",
+      "controls": 70,
+      "beforeRawStdoutStatus": 10,
+      "afterRawStdoutStatus": 64,
+      "afterSourceLineOnlyDiagnostics": 52,
+      "directCandidates": [
+        {
+          "id": "oils:builtin-printf:156",
+          "outputStatus": true,
+          "diagnostics": true
+        },
+        {
+          "id": "oils:builtin-printf:162",
+          "outputStatus": true,
+          "diagnostics": true
+        },
+        {
+          "id": "brush-suite:builtins/printf:9",
+          "outputStatus": true,
+          "diagnostics": true
+        },
+        {
+          "id": "brush-suite:builtins/printf:12",
+          "outputStatus": true,
+          "diagnostics": true
+        },
+        {
+          "id": "brush-suite:builtins/printf:13",
+          "outputStatus": true,
+          "diagnostics": true
+        },
+        {
+          "id": "brush-suite:builtins/printf:74",
+          "outputStatus": false,
+          "diagnostics": true
+        },
+        {
+          "id": "bashkit-suite:bashbox-declare:371",
+          "outputStatus": true,
+          "diagnostics": true
+        },
+        {
+          "id": "bashkit-suite:bashbox-printf:160",
+          "outputStatus": true,
+          "diagnostics": true
+        },
+        {
+          "id": "bashkit-suite:printf:301",
+          "outputStatus": true,
+          "diagnostics": true
+        }
+      ],
+      "remainingDifferences": [
+        {
+          "locale": "C",
+          "script": "printf '-vv'",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf '-v' ''",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf '-v' 'x'",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf '-vx'",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf '-v' '--'",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf '-vx' '--'",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf '--help'",
+          "outputStatus": false,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Help rendering explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf '-v=' '%s' 'x'",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf '-v' '-x' '%s' 'x'",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf -x 2>&1",
+          "outputStatus": false,
+          "diagnostics": true,
+          "mergedNormalized": true,
+          "reason": "Merged source-line annotation only; raw stdout mismatch retained"
+        },
+        {
+          "locale": "C",
+          "script": "printf -v 2>&1",
+          "outputStatus": false,
+          "diagnostics": true,
+          "mergedNormalized": true,
+          "reason": "Merged source-line annotation only; raw stdout mismatch retained"
+        },
+        {
+          "locale": "C",
+          "script": "printf -- ok 1>&-",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Existing missing Bash write-error diagnostic; output/status match"
+        },
+        {
+          "locale": "C",
+          "script": "printf -- '%d' nope 2>&1",
+          "outputStatus": false,
+          "diagnostics": true,
+          "mergedNormalized": true,
+          "reason": "Merged source-line annotation only; raw stdout mismatch retained"
+        },
+        {
+          "locale": "C",
+          "script": "printf -v x --",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf -vx --",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf -vx -- -x",
+          "outputStatus": false,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf -vx -x",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf -vx -v",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf -v x -x",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf -v x",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf -vx",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf --help >/dev/null 2>&1; echo \"rc=$?\"\n[[ -n $(printf --help 2>/dev/null) ]] && echo \"help on stdout\"\nprintf -v x --help >/dev/null 2>&1; echo \"after -v: rc=$?\"\nprintf -- --help; echo \" after --: rc=$?\"\n",
+          "id": "brush-suite:builtins/printf:74",
+          "outputStatus": false,
+          "diagnostics": true,
+          "mergedNormalized": false,
+          "reason": "Help rendering explicitly unsupported"
+        }
+      ]
+    },
+    {
+      "mode": "waffle",
+      "controls": 70,
+      "beforeRawStdoutStatus": 10,
+      "afterRawStdoutStatus": 64,
+      "afterSourceLineOnlyDiagnostics": 52,
+      "directCandidates": [
+        {
+          "id": "oils:builtin-printf:156",
+          "outputStatus": true,
+          "diagnostics": true
+        },
+        {
+          "id": "oils:builtin-printf:162",
+          "outputStatus": true,
+          "diagnostics": true
+        },
+        {
+          "id": "brush-suite:builtins/printf:9",
+          "outputStatus": true,
+          "diagnostics": true
+        },
+        {
+          "id": "brush-suite:builtins/printf:12",
+          "outputStatus": true,
+          "diagnostics": true
+        },
+        {
+          "id": "brush-suite:builtins/printf:13",
+          "outputStatus": true,
+          "diagnostics": true
+        },
+        {
+          "id": "brush-suite:builtins/printf:74",
+          "outputStatus": false,
+          "diagnostics": true
+        },
+        {
+          "id": "bashkit-suite:bashbox-declare:371",
+          "outputStatus": true,
+          "diagnostics": true
+        },
+        {
+          "id": "bashkit-suite:bashbox-printf:160",
+          "outputStatus": true,
+          "diagnostics": true
+        },
+        {
+          "id": "bashkit-suite:printf:301",
+          "outputStatus": true,
+          "diagnostics": true
+        }
+      ],
+      "remainingDifferences": [
+        {
+          "locale": "C",
+          "script": "printf '-vv'",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf '-v' ''",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf '-v' 'x'",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf '-vx'",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf '-v' '--'",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf '-vx' '--'",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf '--help'",
+          "outputStatus": false,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Help rendering explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf '-v=' '%s' 'x'",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf '-v' '-x' '%s' 'x'",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf -x 2>&1",
+          "outputStatus": false,
+          "diagnostics": true,
+          "mergedNormalized": true,
+          "reason": "Merged source-line annotation only; raw stdout mismatch retained"
+        },
+        {
+          "locale": "C",
+          "script": "printf -v 2>&1",
+          "outputStatus": false,
+          "diagnostics": true,
+          "mergedNormalized": true,
+          "reason": "Merged source-line annotation only; raw stdout mismatch retained"
+        },
+        {
+          "locale": "C",
+          "script": "printf -- ok 1>&-",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Existing missing Bash write-error diagnostic; output/status match"
+        },
+        {
+          "locale": "C",
+          "script": "printf -- '%d' nope 2>&1",
+          "outputStatus": false,
+          "diagnostics": true,
+          "mergedNormalized": true,
+          "reason": "Merged source-line annotation only; raw stdout mismatch retained"
+        },
+        {
+          "locale": "C",
+          "script": "printf -v x --",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf -vx --",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf -vx -- -x",
+          "outputStatus": false,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf -vx -x",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf -vx -v",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf -v x -x",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf -v x",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf -vx",
+          "outputStatus": true,
+          "diagnostics": false,
+          "mergedNormalized": false,
+          "reason": "Supplied -v operand/assignment path explicitly unsupported"
+        },
+        {
+          "locale": "C",
+          "script": "printf --help >/dev/null 2>&1; echo \"rc=$?\"\n[[ -n $(printf --help 2>/dev/null) ]] && echo \"help on stdout\"\nprintf -v x --help >/dev/null 2>&1; echo \"after -v: rc=$?\"\nprintf -- --help; echo \" after --: rc=$?\"\n",
+          "id": "brush-suite:builtins/printf:74",
+          "outputStatus": false,
+          "diagnostics": true,
+          "mergedNormalized": false,
+          "reason": "Help rendering explicitly unsupported"
+        }
+      ]
+    }
+  ],
+  "statusOnlyAssignmentGains": [
+    "oils:builtin-printf:76",
+    "bashkit-suite:bashbox-declare:354"
+  ],
+  "statusOnlyAssignmentCaveat": "These negative -v records gain frozen stdout/status memberships because explicit unsupported-operation rejection returns2. Their diagnostics differ from Bash; no variable-name validation or assignment support is claimed.",
+  "standalonePipeLimitation": "Exec-gated wrapper closes OS stderr reader before starting printf -x. Final CLI still returns2, Bash dies with SIGPIPE. Earlier read-in-target probe was not a reliable native gate because standalone stdin is null; it is retained only as historical evidence. compat.rs drives jobs before draining internal pipes and interrupts on host write failure after possible completion. Engine logical reader-closed test returns141 on native/WASI; no end-to-end native adapter fix is claimed. Raw probes and reproducer retained in report, follow-up in owning plan.",
+  "tests": {
+    "initialSemanticRed": 12,
+    "initialLogicalBrokenPipeRed": 1,
+    "nativeWorkspaceReportedPasses": 1249,
+    "focusedOptions": 14,
+    "nativeWorkspaceWords": 639,
+    "wasiPrintf": 88,
+    "wasiEcho": 10,
+    "wasiPrinterResource": 2,
+    "printfFixturesPerNativeAndWaffle": 1122,
+    "echoFixturesPerNativeAndWaffle": 492,
+    "printfGeneratorTests": 9,
+    "ioControlRows": 26,
+    "admissionRows": 28
+  },
+  "localChecks": [
+    "Native workspace tests and native/WASI all-target Clippy -D warnings, Cargo j2",
+    "WASI printf/echo/private printer tests; native/WASI release builds and guest verifiers",
+    "Cargo fmt, parser audit; unchanged exact/structural duplicate gates",
+    "Native/production Waffle before/after raw byte/status, merged/closed FD, partial write and admission controls",
+    "Unchanged printf and echo replays, both targets",
+    "format:check, lint, typecheck, check:unused, check:capabilities, check:layers",
+    "Layer graph zero violations, 42 production and 28 test-only edges; policy unchanged",
+    "Single saved frozen replay and strict offline membership proof; source/artifact and immutable input hash checks"
+  ],
+  "setupCorrections": [
+    "One old grep integration test producer used invalid printf -needle; changed producer to printf --, same grep assertions and no frozen fixture change",
+    "Initial candidate duplicated printf/echo setup. Parsing once into Invocation removed the duplicate without echo refactor or gate edits",
+    "Initial typecheck needed normal pinned sources:browser/build:worker setup; no type suppression or dependency edits",
+    "Unpushed semantic checkpoint had stale layer receipt. Official scanner refreshed only hash/line positions; unchanged counts, policy and violation memberships independently asserted, then standard layer gate passed"
+  ],
+  "notRun": [
+    "Browser suites",
+    "Other fuzz families",
+    "Whole quality command and separate harness test commands",
+    "Hosted CI",
+    "Independent source/comment reviews",
+    "Exact-main checks"
+  ],
+  "measuredSourceSha256": {
+    "shell/engine/src/builtins/printf.rs": "a45b44396be2210e7a05efc82f958b40c297e6a2ec7c550959cfe29dc135d770",
+    "shell/engine/src/builtins/printf/fields.rs": "cdd5a28c3d979411d168ffa55fa3b7cbf204d3cb00bd864195dd7b367aba8fe0",
+    "shell/engine/tests/words.rs": "0a058b2d9150d8208f6595cea87475884990288817e9b0181237907f3772cc9f",
+    "shell/engine/tests/words/printf_options.rs": "4d2d7698eb77da55a8b27e3beb1f05f24760ecd66cc25663e03e40e0553dc1dc",
+    "shell/utilities/tests/streaming.rs": "023f6350c3b7f12e0fa34635e4cc755a7dac4ca9b4587f3f77c32d516126f81a"
+  },
+  "sourceSha256": {
+    "shell/engine/src/builtins/printf.rs": "5fcc86a332701bc0eed10aca6c9e3000b69c3b324976f2cc2908e235fdc9e8c1",
+    "shell/engine/src/builtins/printf/fields.rs": "cdd5a28c3d979411d168ffa55fa3b7cbf204d3cb00bd864195dd7b367aba8fe0",
+    "shell/engine/tests/words.rs": "0a058b2d9150d8208f6595cea87475884990288817e9b0181237907f3772cc9f",
+    "shell/engine/tests/words/printf_options.rs": "4d2d7698eb77da55a8b27e3beb1f05f24760ecd66cc25663e03e40e0553dc1dc",
+    "shell/utilities/tests/streaming.rs": "87f0aa2f19b314e44d7cc260ed566eb42ed7a56e1a40fd5610be73bc47e03ab8"
+  },
+  "artifactSha256": {
+    "/work/tmp/bash-web-printf-options/target/release/shell-cli": "053ab9614713792ef885833cb1bbb3b928c2842688537fe69c77921a0df31c94",
+    "/work/tmp/bash-web-printf-options/target/wasm32-wasip1/release/shell-cli.wasm": "2612ae115902840e7de2a94cc04cebe2d15a768a0f4800985fb83e036d71c217",
+    "/work/tmp/bash-web-printf-options/target/wasm32-wasip1/release/shell-runtime.wasm": "ebab308bce3813baf12cf869b336784fcc353b8e1eb1c89e35940ebb326e3cbc"
+  },
+  "immutableInputSha256": {
+    "scripts/bash-compat.mjs": "859024733dd17e85bc296d78d209404dfd1c41aff56417c742ea11bf9893ab39",
+    "scripts/shell-scoreboard.mjs": "15f548dc88f2dd9a8639fbc3091466b131d04339de70a6569eef5df4ab436807",
+    "scripts/waffle-compat.ts": "deb4356e85cec0ab3b915970ad228273c3012f7be6297f1a20667b205c7abb96",
+    "docs/evidence/own-shell-oracle.json": "bb13fdf4319ae0af179457ff4b3e3c0db57002902f07eb37fde02ff7a6636eaa",
+    "docs/evidence/bash-compatibility.json": "65da50f1c7ce548fb0ca72ce1c10f3dd67a4d608f565f1bb30d5af374c45266f",
+    "quality/duplicates-exact.json": "435a57553fb04ae59adb5f12fe635042e9183fd125b3bd97a32ad99817c7dc33",
+    "quality/duplicates-rust-structural.json": "c5a2a8ee3fb1eb73f963d19d0ce23226b7a4b19a443452757beaacc75aac0965",
+    "scripts/fixtures/shell-printf-seed-1.json": "b68a255fd1c48247c198221167a032d8d970ee7f6d028f03d08ca18df1113d34",
+    "scripts/fixtures/shell-printf-seed-42.json": "a4184f7afa4bc94ea36e2663cf762492d996b6b935c057e2822b92daf169b77c",
+    "scripts/fixtures/shell-echo.json": "a41db7b0cca14d5c65aa1f3851849db79c0781ec489483d43c4fc0ebc0094d3c",
+    "sources.lock.json": "c0301211dcc9b7b83795b521c02c2fa88c2149e8d89421d50c0f828076e0eaec",
+    "bun.lock": "d59888f6c1eaa1f1b99a69e68322af22bd76fba28c58d3d872c5dbe0479f56da"
+  },
+  "baselineSha256": "9b2ac243ec2f809d7055034c153d8172f97459f0ed4e3b6bdb7852a32ed79ab4",
+  "frozenResultSha256": "54c2e5fbacf95271cd928fc6bd323fd3890b6806af27d4e71c10eaa5f2b77248",
+  "resources": {
+    "host": "PC canonical shared heavy runner, owner-reservation and mounted /work checked",
+    "retained": [
+      "/work/tmp/bash-web-printf-options",
+      "/work/worktrees/bash-web/climb-printf-options"
+    ],
+    "consumer": "Parent hill-climb coordinator and independent reviewer",
+    "cleanupOwner": "Parent hill-climb coordinator",
+    "sizes": "/work/reports/bash-web/hill-climb/printf-options/retained-sizes.json",
+    "cleanup": "/work/reports/bash-web/hill-climb/printf-options/remove-after-review.sh",
+    "removalCondition": "After review/merge/exact-main consumers stop. Guard checks exact clean head and no live consumers, then removes only owned outputs and uses git worktree remove. Evidence reports remain."
+  },
+  "reportDirectory": "/work/reports/bash-web/hill-climb/printf-options"
+}

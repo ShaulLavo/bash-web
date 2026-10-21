@@ -1,73 +1,84 @@
 # CI inputs and job ownership
 
-`Shell` runs on pull requests and pushes to `main`. A branch push does not start a
-second copy of the pull-request checks. A newer run cancels the superseded run
-for the same pull request or `main`.
+`Shell` runs on pull requests and pushes to `main`, without a second branch-push
+run. A newer run supersedes the older run for that pull request or `main`.
 
-| Job                       | Work it owns                                                                                                                      |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `prepare`                 | One locked npm install, terminal-source fetch and JavaScript worker build                                                         |
-| `layers`                  | Layer scanner tests, committed layer evidence and scanner types                                                                   |
-| `quality`                 | Package checks, JS formatting/lint/types, unused code, duplicate scans, gate probes and build-tool unit tests                     |
-| `native`                  | Rust formatting, host/WASI all-target Clippy, dependency analysis, native tests, CLI and guest builds, compiled WASI test targets |
-| `wasi`                    | The same eight WASI test executables, smoke tests, scanner proof and compressed-size limit                                        |
-| `fuzz`                    | Fuzzer unit tests and every frozen differential replay                                                                            |
-| `own-shell-compatibility` | Scoreboard unit tests and the frozen compatibility replay                                                                         |
-| `browser`                 | One frontend bundle, terminal unit tests and the complete Chromium/Firefox suite using two workers                                |
+| Job                       | Work it owns                                                                                                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prepare`                 | One locked npm install, terminal-source fetch and worker build                                                                                                                              |
+| `layers`                  | Scanner tests, immutable layer baseline and scanner types                                                                                                                                   |
+| `quality`                 | Package, JS format/lint/types, unused code, duplicates, failure probes, complete guest-build tests/types and CI helper tests/types                                                          |
+| `native`                  | Parser provenance, shell/guest Rust fmt, host/WASI all-target Clippy, machete, native workspace tests, both CLIs, core/utility/fixture guests, ten compiled WASI tests and capability proof |
+| `wasi`                    | All ten WASI test executables, smoke/stdio/helper controls, scanner proof, core Brotli ceiling and runtime/utility size reports                                                             |
+| `fuzz`                    | Every existing generator test and frozen native differential replay, including echo                                                                                                         |
+| `own-shell-compatibility` | Diagnostic observer tests, complete scoreboard tests, real-Waffle echo and the unchanged wrapped frozen replay                                                                              |
+| `browser`                 | Frontend assets, terminal tests and the complete Chromium/Firefox suite with the checked-in worker count                                                                                    |
+| `shell`                   | Always-running aggregate; any failed, skipped or cancelled dependency fails                                                                                                                 |
 
-Consumers download this run's dependency/worker archive and checked native
-artifacts. They never install or compile those inputs again. Tar preserves npm
-symlinks and executable modes. Native artifacts include checksums, their native
-input fingerprint and the original build commit.
+The path-filtered `printf-darwin` workflow remains a separate blocking macOS
+gate. Linux results do not replace it. Its quoting selection and locale setup
+are unchanged.
 
-## Cache keys
+## Same-run artifacts
 
-`scripts/ci-inputs.ts` fingerprints committed Git objects, not timestamps.
-Native inputs include the shell and fixture source trees, Cargo manifests and
-locks, Rust toolchain/configuration, native build/test helpers, CI configuration,
-the source lock, the Waffle pin and native package commands. Prose outside the
-native trees and browser-only changes do not change that key. Its tests cover source, fixture, toolchain and helper changes.
+Consumers restore this run's JavaScript archive, preserving npm symlinks and
+executable modes. The native producer supplies `shell-engine`, `shell-cli`,
+`shell-engine.wasm`, `shell-runtime.wasm`, `argv-py.wasm`, `printenv-py.wasm`,
+`cat/grep/mkdir/seq.wasm`, the browser test/spin guests and every WASI test.
+Parser has four test executables, engine has five including capabilities, and
+utilities has one streaming executable. Stable package-qualified filenames
+prevent the two streaming tests from overwriting each other.
 
-An exact native-cache hit reuses the native checks and builds that passed for
-those inputs. A miss provisions Rust and the SDK and runs them before saving.
-The separate WASI success cache saves only after execution, smoke and size checks
-pass. A failed WASI check cannot create a success receipt. Neither cache uses a
-prefix fallback. Rust compilation targets may restore dependency caches, but
-those caches never substitute for a check result.
+`scripts/ci-artifacts.ts` packs and stages an explicit file inventory. A consumer
+checks the exact current Git SHA, input fingerprint, all file hashes and exact
+WASI test selection before staging. The existing utility receipt additionally
+checks exact source, each guest hash and the patched-libc/memory contract. Missing,
+changed or wrong-source artifacts fail; no earlier build is relabelled.
+The existing `utility-guests-<sha>` and `shell-cli-<sha>` artifacts remain available
+with their original source/hash receipt contracts.
 
-Dependency keys use the complete npm lock after removing only the root package
-version. Dependency changes still invalidate the cache. Root patch bumps do not. Both installed packages and npm downloads use this
-normalized key. If either exact cache is missing, the one install also fills the
-download cache before saving it.
-The workflow also caches npm downloads, the pinned Rust toolchain, both Cargo
-targets, patched libc, SDK 34.0, cargo-machete 0.9.2 and Playwright browsers.
-SDK keys include the verified archive checksum. Playwright keys use its browser
-revision manifest. Downloaded upstream code is outside our lint roots.
+Only the producer compiles shared guests and WASI tests. The TypeScript WASI
+runner's `--prebuilt` mode executes those tests and keeps the normal smoke,
+stdio, helper, scanner and size assertions. Its no-argument local mode still
+builds and runs the same targets. Local `quality` and `build:browser` remain
+complete; CI uses their nonduplicating JS/assets parts.
 
-## Reproduce the measurements
+## Caches and input closure
 
-For each recorded run, read the job and step timestamps and its full cache logs:
+There is no cross-commit native-binary or WASI successful-result cache. Every
+run executes its native/WASI gates. This avoids conflicting with source-exact
+utility receipts. Caches accelerate dependencies and compilation, never replace
+a successful check.
+
+Dependency keys hash the complete npm lock after removing only the root package
+version in its two locations. Dependency changes invalidate both installed
+packages and npm downloads; root patch bumps do not. If either exact cache is
+missing, the one install also fills downloads. Other caches cover the pinned
+Rust toolchain, both Cargo target directories, patched libc, SDK 34.0,
+cargo-machete 0.9.2 and Playwright browsers. SDK keys include the archive checksum.
+
+Native input receipts cover the entire shell, guest and scripts trees, CI
+configuration, source lock, Rust toolchain/configuration, all package recipes,
+the Waffle pin and normalized dependency lock. Build, receipt and gate helper
+changes therefore invalidate the receipt. Exact source SHA remains a separate,
+stronger requirement even when these inputs are unchanged.
+
+## Verification and timing evidence
+
+`npm run test:ci` checks input invalidation, exact ten-target selection,
+pack/stage completeness, source/input/hash mismatches, gate ownership and actual
+aggregate rejection of failed/skipped/cancelled jobs. `npm run typecheck:ci`
+checks these helpers. Hosted publication must still validate complete
+native/WASI/fuzz/browser/frozen compatibility and actual cache restores.
+
+The October 18 measurements describe the original result-reuse design, not this
+repair. Warm elapsed time fell from 386 to 307 seconds; full-native elapsed time
+rose from 381 to 434 seconds. They are single observations, not averages or an
+across-the-board speedup. Removing successful-result reuse means its old warm
+speedup is not a claim about this workflow. Inspect each new run's job timestamps
+and cache logs before claiming a current saving:
 
 ```sh
 gh api repos/ShaulLavo/bash-web/actions/runs/RUN_ID/jobs
 gh run view RUN_ID -R ShaulLavo/bash-web --log
 ```
-
-Use a browser/prose-only commit to check exact native-cache reuse. Then change a
-Rust source or test input to check invalidation and the warm toolchain/SDK/Cargo
-caches. Do not compare a first cache fill with a warm baseline without identifying
-that difference. GitHub-hosted runner timings vary.
-
-Elapsed time spans the first job start to the last job finish. Summed job time
-adds every job duration. Shared producers can reduce summed job time while
-lengthening the critical path of a native change.
-
-The existing `shell` check aggregates every job with `always()`. A failed,
-cancelled or skipped prerequisite fails this check instead of turning a required
-check into a successful skip. Its regression test checks the complete dependency
-list and failure condition.
-
-The native cache is also checked with a temporary Rust fixture-source change.
-The probe is reverted after its run. A following documentation-only commit checks
-that the previously checked native input set restores without any compilation.
-Run links, cache sizes and job timings are recorded in the CI change's PR.

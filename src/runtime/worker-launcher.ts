@@ -1,13 +1,14 @@
 // Original shared-terminal policy, adapted from brush-web src/runtime/browser-runtime.ts
 // and src/runtime/subprocess-broker.ts at a2a4e96. Waffle owns worker launch, admission,
 // descriptor transport, outcomes and supervision; the shell only fences its terminal ring.
-import type { ProcessService, Runtime } from "waffle";
+import type { GuestLauncher, ProcessService, Runtime } from "waffle";
 import type { WorkerLaunchOptions } from "waffle/browser/process-broker";
 import type { RuntimeWorkerRequest } from "waffle/browser/worker";
 import type { FilesystemIdentity } from "waffle/fs";
 import type { ProcessContext, ProcessHandle } from "waffle/proc/types";
 import { workerProcessDirectoryId, type WorkerProcessTransport } from "waffle/proc/worker-client";
 import { observeGuest } from "./diagnostics";
+import type { ShellWorkerRequest } from "./worker";
 import {
   attachTerminal,
   createTerminalAdmission,
@@ -129,4 +130,22 @@ export function launchTerminalWorker<T extends RuntimeWorkerRequest>(
     if (!accepted) cleanup();
     throw error;
   }
+}
+
+/** This package's cooperative Rust guests (the shell's children and installed utility
+ * programs) all start through the shell worker, which owns inherited pipe and terminal
+ * descriptors. Waffle's real bootstrap, runtime_proc and supervision stay in charge. */
+export function cooperativeGuestLauncher(runtime: Runtime, workerUrl: string): GuestLauncher {
+  return (context, service) =>
+    launchTerminalWorker<ShellWorkerRequest>(runtime, service, context, {
+      workerUrl,
+      request: {
+        module: context.module,
+        args: context.request.argv,
+        env: { ...context.request.env, PWD: context.request.cwd },
+        interruptible: context.interruptible,
+        memoryUsage: new SharedArrayBuffer(8),
+      },
+      wake() {},
+    });
 }

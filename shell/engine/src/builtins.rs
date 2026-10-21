@@ -1,19 +1,16 @@
-//! Small streaming builtins needed by the engine acceptance gate. Utilities here
-//! are original adapters except the explicitly attributed grep subset. The full
-//! utility/compatibility work is still deferred.
-mod grep;
+//! Bash builtins. External commands are installed by the embedding runtime.
 mod printf;
+mod read;
 pub(crate) mod test;
 use crate::{
     commands::{self, Builtin, Declaration},
     executor::Budget,
     expand::{Error, Work},
     interpreter::{Context, Flow, JobSelector, Outcome},
-    io::{Endpoint, FdTable, OpenOptions},
+    io::{Endpoint, FdTable},
     state::{SharedState, State, absolute},
 };
 use shell_parser::parser::{Word, WordPart};
-use std::fmt::Write as _;
 
 /// Bashkit's is_decl_keyword starts with the command's syntax, not the name
 /// produced by expansion. Quoting also prevents declaration-keyword syntax.
@@ -85,21 +82,6 @@ async fn write(fds: &FdTable, bytes: &[u8], context: &Context) -> Result<(), i32
         .await
         .map_err(|e| e.status())
 }
-async fn copy(input: Endpoint, fds: &FdTable, context: &Context) -> Result<(), i32> {
-    let mut buffer = [0u8; 8192];
-    let mut budget = Budget::default();
-    loop {
-        budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-        let n = input
-            .read_cancelled(&mut buffer, &context.cancel)
-            .await
-            .map_err(|e| e.status())?;
-        if n == 0 {
-            return Ok(());
-        }
-        write(fds, &buffer[..n], context).await?;
-    }
-}
 pub(crate) async fn run(
     builtin: Builtin,
     name: &str,
@@ -157,151 +139,9 @@ pub(crate) async fn run(
                 },
             });
         }
-        Builtin::Echo => {
-            for (index, arg) in args.iter().enumerate() {
-                if index != 0 {
-                    write(&fds, b" ", &context).await?;
-                }
-                write(&fds, arg.as_bytes(), &context).await?;
-            }
-            write(&fds, b"\n", &context).await?;
-        }
+        Builtin::Echo => printf::echo(&args, &state, &fds, &context, work).await?,
         Builtin::Printf => printf::run(&args, &state, &fds, &context, work).await?,
-        Builtin::Cat => {
-            if args.is_empty() {
-                copy(endpoint(&fds, 0)?, &fds, &context).await?;
-            } else {
-                for path in args {
-                    if let Some(input) = crate::interpreter::device_endpoint(&path, &fds) {
-                        copy(input?, &fds, &context).await?;
-                        continue;
-                    }
-                    let path = absolute(&state.borrow().cwd, &path);
-                    let options = OpenOptions::default();
-                    let input = context
-                        .cancel
-                        .run(context.fs().open(&path, &options))
-                        .await
-                        .map_err(|_| 130)?
-                        .map_err(|e| e.status())?;
-                    copy(input, &fds, &context).await?;
-                }
-            }
-        }
-        Builtin::Grep => return grep::run(args, &state, &fds, &context).await,
-        Builtin::Mkdir => {
-            let mut parents = false;
-            let mut operands = Vec::new();
-            let mut options = true;
-            for arg in args {
-                match arg.as_str() {
-                    "--" if options => options = false,
-                    "-p" if options => parents = true,
-                    s if options && s.starts_with('-') && s != "-" => return Err(2),
-                    _ => operands.push(arg),
-                }
-            }
-            if operands.is_empty() {
-                return Err(2);
-            }
-            let mut status = 0;
-            let mut budget = Budget::default();
-            for operand in operands {
-                budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-                // Empty operands must not turn into the current directory under -p.
-                let path = if operand.is_empty() {
-                    String::new()
-                } else {
-                    absolute(&state.borrow().cwd, &operand)
-                };
-                if let Err(error) = context
-                    .cancel
-                    .run(context.fs().mkdir(&path, parents))
-                    .await
-                    .map_err(|_| 130)?
-                {
-                    status = 1;
-                    if let Some(stderr) = fds.get(2) {
-                        stderr
-                            .write_all(
-                                format!("mkdir: {operand}: {error}\n").as_bytes(),
-                                &context.cancel,
-                            )
-                            .await
-                            .map_err(|error| error.status())?;
-                    }
-                }
-            }
-            return Ok(Outcome::status(status));
-        }
-        Builtin::Seq => {
-            let (start, end) = match args.as_slice() {
-                [end] => (1, end.parse::<i64>().map_err(|_| 2)?),
-                [start, end] => (
-                    start.parse::<i64>().map_err(|_| 2)?,
-                    end.parse::<i64>().map_err(|_| 2)?,
-                ),
-                _ => return Err(2),
-            };
-            let mut buffer = String::new();
-            let mut budget = Budget::default();
-            for n in start..=end {
-                budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-                writeln!(&mut buffer, "{n}").map_err(|_| 1)?;
-                if buffer.len() >= 8192 {
-                    write(&fds, buffer.as_bytes(), &context).await?;
-                    buffer.clear();
-                }
-            }
-            write(&fds, buffer.as_bytes(), &context).await?;
-        }
-        Builtin::Read => {
-            let mut fd = 0;
-            let mut name = None;
-            let mut iter = args.iter();
-            while let Some(arg) = iter.next() {
-                match arg.as_str() {
-                    "-r" => {}
-                    "-u" => fd = iter.next().ok_or(2)?.parse().map_err(|_| 2)?,
-                    s if s.starts_with('-') => return Err(2),
-                    _ => {
-                        if name.replace(arg.clone()).is_some() {
-                            return Err(2);
-                        }
-                    }
-                }
-            }
-            let input = endpoint(&fds, fd)?;
-            let mut bytes = Vec::new();
-            let mut byte = [0];
-            let mut budget = Budget::default();
-            let code = loop {
-                budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-                if input
-                    .read_cancelled(&mut byte, &context.cancel)
-                    .await
-                    .map_err(|e| e.status())?
-                    == 0
-                {
-                    break 1;
-                }
-                if byte[0] == b'\n' {
-                    break 0;
-                }
-                if bytes.len() >= context.limits().line_bytes {
-                    return Err(2);
-                }
-                bytes.push(byte[0]);
-            };
-            let name = name.unwrap_or_else(|| "REPLY".into());
-            State::admit_assignment(&state, &name, bytes.len(), &context.cancel, work)
-                .await
-                .map_err(error_status)?;
-            state
-                .borrow_mut()
-                .assign_parameter(name, String::from_utf8(bytes).map_err(|_| 2)?)?;
-            return Ok(Outcome::status(code));
-        }
+        Builtin::Read => return read::run(&args, &state, &fds, &context, work).await,
         Builtin::Declaration => {
             return declarations(name, args, &state, &fds, &context, work).await;
         }

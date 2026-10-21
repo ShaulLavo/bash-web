@@ -1515,7 +1515,7 @@ impl Drop for FunctionFrame {
     }
 }
 
-pub(crate) fn absolute(cwd: &str, path: &str) -> String {
+pub fn absolute(cwd: &str, path: &str) -> String {
     let path = if path.starts_with('/') {
         path.to_owned()
     } else {

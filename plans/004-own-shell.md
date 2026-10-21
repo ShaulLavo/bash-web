@@ -487,7 +487,7 @@ for index in 0..96 {
     assert_eq!(rig.run(&format!("v{index}=$seed")), 0);
 }
 for source in ["( : )", ": | : | :", ": & wait"] {
-    assert_eq!(rig.run(source), 0); // source-predicted existing behavior
+    assert_eq!(rig.run(source), 0);
 }
 ```
 
@@ -1161,7 +1161,7 @@ pieces are build policy, verification, frozen inputs and provenance.
 | Main compatibility runner                    | `scripts/bash-compat.mjs`, `bash-compat-worker.mjs`, `bash-compat-helpers.mjs`, `shell-scoreboard.mjs`, `shell-scoreboard-base.mjs`, `shell-scoreboard-migration.mjs`, `shell-process-group.mjs`. The entry point imports the helper, runner and scoreboard modules and starts the worker by filename; the worker imports the helpers. Preserve immutable `git show` target-baseline reads, the isolated target rebuild and original-membership proof, inherited-startup-hook exclusion, cancellation ownership and process-group draining.                                                             |
 | Oracle transport from the prerequisite PR    | `scripts/bash-compat-runner.mjs`, `bash-compat-pipe.py`, `audit-bash-oracle-pipe.mjs`, `test-bash-compat-runner.mjs`. Take their final committed merged versions. The runner spawns the Python file, including a separate exit-status fd; do not replace its real independent stdout/stderr pipes with direct Node `spawn` transport. The audit imports the helpers, runner and scoreboard.                                                                                                                                                                                                             |
 | Runner/ratchet tests                         | `scripts/test-shell-scoreboard.mjs`, `test-shell-scoreboard-base.mjs`, `test-shell-scoreboard-migration.mjs`, `test-compat-selection.mjs`, `test-own-shell-runner.mjs`, `test-bash-compat-audit.mjs`, `test-bash-compat-cleanup.mjs`, plus the transport runner test above. Preserve the real-entrypoint cancellation controls, delayed consumer/worker termination barriers, private migration fixtures and startup-hook rejection. The own-shell runner test starts `bash-compat-worker.mjs` by filename; tests also depend on the existing evidence/manifest paths.                                  |
-| Parser/WASI checks                           | `scripts/check-shell-parser.mjs` and `scripts/test-shell-wasi.mjs`. The provenance check reads `sources.lock.json` and its `shellParser.directory` license. The WASI check owns streaming acceptance and the brotli-11 **1,000,000-byte** release ceiling; do not lose it when removing browser tooling.                                                                                                                                                                                                                                                                                                |
+| Parser/WASI checks                           | `scripts/check-shell-parser.mjs` and `scripts/test-shell-wasi.ts`. The provenance check reads `sources.lock.json` and its `shellParser.directory` license. The WASI check owns streaming acceptance and the brotli-11 **1,000,000-byte** release ceiling; do not lose it when removing browser tooling.                                                                                                                                                                                                                                                                                                |
 | Differential generators                      | `scripts/fuzz-shell-words.mjs`, `fuzz-shell-readonly.mjs`, `fuzz-shell-arithmetic.mjs`, `fuzz-shell-parse-boundaries.mjs`, `fuzz-shell-braces.mjs`, `fuzz-shell-substitution-boundaries.mjs`; `scripts/test-fuzz-shell-braces.mjs`, `test-fuzz-shell-substitution-boundaries.mjs` import their corresponding generators. Carry/adapt the shell instructions from `scripts/README.md`. All six generators use Node built-ins.                                                                                                                                                                            |
 | Seed fixtures                                | Under `scripts/fixtures/`: `shell-words-seed-1.json`, `shell-words-seed-42.json`, `shell-readonly-seed-17.json`, `shell-arithmetic-seed-7.json`, `shell-arithmetic-seed-314.json`, `shell-parse-boundaries.json`, `shell-braces-seed-1.json`, `shell-braces-seed-42.json`. Add the substitution PR's final `shell-substitutions-seed-1.json` and `shell-substitutions-seed-42.json` once committed; they did not yet exist at inventory time. Inventory all additional merged fixtures rather than synthesizing missing files during extraction.                                                        |
 | Frozen scoreboard and capture classification | `docs/evidence/own-shell-oracle.json`, `own-shell-baseline.json`, `oracle-pipe-audit.json`, **and** `bash-compatibility.json`. The audit retains the proven transport corrections, unchanged identities, original-membership proof and corrected replay; the classification file preserves capture's historical case classifications and its hash, even though normal frozen replay does not read it. Carry `docs/evidence/licenses/oils-LICENSE.txt` and `brush-MIT.txt`; Bashkit's retained MIT license is `shell/parser/LICENSE`.                                                                    |
@@ -1287,3 +1287,549 @@ foreground/background EOF-ack controls remain covered. PR #21 separately adopted
 Waffle 0.0.50 and covered lazy-loader quiet-start reporting. This historical item
 is not another open assignment; later reader-cancellation, filesystem/device
 and external Bun work remain separate.
+
+## Follow-up: real-runtime scoreboard differences
+
+Status: Approved (2026-10-18). The frozen replay moved from the standalone `node:wasi`/`InProcessHost` runner to the Waffle Node harness at main `9f0bf6a88ebba236a5db9ac3ca6fbe364632db9e` (see [the receipt](../docs/evidence/own-shell-instrument-migration.json)). These ten cases passed only under the old fake host and fail on the real runtime; each item fixes a real-runtime difference from Bash, and its cases then rejoin the ratcheted baseline.
+
+### R1. File permission predicates on the runtime filesystem
+
+Answer `-k`, `-r`, `-w` (and the related `-u`/`-g`/`-x` family) from runtime metadata, or the documented Bash fallback, instead of an unsupported-predicate error.
+
+- `bashkit-suite:test-operators:32`: Bash status 0, stdout `readable\n`; ours status 2, stdout ``, stderr `/usr/bin/bash: [: -r: unsupported predicate\n`.
+- `bashkit-suite:test-operators:40`: Bash status 0, stdout `writable\n`; ours status 2, stdout ``, stderr `/usr/bin/bash: [: -w: unsupported predicate\n`.
+- `oils:builtin-bracket:280`: Bash status 0, stdout `status=1\nstatus=1\n`; ours status 0, stdout `status=2\nstatus=2\n`, stderr `/usr/bin/bash: test: -k: unsupported predicate\n/usr/bin/bash: test: -k: unsupported predicate\n`.
+
+#### Authoritative permissions integration, 2026-10-21
+
+Status: Approved, implementation measured and ready for independent review. The selected Waffle
+pin is `fc58a532f0d7a617e631ea4b7580a190915d4ed6`, version 0.0.58. The shell now
+consumes its four-word permissions query without changing Preview1 filestat.
+Supported mode/access masks distinguish denied from unknown answers in the shared
+`[ ]`/`[[ ]]` evaluator. Native modes stay unchanged. See
+[the contract and control documentation](../docs/file-permissions.md).
+
+The three candidate failures reproduced first in the real production runner and
+then matched Bash after implementation. Native/WASI and real-runtime controls cover
+actual read/write denial, directory search, metadata-only access, masks and ABI
+errors. The memory selector is an equivalent API update. OPFS conformance tests use
+the selected source's exact internal test helper, not an IndexedDB substitution.
+Frozen identities, fixtures, skips and scoring are unchanged.
+
+Measured source `51b7f366a9a10c9f0a248189ea4cf6f04b2803bc`, against accepted base
+`bf9f62b2049f177fb9d293edc136a307d26a8d2f`, completed its single production replay
+with JOBS=1. The 9,221 records still contain 5,792 scored cases and 3,429 skips.
+Oils gains only `oils:builtin-bracket:280`, 1012 -> 1013. Brush stays1001.
+Bashkit gains only `bashkit-suite:test-operators:32` and `:40`, 1404 -> 1406.
+Every corpus loses zero passes. Only those three outcome fields and derived counts
+change; historical failure payloads stay intact. The strict offline comparator
+passes on the saved replay. Stderr is retained, not scored.
+
+The delivery also moves the same blocking scoreboard CI command after its existing
+production guest build so the new real-runtime controls have their required guest.
+No check is skipped and no extra build is introduced. This wiring change and the
+measurement receipt postdate the measured source; production semantics are identical.
+See [the receipt](../docs/evidence/permissions-r1.json). Full R3 replay, controls,
+reproducers and cleanup evidence live under
+`/work/reports/bash-web/hill-climb/r1-permissions-integration/`. Parent owns independent
+review, hosted checks, merge and exact-main acceptance. This is not final acceptance.
+
+### R2. Background jobs at `-c` exit
+
+Let `shell-runtime -c` exit without cancelling still-running background jobs, as Bash does; their output must drain to the inherited descriptors.
+
+- `oils:shell-grammar:17`: Bash status 0, stdout `word word\n`; ours status 0, stdout `word`.
+- `oils:shell-grammar:23`: Bash status 0, stdout `word_a\nword_b\n`; ours status 0, stdout `word_a\nword_b`.
+
+### R3. Directory-read diagnostics
+
+The original candidate `oils:builtin-read:794` uses `read -n3`. Its stdout/status
+failure was option rejection, not proof that runtime errno mapping was wrong.
+Counted-read support now makes that frozen case pass. No runtime errno mapping
+changed. Bash-formatted directory-read diagnostics remain outside this unit.
+
+### R4. `/proc/self`
+
+Decide and implement a minimal `/proc/self` (at least `comm`) or record it as an explicit unsupported host feature with Bash-compatible failure.
+
+- `bashkit-suite:proc-self:57`: Bash status 0, stdout ``; ours status 0, stdout `denied\n`.
+
+### R5. Read-only `/usr` in the compatibility instrument
+
+Give the Waffle Node instrument the oracle sandbox's read-only `/usr` (needs a Waffle read-only mount or equivalent), so these cases measure the shell rather than the instrument.
+
+- `bashkit-suite:script-exec:132`: Bash status 127, stdout ``; ours status 126, stdout ``, stderr `/usr/bin/bash: chmod: command not found\n/usr/bin/bash: /usr/local/bin/my-tool: Permission denied\n`.
+- `bashkit-suite:script-exec:95`: Bash status 127, stdout ``; ours status 126, stdout ``, stderr `/usr/bin/bash: chmod: command not found\n/usr/bin/bash: /usr/local/bin/myutil: Permission denied\n`.
+- `bashkit-suite:subprocess-isolation:126`: Bash status 127, stdout ``; ours status 126, stdout ``, stderr `/usr/bin/bash: chmod: command not found\n/usr/bin/bash: /usr/local/bin/check-isolation: Permission denied\n`.
+
+### R6. Ambiguous redirect diagnostics
+
+`oils:var-sub:24` (`echo hi > "$@"` with two words) now passes on stdout and status, but only because `_tmp` is missing: Bash reports an ambiguous redirect. Diagnose multi-word redirect targets as Bash does; the stdout/status score cannot show this.
+
+## Default echo options and bytes, 2026-10-19
+
+Status: Approved. Bounded implementation from main
+`dfbf44038ad43602f0e7c381b832fd9e984b577c`; parent owns independent review,
+CI monitoring and merge.
+
+The default `-n`/`-e`/`-E` family shares the existing bounded printf printer with
+an explicit echo mode. No R1 file-permission code, runtime adapter or broad
+option subsystem changes. `xpg_echo` and POSIX echo modes remain deferred.
+See [echo behavior and ownership](../docs/echo.md) and `sources.lock.json`.
+
+Strict native failing-first observations had 476 mismatches among 492 cases;
+representative production real-Waffle observations had 5 mismatches among 6.
+The implemented family matches all 492 on native and real Waffle. The unchanged
+printf seeds retain all 1,122 native matches.
+
+The frozen real-Waffle ruler retains its exact oracle/environment/source
+identity, 9,221 records and 5,792 scored cases. Measured pass counts change
+Oils 948 to 967, Brush 956 to 958, Bashkit 1,339 to 1,357. There are 39 gained
+memberships and zero lost memberships. Only these measured outcomes and derived
+counts change in the candidate baseline. The original 30 echo-file failures
+were candidates, not an assumed gain; 28 of those pass now, while the two Brush
+mode-dependent failures remain deferred. Eleven other cases gain from corrected
+echo output. Exact IDs and raw candidate evidence are retained under
+`/work/reports/bash-web/hill-climb/echo-options/` on the implementation host.
+
+## Counted scalar read, 2026-10-19
+
+Status: Approved. Bounded implementation from exact main
+`1bdbacd6c11ca7be31a55a2b3964239eabf10482`; parent owns independent review,
+CI monitoring and merge.
+
+Add `read -n` for one scalar, including raw mode, backslash processing, NUL
+skipping, UTF-8 character boundaries, newline/EOF/zero behavior and unread suffix
+preservation. Keep the uncounted reader unchanged. Multiple destinations,
+arrays, other read modes, terminal editing, timeouts and runtime work are outside
+this unit. See [counted read](../docs/read.md) for the supported locale domain,
+resource limits and unsupported byte sequences.
+
+The native and production real-Waffle failing-first matrix has 124 mismatches
+on the exact merged base; both final matrices match all 124 stdout/status pairs
+and 123 including stderr. The closed-descriptor diagnostic remains different
+and is not claimed fixed. The frozen ruler retains all 9,221 records, 5,792 scored
+cases and all four identity hashes.
+Measured memberships change Oils 967 to 972, Brush 958 to 961 and Bashkit 1,357
+to 1,361: twelve gains and zero losses. Only those twelve records and derived
+counts change in the baseline. Exact IDs and verification receipts are in
+[read-count evidence](../docs/evidence/read-count.json); host logs and reproducer
+are under `/work/reports/bash-web/hill-climb/read-count/`.
+
+## Printf string fields, 2026-10-19
+
+Status: Approved. Bounded implementation from exact main
+`4b063eb5b839f93dc26ff2bc0508b8b8d86fa95a`; parent owns independent review,
+CI monitoring and merge.
+
+Add literal and star width/precision for `%s`, including valid string flags,
+missing/reused operands and byte precision. Keep bare `%d`/`%b`, echo and all
+other conversions unchanged. Borrow string bytes and stream space padding
+through the existing printer's admission/delivery walks, with output/work
+limits, fixed-size writes and cancellation. See
+[printf string fields](../docs/printf-string-fields.md) and `sources.lock.json`.
+
+Four production native and real-Waffle cases fail on the unchanged base. Four
+new native regressions fail before implementation. The final focused matrix
+matches all 167 Bash stdout/status observations on native and real Waffle.
+Invalid numeric controls suppress diagnostics in both shells; the existing
+adapter diagnostic prefix remains different from Bash's source-line annotation.
+
+The full frozen real-Waffle measurement retains 9,221 records, 5,792 scored
+cases and the exact oracle/environment/source identity. Memberships change
+Oils 972 to 979, Brush 961 to 964 and Bashkit 1,361 to 1,366. There are fifteen
+gains and zero losses. The normal `RECORD=0` gate passes with exact candidate
+pass membership; all 9,206 other baseline records remain unchanged. Only these
+fifteen records and derived counts change in the baseline. The 34-case discovery pool is not a promise of gains and
+contains conversions outside this unit. Exact IDs, source cases and verification
+receipts are retained under
+`/work/reports/bash-web/hill-climb/printf-string-fields/`; the checked-in receipt
+is [printf evidence](../docs/evidence/printf-string-fields.json).
+
+Review fixes, 2026-10-20: the interrupted review exposed two numeric-star error
+boundaries. A later `%b` `\c` must clear the earlier numeric status, and a rejected
+numeric warning on closed stderr must not truncate stdout. Both failed first on
+`916a761` in native and real Waffle. Four new native/WASI regression tests cover
+these boundaries, repetitions, output/admission failures and warning cancellation.
+The expanded matrix keeps all 222 cases and their raw diagnostics. Eight introduced
+stdout/status mismatches are fixed, while seven disclosed bare `%d` cases and one
+diagnostic source-line annotation case remain outside this unit. The three accepted narration comments
+are deleted without changing `sources.lock.json` provenance.
+
+Second diagnostic correction, 2026-10-20: two raw-byte regressions fail first at
+`f9ca50f`. Star diagnostics now use the original spelling rather than the parsed
+radix. Invalid suffixes take precedence over range warnings while preserving the
+numeric fallback. Native/WASI tests assert exact stderr bytes and merged output;
+production native/Waffle checks cover both width and precision. Prior stop-status,
+closed-stderr, cancellation, stdout failure and admission controls stay enabled.
+
+The 222-case comparator checks health, status and stdout only, with 214 matches.
+It never normalizes or compares stderr. A separate source-line-only diagnostic
+audit improves 206 to 213 matches, including stdout and status. The extra remaining
+difference is the unchanged missing write-error message on closed stdout.
+Complete raw stdout/status/stderr agreement remains 107/222 due to Bash's
+source-line annotation. Seven bare `%d` defaults and the `2>&1` annotation case
+remain outside scope. No oracle, fixture, score or exclusion is changed.
+
+## Printf integer operands, 2026-10-20
+
+Status: Approved. Bounded implementation from exact accepted main
+`ca974e0facd8c578e483dee5433735f69eb5e620`. Parent owns independent review,
+blocking CI, merge and acceptance. These are measured gains, not accepted gains.
+
+Bare `%d` and `%i` now convert missing, signed, radix and quoted-character operands
+to signed 64-bit decimal. Missing operands give zero without a warning; explicit
+empty and malformed operands warn. Signed overflow saturates, while star counts
+retain their distinct signed-32 limit and -1 fallback. Fixed-stack decimal output
+uses the existing two-pass admission and cancellable chunked delivery. Numeric
+fields and all other new conversions stay outside scope. See
+[integer behavior](../docs/printf-integer-operands.md) and `sources.lock.json`.
+
+Native and production real-Waffle failing-first controls match 6/147 strict
+stdout/status pairs. The same controls now match 146/147, and the expanded matrix
+matches 194/195 per target. Raw diagnostic comparisons remain separate. The
+existing source-line annotation and closed-stdout write-error differences remain
+disclosed in [integer evidence](../docs/evidence/printf-integer-operands.json).
+Native/WASI targeted tests, unchanged printf/echo fixtures, prior string/star
+controls and the unchanged duplicate/layer gates pass.
+
+One complete frozen real-Waffle replay preserves 9,221 records, 5,792 scored cases
+and all identity hashes. Oils changes 979 to 985, Brush 964 to 969 and Bashkit
+1,366 to 1,367, twelve gains and zero lost passes. The replay saves all results
+then exits 1 at the expected stale-membership assertion. After updating only the
+twelve gained rows and derived counts, the unchanged strict membership check
+passes offline against that saved replay. No full rerun or re-oracle is claimed.
+All 9,209 other baseline rows remain unchanged, including 25 historical failing
+payload differences. Exact case IDs, source pins, hashes and reproducer logs are
+in the evidence receipt and `/work/reports/bash-web/hill-climb/printf-integer-operands/`.
+
+## Printf unsigned and radix operands, 2026-10-20
+
+Status: Approved. Bounded implementation from accepted main
+`2b2b86b54c5b4824163731416a180c7a915096f7`. Parent owns independent review,
+blocking CI, merge and exact-main acceptance. These are measured gains only.
+
+Bare `%u`, `%o`, `%x` and `%X` now use the full unsigned-64 operand range.
+Checked accumulation distinguishes exact maximum from overflow. In-range
+negative input wraps; either overflow sign saturates to maximum. Signed-64 and
+string-star signed-32 policies remain separate. A fixed 22-byte integer renderer
+preserves two-pass admission, diagnostic ordering, cancellation and real I/O.
+Numeric fields, floats, time, `-v`, locale and runtime changes remain outside scope.
+See [unsigned behavior](../docs/printf-unsigned-radix.md) and `sources.lock.json`.
+
+Failing-first native and real-Waffle controls match 55/446 strict stdout/status
+pairs. The same scripts now match 444/446 per target. Raw stderr is retained and
+checked separately; merged source-line annotations and the existing extra Bash
+closed-stdout diagnostic remain disclosed. Nine new Rust tests pass on native
+and WASI, alongside prior signed/string/star/echo and resource controls. Frozen
+printf and echo fixtures, duplicate allowances and layer policy are unchanged.
+
+One complete frozen production-Waffle replay preserves 9,221 records, 5,792
+scored cases and every oracle/environment/source/case identity. It measures
+Oils 985 to 996, Brush 969 to 975 and Bashkit 1,367 to 1,373, 23 gains and zero
+lost passes. The complete saved replay exits 1 only at stale membership. After
+updating those 23 gained rows and derived counts, strict membership passes
+offline against the saved replay. No second full replay or re-oracle. All 9,198
+other baseline rows stay unchanged, including 20 historical failing payload
+changes that are deliberately not rewritten. Exact IDs, byte comparisons,
+source/artifact hashes and unrun CI gates are in
+[the evidence receipt](../docs/evidence/printf-unsigned-radix.json) and
+`/work/reports/bash-web/hill-climb/printf-unsigned-radix/`.
+
+## Printf integer fields, 2026-10-20
+
+Status: Approved. Bounded implementation from accepted main
+`fa9f07983fc2974404bc58493616757669148471`. Parent owns independent review,
+blocking CI, merge and exact-main acceptance. This unit adds literal/star integer
+width and precision and the `-`, `+`, space, `0` and `#` interactions. It shares
+field/count parsing with strings and preserves signed-32 star versus signed and
+unsigned-64 operand policies. Fixed digit storage and chunked padding retain
+admission before delivery, cancellation and stream ordering. No floats, time,
+locale grouping, `%c`, `-v`, dependency, runtime or architecture changes.
+See [integer fields](../docs/printf-integer-fields.md).
+
+Failing-first native and production-Waffle controls match 31/542 strict Bash
+stdout/status observations per target, improving to 537/542 with raw stderr
+retained separately. Ten new Rust tests pass on native and WASI alongside prior
+signed/unsigned/star/string/echo and resource controls. Frozen printf/echo
+fixtures, duplicate allowances and layer policy are unchanged.
+
+One complete frozen production-Waffle replay preserves 9,221 records, 5,792
+scored cases and all case/oracle/environment/source identities. It measures
+Oils 996 to 1,002, Brush 975 to 983 and Bashkit 1,373 to 1,383, 24 gains and zero
+lost passes. Its expected exit 1 follows the complete saved result and stale
+membership assertion. Only those 24 gained rows and derived counts change.
+The unchanged strict comparator passes offline against the same saved replay;
+no second replay or re-oracle. All 9,197 other baseline rows stay unchanged,
+including 18 historical still-failing payload differences. Production/test
+source is frozen at 8b8ce95b3bfb04405eaa5c494eb7d883ee0b33fd. Exact gains,
+hashes, comparisons, unrun gates and cleanup ownership are in
+[the evidence receipt](../docs/evidence/printf-integer-fields.json) and
+`/work/reports/bash-web/hill-climb/printf-integer-fields/`.
+
+## Printf character conversion, 2026-10-20
+
+Status: Approved. Bounded implementation from accepted main
+`07ad8801561afe1a25457801bd52e1f490058c15`. Parent owns independent review,
+hosted CI, merge and exact-main acceptance. These five gains are measured only.
+
+`%c` now prints the first operand byte, not an integer code or Unicode scalar.
+Missing and empty operands print a real NUL. Literal/star fields keep alignment,
+argument consumption/reuse and count diagnostics; precision is consumed but
+ignored for the character. Borrowed byte/static NUL and existing string padding
+preserve admission before output, fixed buffering, partial writes and cancellation.
+See [character behavior](../docs/printf-character.md).
+
+Failing-first native and production-Waffle controls match 2/160 strict raw
+stdout/status observations per target, improving to 151/160. Normalized stderr
+is checked separately, 157/160. All five direct inventory cases match. Twelve
+character tests pass; the native workspace, focused WASI tests, all-target
+Clippy, frozen printf/echo fixtures and unchanged duplicate/layer gates pass.
+
+One complete frozen production-Waffle replay preserves 9,221 records, 5,792
+scored cases and all case/oracle/environment/source identities. Oils changes
+1,002 to 1,003, Brush 983 to 986 and Bashkit 1,383 to 1,384. Five gains, zero
+losses. The full saved result exits 1 only at the old strict membership check.
+After refreshing those five rows and derived counts, strict membership passes
+offline against the saved replay. All 9,216 other baseline rows stay unchanged,
+including 16 historical still-failing payload differences. No repeated full
+replay or re-oracle. Measured production and test source is commit
+`5ce47589e53004944beb42a3ec7d9147feb7c555`. Later edits update evidence and
+baseline memberships and remove redundant comments. Production code and test
+assertions remain unchanged. Exact IDs, hashes, unrun gates and cleanup ownership
+are in
+[the evidence receipt](../docs/evidence/printf-character.json) and
+`/work/reports/bash-web/hill-climb/printf-character/`.
+
+### Finding outside this unit: invalid byte input
+
+The parser already turns invalid ANSI-C byte escapes into Unicode U+00xx in
+`shell/parser/src/parser/lexer.rs:2000`, `flush_escape_bytes`. Both native and
+Waffle repeat this in C and C.UTF-8. Reproduce with
+`LC_ALL=C; printf '[%c]' $'\xffZ'`. Bash stdout hex is `5bff5d`, the measured
+shell gives `5bc35d`, both status 0. The parser passes `ÿZ` encoded as UTF-8 to
+printf. Valid UTF-8 input still produces its raw first byte, as Bash does.
+`after.json` and `targeted-audit.json` retain all six invalid-input controls per
+target. This is not a numeric or scalar conversion problem in printf. A future
+byte-preserving word representation needs its own bounded contract decision;
+no runtime/parser rewrite or gain is claimed here. The mixed Brush basic3 case
+also remains blocked on self-invocation and was not chased. Existing merged
+source-line annotations and extra Bash closed-output diagnostics stay disclosed.
+
+## Printf option boundaries, 2026-10-20
+
+Status: Approved, implementation awaiting independent parent review and CI.
+
+Consume one leading `--`, preserve a lone `-` and empty formats, and stop option
+parsing at FORMAT. Missing formats, bare `-v`, and unknown options receive bounded
+usage diagnostics and status 2. Both admission and delivery borrow the same
+argument slice; the formatter and runtime contracts do not change. Supplied
+`-v` and exact `--help` remain explicitly unsupported, with no fabricated
+assignment or help output. See [behavior](../docs/printf-options.md) and
+[measurement receipt](../docs/evidence/printf-options.json).
+
+The existing utility integration control used `printf '-needle\n'` to feed grep.
+Bash rejects that input as option `-n`. Its producer now uses `printf --` so the
+unchanged grep output/status assertions test grep rather than printf's old bug.
+No frozen fixtures, oracle, replay inputs or gates change.
+
+An outer Bash wrapper waits on stdin before exec, then starts `printf -x` with
+its OS stderr reader already closed. The native CLI still returns 2 instead of
+Bash SIGPIPE, recorded in `closed-diagnostic-exec-gated.json`. Earlier
+`closed-diagnostic-before.json` and `closed-diagnostic-after.json` used a read
+inside the target, which was not a reliable native gate because standalone stdin
+is null. Those remain historical observations only. The engine
+closed-reader regression passes with 141 on native and WASI. In
+`shell/engine/src/compat.rs:554-599`, the standalone adapter drives the job before
+draining internal diagnostic pipes and interrupts on host write failure, which
+can arrive after completion. No formatter defect is claimed for this remaining
+adapter behavior, and no runtime work was added. A future adapter unit should
+reproduce through `closed-diagnostic.ts` from the unit report and decide how host
+write failures reach completed jobs.
+
+One unchanged frozen production-Waffle replay at source
+`fe57a8981db097a3969f237050d05b88aacb6de6` predates the accepted comment-only
+delivery delta from source-reviewed `206bae6a271a7f924e59a0bfb7452e7ec86fd8c4`.
+Only K1, K2, R1 and R2 comment spans change; executable, assertion and source-string
+bytes remain unchanged. Original measurement hashes are retained separately from
+delivery source hashes. No rebuild or second full replay ran. That replay measured
+10 gains and zero losses,
+with 9221 records, 5792 scored and 3429 skips. Oils 1003 to 1006, Brush 986 to
+989, Bashkit 1384 to 1388. Only ten gained baseline rows and derived counts
+changed. The strict unchanged comparator passes offline against that saved
+result. The cumulative measured gain is 140, pending parent acceptance. Two
+additional negative `-v` cases pass stdout/status because unsupported-operation
+rejection returns 2, `oils:builtin-printf:76` and
+`bashkit-suite:bashbox-declare:354`. Their diagnostics differ from Bash. They do
+not establish variable-name validation or assignment support. The mixed help
+record remains failing.
+
+### Unresolved compatibility timeout evidence
+
+Status: Approved. PR34 push run 39486769464 timed out on consecutive scored
+ordinals 4260 through 4263 in the unchanged four-worker pool and 10-second case
+deadline. These include two prior passes, UTF-8 lines 49 and 72, and two known
+failures, UTF-8 line 56 and word-expander line 5. Run 39486886987 succeeded with
+the identical Git tree. This does not establish a pre-existing defect, a flake,
+or a resolved failure. The 2,490 completed local candidate/base probes had no
+timeouts. The incomplete local OOM probe does not explain hosted CI. Parent
+subsequently verified all ten jobs across push 39491917246 and PR run 39491923353 succeeded
+at exact 790ccad. That is CI status, not a diagnosis of the earlier stall.
+
+`scripts/diagnose-compat.ts` observes the existing `npm run compat:shell` command
+from a separate Linux process. It inherits all three standard streams and the
+unchanged environment. It does not import the runner, replace Workers, inject
+hooks, set Node flags, add a case deadline, or replay cases. The workflow runs
+its isolated controls once and uploads its trace directory in the existing
+`own-shell-current` artifact, beside the unchanged scored result.
+
+The bounded trace retains `host.jsonl` and `host.previous.jsonl`, each at most
+16 MiB. Read both by `ms`, then align `utc` with the existing job log's
+`[bash-compat] own-shell: N` progress. Each one-second snapshot includes process
+and thread birth ticks, CPU ticks, RSS/high-water/swap in KiB, task state, kernel
+wait channel, scheduler runtime/wait/timeslices, context switches, faults and
+host CPU/memory/pressure counters. `wchar` and `syscw` count host writes, not
+completed cases or guest output. No command lines, environments, process names,
+file contents or guest output are retained. Caps and omitted counts are explicit.
+Sampler gaps and observer CPU/RSS distinguish observation delays from child
+counters. Short-lived threads between snapshots remain unobserved.
+
+Increasing thread CPU with little scheduler wait supports active computation;
+flat CPU with increasing scheduler wait supports host contention. Flat CPU and
+parked threads supports blocked work. Thread disappearance/replacement bounds
+host lifecycle changes. None of these signals alone identifies a guest loop,
+GC, case dispatch, or disposal. In particular, frozen code publishes no case or
+runtime phase events. Attributing dispatch versus disposal, or proving GC,
+remains blocked without an explicitly allowed internal observation mechanism.
+The former probe's replaced Worker/runner cannot supply that evidence for the
+frozen ruler. Do not infer phases from empty scored output.
+
+The observer forwards SIGINT/SIGTERM to its owned detached command session,
+returns the command's exit code or terminating signal, and stops remaining
+session members after the command exits. Birth ticks guard signal delivery.
+Isolated controls cover success, status 37, timeout 124, SIGINT, SIGTERM,
+SIGKILL of the child, stopped-task detection, fast-parent/reparented-descendant
+cleanup, spawn failure and trace rotation. No runtime or guest runs in those
+controls. An unavailable trace destination does not skip the command or replace
+its status. A null `cleanup.remaining` means the cleanup scan failed, not that no
+processes remained. They do not prove cleanup after an uncatchable SIGKILL of the observer
+or for commands that deliberately escape into a new session. There is no new
+cancellation deadline imposed on the scored command. Missing terminal
+`exit`/`cleanup` records mean incomplete evidence, not successful cleanup.
+
+The original saved measurement and strict offline comparator remain the only
+measurement evidence. New diagnostics require independent source review and a
+narrow workflow/lifecycle review before parent acceptance. No semantic repair
+or compatibility gain is claimed by this diagnostic change.
+
+## Printf shell quoting, 2026-10-21
+
+Status: Approved, implementation and one frozen measurement finished. Parent owns
+independent review, hosted CI, merge and exact-main acceptance. This is review-ready,
+not accepted or merged.
+
+Implement `%q` and `%Q` inside the existing formatter, with byte-counted width,
+precision, stars, alternate quoting, argument reuse and named/octal escapes.
+No parser/runtime changes or dependencies.
+See [behavior and boundaries](../docs/printf-quoting.md) and
+[measurement receipt](../docs/evidence/printf-quoting.json).
+
+### Remaining classifier and byte-input boundaries
+
+The actual Waffle target's pinned WASI libc classifies unassigned U+0378 as
+printable. Native GNU libc and Bash classify it as nonprinting. Reproduce with
+`LC_ALL=C.UTF-8; printf '[%q]' '͸'`. Bash stdout hex is
+`5b24275c3331355c323730275d`, while Waffle emits `5bcdb85d`, both status 0.
+The helper's character classifier is in
+`shell/engine/src/builtins/printf/quoting.rs`. All 16 affected width/precision/
+alternate controls are retained in `after.json` under
+`/work/reports/bash-web/hill-climb/printf-quoting/`. This unit does not introduce
+a replacement Unicode table or a locale architecture. A later classifier unit
+must choose a portable printability contract and measure table differences first.
+
+The earlier invalid-byte word-decoding finding still applies to `%q`.
+`LC_ALL=C.UTF-8; printf '%q' $'\xff'` produces `c3bf` instead of Bash's
+`24275c33373727` because the lexer has already replaced byte `ff` with U+00FF.
+The formatter cannot reconstruct that byte without guessing. Controls preserve
+this mismatch; no gain or byte-preserving input support is claimed for it.
+
+The earlier four-case compatibility CI stall remains unresolved. Its Approved
+finding and unchanged observer/command above are preserved. No CI diagnosis or
+infrastructure change is part of this unit.
+
+### Measured result
+
+Measured source `e050d54ae26c54ba3af9da72ee6186f05914d82d`, accepted base
+`46a6bb090e1bdcc3d447bc2c70a3a7f4c72fd4b4`. Exactly one production-Waffle
+replay, JOBS=1 and RECORD=0: 9,221 records, 5,792 scored, 3,429 unchanged skips.
+
+- oils: 1006 -> 1012, gained 6, lost 0.
+- brush-suite: 989 -> 1001, gained 12, lost 0.
+- bashkit-suite: 1388 -> 1404, gained 16, lost 0.
+
+Only 34 proven gained rows and derived baseline counts change. Every other
+baseline record retains its historical payload. The unchanged strict comparator
+passes offline on the saved replay. Oracle, cases, environment, source pins,
+exclusions, scorer, fixtures, deadlines and blocking gates are unchanged.
+Raw stdout/status define scores; stderr is retained but unscored.
+
+Full native workspace tests and native/WASI all-target Clippy pass. Focused WASI
+checks pass 102 printf, 10 echo and two memory-budget tests. Unchanged printf
+fixtures pass 1,122 each on native and actual Waffle; echo passes 492 each.
+Fifty I/O/admission/closed-descriptor controls pass. Four quoting regressions
+failed first; all 14 new tests now pass. See the receipt for exact commands,
+artifacts, version-only rebuild correspondence, retained raw differences and
+skipped local checks. Parent owns independent reviews and all hosted gates.
+
+### Closed-stdout printf diagnostics, 2026-10-21
+
+Status: Approved, separate shared-Printer repair. Not fixed by the quoting unit.
+At reviewed `8242cd0125b0c40526728ac88dacd384ba2f358f`, independent review
+reproduced missing stderr for `printf '[%q]' 'a b' 1>&-` and
+`printf '[%.0q]' x 1>&-`. Both Bash and the native shell return 1 with empty
+stdout; Bash emits `/usr/bin/bash: line 1: printf: write error: Bad file descriptor\n`,
+while the native shell emits no stderr. The reviewer also reproduced ordinary
+`printf '%s' x 1>&-`; the fix lane independently repeated all three controls
+with the retained measured native binary, with the same results.
+
+Reproduce each source with `/usr/bin/bash -c "$source"` and
+`/work/tmp/bash-web-printf-quoting/target/release/shell-cli -c "$source"`.
+The latter measured binary has SHA-256
+`b02f86cc46a818d7cd40c2d95bbc120ee1c7ec4f2c4a87a38940860404feef6e`.
+Review records and exact stderr hex are in
+`/work/reports/bash-web/hill-climb/printf-quoting/review-r1-native.json`;
+controls reproduce on every one of the three reruns, not intermittently.
+Inspect `Printer::flush_output` at `shell/engine/src/builtins/printf.rs:230-236`,
+its shared `write` error handling and the final flush/status propagation.
+Those paths are unchanged by this PR. This rules out a quoting-only failure,
+not the bug's age or root cause. Repair and test ordinary `%s`, `%q` and `%Q`
+in a bounded follow-up. Stderr is retained but not part of the frozen score.
+
+### Darwin quoting review fix
+
+Review found the Apple locale mask selected messages rather than character
+classification. The narrow correction uses Darwin's `LC_CTYPE_MASK = 1 << 1`,
+`en_US.UTF-8` and the declared `int` return from `freelocale`. A Darwin-only
+regression queries the initial process C locale, exercises actual `%q`/`%Q`
+UTF-8 output, then checks that locale again without changing it. A path-filtered
+hosted macOS gate confirms that locale name exists and runs the quoting tests.
+Local Mac Mesh and documented SSH recovery were unavailable before setup.
+
+The original one-replay result above remains historical. The later delivery's
+Linux/WASI active production source matches the reviewed source after comments
+are removed and actual rustc target cfg expansion. The unchanged comparator
+still accepts the saved replay; no new gain, second replay or Darwin execution
+is inferred from those checks. See `review-fixes-r1.md` in the report directory
+for separate hosted Darwin results and current delivery/source correspondence.
+
+The first actual hosted Darwin run, `39515015387/job/118944969036`, compiled
+successfully and passed 14/15 quoting tests, including initial-C-locale `%q`/`%Q`.
+Its sole failure was the GNU-specific Unicode expected output at
+`printf_quoting.rs:126`. Darwin escaped U+00AD, U+200B and U+FEFF while leaving
+U+2028 literal; the retained GNU expectation did the reverse. The narrow test
+correction preserves the non-Apple expectation and checks the recorded Apple
+expectation against direct native `iswprint_l` classifications. Native Bash
+3.2.57 emits a distinct byte-level quote representation; its captured output
+and round-trip check are independent observations, not the GNU 5.3.15 oracle. No skip, filtered assertion, portable Unicode
+table or scoring change is included. Raw first-failure and follow-up logs stay
+in the report directory under `review-fixes-r1-darwin*`.

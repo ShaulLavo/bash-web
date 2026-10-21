@@ -3,14 +3,13 @@
 //! 491c3281f668b76d64b15210b8f5d7bf97244be0. See sources.lock.json.
 //! Original descriptor adapter, bounded record reader and small BRE translator;
 //! no upstream whole-file reads, output accumulation or backtracking matcher.
-use super::{endpoint, write};
-use crate::{
-    executor::Budget,
-    interpreter::{Context, Outcome},
-    io::{Endpoint, FdTable, IoError, OpenOptions},
-    state::{SharedState, absolute},
-};
+use super::{Context, endpoint, write};
 use regex::bytes::{Regex, RegexBuilder};
+use shell_engine::{
+    executor::Budget,
+    io::{Endpoint, FdTable, IoError, OpenOptions},
+    state::absolute,
+};
 
 const PATTERN_BYTES: usize = 4096;
 const REGEX_BYTES: usize = 256 * 1024;
@@ -251,7 +250,7 @@ impl Scan<'_> {
         let mut chunk = [0; 8192];
         let mut record = Vec::new();
         let mut budget = Budget::default();
-        let limit = self.context.limits().line_bytes.min(RECORD_BYTES);
+        let limit = self.context.line_bytes.min(RECORD_BYTES);
         loop {
             budget
                 .checkpoint(&self.context.cancel)
@@ -298,12 +297,12 @@ impl Scan<'_> {
     }
 }
 
-pub(super) async fn run(
+pub(crate) async fn run(
     args: Vec<String>,
-    state: &SharedState,
+    cwd: &str,
     fds: &FdTable,
     context: &Context,
-) -> Result<Outcome, i32> {
+) -> Result<i32, i32> {
     let (options, pattern, mut files) = match Options::parse(args) {
         Ok(parsed) => parsed,
         Err(error) => {
@@ -330,7 +329,7 @@ pub(super) async fn run(
         let input = if file == "-" {
             endpoint(fds, 0).map_err(|_| 2)
         } else {
-            let path = absolute(&state.borrow().cwd, &file);
+            let path = absolute(cwd, &file);
             context
                 .cancel
                 .run(context.fs().open(&path, &OpenOptions::default()))
@@ -371,8 +370,8 @@ pub(super) async fn run(
         found |= scan.selected > 0;
         // GNU quiet success takes priority over earlier input errors.
         if options.quiet && found {
-            return Ok(Outcome::status(0));
+            return Ok(0);
         }
     }
-    Ok(Outcome::status(if failed { 2 } else { i32::from(!found) }))
+    Ok(if failed { 2 } else { i32::from(!found) })
 }

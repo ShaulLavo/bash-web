@@ -30,6 +30,7 @@ for (const target of [[], ["--target", "wasm32-wasip1"]]) {
       "shell/Cargo.toml",
       "--workspace",
       "--all-targets",
+      "-j2",
     ].concat(target, ["--", "-D", "warnings"]),
     target.length
       ? { env: wasiBuildEnvironment(root, process.env.CARGO_TARGET_DIR ?? ".build/shell") }

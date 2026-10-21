@@ -8,10 +8,6 @@ pub(crate) enum Builtin {
     False,
     Echo,
     Printf,
-    Cat,
-    Grep,
-    Mkdir,
-    Seq,
     Read,
     Declaration,
     Cd,
@@ -41,7 +37,6 @@ pub(crate) enum Handler {
 pub(crate) enum Class {
     SpecialBuiltin,
     RegularBuiltin,
-    AcceptanceUtility,
     Keyword,
 }
 
@@ -51,17 +46,9 @@ pub(crate) enum Declaration {
     AssignmentOperands,
 }
 
-/// Descriptive ownership for the current full build, not Cargo feature flags or
-/// shell options. Step 6 owns compile-time filtering and omitted-operation errors.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Capability {
-    Core,
-    AcceptanceUtilities,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Availability {
-    Included(Capability),
+    Included,
     UnsupportedSyntax,
 }
 
@@ -83,7 +70,7 @@ pub(crate) struct Command {
 impl Command {
     pub(crate) fn handler(&self) -> Option<Handler> {
         match self.availability {
-            Availability::Included(_) => self.handler,
+            Availability::Included => self.handler,
             Availability::UnsupportedSyntax => None,
         }
     }
@@ -93,14 +80,11 @@ impl Command {
         self.class == Class::Keyword
     }
 
-    /// Stand-ins execute internally but `command -v/-V` must still search PATH.
     pub(crate) fn query_builtin(&self) -> bool {
         matches!(self.class, Class::SpecialBuiltin | Class::RegularBuiltin)
             && self.handler().is_some()
     }
 
-    /// This deliberately differs from query_builtin: grep/mkdir retain shell
-    /// heredoc errors, while cat/seq retain command-local heredoc errors.
     pub(crate) fn shell_heredoc_errors(&self) -> bool {
         self.heredoc_errors == HeredocErrors::Shell && self.handler().is_some()
     }
@@ -116,7 +100,7 @@ const fn core(
         name,
         class,
         declaration,
-        availability: Availability::Included(Capability::Core),
+        availability: Availability::Included,
         handler: Some(handler),
         heredoc_errors: HeredocErrors::Shell,
     }
@@ -140,16 +124,6 @@ const fn declaration(name: &'static str, class: Class) -> Command {
         Handler::Builtin(Builtin::Declaration),
     )
 }
-const fn utility(name: &'static str, builtin: Builtin, heredoc_errors: HeredocErrors) -> Command {
-    Command {
-        name,
-        class: Class::AcceptanceUtility,
-        declaration: Declaration::Ordinary,
-        availability: Availability::Included(Capability::AcceptanceUtilities),
-        handler: Some(Handler::Builtin(builtin)),
-        heredoc_errors,
-    }
-}
 const fn keyword(name: &'static str, availability: Availability) -> Command {
     Command {
         name,
@@ -170,10 +144,6 @@ static COMMANDS: &[Command] = &[
     regular("false", Builtin::False),
     regular("echo", Builtin::Echo),
     regular("printf", Builtin::Printf),
-    utility("cat", Builtin::Cat, HeredocErrors::CommandLocal),
-    utility("grep", Builtin::Grep, HeredocErrors::Shell),
-    utility("mkdir", Builtin::Mkdir, HeredocErrors::Shell),
-    utility("seq", Builtin::Seq, HeredocErrors::CommandLocal),
     regular("read", Builtin::Read),
     declaration("export", Class::SpecialBuiltin),
     declaration("local", Class::RegularBuiltin),
@@ -209,27 +179,27 @@ static COMMANDS: &[Command] = &[
         Declaration::Ordinary,
         Handler::Let,
     ),
-    keyword("if", Availability::Included(Capability::Core)),
-    keyword("then", Availability::Included(Capability::Core)),
-    keyword("else", Availability::Included(Capability::Core)),
-    keyword("elif", Availability::Included(Capability::Core)),
-    keyword("fi", Availability::Included(Capability::Core)),
-    keyword("case", Availability::Included(Capability::Core)),
-    keyword("esac", Availability::Included(Capability::Core)),
-    keyword("for", Availability::Included(Capability::Core)),
+    keyword("if", Availability::Included),
+    keyword("then", Availability::Included),
+    keyword("else", Availability::Included),
+    keyword("elif", Availability::Included),
+    keyword("fi", Availability::Included),
+    keyword("case", Availability::Included),
+    keyword("esac", Availability::Included),
+    keyword("for", Availability::Included),
     keyword("select", Availability::UnsupportedSyntax),
-    keyword("while", Availability::Included(Capability::Core)),
-    keyword("until", Availability::Included(Capability::Core)),
-    keyword("do", Availability::Included(Capability::Core)),
-    keyword("done", Availability::Included(Capability::Core)),
-    keyword("in", Availability::Included(Capability::Core)),
-    keyword("function", Availability::Included(Capability::Core)),
+    keyword("while", Availability::Included),
+    keyword("until", Availability::Included),
+    keyword("do", Availability::Included),
+    keyword("done", Availability::Included),
+    keyword("in", Availability::Included),
+    keyword("function", Availability::Included),
     keyword("time", Availability::UnsupportedSyntax),
-    keyword("{", Availability::Included(Capability::Core)),
-    keyword("}", Availability::Included(Capability::Core)),
-    keyword("!", Availability::Included(Capability::Core)),
-    keyword("[[", Availability::Included(Capability::Core)),
-    keyword("]]", Availability::Included(Capability::Core)),
+    keyword("{", Availability::Included),
+    keyword("}", Availability::Included),
+    keyword("!", Availability::Included),
+    keyword("[[", Availability::Included),
+    keyword("]]", Availability::Included),
     keyword("coproc", Availability::UnsupportedSyntax),
 ];
 

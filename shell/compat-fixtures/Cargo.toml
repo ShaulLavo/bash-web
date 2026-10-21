@@ -1,0 +1,28 @@
+[package]
+name = "shell-compat-fixtures"
+version = "0.0.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Compatibility-harness guests only: argv.py and printenv.py from the frozen oracle's
+# helper directory, run as genuine programs on Waffle's process boundary. Never packaged.
+[dependencies]
+shell-engine = { path = "../engine" }
+shell-utilities = { path = "../utilities" }
+futures.workspace = true
+serde.workspace = true
+serde_json = "1"
+
+[[bin]]
+name = "argv-py"
+path = "src/bin/argv.rs"
+
+[[bin]]
+name = "printenv-py"
+path = "src/bin/printenv.rs"
+
+[[bin]]
+name = "shell-cli"
+path = "src/bin/shell-cli.rs"

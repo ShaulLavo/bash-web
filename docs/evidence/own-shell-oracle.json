@@ -28,8 +28,10 @@
   },
   "environment": {
     "target": "wasm32-wasip1",
-    "runner": "node:wasi",
+    "runner": "waffle-node",
+    "shell": "shell-runtime -c SCRIPT, the production runtime_proc guest",
     "env": {
+      "PATH": "/usr/bin:/bin",
       "HOME": "/home/user",
       "TMP": "/tmp/spec",
       "PWD": "/tmp/spec",
@@ -37,8 +39,8 @@
       "LC_ALL": "C.UTF-8"
     },
     "stdin": "empty",
-    "filesystem": "fresh MemoryFs, 16 MiB; no host preopens",
-    "processHost": "InProcessHost, argv.py and printenv.py fixtures only",
+    "filesystem": "fresh Waffle filesystem per case, no persistence: working directory, /dev, /bin, /usr/bin, /usr/local/bin",
+    "processHost": "Waffle process broker; argv.py and printenv.py fixture guests only",
     "timeoutMs": 10000,
     "outputLimitBytes": 4194304,
     "normalization": [
@@ -9802,7 +9804,7 @@
     "schema": 1,
     "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
     "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
-    "environment": "507eb1db0221423576b1a0daba7d79a7b2bc3fbbac1a5d86af3a00bc65b29e6a",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
     "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
   }
 }
