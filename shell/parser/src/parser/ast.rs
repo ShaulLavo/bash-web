@@ -393,7 +393,7 @@ impl fmt::Display for Word {
                 WordPart::BadSubstitution(text) => write!(f, "{}", text)?,
                 // Printed as shell text (re-parsed by alias expansion);
                 // never `Debug` (TM-INF-022).
-                WordPart::CommandSubstitution(cmd) => {
+                WordPart::CommandSubstitution(cmd) | WordPart::FileSubstitution(cmd) => {
                     write!(f, "$({})", super::print_cmd::inline_commands(cmd))?
                 }
                 WordPart::UnparsedCommandSubstitution { source, .. } => {
@@ -539,6 +539,8 @@ pub enum WordPart {
     Variable(String),
     /// Command substitution ($(...))
     CommandSubstitution(Vec<Command>),
+    /// A single input-only substitution whose Bash file-read shortcut is enabled.
+    FileSubstitution(Vec<Command>),
     /// A `$((...) ... )` span whose text is not arithmetic, so bash runs it as
     /// a command substitution. Bash parses that text only when the word
     /// expands: a syntax error there is reported then, with status 2, rather
