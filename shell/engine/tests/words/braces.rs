@@ -371,7 +371,7 @@ fn brace_scanning_range_emission_and_products_cooperate_with_cancellation() {
                 .borrow()
                 .bindings()
                 .get("scope")
-                .map(String::as_str),
+                .map(|value| value.as_str()),
             Some("inside"),
         );
         let peer = rig.ex.spawn(async { 42 });

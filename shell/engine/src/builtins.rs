@@ -805,7 +805,12 @@ async fn nameref_declaration(
             let target = state
                 .namerefs()
                 .get(key)
-                .or_else(|| state.bindings().get(key))
+                .or_else(|| {
+                    state
+                        .bindings()
+                        .get(key)
+                        .and_then(crate::state::Binding::scalar)
+                })
                 .ok_or(2)?;
             work.admit_storage(target.len()).map_err(error_status)?;
             target.clone()

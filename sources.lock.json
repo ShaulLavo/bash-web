@@ -1602,5 +1602,20 @@
     "implementation": "Original incremental counted input with one-byte reads, bounded UTF-8 validation, escape/continuation processing, NUL skipping, scalar IFS-whitespace trimming, count validation and exact-boundary stopping. Reuses the existing local locale selector and state/endpoint/work admission. Shared live buffer admission remains retained through assignment; cancellation and errors drop it. Uncounted line-reader implementation is moved unchanged from the exact base.",
     "deferred": "Uncounted escapes and splitting, multiple destinations, arrays, -N/-d, terminal/editor/timeouts, other locale encodings and malformed UTF-8 scalar representation. No runtime metadata or permissions changes.",
     "gate": "Failing-first original Rust controls, exact raw stdout and status differentials on native shell-cli and production shell-runtime on real Waffle, native/WASI suites, browser external-guest pipe, unchanged frozen 9221-record oracle and zero-lost membership comparison."
+  },
+  "shellIndexedArrays": {
+    "classification": "Original local indexed binding and assignment adapters, with GNU Bash 5.3.15 as a behavior oracle. No upstream implementation copied or adapted.",
+    "baseRevision": "361992834804c5d9325022ddc3580f5e9899bcee",
+    "paths": [
+      "shell/engine/src/state/binding.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/interpreter/indexed.rs",
+      "shell/engine/src/interpreter.rs",
+      "shell/engine/src/expand.rs",
+      "shell/engine/src/expand/positional.rs",
+      "shell/engine/tests/words.rs"
+    ],
+    "implementation": "One scalar-or-indexed binding map. Sparse ordered elements share immutable trees across snapshots; writes preserve complete prefix/local bindings, readonly protection, scalar element-zero semantics and admitted storage. Existing parser AST and field expansion are reused without parser modifications.",
+    "deferred": "Explicit compound subscripts, array slices/indices/operators/transforms, indexed unset, declare/local array flags, associative arrays, arithmetic array lvalues and BASH_REMATCH capture production."
   }
 }

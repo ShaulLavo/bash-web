@@ -56,7 +56,7 @@ fn arithmetic_readonly_errors_preserve_rhs_effects_and_skip_unselected_writes() 
                 .borrow()
                 .bindings()
                 .get("saved")
-                .map(String::as_str),
+                .map(|value| value.as_str()),
             expected
         );
     }

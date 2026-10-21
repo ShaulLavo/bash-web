@@ -105,7 +105,7 @@ impl Rig {
                 .borrow()
                 .bindings()
                 .get(name)
-                .map(String::as_str)
+                .map(|value| value.as_str())
                 == Some(value)
             {
                 return;
@@ -1185,7 +1185,7 @@ fn trim_selected_substitution_patterns_reach_default_assignment_and_error_operan
                     .borrow()
                     .bindings()
                     .get("u")
-                    .map(String::as_str),
+                    .map(|value| value.as_str()),
                 assigned.then_some("bc"),
             );
         }
@@ -1495,14 +1495,7 @@ fn lazy_lengths_keep_quote_ifs_and_scalar_context_rules() {
 
 #[test]
 fn unsupported_length_targets_fail_closed_even_in_selected_operands() {
-    for token in [
-        "${#0}",
-        "${#@}",
-        "${#*}",
-        "${#arr[0]}",
-        "${#arr[@]}",
-        "${#arr[*]}",
-    ] {
+    for token in ["${#0}", "${#@}", "${#*}"] {
         for source in [format!("args {token}"), format!("args ${{u:-{token}}}")] {
             let rig = Rig::new(Limits::default());
             assert_eq!(rig.run(&source), 2, "{source}");
@@ -1974,7 +1967,7 @@ fn long_splitting_yields_and_cancellation_restores_frames() {
             .borrow()
             .bindings()
             .get("IFS")
-            .map(String::as_str)
+            .map(|value| value.as_str())
             == Some(" ")
         {
             break;
@@ -2246,7 +2239,7 @@ fn selected_operand_scanning_yields_and_cancellation_restores_local_frames() {
             .borrow()
             .bindings()
             .get("v")
-            .map(String::as_str)
+            .map(|value| value.as_str())
             == Some("inner")
         {
             break;
@@ -2314,7 +2307,7 @@ fn cancellation_during_nested_token_admission_never_dispatches() {
             .borrow()
             .bindings()
             .get("v")
-            .map(String::as_str)
+            .map(|value| value.as_str())
             == Some("inner")
         {
             break;
@@ -2834,7 +2827,7 @@ fn deferred_list_separator_replay_yields_and_cancels_after_the_ifs_write() {
             .borrow()
             .bindings()
             .get("IFS")
-            .map(String::as_str)
+            .map(|value| value.as_str())
             == Some(":")
         {
             break;
@@ -2916,7 +2909,7 @@ fn deferred_ifs_splitting_yields_and_cancels_after_the_parameter_write() {
             .borrow()
             .bindings()
             .get("IFS")
-            .map(String::as_str)
+            .map(|value| value.as_str())
             == Some(" ")
         {
             break;
@@ -3459,11 +3452,11 @@ fn parameter_writes_share_storage_admission_even_when_fields_fit() {
     let state = rig.shell.state();
     let state = state.borrow();
     assert_eq!(
-        state.bindings().get("aa").map(String::as_str),
+        state.bindings().get("aa").map(|value| value.as_str()),
         Some("123456789")
     );
     assert_eq!(
-        state.bindings().get("bb").map(String::as_str),
+        state.bindings().get("bb").map(|value| value.as_str()),
         Some("123456789")
     );
     assert!(!state.bindings().contains_key("cc"));
@@ -3490,7 +3483,7 @@ fn cancellation_keeps_completed_rhs_effects_and_restores_local_prefix_frames() {
             .borrow()
             .bindings()
             .get("saved")
-            .map(String::as_str),
+            .map(|value| value.as_str()),
         Some("yes")
     );
     rig.ex.drive(4);
@@ -3552,7 +3545,7 @@ fn cancellation_during_error_operand_keeps_effects_without_partial_diagnostic() 
             .borrow()
             .bindings()
             .get("saved")
-            .map(String::as_str),
+            .map(|value| value.as_str()),
         Some("yes")
     );
     assert!(!job.is_finished());
@@ -4050,7 +4043,7 @@ fn cancellation_during_redirect_target_keeps_effects_and_restores_frames() {
             .borrow()
             .bindings()
             .get("saved")
-            .map(String::as_str),
+            .map(|value| value.as_str()),
         Some("yes")
     );
     assert!(!job.is_finished());
@@ -4139,20 +4132,92 @@ mod printf_quoting;
 #[test]
 fn indexed_arrays_compound_sparse_and_quoted_fields() {
     let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run("a=('one two' '' three); a[7]=last; args \"${a[@]}\" \"${a[7]}\" \"${#a[@]}\""), 0);
-    assert_eq!(*rig.calls.borrow(), vec![vec!["one two", "", "three", "last", "last", "4"]]);
+    assert_eq!(
+        rig.run("a=('one two' '' three); a[7]=last; args \"${a[@]}\" \"${a[7]}\" \"${#a[@]}\""),
+        0
+    );
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["one two", "", "three", "last", "last", "4"]]
+    );
 }
 
 #[test]
 fn indexed_arrays_append_scalar_zero_and_negative_index() {
     let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run("a=zero; a[3]=three; a+=(four five); a[-1]=LAST; a=new; args \"${a[@]}\" \"${a[-2]}\""), 0);
-    assert_eq!(*rig.calls.borrow(), vec![vec!["new", "three", "four", "LAST", "four"]]);
+    assert_eq!(
+        rig.run(
+            "a=zero; a[3]=three; a+=(four five); a[-1]=LAST; a=new; args \"${a[@]}\" \"${a[-2]}\""
+        ),
+        0
+    );
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["new", "three", "four", "LAST", "four"]]
+    );
 }
 
 #[test]
 fn indexed_arrays_restore_prefix_local_and_subshell_bindings() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("a=(outer kept); a=prefix echo \"$a\"; f() { local a=local; a=(inner x); args \"${a[@]}\"; }; f; (a=(child)); args \"${a[@]}\""), 0);
-    assert_eq!(*rig.calls.borrow(), vec![vec!["inner", "x"], vec!["outer", "kept"]]);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["inner", "x"], vec!["outer", "kept"]]
+    );
+}
+
+#[test]
+fn indexed_arrays_lengths_empty_lists_and_scalar_zero() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(); args \"${a[@]}\"; a[7]=last; args \"$a\" \"${a[*]}\" \"${#a[@]}\" \"${#a[7]}\"; a+=zero; args \"${a[@]}\""), 0);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![
+            Vec::<String>::new(),
+            vec!["", "last", "1", "4"]
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+            vec!["zero", "last"]
+                .into_iter()
+                .map(str::to_owned)
+                .collect()
+        ]
+    );
+}
+
+#[test]
+fn indexed_arrays_readonly_and_scalar_builtin_writes_preserve_elements() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(old kept); printf -v a %s new; args \"${a[@]}\"; a=prefix printf -v a %s temporary; args \"${a[@]}\""), 0);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["new", "kept"], vec!["new", "kept"]]
+    );
+    assert_eq!(rig.run("readonly a; a[3]=bad"), 1);
+    assert_eq!(rig.run("args \"${a[@]}\""), 0);
+    assert_eq!(rig.calls.borrow().last().unwrap(), &vec!["new", "kept"]);
+}
+
+#[test]
+fn indexed_arrays_reject_oversize_replacement_before_changing_binding() {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 2048,
+        ..Limits::default()
+    });
+    assert_eq!(rig.run("a=(saved kept)"), 0);
+    assert_eq!(rig.run(&format!("a=({})", "x".repeat(2049))), 2);
+    assert_eq!(rig.run("args \"${a[@]}\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["saved", "kept"]]);
+}
+
+#[test]
+fn indexed_arrays_element_length_and_reads_obey_nounset() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(set); set -u; args \"${a[5]}\""), 127);
+    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.run("args \"${#a[5]}\""), 0);
+    assert_eq!(rig.run("a=(); args \"${#a[@]}\" \"${a[@]}\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["0"], vec!["0"]]);
 }

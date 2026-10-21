@@ -66,7 +66,7 @@ fn builtin_prefixes_preserve_local_export_and_readonly_rules() {
             .borrow()
             .bindings()
             .get("IFS")
-            .map(String::as_str),
+            .map(|value| value.as_str()),
         Some("global")
     );
     assert_eq!(
@@ -75,7 +75,7 @@ fn builtin_prefixes_preserve_local_export_and_readonly_rules() {
             .borrow()
             .bindings()
             .get("locked")
-            .map(String::as_str),
+            .map(|value| value.as_str()),
         Some("kept")
     );
 }
@@ -112,7 +112,10 @@ fn builtin_prefixes_restore_after_cancellation() {
     assert_eq!(rig.finish(job), 130);
     let state = rig.shell.state();
     let state = state.borrow();
-    assert_eq!(state.bindings().get("IFS").map(String::as_str), Some(":"));
+    assert_eq!(
+        state.bindings().get("IFS").map(|value| value.as_str()),
+        Some(":")
+    );
     assert!(!state.bindings().contains_key("temporary"));
     assert!(!state.bindings().contains_key("line"));
     drop(writer);

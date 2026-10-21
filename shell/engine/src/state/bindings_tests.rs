@@ -45,7 +45,14 @@ fn cli_environment_replaces_defaults_and_adds_only_a_nonexported_default_path() 
     inherited
         .initialize_cli_environment([("PATH".into(), String::new()), ("IFS".into(), ":".into())]);
     assert_eq!(inherited.bindings()["PATH"], "");
-    assert_eq!(inherited.environment(), inherited.bindings().clone());
+    assert_eq!(
+        inherited.environment(),
+        inherited
+            .bindings()
+            .iter()
+            .map(|(k, v)| (k.clone(), v.to_string()))
+            .collect()
+    );
     assert_eq!(inherited.parameter("IFS"), ":");
 }
 
@@ -56,7 +63,14 @@ fn runtime_environment_extends_defaults_exports_ifs_and_does_not_invent_path() {
     assert_eq!(state.bindings().len(), 2);
     assert_eq!(state.bindings()["IFS"], " \t\n");
     assert!(!state.bindings().contains_key("PATH"));
-    assert_eq!(state.environment(), state.bindings().clone());
+    assert_eq!(
+        state.environment(),
+        state
+            .bindings()
+            .iter()
+            .map(|(k, v)| (k.clone(), v.to_string()))
+            .collect()
+    );
 
     let mut inherited = State::default();
     inherited.inherit_environment([("IFS".into(), ":".into()), ("PATH".into(), String::new())]);

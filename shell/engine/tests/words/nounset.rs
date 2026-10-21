@@ -282,7 +282,7 @@ fn prefix_rhs_failure_is_fatal_even_when_the_command_has_a_heredoc() {
                 .borrow()
                 .bindings()
                 .get("TEMP")
-                .map(String::as_str),
+                .map(|value| value.as_str()),
             Some("before")
         );
         assert!(!rig.shell.state().borrow().bindings().contains_key("value"));
@@ -382,7 +382,7 @@ fn cancellation_before_a_later_unbound_read_has_no_partial_dispatch_or_diagnosti
             .borrow()
             .bindings()
             .get("TEMP")
-            .map(String::as_str),
+            .map(|value| value.as_str()),
         Some("before")
     );
     assert!(!rig.shell.state().borrow().bindings().contains_key("value"));

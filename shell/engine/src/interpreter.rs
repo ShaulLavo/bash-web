@@ -22,6 +22,7 @@ mod command_builtin;
 mod conditional;
 mod control;
 pub(crate) mod eval;
+mod indexed;
 
 #[derive(Clone, Debug)]
 pub struct Limits {
@@ -3351,11 +3352,18 @@ async fn assignments(
     let mut budget = Budget::default();
     for assignment in assignments {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-        if assignment.index.is_some() || assignment.append {
+        let indexed = assignment.index.is_some()
+            || assignment.append
+            || matches!(assignment.value, AssignmentValue::Array(_));
+        if indexed && !commit {
             return Err(2.into());
         }
+        if indexed {
+            indexed::assign(&assignment, state, context, work, &frame, bytes).await?;
+            continue;
+        }
         let AssignmentValue::Scalar(word) = assignment.value else {
-            return Err(2.into());
+            unreachable!()
         };
         let value = expand::word(
             &word,
@@ -3379,8 +3387,17 @@ async fn assignments(
         }
         expand::admit_assignment(state, &assignment.name, value.len(), &context.cancel, work)
             .await?;
+        let storage = state
+            .borrow()
+            .binding(&assignment.name)
+            .filter(|value| matches!(value, crate::state::Binding::Indexed(_)))
+            .map_or(0, |value| {
+                value
+                    .storage_bytes()
+                    .saturating_add(crate::state::Binding::node_bytes())
+            });
         frame
-            .reserve(&assignment.name, value.len())
+            .reserve(&assignment.name, value.len().saturating_add(storage))
             .map_err(expand::Error::from)?;
         let assignment_name = assignment.name.clone();
         if let Err(name) = frame.set(assignment.name, value) {
@@ -3402,6 +3419,10 @@ async fn assignments(
             });
         }
         names.push(assignment_name);
+    }
+    if commit {
+        frame.commit().map_err(expand::Error::from)?;
+        return Ok(Vec::new());
     }
     let mut assigned = Vec::new();
     *bytes = initial_bytes;
@@ -3426,9 +3447,6 @@ async fn assignments(
             }
             assigned.push((state.assignment_name(name)?, value.to_owned()));
         }
-    }
-    if commit {
-        frame.commit().map_err(expand::Error::from)?;
     }
     Ok(assigned)
 }
