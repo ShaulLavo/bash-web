@@ -1,0 +1,1311 @@
+{
+  "schema": 1,
+  "bash": "5.3.15(1)-release",
+  "cases": [
+    {
+      "script": "IFS=' '; read a <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=' '; read a b <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=' '; read a b c <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=' '; read  <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=' '; read a <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdW10K"
+    },
+    {
+      "script": "IFS=' '; read a b <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdW10K"
+    },
+    {
+      "script": "IFS=' '; read a b c <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdW10K"
+    },
+    {
+      "script": "IFS=' '; read  <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYV0K"
+    },
+    {
+      "script": "IFS=' '; read a <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=' '; read a b <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bYl1bXVtdCg=="
+    },
+    {
+      "script": "IFS=' '; read a b c <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bYl1bXVtdCg=="
+    },
+    {
+      "script": "IFS=' '; read  <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bICBhIGIgIF0K"
+    },
+    {
+      "script": "IFS=' '; read a <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOl1bXVtdW10K"
+    },
+    {
+      "script": "IFS=' '; read a b <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOl1bXVtdW10K"
+    },
+    {
+      "script": "IFS=' '; read a b c <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOl1bXVtdW10K"
+    },
+    {
+      "script": "IFS=' '; read  <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTpiOl0K"
+    },
+    {
+      "script": "IFS=' '; read a <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTo6Yl1bXVtdW10K"
+    },
+    {
+      "script": "IFS=' '; read a b <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTo6Yl1bXVtdW10K"
+    },
+    {
+      "script": "IFS=' '; read a b c <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTo6Yl1bXVtdW10K"
+    },
+    {
+      "script": "IFS=' '; read  <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTo6Yl0K"
+    },
+    {
+      "script": "IFS=' '; read a <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbOjpdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=' '; read a b <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbOjpdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=' '; read a b c <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbOjpdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=' '; read  <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bOjpdCg=="
+    },
+    {
+      "script": "IFS=' '; read a <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTogOmI6XVtdW11bXQo="
+    },
+    {
+      "script": "IFS=' '; read a b <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpdWzpiOl1bXVtdCg=="
+    },
+    {
+      "script": "IFS=' '; read a b c <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpdWzpiOl1bXVtdCg=="
+    },
+    {
+      "script": "IFS=' '; read  <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTogOmI6IF0K"
+    },
+    {
+      "script": "IFS=' '; read a <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiIGNdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=' '; read a b <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiXVtjIF1bXVtdCg=="
+    },
+    {
+      "script": "IFS=' '; read a b c <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiXVtjIF1bXVtdCg=="
+    },
+    {
+      "script": "IFS=' '; read  <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYSBiIGMgXQo="
+    },
+    {
+      "script": "IFS=' '; read a <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOmNdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=' '; read a b <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOmNdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=' '; read a b c <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOmNdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=' '; read  <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTpiOmNdCg=="
+    },
+    {
+      "script": "IFS=' '; read a <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbw6k65LitOvCfmIBdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=' '; read a b <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbw6k65LitOvCfmIBdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=' '; read a b c <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbw6k65LitOvCfmIBdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=' '; read  <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bw6k65LitOvCfmIBdCg=="
+    },
+    {
+      "script": "IFS=' '; read a <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpb87CAoDphXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=' '; read a b <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpb87CAoDphXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=' '; read a b c <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpb87CAoDphXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=' '; read  <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11b87CAoDphXQo="
+    },
+    {
+      "script": "IFS=':'; read a <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=':'; read a b <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=':'; read a b c <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=':'; read  <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=':'; read a <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdW10K"
+    },
+    {
+      "script": "IFS=':'; read a b <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdW10K"
+    },
+    {
+      "script": "IFS=':'; read a b c <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdW10K"
+    },
+    {
+      "script": "IFS=':'; read  <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYV0K"
+    },
+    {
+      "script": "IFS=':'; read a <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhIGIgIF1bXVtdW10K"
+    },
+    {
+      "script": "IFS=':'; read a b <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhIGIgIF1bXVtdW10K"
+    },
+    {
+      "script": "IFS=':'; read a b c <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhIGIgIF1bXVtdW10K"
+    },
+    {
+      "script": "IFS=':'; read  <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bICBhIGIgIF0K"
+    },
+    {
+      "script": "IFS=':'; read a <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOl1bXVtdW10K"
+    },
+    {
+      "script": "IFS=':'; read a b <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bYl1bXVtdCg=="
+    },
+    {
+      "script": "IFS=':'; read a b c <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bYl1bXVtdCg=="
+    },
+    {
+      "script": "IFS=':'; read  <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTpiOl0K"
+    },
+    {
+      "script": "IFS=':'; read a <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTo6Yl1bXVtdW10K"
+    },
+    {
+      "script": "IFS=':'; read a b <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bOmJdW11bXQo="
+    },
+    {
+      "script": "IFS=':'; read a b c <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtiXVtdCg=="
+    },
+    {
+      "script": "IFS=':'; read  <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTo6Yl0K"
+    },
+    {
+      "script": "IFS=':'; read a <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbOjpdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=':'; read a b <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=':'; read a b c <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=':'; read  <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bOjpdCg=="
+    },
+    {
+      "script": "IFS=':'; read a <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTogOmI6IF1bXVtdW10K"
+    },
+    {
+      "script": "IFS=':'; read a b <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bIDpiOiBdW11bXQo="
+    },
+    {
+      "script": "IFS=':'; read a b c <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bIF1bYjogXVtdCg=="
+    },
+    {
+      "script": "IFS=':'; read  <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTogOmI6IF0K"
+    },
+    {
+      "script": "IFS=':'; read a <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiIGMgXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=':'; read a b <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiIGMgXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=':'; read a b c <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiIGMgXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=':'; read  <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYSBiIGMgXQo="
+    },
+    {
+      "script": "IFS=':'; read a <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOmNdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=':'; read a b <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiXVtjXVtdW10K"
+    },
+    {
+      "script": "IFS=':'; read a b c <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiXVtjXVtdW10K"
+    },
+    {
+      "script": "IFS=':'; read  <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTpiOmNdCg=="
+    },
+    {
+      "script": "IFS=':'; read a <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbw6k65LitOvCfmIBdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=':'; read a b <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbw6ldW+S4rTrwn5iAXVtdW10K"
+    },
+    {
+      "script": "IFS=':'; read a b c <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbw6ldW+S4rV1b8J+YgF1bXQo="
+    },
+    {
+      "script": "IFS=':'; read  <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bw6k65LitOvCfmIBdCg=="
+    },
+    {
+      "script": "IFS=':'; read a <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpb87CAoDphXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=':'; read a b <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpb87CAoF1bYV1bXVtdCg=="
+    },
+    {
+      "script": "IFS=':'; read a b c <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpb87CAoF1bYV1bXVtdCg=="
+    },
+    {
+      "script": "IFS=':'; read  <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11b87CAoDphXQo="
+    },
+    {
+      "script": "IFS=': '; read a <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=': '; read a b <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=': '; read a b c <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=': '; read  <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=': '; read a <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdW10K"
+    },
+    {
+      "script": "IFS=': '; read a b <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdW10K"
+    },
+    {
+      "script": "IFS=': '; read a b c <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdW10K"
+    },
+    {
+      "script": "IFS=': '; read  <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYV0K"
+    },
+    {
+      "script": "IFS=': '; read a <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=': '; read a b <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bYl1bXVtdCg=="
+    },
+    {
+      "script": "IFS=': '; read a b c <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bYl1bXVtdCg=="
+    },
+    {
+      "script": "IFS=': '; read  <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bICBhIGIgIF0K"
+    },
+    {
+      "script": "IFS=': '; read a <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOl1bXVtdW10K"
+    },
+    {
+      "script": "IFS=': '; read a b <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bYl1bXVtdCg=="
+    },
+    {
+      "script": "IFS=': '; read a b c <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bYl1bXVtdCg=="
+    },
+    {
+      "script": "IFS=': '; read  <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTpiOl0K"
+    },
+    {
+      "script": "IFS=': '; read a <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTo6Yl1bXVtdW10K"
+    },
+    {
+      "script": "IFS=': '; read a b <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bOmJdW11bXQo="
+    },
+    {
+      "script": "IFS=': '; read a b c <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtiXVtdCg=="
+    },
+    {
+      "script": "IFS=': '; read  <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTo6Yl0K"
+    },
+    {
+      "script": "IFS=': '; read a <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbOjpdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=': '; read a b <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=': '; read a b c <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=': '; read  <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bOjpdCg=="
+    },
+    {
+      "script": "IFS=': '; read a <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTogOmI6XVtdW11bXQo="
+    },
+    {
+      "script": "IFS=': '; read a b <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bOmI6XVtdW10K"
+    },
+    {
+      "script": "IFS=': '; read a b c <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtiXVtdCg=="
+    },
+    {
+      "script": "IFS=': '; read  <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTogOmI6IF0K"
+    },
+    {
+      "script": "IFS=': '; read a <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiIGNdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=': '; read a b <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiXVtjIF1bXVtdCg=="
+    },
+    {
+      "script": "IFS=': '; read a b c <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiXVtjIF1bXVtdCg=="
+    },
+    {
+      "script": "IFS=': '; read  <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYSBiIGMgXQo="
+    },
+    {
+      "script": "IFS=': '; read a <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOmNdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=': '; read a b <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiXVtjXVtdW10K"
+    },
+    {
+      "script": "IFS=': '; read a b c <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiXVtjXVtdW10K"
+    },
+    {
+      "script": "IFS=': '; read  <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTpiOmNdCg=="
+    },
+    {
+      "script": "IFS=': '; read a <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbw6k65LitOvCfmIBdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=': '; read a b <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbw6ldW+S4rTrwn5iAXVtdW10K"
+    },
+    {
+      "script": "IFS=': '; read a b c <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbw6ldW+S4rV1b8J+YgF1bXQo="
+    },
+    {
+      "script": "IFS=': '; read  <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bw6k65LitOvCfmIBdCg=="
+    },
+    {
+      "script": "IFS=': '; read a <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpb87CAoDphXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=': '; read a b <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpb87CAoF1bYV1bXVtdCg=="
+    },
+    {
+      "script": "IFS=': '; read a b c <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpb87CAoF1bYV1bXVtdCg=="
+    },
+    {
+      "script": "IFS=': '; read  <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11b87CAoDphXQo="
+    },
+    {
+      "script": "IFS=''; read a <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=''; read a b <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=''; read a b c <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=''; read  <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=''; read a <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdW10K"
+    },
+    {
+      "script": "IFS=''; read a b <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdW10K"
+    },
+    {
+      "script": "IFS=''; read a b c <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdW10K"
+    },
+    {
+      "script": "IFS=''; read  <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYV0K"
+    },
+    {
+      "script": "IFS=''; read a <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhIGIgIF1bXVtdW10K"
+    },
+    {
+      "script": "IFS=''; read a b <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhIGIgIF1bXVtdW10K"
+    },
+    {
+      "script": "IFS=''; read a b c <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhIGIgIF1bXVtdW10K"
+    },
+    {
+      "script": "IFS=''; read  <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bICBhIGIgIF0K"
+    },
+    {
+      "script": "IFS=''; read a <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOl1bXVtdW10K"
+    },
+    {
+      "script": "IFS=''; read a b <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOl1bXVtdW10K"
+    },
+    {
+      "script": "IFS=''; read a b c <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOl1bXVtdW10K"
+    },
+    {
+      "script": "IFS=''; read  <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTpiOl0K"
+    },
+    {
+      "script": "IFS=''; read a <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTo6Yl1bXVtdW10K"
+    },
+    {
+      "script": "IFS=''; read a b <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTo6Yl1bXVtdW10K"
+    },
+    {
+      "script": "IFS=''; read a b c <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTo6Yl1bXVtdW10K"
+    },
+    {
+      "script": "IFS=''; read  <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTo6Yl0K"
+    },
+    {
+      "script": "IFS=''; read a <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbOjpdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=''; read a b <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbOjpdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=''; read a b c <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbOjpdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=''; read  <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bOjpdCg=="
+    },
+    {
+      "script": "IFS=''; read a <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTogOmI6IF1bXVtdW10K"
+    },
+    {
+      "script": "IFS=''; read a b <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTogOmI6IF1bXVtdW10K"
+    },
+    {
+      "script": "IFS=''; read a b c <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTogOmI6IF1bXVtdW10K"
+    },
+    {
+      "script": "IFS=''; read  <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTogOmI6IF0K"
+    },
+    {
+      "script": "IFS=''; read a <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiIGMgXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=''; read a b <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiIGMgXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=''; read a b c <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiIGMgXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=''; read  <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYSBiIGMgXQo="
+    },
+    {
+      "script": "IFS=''; read a <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOmNdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=''; read a b <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOmNdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=''; read a b c <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOmNdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=''; read  <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTpiOmNdCg=="
+    },
+    {
+      "script": "IFS=''; read a <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbw6k65LitOvCfmIBdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=''; read a b <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbw6k65LitOvCfmIBdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=''; read a b c <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbw6k65LitOvCfmIBdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS=''; read  <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bw6k65LitOvCfmIBdCg=="
+    },
+    {
+      "script": "IFS=''; read a <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpb87CAoDphXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=''; read a b <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpb87CAoDphXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=''; read a b c <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpb87CAoDphXVtdW11bXQo="
+    },
+    {
+      "script": "IFS=''; read  <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11b87CAoDphXQo="
+    },
+    {
+      "script": "IFS='é'; read a <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS='é'; read a b <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS='é'; read a b c <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS='é'; read  <<'EOF'\n\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bXQo="
+    },
+    {
+      "script": "IFS='é'; read a <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdW10K"
+    },
+    {
+      "script": "IFS='é'; read a b <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdW10K"
+    },
+    {
+      "script": "IFS='é'; read a b c <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdW10K"
+    },
+    {
+      "script": "IFS='é'; read  <<'EOF'\na\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYV0K"
+    },
+    {
+      "script": "IFS='é'; read a <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhIGIgIF1bXVtdW10K"
+    },
+    {
+      "script": "IFS='é'; read a b <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhIGIgIF1bXVtdW10K"
+    },
+    {
+      "script": "IFS='é'; read a b c <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhIGIgIF1bXVtdW10K"
+    },
+    {
+      "script": "IFS='é'; read  <<'EOF'\n  a b  \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bICBhIGIgIF0K"
+    },
+    {
+      "script": "IFS='é'; read a <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOl1bXVtdW10K"
+    },
+    {
+      "script": "IFS='é'; read a b <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOl1bXVtdW10K"
+    },
+    {
+      "script": "IFS='é'; read a b c <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOl1bXVtdW10K"
+    },
+    {
+      "script": "IFS='é'; read  <<'EOF'\na:b:\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTpiOl0K"
+    },
+    {
+      "script": "IFS='é'; read a <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTo6Yl1bXVtdW10K"
+    },
+    {
+      "script": "IFS='é'; read a b <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTo6Yl1bXVtdW10K"
+    },
+    {
+      "script": "IFS='é'; read a b c <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTo6Yl1bXVtdW10K"
+    },
+    {
+      "script": "IFS='é'; read  <<'EOF'\na::b\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTo6Yl0K"
+    },
+    {
+      "script": "IFS='é'; read a <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbOjpdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS='é'; read a b <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbOjpdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS='é'; read a b c <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbOjpdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS='é'; read  <<'EOF'\n::\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bOjpdCg=="
+    },
+    {
+      "script": "IFS='é'; read a <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTogOmI6IF1bXVtdW10K"
+    },
+    {
+      "script": "IFS='é'; read a b <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTogOmI6IF1bXVtdW10K"
+    },
+    {
+      "script": "IFS='é'; read a b c <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTogOmI6IF1bXVtdW10K"
+    },
+    {
+      "script": "IFS='é'; read  <<'EOF'\na: :b: \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTogOmI6IF0K"
+    },
+    {
+      "script": "IFS='é'; read a <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiIGMgXVtdW11bXQo="
+    },
+    {
+      "script": "IFS='é'; read a b <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiIGMgXVtdW11bXQo="
+    },
+    {
+      "script": "IFS='é'; read a b c <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiIGMgXVtdW11bXQo="
+    },
+    {
+      "script": "IFS='é'; read  <<'EOF'\na\\ b c\\ \nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYSBiIGMgXQo="
+    },
+    {
+      "script": "IFS='é'; read a <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOmNdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS='é'; read a b <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOmNdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS='é'; read a b c <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYTpiOmNdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS='é'; read  <<'EOF'\na\\:b:c\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bYTpiOmNdCg=="
+    },
+    {
+      "script": "IFS='é'; read a <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbw6k65LitOvCfmIBdW11bXVtdCg=="
+    },
+    {
+      "script": "IFS='é'; read a b <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVs65LitOvCfmIBdW11bXQo="
+    },
+    {
+      "script": "IFS='é'; read a b c <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVs65LitOvCfmIBdW11bXQo="
+    },
+    {
+      "script": "IFS='é'; read  <<'EOF'\né:中:😀\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11bw6k65LitOvCfmIBdCg=="
+    },
+    {
+      "script": "IFS='é'; read a <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpb87CAoDphXVtdW11bXQo="
+    },
+    {
+      "script": "IFS='é'; read a b <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpb87CAoDphXVtdW11bXQo="
+    },
+    {
+      "script": "IFS='é'; read a b c <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpb87CAoDphXVtdW11bXQo="
+    },
+    {
+      "script": "IFS='é'; read  <<'EOF'\n󰀠:a\nEOF\nprintf '%s:[%s][%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW11b87CAoDphXQo="
+    },
+    {
+      "script": "read a -r <<<'x y'; printf '%s:[%s]\\n' \"$?\" \"$a\"",
+      "status": 0,
+      "stdoutBase64": "MTpbeF0K"
+    },
+    {
+      "script": "b=old; read a 1x b <<<'x y z'; printf '%s:[%s][%s]\\n' \"$?\" \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "MTpbeF1bb2xkXQo="
+    },
+    {
+      "script": "read <<'EOF'\n  a\\\n b  \nEOF\nprintf '[%s]\\n' \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "WyAgYSBiICBdCg=="
+    },
+    {
+      "script": "printf 'ab\\\\' | { read a b; printf '%s:[%s][%s]\\n' \"$?\" \"$a\" \"$b\"; }",
+      "status": 0,
+      "stdoutBase64": "MTpbYWJdW10K"
+    },
+    {
+      "script": "printf 'a\\0b c' | { read a b; printf '%s:[%s][%s]\\n' \"$?\" \"$a\" \"$b\"; }",
+      "status": 0,
+      "stdoutBase64": "MTpbYWJdW2NdCg=="
+    },
+    {
+      "script": "{ read -n5 a b; printf '%s:[%s][%s]\\n' \"$?\" \"$a\" \"$b\"; read -r tail; printf '[%s]\\n' \"$tail\"; } <<<'x y zrest'",
+      "status": 0,
+      "stdoutBase64": "MDpbeF1beSB6XQpbcmVzdF0K"
+    },
+    {
+      "script": "read -n4 a b <<<'a\\ b c'; printf '[%s][%s]\\n' \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "W2EgYl1bXQo="
+    },
+    {
+      "script": "read -n4 a b <<<'é 中z!'; printf '[%s][%s]\\n' \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "W8OpXVvkuK16XQo="
+    },
+    {
+      "script": "IFS=': ' read -r a b <<<'x\\ y:z\\ '; printf '[%s][%s]\\n' \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "W3hcXVt5OnpcXQo="
+    },
+    {
+      "script": "read a a <<<'x y z'; printf '[%s]\\n' \"$a\"",
+      "status": 0,
+      "stdoutBase64": "W3kgel0K"
+    },
+    {
+      "script": "read IFS a b <<<'x y z'; printf '[%s][%s][%s]\\n' \"$IFS\" \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "W3hdW3ldW3pdCg=="
+    },
+    {
+      "script": "{ read 1bad; printf '%s\\n' \"$?\"; read -r a; printf '[%s]\\n' \"$a\"; } <<<'untouched'",
+      "status": 0,
+      "stdoutBase64": "MQpbdW50b3VjaGVkXQo="
+    },
+    {
+      "script": "{ read -n3 1bad; printf '%s\\n' \"$?\"; read -r a; printf '[%s]\\n' \"$a\"; } <<<'untouched'",
+      "status": 0,
+      "stdoutBase64": "MQpbdW50b3VjaGVkXQo="
+    },
+    {
+      "script": "IFS=: read a b <<<'a::b\\ '; printf '[%s][%s]\\n' \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "W2FdWzpiIF0K"
+    },
+    {
+      "script": "IFS='é¢'; read a b <<<'âz'; printf '[%s][%s]\\n' \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "W8Oiel1bXQo="
+    },
+    {
+      "script": "IFS='é¢'; read IFS a b <<<'xéâz¢q'; printf '[%s][%s][%s]\\n' \"$IFS\" \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "W3hdW8Oiel1bcV0K"
+    },
+    {
+      "script": "IFS='é¢'; read -r a b <<<'a\\éâ¢b'; printf '[%s][%s]\\n' \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "W2FcXVvDosKiYl0K"
+    },
+    {
+      "script": "IFS='é¢'; read a b <<<'a\\éâ¢b'; printf '[%s][%s]\\n' \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "W2HDqcOiXVtiXQo="
+    },
+    {
+      "script": "IFS='éš'; read a b <<<'oneátwo'; printf '[%s][%s]\\n' \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "W29uZcOhdHdvXVtdCg=="
+    },
+    {
+      "script": "IFS='éš'; read -r a <<<'abcá'; printf '%s:[%s]\\n' \"$?\" \"$a\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYWJjw6FdCg=="
+    },
+    {
+      "script": "IFS='éš'; read -n4 a <<<'abcá'; printf '%s:[%s]\\n' \"$?\" \"$a\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYWJjw6FdCg=="
+    },
+    {
+      "script": "IFS='éš'; read -rn4 a <<<'abcá'; printf '%s:[%s]\\n' \"$?\" \"$a\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYWJjw6FdCg=="
+    },
+    {
+      "script": "a=oldA; b=oldB; c=oldC; readonly a; read  a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\\n' \"$r\" \"$a\" \"$b\" \"$c\"; exit \"$r\"",
+      "status": 2,
+      "stdoutBase64": "Mjpbb2xkQV1bb2xkQl1bb2xkQ10K"
+    },
+    {
+      "script": "a=oldA; b=oldB; c=oldC; readonly b; read  a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\\n' \"$r\" \"$a\" \"$b\" \"$c\"; exit \"$r\"",
+      "status": 2,
+      "stdoutBase64": "MjpbeF1bb2xkQl1bb2xkQ10K"
+    },
+    {
+      "script": "a=oldA; b=oldB; c=oldC; readonly c; read  a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\\n' \"$r\" \"$a\" \"$b\" \"$c\"; exit \"$r\"",
+      "status": 1,
+      "stdoutBase64": "MTpbeF1beV1bb2xkQ10K"
+    },
+    {
+      "script": "a=oldA; b=oldB; c=oldC; readonly a; read -r a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\\n' \"$r\" \"$a\" \"$b\" \"$c\"; exit \"$r\"",
+      "status": 2,
+      "stdoutBase64": "Mjpbb2xkQV1bb2xkQl1bb2xkQ10K"
+    },
+    {
+      "script": "a=oldA; b=oldB; c=oldC; readonly b; read -r a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\\n' \"$r\" \"$a\" \"$b\" \"$c\"; exit \"$r\"",
+      "status": 2,
+      "stdoutBase64": "MjpbeF1bb2xkQl1bb2xkQ10K"
+    },
+    {
+      "script": "a=oldA; b=oldB; c=oldC; readonly c; read -r a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\\n' \"$r\" \"$a\" \"$b\" \"$c\"; exit \"$r\"",
+      "status": 1,
+      "stdoutBase64": "MTpbeF1beV1bb2xkQ10K"
+    },
+    {
+      "script": "a=oldA; b=oldB; c=oldC; readonly a; read -n4 a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\\n' \"$r\" \"$a\" \"$b\" \"$c\"; exit \"$r\"",
+      "status": 2,
+      "stdoutBase64": "Mjpbb2xkQV1bb2xkQl1bb2xkQ10K"
+    },
+    {
+      "script": "a=oldA; b=oldB; c=oldC; readonly b; read -n4 a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\\n' \"$r\" \"$a\" \"$b\" \"$c\"; exit \"$r\"",
+      "status": 2,
+      "stdoutBase64": "MjpbeF1bb2xkQl1bb2xkQ10K"
+    },
+    {
+      "script": "a=oldA; b=oldB; c=oldC; readonly c; read -n4 a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\\n' \"$r\" \"$a\" \"$b\" \"$c\"; exit \"$r\"",
+      "status": 1,
+      "stdoutBase64": "MTpbeF1beV1bb2xkQ10K"
+    },
+    {
+      "script": "a=oldA; b=oldB; c=oldC; readonly a; read -rn4 a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\\n' \"$r\" \"$a\" \"$b\" \"$c\"; exit \"$r\"",
+      "status": 2,
+      "stdoutBase64": "Mjpbb2xkQV1bb2xkQl1bb2xkQ10K"
+    },
+    {
+      "script": "a=oldA; b=oldB; c=oldC; readonly b; read -rn4 a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\\n' \"$r\" \"$a\" \"$b\" \"$c\"; exit \"$r\"",
+      "status": 2,
+      "stdoutBase64": "MjpbeF1bb2xkQl1bb2xkQ10K"
+    },
+    {
+      "script": "a=oldA; b=oldB; c=oldC; readonly c; read -rn4 a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\\n' \"$r\" \"$a\" \"$b\" \"$c\"; exit \"$r\"",
+      "status": 1,
+      "stdoutBase64": "MTpbeF1beV1bb2xkQ10K"
+    },
+    {
+      "script": "a=oldA; b=oldB; c=oldC; readonly a; read -n0 a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\\n' \"$r\" \"$a\" \"$b\" \"$c\"; exit \"$r\"",
+      "status": 2,
+      "stdoutBase64": "Mjpbb2xkQV1bb2xkQl1bb2xkQ10K"
+    },
+    {
+      "script": "a=oldA; b=oldB; c=oldC; readonly b; read -n0 a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\\n' \"$r\" \"$a\" \"$b\" \"$c\"; exit \"$r\"",
+      "status": 2,
+      "stdoutBase64": "MjpbXVtvbGRCXVtvbGRDXQo="
+    },
+    {
+      "script": "a=oldA; b=oldB; c=oldC; readonly c; read -n0 a b c <<<'x y z'; r=$?; printf '%s:[%s][%s][%s]\\n' \"$r\" \"$a\" \"$b\" \"$c\"; exit \"$r\"",
+      "status": 1,
+      "stdoutBase64": "MTpbXVtdW29sZENdCg=="
+    },
+    {
+      "script": "REPLY=old; readonly REPLY; read  <<<'xyz'; r=$?; printf '%s:[%s]\\n' \"$r\" \"$REPLY\"; exit \"$r\"",
+      "status": 2,
+      "stdoutBase64": "Mjpbb2xkXQo="
+    },
+    {
+      "script": "REPLY=old; readonly REPLY; read -r <<<'xyz'; r=$?; printf '%s:[%s]\\n' \"$r\" \"$REPLY\"; exit \"$r\"",
+      "status": 2,
+      "stdoutBase64": "Mjpbb2xkXQo="
+    },
+    {
+      "script": "REPLY=old; readonly REPLY; read -n2 <<<'xyz'; r=$?; printf '%s:[%s]\\n' \"$r\" \"$REPLY\"; exit \"$r\"",
+      "status": 2,
+      "stdoutBase64": "Mjpbb2xkXQo="
+    },
+    {
+      "script": "REPLY=old; readonly REPLY; read -n0 <<<'xyz'; r=$?; printf '%s:[%s]\\n' \"$r\" \"$REPLY\"; exit \"$r\"",
+      "status": 2,
+      "stdoutBase64": "Mjpbb2xkXQo="
+    }
+  ]
+}
