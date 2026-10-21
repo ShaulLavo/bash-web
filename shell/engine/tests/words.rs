@@ -4135,3 +4135,24 @@ mod printf_integer_fields;
 mod printf_options;
 #[path = "words/printf_quoting.rs"]
 mod printf_quoting;
+
+#[test]
+fn indexed_arrays_compound_sparse_and_quoted_fields() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=('one two' '' three); a[7]=last; args \"${a[@]}\" \"${a[7]}\" \"${#a[@]}\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["one two", "", "three", "last", "last", "4"]]);
+}
+
+#[test]
+fn indexed_arrays_append_scalar_zero_and_negative_index() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=zero; a[3]=three; a+=(four five); a[-1]=LAST; a=new; args \"${a[@]}\" \"${a[-2]}\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["new", "three", "four", "LAST", "four"]]);
+}
+
+#[test]
+fn indexed_arrays_restore_prefix_local_and_subshell_bindings() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(outer kept); a=prefix echo \"$a\"; f() { local a=local; a=(inner x); args \"${a[@]}\"; }; f; (a=(child)); args \"${a[@]}\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["inner", "x"], vec!["outer", "kept"]]);
+}
