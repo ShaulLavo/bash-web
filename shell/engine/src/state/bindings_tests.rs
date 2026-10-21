@@ -30,10 +30,12 @@ fn builtin(state: &SharedState, assigned: &[(String, String)]) -> PrefixFrame {
 }
 
 #[test]
-fn cli_environment_replaces_defaults_and_adds_only_a_nonexported_default_path() {
+fn cli_environment_adds_nonexported_shell_defaults() {
     let mut state = State::default();
     state.initialize_cli_environment([("HOME".into(), "/home/test".into())]);
-    assert_eq!(state.bindings().len(), 2);
+    assert_eq!(state.bindings().len(), 4);
+    assert_eq!(state.bindings()["OPTIND"], "1");
+    assert_eq!(state.bindings()["OPTERR"], "1");
     assert!(!state.bindings().contains_key("IFS"));
     assert_eq!(state.bindings()["PATH"], "/usr/bin:/bin");
     assert_eq!(
@@ -45,7 +47,10 @@ fn cli_environment_replaces_defaults_and_adds_only_a_nonexported_default_path() 
     inherited
         .initialize_cli_environment([("PATH".into(), String::new()), ("IFS".into(), ":".into())]);
     assert_eq!(inherited.bindings()["PATH"], "");
-    assert_eq!(inherited.environment(), inherited.bindings().clone());
+    assert_eq!(
+        inherited.environment(),
+        BTreeMap::from([("PATH".into(), String::new()), ("IFS".into(), ":".into())])
+    );
     assert_eq!(inherited.parameter("IFS"), ":");
 }
 
@@ -53,10 +58,18 @@ fn cli_environment_replaces_defaults_and_adds_only_a_nonexported_default_path() 
 fn runtime_environment_extends_defaults_exports_ifs_and_does_not_invent_path() {
     let mut state = State::default();
     state.inherit_environment([("HOME".into(), "/home/test".into())]);
-    assert_eq!(state.bindings().len(), 2);
+    assert_eq!(state.bindings().len(), 4);
+    assert_eq!(state.bindings()["OPTIND"], "1");
+    assert_eq!(state.bindings()["OPTERR"], "1");
     assert_eq!(state.bindings()["IFS"], " \t\n");
     assert!(!state.bindings().contains_key("PATH"));
-    assert_eq!(state.environment(), state.bindings().clone());
+    assert_eq!(
+        state.environment(),
+        BTreeMap::from([
+            ("HOME".into(), "/home/test".into()),
+            ("IFS".into(), " \t\n".into())
+        ])
+    );
 
     let mut inherited = State::default();
     inherited.inherit_environment([("IFS".into(), ":".into()), ("PATH".into(), String::new())]);
