@@ -24,6 +24,7 @@ mod conditional;
 mod control;
 pub(crate) mod eval;
 mod file_substitution;
+mod type_builtin;
 
 #[derive(Clone, Debug)]
 pub struct Limits {
@@ -3111,6 +3112,12 @@ async fn dispatch_simple_command_body(
             return Err(2);
         }
         return Ok(eval::run(args, state, fds, context).await);
+    }
+    if handler == Some(commands::Handler::Type) {
+        let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
+            .await
+            .map_err(admission_status)?;
+        return type_builtin::run(&args, &state, &fds, &context, &mut work).await;
     }
     if let Some(commands::Handler::Builtin(builtin)) = handler {
         let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)

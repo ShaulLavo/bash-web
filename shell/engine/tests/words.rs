@@ -4143,3 +4143,6 @@ mod builtin_wrapper;
 
 #[path = "words/getopts.rs"]
 mod getopts;
+
+#[path = "words/type_builtin.rs"]
+mod type_builtin;

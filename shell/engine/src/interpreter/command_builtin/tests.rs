@@ -219,7 +219,7 @@ impl Rig {
 
 #[test]
 fn lookup_live_storage_refunds_each_failed_candidate() {
-    for source in ["probe", "command -v probe"] {
+    for source in ["probe", "command -v probe", "type -p probe"] {
         let rig = Rig::new(Limits {
             path_bytes: 70,
             ..Limits::default()
@@ -287,7 +287,7 @@ fn lookup_small_paths_reserve_actual_bytes_not_the_whole_policy_ceiling() {
 
 #[test]
 fn lookup_global_admission_rejects_before_copying_large_path_requests() {
-    for source in ["probe", "command -v probe"] {
+    for source in ["probe", "command -v probe", "type -p probe"] {
         let rig = Rig::new(Limits {
             execution_bytes: 192 * 1024,
             ..Limits::default()

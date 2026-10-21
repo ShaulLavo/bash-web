@@ -21,17 +21,18 @@ fn baseline(names: &[&'static str]) -> Vec<&'static str> {
 const BUILTINS: &[&str] = &[
     ":", "[", "break", "builtin", "cd", "command", "continue", "declare", "echo", "eval", "exec",
     "exit", "export", "false", "getopts", "jobs", "kill", "let", "local", "printf", "pwd", "read",
-    "readonly", "return", "set", "shift", "shopt", "test", "true", "typeset", "unset", "wait",
+    "readonly", "return", "set", "shift", "shopt", "test", "true", "type", "typeset", "unset",
+    "wait",
 ];
 
 #[test]
-fn catalogue_has_unique_exact_names_and_no_type_builtin() {
+fn catalogue_has_unique_exact_names() {
     let unique: BTreeSet<_> = COMMANDS.iter().map(|command| command.name).collect();
     assert_eq!(unique.len(), COMMANDS.len());
     for command in COMMANDS {
         assert!(std::ptr::eq(lookup(command.name).unwrap(), command));
     }
-    for missing in ["", "type", "Echo", "/bin/echo", " export", "export "] {
+    for missing in ["", "Echo", "/bin/echo", " export", "export "] {
         assert!(lookup(missing).is_none(), "{missing:?}");
     }
 }
@@ -67,6 +68,7 @@ fn adapter_dispatch_preserves_the_old_dispatch_set_not_the_old_is_builtin_set() 
     for (name, expected) in [
         ("command", Handler::Command),
         ("builtin", Handler::BuiltinWrapper),
+        ("type", Handler::Type),
         ("exec", Handler::Exec),
         ("eval", Handler::Eval),
         ("let", Handler::Let),

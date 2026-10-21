@@ -83,7 +83,7 @@ pub(super) async fn execution_failure(
     diagnostic(fds, context, b"\n").await
 }
 
-async fn output(fds: &Descriptors, context: &Context, bytes: &[u8]) -> Result<(), i32> {
+pub(super) async fn output(fds: &Descriptors, context: &Context, bytes: &[u8]) -> Result<(), i32> {
     let output = fds.borrow().get(1).ok_or(1)?;
     output
         .write_all(bytes, &context.cancel)
@@ -135,7 +135,12 @@ impl LookupWork {
             storage,
         })
     }
-    fn join(&self, prefix: &str, name: &str, context: &Context) -> Result<PathString, i32> {
+    pub(super) fn join(
+        &self,
+        prefix: &str,
+        name: &str,
+        context: &Context,
+    ) -> Result<PathString, i32> {
         let separator = if prefix.ends_with('/') { "" } else { "/" };
         let bytes = prefix
             .len()
@@ -168,6 +173,29 @@ pub(super) async fn executable(
     context: &Context,
     work: &mut LookupWork,
 ) -> Result<Resolution, i32> {
+    executable_from(
+        name,
+        state,
+        default_path,
+        path_override,
+        context,
+        work,
+        &mut 0,
+    )
+    .await
+}
+
+/// Resume the same authoritative PATH scan after its last inspected entry.
+/// The caller keeps one cursor per name and shares LookupWork across all names.
+pub(super) async fn executable_from(
+    name: &str,
+    state: &SharedState,
+    default_path: bool,
+    path_override: Option<&str>,
+    context: &Context,
+    work: &mut LookupWork,
+    cursor: &mut usize,
+) -> Result<Resolution, i32> {
     if name.is_empty() {
         return Ok(Resolution::Missing);
     }
@@ -187,7 +215,10 @@ pub(super) async fn executable(
         let storage = work.admit(cwd_storage(&state.cwd, path)?, context)?;
         (state.cwd.clone(), path.to_owned(), path_unset, storage)
     };
-    let mut entries = path.split(':');
+    let Some(remaining) = path.get(*cursor..) else {
+        return Ok(Resolution::Missing);
+    };
+    let mut entries = remaining.split(':');
     let mut non_executable = None;
     // Bash remembers the first existing candidate, including a directory. A
     // directory before a non-runnable regular file suppresses that fallback;
@@ -207,6 +238,7 @@ pub(super) async fn executable(
                         .unwrap_or(Resolution::Missing)
                 });
             };
+            *cursor = cursor.saturating_add(directory.len()).saturating_add(1);
             let prefix = if path_unset {
                 cwd.as_str()
             } else if directory.is_empty() {
@@ -346,39 +378,7 @@ pub(super) async fn query(
             )
             .await?;
             if options.verbose {
-                let limit = context
-                    .limits()
-                    .expansion_bytes
-                    .min(work.storage_left())
-                    .min(context.evaluation.execution_available());
-                // The printer enforces its ceiling before appending. Reserve
-                // that full possible live buffer before it allocates anything.
-                let _render_storage = context.evaluation.admit_execution(limit)?;
-                let rendered = match function_string_bounded(
-                    name,
-                    &function.body,
-                    &Cell::new(limit),
-                    limit,
-                    Some(&context.parser_budget()),
-                ) {
-                    Ok(rendered) => rendered,
-                    Err(_) => {
-                        if context.cancel.is_cancelled() {
-                            return Err(context.cancel_status());
-                        }
-                        diagnostic(
-                            fds,
-                            context,
-                            b"command: function description exceeds memory or print-work limit\n",
-                        )
-                        .await?;
-                        return Err(2);
-                    }
-                };
-                work.admit_storage(rendered.len())
-                    .map_err(admission_status)?;
-                output(fds, context, rendered.as_bytes()).await?;
-                output(fds, context, b"\n").await?;
+                function_description(name, &function, fds, context, work).await?;
             }
         } else if command.is_some_and(commands::Command::query_builtin) {
             output(fds, context, name.as_bytes()).await?;
@@ -445,3 +445,49 @@ pub(super) async fn query(
 
 #[cfg(test)]
 mod tests;
+
+/// Shared AST rendering and admission for command/type function descriptions.
+pub(super) async fn function_description(
+    name: &str,
+    function: &StoredFunction,
+    fds: &Descriptors,
+    context: &Context,
+    work: &mut expand::Work,
+) -> Result<(), i32> {
+    let limit = context
+        .limits()
+        .expansion_bytes
+        .min(work.storage_left())
+        .min(context.evaluation.execution_available());
+    // The printer enforces its ceiling before appending. Reserve
+    // that full possible live buffer before it allocates anything.
+    let _render_storage = context.evaluation.admit_execution(limit)?;
+    let rendered = match function_string_bounded(
+        name,
+        &function.body,
+        &Cell::new(limit),
+        limit,
+        Some(&context.parser_budget()),
+    ) {
+        Ok(rendered) => rendered,
+        Err(_) => return function_description_failure(fds, context).await,
+    };
+    work.admit_storage(rendered.len())
+        .map_err(admission_status)?;
+    output(fds, context, rendered.as_bytes()).await?;
+    output(fds, context, b"\n").await?;
+    Ok(())
+}
+
+async fn function_description_failure(fds: &Descriptors, context: &Context) -> Result<(), i32> {
+    if context.cancel.is_cancelled() {
+        return Err(context.cancel_status());
+    }
+    diagnostic(
+        fds,
+        context,
+        b"command: function description exceeds memory or print-work limit\n",
+    )
+    .await?;
+    Err(2)
+}

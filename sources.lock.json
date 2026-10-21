@@ -1830,5 +1830,39 @@
       "non-ASCII option bytes, which cannot be represented individually by the existing UTF-8 scalar binding storage",
       "byte-identical GNU Bash --help prose"
     ]
+  },
+  "shellType": {
+    "repository": "https://github.com/everruns/bashkit",
+    "revision": "491c3281f668b76d64b15210b8f5d7bf97244be0",
+    "license": "MIT",
+    "classification": "Adapted type option and classification ordering with original catalogue, streaming, lookup and AST-rendering adapters.",
+    "implementationSources": [
+      {
+        "path": "crates/bashkit/src/builtins/introspect.rs",
+        "sha256": "01feec19da8edea66668ed2a6699ee1244ed4f206b416481a4e769eaba803562",
+        "items": [
+          "Type option modes, persistent force-PATH flag, shell classification order and all-operands status"
+        ]
+      }
+    ],
+    "testSources": [
+      {
+        "path": "crates/bashkit/tests/spec_cases/bash/type.test.sh",
+        "sha256": "cecb81e7282e8e17a4e8920462dcd8f27199ff2c493dcf1cd688245d479ddbf8"
+      }
+    ],
+    "implementationDestinations": [
+      "shell/engine/src/interpreter/type_builtin.rs"
+    ],
+    "testDestinations": [
+      "shell/engine/tests/words/type_builtin.rs"
+    ],
+    "originalAdapters": "Register one interpreter handler in the existing command catalogue. Extend the existing bounded command_builtin executable resolver with a resumable PATH-entry offset, preserving its one-shot wrapper and fallback policy. Extract existing canonical AST function rendering and its admission unchanged for both query callers. Stream through existing descriptors, share command work and live storage, never spawn as a probe. No upstream search_path helpers, parallel builtin registry, buffered output or function-text parser is retained.",
+    "deferred": [
+      "aliases and command hash ownership",
+      "declarations, arrays and grammar prerequisites",
+      "byte-identical GNU Bash help and execution-coordinate diagnostics"
+    ],
+    "documentation": "docs/type.md"
   }
 }
