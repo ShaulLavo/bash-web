@@ -63,20 +63,40 @@ cover the actual standalone entry in both configured browsers.
 
 ## Measured result
 
-The full integrated production replay at `7283f602` preserves all 9,221 records
-against PR44/main `2f0bf117`. Oils stays 1,023/1,682 scored, Brush stays 1,014/1,888,
-and Bashkit stays 1,420/2,222. Every gained/lost ID list is empty, with no other
-outcome changes. No baseline update is needed. The host-backed descriptor controls
-are the new behavior. The frozen inventory contains 16 descriptor-path cases:
-10 pass, four are excluded command-dependent cases, and two fail for unrelated
-syntax or missing-builtin behavior. This replay preserves all 10 existing passes.
+The integrated production source `6d8fd8bea2321ad3072d7e618e237b48536fbd0c`
+normally merges main `f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb`, including getopts.
+The full production replay preserves all 9,221 records. Oils stays 1,051/1,682
+scored, Brush stays 1,057/1,888, and Bashkit stays 1,443/2,222. Every gained/lost
+ID list is empty, with no other outcome changes. The baseline and its historical
+failure payloads are unchanged. This is supporting host-backed adoption, not a
+new scored gain. See [the exact receipt](evidence/waffle-descriptor-reopening.json).
+
+The frozen inventory contains 16 descriptor-path cases: 10 pass, four are excluded
+command-dependent cases, and two fail for unrelated behavior. All 10 passes remain.
 The failures are `oils:redirect:543` for `{var}` redirects and
 `brush-suite:builtins/dot:8` for the missing `.` builtin.
-See [the exact receipt](evidence/waffle-descriptor-reopening.json).
 
-Native/WASI tests pass 1,317/1,297 cases, the complete scoreboard test recipe passes
-557, and runtime unit tests pass 145. Chromium/Firefox pass 232 browser cases with
-16 unchanged skips, plus the two added real shared-terminal controls. Browser
-runs use source/artifact hashes and verified remote teardown. Final review and
-hosted CI belong to the parent. The root hold also requires normal PR47/main
-integration and a complete frozen recomputation before landing.
+Independent review found that grep operands still bypassed logical translation.
+Before repair, `printf 'secret-stdin\n' | grep secret /dev/fd/4` read a private
+stdin duplicate and returned 0. Bash 5.3.15 returned 2 with no stdout. Grep now
+uses the same typed opener as cat and redirects, returns 2 without leaking data,
+and retains its existing generic I/O diagnostic. The operand loop still processes
+later inputs, gives quiet success priority over earlier errors, and preserves
+cancellation 130 and broken-pipe 141. Production controls cover fd 3 through 6,
+remapping, both numbered namespaces, stdio aliases, normalized spellings,
+independent regular offsets, real pipes, ordinary files and inode access denial.
+
+The consumer audit found no other direct shell-semantic file-operand open.
+Ordinary redirects and `interpreter/file_substitution.rs` use `open_path`.
+The remaining direct opens implement the filesystem itself or are test fixtures;
+mkdir creates namespace entries rather than reopening input operands. No program
+or generic I/O contract was added.
+
+Integrated native/WASI suites pass 1,342/1,322 tests. Production controls pass 154,
+the exact scoreboard recipe passes 573, CI tests pass 105, and runtime unit tests
+pass 145. Chromium/Firefox pass 234 browser cases with 16 unchanged skips,
+including shared terminals, Waiting, Restart, SAFE rejection and foreign format
+preservation. Source/artifact hashes and remote teardown are recorded. Engine
+layers retain zero violations and 42 production/28 test-only edges. All local
+gates pass. The root hold is lifted; exact-head independent review, hosted CI and
+merge still belong to the parent. This is not a merged-status claim.

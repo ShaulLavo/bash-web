@@ -1,8 +1,8 @@
 {
-  "status": "review-ready; parent review, CI and post-PR47 integration pending",
-  "date": "2026-10-21",
-  "measuredHead": "7283f602fb91c6ca5d217318aa9c6ffbdebcd3d0",
-  "integratedMain": "2f0bf1176703a2a397bd0e35af480d7df322e67e",
+  "status": "review-ready; exact-head independent review and hosted CI pending",
+  "date": "2026-10-22",
+  "measuredHead": "6d8fd8bea2321ad3072d7e618e237b48536fbd0c",
+  "integratedMain": "f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb",
   "waffle": "c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289",
   "node": "26.7.0",
   "jobs": 1,
@@ -19,22 +19,22 @@
     "ok": true,
     "corpora": {
       "oils": {
-        "before": 1023,
-        "after": 1023,
+        "before": 1051,
+        "after": 1051,
         "gained": [],
         "lost": [],
         "newlyFailing": []
       },
       "brush-suite": {
-        "before": 1014,
-        "after": 1014,
+        "before": 1057,
+        "after": 1057,
         "gained": [],
         "lost": [],
         "newlyFailing": []
       },
       "bashkit-suite": {
-        "before": 1420,
-        "after": 1420,
+        "before": 1443,
+        "after": 1443,
         "gained": [],
         "lost": [],
         "newlyFailing": []
@@ -45,23 +45,43 @@
   "counts": {
     "oils": {
       "total": 2492,
-      "passed": 1023,
+      "passed": 1051,
       "skipped": 810
     },
     "brush-suite": {
       "total": 2894,
-      "passed": 1014,
+      "passed": 1057,
       "skipped": 1006
     },
     "bashkit-suite": {
       "total": 3835,
-      "passed": 1420,
+      "passed": 1443,
       "skipped": 1613
     }
   },
   "artifact": {
-    "path": "/work/reports/bash-web/hill-climb/control/waffle-reopen/frozen.json",
-    "sha256": "203eef3e4ddc8eddd2ed4edc2ce6e14ddc05fe7295ee7217471735d4ad88cd8d"
+    "path": "/work/reports/bash-web/hill-climb/control/waffle-reopen/integration/frozen.json",
+    "sha256": "84156f07ffed46b984b5b8ceb84d5d620cd71b42ef0286220e41b3eae1d8f283"
   },
-  "baselineChanged": false
+  "baselineChanged": false,
+  "verification": {
+    "productionControls": 154,
+    "nativeTests": 1342,
+    "wasiTests": 1322,
+    "scoreboardTests": 573,
+    "ciTests": 105,
+    "guestBuildTests": 18,
+    "runtimeTests": 145,
+    "browserPassed": 234,
+    "browserSkipped": 16,
+    "layerTests": 34,
+    "productionLayerEdges": 42,
+    "testLayerEdges": 28,
+    "productionLayerViolations": 0,
+    "testLayerViolations": 0,
+    "browserReceipt": "/work/reports/machine-fleet/remote-gate/waffle-reopen-r2-browser-20261021T214004Z-l9ablpem",
+    "browserTeardown": "ok",
+    "shellRuntimeSha256": "e4e9d2b070b98736ec5f3d8cdf8d5d358c038255bc9011c072d5ac2e3ed73aa4",
+    "grepSha256": "d2eb8e8d385e00bf4a8f326e9e0876e68009d617c1130a3fb308c8934aa91196"
+  }
 }

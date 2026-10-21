@@ -2156,22 +2156,32 @@ See [descriptor contracts and consumer audit](../docs/descriptor-reopening.md).
 
 ### Adoption measurement and landing gate
 
-The integrated candidate `7283f602fb91c6ca5d217318aa9c6ffbdebcd3d0` normally merges
-PR44/main `2f0bf1176703a2a397bd0e35af480d7df322e67e`. Both ordinary redirects and
-PR44's `interpreter/file_substitution.rs` use the same logical-to-physical helper.
-The full production-Waffle replay preserves all 9,221 identities and every outcome.
-Oils/Brush/Bashkit stay 1023/1014/1420; gained and lost IDs are empty in every corpus.
-The baseline and its historical failure payloads are unchanged. See the
-[measurement receipt](../docs/evidence/waffle-descriptor-reopening.json).
+The integrated production source `6d8fd8bea2321ad3072d7e618e237b48536fbd0c`
+normally merges main `f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb`, including getopts.
+Both ordinary redirects and `interpreter/file_substitution.rs` use the same
+logical-to-physical helper. Independent R2 review found one omitted consumer:
+grep operands opened directly against the utility's physical WASI table.
+`printf 'secret-stdin\n' | grep secret /dev/fd/4` printed the private stdin data
+and returned 0, while Bash 5.3.15 returned 2 without stdout. Grep now uses the
+existing typed opener and returns 2 without leaking data. Its operand error,
+quiet-success and cancellation policies remain intact. No generic API changed.
 
-Native/WASI suites pass 1,317/1,297 tests, the exact scoreboard recipe passes 557,
-and runtime controls pass 145. Chromium and Firefox pass 232 browser cases with
-16 existing skips, plus both real shared-terminal descriptor controls. Foreign
-format errors survive Restart without wiping the sentinel. SAFE never falls back.
-The one duplicate fixture setup found by the quality gate is extracted and
-reverified before handoff.
+The full production-Waffle replay preserves all 9,221 records and every outcome
+against immutable integrated main. Oils/Brush/Bashkit stay 1051/1057/1443;
+gained=[], lost=[] and newlyFailing=[] in every corpus. The baseline and its
+historical failure payloads are unchanged. The oracle includes 16 descriptor-path
+cases, with 10 passes preserved, four frozen skips and two unrelated failures.
+See the [measurement receipt](../docs/evidence/waffle-descriptor-reopening.json).
 
-Status: Approved, implementation awaiting parent review and hosted CI. The root
-merge hold remains in force. Parent alone merges after PR47/main normal integration
-and a fresh complete frozen membership recomputation. This receipt does not claim
-PR47 integration, hosted CI acceptance, full local-buffer parity or merged status.
+Native/WASI suites pass 1,342/1,322 tests, production controls pass 154, the exact
+scoreboard recipe passes 573, and runtime controls pass 145. Chromium/Firefox pass
+234 browser cases with 16 existing skips. Foreign format errors survive Restart
+without wiping the sentinel; SAFE never falls back. Both ordinary redirects and
+the file-substitution shortcut pass host-fd translation controls after integration.
+The eight short/large here-input observations above are reverified unchanged.
+
+Status: Approved, implementation review-ready after normal PR47/main integration
+and full recomputation. The root hold is lifted. Parent alone owns exact-head
+independent review, hosted CI and merge. The Approved local-buffer follow-up above
+remains required before claiming full alias removal. This receipt claims neither
+that parity nor merged status.
