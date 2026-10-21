@@ -1,0 +1,174 @@
+{
+  "bash": "5.3.15(1)-release",
+  "env": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "LC_ALL": "C.utf8",
+    "LANG": "C.utf8"
+  },
+  "cases": [
+    {
+      "script": "cd \"$TMP\"; : > b; : > ab; : > a; printf '<%s>\\n' a* *b",
+      "status": 0,
+      "stdoutBase64": "PGE+CjxhYj4KPGFiPgo8Yj4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > a; : > ab; : > b; printf '<%s>\\n' ? [ab] [!a] [a-b]?",
+      "status": 0,
+      "stdoutBase64": "PGE+CjxiPgo8YT4KPGI+CjxiPgo8YWI+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > b; : > a; : > c; echo *",
+      "status": 0,
+      "stdoutBase64": "YSBiIGMK",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > echo; e* matched name",
+      "status": 0,
+      "stdoutBase64": "bWF0Y2hlZCBuYW1lCg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > a; [ a = a ] && echo test-command",
+      "status": 0,
+      "stdoutBase64": "dGVzdC1jb21tYW5kCg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > a; : > ab; printf '<%s>\\n' 'a*' \"a*\" a\\* a'*' \\[ab] \"a\"* '[a]'*",
+      "status": 0,
+      "stdoutBase64": "PGEqPgo8YSo+CjxhKj4KPGEqPgo8W2FiXT4KPGE+CjxhYj4KPFthXSo+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > a; : > ab; v='a*'; printf '<%s>\\n' \"$v\" $v \"${v}\"b",
+      "status": 0,
+      "stdoutBase64": "PGEqPgo8YT4KPGFiPgo8YSpiPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > a; : > ab; : > b; IFS=:; v='a*:*b'; printf '<%s>\\n' $v",
+      "status": 0,
+      "stdoutBase64": "PGE+CjxhYj4KPGFiPgo8Yj4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > yz; v='x y'; printf '<%s>\\n' $v\"*\" $v*",
+      "status": 0,
+      "stdoutBase64": "PHg+Cjx5Kj4KPHg+Cjx5ej4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > a; : > ab; set -- 'a* b'; printf '<%s>\\n' $1 \"$1\"",
+      "status": 0,
+      "stdoutBase64": "PGE+CjxhYj4KPGI+CjxhKiBiPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > a; printf '<%s>\\n' z* '[ab' [ab z?",
+      "status": 0,
+      "stdoutBase64": "PHoqPgo8W2FiPgo8W2FiPgo8ej8+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > a; : > ab; shopt -s nullglob; printf '<%s>\\n' start z* \"z*\" 'y?' a* end",
+      "status": 0,
+      "stdoutBase64": "PHN0YXJ0Pgo8eio+Cjx5Pz4KPGE+CjxhYj4KPGVuZD4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; shopt -s nullglob; set -- z* y? [q]; echo $#",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; shopt -s nullglob; (printf '<%s>\\n' inner z*); printf '<%s>\\n' outer z*",
+      "status": 0,
+      "stdoutBase64": "PGlubmVyPgo8b3V0ZXI+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; shopt -s nullglob; printf '<%s>\\n' on z*; shopt -u nullglob; printf '<%s>\\n' off z*",
+      "status": 0,
+      "stdoutBase64": "PG9uPgo8b2ZmPgo8eio+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > a; : > ab; set -f; printf '<%s>\\n' a*; set +f; printf '<%s>\\n' a*",
+      "status": 0,
+      "stdoutBase64": "PGEqPgo8YT4KPGFiPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > a; set -o noglob; for f in a*; do echo \"$f\"; done; set +o noglob; echo a*",
+      "status": 0,
+      "stdoutBase64": "YSoKYQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > x; : > y; set -f; v='*'; echo $v; set +f; echo $v",
+      "status": 0,
+      "stdoutBase64": "Kgp4IHkK",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > .hidden; : > a; printf '<%s>\\n' * .h* ?hidden",
+      "status": 0,
+      "stdoutBase64": "PGE+CjwuaGlkZGVuPgo8P2hpZGRlbj4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; mkdir -p d/x d/y; : > d/x/f; : > d/n; printf '<%s>\\n' d/*/f d/*/ d/?",
+      "status": 0,
+      "stdoutBase64": "PGQveC9mPgo8ZC94Lz4KPGQveS8+CjxkL24+CjxkL3g+CjxkL3k+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > a; x=$(printf '%s\\n' {1..20000}); set -- $x; echo $#; set -- $x a*; echo $# \"${@: -1}\"",
+      "status": 0,
+      "stdoutBase64": "MjAwMDAKMjAwMDEgYQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; for i in {1..150}; do : > f$i; done; set -- f*; echo $# $1 $2 $3",
+      "status": 0,
+      "stdoutBase64": "MTUwIGYxIGYxMCBmMTAwCg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > a; : > ab; v=a*; printf '<%s>\\n' \"$v\"; declare w=a?; printf '<%s>\\n' \"$w\"",
+      "status": 0,
+      "stdoutBase64": "PGEqPgo8YT8+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; echo hi > z*; printf '<%s>\\n' z*",
+      "status": 0,
+      "stdoutBase64": "PHoqPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; echo hi > ab; printf '<%s>\\n' \"$(< a?)\"",
+      "status": 0,
+      "stdoutBase64": "PGhpPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > a; : > ab; for f in a* z*; do printf '<%s>\\n' \"$f\"; done",
+      "status": 0,
+      "stdoutBase64": "PGE+CjxhYj4KPHoqPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "shopt -s extglob\ncd \"$TMP\"; printf '<%s>\\n' @(q|r) +(q) ${u:-a@(}",
+      "status": 0,
+      "stdoutBase64": "PEAocXxyKT4KPCsocSk+CjxhQCg+Cg==",
+      "stderrBase64": ""
+    }
+  ]
+}
