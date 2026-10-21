@@ -1,0 +1,280 @@
+{
+  "schema": 1,
+  "status": "Measured membership update, review-ready. Parent owns final membership/body audit, hosted gates, merge and exact-main acceptance.",
+  "acceptedBase": "6f292e1ecafdb0f1638860092d0f4e96722480ac",
+  "measuredRevision": "ec8b801c8ded5ada99d9be9edc847ff856936ad3",
+  "revisionCorrespondence": "Exactly one full production-Waffle replay measured this immutable source. The delivery descendant changes only gained baseline memberships, derived counts, this receipt and related docs. No source, test, runtime, pin, deadline or gate changes follow the measurement.",
+  "model": "gpt-6.1-sol",
+  "harness": "codex",
+  "provider": "existing verified cli-proxy",
+  "effort": "xhigh",
+  "versions": {
+    "root": "0.0.74",
+    "engine": "0.0.42",
+    "vite": "8.3.3"
+  },
+  "waffle": "fc58a532f0d7a617e631ea4b7580a190915d4ed6",
+  "classification": "Original local Rust implementation with TypeScript runtime controls, observed against GNU Bash. No copied or adapted upstream implementation.",
+  "scope": "Decoded %b byte width, alignment, space padding, byte precision, stop and warning behavior. Literal field-count overflow recovers as zero for %b only. Bare %b and ordinary %s remain unchanged. No new decoder or runtime contract.",
+  "sourceSha256": {
+    "shell/engine/src/builtins/printf.rs": "7ddc24b97955b2bb129f86446c8f7946795b25f3d4681232c830a1f4f665c0fa",
+    "shell/engine/src/builtins/printf/fields.rs": "adf040fd467e52c103edb9c341174066605f553c216552e7f2f17ff79d4b28b4",
+    "shell/engine/tests/words/printf_escaped_fields.rs": "f036db2ffe9cb529ded71f9375db3c457d2532b793aefa7c4e6d54d01c5d556d",
+    "scripts/test-own-shell-printf-assignment.ts": "1f6d45caf36c5917ca1f0fbf3dc82c41eb0f1e504ac87a66bc467416b7564e67"
+  },
+  "frozenMeasurement": {
+    "command": "BASH_COMPAT_BASE_REF=6f292e1ecafdb0f1638860092d0f4e96722480ac BASH_COMPAT_JOBS=1 BASH_COMPAT_RECORD=0 BASH_COMPAT_SKIP_BUILD=1 npm run compat:shell",
+    "host": "omarchy, PC actual-host shared heavy queue, suite class",
+    "startedAt": "2026-10-21T10:22:09.061Z",
+    "endedAt": "2026-10-21T10:28:49.373Z",
+    "queueAndRunAllowanceSeconds": 7200,
+    "records": 9221,
+    "scored": 5792,
+    "skipped": 3429,
+    "jobs": 1,
+    "record": 0,
+    "fullReplays": 1,
+    "warmArtifactsReusedWithoutRustRebuild": true,
+    "identity": {
+      "schema": 1,
+      "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+      "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+      "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+      "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+    },
+    "environment": {
+      "target": "wasm32-wasip1",
+      "runner": "waffle-node",
+      "shell": "shell-runtime -c SCRIPT, the production runtime_proc guest",
+      "env": {
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/home/user",
+        "TMP": "/tmp/spec",
+        "PWD": "/tmp/spec",
+        "SH": "bash",
+        "LC_ALL": "C.UTF-8"
+      },
+      "stdin": "empty",
+      "filesystem": "fresh Waffle filesystem per case, no persistence: working directory, /dev, /bin, /usr/bin, /usr/local/bin",
+      "processHost": "Waffle process broker; argv.py and printenv.py fixture guests only",
+      "timeoutMs": 10000,
+      "outputLimitBytes": 4194304,
+      "normalization": [
+        [
+          "/tmp/spec",
+          "$TMP"
+        ],
+        [
+          "/home/user",
+          "$HOME"
+        ]
+      ],
+      "scoring": "stdout bytes and exit status; stderr retained separately, not scored",
+      "nodeVersion": "v26.7.0"
+    },
+    "beforeOutcomes": {
+      "pass": 3434,
+      "skip": 3429,
+      "fail": 2355,
+      "timeout": 3
+    },
+    "afterOutcomes": {
+      "pass": 3436,
+      "skip": 3429,
+      "fail": 2353,
+      "timeout": 3
+    },
+    "delta": {
+      "ok": true,
+      "corpora": {
+        "oils": {
+          "before": 1015,
+          "after": 1015,
+          "gained": [],
+          "lost": [],
+          "newlyFailing": []
+        },
+        "brush-suite": {
+          "before": 1007,
+          "after": 1008,
+          "gained": [
+            "brush-suite:builtins/printf:34"
+          ],
+          "lost": [],
+          "newlyFailing": []
+        },
+        "bashkit-suite": {
+          "before": 1412,
+          "after": 1413,
+          "gained": [
+            "bashkit-suite:bashbox-printf:132"
+          ],
+          "lost": [],
+          "newlyFailing": []
+        }
+      }
+    },
+    "changedNonpassOutcomes": [],
+    "exactIdsOrderClassificationExclusionsAndSkips": true,
+    "replaySha256": "cd4f31a14b65c1a3b03591429af3d4b3f3e7d9e6ad5df95304ae2f3b8253115c",
+    "replayBytes": 1553664,
+    "replayLogSha256": "565423147aea883ec0cc7c4bfea680dd8b42b61be7922ace13227db8d45e9867",
+    "originalReplayExit": 1,
+    "originalExitReason": "The unchanged strict comparator rejects exactly the two new pass memberships after saving all 9221 records. The complete original output and error remain retained. No second replay.",
+    "baselineBeforeSha256": "d3931d2bd2e1fe6e9f462b6088360792d798744a4ed1c0a7f6aee9af917e550d",
+    "baselineAfterSha256": "0eae0c2b5934bd5239b3ee062d0ee16ad735b091fcb717861b3f8cf9ad20f410",
+    "baselineMembershipBeforeSha256": "0a0d6a394a81aa0e471f8ad69ca102ced8daffa76d8186a0054da700bee0ecfb",
+    "baselineMembershipAfterSha256": "e4ce8f3774a7e9fc42fc49145d4e3a893bc3822d7461e9561da35d188048a239",
+    "changedBaselineMemberships": [
+      "brush-suite:builtins/printf:34",
+      "bashkit-suite:bashbox-printf:132"
+    ],
+    "unchangedOtherRecords": 9219,
+    "historicalActualPayloadsPreserved": true,
+    "actualPayloadDifferences": 44,
+    "nonpassPayloadDifferenceIds": [
+      "oils:unicode:125",
+      "oils:unicode:150",
+      "oils:var-op-slice:107",
+      "oils:var-op-slice:124",
+      "oils:array-assoc:540",
+      "oils:builtin-printf:910",
+      "oils:builtin-read:100",
+      "oils:serialize:76",
+      "oils:serialize:111",
+      "brush-suite:builtins/command:35",
+      "brush-suite:builtins/echo:5",
+      "brush-suite:builtins/echo:6",
+      "brush-suite:builtins/printf:47",
+      "brush-suite:builtins/printf:69",
+      "brush-suite:builtins/printf:74",
+      "brush-suite:builtins/read:54",
+      "brush-suite:prompt:14",
+      "bashkit-suite:background:1",
+      "bashkit-suite:bashbox-declare:31",
+      "bashkit-suite:bashbox-declare:335",
+      "bashkit-suite:bashbox-printf:111",
+      "bashkit-suite:bashbox-read-names:5",
+      "bashkit-suite:heredoc-read-escapes:36",
+      "bashkit-suite:printf:273",
+      "bashkit-suite:printf:293"
+    ],
+    "payloadQualification": "25 failures retain their fail outcome but differ from historical actual payloads. Another 17 already-passing records and the two gained records carry historical failure payloads in the baseline, while the fresh saved replay omits actual for passes. All 44 original payloads remain untouched. This is not whole-output equality.",
+    "strictOfflineComparator": "Existing verifyOracle, validateScore and compareScores(requireMembership:true) pass against the SAME saved output after changing only measured gained outcomes and derived counts."
+  },
+  "targeted": {
+    "acceptedBase": "4ffaebd4db8807b37bc2ebeeaf6ac6a966a0c654",
+    "failingFirst": "Both scored candidates fail on exact native and production Waffle; all12 passing preservation cases match Bash. Raw before observations remain in baseline-cases.json. Ten initial native controls fail before the implementation.",
+    "latestExactSource": {
+      "nativePrintf": 138,
+      "wasiPrintf": 138,
+      "productionPrintfScalar": 98,
+      "originalCandidatesAndPreservation": 14,
+      "nearbyProbes": 25,
+      "r1DifferentialControls": 14
+    },
+    "exactSourceResult": "All listed latest-source checks pass. Candidate/preservation, nearby and R1 differential controls match on native and real Waffle. Targeted stderr comparison removes only Bash source-line annotations; raw streams are retained. Frozen stdout/status scoring is unchanged.",
+    "r1": {
+      "finding": "R1 P2 literal precision overflow aborts escaped conversion before decoding",
+      "parentClosure": "CLOSED_BY_PARENT_FINDING_RESPONSE_REVIEW",
+      "closureReceipt": "parent-r1-closure.json",
+      "before": "r1-before.json",
+      "after": "r1-after.json",
+      "response": "Recover literal overflow as zero only for %b, keep operand decoding, stop behavior, warning order and closed-stderr semantics."
+    },
+    "quality": "npm run quality, check:layers and test:check-layers passed on exact measured source; zero production or test-only layer violations,34 layer tests.",
+    "refreshedScoreboard": {
+      "command": "npm run test:shell:scoreboard",
+      "passed": 172,
+      "failed": 0,
+      "skipped": 0,
+      "log": "scoreboard-evidence.log",
+      "sourceChanges": false
+    },
+    "hosted": "Not watched or claimed by author. Parent-owned unchanged blocking gates remain required."
+  },
+  "artifacts": [
+    {
+      "path": "/work/tmp/bash-web-printf-b-fields-20261021/target/debug/shell-engine",
+      "size": 46578200,
+      "sha256": "591e7eaa7c1d5a40b0dbd877a8bef2893b6a721a1f03123666f64286d6732720"
+    },
+    {
+      "path": "/work/tmp/bash-web-printf-b-fields-20261021/target/wasm32-wasip1/release/shell-engine.wasm",
+      "size": 1875382,
+      "sha256": "f62e8ca8dc583e29c1d78c95bdad1a24aca7f70580bd1ba2c2825b244b4ed043"
+    },
+    {
+      "path": "/work/tmp/bash-web-printf-b-fields-20261021/target/wasm32-wasip1/release/shell-runtime.wasm",
+      "size": 1819673,
+      "sha256": "7412b8a58cb377dda763dd111447189d1636046f217db60ccbdee678f63ad31b"
+    },
+    {
+      "path": "/work/tmp/bash-web-printf-b-fields-20261021/target/wasm32-wasip1/release/cat.wasm",
+      "size": 234302,
+      "sha256": "521053c121bb6be472620bfdaca86aa05951394569365d4575952d8d3ddfcd22"
+    },
+    {
+      "path": "/work/tmp/bash-web-printf-b-fields-20261021/target/wasm32-wasip1/release/grep.wasm",
+      "size": 1301130,
+      "sha256": "7f54a6ece17560e4687bad42298a5edb6873355787d361a944bf14326972cc59"
+    },
+    {
+      "path": "/work/tmp/bash-web-printf-b-fields-20261021/target/wasm32-wasip1/release/mkdir.wasm",
+      "size": 229818,
+      "sha256": "f1715e7a916715b612985d5a074e8c9b3b0a4606a4fb4a32682161856452f5d3"
+    },
+    {
+      "path": "/work/tmp/bash-web-printf-b-fields-20261021/target/wasm32-wasip1/release/seq.wasm",
+      "size": 223503,
+      "sha256": "ababaae6a32552788e8d9cf3041edeeb43f06aa658058af866bd5d849201703c"
+    },
+    {
+      "path": "/work/tmp/bash-web-printf-b-fields-20261021/target/wasm32-wasip1/release/argv-py.wasm",
+      "size": 234410,
+      "sha256": "1843b0183ca2e73698f0e90eaf627e7db5c3ff08f49eebee57435b59d595a866"
+    },
+    {
+      "path": "/work/tmp/bash-web-printf-b-fields-20261021/target/wasm32-wasip1/release/printenv-py.wasm",
+      "size": 234418,
+      "sha256": "017b3b651bc41dee06ff82d3a32fe86578b53cf2c5c9517037aaa25b6eb52a63"
+    },
+    {
+      "path": "/work/worktrees/bash-web/climb-printf-b-fields/public/programs/test-guest.wasm",
+      "size": 129222,
+      "sha256": "963ffa35413de94e85076badd890ba4f46a7e6203e3a70234a57dc415a880395"
+    },
+    {
+      "path": "/work/worktrees/bash-web/climb-printf-b-fields/public/programs/test-spin.wasm",
+      "size": 91340,
+      "sha256": "5e97dcf54accd1a78ee9fd4b75922f658a51c488aa9af9bcc5ec4ce5be87e942"
+    }
+  ],
+  "frozenInputsSha256": {
+    "docs/evidence/own-shell-baseline.json": "d3931d2bd2e1fe6e9f462b6088360792d798744a4ed1c0a7f6aee9af917e550d",
+    "docs/evidence/own-shell-oracle.json": "bb13fdf4319ae0af179457ff4b3e3c0db57002902f07eb37fde02ff7a6636eaa",
+    "sources.lock.json": "1eb75b6843cba18dfaaf1535bebd5e4d3cca21c301070573a9eb543e4a228257",
+    "scripts/bash-compat.mjs": "859024733dd17e85bc296d78d209404dfd1c41aff56417c742ea11bf9893ab39",
+    "scripts/bash-compat-runner.mjs": "6f2d11492ca95783ffbc7be47987e8c40b32311086f114d812eda855967d21fe",
+    "scripts/bash-compat-worker.mjs": "13ce862353f92049c40590e5ac00dae2064f72fc4ee802f786c54660bc8fdb89",
+    "scripts/bash-compat-helpers.mjs": "c983de9b6701f928a16abee1b384dad693d4ba420a82bdd8e10d55c94249abaf",
+    "scripts/waffle-compat.ts": "46d6946c7b3ed04918e7df30042db9eee3998eefe4327a8ecbcc2ec6e57ea89c",
+    "scripts/shell-scoreboard.mjs": "15f548dc88f2dd9a8639fbc3091466b131d04339de70a6569eef5df4ab436807",
+    "scripts/shell-scoreboard-base.mjs": "a7f146f12f6500bc59cd96d83bbf22c3d984884b0855d9751ce7929d4951e582"
+  },
+  "evidence": {
+    "directory": "/work/reports/bash-web/hill-climb/printf-b-fields",
+    "fullSavedResult": "frozen-result.json",
+    "originalReplayLog": "frozen-replay.log",
+    "comparison": "measurement-comparison.json",
+    "payloadDifferences": "measurement-payload-differences.json",
+    "offlineStrict": "offline-strict.json",
+    "auditor": "audit-measurement.ts",
+    "preflight": "measurement-preflight.json",
+    "cleanup": "measurement-cleanup.json"
+  },
+  "cleanup": {
+    "owner": "printf-b-fields author until handoff; parent owns retained small evidence afterward",
+    "policy": "After consumers exit, remove only owned warm targets, dependencies, generated outputs and the exclusive worktree. Preserve branch and complete small reports. Actual-host sizes and process absence are recorded separately."
+  }
+}
