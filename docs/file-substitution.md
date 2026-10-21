@@ -25,9 +25,14 @@ the existing descriptor owner and are drained during cancellation and shutdown.
 
 Native/WASI tests are in `shell/engine/tests/words/file_substitution.rs` and the
 parser's `file_substitution.rs`. Build the production guest, then run
-`npm run test:file-substitution` for independent sandboxed GNU Bash comparisons
-against the production Waffle runner. These original controls compare exact
-stdout and status; raw stderr is retained separately. The measurement receipt is
+`npm run test:file-substitution` to compare the production Waffle runner with
+sandboxed GNU Bash 5.3.15 observations recorded in
+`scripts/fixtures/shell-file-substitution.json`, the frozen scoreboard's oracle
+version. Bash 5.2 also captures backticks beginning with `0<file` and negated
+`! <file`, so a host's own Bash is not the oracle. Re-record with
+`BASH_FILE_SUBSTITUTION_RECORD=<path>` on a host whose `/usr/bin/bash` is 5.3.15;
+the test rejects any other version. These original controls compare exact
+stdout and status; stderr is not compared. The measurement receipt is
 `docs/evidence/file-substitution.json`.
 
 ## Existing descriptor boundary

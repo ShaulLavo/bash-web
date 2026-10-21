@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -26,6 +27,20 @@ const runner = await createWaffleRunner({
   modulePath: resolve(directory, "shell-runtime.wasm"),
 });
 const observations: object[] = [];
+// Expectations replay recorded GNU Bash 5.3.15 observations, the frozen scoreboard's oracle.
+// Bash 5.2 (hosted Ubuntu 24.04) also captures `0<f` in backquotes and `! <f`, so a live host
+// shell is not the oracle. BASH_FILE_SUBSTITUTION_RECORD re-records from /usr/bin/bash 5.3.15.
+type Expected = { status: number; stdout: Buffer };
+type Recorded = { script: string; status: number; stdoutBase64: string };
+const bashVersion = "5.3.15(1)-release";
+const fixturePath = new URL("fixtures/shell-file-substitution.json", import.meta.url);
+const recordPath = process.env.BASH_FILE_SUBSTITUTION_RECORD;
+const recorded: Recorded[] = [];
+const fixture: { bash: string; cases: Recorded[] } = recordPath
+  ? { bash: liveBashVersion(), cases: [] }
+  : JSON.parse(readFileSync(fixturePath, "utf8"));
+assert.equal(fixture.bash, bashVersion);
+const fixtureCases = new Map(fixture.cases.map((entry) => [entry.script, entry]));
 after(async () => {
   try {
     assert.equal(activeChildren.size, 0);
@@ -34,10 +49,34 @@ after(async () => {
         process.env.BASH_FILE_SUBSTITUTION_OUT,
         JSON.stringify(observations, null, 2) + "\n",
       );
+    if (recordPath)
+      await writeFile(
+        recordPath,
+        JSON.stringify({ schema: 1, bash: fixture.bash, cases: recorded }, null, 2) + "\n",
+      );
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
 });
+
+function liveBashVersion() {
+  const probe = spawnSync("/usr/bin/bash", ["-c", 'printf %s "$BASH_VERSION"']);
+  assert.equal(probe.status, 0);
+  return probe.stdout.toString();
+}
+
+async function expectation(script: string): Promise<Expected> {
+  if (!recordPath) {
+    const entry = fixtureCases.get(script);
+    assert.ok(entry, `missing recorded Bash observation: ${script}`);
+    return { status: entry.status, stdout: Buffer.from(entry.stdoutBase64, "base64") };
+  }
+  const live = await bash("/usr/bin/bash", script, "/usr/bin:/bin", true);
+  assert.equal(live.timeout, false);
+  assert.equal(live.outputLimit, false);
+  recorded.push({ script, status: live.status, stdoutBase64: live.stdout.toString("base64") });
+  return live;
+}
 
 const bodies = [
   "<f",
@@ -117,13 +156,19 @@ const scripts = bodies
     "printf data >f; x=$(<f); printf '%s' \"$(printf '%s' \"$x\")\"",
   ]);
 
+const boundaryScript = "printf '\\377' >f; printf %s \"$(<f)\"";
+test("recorded Bash observations cover exactly the control scripts", { skip: !!recordPath }, () => {
+  assert.deepEqual(
+    fixture.cases.map((entry) => entry.script),
+    scripts.concat([boundaryScript]),
+  );
+});
+
 for (const script of scripts)
   test(`production Waffle input-only substitution: ${script}`, async () => {
-    const expected = await bash("/usr/bin/bash", script, "/usr/bin:/bin", true);
+    const expected = await expectation(script);
     const actual = await runner(script);
     observations.push({ script, expected, actual });
-    assert.equal(expected.timeout, false);
-    assert.equal(expected.outputLimit, false);
     assert.equal(actual.crash, undefined);
     assert.equal(actual.outputLimit, undefined);
     assert.equal(actual.status, expected.status);
@@ -131,8 +176,8 @@ for (const script of scripts)
   });
 
 test("production Waffle file capture rejects unrepresentable bytes", async () => {
-  const script = "printf '\\377' >f; printf %s \"$(<f)\"";
-  const expected = await bash("/usr/bin/bash", script, "/usr/bin:/bin", true);
+  const script = boundaryScript;
+  const expected = await expectation(script);
   const actual = await runner(script);
   observations.push({ script, boundary: "invalid UTF-8 remains unsupported", expected, actual });
   assert.equal(actual.crash, undefined);
