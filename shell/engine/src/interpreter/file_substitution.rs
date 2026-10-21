@@ -31,11 +31,7 @@ impl Substitutions {
             Ok(endpoint) => Ok(Some(endpoint)),
             Err(io::IoError::Cancelled) => Err(130.into()),
             Err(error) => {
-                let message = match error {
-                    io::IoError::NotFound => "No such file or directory",
-                    io::IoError::BadDescriptor => "Bad file descriptor",
-                    _ => "cannot open input file",
-                };
+                let message = open_error_message(error);
                 self.file_substitution_error(target, message).await?;
                 Ok(None)
             }
@@ -56,5 +52,13 @@ impl Substitutions {
             return Err(130.into());
         }
         Ok(())
+    }
+}
+
+fn open_error_message(error: io::IoError) -> &'static str {
+    match error {
+        io::IoError::NotFound => "No such file or directory",
+        io::IoError::BadDescriptor => "Bad file descriptor",
+        _ => "cannot open input file",
     }
 }
