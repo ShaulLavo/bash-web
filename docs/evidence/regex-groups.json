@@ -1,0 +1,251 @@
+{
+  "schema": 1,
+  "status": "Measured and review-ready. Parent owns independent review, hosted CI, merge and exact-main acceptance.",
+  "acceptedBase": "361992834804c5d9325022ddc3580f5e9899bcee",
+  "measuredRevision": "ab1378ab8db7dda387e26e7477687e62a2c8c05e",
+  "revisionCorrespondence": "The delivery descendant changes only measured gained memberships, derived counts, this receipt and related docs. Production and test source remains byte-identical to the measured revision.",
+  "model": "gpt-6.1-sol",
+  "harness": "Codex through T3",
+  "versions": {
+    "root": "0.0.76",
+    "engine": "0.0.43",
+    "node": "26.7.0",
+    "rust": "1.98.1",
+    "wasmtime": "49.0.3",
+    "bash": "5.3.15"
+  },
+  "waffle": "fc58a532f0d7a617e631ea4b7580a190915d4ed6",
+  "classification": "Original local Rust grouped-ERE compiler and TypeScript production controls; no copied upstream implementation.",
+  "scope": "ASCII boolean groups, nested alternatives, empty branches and group repetition through the existing Thompson matcher. At most 64 open groups and interval counts through 32767. Captures/BASH_REMATCH, backreferences, locale extensions, stacked quantifiers and unrelated shell features remain boundaries. No parser, variable state, array API or expansion pattern/glob module changes.",
+  "designReport": "/work/reports/bash-web/hill-climb/control/regex-groups/design.json",
+  "sourceSha256": {
+    "shell/engine/src/interpreter/conditional/regex.rs": "e6e7df370f54b2e0e7d03438e4432d54db6efe71596a11b4ab45e60459714172",
+    "shell/engine/tests/words/regex.rs": "b69434a24133511a1b9b8fc02998b6c09de81c456c7c6283c42ea1dc5d0635a4",
+    "scripts/test-own-shell-regex-groups.ts": "bf4d55551fab48d9d4636898d2f7691676247bbc25e452a118365ccad8c8e904"
+  },
+  "failingFirst": {
+    "productionControls": 13,
+    "stdoutStatusMatches": 0,
+    "nativeRegressionFailed": "regex_grouped_alternatives_and_nested_repetition",
+    "evidence": [
+      "before-observations.json",
+      "before.log",
+      "failing-native.log",
+      "interval-boundary.md"
+    ]
+  },
+  "verification": {
+    "commandWrapper": "source /work/reports/bash-web/hill-climb/control/regex-groups/env.sh; bun /work/platform-production/heavy/current/run.js --class build LABEL -- node scripts/diagnose-compat.ts TRACE -- COMMAND",
+    "commands": {
+      "quality": "npm run sources:browser && npm run quality:js && npm run check:rust && npm run check:capabilities",
+      "native": "cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2",
+      "wasi": "npm run test:shell:wasi",
+      "release": "cargo build --locked --release --manifest-path shell/Cargo.toml -p shell-engine -p shell-compat-fixtures -j2",
+      "controlFlow": "npm run fuzz:shell-control-flow:ci -- --shell /work/tmp/bash-web-control-regex-groups/target/release/shell-cli",
+      "scoreboardAndProductionControls": "npm run test:shell:scoreboard",
+      "layers": "LAYERS_BASE_REF=361992834804c5d9325022ddc3580f5e9899bcee npm run check:layers; npm run test:check-layers; npm run typecheck:layers"
+    },
+    "nativePassed": 1305,
+    "wasiPassed": 1285,
+    "productionBashControlsPassed": 248,
+    "scoreboardTestsPassed": 421,
+    "controlFlowSeeds": {
+      "1": 2448,
+      "42": 2448
+    },
+    "layerTestsPassed": 34,
+    "quality": "format, lint, strict types, Knip, exact/structural no-new-clone gates, gate negative controls, native/WASI all-target Clippy and cargo-machete passed",
+    "layers": {
+      "productionViolations": 0,
+      "testViolations": 0,
+      "productionEdges": 42,
+      "testEdges": 28
+    },
+    "coreRegexDependencies": [],
+    "finalLogs": [
+      "quality-frozen.log",
+      "rust-quality-frozen.log",
+      "native-frozen.log",
+      "wasi-frozen.log",
+      "control-flow-frozen.log",
+      "scoreboard-frozen.log",
+      "layers-frozen.log"
+    ],
+    "notRunLocally": "Browser/Darwin and the other unchanged fuzz families remain hosted parent-owned checks."
+  },
+  "sizes": {
+    "base": {
+      "raw": 1819673,
+      "gzip9": 529998,
+      "brotli11": 410655,
+      "sha256": "3c42874dd86b0213d0b451ebfaa39e7ea175827a932fae755f1f6233a536203c"
+    },
+    "candidate": {
+      "raw": 1823495,
+      "gzip9": 531101,
+      "brotli11": 411229,
+      "sha256": "fc7be7fd2fbf49046f6691674c3d75892e8a58bb11ce727ed77268e175406e3c"
+    },
+    "Shell core release WASI (standalone embedding)": {
+      "raw": 1879195,
+      "gzip9": 551782,
+      "brotli11": 428725
+    },
+    "Utility add-on cat": {
+      "raw": 234466,
+      "gzip9": 68358,
+      "brotli11": 56965
+    },
+    "Utility add-on grep": {
+      "raw": 1301118,
+      "gzip9": 388786,
+      "brotli11": 267663
+    },
+    "Utility add-on mkdir": {
+      "raw": 229981,
+      "gzip9": 66714,
+      "brotli11": 55770
+    },
+    "Utility add-on seq": {
+      "raw": 223666,
+      "gzip9": 64684,
+      "brotli11": 53952
+    }
+  },
+  "frozenMeasurement": {
+    "host": "PC, actual shared heavy queue, build class",
+    "records": 9221,
+    "scored": 5792,
+    "skipped": 3429,
+    "jobs": 1,
+    "record": 0,
+    "candidateFullReplays": 1,
+    "immutableMainControlFullReplays": 1,
+    "command": "BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell BASH_COMPAT_SKIP_BUILD=1 BASH_COMPAT_JOBS=1 BASH_COMPAT_RECORD=0 BASH_COMPAT_BASE_REF=361992834804c5d9325022ddc3580f5e9899bcee BASH_COMPAT_SHELL_WASM=/work/tmp/bash-web-control-regex-groups/target/wasm32-wasip1/release/shell-runtime.wasm BASH_COMPAT_FIXTURE_DIR=/work/tmp/bash-web-control-regex-groups/target/wasm32-wasip1/release BASH_COMPAT_UTILITY_DIR=/work/tmp/bash-web-control-regex-groups/target/wasm32-wasip1/release BASH_COMPAT_OUT=/work/reports/bash-web/hill-climb/control/regex-groups/candidate-score.json node scripts/bash-compat.mjs",
+    "controlCommand": "npm run build:compat-control -- 361992834804c5d9325022ddc3580f5e9899bcee; run the same frozen command with its immutable compat-control/361992834804c5d9325022ddc3580f5e9899bcee.wasm and control-score.json output",
+    "identity": {
+      "schema": 1,
+      "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+      "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+      "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+      "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+    },
+    "corpusRevisions": {
+      "oils": "bdc8364c253ce921e033bbc2399ea2ce0be41825",
+      "brush-suite": "4cfba081f2f8bcda8150010a57203d020f14f0cc",
+      "bashkit-suite": "491c3281f668b76d64b15210b8f5d7bf97244be0"
+    },
+    "delta": {
+      "ok": true,
+      "corpora": {
+        "oils": {
+          "before": 1015,
+          "after": 1023,
+          "gained": [
+            "oils:regex:70",
+            "oils:regex:90",
+            "oils:regex:95",
+            "oils:regex:318",
+            "oils:regex:329",
+            "oils:regex:343",
+            "oils:regex:371",
+            "oils:regex:630"
+          ],
+          "lost": [],
+          "newlyFailing": []
+        },
+        "brush-suite": {
+          "before": 1008,
+          "after": 1012,
+          "gained": [
+            "brush-suite:extended_tests:23",
+            "brush-suite:extended_tests:33",
+            "brush-suite:extended_tests:34",
+            "brush-suite:extended_tests:36"
+          ],
+          "lost": [],
+          "newlyFailing": []
+        },
+        "bashkit-suite": {
+          "before": 1413,
+          "after": 1415,
+          "gained": [
+            "bashkit-suite:bashbox-parser:214",
+            "bashkit-suite:conditional:266"
+          ],
+          "lost": [],
+          "newlyFailing": []
+        }
+      }
+    },
+    "beforeOutcomes": {
+      "pass": 3436,
+      "skip": 3429,
+      "fail": 2353,
+      "timeout": 3
+    },
+    "afterOutcomes": {
+      "pass": 3450,
+      "skip": 3429,
+      "fail": 2339,
+      "timeout": 3
+    },
+    "candidateReplaySha256": "d2b5314d03c29400b40d09037626891338539fc9c35a9833ccb3c6669ae5daff",
+    "candidateReplayBytes": 1552860,
+    "controlReplaySha256": "cd4f31a14b65c1a3b03591429af3d4b3f3e7d9e6ad5df95304ae2f3b8253115c",
+    "controlExit": 0,
+    "candidateExit": 1,
+    "candidateExitReason": "Complete result saved, then unchanged strict committed-membership comparator rejects exactly the 14 newly gained cases. No loss. The unchanged validator/comparator passes offline after the gain-only update.",
+    "strictOfflineAudit": "node /work/reports/bash-web/hill-climb/control/regex-groups/audit-score.ts --update; node /work/reports/bash-web/hill-climb/control/regex-groups/audit-score.ts --strict",
+    "gainedRowsOnly": 14,
+    "unchangedBaselineRows": 9207,
+    "historicalPayloadsPreserved": true,
+    "changedNonpassOutcomes": [],
+    "historicalNonpassPayloadDifferencesRetained": [
+      "oils:unicode:125",
+      "oils:unicode:150",
+      "oils:var-op-slice:107",
+      "oils:var-op-slice:124",
+      "oils:array-assoc:540",
+      "oils:builtin-printf:910",
+      "oils:builtin-read:100",
+      "oils:serialize:76",
+      "oils:serialize:111",
+      "brush-suite:builtins/command:35",
+      "brush-suite:builtins/echo:5",
+      "brush-suite:builtins/echo:6",
+      "brush-suite:builtins/printf:47",
+      "brush-suite:builtins/printf:69",
+      "brush-suite:builtins/printf:74",
+      "brush-suite:builtins/read:54",
+      "brush-suite:extended_tests:29",
+      "brush-suite:extended_tests:30",
+      "brush-suite:extended_tests:35",
+      "brush-suite:prompt:14",
+      "bashkit-suite:background:1",
+      "bashkit-suite:bashbox-declare:31",
+      "bashkit-suite:bashbox-declare:335",
+      "bashkit-suite:bashbox-printf:111",
+      "bashkit-suite:bashbox-read-names:5",
+      "bashkit-suite:control-flow:444",
+      "bashkit-suite:heredoc-read-escapes:36",
+      "bashkit-suite:printf:273",
+      "bashkit-suite:printf:293"
+    ],
+    "startedAt": "2026-10-21T19:09:45.742Z",
+    "endedAt": "2026-10-21T19:17:17.929Z",
+    "cleanupRemaining": []
+  },
+  "reportDirectory": "/work/reports/bash-web/hill-climb/control/regex-groups",
+  "cleanup": {
+    "warmTargetBytes": 2694581809,
+    "ownership": "Control coordinator removes retained worktree/target/dependency setup after review/merge or abandonment. No owned process, service, route, mount or container remains.",
+    "rootOwnedCoredumpBytes": 2332654,
+    "rootOwnedCoredumpRemoval": "Needs owner privilege or systemd expiry; local cleanup.json retains its exact path and command."
+  },
+  "deviations": [
+    "Added an explicit interval ceiling after a repeated-empty-group boundary observation. No candidate full measurement ran before that repair.",
+    "No parser change was needed: the real runtime source-word controls already preserve grouping syntax, spaces, expansions and protected punctuation."
+  ],
+  "integrationNotice": "origin/main remains 3619928 at handoff. If indexed arrays land first, merge main normally and adapt locale() to state.scalar_parameter(name) without String::as_str, then recompute the integrated baseline. Arithmetic arrays remain reserved to variables."
+}

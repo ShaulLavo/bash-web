@@ -408,3 +408,10 @@ pins a killed root that never starts. `scripts/own-shell-runner-fixture.ts` only
 relocates the unchanged original tiny WASI fixture from the existing runner tests.
 No oracle, baseline, migration receipt, stdio kind, case deadline or output bound
 changes.
+
+## Grouped conditional ERE
+
+The core's original Thompson matcher accepts ASCII groups, nested alternatives
+and group repetition for `[[ value =~ pattern ]]`. Matching uses no external
+regex dependency. See [grouped ERE behavior](regex-groups.md) for limits and the
+explicit capture boundary.
