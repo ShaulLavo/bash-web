@@ -27,9 +27,9 @@ consulted locale variable that is a nameref is unsupported and fails with status
 Not supported, and failing closed with status 2: arrays (including `PIPESTATUS`
 and namerefs to subscripts), `${@@op}`, `${*@op}`, `${!name@op}`, prompt expansion `@P`, transformations nested inside another
 operand such as `${v:-${x@Q}}`, and invalid operators on set names. Bash reports
-the last as a bad substitution. `${#@op}` never reaches this code: the whole
-script fails with status 1 and "bad substitution: invalid parameter expansion"
-before anything runs. Attributes the state does not store (integer,
+the last as a bad substitution. `${#@op}` never reaches this code: the shell
+exits with status 1 and "bad substitution: invalid parameter expansion" when the
+expansion is reached; earlier commands still run. Attributes the state does not store (integer,
 case, array) are not reported.
 
 Original Rust in `shell/engine/src/expand/transformation.rs`, observed against

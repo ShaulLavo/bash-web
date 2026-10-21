@@ -4137,3 +4137,6 @@ mod printf_integer_fields;
 mod printf_options;
 #[path = "words/printf_quoting.rs"]
 mod printf_quoting;
+
+#[path = "words/getopts.rs"]
+mod getopts;

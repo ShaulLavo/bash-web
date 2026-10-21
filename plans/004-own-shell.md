@@ -2015,6 +2015,40 @@ See [the behavior notes](../docs/printf-escaped-fields.md) and
 saved replay, original exit, before-and-after controls, offline comparator and
 cleanup receipt remain in `/work/reports/bash-web/hill-climb/printf-b-fields`.
 
+## Getopts caller-local dynamic unbind, 2026-10-21
+
+Status: Approved. Owner: Variables track for general dynamic scope/unbind
+semantics, coordinated with BUILTINS for the getopts caller. This is a separate
+follow-up, not part of the bounded scanner repair.
+
+Independent getopts repair review r3 retained an inherited caller-local OPTARG
+limitation as `F2-caller-local-error`. Run the exact script with Bash 5.3.15 or
+the production Waffle shell:
+
+```sh
+OPTARG=g; g() { getopts a o x; echo "g:${OPTARG-unset}"; }; f() { local OPTARG=l; readonly OPTARG; g; OPTARG=after; echo "f:$OPTARG"; }; f; echo "global:$OPTARG"
+```
+
+Bash prints `g:g\nf:after\nglobal:after\n`. Reviewed shell source
+`339a5b9e635637ffd9734e889d43a1bf3186bc34` prints
+`g:unset\nf:after\nglobal:g\n` on both native and real Waffle. All three return
+status 0 with empty stderr. Exact script and raw observations are the
+`F2-caller-local-error` records in
+`/work/reports/bash-web/hill-climb/builtins/getopts-repair-review-r3/native.json`
+and `waffle.json`; disposition and source inspection are in the adjacent
+`report.md` and `RESULT.json`.
+
+The current direct getopts unbind removes the visible value but does not reveal
+the outer binding when the removed local belongs to a caller. Inspect
+`State::unset_getopts_argument` and local-frame restoration in
+`shell/engine/src/state.rs`. The prior helper had the same visible-value removal
+policy; this is not a new scanner-repair regression. Define general dynamic
+unbind/restoration semantics with the Variables owner, then cover caller-local,
+current-local, readonly, nameref and function-return behavior. Keep the exact
+Bash/native/Waffle control nonpassing until that contract lands. Do not add a
+getopts-only scope rewrite, change score inputs or claim full dynamic-unbind
+parity for the current scanner PR.
+
 ## Input-only substitution and inherited file aliases, 2026-10-21
 
 Approved bounded command-substitution family. Typed parser metadata distinguishes
@@ -2077,14 +2111,14 @@ share it. Arrays, locale variables that are namerefs, `${@@op}`, indirect names,
 closed.
 
 One frozen production-Waffle replay against main
-`2f0bf1176703a2a397bd0e35af480d7df322e67e` preserves all 9,221 IDs, frozen
+`f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb` preserves all 9,221 IDs, frozen
 identities and exclusions, with zero lost passes:
 
-- Oils: 1,023 to 1,030, gained `oils:var-op-bash:163`, `:182`, `:264`, `:381`,
+- Oils: 1,051 to 1,058, gained `oils:var-op-bash:163`, `:182`, `:264`, `:381`,
   `:410`, `oils:builtin-printf:95`, `oils:serialize:193`.
-- Brush suite: 1,014 to 1,019, gained `brush-suite:nameref:102` and
+- Brush suite: 1,057 to 1,062, gained `brush-suite:nameref:102` and
   `word_expansion/param_transformation:5`, `:9`, `:10`, `:12`.
-- Bashkit suite: 1,420 to 1,426, gained `bashkit-suite:variables:377`, `:384`,
+- Bashkit suite: 1,443 to 1,449, gained `bashkit-suite:variables:377`, `:384`,
   `:391`, `:398`, `:405`, `:795`.
 
 Remaining scored transformation failures need arrays, positional lists, integer
