@@ -9,6 +9,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -26,6 +27,7 @@ import { utilityNames, writeUtilityArtifacts } from "./utility-artifacts.ts";
 import { cappedWasiFixture as wasm } from "./wasi-artifact-fixture.ts";
 
 const root = resolve(import.meta.dirname, "..");
+const shellNotice = "# Third-party notices\n\nfixture license bytes: ©\n";
 
 function fixture(run: (directory: string, consumer: string) => void) {
   mkdirSync(resolve(root, ".build"), { recursive: true });
@@ -38,6 +40,7 @@ function fixture(run: (directory: string, consumer: string) => void) {
       mkdirSync(dirname(resolve(directory, name)), { recursive: true });
       writeFileSync(resolve(directory, name), wasm);
     }
+    writeFileSync(resolve(directory, "THIRD_PARTY_NOTICES.txt"), shellNotice);
     const source = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" });
     writeFileSync(resolve(directory, "cli-source.txt"), source);
     writeFileSync(resolve(directory, "inputs"), `${ciInputs("HEAD").native}\n`);
@@ -76,6 +79,10 @@ test("the complete exact-source artifact stages both CLIs, every guest and utili
         Buffer.from(wasm),
       );
     assert.ok(existsSync(resolve(consumer, ".build/utility-artifacts/source-sha256.txt")));
+    assert.equal(
+      readFileSync(resolve(consumer, "dist/THIRD_PARTY_NOTICES.txt"), "utf8"),
+      shellNotice,
+    );
   });
 });
 
@@ -95,7 +102,7 @@ for (const name of nativeArtifactFiles) {
     fixture((directory, consumer) => {
       rmSync(resolve(directory, name));
       assert.throws(() => stageCiArtifacts(consumer, directory));
-      assert.equal(existsSync(resolve(consumer, ".build/shell")), false);
+      assert.deepEqual(readdirSync(consumer), []);
     });
   });
 }
@@ -104,13 +111,14 @@ for (const [name, contents, error] of [
   ["cli-source.txt", `${"0".repeat(40)}\n`, /exact source/],
   ["inputs", "changed-input\n", /inputs changed/],
   ["shell-cli", "corrupt", /checksum/],
+  ["THIRD_PARTY_NOTICES.txt", "stale notice", /checksum/],
   ["SHA256SUMS", "omitted checksums", /checksum/],
 ] satisfies [string, string, RegExp][]) {
   test(`${name} mismatch is rejected before staging`, () => {
     fixture((directory, consumer) => {
       writeFileSync(resolve(directory, name), contents);
       assert.throws(() => stageCiArtifacts(consumer, directory), error);
-      assert.equal(existsSync(resolve(consumer, ".build/shell")), false);
+      assert.deepEqual(readdirSync(consumer), []);
     });
   });
 }
@@ -151,4 +159,9 @@ test("the TypeScript prebuilt runner rejects an old source before invoking Cargo
     assert.match(result.stderr, /Native artifacts must match this exact source/);
     assert.doesNotMatch(result.stderr, /nonexistent-sdk|spawnSync (cargo|wasmtime)/);
   });
+});
+
+test("shell notices are required alongside the unchanged native and ten WASI test files", () => {
+  assert.ok(nativeArtifactFiles.includes("THIRD_PARTY_NOTICES.txt"));
+  assert.equal(nativeArtifactFiles.filter((name) => name.startsWith("wasi-tests/")).length, 10);
 });

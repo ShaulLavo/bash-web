@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const nativePaths =
-  /^((shell|tests\/guest|\.cargo|\.github|scripts)\/.*|rust-toolchain\.toml|sources\.lock\.json)$/;
+  /^((shell|docs\/evidence\/licenses|tests\/guest|\.cargo|\.github|scripts)\/.*|rust-toolchain\.toml|sources\.lock\.json)$/;
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))

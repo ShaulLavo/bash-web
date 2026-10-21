@@ -138,6 +138,7 @@ jobs:
           sha256sum .build/shell/release/shell-engine .build/shell/release/shell-cli > .build/shell/cli-sha256.txt
           git rev-parse HEAD > .build/shell/cli-source.txt
           node scripts/utility-artifacts.ts
+          npm run notices:shell
           node scripts/ci-artifacts.ts pack .build/ci-native
       - name: Core dependency proof
         run: npm run check:capabilities
@@ -265,8 +266,8 @@ jobs:
       - run: npm run fuzz:shell-echo:ci -- --waffle --shell "$GITHUB_WORKSPACE/.build/shell/wasm32-wasip1/release/shell-runtime.wasm"
         env:
           TMPDIR: ${{ runner.temp }}
-      - name: Observe unchanged compatibility command
-        run: node scripts/diagnose-compat.ts "${{ runner.temp }}/own-shell-diagnostics" -- npm run compat:shell
+      - name: Observe compatibility with the same-job node build
+        run: node scripts/diagnose-compat.ts "${{ runner.temp }}/own-shell-diagnostics" -- npm run compat:shell:prebuilt
         env:
           BASH_COMPAT_OUT: ${{ runner.temp }}/own-shell-current.json
           BASH_COMPAT_SCRATCH: ${{ runner.temp }}
@@ -299,7 +300,7 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
       - run: npx playwright install --with-deps chromium firefox
-      - run: npm run build:browser:assets
+      - run: npm run build:browser:assets:ci
       - run: npm run test:runtime:terminal
       - run: npm run test:browser
       - uses: actions/upload-artifact@v4

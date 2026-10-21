@@ -15,6 +15,10 @@ test("native inputs exclude browser, prose and root package version changes", ()
 for (const path of [
   "shell/engine/src/lib.rs",
   "shell/parser/LICENSE",
+  "shell/engine/LICENSE",
+  "docs/evidence/licenses/oils-LICENSE.txt",
+  "docs/evidence/licenses/brush-MIT.txt",
+  "docs/evidence/licenses/NOTICE-extra.txt",
   "shell/engine/tests/fixtures/example.md",
   "sources.lock.json",
   "shell/parser/Cargo.toml",
