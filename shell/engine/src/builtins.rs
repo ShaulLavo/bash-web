@@ -952,13 +952,7 @@ async fn readonly_diagnostic(
     context: &Context,
 ) -> Result<(), i32> {
     let diagnostic = format!("{builtin}: {key}: readonly variable\n");
-    if let Some(stderr) = fds.get(2) {
-        stderr
-            .write_all(diagnostic.as_bytes(), &context.cancel)
-            .await
-            .map_err(|error| error.status())?;
-    }
-    Ok(())
+    diagnose(fds, &diagnostic, context).await
 }
 
 async fn scan_bytes(bytes: usize, context: &Context, work: &mut Work) -> Result<(), i32> {
