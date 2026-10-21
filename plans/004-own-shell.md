@@ -1161,7 +1161,7 @@ pieces are build policy, verification, frozen inputs and provenance.
 | Main compatibility runner                    | `scripts/bash-compat.mjs`, `bash-compat-worker.mjs`, `bash-compat-helpers.mjs`, `shell-scoreboard.mjs`, `shell-scoreboard-base.mjs`, `shell-scoreboard-migration.mjs`, `shell-process-group.mjs`. The entry point imports the helper, runner and scoreboard modules and starts the worker by filename; the worker imports the helpers. Preserve immutable `git show` target-baseline reads, the isolated target rebuild and original-membership proof, inherited-startup-hook exclusion, cancellation ownership and process-group draining.                                                             |
 | Oracle transport from the prerequisite PR    | `scripts/bash-compat-runner.mjs`, `bash-compat-pipe.py`, `audit-bash-oracle-pipe.mjs`, `test-bash-compat-runner.mjs`. Take their final committed merged versions. The runner spawns the Python file, including a separate exit-status fd; do not replace its real independent stdout/stderr pipes with direct Node `spawn` transport. The audit imports the helpers, runner and scoreboard.                                                                                                                                                                                                             |
 | Runner/ratchet tests                         | `scripts/test-shell-scoreboard.mjs`, `test-shell-scoreboard-base.mjs`, `test-shell-scoreboard-migration.mjs`, `test-compat-selection.mjs`, `test-own-shell-runner.mjs`, `test-bash-compat-audit.mjs`, `test-bash-compat-cleanup.mjs`, plus the transport runner test above. Preserve the real-entrypoint cancellation controls, delayed consumer/worker termination barriers, private migration fixtures and startup-hook rejection. The own-shell runner test starts `bash-compat-worker.mjs` by filename; tests also depend on the existing evidence/manifest paths.                                  |
-| Parser/WASI checks                           | `scripts/check-shell-parser.mjs` and `scripts/test-shell-wasi.ts`. The provenance check reads `sources.lock.json` and its `shellParser.directory` license. The WASI check owns streaming acceptance and the brotli-11 **1,000,000-byte** release ceiling; do not lose it when removing browser tooling.                                                                                                                                                                                                                                                                                                |
+| Parser/WASI checks                           | `scripts/check-shell-parser.mjs` and `scripts/test-shell-wasi.ts`. The provenance check reads `sources.lock.json` and its `shellParser.directory` license. The WASI check owns streaming acceptance and the brotli-11 **1,000,000-byte** release ceiling; do not lose it when removing browser tooling.                                                                                                                                                                                                                                                                                                 |
 | Differential generators                      | `scripts/fuzz-shell-words.mjs`, `fuzz-shell-readonly.mjs`, `fuzz-shell-arithmetic.mjs`, `fuzz-shell-parse-boundaries.mjs`, `fuzz-shell-braces.mjs`, `fuzz-shell-substitution-boundaries.mjs`; `scripts/test-fuzz-shell-braces.mjs`, `test-fuzz-shell-substitution-boundaries.mjs` import their corresponding generators. Carry/adapt the shell instructions from `scripts/README.md`. All six generators use Node built-ins.                                                                                                                                                                            |
 | Seed fixtures                                | Under `scripts/fixtures/`: `shell-words-seed-1.json`, `shell-words-seed-42.json`, `shell-readonly-seed-17.json`, `shell-arithmetic-seed-7.json`, `shell-arithmetic-seed-314.json`, `shell-parse-boundaries.json`, `shell-braces-seed-1.json`, `shell-braces-seed-42.json`. Add the substitution PR's final `shell-substitutions-seed-1.json` and `shell-substitutions-seed-42.json` once committed; they did not yet exist at inventory time. Inventory all additional merged fixtures rather than synthesizing missing files during extraction.                                                        |
 | Frozen scoreboard and capture classification | `docs/evidence/own-shell-oracle.json`, `own-shell-baseline.json`, `oracle-pipe-audit.json`, **and** `bash-compatibility.json`. The audit retains the proven transport corrections, unchanged identities, original-membership proof and corrected replay; the classification file preserves capture's historical case classifications and its hash, even though normal frozen replay does not read it. Carry `docs/evidence/licenses/oils-LICENSE.txt` and `brush-MIT.txt`; Bashkit's retained MIT license is `shell/parser/LICENSE`.                                                                    |
@@ -1358,9 +1358,9 @@ Decide and implement a minimal `/proc/self` (at least `comm`) or record it as an
 
 Give the Waffle Node instrument the oracle sandbox's read-only `/usr` (needs a Waffle read-only mount or equivalent), so these cases measure the shell rather than the instrument.
 
-- `bashkit-suite:script-exec:132`: Bash status 127, stdout ``; ours status 126, stdout ``, stderr `/usr/bin/bash: chmod: command not found\n/usr/bin/bash: /usr/local/bin/my-tool: Permission denied\n`.
-- `bashkit-suite:script-exec:95`: Bash status 127, stdout ``; ours status 126, stdout ``, stderr `/usr/bin/bash: chmod: command not found\n/usr/bin/bash: /usr/local/bin/myutil: Permission denied\n`.
-- `bashkit-suite:subprocess-isolation:126`: Bash status 127, stdout ``; ours status 126, stdout ``, stderr `/usr/bin/bash: chmod: command not found\n/usr/bin/bash: /usr/local/bin/check-isolation: Permission denied\n`.
+- `bashkit-suite:script-exec:132`: Bash status 127, stdout `; ours status 126, stdout `, stderr `/usr/bin/bash: chmod: command not found\n/usr/bin/bash: /usr/local/bin/my-tool: Permission denied\n`.
+- `bashkit-suite:script-exec:95`: Bash status 127, stdout `; ours status 126, stdout `, stderr `/usr/bin/bash: chmod: command not found\n/usr/bin/bash: /usr/local/bin/myutil: Permission denied\n`.
+- `bashkit-suite:subprocess-isolation:126`: Bash status 127, stdout `; ours status 126, stdout `, stderr `/usr/bin/bash: chmod: command not found\n/usr/bin/bash: /usr/local/bin/check-isolation: Permission denied\n`.
 
 ### R6. Ambiguous redirect diagnostics
 
@@ -2015,7 +2015,6 @@ See [the behavior notes](../docs/printf-escaped-fields.md) and
 saved replay, original exit, before-and-after controls, offline comparator and
 cleanup receipt remain in `/work/reports/bash-web/hill-climb/printf-b-fields`.
 
-
 ## Getopts caller-local dynamic unbind, 2026-10-21
 
 Status: Approved. Owner: Variables track for general dynamic scope/unbind
@@ -2030,15 +2029,9 @@ the production Waffle shell:
 OPTARG=g; g() { getopts a o x; echo "g:${OPTARG-unset}"; }; f() { local OPTARG=l; readonly OPTARG; g; OPTARG=after; echo "f:$OPTARG"; }; f; echo "global:$OPTARG"
 ```
 
-Bash prints `g:g
-f:after
-global:after
-`. Reviewed shell source
+Bash prints `g:g\nf:after\nglobal:after\n`. Reviewed shell source
 `339a5b9e635637ffd9734e889d43a1bf3186bc34` prints
-`g:unset
-f:after
-global:g
-` on both native and real Waffle. All three return
+`g:unset\nf:after\nglobal:g\n` on both native and real Waffle. All three return
 status 0 with empty stderr. Exact script and raw observations are the
 `F2-caller-local-error` records in
 `/work/reports/bash-web/hill-climb/builtins/getopts-repair-review-r3/native.json`
