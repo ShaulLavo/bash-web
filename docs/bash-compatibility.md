@@ -570,7 +570,9 @@ Bash-compatible unset behavior. `shopt` stores and reports
 `*()` groups support nesting and alternatives in case patterns when extglob is
 enabled, and in `[[ == ]]` and `[[ != ]]` regardless of that option. Quote masks
 keep protected punctuation literal. An iterative, work-bounded NFA avoids
-recursive matching and backtracking. Negative groups, pathname extglob, and
+recursive matching and backtracking. Group boundaries preserve balanced literal
+parentheses, bracket context and quote/expansion delimiter boundaries. Malformed
+groups retain Bash's literal fallback. Negative groups, pathname extglob, and
 extglob in scalar trim or replacement remain unsupported. The
 [extglob receipt](evidence/own-shell-extglob.json) records exact production gains
 and losses. For-list pathname expansion uses quote metadata and incremental

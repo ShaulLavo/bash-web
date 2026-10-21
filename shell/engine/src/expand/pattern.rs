@@ -90,12 +90,19 @@ impl Pattern {
         self.chars.truncate(write);
         Ok(())
     }
-    /// Pathname expansion has one additional quote-boundary rule: an
-    /// expansion-provided backslash escapes the synthetic quote marker on a
-    /// quoted glob character. Keep this normalization separate from scalar
-    /// trim/case matching, whose established Bash compatibility uses the
-    /// escaped-protected distinction above.
+    /// An expansion-provided backslash escapes the synthetic quote marker on
+    /// quoted glob punctuation. Full extglob patterns also escape group
+    /// delimiters and '!'. Scalar trim/replacement keep their separate
+    /// escaped-protected rule; pathname matching keeps only basic punctuation.
     async fn normalize_pathname(&mut self, work: &mut Work, cancel: &Cancel) -> Result<(), Error> {
+        self.normalize_glob(false, work, cancel).await
+    }
+    async fn normalize_glob(
+        &mut self,
+        extended: bool,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<(), Error> {
         let mut read = 0;
         let mut write = 0;
         while read < self.chars.len() {
@@ -103,7 +110,8 @@ impl Pattern {
             let escape = self.active(read, '\\') && read + 1 < self.chars.len();
             if escape
                 && self.chars[read + 1].protected
-                && matches!(self.chars[read + 1].value, '*' | '?' | '[' | ']' | '\\')
+                && (matches!(self.chars[read + 1].value, '*' | '?' | '[' | ']' | '\\')
+                    || extended && matches!(self.chars[read + 1].value, '(' | ')' | '|' | '!'))
             {
                 self.chars[write] = Character {
                     value: '\\',
@@ -267,7 +275,7 @@ impl Pattern {
         work: &mut Work,
         cancel: &Cancel,
     ) -> Result<bool, Error> {
-        self.normalize_pathname(work, cancel).await?;
+        self.normalize_glob(self.extglob, work, cancel).await?;
         extglob::matches(self, value, work, cancel).await
     }
 
@@ -704,6 +712,34 @@ mod tests {
                     expected
                 );
             }
+        }
+    }
+
+    #[test]
+    fn extended_quote_boundary_normalization_is_idempotent() {
+        let mut work = Work::new(100000, 100000, 16);
+        let cancel = Cancel::new();
+        let mut pattern = Pattern::with_options(false, true);
+        for (text, protection) in [
+            ("@(a\\", Protection::None),
+            ("|", Protection::All),
+            ("b|c)", Protection::None),
+        ] {
+            for ch in text.chars() {
+                pattern
+                    .push(ch, protection, &mut work)
+                    .unwrap_or_else(|_| panic!("pattern fits"));
+            }
+        }
+        for _ in 0..3 {
+            assert_eq!(
+                finish(pattern.matches_full("b", &mut work, &cancel)).ok(),
+                Some(true)
+            );
+            assert_eq!(
+                finish(pattern.matches_full("a|b", &mut work, &cancel)).ok(),
+                Some(false)
+            );
         }
     }
 

@@ -15,6 +15,7 @@ struct Group {
     arm: usize,
     exit: usize,
     repeat: usize,
+    literal_depth: usize,
 }
 
 struct Compiler {
@@ -53,6 +54,7 @@ impl Compiler {
             arm,
             exit,
             repeat,
+            literal_depth: 0,
         });
         self.tail = arm;
         Ok(())
@@ -90,11 +92,64 @@ impl Compiler {
     }
 }
 
+async fn group_boundaries(
+    pattern: &Pattern,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<Vec<bool>, Error> {
+    let mut paired = Vec::new();
+    if !pattern.extglob {
+        return Ok(paired);
+    }
+    admit_vec_exact(&mut paired, pattern.chars.len(), work)?;
+    for _ in &pattern.chars {
+        work.checkpoint(cancel).await?;
+        paired.push(false);
+    }
+    let mut opens = Vec::new();
+    let mut index = 0;
+    while index < pattern.chars.len() {
+        work.checkpoint(cancel).await?;
+        index = boundary_next(pattern, index, &mut opens, &mut paired, work, cancel).await?;
+    }
+    Ok(paired)
+}
+
+async fn boundary_next(
+    pattern: &Pattern,
+    index: usize,
+    opens: &mut Vec<usize>,
+    paired: &mut [bool],
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<usize, Error> {
+    if pattern.active(index, '[') {
+        if let Some((_, next)) = pattern.bracket(index + 1, work, cancel).await? {
+            return Ok(next);
+        }
+        // An unmatched class invalidates containing groups, but stays literal
+        // outside them. Later, independent groups may still be well formed.
+        opens.clear();
+        return Ok(index + 1);
+    }
+    if pattern.active(index, '(') {
+        admit_vec_slot(opens, work)?;
+        opens.push(index);
+    }
+    if pattern.active(index, ')')
+        && let Some(open) = opens.pop()
+    {
+        paired[open] = true;
+    }
+    Ok(index + 1)
+}
+
 async fn compile(
     pattern: &Pattern,
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<Vec<Instruction>, Error> {
+    let paired = group_boundaries(pattern, work, cancel).await?;
     let mut compiler = Compiler {
         code: Vec::new(),
         groups: Vec::new(),
@@ -104,7 +159,7 @@ async fn compile(
     let mut index = 0;
     while index < pattern.chars.len() {
         work.checkpoint(cancel).await?;
-        index = compile_next(pattern, index, &mut compiler, work, cancel).await?;
+        index = compile_next(pattern, &paired, index, &mut compiler, work, cancel).await?;
     }
     if !compiler.groups.is_empty() {
         return Err(2.into());
@@ -114,6 +169,7 @@ async fn compile(
 
 async fn compile_next(
     pattern: &Pattern,
+    paired: &[bool],
     index: usize,
     compiler: &mut Compiler,
     work: &mut Work,
@@ -122,20 +178,45 @@ async fn compile_next(
     if pattern.extglob
         && let Some(operator) = pattern.group_operator(index)
     {
+        if !paired[index + 1] {
+            return literal_tail(pattern, index, compiler, work, cancel).await;
+        }
         compiler.open(operator, work)?;
         return Ok(index + 2);
     }
-    if !compiler.groups.is_empty() && pattern.active(index, '|') {
-        compiler.alternative(work)?;
-        return Ok(index + 1);
-    }
-    if !compiler.groups.is_empty() && pattern.active(index, ')') {
-        compiler.close()?;
-        return Ok(index + 1);
+    if let Some(group) = compiler.groups.last_mut() {
+        if group.literal_depth == 0 && pattern.active(index, '|') {
+            compiler.alternative(work)?;
+            return Ok(index + 1);
+        }
+        if group.literal_depth == 0 && pattern.active(index, ')') {
+            compiler.close()?;
+            return Ok(index + 1);
+        }
+        if pattern.active(index, '(') {
+            group.literal_depth = group.literal_depth.checked_add(1).ok_or(2)?;
+        }
+        if pattern.active(index, ')') {
+            group.literal_depth -= 1;
+        }
     }
     let (atom, next) = pattern.basic_atom(index, work, cancel).await?;
     compiler.consume(atom, work)?;
     Ok(next)
+}
+
+async fn literal_tail(
+    pattern: &Pattern,
+    start: usize,
+    compiler: &mut Compiler,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<usize, Error> {
+    for ch in &pattern.chars[start..] {
+        work.checkpoint(cancel).await?;
+        compiler.consume(Atom::Literal(ch.value), work)?;
+    }
+    Ok(pattern.chars.len())
 }
 
 struct States {
@@ -300,6 +381,56 @@ mod tests {
                 "{source}: {value}"
             );
         }
+    }
+
+    #[test]
+    fn literal_parentheses_and_brackets_preserve_group_boundaries() {
+        for (source, value, expected) in [
+            ("@(a(b)c|x)", "a(b)c", true),
+            ("@(a(b|c)d|x)", "a(b|c)d", true),
+            ("@(a((b|c))d|x)", "x", true),
+            ("@(a(@(b|c))d|x)", "a(b)d", true),
+            ("@([|a)", "a", false),
+            ("@([|a)", "[", false),
+            ("@([|a)", "@([|a)", true),
+            ("@(@([|a)|b)", "b", false),
+            ("@([a)|b])", ")", true),
+            ("[@(a|b)", "[a", true),
+            ("@(@(a)|[b)", "@(@(a)|[b)", true),
+            ("@(@(a)|[b)", "@(a|[b)", false),
+            ("@([a|b)@(x)", "@([a|b)@(x)", true),
+            ("*(a", "zz(a", false),
+            ("[a", "[a", true),
+        ] {
+            let mut work = Work::new(100000, 100000, 16);
+            assert_eq!(
+                finish(pattern(source).matches_full(value, &mut work, &Cancel::new())).ok(),
+                Some(expected),
+                "{source}: {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn group_boundary_storage_and_scan_are_admitted_and_cancellable() {
+        let source = pattern("@(a)");
+        let cancel = Cancel::new();
+        let mut work = Work::new(100000, source.chars.len() - 1, 16);
+        assert!(matches!(
+            finish(group_boundaries(&source, &mut work, &cancel)),
+            Err(Error::Status(2))
+        ));
+        let mut work = Work::new(100000, source.chars.len(), 16);
+        assert!(matches!(
+            finish(group_boundaries(&source, &mut work, &cancel)),
+            Err(Error::Status(2))
+        ));
+        let source = pattern(&format!("@({})", "a".repeat(8192)));
+        let mut work = Work::new(1000000, 1000000, 16);
+        let mut pending = Box::pin(group_boundaries(&source, &mut work, &cancel));
+        assert!(pending.as_mut().now_or_never().is_none());
+        cancel.cancel();
+        assert!(matches!(finish(pending), Err(Error::Status(130))));
     }
 
     #[test]
