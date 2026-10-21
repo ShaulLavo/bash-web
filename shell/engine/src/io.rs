@@ -100,6 +100,17 @@ pub enum FileKind {
     Socket,
     Unknown,
 }
+/// Authoritative Unix mode bits. A clear unsupported bit is unknown, not denied.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FileMode {
+    pub bits: u32,
+    pub supported: u32,
+}
+impl FileMode {
+    pub fn test(self, bit: u32) -> Option<bool> {
+        (self.supported & bit == bit).then_some(self.bits & bit != 0)
+    }
+}
 /// A metadata snapshot. Optional values are absent when the host cannot report
 /// them; callers must not invent permissions, ownership or timestamps from an
 /// open succeeding. Access and ownership booleans refer to the effective caller.
@@ -108,7 +119,7 @@ pub enum FileKind {
 pub struct FileMetadata {
     pub kind: FileKind,
     pub size: u64,
-    pub mode: Option<u32>,
+    pub mode: Option<FileMode>,
     pub device: Option<u64>,
     pub inode: Option<u64>,
     pub uid: Option<u32>,
@@ -230,10 +241,13 @@ impl FsState {
         FileMetadata {
             kind,
             size: 0,
-            mode: Some(if kind == FileKind::Directory {
-                0o777
-            } else {
-                0o666
+            mode: Some(FileMode {
+                bits: if kind == FileKind::Directory {
+                    0o777
+                } else {
+                    0o666
+                },
+                supported: 0o7777,
             }),
             device: None,
             inode: Some(inode),
@@ -795,7 +809,10 @@ impl MemoryFs {
             .ok_or(IoError::NotFound)?;
         let mut metadata = file.metadata.get();
         metadata.executable = Some(executable);
-        metadata.mode = Some(if executable { 0o755 } else { 0o600 });
+        metadata.mode = Some(FileMode {
+            bits: if executable { 0o755 } else { 0o600 },
+            supported: 0o7777,
+        });
         file.metadata.set(metadata);
         Ok(())
     }
@@ -979,7 +996,7 @@ mod tests {
         let before = fs.stat("/f", true).unwrap();
         assert_eq!(before.kind, FileKind::Regular);
         assert_eq!(before.size, 3);
-        assert_eq!(before.mode, Some(0o666));
+        assert_eq!(before.mode.unwrap().bits, 0o666);
         assert_eq!(before.readable, Some(true));
         assert_eq!(before.writable, Some(true));
         assert_eq!(before.executable, Some(false));

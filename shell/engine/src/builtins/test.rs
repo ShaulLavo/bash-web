@@ -488,35 +488,39 @@ async fn unary_value(
             else {
                 return Ok(false);
             };
-            let kind = |expected| {
-                if metadata.kind == FileKind::Unknown {
-                    Err(2)
-                } else {
-                    Ok(metadata.kind == expected)
-                }
-            };
-            match operator {
-                "-a" | "-e" => Ok(true),
-                "-b" => kind(FileKind::BlockDevice),
-                "-c" => kind(FileKind::CharacterDevice),
-                "-d" => kind(FileKind::Directory),
-                "-f" => kind(FileKind::Regular),
-                "-h" | "-L" => kind(FileKind::Symlink),
-                "-p" => kind(FileKind::Fifo),
-                "-S" => kind(FileKind::Socket),
-                "-s" => Ok(metadata.size > 0),
-                "-r" => metadata.readable.ok_or(2),
-                "-w" => metadata.writable.ok_or(2),
-                "-x" => metadata.executable.ok_or(2),
-                "-O" => metadata.owned_by_effective_uid.ok_or(2),
-                "-G" => metadata.owned_by_effective_gid.ok_or(2),
-                "-u" => Ok(metadata.mode.ok_or(2)? & 0o4000 != 0),
-                "-g" => Ok(metadata.mode.ok_or(2)? & 0o2000 != 0),
-                "-k" => Ok(metadata.mode.ok_or(2)? & 0o1000 != 0),
-                "-N" => Ok(metadata.modified_ns.ok_or(2)? > metadata.accessed_ns.ok_or(2)?),
-                _ => Err(2),
-            }
+            file_predicate(operator, metadata)
         }
+        _ => Err(2),
+    }
+}
+
+fn file_predicate(operator: &str, metadata: FileMetadata) -> Result<bool, i32> {
+    let kind = |expected| {
+        if metadata.kind == FileKind::Unknown {
+            Err(2)
+        } else {
+            Ok(metadata.kind == expected)
+        }
+    };
+    match operator {
+        "-a" | "-e" => Ok(true),
+        "-b" => kind(FileKind::BlockDevice),
+        "-c" => kind(FileKind::CharacterDevice),
+        "-d" => kind(FileKind::Directory),
+        "-f" => kind(FileKind::Regular),
+        "-h" | "-L" => kind(FileKind::Symlink),
+        "-p" => kind(FileKind::Fifo),
+        "-S" => kind(FileKind::Socket),
+        "-s" => Ok(metadata.size > 0),
+        "-r" => metadata.readable.ok_or(2),
+        "-w" => metadata.writable.ok_or(2),
+        "-x" => metadata.executable.ok_or(2),
+        "-O" => metadata.owned_by_effective_uid.ok_or(2),
+        "-G" => metadata.owned_by_effective_gid.ok_or(2),
+        "-u" => metadata.mode.ok_or(2)?.test(0o4000).ok_or(2),
+        "-g" => metadata.mode.ok_or(2)?.test(0o2000).ok_or(2),
+        "-k" => metadata.mode.ok_or(2)?.test(0o1000).ok_or(2),
+        "-N" => Ok(metadata.modified_ns.ok_or(2)? > metadata.accessed_ns.ok_or(2)?),
         _ => Err(2),
     }
 }
@@ -768,5 +772,40 @@ mod tests {
         );
         assert!(operators.is_empty());
         assert_eq!(operators.capacity(), 0);
+    }
+}
+
+#[cfg(test)]
+mod permission_tests {
+    use super::*;
+    use crate::io::FileMode;
+
+    #[test]
+    fn supported_modes_and_access_do_not_answer_unsupported_predicates() {
+        let fs = crate::io::MemoryFs::new(1024);
+        let mut metadata = fs.stat("/", true).unwrap();
+        metadata.mode = Some(FileMode {
+            bits: 0,
+            supported: 0o1700,
+        });
+        metadata.readable = Some(false);
+        metadata.writable = Some(true);
+        metadata.executable = Some(false);
+        for (operator, expected) in [
+            ("-k", Ok(false)),
+            ("-u", Err(2)),
+            ("-g", Err(2)),
+            ("-r", Ok(false)),
+            ("-w", Ok(true)),
+            ("-x", Ok(false)),
+        ] {
+            assert_eq!(file_predicate(operator, metadata), expected, "{operator}");
+        }
+        metadata.mode.as_mut().unwrap().bits = 0o1000;
+        assert_eq!(file_predicate("-k", metadata), Ok(true));
+        metadata.mode.as_mut().unwrap().supported = 0o600;
+        assert_eq!(file_predicate("-k", metadata), Err(2));
+        metadata.executable = None;
+        assert_eq!(file_predicate("-x", metadata), Err(2));
     }
 }

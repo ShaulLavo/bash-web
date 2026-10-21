@@ -19,7 +19,7 @@ function createRootRuntime() {
   return waffle.createRuntime({
     filesystem: {
       workerURL: new URL("../.build/node/fs.mjs", import.meta.url),
-      persistence: false,
+      mode: "memory",
     },
   });
 }

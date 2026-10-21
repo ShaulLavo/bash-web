@@ -76,6 +76,22 @@ fn decode_filestat(bytes: &[u8; 64]) -> FileMetadata {
     }
 }
 
+/// The runtime_fs record is four little-endian u32s, independent of filestat.
+#[cfg(any(target_os = "wasi", test))]
+fn decode_permissions(metadata: &mut FileMetadata, bytes: &[u8; 16]) {
+    let word = |offset| u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap());
+    metadata.mode = Some(crate::io::FileMode {
+        bits: word(0),
+        supported: word(4),
+    });
+    let access = word(8);
+    let supported = word(12);
+    let allowed = |bit| (supported & bit != 0).then_some(access & bit != 0);
+    metadata.readable = allowed(4);
+    metadata.writable = allowed(2);
+    metadata.executable = allowed(1);
+}
+
 const AGAIN: i32 = 6;
 // runtime/proc/signals.ts: DEFAULT=0, IGNORE=1, HANDLE=2. This is a
 // disposition, not the signal number or the self-signal operation (mode 3).

@@ -190,12 +190,12 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --unshare-all --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 --proc /proc --dev /dev -- /usr/bin/true
       - run: node --test scripts/test-diagnose-compat.ts
-      - run: npm run test:shell:scoreboard
       - uses: actions/download-artifact@v4
         with:
           name: utility-guests-${{ github.sha }}
           path: .build/utility-artifacts/
       - run: npm run build:shell
+      - run: npm run test:shell:scoreboard
       - run: npm run fuzz:shell-echo:ci -- --waffle --shell "$GITHUB_WORKSPACE/.build/shell/wasm32-wasip1/release/shell-runtime.wasm"
         env:
           TMPDIR: ${{ runner.temp }}

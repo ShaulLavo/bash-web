@@ -1300,6 +1300,40 @@ Answer `-k`, `-r`, `-w` (and the related `-u`/`-g`/`-x` family) from runtime met
 - `bashkit-suite:test-operators:40`: Bash status 0, stdout `writable\n`; ours status 2, stdout ``, stderr `/usr/bin/bash: [: -w: unsupported predicate\n`.
 - `oils:builtin-bracket:280`: Bash status 0, stdout `status=1\nstatus=1\n`; ours status 0, stdout `status=2\nstatus=2\n`, stderr `/usr/bin/bash: test: -k: unsupported predicate\n/usr/bin/bash: test: -k: unsupported predicate\n`.
 
+#### Authoritative permissions integration, 2026-10-21
+
+Status: Approved, implementation measured and ready for independent review. The selected Waffle
+pin is `fc58a532f0d7a617e631ea4b7580a190915d4ed6`, version 0.0.58. The shell now
+consumes its four-word permissions query without changing Preview1 filestat.
+Supported mode/access masks distinguish denied from unknown answers in the shared
+`[ ]`/`[[ ]]` evaluator. Native modes stay unchanged. See
+[the contract and control documentation](../docs/file-permissions.md).
+
+The three candidate failures reproduced first in the real production runner and
+then matched Bash after implementation. Native/WASI and real-runtime controls cover
+actual read/write denial, directory search, metadata-only access, masks and ABI
+errors. The memory selector is an equivalent API update. OPFS conformance tests use
+the selected source's exact internal test helper, not an IndexedDB substitution.
+Frozen identities, fixtures, skips and scoring are unchanged.
+
+Measured source `51b7f366a9a10c9f0a248189ea4cf6f04b2803bc`, against accepted base
+`bf9f62b2049f177fb9d293edc136a307d26a8d2f`, completed its single production replay
+with JOBS=1. The 9,221 records still contain 5,792 scored cases and 3,429 skips.
+Oils gains only `oils:builtin-bracket:280`, 1012 -> 1013. Brush stays1001.
+Bashkit gains only `bashkit-suite:test-operators:32` and `:40`, 1404 -> 1406.
+Every corpus loses zero passes. Only those three outcome fields and derived counts
+change; historical failure payloads stay intact. The strict offline comparator
+passes on the saved replay. Stderr is retained, not scored.
+
+The delivery also moves the same blocking scoreboard CI command after its existing
+production guest build so the new real-runtime controls have their required guest.
+No check is skipped and no extra build is introduced. This wiring change and the
+measurement receipt postdate the measured source; production semantics are identical.
+See [the receipt](../docs/evidence/permissions-r1.json). Full R3 replay, controls,
+reproducers and cleanup evidence live under
+`/work/reports/bash-web/hill-climb/r1-permissions-integration/`. Parent owns independent
+review, hosted checks, merge and exact-main acceptance. This is not final acceptance.
+
 ### R2. Background jobs at `-c` exit
 
 Let `shell-runtime -c` exit without cancelling still-running background jobs, as Bash does; their output must drain to the inherited descriptors.

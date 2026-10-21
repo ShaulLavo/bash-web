@@ -1,12 +1,22 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
-import { createRuntime, type Runtime, type SharedFilesystemState } from "waffle";
+import {
+  createRuntime,
+  type Runtime,
+  type SharedFilesystemOptions,
+  type SharedFilesystemState,
+} from "waffle";
 import { FilesystemError, type FilesystemConnection } from "waffle/fs/protocol";
 import { FilesystemService } from "waffle/fs/service";
+import { withVfsImplementation } from "../../node_modules/waffle/fs/vfs-internal.ts";
 import { MemoryBackend } from "waffle/fs/backend";
 import { BrowserSession } from "./session";
 import { createStartupDiagnostics } from "../runtime/startup-diagnostics";
 import { createStorageStartup, STORAGE_READY_TIMEOUT_MS, waitForStorage } from "./storage";
+
+function opfs(options: Omit<SharedFilesystemOptions, "mode"> = {}) {
+  return withVfsImplementation("opfs-memory", { mode: "fast", ...options });
+}
 
 function storageWorker(context: TestContext) {
   const previousWorker = globalThis.Worker;
@@ -16,7 +26,7 @@ function storageWorker(context: TestContext) {
   class StorageWorker extends EventTarget {
     connection?: FilesystemConnection;
     service = new FilesystemService(new MemoryBackend());
-    initialization?: { storage: string; whenBusy?: string };
+    initialization?: { mode?: string; implementation?: string; whenBusy?: string };
     disposalRequested = false;
     holdDisposal = false;
     terminated = false;
@@ -26,13 +36,18 @@ function storageWorker(context: TestContext) {
     }
     postMessage(message: {
       connect?: FilesystemConnection;
-      storage?: string;
+      mode?: string;
+      implementation?: string;
       whenBusy?: string;
       dispose?: boolean;
     }) {
       if (message.connect) {
         this.connection = message.connect;
-        this.initialization = { storage: message.storage!, whenBusy: message.whenBusy };
+        this.initialization = {
+          mode: message.mode,
+          implementation: message.implementation,
+          whenBusy: message.whenBusy,
+        };
       }
       if (message.dispose) {
         this.disposalRequested = true;
@@ -82,7 +97,11 @@ function storageWorker(context: TestContext) {
         ...options,
         filesystem: { workerURL: "https://example.test/fs-worker.js", ...options.filesystem },
       });
-      return { runtime, worker: workers.at(-1)! };
+      const worker = workers.at(-1)!;
+      const implementation = runtime.filesystem.vfs.implementation;
+      assert.equal(worker.initialization?.implementation, implementation);
+      assert.equal(worker.initialization?.mode, "fast");
+      return { runtime, worker };
     },
   };
 }
@@ -96,7 +115,13 @@ test("waiting remains typed and pending until recovery reports ready, preserving
     ownerStates.push(state.status);
   };
   const { runtime, worker } = fixture.create({
-    filesystem: { storage: "opfs", onStateChange: owner },
+    filesystem: opfs({ onStateChange: owner }),
+  });
+  assert.equal(runtime.filesystem.vfs.implementation, "opfs-memory");
+  assert.deepEqual(worker.initialization, {
+    mode: "fast",
+    implementation: "opfs-memory",
+    whenBusy: "wait",
   });
   const states: string[] = [];
   let ready = false;
@@ -124,7 +149,7 @@ test("shell startup timeout starts only after storage is ready", async (context)
     globalThis.fetch = fetch;
   });
   const fixture = storageWorker(context);
-  const { runtime, worker } = fixture.create({ filesystem: { storage: "opfs" } });
+  const { runtime, worker } = fixture.create({ filesystem: opfs() });
   worker.state("waiting");
   let admitted = false;
   let rejected = false;
@@ -158,7 +183,7 @@ test("shell startup timeout starts only after storage is ready", async (context)
 
 test("runtime disposal revokes synchronously and awaits the final waiting-storage acknowledgement", async (context) => {
   const fixture = storageWorker(context);
-  const { runtime, worker } = fixture.create({ filesystem: { storage: "opfs" } });
+  const { runtime, worker } = fixture.create({ filesystem: opfs() });
   worker.holdDisposal = true;
   worker.state("waiting");
   const opening = waitForStorage(runtime, new AbortController().signal);
@@ -220,7 +245,7 @@ for (const whenBusy of ["takeover", "wait"] as const) {
 test("cancelling a waiting session detaches its observer without disposing the borrowed runtime", async (context) => {
   const fixture = storageWorker(context);
   const { runtime, worker } = fixture.create({
-    filesystem: { storage: "indexeddb", whenBusy: "wait" },
+    filesystem: { mode: "fast", whenBusy: "wait" },
   });
   worker.state("waiting");
   const controller = new AbortController();
@@ -243,7 +268,7 @@ test("concurrent storage waiters detach without replacing the owner's observer",
   const fixture = storageWorker(context);
   const owner = () => {};
   const { runtime, worker } = fixture.create({
-    filesystem: { storage: "opfs", onStateChange: owner },
+    filesystem: opfs({ onStateChange: owner }),
   });
   const cancelled = new AbortController();
   const first = waitForStorage(runtime, cancelled.signal);
@@ -259,7 +284,7 @@ test("concurrent storage waiters detach without replacing the owner's observer",
 test("initial storage opening has a separate generous readiness bound", async (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const fixture = storageWorker(context);
-  const { runtime, worker } = fixture.create({ filesystem: { storage: "opfs" } });
+  const { runtime, worker } = fixture.create({ filesystem: opfs() });
   let failed = false;
   const opening = waitForStorage(runtime, new AbortController().signal);
   const rejected = assert
@@ -280,7 +305,7 @@ test("initial storage opening has a separate generous readiness bound", async (c
 test("ownership waiting disarms the opening guard without starting the shell guard", async (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const fixture = storageWorker(context);
-  const { runtime, worker } = fixture.create({ filesystem: { storage: "opfs" } });
+  const { runtime, worker } = fixture.create({ filesystem: opfs() });
   let ready = false;
   const opening = waitForStorage(runtime, new AbortController().signal).then(() => {
     ready = true;
@@ -299,7 +324,7 @@ for (const outcome of ["ready", "cancelled"] as const)
   test(`storage ${outcome} removes its opening timer and observer`, async (context) => {
     context.mock.timers.enable({ apis: ["setTimeout"] });
     const fixture = storageWorker(context);
-    const { runtime, worker } = fixture.create({ filesystem: { storage: "opfs" } });
+    const { runtime, worker } = fixture.create({ filesystem: opfs() });
     const clear = context.mock.method(globalThis, "clearTimeout");
     const controller = new AbortController();
     const opening = waitForStorage(runtime, controller.signal);
@@ -323,13 +348,17 @@ for (const outcome of ["ready", "cancelled"] as const)
 test("storage defaults are forwarded unchanged and OPFS takeover is rejected", async (context) => {
   const fixture = storageWorker(context);
   const { runtime, worker } = fixture.create();
-  assert.deepEqual(worker.initialization, { storage: "indexeddb", whenBusy: undefined });
+  assert.deepEqual(worker.initialization, {
+    mode: "fast",
+    implementation: "indexeddb",
+    whenBusy: "takeover",
+  });
   // Default IndexedDB startup is cancellable even before storage becomes ready.
   await runtime.dispose();
-  const invalid = { storage: "opfs", whenBusy: "takeover" };
+  const invalid = withVfsImplementation("opfs-memory", { mode: "fast", whenBusy: "takeover" });
   assert.throws(
-    () => createRuntime({ filesystem: invalid as never }),
-    /only supports whenBusy: "wait"/,
+    () => createRuntime({ filesystem: invalid }),
+    /opfs-memory does not support whenBusy: takeover/,
   );
 });
 

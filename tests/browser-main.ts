@@ -3,6 +3,7 @@
 // Then compose createBunRuntimeLease from ./helpers/bun-fixture using that installer
 // and import workerUrl from "bun-wasm/worker?worker&url". No old guest is substituted.
 import { createRuntime, type SharedFilesystemOptions } from "waffle";
+import { withVfsImplementation } from "../node_modules/waffle/fs/vfs-internal.ts";
 import { mountBrowser, type BrowserRuntimeLease } from "../src/browser/main";
 import { registerTestPrograms } from "./helpers/test-programs";
 import { installCat } from "../src/utilities/cat";
@@ -19,7 +20,7 @@ function filesystemOptions(): SharedFilesystemOptions {
   const whenBusy = query.get("whenBusy");
   if (query.get("storage") === "opfs") {
     if (whenBusy === "takeover") throw new TypeError('OPFS storage only supports whenBusy: "wait"');
-    return { ...defaults, name, storage: "opfs" };
+    return withVfsImplementation("opfs-memory", { ...defaults, name, mode: "fast" });
   }
   return {
     ...defaults,
@@ -31,6 +32,13 @@ function filesystemOptions(): SharedFilesystemOptions {
 mountBrowser({
   acquireRuntime(onStartupStage): BrowserRuntimeLease {
     const runtime = createRuntime({ filesystem: filesystemOptions(), onStartupStage });
+    const query = new URLSearchParams(location.search);
+    if (
+      query.get("test") === "1" &&
+      query.get("storage") === "opfs" &&
+      runtime.filesystem.vfs.implementation !== "opfs-memory"
+    )
+      throw new Error("OPFS conformance selector did not reach the runtime");
     const registration = new AbortController();
     // External commands are add-ons: this composition selects all four. Each one's
     // program is fetched only when the shell first starts it.
