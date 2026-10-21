@@ -1,13 +1,18 @@
 //! Scalar indirection adapted from Bashkit's IndirectExpansion/indirect_target
 //! at 491c3281. This original adapter resolves typed names directly; it never
 //! desugars a target string into syntax. Generic IndirectSuffix stays unsupported.
+//! Bare positional and special targets reuse the direct `$1`/`$?`/`$@` adapters.
 use super::{Error, Expansion, OperandContext, Protection, operand};
 use crate::state::SharedState;
-use shell_parser::parser::ParameterOp;
+use shell_parser::parser::{ParameterOp, WordPart};
 
-#[derive(PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 enum TargetKind {
     Scalar,
+    /// Positional digits and the scalar specials `#`, `?`, `$`, `!` and `-`.
+    Special,
+    /// `@` and `*`, which expand as the positional list.
+    List,
     Unsupported,
     Invalid,
 }
@@ -37,12 +42,20 @@ impl Expansion<'_> {
         let Some(target) = self.indirect_snapshot(name, state, true).await? else {
             return Err(self.invalid_indirect(name, true)?);
         };
-        match self.indirect_kind(&target).await? {
-            TargetKind::Unsupported => return Err(2.into()),
-            TargetKind::Invalid => return Err(self.invalid_indirect(&target, false)?),
-            TargetKind::Scalar => {}
+        let kind = self.indirect_kind(&target).await?;
+        if kind == TargetKind::Invalid {
+            return Err(self.invalid_indirect(&target, false)?);
         }
-        if operator.is_none() && state.borrow().is_nameref(name) {
+        let nameref = state.borrow().is_nameref(name);
+        if matches!(kind, TargetKind::Special | TargetKind::List) && !nameref {
+            return self
+                .special_target(name, &target, kind, operator, context)
+                .await;
+        }
+        if kind != TargetKind::Scalar {
+            return Err(2.into());
+        }
+        if operator.is_none() && nameref {
             return self
                 .segment(
                     &target,
@@ -55,22 +68,7 @@ impl Expansion<'_> {
             // A bare indirection reads its resolved target. Lazy operators
             // below only test target presence; their selected operands enforce
             // nounset through ordinary expansion instead.
-            if let Err(error) = self.require_bound(&target, state).await {
-                return Err(match error {
-                    Error::Unbound { line, .. } => {
-                        // Bash names the indirect expression (`!p`), not its
-                        // resolved target. Admit both diagnostic spellings
-                        // before allocating this replacement name.
-                        self.work
-                            .admit_storage(name.len().saturating_add(1).saturating_mul(2))?;
-                        Error::Unbound {
-                            name: format!("!{name}"),
-                            line,
-                        }
-                    }
-                    other => other,
-                });
-            }
+            self.bound_target(name, &target, state).await?;
             let value = self
                 .indirect_snapshot(&target, state, false)
                 .await?
@@ -94,6 +92,83 @@ impl Expansion<'_> {
         result
     }
 
+    /// A bare read of `${!p}` whose target is a positional or special
+    /// parameter is exactly the direct read of that parameter, so it shares
+    /// the ordinary adapters' quoting, IFS, list and limit semantics. Operators
+    /// select scalar names only; nested operands and patterns expand `$@`
+    /// through their own adapters, so those combinations stay unsupported.
+    async fn special_target(
+        &mut self,
+        name: &str,
+        target: &str,
+        kind: TargetKind,
+        operator: Option<&ParameterOp>,
+        context: OperandContext<'_>,
+    ) -> Result<(), Error> {
+        let OperandContext {
+            state,
+            quoted,
+            scalar,
+            depth,
+        } = context;
+        if operator.is_some() {
+            return Err(2.into());
+        }
+        let (nounset, no_async, no_positionals) = {
+            let state = state.borrow();
+            (
+                state.nounset,
+                state.last_async().is_none(),
+                state.positional().is_empty(),
+            )
+        };
+        if kind == TargetKind::Special {
+            // Bash reports an unset `!` target with a second bad-substitution
+            // diagnostic; that combined error has no adapter here.
+            if target == "!" && nounset && no_async {
+                return Err(2.into());
+            }
+            self.bound_target(name, target, state).await?;
+            return self.variable(target, state, quoted, scalar).await;
+        }
+        if depth > 0 || self.pattern.is_some() || self.replacement.is_some() {
+            return Err(2.into());
+        }
+        // Unlike direct `$*`, Bash treats an empty `*` target as unset.
+        if target == "*" && nounset && no_positionals {
+            return Err(self.unbound_indirect(name, None)?);
+        }
+        self.work.admit_storage(target.len())?;
+        let part = WordPart::Variable(target.to_owned());
+        self.elements(&part, state, quoted, scalar).await
+    }
+
+    async fn bound_target(
+        &mut self,
+        name: &str,
+        target: &str,
+        state: &SharedState,
+    ) -> Result<(), Error> {
+        let Err(error) = self.require_bound(target, state).await else {
+            return Ok(());
+        };
+        let Error::Unbound { line, .. } = error else {
+            return Err(error);
+        };
+        Err(self.unbound_indirect(name, line)?)
+    }
+
+    fn unbound_indirect(&mut self, name: &str, line: Option<usize>) -> Result<Error, Error> {
+        // Bash names the indirect expression (`!p`), not its resolved target.
+        // Admit both diagnostic spellings before allocating this replacement.
+        self.work
+            .admit_storage(name.len().saturating_add(1).saturating_mul(2))?;
+        Ok(Error::Unbound {
+            name: format!("!{name}"),
+            line,
+        })
+    }
+
     async fn indirect_kind(&mut self, name: &str) -> Result<TargetKind, Error> {
         let mut valid = !name.is_empty();
         let mut digits = !name.is_empty();
@@ -111,8 +186,14 @@ impl Expansion<'_> {
         if valid {
             return Ok(TargetKind::Scalar);
         }
-        // These categories need typed semantics, never target-string reparsing.
-        if subscript || digits || matches!(name, "@" | "*" | "#" | "?" | "$" | "!" | "-") {
+        if digits || matches!(name, "#" | "?" | "$" | "!" | "-") {
+            return Ok(TargetKind::Special);
+        }
+        if matches!(name, "@" | "*") {
+            return Ok(TargetKind::List);
+        }
+        // Subscripts need typed array semantics, never target-string reparsing.
+        if subscript {
             return Ok(TargetKind::Unsupported);
         }
         Ok(TargetKind::Invalid)
