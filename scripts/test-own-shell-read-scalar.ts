@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { after, test } from "node:test";
+import { recordedBash } from "./recorded-bash.ts";
 import { createWaffleRunner } from "./waffle-compat.ts";
 
 const env = { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" };
@@ -77,24 +77,14 @@ const cases = [" ", ":", ": ", "", "é"]
     ),
   );
 // CI Bash is not the pinned oracle; replay locally recorded observations.
-type Recorded = { script: string; status: number; stdoutBase64: string };
-const bashVersion = "GNU bash, version 5.3.15(1)-release ";
-const fixturePath = new URL("fixtures/shell-read-scalar.json", import.meta.url);
-const recordPath = process.env.BASH_READ_SCALAR_RECORD;
-const recorded: Recorded[] = [];
-const fixture: { bash: string; cases: Recorded[] } = recordPath
-  ? { bash: liveBashVersion(), cases: [] }
-  : JSON.parse(readFileSync(fixturePath, "utf8"));
-assert.ok(fixture.bash.startsWith(bashVersion), fixture.bash);
-const fixtureCases = new Map(fixture.cases.map((entry) => [entry.script, entry]));
-if (!recordPath) assert.equal(fixtureCases.size, new Set(cases).size);
-after(() => {
-  if (recordPath)
-    writeFileSync(
-      recordPath,
-      JSON.stringify({ schema: 1, bash: fixture.bash, cases: recorded }, null, 2) + "\n",
-    );
-});
+const oracle = recordedBash(
+  new URL("fixtures/shell-read-scalar.json", import.meta.url),
+  process.env.BASH_READ_SCALAR_RECORD,
+  /^GNU bash, version 5\.3\.15\(1\)-release /,
+  liveBashVersion,
+);
+if (!oracle.recording) assert.equal(oracle.cases.size, new Set(cases).size);
+after(() => oracle.save());
 
 function liveBashVersion() {
   const probe = spawnSync("/usr/bin/bash", ["--version"]);
@@ -103,20 +93,13 @@ function liveBashVersion() {
 }
 
 function expectation(script: string) {
-  if (!recordPath) {
-    const entry = fixtureCases.get(script);
-    assert.ok(entry, `missing recorded Bash observation: ${script}`);
-    return { status: entry.status, stdout: Buffer.from(entry.stdoutBase64, "base64") };
-  }
+  if (!oracle.recording) return oracle.replay(script);
   const bash = spawnSync("/usr/bin/bash", ["--noprofile", "--norc", "-c", script], { env });
   assert.equal(bash.error, undefined);
   assert.equal(bash.signal, null);
-  recorded.push({
-    script,
-    status: bash.status ?? -1,
-    stdoutBase64: bash.stdout.toString("base64"),
-  });
-  return bash;
+  const live = { status: bash.status ?? -1, stdout: bash.stdout };
+  oracle.record(script, live);
+  return live;
 }
 
 for (const script of cases)
