@@ -4138,3 +4138,6 @@ mod printf_quoting;
 
 #[path = "words/builtin_wrapper.rs"]
 mod builtin_wrapper;
+
+#[path = "words/getopts.rs"]
+mod getopts;

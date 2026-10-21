@@ -47,7 +47,7 @@ impl<'a> Invocation<'a> {
         let mut operands = args;
         let mut name = None;
         while let Some((first, rest)) = operands.split_first() {
-            scan_option(first.len().max(1), context, work).await?;
+            super::scan_bytes(first.len().max(1), context, work).await?;
             if first == "--" {
                 operands = rest;
                 break;
@@ -63,7 +63,7 @@ impl<'a> Invocation<'a> {
                     b"/usr/bin/bash: printf: -v: option requires an argument\n",
                 ));
             };
-            scan_option(target.len(), context, work).await?;
+            super::scan_bytes(target.len(), context, work).await?;
             if !super::valid_name(target) {
                 return Ok(Self::InvalidVariable(target));
             }
@@ -115,15 +115,6 @@ impl<'a> Invocation<'a> {
         printer.usage_diagnostic(USAGE).await?;
         Ok(2)
     }
-}
-
-async fn scan_option(bytes: usize, context: &Context, work: &mut Work) -> Result<(), i32> {
-    for _ in 0..bytes {
-        work.checkpoint(&context.cancel)
-            .await
-            .map_err(error_status)?;
-    }
-    Ok(())
 }
 
 async fn assign(

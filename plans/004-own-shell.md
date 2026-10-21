@@ -2117,6 +2117,40 @@ passing decimal projection. The next worker must preserve every accepted-main
 pass and run the unchanged frozen ruler. Earlier unmerged matches are evidence,
 not accepted baseline memberships.
 
+## Getopts caller-local dynamic unbind, 2026-10-21
+
+Status: Approved. Owner: Variables track for general dynamic scope/unbind
+semantics, coordinated with BUILTINS for the getopts caller. This is a separate
+follow-up, not part of the bounded scanner repair.
+
+Independent getopts repair review r3 retained an inherited caller-local OPTARG
+limitation as `F2-caller-local-error`. Run the exact script with Bash 5.3.15 or
+the production Waffle shell:
+
+```sh
+OPTARG=g; g() { getopts a o x; echo "g:${OPTARG-unset}"; }; f() { local OPTARG=l; readonly OPTARG; g; OPTARG=after; echo "f:$OPTARG"; }; f; echo "global:$OPTARG"
+```
+
+Bash prints `g:g\nf:after\nglobal:after\n`. Reviewed shell source
+`339a5b9e635637ffd9734e889d43a1bf3186bc34` prints
+`g:unset\nf:after\nglobal:g\n` on both native and real Waffle. All three return
+status 0 with empty stderr. Exact script and raw observations are the
+`F2-caller-local-error` records in
+`/work/reports/bash-web/hill-climb/builtins/getopts-repair-review-r3/native.json`
+and `waffle.json`; disposition and source inspection are in the adjacent
+`report.md` and `RESULT.json`.
+
+The current direct getopts unbind removes the visible value but does not reveal
+the outer binding when the removed local belongs to a caller. Inspect
+`State::unset_getopts_argument` and local-frame restoration in
+`shell/engine/src/state.rs`. The prior helper had the same visible-value removal
+policy; this is not a new scanner-repair regression. Define general dynamic
+unbind/restoration semantics with the Variables owner, then cover caller-local,
+current-local, readonly, nameref and function-return behavior. Keep the exact
+Bash/native/Waffle control nonpassing until that contract lands. Do not add a
+getopts-only scope rewrite, change score inputs or claim full dynamic-unbind
+parity for the current scanner PR.
+
 ## Input-only substitution and inherited file aliases, 2026-10-21
 
 Approved bounded command-substitution family. Typed parser metadata distinguishes
