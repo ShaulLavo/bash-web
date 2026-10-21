@@ -79,6 +79,17 @@ test("the complete exact-source artifact stages both CLIs, every guest and utili
   });
 });
 
+test("staged utilities are available at package URLs before browser bundling", () => {
+  fixture((directory, consumer) => {
+    stageCiArtifacts(consumer, directory);
+    for (const name of utilityNames)
+      assert.deepEqual(
+        readFileSync(resolve(consumer, `dist/${name}.wasm`)),
+        readFileSync(resolve(directory, `${name}.wasm`)),
+      );
+  });
+});
+
 for (const name of nativeArtifactFiles) {
   test(`missing ${name} fails before consumer writes`, () => {
     fixture((directory, consumer) => {

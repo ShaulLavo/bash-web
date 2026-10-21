@@ -121,8 +121,10 @@ export function stageCiArtifacts(root: string, directory: string) {
     resolve(directory, "shell-runtime.wasm"),
     resolve(root, "public/programs/shell-engine.wasm"),
   );
-  for (const name of utilityNames)
+  for (const name of utilityNames) {
     copy(resolve(directory, `${name}.wasm`), resolve(root, `public/programs/${name}.wasm`));
+    copy(resolve(directory, `${name}.wasm`), resolve(root, `dist/${name}.wasm`));
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

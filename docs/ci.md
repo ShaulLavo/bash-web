@@ -37,6 +37,10 @@ changed or wrong-source artifacts fail; no earlier build is relabelled.
 The existing `utility-guests-<sha>` and `shell-cli-<sha>` artifacts remain available
 with their original source/hash receipt contracts.
 
+Staging puts each utility in both `public/programs` and `dist` before Vite runs,
+matching the normal utility build. Utility package entries resolve their WASM
+URLs from `dist`; copying those files only after bundling leaves broken URLs.
+
 Only the producer compiles shared guests and WASI tests. The TypeScript WASI
 runner's `--prebuilt` mode executes those tests and keeps the normal smoke,
 stdio, helper, scanner and size assertions. Its no-argument local mode still
