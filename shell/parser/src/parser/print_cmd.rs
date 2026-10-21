@@ -411,7 +411,7 @@ impl<'a> Printer<'a> {
                 WordPart::BadSubstitution(text) => write!(self.out, "{}", text)?,
                 // Printed as shell text (re-parsed by alias expansion);
                 // never `Debug` (TM-INF-022).
-                WordPart::CommandSubstitution(cmd) => {
+                WordPart::CommandSubstitution(cmd) | WordPart::FileSubstitution(cmd) => {
                     self.out.write_str("$(")?;
                     self.stream_commands(cmd)?;
                     self.out.write_char(')')?;
@@ -1021,7 +1021,7 @@ impl<'a> Printer<'a> {
         for part in &word.parts {
             match part {
                 WordPart::Literal(value) => text.push_str(value),
-                WordPart::CommandSubstitution(commands) => {
+                WordPart::CommandSubstitution(commands) | WordPart::FileSubstitution(commands) => {
                     text.push_str("$(");
                     text.push_str(&self.inline_commands(commands));
                     text.push(')');
@@ -1568,7 +1568,7 @@ fn reconstruct_word(w: &Word) -> String {
     for part in &w.parts {
         match part {
             WordPart::Literal(t) => s.push_str(t),
-            WordPart::CommandSubstitution(cmds) => {
+            WordPart::CommandSubstitution(cmds) | WordPart::FileSubstitution(cmds) => {
                 s.push_str("$(");
                 s.push_str(&inline_commands(cmds));
                 s.push(')');

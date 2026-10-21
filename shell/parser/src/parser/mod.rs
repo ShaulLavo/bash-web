@@ -24,6 +24,7 @@
 
 mod ast;
 pub mod budget;
+mod file_substitution;
 mod lexer;
 mod lexical;
 pub mod parameter_scan;
@@ -92,6 +93,7 @@ pub struct Parser<'a> {
     /// parameter parsing. Brace expansion precedes those transformations.
     current_raw: Option<String>,
     current_escapes: Vec<LiteralEscape>,
+    current_backticks: Vec<usize>,
     /// Maximum allowed AST nesting depth
     max_depth: usize,
     /// Current nesting depth
@@ -208,9 +210,9 @@ impl<'a> Parser<'a> {
         lexer.set_extglob_bang(options.extglob);
         lexer.set_capture_raw(true);
         let spanned = lexer.next_spanned_token();
-        let (current_token, current_span, current_escapes, current_raw) = match spanned {
-            Some(st) => (Some(st.token), st.span, st.literal_escapes, st.raw),
-            None => (None, Span::new(), Vec::new(), None),
+        let (current_token, current_span, current_escapes, current_raw, current_backticks) = match spanned {
+            Some(st) => (Some(st.token), st.span, st.literal_escapes, st.raw, st.backtick_offsets),
+            None => (None, Span::new(), Vec::new(), None, Vec::new()),
         };
         // The first token was lexed before any alias table was attached:
         // it is plain when it reads exactly as its source text.
@@ -224,6 +226,7 @@ impl<'a> Parser<'a> {
             peeked_token: None,
             current_raw,
             current_escapes,
+            current_backticks,
             max_depth: max_depth.min(HARD_MAX_AST_DEPTH),
             current_depth: 0,
             fuel: Cell::new(max_fuel),
@@ -409,7 +412,7 @@ impl<'a> Parser<'a> {
             Some(tokens::Token::QuotedGlobWord(text)) => (text.clone(), true, true),
             _ => return Err(parser.error("expected one expanded word")),
         };
-        let mut word = parser.parse_word_inner(text, &parser.current_escapes, true);
+        let mut word = parser.parse_word_inner(text, &parser.current_escapes, true, &parser.current_backticks);
         budget.check()?;
         if let Some(error) = parser.deferred_error.take() {
             return Err(error);
@@ -483,7 +486,7 @@ impl<'a> Parser<'a> {
                     parser.validate_parameter_command(&body)?;
                 }
                 match parser.parse_substitution_body(&body) {
-                    Ok(script) => WordPart::CommandSubstitution(script.commands),
+                    Ok(script) => file_substitution::part(script, None),
                     Err(error) => substitution_error(body, fused, error, 1)?,
                 }
             }
@@ -518,7 +521,7 @@ impl<'a> Parser<'a> {
             .with_execution_budget(budget.clone())
             .with_strict_substitution_bodies();
         let part = match parser.parse_substitution_body(body) {
-            Ok(script) => WordPart::CommandSubstitution(script.commands),
+            Ok(script) => file_substitution::part(script, Some(body)),
             Err(error @ Error::ResourceLimit(_)) => return Err(error),
             Err(Error::Parse { message, .. }) => WordPart::UnparsedCommandSubstitution {
                 source: body.to_string(),
@@ -616,7 +619,7 @@ impl<'a> Parser<'a> {
             });
         }
         match self.parse_substitution_body(body) {
-            Ok(script) => Ok(WordPart::CommandSubstitution(script.commands)),
+            Ok(script) => Ok(file_substitution::part(script, Some(body))),
             Err(error @ Error::ResourceLimit(_)) => Err(error),
             Err(Error::Parse { message, .. }) => Ok(WordPart::UnparsedCommandSubstitution {
                 source: body.to_string(),
@@ -1043,6 +1046,7 @@ impl<'a> Parser<'a> {
                 self.current_span = st.span;
                 self.current_raw = st.raw;
                 self.current_escapes = st.literal_escapes;
+                self.current_backticks = st.backtick_offsets;
                 self.current_plain = st.plain;
                 self.current_after_blank = st.after_blank_alias;
             }
@@ -1050,6 +1054,7 @@ impl<'a> Parser<'a> {
                 self.current_token = None;
                 self.current_raw = None;
                 self.current_escapes.clear();
+                self.current_backticks.clear();
                 self.current_plain = false;
                 self.current_after_blank = false;
                 // Keep the last span for error reporting
@@ -1062,6 +1067,7 @@ impl<'a> Parser<'a> {
         let units = self
             .current_escapes
             .len()
+            .saturating_add(self.current_backticks.len())
             .saturating_add(self.lexer.take_boundary_scan_work());
         if let Err(err) = self.tick_units(units) {
             let first = self.deferred_error.take();
@@ -3533,6 +3539,7 @@ impl<'a> Parser<'a> {
             index,
             value: value_str,
             escapes: value_escapes,
+            backticks: file_substitution::slice_offsets(&self.current_backticks, value_start, w.len()),
             raw: value_raw,
             append: is_append,
         }))
@@ -3588,7 +3595,7 @@ impl<'a> Parser<'a> {
     #[inline(never)]
     fn assignment_scalar_value(&self, source: &mut AssignmentSource) -> AssignmentValue {
         let mut word =
-            self.parse_word_with_escapes(std::mem::take(&mut source.value), &source.escapes);
+            self.parse_word_inner(std::mem::take(&mut source.value), &source.escapes, false, &source.backticks);
         word.raw = source.raw.take();
         AssignmentValue::Scalar(word)
     }
@@ -4166,6 +4173,7 @@ impl<'a> Parser<'a> {
     ) -> bool {
         let saved_raw = self.current_raw.clone();
         let saved_escapes = self.current_escapes.clone();
+        let saved_backticks = self.current_backticks.clone();
         self.advance();
         if let Some(word) = self.try_parse_compound_array_arg(w.clone(), saved_raw.clone()) {
             words.push(word);
@@ -4181,7 +4189,7 @@ impl<'a> Parser<'a> {
                 raw: saved_raw.clone(),
             }
         } else {
-            let mut word = self.parse_word_with_escapes(w, &saved_escapes);
+            let mut word = self.parse_word_inner(w, &saved_escapes, false, &saved_backticks);
             if is_quoted {
                 word.quoted = true;
             }
@@ -5387,18 +5395,18 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_current_word(&self, s: String) -> Word {
-        self.parse_word_with_escapes(s, &self.current_escapes)
+        self.parse_word_inner(s, &self.current_escapes, false, &self.current_backticks)
     }
 
     fn parse_word_with_escapes(&self, s: String, escapes: &[LiteralEscape]) -> Word {
-        self.parse_word_inner(s, escapes, false)
+        self.parse_word_inner(s, escapes, false, &[])
     }
 
     // THREAT[TM-DOS-044]: nested `$(...)` bodies parse after the scan loop's
     // large frame has returned, so each substitution level keeps only this
     // small frame and `parse_word_substitutions` on the recursive path.
-    fn parse_word_inner(&self, s: String, escapes: &[LiteralEscape], preserve_empty: bool) -> Word {
-        let mut scanned = self.scan_word_parts(&s, escapes);
+    fn parse_word_inner(&self, s: String, escapes: &[LiteralEscape], preserve_empty: bool, backticks: &[usize]) -> Word {
+        let mut scanned = self.scan_word_parts(&s, escapes, backticks);
         drop(s);
         if !scanned.pending.is_empty() {
             self.parse_word_substitutions(&mut scanned);
@@ -5409,7 +5417,7 @@ impl<'a> Parser<'a> {
     /// One pass over the word's characters. Command substitution bodies are
     /// recorded in `pending` with placeholder parts, not parsed here.
     #[inline(never)]
-    fn scan_word_parts(&self, s: &str, escapes: &[LiteralEscape]) -> Box<ScannedWord> {
+    fn scan_word_parts(&self, s: &str, escapes: &[LiteralEscape], backticks: &[usize]) -> Box<ScannedWord> {
         let mut pending: Vec<PendingSubstitution> = Vec::new();
         let mut parts = Vec::new();
         let mut part_quoted = Vec::new();
@@ -5510,6 +5518,7 @@ impl<'a> Parser<'a> {
                 } else if chars.peek() == Some(&'(') {
                     // Check for $( - command substitution or arithmetic
                     chars.next(); // consume first '('
+                    let backtick = backticks.binary_search(&(s.len() - chars.remaining().len() - 2)).is_ok();
 
                     match self.read_word_substitution(&mut chars) {
                         Ok(WordSubstitution::Arithmetic { expression, nested }) => {
@@ -5534,6 +5543,7 @@ impl<'a> Parser<'a> {
                                 body,
                                 fused,
                                 first_error: !self.has_deferred_error(),
+                                backtick,
                             });
                             push_part!(WordPart::CommandSubstitution(Vec::new()));
                         }
@@ -5609,6 +5619,7 @@ impl<'a> Parser<'a> {
                 body,
                 fused: false,
                 first_error: !self.has_deferred_error(),
+                backtick: false,
             });
         }
     }
@@ -5667,7 +5678,7 @@ impl<'a> Parser<'a> {
         let line = self.current_span.start.line;
         let part = match result {
             Ok(None) => return,
-            Ok(Some(script)) => WordPart::CommandSubstitution(script.commands),
+            Ok(Some(script)) => file_substitution::part(script, pending.backtick.then_some(pending.body.as_str())),
             Err(err) => match substitution_error(pending.body, pending.fused, err, line) {
                 Ok(part) => part,
                 Err(err) => {
@@ -5907,6 +5918,7 @@ struct AssignmentSource {
     index: Option<String>,
     value: String,
     escapes: Vec<LiteralEscape>,
+    backticks: Vec<usize>,
     raw: Option<String>,
     append: bool,
 }
@@ -5969,6 +5981,7 @@ struct PendingSubstitution {
     fused: bool,
     /// No earlier error in source order was recorded when it was scanned.
     first_error: bool,
+    backtick: bool,
 }
 
 enum WordSubstitution {

@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.77",
+  "version": "0.0.79",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -29,7 +29,7 @@
     "build:shell": "node scripts/build-shell.ts",
     "check:capabilities": "node scripts/check-shell-capabilities.ts",
     "test:shell:wasi": "node scripts/test-shell-wasi.ts",
-    "test:shell:scoreboard": "npm run build:node-harness && node --test scripts/test-shell-scoreboard*.mjs scripts/test-shell-scoreboard-instrument.ts scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-own-shell-root.ts scripts/test-own-shell-permissions.ts scripts/test-own-shell-printf-assignment.ts scripts/test-own-shell-regex-groups.ts scripts/test-own-shell-indirect-special.ts scripts/test-bash-compat*.mjs",
+    "test:shell:scoreboard": "npm run build:node-harness && node --test scripts/test-shell-scoreboard*.mjs scripts/test-shell-scoreboard-instrument.ts scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-own-shell-root.ts scripts/test-own-shell-permissions.ts scripts/test-own-shell-printf-assignment.ts scripts/test-own-shell-regex-groups.ts scripts/test-own-shell-file-substitution.ts scripts/test-own-shell-indirect-special.ts scripts/test-bash-compat*.mjs",
     "compat:shell": "npm run build:node-harness && npm run compat:shell:prebuilt",
     "prepare:shell-corpus": "node scripts/prepare-shell-corpus.mjs",
     "fuzz:shell-braces": "node scripts/fuzz-shell-braces.mjs",
@@ -101,7 +101,8 @@
     "compat:shell:prebuilt": "BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell BASH_COMPAT_UTILITY_DIR=${CARGO_TARGET_DIR:-.build/shell}/wasm32-wasip1/release node scripts/bash-compat.mjs",
     "notices:browser:ci": "node scripts/ci-artifacts.ts notices .build/ci-native && node scripts/browser-notices.mjs",
     "bundle:browser:assets": "vite build && node scripts/finish-build.mjs",
-    "build:browser:assets:ci": "npm run notices:browser:ci && npm run bundle:browser:assets"
+    "build:browser:assets:ci": "npm run notices:browser:ci && npm run bundle:browser:assets",
+    "test:file-substitution": "npm run build:node-harness && node --test scripts/test-own-shell-file-substitution.ts"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",
