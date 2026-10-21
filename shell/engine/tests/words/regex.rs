@@ -34,7 +34,9 @@ fn regex_invalid_or_unsupported_forms_never_turn_into_false_predicates() {
         "a{3,2}",
         "a{",
         "\\",
-        "(a)",
+        "(a",
+        "a)",
+        "(a)\\1",
         "\\1",
         "[[.x.]]",
         "[[=a=]]",
@@ -130,7 +132,7 @@ fn regex_long_match_yields_interrupts_and_recovers_without_processes() {
         expansion_bytes: 32 * 1024 * 1024,
         ..Limits::default()
     });
-    rig.variable("pattern", "a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*b$");
+    rig.variable("pattern", "^((a|aa)*)*b$");
     rig.variable("text", &"a".repeat(64 * 1024));
     let job = rig
         .shell
@@ -208,4 +210,42 @@ fn regex_locale_precedence_preserves_supported_ascii_and_rejects_other_locales()
         assert_eq!(rig.run("[[ yes || abc =~ ^[a-z]+$ ]] && args skipped"), 0);
         assert_eq!(*rig.calls.borrow(), [vec!["skipped"]]);
     }
+}
+
+#[test]
+fn regex_grouped_alternatives_and_nested_repetition() {
+    check_output(
+        r#"p='^((ab|c){2,3})+$'; [[ abc =~ $p ]]; echo $?; [[ cabababc =~ $p ]]; echo $?; [[ ab =~ $p ]]; echo $?; p='^(a|)b?$'; [[ '' =~ $p ]]; echo $?; [[ ab =~ $p ]]; echo $?; [[ ac =~ $p ]]; echo $?"#,
+        "0\n0\n1\n0\n0\n1\n",
+    );
+}
+
+#[test]
+fn regex_source_grouping_preserves_spaces_and_expansions() {
+    check_output(
+        r#"[[ 'a  b' =~ ^(a  b)$ ]]; echo $?; [[ 'a b' =~ ^(a  b)$ ]]; echo $?; f=fff; [[ fffx =~ $f(x) ]]; echo $?; [[ a=x =~ a=(x) ]]; echo $?; [[ '< >' =~ (< >) ]]; echo $?; [[ xy =~ x+((y)) ]]; echo $?; [[ '[' =~ ^([x[]) ]]; echo $?"#,
+        "0\n1\n0\n0\n0\n0\n0\n",
+    );
+}
+
+#[test]
+fn regex_grouped_anchors_empty_cycles_and_quoted_punctuation() {
+    check_output(
+        r#"p='(^)*'; [[ a =~ $p ]]; echo $?; p='($)+'; [[ a =~ $p ]]; echo $?; p='^(()|a?)*$'; [[ aaa =~ $p ]]; echo $?; [[ b =~ $p ]]; echo $?; p='(a^|b$)'; [[ a =~ $p ]]; echo $?; [[ xb =~ $p ]]; echo $?; [[ bx =~ $p ]]; echo $?; [[ '(a|b)+' =~ ^'('a'|'b')+'$ ]]; echo $?; [[ a =~ ^('a'|"b")$ ]]; echo $?; [[ x =~ ^('a'|"b")$ ]]; echo $?"#,
+        "0\n0\n0\n1\n1\n0\n1\n0\n0\n1\n",
+    );
+}
+
+#[test]
+fn regex_group_depth_and_repeated_group_storage_recover() {
+    let rig = Rig::new(Limits::default());
+    rig.variable("pattern", &format!("{}a{}", "(".repeat(64), ")".repeat(64)));
+    assert_eq!(rig.run("[[ a =~ $pattern ]]"), 0);
+    rig.variable("pattern", &format!("{}a{}", "(".repeat(65), ")".repeat(65)));
+    assert_eq!(rig.run("[[ a =~ $pattern ]] && args forbidden"), 2);
+    rig.variable("pattern", "((ab|cd){10000}){10000}");
+    assert_eq!(rig.run("[[ a =~ $pattern ]] && args forbidden"), 2);
+    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.run("[[ ab =~ ^(ab|cd)$ ]] && args recovered"), 0);
+    assert_eq!(*rig.calls.borrow(), [vec!["recovered"]]);
 }
