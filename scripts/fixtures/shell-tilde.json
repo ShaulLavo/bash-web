@@ -248,6 +248,78 @@
       "status": 0,
       "stdoutBase64": "PGZvbzovaG9tZS90dDovaG9tZS90dC9zcmM+Cjxmb286L2hvbWUvdHQ6L2hvbWUvdHQvc3JjOi9ob21lL3R0Pgo=",
       "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/one; a=prefix:~:~/tail; printf '<%s>\\n' \"$a\"",
+      "status": 0,
+      "stdoutBase64": "PHByZWZpeDovb25lOi9vbmUvdGFpbD4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/one; a=prefix; a+=:~:~/tail; printf '<%s>\\n' \"$a\"",
+      "status": 0,
+      "stdoutBase64": "PHByZWZpeDovb25lOi9vbmUvdGFpbD4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME='/a b*?[x]:é🙂'; IFS=' /:'; a=prefix; a+=:~:~/tail; set -- \"$a\"; printf 'argc=%s\\n' \"$#\"; printf '<%s>\\n' \"$@\"",
+      "status": 0,
+      "stdoutBase64": "YXJnYz0xCjxwcmVmaXg6L2EgYio/W3hdOsOp8J+ZgjovYSBiKj9beF06w6nwn5mCL3RhaWw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/one; a=~; HOME=/two; a+=:~; HOME=; a+=:~; printf '<%s>\\n' \"$a\"",
+      "status": 0,
+      "stdoutBase64": "PC9vbmU6L3R3bzo+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/one; a=(old keep); a=prefix:~:~/tail; printf '<%s>\\n' \"${a[@]}\"",
+      "status": 0,
+      "stdoutBase64": "PHByZWZpeDovb25lOi9vbmUvdGFpbD4KPGtlZXA+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/one; a=(old keep); a+=:~:~/tail; printf '<%s>\\n' \"${a[@]}\"",
+      "status": 0,
+      "stdoutBase64": "PG9sZDovb25lOi9vbmUvdGFpbD4KPGtlZXA+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/one; a=(old keep); a[1]=prefix:~:~/tail; a[1]+=:~; printf '<%s>\\n' \"${a[@]}\"",
+      "status": 0,
+      "stdoutBase64": "PG9sZD4KPHByZWZpeDovb25lOi9vbmUvdGFpbDovb25lPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME='/a b*?[x]:é🙂'; IFS=' /:'; a=(old keep); a+=:~:~/tail; printf '<%s>\\n' \"${a[@]}\"",
+      "status": 0,
+      "stdoutBase64": "PG9sZDovYSBiKj9beF06w6nwn5mCOi9hIGIqP1t4XTrDqfCfmYIvdGFpbD4KPGtlZXA+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/one; a=prefix; a+=':~'; a+=\\:~; a+=:~; printf '<%s>\\n' \"$a\"",
+      "status": 0,
+      "stdoutBase64": "PHByZWZpeDp+On46L29uZT4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/one; a=(old keep); HOME=/two; a+=:~; HOME=; a+=:~; printf '<%s>\\n' \"${a[@]}\"",
+      "status": 0,
+      "stdoutBase64": "PG9sZDovdHdvOj4KPGtlZXA+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=(/one ignored); a=prefix:~; a+=:~/tail; printf '<%s>\\n' \"$a\"",
+      "status": 0,
+      "stdoutBase64": "PHByZWZpeDovb25lOi9vbmUvdGFpbD4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/one; a=(old keep); a=x=~; a+=:~; printf '<%s>\\n' \"${a[@]}\"; export b=x=~; printf '<%s>\\n' \"$b\"",
+      "status": 0,
+      "stdoutBase64": "PHg9fjovb25lPgo8a2VlcD4KPHg9fj4K",
+      "stderrBase64": ""
     }
   ]
 }

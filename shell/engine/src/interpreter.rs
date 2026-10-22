@@ -24,6 +24,7 @@ mod conditional;
 mod control;
 pub(crate) mod eval;
 mod file_substitution;
+mod indexed;
 
 #[derive(Clone, Debug)]
 pub struct Limits {
@@ -1913,6 +1914,7 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
     } else if matches!(
         error,
         expand::Error::AssignmentDepth
+            | expand::Error::BadArraySubscript { .. }
             | expand::Error::Arithmetic { .. }
             | expand::Error::Readonly { .. }
             | expand::Error::ShellBoundary {
@@ -1931,6 +1933,9 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
         expand::Error::AssignmentDepth => return Outcome { code: 1, flow },
         expand::Error::SpecialAssignment { name, line } => {
             (name, "cannot assign in this way".to_owned(), line, 1)
+        }
+        expand::Error::BadArraySubscript { name, line } => {
+            (name, "bad array subscript".to_owned(), line, 1)
         }
         expand::Error::Readonly { name, line, .. } => {
             (name, "readonly variable".to_owned(), line, 1)
@@ -3376,17 +3381,65 @@ async fn assignments(
     if assignments.is_empty() {
         return Ok(Vec::new());
     }
-    let frame = PrefixFrame::enter(state.clone());
+    let mut completed = crate::state::AssignmentFrame::enter(state.clone())?;
+    let result = assignments_body(
+        assignments,
+        state,
+        context,
+        bytes,
+        work,
+        (commit, function_diagnostics),
+        &mut completed,
+    )
+    .await;
+    if !matches!(
+        result,
+        Err(expand::Error::Status(
+            2 | 130 | crate::exec::RESOURCE_STATUS
+        ))
+    ) {
+        completed.keep();
+    }
+    result
+}
+
+async fn assignments_body(
+    assignments: Vec<Assignment>,
+    state: &SharedState,
+    context: &Context,
+    bytes: &mut usize,
+    work: &mut expand::Work,
+    mode: (bool, Option<&Descriptors>),
+    completed: &mut crate::state::AssignmentFrame,
+) -> Result<Vec<(String, String)>, expand::Error> {
+    let (commit, function_diagnostics) = mode;
+    if assignments.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut frame = PrefixFrame::enter(state.clone());
     let mut names = Vec::new();
     let initial_bytes = *bytes;
     let mut budget = Budget::default();
     for assignment in assignments {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-        if assignment.index.is_some() || assignment.append {
+        let indexed = assignment.index.is_some()
+            || assignment.append
+            || matches!(assignment.value, AssignmentValue::Array(_))
+            || (commit
+                && matches!(
+                    state.borrow().binding(&assignment.name),
+                    Some(crate::state::Binding::Indexed(_))
+                ));
+        if indexed && !commit {
             return Err(2.into());
         }
+        if indexed {
+            indexed::assign(&assignment, state, context, work, frame, bytes, completed).await?;
+            frame = PrefixFrame::enter(state.clone());
+            continue;
+        }
         let AssignmentValue::Scalar(word) = assignment.value else {
-            return Err(2.into());
+            unreachable!()
         };
         let value = expand::assignment(
             &word,
@@ -3410,9 +3463,25 @@ async fn assignments(
         }
         expand::admit_assignment(state, &assignment.name, value.len(), &context.cancel, work)
             .await?;
+        let storage = state
+            .borrow()
+            .binding(&assignment.name)
+            .filter(|value| matches!(value, crate::state::Binding::Indexed(_)))
+            .map_or(0, |value| {
+                value
+                    .storage_bytes()
+                    .saturating_add(crate::state::Binding::node_bytes())
+            });
         frame
-            .reserve(&assignment.name, value.len())
+            .reserve(&assignment.name, value.len().saturating_add(storage))
             .map_err(expand::Error::from)?;
+        let retained = state
+            .borrow()
+            .binding(&assignment.name)
+            .map_or(0, crate::state::Binding::storage_bytes);
+        if commit {
+            completed.reserve(&assignment.name, retained)?;
+        }
         let assignment_name = assignment.name.clone();
         if let Err(name) = frame.set(assignment.name, value) {
             if let Some(fds) = function_diagnostics {
@@ -3433,6 +3502,13 @@ async fn assignments(
             });
         }
         names.push(assignment_name);
+        if commit {
+            frame.commit(Some(completed)).map_err(expand::Error::from)?;
+            frame = PrefixFrame::enter(state.clone());
+        }
+    }
+    if commit {
+        return Ok(Vec::new());
     }
     let mut assigned = Vec::new();
     *bytes = initial_bytes;
@@ -3457,9 +3533,6 @@ async fn assignments(
             }
             assigned.push((state.assignment_name(name)?, value.to_owned()));
         }
-    }
-    if commit {
-        frame.commit().map_err(expand::Error::from)?;
     }
     Ok(assigned)
 }

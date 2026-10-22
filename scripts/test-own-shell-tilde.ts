@@ -69,17 +69,29 @@ const boundaries = [
     status: 2,
     reason: "lazy parameter operands are not word literals",
   },
-  {
-    script: "HOME=/home/tt; a=foo:~:~/src; printf '<%s>\\n' \"$a\"; a+=:~; printf '<%s>\\n' \"$a\"",
-    stdout: "<foo:/home/tt:/home/tt/src>\n<foo:/home/tt:/home/tt/src>\n",
-    status: 0,
-    reason: "append assignment (+=) is rejected before its value expands",
-  },
+];
+const integratedCases = [
+  "HOME=/home/tt; a=foo:~:~/src; printf '<%s>\\n' \"$a\"; a+=:~; printf '<%s>\\n' \"$a\"",
+  "HOME=/one; a=prefix:~:~/tail; printf '<%s>\\n' \"$a\"",
+  "HOME=/one; a=prefix; a+=:~:~/tail; printf '<%s>\\n' \"$a\"",
+  "HOME='/a b*?[x]:é🙂'; IFS=' /:'; a=prefix; a+=:~:~/tail; set -- \"$a\"; printf 'argc=%s\\n' \"$#\"; printf '<%s>\\n' \"$@\"",
+  "HOME=/one; a=~; HOME=/two; a+=:~; HOME=; a+=:~; printf '<%s>\\n' \"$a\"",
+  "HOME=/one; a=(old keep); a=prefix:~:~/tail; printf '<%s>\\n' \"${a[@]}\"",
+  "HOME=/one; a=(old keep); a+=:~:~/tail; printf '<%s>\\n' \"${a[@]}\"",
+  "HOME=/one; a=(old keep); a[1]=prefix:~:~/tail; a[1]+=:~; printf '<%s>\\n' \"${a[@]}\"",
+  "HOME='/a b*?[x]:é🙂'; IFS=' /:'; a=(old keep); a+=:~:~/tail; printf '<%s>\\n' \"${a[@]}\"",
+  "HOME=/one; a=prefix; a+=':~'; a+=\\:~; a+=:~; printf '<%s>\\n' \"$a\"",
+  "HOME=/one; a=(old keep); HOME=/two; a+=:~; HOME=; a+=:~; printf '<%s>\\n' \"${a[@]}\"",
+  "HOME=(/one ignored); a=prefix:~; a+=:~/tail; printf '<%s>\\n' \"$a\"",
+  "HOME=/one; a=(old keep); a=x=~; a+=:~; printf '<%s>\\n' \"${a[@]}\"; export b=x=~; printf '<%s>\\n' \"$b\"",
 ];
 type Recorded = { script: string; status: number; stdoutBase64: string; stderrBase64: string };
 const fixturePath = new URL("fixtures/shell-tilde.json", import.meta.url);
 const recordPath = process.env.BASH_TILDE_RECORD;
-const scripts = cases.concat(boundaries.map((entry) => entry.script));
+const scripts = cases.concat(
+  boundaries.map((entry) => entry.script),
+  integratedCases,
+);
 const bashVersion = "5.3.15(1)-release";
 if (recordPath) {
   const version = spawnSync(

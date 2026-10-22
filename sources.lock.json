@@ -705,15 +705,6 @@
         ],
         "change": "Retain typed file-read substitution eligibility and lexical backtick origins through quote and scalar assignment transformations. Keep legacy numeric redirect and trailing-input distinctions, escaped newlines and mixed-quote backticks. Traverse and print the dedicated AST variant.",
         "reason": "GNU Bash 5.3.15 treats one input-only command as a parent-side file capture, while specific backtick spellings disable the shortcut. No upstream test removed."
-      },
-      {
-        "paths": [
-          "shell/parser/src/parser/mod.rs",
-          "shell/parser/tests/api.rs"
-        ],
-        "classification": "Original quote-provenance retention over the owned parser; no additional upstream implementation copied. GNU Bash 5.3.15 supplies recorded behavior.",
-        "change": "Preserve existing empty quoted literal parts when an unquoted literal contains '~'. Leave the AST and all other empty-part removal rules unchanged. Add parser controls for trailing empty quotes beside tilde and for the lexer's existing single quoted ''~ word.",
-        "reason": "Tilde-prefix recognition must distinguish ~ from ~'' and ~\"\" without reconstructing discarded syntax or adding AST metadata."
       }
     ],
     "removedUpstreamTests": [
@@ -1856,6 +1847,40 @@
       "byte-identical GNU Bash --help prose"
     ]
   },
+  "shellIndexedArrays": {
+    "classification": "Original local indexed binding and assignment adapters, with GNU Bash 5.3.15 as a behavior oracle. No upstream implementation copied or adapted.",
+    "baseRevision": "361992834804c5d9325022ddc3580f5e9899bcee",
+    "paths": [
+      "shell/engine/src/state/binding.rs",
+      "shell/engine/src/state/bindings_tests.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/interpreter/indexed.rs",
+      "shell/engine/src/interpreter.rs",
+      "shell/engine/src/exec.rs",
+      "shell/engine/src/expand.rs",
+      "shell/engine/src/expand/positional.rs",
+      "shell/engine/src/expand/operand.rs",
+      "shell/engine/tests/words.rs",
+      "shell/engine/tests/words/getopts.rs",
+      "shell/engine/src/state/getopts_tests.rs",
+      "shell/engine/src/builtins/getopts.rs",
+      "shell/engine/src/builtins/getopts/tests.rs",
+      "scripts/fixtures/shell-indexed-integration.json",
+      "shell/engine/src/expand/transformation.rs",
+      "shell/engine/tests/words/transformation.rs",
+      "scripts/fixtures/shell-indexed-transform-boundary.json"
+    ],
+    "implementation": "One scalar-or-indexed binding map. Unique sparse indexed writes mutate state-owned trees in place; shared snapshots pay full admitted copy-on-write. Cached string accounting and a conservative bound derived from the pinned Rust 1.98.1 B-tree allocation layouts replace whole-map per-write charges. Assignment-only commands synchronously commit each expanded/admitted update and keep session-budgeted element/range inverses for resource/cancellation rollback, preserving earlier completed writes on ordinary semantic errors and durable RHS parameter assignments on rollback. Isolated snapshots and State clones exclude the caller journal. Complete prefix/local restoration, readonly checks and scalar element-zero writes remain state-owned. RHS expansion precedes subscript effects; invalid negative writes abort the read unit; relative reads include i64::MAX. Array-valued IFS disables splitting. PIPESTATUS indexed lengths use the special producer. Parser AST and field expansion are reused without parser changes. After normal PR47 integration, OPTIND indexed updates refresh the shell-owned cursor and the inverse journal restores the hidden cluster cursor on resource rejection/cancellation. Durable RHS OPTIND assignments refresh its saved cursor; ordinary semantic errors and temporary-prefix behavior retain their existing policy. Getopts aggregate admission shares the scalar publication sizing for indexed locals, including missing-zero and repeated resolved aliases, so resource rejection occurs before the hidden cursor commit. Normal-main scalar transformation integration rejects resolved indexed bindings, including namerefs, before scalar projection while preserving prior nounset and scalar-local ordering.",
+    "deferred": "Unquoted syntactic compound subscripts reject status 2 until implemented; quoted/escaped spellings remain data. Array slices/indices/operators/transforms, indexed unset, declare/local array flags, associative arrays, arithmetic array lvalues, BASH_REMATCH capture production and arbitrary non-UTF8 word bytes remain deferred. Array-valued IFS star-join raw sentinel bytes are custom probes, not claimed scored gains.",
+    "gate": "Failing-first native regressions, default-limit 5000 incremental writes/5000 appends/10000 compound elements, copy-on-write/snapshot controls, resource/cancellation/refund and durable-RHS undo tests, production Waffle byte/status differentials, native/WASI suites, unchanged quality/layer gates and frozen 9221-record zero-lost membership comparison. Node allocation derivation cites pinned Rust source; no upstream implementation copied.",
+    "integrationBaseRevision": "93fdf762f2a694427440d07156c7a8c458ecc995",
+    "nodeLayoutReference": {
+      "repository": "https://github.com/rust-lang/rust",
+      "revision": "48a229ceaefd4985c50990b14116b6d856af0985",
+      "path": "library/alloc/src/collections/btree/node.rs",
+      "classification": "Allocation layout reference only. Conservative allocation bound and local adapters are original; no upstream implementation copied."
+    }
+  },
   "shellTilde": {
     "classification": "Original HOME-only tilde adapter and controls. GNU Bash 5.3.15 is a behavior oracle; no upstream implementation copied or adapted.",
     "baseRevision": "93fdf762f2a694427440d07156c7a8c458ecc995",
@@ -1863,6 +1888,7 @@
       "shell/engine/src/expand/tilde.rs",
       "shell/engine/src/expand.rs",
       "shell/engine/src/interpreter.rs",
+      "shell/engine/src/interpreter/indexed.rs",
       "shell/engine/tests/words/tilde.rs",
       "scripts/test-own-shell-tilde.ts",
       "scripts/recorded-bash.ts",
@@ -1870,8 +1896,8 @@
       "shell/parser/src/parser/mod.rs",
       "shell/parser/tests/api.rs"
     ],
-    "implementation": "Recognize unquoted HOME tilde prefixes from existing literal parts after brace expansion. Words changed by brace expansion keep only a leading prefix, because Bash gives them fresh flags without assignment eligibility. Snapshot the actual scalar binding at each eligible literal execution segment, following preceding parameter side effects. Protect only substituted home bytes from splitting and pathname expansion. Scalar assignments allow prefixes after literal colons; ordinary words allow this only after an unquoted valid identifier and equals or plus-equals. Declarations and redirect scalar words retain ordinary assignment-looking recognition; only actual scalar RHSs use assignment mode. Admit the retained snapshot before copying and charge each emitted copy to existing raw, field, work and storage budgets. Words without an unquoted literal tilde spend no tilde work; assignment-name scans, tilde candidates and emitted values yield and check cancellation.",
-    "deferred": "Named-user homes and HOME-unset account fallback require an authentic runtime account lookup; preserve those prefixes literally. PWD/OLDPWD, directory-stack forms, parameter operands, array assignments and non-UTF-8 fields remain outside this slice. Only the separately recorded empty-quote retention changes parser behavior. No AST, state storage, FileSubstitution or pathname traversal changes.",
+    "implementation": "Recognize unquoted HOME tilde prefixes from existing literal parts after brace expansion. Words changed by brace expansion keep only a leading prefix, because Bash gives them fresh flags without assignment eligibility. Snapshot the actual scalar binding at each eligible literal execution segment, following preceding parameter side effects. Protect only substituted home bytes from splitting and pathname expansion. Scalar assignments allow prefixes after literal colons; ordinary words allow this only after an unquoted valid identifier and equals or plus-equals. Declarations and redirect scalar words retain ordinary assignment-looking recognition; only actual scalar RHSs use assignment mode. Admit the retained snapshot before copying and charge each emitted copy to existing raw, field, work and storage budgets. Words without an unquoted literal tilde spend no tilde work; assignment-name scans, tilde candidates and emitted values yield and check cancellation. Normal PR41 integration routes actual scalar-form RHS values, including scalar += and scalar writes through indexed bindings, through the same assignment expansion context without changing subscript evaluation, append, binding storage or compound/list expansion.",
+    "deferred": "Named-user homes and HOME-unset account fallback require an authentic runtime account lookup; preserve those prefixes literally. PWD/OLDPWD, directory-stack forms, parameter operands, compound/list array assignments and non-UTF-8 fields remain outside this slice. Only the separately recorded empty-quote retention changes parser behavior. No AST, state storage, FileSubstitution or pathname traversal changes.",
     "gate": "Record actual local Bash 5.3.15(1)-release controls once and replay CI without live Bash. The tilde and extglob recorders share the original scripts/recorded-bash.ts runner. Native/WASI resource and cancellation controls plus actual Waffle controls and the unchanged full serial 9221-row frozen scored-only replay. Preserve all former passes, identities, ordered membership, skips and historical diagnostic payloads."
   }
 }

@@ -25,13 +25,15 @@ the parser's existing quote flags.
 
 There is no runtime account lookup. Named-user prefixes and bare tilde with HOME
 unset remain literal rather than inventing an account home. PWD/OLDPWD and
-directory-stack forms, lazy parameter operands, arrays and non-UTF-8 fields are
+directory-stack forms, lazy parameter operands, compound/list array expansion and non-UTF-8 fields are
 not implemented here.
 
 `node --test scripts/test-own-shell-tilde.ts` runs the production guest on real
-Waffle against recorded GNU Bash `5.3.15(1)-release` controls. The final three cases
-name the unset-HOME/account, parameter-operand and append-assignment (`+=`)
-boundaries instead of claiming Bash matches. CI never invokes live Bash as this test's oracle. To explicitly
+Waffle against recorded GNU Bash `5.3.15(1)-release` controls. Two cases name the unset-HOME/account and parameter-operand boundaries instead of
+claiming Bash matches. Actual scalar RHS values, including `+=` and scalar writes
+through indexed bindings, use assignment context. Compound/list RHS expansion
+retains its existing field context. Integration controls cover these scalar owners,
+colon prefixes, protected HOME bytes, IFS, and HOME changes. CI never invokes live Bash as this test's oracle. To explicitly
 refresh the recording on the pinned local Bash:
 
 ```sh
