@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { after, test } from "node:test";
 import { liveNodeWorkers } from "./node-worker-host.ts";
-import { createWaffleRunner } from "./waffle-compat.ts";
+import { releaseShellRunner } from "./release-shell-runner.ts";
 
 // Expectations replay recorded GNU Bash 5.3.15 observations, the frozen scoreboard's oracle;
 // CI never runs the host's Bash. BASH_PATHNAME_RECORD=<fixture> re-records from
@@ -130,17 +130,7 @@ if (recordPath) {
 } else {
   const fixtureCases = new Map(fixture.cases.map((entry) => [entry.script, entry]));
   assert.deepEqual(Array.from(fixtureCases.keys()), scripts);
-  const directory = resolve(
-    process.env.CARGO_TARGET_DIR ?? ".build/shell",
-    "wasm32-wasip1/release",
-  );
-  const run = await createWaffleRunner({
-    modulePath: resolve(directory, "shell-runtime.wasm"),
-    fixtureDirectory: directory,
-    utilityDirectory: directory,
-    tmp: env.TMP,
-    env,
-  });
+  const run = await releaseShellRunner(env);
   after(() => assert.equal(liveNodeWorkers(), 0));
   for (const script of scripts)
     test(`production Waffle pathname expansion: ${script}`, { timeout: 20000 }, async () => {
