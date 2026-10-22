@@ -1,0 +1,107 @@
+{
+  "scope": "Registration, query, reset, list, ignore registration and child registration only. No trap execution.",
+  "reviewedHead": "6609e3cb0b8b5ababcca7ba0ee0269f09492d337",
+  "originalLaunch": "77b3963d904599932c2cd59fe46409f0ab7a6c9a",
+  "fixtureVersion": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "fixture": {
+    "preservedRows": 57,
+    "addedRows": 39,
+    "total": 96,
+    "preservedOriginalSourceHead": true
+  },
+  "failingFirst": {
+    "artifactHead": "6609e3cb0b8b5ababcca7ba0ee0269f09492d337",
+    "native": {
+      "passed": 62,
+      "failed": 34
+    },
+    "productionWaffle": {
+      "passed": 62,
+      "failed": 34
+    },
+    "originalRowsPassing": 57
+  },
+  "correction": {
+    "native": {
+      "passed": 96,
+      "failed": 0
+    },
+    "productionWaffle": {
+      "passed": 96,
+      "failed": 0
+    },
+    "nativeWorkspaceTests": 1398,
+    "officialWasiTests": 1377,
+    "qualityJs": "pass",
+    "hostAndWasiClippyAllTargets": "pass",
+    "capabilities": "pass",
+    "layers": {
+      "productionViolations": 0,
+      "testViolations": 0,
+      "receiptRefresh": "source hash and line locations only; policy and edges unchanged"
+    }
+  },
+  "reviewRuleCorrection": "Bash 5.3.15 clears inherited ignored EXIT at process-substitution entry too. Ordinary child mutation retains ignored EXIT. The initial proposed transform failed the recorded discriminator; the final transform passes it.",
+  "sourceSha256": {
+    "shell/engine/src/builtins/trap.rs": "6e6bae8d3ddc6762a53c30150c0df2d768d9d9d7e651cc58405f40dddfd5db56",
+    "shell/engine/src/state/traps.rs": "f8f6d786273d5299fb21bb10ea3a1bc60246aaff326fc26fb256e543ccdee93e",
+    "shell/engine/src/expand.rs": "f481385ad90387ce4f238f0116264bddae3001407f7841dca4b8bea1cc294a0c",
+    "scripts/fixtures/shell-trap-registration.json": "f6739f3ac5cc5b62057117f19c445e0521afeb945296bbb29d983e969feeb11e"
+  },
+  "artifacts": {
+    "nativeShellEngine": "9ee961ba2280c3600072bb431748a2b002613284127b0eb0536452c2e28af936",
+    "shellRuntimeWasm": "d903fffa44fa675a38d5e27a18a02fa39fa5e5ec01fb175ec2d908843cfc8432"
+  },
+  "historicalQualification": {
+    "notRerunForThisCorrection": true,
+    "head": "6609e3cb0b8b5ababcca7ba0ee0269f09492d337",
+    "comparedWith": "77b3963d904599932c2cd59fe46409f0ab7a6c9a",
+    "gained": {
+      "oils": 11,
+      "brushSuite": 24,
+      "bashkitSuite": 3,
+      "total": 38
+    },
+    "lost": 0,
+    "inheritedTimeouts": 3,
+    "supersededExecutionExperimentGainsNotClaimed": 67,
+    "currentMainIntegrationAndFrozenQualification": "Coordinator-owned, pending."
+  },
+  "coincidentalFrozenGains": [
+    {
+      "id": "oils:builtin-trap:340",
+      "limitation": "Bash executes EXIT action echo < and emits only a stderr syntax error; frozen scoring ignores stderr."
+    },
+    {
+      "id": "bashkit-suite:bashbox-syntax-error:40",
+      "limitation": "Bash executes RETURN action fi and emits only a stderr syntax error; frozen scoring ignores stderr."
+    },
+    {
+      "id": "brush-suite:builtins/trap:65",
+      "limitation": "Guest kill -INT $$ is a no-op even without a trap. This is not proof that an ignore disposition is honored."
+    },
+    {
+      "id": "oils:builtin-trap:286",
+      "limitation": "Bash executes EXIT action # comment silently. Guest does not execute it."
+    }
+  ],
+  "provenance": {
+    "originalImplementation": "Continued on separate Claude Opus after actual Sol provider refusal; rejected execution experiments remain superseded and absent from final source.",
+    "wholeFamilyReview": "Separate Opus 5.5 xhigh after Sol xhigh review shell-wave-trap6609-review-r1-20261022 was refused. Verdict CHANGES REQUESTED.",
+    "refusal": "This content was flagged for possible cybersecurity risk",
+    "thisCorrection": "gpt-6.1-sol, no child agents, no provider refusal."
+  },
+  "notChanged": [
+    "frozen membership",
+    "frozen oracle and environment identities",
+    "exclusions",
+    "blocking gate policy",
+    "dependency pins",
+    "main integration",
+    "trap execution",
+    "errtrace/functrace",
+    "runtime completion"
+  ],
+  "deferredNativeRedirectBug": "Approved plan 004 follow-up. Native prints 0 for : > /nonexistent/dir/x; echo $?, while Bash and production Waffle print 1. Reproduced before and after; native files unchanged.",
+  "diagnosticPolicy": "Compare status and stdout. Require empty stderr when Bash recorded none. Nonempty stderr is retained, not exact-parity evidence."
+}

@@ -4,6 +4,7 @@ use crate::exec::StorageAllocation;
 use std::rc::Rc;
 
 pub(crate) const SLOTS: usize = 68;
+const SIGNAL_SLOTS: usize = 65;
 #[derive(Debug)]
 pub(crate) struct Action {
     pub(crate) text: String,
@@ -46,8 +47,17 @@ impl Traps {
         self.prepare_mutation();
         self.bindings[signal] = binding;
     }
+    pub(crate) fn prepare_process_substitution(&mut self) {
+        self.clear_signal_handlers();
+        self.bindings[0] = None;
+        self.inherited = false;
+    }
     fn clear_handlers(&mut self) {
-        for binding in &mut self.bindings {
+        self.clear_signal_handlers();
+        self.bindings[SIGNAL_SLOTS..].fill(None);
+    }
+    fn clear_signal_handlers(&mut self) {
+        for binding in &mut self.bindings[..SIGNAL_SLOTS] {
             if matches!(binding, Some(Binding::Handler(_))) {
                 *binding = None;
             }
@@ -59,6 +69,52 @@ impl Traps {
 mod tests {
     use super::*;
     use crate::exec::StorageBudget;
+    #[test]
+    fn child_mutation_drops_special_ignores_but_retains_exit_and_signal_ignores() {
+        let mut parent = Traps::default();
+        for signal in [0, 2, 65, 66, 67] {
+            parent.set(signal, Some(Binding::Ignored));
+        }
+        let mut child = parent.inherited();
+        child.set(1, Some(Binding::Ignored));
+        for signal in [0, 2] {
+            assert!(matches!(child.get(signal), Some(Binding::Ignored)));
+        }
+        for signal in 65..SLOTS {
+            assert!(child.get(signal).is_none());
+            assert!(matches!(parent.get(signal), Some(Binding::Ignored)));
+        }
+    }
+    #[test]
+    fn process_substitution_has_no_deferred_reset_but_its_nested_child_does() {
+        let mut parent = Traps::default();
+        let action = Rc::new(Action {
+            text: ":".into(),
+            _storage: None,
+        });
+        for signal in [0, 2, 66] {
+            parent.set(signal, Some(Binding::Handler(action.clone())));
+        }
+        for signal in [15, 65, 67] {
+            parent.set(signal, Some(Binding::Ignored));
+        }
+        let mut child = parent.inherited();
+        child.prepare_process_substitution();
+        assert!(child.get(0).is_none());
+        assert!(child.get(2).is_none());
+        child.set(1, Some(Binding::Ignored));
+        assert!(matches!(child.get(66), Some(Binding::Handler(_))));
+        for signal in [15, 65, 67] {
+            assert!(matches!(child.get(signal), Some(Binding::Ignored)));
+        }
+        let mut nested = child.inherited();
+        nested.set(3, Some(Binding::Ignored));
+        assert!(matches!(nested.get(15), Some(Binding::Ignored)));
+        for signal in 65..SLOTS {
+            assert!(nested.get(signal).is_none());
+        }
+        assert!(matches!(parent.get(0), Some(Binding::Handler(_))));
+    }
     #[test]
     fn retained_action_refunds_after_last_child_and_failed_admission_is_atomic() {
         let budget = StorageBudget::new(100);

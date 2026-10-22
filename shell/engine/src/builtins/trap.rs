@@ -81,43 +81,30 @@ const NAMES: [&str; SLOTS] = [
     "ERR",
     "RETURN",
 ];
+fn signal_number(text: &str) -> Option<usize> {
+    let number = text.trim_matches([' ', '\t', '\n', '\r', '\x0b', '\x0c']);
+    usize::try_from(number.parse::<i64>().ok()?).ok()
+}
 fn signal(name: &str) -> Option<usize> {
-    let number = name.strip_prefix('+').unwrap_or(name);
-    if !number.is_empty() && number.bytes().all(|b| b.is_ascii_digit()) {
-        return number.parse::<usize>().ok().filter(|&n| n <= 64);
+    if let Some(number) = signal_number(name) {
+        return (number <= 64).then_some(number);
     }
     let prefixed = name.get(..3).is_some_and(|s| s.eq_ignore_ascii_case("SIG"));
     let bare = if prefixed { &name[3..] } else { name };
-    if prefixed
-        && ["EXIT", "ERR", "DEBUG", "RETURN"]
-            .iter()
-            .any(|event| event.eq_ignore_ascii_case(bare))
-    {
-        return None;
-    }
-    let alias = match bare {
-        s if s.eq_ignore_ascii_case("IOT") => "ABRT",
-        s if s.eq_ignore_ascii_case("CLD") => "CHLD",
-        s if s.eq_ignore_ascii_case("POLL") => "IO",
-        s => s,
-    };
-    if alias
+    if bare
         .get(..6)
         .is_some_and(|prefix| prefix.eq_ignore_ascii_case("RTMIN+"))
     {
-        let offset = &alias[6..];
-        return offset
-            .parse::<usize>()
-            .ok()
+        return signal_number(&bare[6..])
             .filter(|&n| n <= 30)
             .map(|n| n + 34);
     }
-    NAMES.iter().position(|candidate| {
-        candidate
-            .strip_prefix("SIG")
-            .unwrap_or(candidate)
-            .eq_ignore_ascii_case(alias)
-    })
+    NAMES
+        .iter()
+        .position(|candidate| match candidate.strip_prefix("SIG") {
+            Some(signal) => signal.eq_ignore_ascii_case(bare),
+            None => !prefixed && candidate.eq_ignore_ascii_case(name),
+        })
 }
 #[derive(Default)]
 struct Options {
@@ -188,7 +175,9 @@ pub(super) async fn run(
         return query(args, options.action, state, fds, context, work).await;
     }
     let reset = args[0] == "-"
-        || !args[0].is_empty() && args[0].bytes().all(|b| b.is_ascii_digit())
+        || !args[0].is_empty()
+            && args[0].bytes().all(|b| b.is_ascii_digit())
+            && signal(&args[0]).is_some()
         || args.len() == 1 && signal(&args[0]).is_some();
     let operands = if reset && args[0] != "-" {
         args
@@ -291,6 +280,8 @@ async fn print(
     .map_err(error_status)?;
     let output = if action_only {
         format!("{text}\n")
+    } else if text == "'" {
+        format!("trap -- \\' {}\n", NAMES[signal])
     } else {
         format!(
             "trap -- '{}' {}\n",

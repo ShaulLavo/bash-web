@@ -2227,3 +2227,43 @@ Remaining scored transformation failures need arrays, positional lists, integer
 or case attributes, `@P` or indirect names. See
 [the behavior notes](../docs/parameter-transformation.md) and
 [the receipt](../docs/evidence/parameter-transformation.json).
+
+## Native `-c` missing-parent redirection, 2026-10-22
+
+Status: Approved follow-up. Owner: BUILTINS coordinator, outside the trap
+registration family. Fix the native fixture filesystem before using native
+controls to judge missing-parent redirection failures.
+
+At source `6609e3cb0b8b5ababcca7ba0ee0269f09492d337`, run:
+
+```sh
+/work/tmp/bash-web-builtins-trap-exit-review-6609e3c/native/shell-engine -c ': > /nonexistent/dir/x; echo $?'
+/usr/bin/bash -c ': > /nonexistent/dir/x; echo $?'
+```
+
+Both processes exit 0. Native stdout is `0\n` with empty stderr. GNU Bash
+5.3.15 stdout is `1\n`, with a missing-directory diagnostic. The same script
+through production Waffle prints `1\n`. Reproduced in the independent trap
+review and again in the correction lane, without any trap command, so this is
+not evidence of trap registration behavior.
+
+Pinned native SHA-256 is
+`915e44c2c92591245ef33a62f3d8c46650f4765074ee112af421fe1d0878ee4e`.
+Production Waffle uses `shell-runtime.wasm` SHA-256
+`eb435393f9ff7a0b6d596497f6a7fd10080c94d4195a1c50efbf5513bfc40aaa`
+and the unchanged launch Node bundles. Bash's full version is
+`GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)`.
+Its binary SHA-256 is
+`575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5`.
+
+Suspected cause: `compat.rs:492` installs `MemoryFs` for native `-c`, and
+`io.rs:733` creates a missing file without checking its parent directory.
+`ReadOnlyMount::open` delegates to that method. This rules out trap dispatch
+and action execution. Add a missing-parent fixture and preserve successful
+opens, directory errors, permissions and the production-Waffle control when
+repairing it. Do not change frozen oracle identities or scoring to hide it.
+
+Reproducer and exact observations are in
+`/work/reports/wave-20261022/shell/trap-repair-r1-evidence/redirect-control.ts`
+and `redirect-before.json`. This lane leaves `main.rs`, `compat.rs` and `io.rs` unchanged. The coordinator owns the follow-up and retained evidence until it
+is repaired and verified.
