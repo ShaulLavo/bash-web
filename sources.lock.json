@@ -70,10 +70,10 @@
   },
   "waffle": {
     "repository": "https://github.com/ShaulLavo/waffle",
-    "revision": "c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289",
+    "revision": "b20fad173ebaa225cb87c51776f35edaaafd4a40",
     "package": "waffle",
-    "version": "0.0.63",
-    "specifier": "git+https://github.com/ShaulLavo/waffle.git#c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289",
+    "version": "0.0.67",
+    "specifier": "git+https://github.com/ShaulLavo/waffle.git#b20fad173ebaa225cb87c51776f35edaaafd4a40",
     "license": "MIT",
     "descriptorAdapter": "Original local Rust logical-to-physical fd translation and WASI path_open flags/rights adapter, from docs/host-abi.md at the selected revision. No copied runtime implementation. Native MemoryFs uses its own same-node/new-description operation; unexported buffers retain their explicit boundary. See docs/descriptor-reopening.md and plan 004.",
     "permissionAdapter": "Original local Rust adapter from runtime_fs.path_permissions_get documentation at the selected revision. No copied upstream implementation. Preserve the four-word supported-mode/access contract; query metadata without opening payloads. Test-only storage conformance imports fs/vfs-internal.ts from the same pinned source module as SharedFilesystem; product composition stays default FAST and the frozen runner stays public memory.",
