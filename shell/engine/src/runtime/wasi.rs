@@ -325,16 +325,21 @@ impl Abi for WasiAbi {
         {
             return Err(8);
         }
+        let descriptor = crate::io::descriptor_number(path);
+        let seekable = match descriptor {
+            Some(fd) => self.fd_kind(fd)? == DescriptorKind::Regular,
+            None => true,
+        };
         let path = path.trim_start_matches('/');
-        // Seek/tell/stat are useful to inherited libc clients too. Poll and I/O
-        // rights are exactly those used by runtime_proc for this open direction.
-        let rights = (1u64 << 2)
-            | (1 << 5)
+        // Shared streams have no seek/tell rights. Regular reopens retain them.
+        let rights = if seekable { (1u64 << 2) | (1 << 5) } else { 0 }
             | (1 << 21)
             | (1 << 27)
             | if options.read { 1 << 1 } else { 0 }
             | if options.write { 1 << 6 } else { 0 };
-        let flags = u16::from(options.create) | if options.truncate { 8 } else { 0 };
+        // A descriptor path opens an existing inode or stream, never a new file.
+        let flags = u16::from(options.create && descriptor.is_none())
+            | if options.truncate { 8 } else { 0 };
         let mut fd = 0;
         let errno = unsafe {
             path_open(

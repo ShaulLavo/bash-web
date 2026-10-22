@@ -2178,25 +2178,124 @@ verification remain required.
 
 ### Separate follow-up: independently reopen regular-file descriptor aliases
 
+Historical finding, addressed by the bounded adoption below. Its local-buffer
+exception remains an Approved follow-up, not full alias-removal parity.
+
 Approved separate CONTROL family after the Waffle owner supplies an actual
 merged independent-reopen contract. Do not block the bounded shorthand family
 on it, change the shared I/O helper here, add path blacklists or restore offsets
 by guessing. Preserve pipe/terminal sharing and all current frozen passes.
 
 Exact reproduction: `printf 'one\ntwo\n' >f; exec 3<f; x=$(</dev/fd/3); IFS= read -r y <&3; printf 'x=<%s> y=<%s>\n' "$x" "$y"`.
-GNU Bash 5.3.15 prints `y=<one>`; both the native candidate and production Waffle
-print `y=<>`, all status 0. Replacing the shorthand with
+GNU Bash 5.3.15 prints `y=<one>`; before adoption, both the native candidate and
+production Waffle printed `y=<>`, all status 0. Replacing the shorthand with
 `$(cat </dev/fd/3)` reproduces the same production mismatch. Observed once per
 form in the bounded probe; the source behavior is deterministic.
-`io.rs::device_endpoint` returns the identical endpoint, so reads consume the
-inherited regular file offset. Neither `FileSystem` nor `HostEndpoint` currently
-exposes independent reopening. This rules out the new capture decoder as the
+The old `io.rs::device_endpoint` returned the identical endpoint, so reads consumed
+the inherited regular file offset. At that pin neither `FileSystem` nor
+`HostEndpoint` exposed independent reopening. This rules out the new capture decoder as the
 cause. Evidence and exact script are retained in
 `/work/reports/bash-web/hill-climb/control/file-substitution/fd-observation.json`;
 no worker, route or container is retained. Root accepted this boundary and routed
-the runtime contract to Waffle. The future family must first reproduce both
-forms, test fresh regular-file offsets versus shared pipes/terminals, preserve
-cancellation and lifetime ownership, then replay the unchanged frozen ruler.
+the runtime contract to Waffle. The bounded adoption below first reproduces both
+forms, tests fresh regular-file offsets versus shared pipes/terminals, preserves
+cancellation and lifetime ownership, then replays the unchanged frozen ruler.
+
+## Waffle descriptor paths and retained here-input boundary, 2026-10-21
+
+Approved adoption of exact Waffle 0.0.63 pin
+`c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289`, from actual main's 0.0.58 pin
+`fc58a532f0d7a617e631ea4b7580a190915d4ed6`. Translate logical shell fds through
+`Endpoint::runtime_fd`, then use real `path_open`; do not clone regular host
+endpoints. Native MemoryFs reopens use the same inode with a new description in
+its owning I/O implementation. This adoption adds no generic I/O trait, export
+pump, producer/session owner or compatibility fallback.
+
+### Approved follow-up: remove the remaining local buffer alias boundary
+
+The follow-up is not implemented in this bounded adoption. The source boundary is
+`io.rs::Open::Bytes`, `buffered_source`, `export_buffer` and `reopen_descriptor`,
+plus the existing runtime child-export machinery. Unexported buffers share their
+cursor; exported buffers use an actual host pipe. Native local pipes deliberately
+duplicate their shared description, capture/null fixtures remain local, and opaque
+Host endpoints without `runtime_fd` return Unsupported. Native regular endpoints
+are no longer aliases. No copied data, fabricated offsets or metadata stand in for
+an independent regular-file reopen.
+
+Exact Bash 5.3.15 versus production Waffle reproducer, with N=3 and N=65536 and
+both a here-document and the equivalent `<<<"$payload"` here-string:
+
+```python
+# Generate the exact guest script. Use N=3 or N=65536.
+N = 65536
+body = '{ IFS= read -r x </dev/stdin; IFS= read -r y; printf "%s:%s\\n" "${#x}" "${#y}"; }'
+payload = "x" * N
+print(body + " <<'END'\n" + payload + "\nlast\nEND")
+# Here-string alternative: print(body + " <<<'" + payload + "\nlast'")
+```
+
+For an exact generated script without relying on shell interpolation, the retained
+`/work/reports/bash-web/hill-climb/control/waffle-reopen/buffer-controls.ts` builds
+`{ IFS= read -r x </dev/stdin; IFS= read -r y; printf '%s:%s\n' "${#x}" "${#y}"; }`
+followed by `<<'END'`, N literal `x` bytes, `last`, `END`, each on its own line.
+Its here-string form appends `<<<'` plus N literal `x` bytes, newline, `last'`.
+The report's JSON contains all eight Bash/production observations.
+
+After export, replace that body with
+`{ cat /dev/stdin >copy; if IFS= read -r x </dev/stdin; then printf 'next=%s\n' "${#x}"; else printf 'EOF\n'; fi; IFS= read -r y <copy; printf 'copy=%s\n' "${#y}"; }`.
+Short input gives `EOF` then `copy=3` on both. Large input gives `next=65536`
+then `copy=65536` on Bash, but `EOF` then `copy=65536` on production Waffle.
+This proves actual post-export pipe sharing, not large here-input parity.
+The committed production controls retain both sizes and both here-input forms.
+
+Removal condition: a separately authorized bounded design must give buffered
+here-inputs Bash's actual reopen identity, offset and lifetime behavior before and
+after export, without copied snapshots or invented metadata. It must preserve
+actual pipe sharing, process/session cleanup and every frozen individual pass.
+Until then, only production host-backed regular-file paths are the gain claim.
+See [descriptor contracts and consumer audit](../docs/descriptor-reopening.md).
+
+
+### Adoption measurement and landing gate
+
+Status: Approved, final integrated replay qualified on 2026-10-22. Parent owns
+hosted CI and landing; this is not merged completion. Root's explicit
+CONTROL48-then49 grant supersedes all older PR50 holds.
+
+Measured production source `d7009e1afbdc06cd29ebb52dc78c97a2326154e3` normally
+merges exact main `4bf6a474ef6bb32dd5de44c1b6d30a300a079d93`, including PR41.
+No Rust semantic conflict required manual resolution. Patch versions, the exact
+combined scoreboard recipe, derived layer receipt and plan text were resolved;
+parent independently accepted the integration delta.
+
+Both ordinary redirects and `interpreter/file_substitution.rs` use the same
+logical-to-physical helper. Independent R2 review found one omitted consumer:
+grep operands opened directly against the utility's physical WASI table.
+`printf 'secret-stdin\n' | grep secret /dev/fd/4` printed private stdin data
+and returned 0, while Bash 5.3.15 returned 2 without stdout. Grep now uses the
+existing typed opener and returns 2 without leaking data. Its operand error,
+quiet-success and cancellation policies remain intact. No generic API changed.
+R3 independently approved that repair at `e9740d8`; adoption code is unchanged.
+
+The final production-Waffle replay preserves all 9,221 records and every outcome
+against immutable integrated main. Oils/Brush/Bashkit stay 1154/1120/1554;
+gained=[], lost=[] and newlyFailing=[] in every corpus. Official validation and
+membership comparison pass. Baseline bytes and historical failure payloads are
+unchanged. The oracle includes 16 descriptor-path cases, with 10 passes preserved,
+four frozen skips and two unrelated failures. See the
+[measurement receipt](../docs/evidence/waffle-descriptor-reopening.json).
+
+Native/WASI suites pass 1,438/1,418 tests, production controls pass 154, the exact
+combined scoreboard recipe passes 710, CI tests pass 105 and runtime controls
+pass 145. Chromium/Firefox pass 234 browser cases with 16 unchanged skips.
+Foreign-format errors survive Restart without wiping the sentinel; SAFE never
+falls back. Both ordinary redirects and the file-substitution shortcut pass
+host-fd translation controls. All eight short/large here-input observations are
+unchanged. Rust, JS quality, typecheck, capability, guest and layer gates pass,
+with zero violations and 42 production/30 test-only edges. Only documentation and
+evidence change after the measured source. The Approved local-buffer follow-up
+above remains required before full alias removal. No new runtime/export contract
+was added, and no skipped case is counted as a gain.
 
 ## Scalar parameter transformations, 2026-10-21
 

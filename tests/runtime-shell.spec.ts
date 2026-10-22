@@ -42,6 +42,27 @@ test("own shell is the default engine", async ({ page }) => {
   expect(await page.evaluate(() => window.bashWeb?.snapshot().engine)).toBe("own-shell");
 });
 
+test("descriptor paths reopen actual shared terminals without owning their lifetime", async ({
+  page,
+}) => {
+  const baseline = await open(page);
+  await command(
+    page,
+    "exec 7>/dev/stdout; exec 8>/dev/stderr; exec 9</dev/stdin; test -t 7; echo TTY_OUT:$?; test -t 8; echo TTY_ERR:$?; test -t 9; echo TTY_IN:$?; printf 'REOPEN_OUT\\n' >&7; printf 'REOPEN_ERR\\n' >&8; exec 7>&-; exec 8>&-; exec 9<&-; echo ORIGINAL_TERMINAL_LIVE",
+  );
+  for (const line of [
+    "TTY_OUT:0",
+    "TTY_ERR:0",
+    "TTY_IN:0",
+    "REOPEN_OUT",
+    "REOPEN_ERR",
+    "ORIGINAL_TERMINAL_LIVE",
+  ])
+    await output(page, line);
+  await ready(page);
+  await expect.poll(() => page.workers().length).toBe(baseline);
+});
+
 test("missing runtime devices fail rather than creating a fake /dev/null file", async ({
   page,
 }) => {
