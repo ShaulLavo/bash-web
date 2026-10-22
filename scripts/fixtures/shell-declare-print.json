@@ -184,6 +184,76 @@
       "status": 0,
       "stdout": "MTpvbGQK",
       "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiB4PW5ldzogbm90IGZvdW5kCg=="
+    },
+    {
+      "name": "unset reference recreation",
+      "code": "target=\"hello\"\ndeclare -n ref=target\necho \"before: $ref\"\nunset -n ref\necho \"after unset -n:\"\ndeclare -p ref 2>/dev/null || echo \"ref gone\"\ndeclare -n ref=target\necho \"recreated: $ref\"\n",
+      "status": 0,
+      "stdout": "YmVmb3JlOiBoZWxsbwphZnRlciB1bnNldCAtbjoKcmVmIGdvbmUKcmVjcmVhdGVkOiBoZWxsbwo=",
+      "stderr": ""
+    },
+    {
+      "name": "unset reference chain",
+      "code": "v=ok; declare -n a=v; declare -n b=a; unset -n b; declare -p a v; declare -p b 2>/dev/null; echo \"missing:$?\"",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtbiBhPSJ2IgpkZWNsYXJlIC0tIHY9Im9rIgptaXNzaW5nOjEK",
+      "stderr": ""
+    },
+    {
+      "name": "unset reference cycle",
+      "code": "declare -n a=b; declare -n b=a; unset -n a; declare -p a 2>/dev/null; echo \"missing:$?\"; declare -p b",
+      "status": 0,
+      "stdout": "bWlzc2luZzoxCmRlY2xhcmUgLW4gYj0iYSIK",
+      "stderr": ""
+    },
+    {
+      "name": "unset reference keeps ordinary names",
+      "code": "v=ok; f(){ echo function; }; unset -n v f absent; declare -p v; f; echo \"status:$?\"",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB2PSJvayIKZnVuY3Rpb24Kc3RhdHVzOjAK",
+      "stderr": ""
+    },
+    {
+      "name": "unset reference readonly target",
+      "code": "readonly t=ok; declare -n r=t; unset -n r; echo \"status:$?\"; declare -p r 2>/dev/null; echo \"missing:$?\"; declare -p t",
+      "status": 0,
+      "stdout": "c3RhdHVzOjAKbWlzc2luZzoxCmRlY2xhcmUgLXIgdD0ib2siCg==",
+      "stderr": ""
+    },
+    {
+      "name": "unset current local reference",
+      "code": "r=global; t=target; f(){ local -n r=t; unset -n r; declare -p r; }; f; declare -p r t",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSByCmRlY2xhcmUgLS0gcj0iZ2xvYmFsIgpkZWNsYXJlIC0tIHQ9InRhcmdldCIK",
+      "stderr": ""
+    },
+    {
+      "name": "unset caller local reference",
+      "code": "r=global; t=target; f(){ local -n r=t; g(){ unset -n r; declare -p r; }; g; declare -p r; }; f; declare -p r t",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSByPSJnbG9iYWwiCmRlY2xhcmUgLS0gcj0iZ2xvYmFsIgpkZWNsYXJlIC0tIHI9Imdsb2JhbCIKZGVjbGFyZSAtLSB0PSJ0YXJnZXQiCg==",
+      "stderr": ""
+    },
+    {
+      "name": "unset reference function option",
+      "code": "f(){ echo old; }; declare -n f=target; target=kept; unset -nf f; declare -p f target; f 2>/dev/null; echo \"function:$?\"",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtbiBmPSJ0YXJnZXQiCmRlY2xhcmUgLS0gdGFyZ2V0PSJrZXB0IgpmdW5jdGlvbjoxMjcK",
+      "stderr": ""
+    },
+    {
+      "name": "unset reference variable option",
+      "code": "v=ok; declare -n r=v; unset -nv r; declare -p v; declare -p r 2>/dev/null; echo \"missing:$?\"",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB2PSJvayIKbWlzc2luZzoxCg==",
+      "stderr": ""
+    },
+    {
+      "name": "unset IFS reference",
+      "code": "sep=:; declare -n IFS=sep; unset -n IFS; value=\"a b\"; printf \"<%s>\\n\" $value; declare -p sep; declare -p IFS 2>/dev/null; echo \"missing:$?\"",
+      "status": 0,
+      "stdout": "PGE+CjxiPgpkZWNsYXJlIC0tIHNlcD0iOiIKbWlzc2luZzoxCg==",
+      "stderr": ""
     }
   ]
 }
