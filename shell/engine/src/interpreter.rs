@@ -18,6 +18,7 @@ use std::{
     rc::Rc,
 };
 
+mod builtin_wrapper;
 mod command_builtin;
 mod conditional;
 mod control;
@@ -2712,6 +2713,7 @@ async fn retain_declaration_syntax(
 }
 
 struct PreparedCommand {
+    line: Option<usize>,
     argv: Vec<String>,
     assigned: Vec<(String, String)>,
     fds: Descriptors,
@@ -2773,6 +2775,7 @@ async fn prepare_simple_command_body(
     fds: Descriptors,
     context: &Context,
 ) -> Result<PreparedCommand, CommandError> {
+    let line = simple.expansion_line;
     retain_declaration_syntax(&mut simple, &context.source, &context.cancel).await?;
     let assignment_count = simple.assignments.len();
     if assignment_count > context.limits().arguments {
@@ -2849,6 +2852,7 @@ async fn prepare_simple_command_body(
         let fds = redirects(&simple.redirects, state, fds, context, &mut work, Some(1)).await?;
         work.substitutions = None;
         return Ok(PreparedCommand {
+            line,
             argv,
             assigned: Vec::new(),
             fds,
@@ -2881,6 +2885,7 @@ async fn prepare_simple_command_body(
     .await?;
     work.substitutions = None;
     Ok(PreparedCommand {
+        line,
         argv,
         assigned,
         fds,
@@ -2927,6 +2932,7 @@ async fn dispatch_simple_command_body(
     parent_stderr: WeakStderr,
 ) -> Result<Outcome, i32> {
     let PreparedCommand {
+        line,
         argv,
         assigned,
         fds,
@@ -2938,29 +2944,49 @@ async fn dispatch_simple_command_body(
         // substitution it ran (words, then redirects and assignments).
         return Ok(Outcome::status(work.substitution_status.unwrap_or(0)));
     };
-    let mut args: Vec<_> = fields.collect();
     let mut bypass_functions = false;
     let mut default_path = false;
-    while commands::handler(&name) == Some(commands::Handler::Command)
-        && (bypass_functions || !state.borrow().functions().contains_key(&name))
+    let mut builtin_only = false;
+    while matches!(
+        commands::handler(&name),
+        Some(commands::Handler::Command | commands::Handler::BuiltinWrapper)
+    ) && (bypass_functions || !state.borrow().functions().contains_key(&name))
     {
-        let mut options = command_builtin::options(&args, &fds, &context, &mut work).await?;
+        work.checkpoint(&context.cancel)
+            .await
+            .map_err(admission_status)?;
+        builtin_only = commands::handler(&name) == Some(commands::Handler::BuiltinWrapper);
+        let mut options = if builtin_only {
+            builtin_wrapper::options(fields.as_slice(), line, &fds, &context).await?
+        } else {
+            command_builtin::options(fields.as_slice(), &fds, &context, &mut work).await?
+        };
         default_path |= options.default_path;
         options.default_path = default_path;
-        args.drain(..options.operands);
+        for _ in 0..options.operands {
+            fields.next();
+        }
         if options.query {
             let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
                 .await
                 .map_err(admission_status)?;
-            return command_builtin::query(&args, &options, &state, &fds, &context, &mut work)
-                .await;
+            return command_builtin::query(
+                fields.as_slice(),
+                &options,
+                &state,
+                &fds,
+                &context,
+                &mut work,
+            )
+            .await;
         }
-        if args.is_empty() {
+        let Some(target) = fields.next() else {
             return Ok(Outcome::status(0));
-        }
-        name = args.remove(0);
+        };
+        name = target;
         bypass_functions = true;
     }
+    let args: Vec<_> = fields.collect();
     // Ordinary function calls share shell state. Their temporary exported
     // bindings belong to call-local restore frames, not an isolated State.
     let function = if bypass_functions {
@@ -3097,6 +3123,10 @@ async fn dispatch_simple_command_body(
             .map_err(admission_status)?;
         let bindings = fds.borrow().clone();
         return builtins::run(builtin, &name, args, state, bindings, context, &mut work).await;
+    }
+    if builtin_only {
+        builtin_wrapper::missing(&name, line, &fds, &context).await?;
+        return Ok(Outcome::status(1));
     }
     // A pipe named by an open descriptor exists but cannot be executed.
     if name.starts_with("/dev/fd/")

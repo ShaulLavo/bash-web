@@ -349,7 +349,7 @@ fallback.
       - Scalar length for ordinary names, positive positions, status and positional count (#20): Oils 314→322, Brush-suite 328→332, Bashkit-suite 492→505. UTF-8 locales count Unicode scalar values; C/POSIX and unrecognized locales count bytes. Input snapshots, decimal output and counting share the existing bounds and cancellation budget.
       - Scalar prefix/suffix pattern removal with bounded cooperative matching (#21): Oils 322→340, Brush-suite 332→333, Bashkit-suite 505→528. Shortest/longest scalar trims preserve inner pattern quotes, outer result protection and final-IFS effects; matcher exhaustion fails explicitly without partial results or candidate-string allocation.
       - Scalar case modification with ordinary identifiers and `^`, `^^`, `,`, `,,` (#23): Oils 340→345, Brush-suite 333→334, Bashkit-suite 528→539. C/POSIX ASCII and C.UTF-8/C.utf8 Latin-1 input mappings reuse bounded single-character pattern matching; full Unicode and locale collation remain deferred. Matcher and mapping capacities are admitted before allocation, with shared work bounds and cancellation.
-      - Scalar one-level indirection on ordinary names (`${!v}` and the eight scalar conditional operators) (#24): Oils 345→350, Brush-suite 334→335, Bashkit-suite 539→548. Pointer and target snapshots are bounded before copying; invalid pointers fail with fatal status 1, while valid unset targets remain distinct. Arrays, namerefs, special names and generic indirect suffixes remain deferred.
+      - Scalar one-level indirection on ordinary names (`${!v}` and the eight scalar conditional operators) (#24): Oils 345→350, Brush-suite 334→335, Bashkit-suite 539→548. Pointer and target snapshots are bounded before copying; invalid pointers fail with fatal status 1, while valid unset targets remain distinct. Arrays, namerefs, special names and generic indirect suffixes remain deferred. Bare `${!p}` to positional and special targets (`1`, `10`, `#`, `?`, `$`, `!`, `-`, `@`, `*`) reuses the direct-read and positional-list adapters; operators, nested operands, patterns and array targets on those targets stay unsupported.
       - Scalar replacement on ordinary names (`${v/p/r}`, `${v//p/r}`, `${v/#p/r}`, `${v/%p/r}`) (#25): Oils 350→379, Brush-suite 335→338, Bashkit-suite 548→584. Leftmost-longest basic-pattern search, lazy operands, typed ampersand protection, final-IFS behavior and shared raw/storage/work/field bounds are preserved; arrays, namerefs, options, locale collation and unsupported pattern forms remain deferred.
       - Scalar arithmetic, positional/scalar slices, readonly writes and read-unit error recovery (#28): Oils 380→481, Brush-suite 340→384, Bashkit-suite 595→754, with no lost cases. Boxed arithmetic futures and explicit scalar depth bounds retain native/WASI stack safety; staged shell-boundary checks preserve Bash error status before lazy evaluation.
       - Brace lists and numeric/ASCII-letter ranges (#29): Oils 481→525, Brush-suite 384→394, Bashkit-suite 754→785, with no lost cases; brace generator seeds 1/42 match Bash on 5,318 cases each. Fused `$((`/`<((` spans end by raw parenthesis matching and are classified by `chk_arithsub`; other substitution bodies (also inside `${…}` operands and raw `$((` text) are parsed with the script and fail with status 127, strictly separated. Nested parses run after each word's scan loop (debug stack per nesting level ~21 KB→~7 KB). Brace temporaries are charged by peak storage; the default argument count is 65,536. Follow-ups owned by later units: running `UnparsedCommandSubstitution` (a non-arithmetic `$((` whose text fails to parse) at expansion with status 2 belongs to command substitution; prefix assignments on function calls (`TEMP=x f`) remain unsupported and belong to functions/locals.
@@ -2015,6 +2015,108 @@ See [the behavior notes](../docs/printf-escaped-fields.md) and
 saved replay, original exit, before-and-after controls, offline comparator and
 cleanup receipt remain in `/work/reports/bash-web/hill-climb/printf-b-fields`.
 
+## Builtin-wrapper review follow-ups, 2026-10-21
+
+Approved future work, separate from the bounded wrapper repair. At immutable
+`e0a44aa8fe135713a2773cc46ddb660a395db1ec`, the independent observations in
+`/work/reports/bash-web/hill-climb/builtin-wrapper/review-r1/followup-results.json`
+reproduce these inherited failures on each recorded run. The wrapper is not the
+first owner of either behavior.
+
+- Readonly prefixes abort the submitted sequence. Reproduce with
+  `readonly v=old; v=new echo target; echo rc=$? v=$v`, and compare direct `echo`,
+  `command echo`, `builtin echo` and unknown `nocmdq` targets from that JSON.
+  Bash prints `target` then `rc=0 v=old` for the echo forms, diagnoses the readonly
+  binding on stderr, and continues. Native and production Waffle stop at the
+  diagnostic with status one and no stdout. Suspected owners are prefix assignment
+  admission in `shell/engine/src/interpreter.rs:3366-3432` and `expansion_failure`
+  at lines 1902-1926 of that immutable source. Distinguish prefix failure from
+  fatal expansion failure without changing ordinary readonly assignment rules.
+- Production Waffle treats inherited stdin as a writable diagnostic endpoint.
+  Reproduce `printf -z 2<&0; echo rc=$?` with empty inherited stdin. Bash and native
+  print only `rc=2`; Waffle emits the usage diagnostic on stdout before that line.
+  The direct printf control rules out new wrapper dispatch as the cause. The
+  here-string variant `printf -z <<< x 2<&0; echo rc=$?` does not reproduce it.
+  Inspect the host-descriptor bridge at `shell/engine/src/runtime.rs:730-736` and
+  `runtime/wasi.rs:362-363` at that checkpoint, then the pinned Waffle host owner.
+  Endpoint rights must be proved on the actual descriptor, not inferred from open
+  success. A complete host-side root cause has not been established. Runtime/FS
+  fixes and pin changes are outside this wrapper unit.
+
+R1 execution-diagnostic provenance also remains blocked. Keep lexical
+`expansion_line` unchanged and retain the exact diagnostic captures in
+`/work/reports/bash-web/hill-climb/builtin-wrapper/repair-r1-red-review32.json`.
+The repair progress file records the proposed owning data shape and additional
+Bash-only function/assignment controls. No line offset or prose waiver resolves it.
+
+
+## Builtin diagnostic coordinates, later family
+
+Status: Approved, later. Dispatch-only extraction is not R1 coordinate clearance.
+No `Context::diagnostic_line` ships here. Getopts' exact binding-prefix checks
+`root-invalid`, `root-readonly`, `nameref-readonly`, `function-invalid` and
+`eval-invalid` remain blocked. Preserve
+`/work/reports/bash-web/hill-climb/builtins/getopts/binding-diagnostics-pending.json`
+verbatim. Their expected Bash lines are 3, 3, 3, 2 and 3. Ordinary option errors
+stay prefix-free. Retain getopts review controls p19, p23, t05, t08 and q06.
+
+The stopped provenance implementation begins at `6d84037`; its failed r6 head is
+`0253be66210bf88475730134d2e89d640908676b`. Do not add another endpoint switch.
+Establish separate Bash reader, function-definition, redirect-expansion and
+conditional-construction ownership from source before changing metadata. A lexical
+expansion hint, constant fallback or empty getter cannot fulfill that contract.
+Preserve accepted main's canonical existing-expansion line-1 limitation until the
+later family's own decision changes it, even though Bash reports line 2.
+
+Keep R1a through R1d, conditional20, physical3, reduced function4, the broader r5
+failures and r6 inner/caller mismatch. Exact evidence under
+`/work/reports/bash-web/hill-climb/`:
+
+- `builtin-wrapper/review-r1/{targeted,followup}-results.json`, including
+  `retained-extra-2`, assignment versus argument, functions and existing writers.
+- `builtin-wrapper/provenance-review-r2/{main,followup}-results.json` for lazy
+  operands, compound headers, heredoc delimiter endpoints and function connectors.
+- `builtin-wrapper/conditional-repair-r4/{extra-red,extra-green}-results.json`
+  and its complete conditional control set.
+- `builtins/wrapper-review-r4/{main,review,discriminators}-results.json`.
+- `builtins/wrapper-redirect-review-r5/{review,function,main}-results.json`.
+- `builtins/wrapper-function-repair-r6/{first-candidate-cases,first-candidate-results,prior-results,conflicting-probes}.json`,
+  `first-candidate.patch` and `first-candidate.json`.
+- `builtins/wrapper-dispatch/deferred-coordinate-tests.rs`, the exact old tests,
+  and the new unprojected 207-script outcomes, including lost unaccepted matches.
+
+Minimum discriminator, including its initial blank line:
+
+```bash
+
+f() {
+:
+} > "$(builtin redir)out"
+f
+```
+
+Bash/prior84 report line 2; r5 reports line 4, with empty stdout and status 0.
+`f 2>&1` puts the difference in stdout. R6 repairs these but still reports redir
+line 3 instead of 2 in this case:
+
+```bash
+
+f() {
+[[ "$(builtin body)" == "a
+b" ]] > "$(builtin redir)out";
+}
+
+f
+builtin after
+```
+
+Bash's ordered stderr is redir2/body4/after8. R6 is redir3/body4/after8; empty
+stdout, status1. `r5-function-child-reader-does-not-leak` also emits an extra
+caller redirect diagnostic in r6. Keep that complete-output difference, not a
+passing decimal projection. The next worker must preserve every accepted-main
+pass and run the unchanged frozen ruler. Earlier unmerged matches are evidence,
+not accepted baseline memberships.
+
 ## Getopts caller-local dynamic unbind, 2026-10-21
 
 Status: Approved. Owner: Variables track for general dynamic scope/unbind
@@ -2095,3 +2197,62 @@ no worker, route or container is retained. Root accepted this boundary and route
 the runtime contract to Waffle. The future family must first reproduce both
 forms, test fresh regular-file offsets versus shared pipes/terminals, preserve
 cancellation and lifetime ownership, then replay the unchanged frozen ruler.
+
+## Scalar parameter transformations, 2026-10-21
+
+Approved bounded unit, implemented by Claude after a Sol provider refusal. Review
+stays on Sol; the expansion track owns review, merge and exact-main acceptance.
+
+`${name@op}` now supports Q, E, u, U, L, K, k, A and a on scalar, nameref, `$?`
+and positional names, in the new `expand/transformation.rs`. Quoting matches
+Bash's reusable quoting, `@E` matches `$'...'` decoding, case operators reuse the
+existing locale mapper and `@A`/`@a` read readonly and export state. The locale
+printability classifier moved unchanged from printf quoting into `expand` so both
+share it. Arrays, locale variables that are namerefs, `${@@op}`, indirect names,
+`@P` and transformations nested in other operands remain unsupported and fail
+closed.
+
+One frozen production-Waffle replay against main
+`f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb` preserves all 9,221 IDs, frozen
+identities and exclusions, with zero lost passes:
+
+- Oils: 1,051 to 1,058, gained `oils:var-op-bash:163`, `:182`, `:264`, `:381`,
+  `:410`, `oils:builtin-printf:95`, `oils:serialize:193`.
+- Brush suite: 1,057 to 1,062, gained `brush-suite:nameref:102` and
+  `word_expansion/param_transformation:5`, `:9`, `:10`, `:12`.
+- Bashkit suite: 1,443 to 1,449, gained `bashkit-suite:variables:377`, `:384`,
+  `:391`, `:398`, `:405`, `:795`.
+
+Remaining scored transformation failures need arrays, positional lists, integer
+or case attributes, `@P` or indirect names. See
+[the behavior notes](../docs/parameter-transformation.md) and
+[the receipt](../docs/evidence/parameter-transformation.json).
+
+## Follow-up: all-zero and overflowing digit parameters, 2026-10-22
+
+Status: Approved. Fix this in the direct parameter adapter, not in indirection.
+Bare `${!p}` reaches digit targets through the same direct read, so one fix
+covers both spellings.
+
+The review of the indirect special-target unit (PR #46) compared GNU Bash
+5.3.15 with the release Waffle guest (sha256 `e0aa18e3…`) after
+`set -- a b c d e f g h i j`:
+
+| Form | Bash | Waffle |
+| --- | --- | --- |
+| `"${00}"`, `"${000}"`, `r=00; "${!r}"` | `$0` (`/usr/bin/bash`) | empty |
+| `"${18446744073709551616}"` and its `${!r}` form | `a` | empty |
+| `"${9999999999999999999999999999999999999999}"` and its `${!r}` form | `i` | empty |
+| the two overflowing forms under `set -u` | `a` / `i`, status 0 | fatal `unbound variable`, status 127 |
+
+`r=01` and `r=0010` already match Bash. Suspected cause:
+`State::parameter` (`shell/engine/src/state.rs:343`) matches `$0` only on
+the literal `"0"`, so `00` parses to 0, fails `checked_sub(1)` and reads as
+empty. Overflowing digit strings fail `parse::<usize>()` and also read as
+empty. `require_bound` (`shell/engine/src/expand.rs:668`) treats the failed
+parse as unset under nounset. Bash converts the digits with wrapping
+arithmetic and selects the resulting positional. Derive the exact wrap rule
+from Bash's source and check it against controls before changing the code.
+Evidence: `/work/reports/bash-web/hill-climb/expansion/indirect-special-review-r2/controls.json`
+(rows `direct:00:` through `indirect:9999…:set -u; `). No frozen scored case
+has been checked against this; claim no gain unless a replay proves one.

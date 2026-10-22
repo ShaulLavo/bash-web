@@ -698,7 +698,6 @@ fn unsupported_case_targets_transformations_and_selected_patterns_fail_closed() 
         "${PIPESTATUS[@],,}",
         "${PIPESTATUS^^}",
         "${!v^^}",
-        "${v@U}",
         "${v~}",
         "${v~~}",
         "${v^^~}",
@@ -4026,6 +4025,9 @@ mod echo;
 #[path = "words/read_count.rs"]
 mod read_count;
 
+#[path = "words/transformation.rs"]
+mod transformation;
+
 #[path = "words/printf_escaped_fields.rs"]
 mod printf_escaped_fields;
 #[path = "words/printf_fields.rs"]
@@ -4045,6 +4047,9 @@ mod printf_integer_fields;
 mod printf_options;
 #[path = "words/printf_quoting.rs"]
 mod printf_quoting;
+
+#[path = "words/builtin_wrapper.rs"]
+mod builtin_wrapper;
 
 #[test]
 fn indexed_arrays_compound_sparse_and_quoted_fields() {

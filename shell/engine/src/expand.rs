@@ -20,7 +20,10 @@ mod indirect;
 mod operand;
 pub(crate) mod pattern;
 mod positional;
+mod printable;
 mod replacement;
+mod transformation;
+pub(crate) use printable::Printability;
 use std::{borrow::Cow, collections::BTreeSet};
 
 pub(crate) use crate::exec::{Error, ShellBoundaryStage};
@@ -1017,6 +1020,19 @@ impl Expansion<'_> {
             }
             if let WordPart::Variable(name) = part {
                 return expansion.variable(name, state, quoted, scalar).await;
+            }
+            if let WordPart::Transformation { name, operator } = part {
+                return expansion
+                    .transformation(
+                        name,
+                        *operator,
+                        TransformContext {
+                            state,
+                            protected: scalar || quoted,
+                            depth,
+                        },
+                    )
+                    .await;
             }
             let max = expansion.snapshot_max();
             let value = scalar_value(
@@ -2513,7 +2529,10 @@ async fn pattern_with_positionals(
     let mut expansion = Expansion {
         segments: Segments::default(),
         captured: None,
-        pattern: Some(pattern::Pattern::with_joined_positionals(join_positionals)),
+        pattern: Some(pattern::Pattern::with_options(
+            join_positionals,
+            state.borrow().extglob || join_positionals,
+        )),
         replacement: None,
         pattern_context: true,
         pattern_snapshots: true,
