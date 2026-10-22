@@ -316,3 +316,149 @@ fn partial_builtin_admission_rolls_back_before_returning_the_error() {
     assert!(!state.borrow().bindings().contains_key("missing"));
     assert_eq!(memory.observation().0, 0);
 }
+
+#[test]
+fn indexed_commit_moves_unique_rc_and_copies_only_shared_snapshots() {
+    let state = State::default().shared();
+    let mut values = Indexed::default();
+    values.insert(0, "old".into());
+    state
+        .borrow_mut()
+        .variables
+        .insert("a".into(), Binding::Indexed(Rc::new(values)));
+    let address = |state: &SharedState| match &state.borrow().variables["a"] {
+        Binding::Indexed(values) => Rc::as_ptr(values),
+        _ => panic!("array expected"),
+    };
+    let original = address(&state);
+    let mut completed =
+        AssignmentFrame::enter(state.clone()).unwrap_or_else(|_| panic!("undo frame fits"));
+    completed.keep();
+    let update = BindingUpdate::Element {
+        index: 1,
+        value: "new".into(),
+    };
+    assert_eq!(update.copy_bytes(state.borrow().binding("a")), 0);
+    PrefixFrame::enter(state.clone())
+        .commit_update("a".into(), update, &mut completed)
+        .unwrap_or_else(|_| panic!("admitted update fits"));
+    assert_eq!(address(&state), original);
+    let saved = state.borrow().binding("a").unwrap().clone();
+    let update = BindingUpdate::Element {
+        index: 0,
+        value: "child".into(),
+    };
+    assert_eq!(
+        update.copy_bytes(state.borrow().binding("a")),
+        saved.storage_bytes()
+    );
+    PrefixFrame::enter(state.clone())
+        .commit_update("a".into(), update, &mut completed)
+        .unwrap_or_else(|_| panic!("admitted update fits"));
+    assert_ne!(address(&state), original);
+    assert_eq!(saved.element(0), Some("old"));
+    assert_eq!(state.borrow().array_element("a", 0), Some("child"));
+}
+
+#[test]
+fn indexed_commit_local_admission_failure_refunds_frame_without_mutation() {
+    let memory = crate::exec::StorageBudget::new(16_384);
+    let state = State::default().shared();
+    state.borrow_mut().memory = Some(memory.clone());
+    state.borrow_mut().locals.push(BTreeMap::new());
+    state
+        .borrow_mut()
+        .local("a".into(), "saved".into())
+        .unwrap();
+    let before = memory.observation().0;
+    for _ in 0..8 {
+        let frame = PrefixFrame::enter(state.clone());
+        let mut completed =
+            AssignmentFrame::enter(state.clone()).unwrap_or_else(|_| panic!("undo frame fits"));
+        frame.reserve("a", 0).unwrap();
+        let update = BindingUpdate::Element {
+            index: 1,
+            value: "x".repeat(16_384),
+        };
+        assert!(matches!(
+            frame.commit_update("a".into(), update, &mut completed),
+            Err(Error::Status(crate::exec::RESOURCE_STATUS))
+        ));
+        assert_eq!(state.borrow().scalar_parameter("a"), Some("saved"));
+        drop(completed);
+        assert_eq!(memory.observation().0, before);
+    }
+}
+
+fn commit_test_update(state: &SharedState, completed: &mut AssignmentFrame, update: BindingUpdate) {
+    let mut work = Work::new(65_536, 65_536, 0);
+    let (_, storage) = state
+        .borrow()
+        .admit_binding_update("a", &update, &mut work)
+        .unwrap_or_else(|_| panic!("short update fits"));
+    let retained = update.undo_bytes(state.borrow().binding("a"));
+    completed
+        .reserve("a", retained)
+        .unwrap_or_else(|_| panic!("undo fits"));
+    let frame = PrefixFrame::enter(state.clone());
+    frame.reserve("a", storage).unwrap();
+    frame
+        .commit_update("a".into(), update, completed)
+        .unwrap_or_else(|_| panic!("admitted update fits"));
+}
+
+#[test]
+fn completed_undo_is_excluded_from_snapshots_and_state_clones() {
+    let state = State::default().shared();
+    state
+        .borrow_mut()
+        .assign_parameter("a".into(), "caller".into())
+        .unwrap();
+    let mut completed =
+        AssignmentFrame::enter(state.clone()).unwrap_or_else(|_| panic!("undo fits"));
+    commit_test_update(
+        &state,
+        &mut completed,
+        BindingUpdate::Element {
+            index: 1,
+            value: "new".into(),
+        },
+    );
+    let mut work = Work::new(65_536, 65_536, 0);
+    let mut child = finish(State::snapshot(&state, &Cancel::new(), &mut work))
+        .unwrap_or_else(|_| panic!("snapshot fits"));
+    assert!(child.assignment_undo.0.upgrade().is_none());
+    assert!(state.borrow().clone().assignment_undo.0.upgrade().is_none());
+    child.assign_parameter("a".into(), "child".into()).unwrap();
+    drop(child);
+    drop(completed);
+    assert_eq!(
+        state.borrow().binding("a"),
+        Some(&Binding::Scalar("caller".into()))
+    );
+}
+
+#[test]
+fn completed_local_undo_restores_all_updates_and_refunds_exact_storage() {
+    let memory = crate::exec::StorageBudget::new(65_536);
+    let state = State::with_memory(memory.clone()).shared();
+    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    state.borrow_mut().local("a".into(), "old".into()).unwrap();
+    let before = memory.observation().0;
+    for _ in 0..8 {
+        let mut completed =
+            AssignmentFrame::enter(state.clone()).unwrap_or_else(|_| panic!("undo fits"));
+        for value in ["long".repeat(1000), "".into(), "short".into()] {
+            commit_test_update(
+                &state,
+                &mut completed,
+                BindingUpdate::Element { index: 0, value },
+            );
+        }
+        drop(completed);
+        assert_eq!(state.borrow().scalar_parameter("a"), Some("old"));
+        assert_eq!(memory.observation().0, before);
+    }
+    drop(function);
+    assert_eq!(memory.observation().0, 0);
+}

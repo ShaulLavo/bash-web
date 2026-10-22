@@ -223,6 +223,36 @@
       "status": 0,
       "stdoutBase64": "PEAocXxyKT4KPCsocSk+CjxhQCg+Cg==",
       "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > b; : > ab; : > a; : > .hidden; a=(*); printf '<%s>\\n' \"${a[@]}\"; a=('a*' \"a?\" a*); printf '<%s>\\n' \"${a[@]}\"",
+      "status": 0,
+      "stdoutBase64": "PGE+CjxhYj4KPGI+CjxhKj4KPGE/Pgo8YT4KPGFiPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; : > a; : > ab; a=(before); set -f; a+=(a*); set +f; a+=(a*); shopt -s nullglob; a+=(z*); echo ${#a[@]}; printf '<%s>\\n' \"${a[@]}\"",
+      "status": 0,
+      "stdoutBase64": "NAo8YmVmb3JlPgo8YSo+CjxhPgo8YWI+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "x=aaaaaaaaaa; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x${x:0:6000}; a=($x* \"$x*\" $x[); echo $? ${#a[@]} ${#a[0]} ${#a[1]} ${#a[2]}; shopt -s nullglob; a=(start $x* \"$x*\" $x[ end); echo $? ${#a[@]} ${#a[1]} ${#a[2]}",
+      "status": 0,
+      "stdoutBase64": "MCAzIDY2MDAxIDY2MDAxIDY2MDAxCjAgNCA2NjAwMSA2NjAwMQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; mkdir d; x=a; while [ ${#x} -lt 5000 ]; do x=$x$x; done; x=${x:0:5000}; a=(/$x/* d*/$x); echo $? ${#a[@]} ${#a[0]} ${#a[1]}; shopt -s nullglob; a=(/$x/* d*/$x d*); echo $? ${#a[@]} \"${a[@]}\"",
+      "status": 0,
+      "stdoutBase64": "MCAyIDUwMDMgNTAwMwowIDEgZAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; n=aaaaaaaaaa; n=$n$n$n$n$n$n$n$n$n$n; n=$n$n; p=$n; for i in {2..20}; do p=$p/$n; done; m=${n:0:66}; mkdir -p $p/$m; a=($p/*/); echo $? ${#a[@]} ${#a[0]}; shopt -s nullglob; a=($p/*/ $p/*/*/); echo $? ${#a[@]} ${#a[0]}",
+      "status": 0,
+      "stdoutBase64": "MCAxIDQwODcKMCAxIDQwODcK",
+      "stderrBase64": ""
     }
   ]
 }

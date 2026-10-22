@@ -68,6 +68,12 @@ const scripts = [
   'cd "$TMP"; : > a; : > ab; for f in a* z*; do printf \'<%s>\\n\' "$f"; done',
   // Extglob groups without basic wildcards remain literal arguments.
   "shopt -s extglob\ncd \"$TMP\"; printf '<%s>\\n' @(q|r) +(q) ${u:-a@(}",
+  // Current-main indexed compound assignments use the same unadmitted pathname fields.
+  'cd "$TMP"; : > b; : > ab; : > a; : > .hidden; a=(*); printf \'<%s>\\n\' "${a[@]}"; a=(\'a*\' "a?" a*); printf \'<%s>\\n\' "${a[@]}"',
+  'cd "$TMP"; : > a; : > ab; a=(before); set -f; a+=(a*); set +f; a+=(a*); shopt -s nullglob; a+=(z*); echo ${#a[@]}; printf \'<%s>\\n\' "${a[@]}"',
+  'x=aaaaaaaaaa; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x${x:0:6000}; a=($x* "$x*" $x[); echo $? ${#a[@]} ${#a[0]} ${#a[1]} ${#a[2]}; shopt -s nullglob; a=(start $x* "$x*" $x[ end); echo $? ${#a[@]} ${#a[1]} ${#a[2]}',
+  'cd "$TMP"; mkdir d; x=a; while [ ${#x} -lt 5000 ]; do x=$x$x; done; x=${x:0:5000}; a=(/$x/* d*/$x); echo $? ${#a[@]} ${#a[0]} ${#a[1]}; shopt -s nullglob; a=(/$x/* d*/$x d*); echo $? ${#a[@]} "${a[@]}"',
+  'cd "$TMP"; n=aaaaaaaaaa; n=$n$n$n$n$n$n$n$n$n$n; n=$n$n; p=$n; for i in {2..20}; do p=$p/$n; done; m=${n:0:66}; mkdir -p $p/$m; a=($p/*/); echo $? ${#a[@]} ${#a[0]}; shopt -s nullglob; a=($p/*/ $p/*/*/); echo $? ${#a[@]} ${#a[0]}',
 ];
 
 // Waffle's environment; each recorded Bash script gets its own TMP.

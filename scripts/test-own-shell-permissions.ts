@@ -252,3 +252,42 @@ async function abiControls(runtime: Runtime, fs: FilesystemClient) {
     wasi.descriptors.dispose();
   }
 }
+
+test("descriptor reopen checks the inode's current access, not the source rights", () =>
+  withRuntime(async (runtime, fs) => {
+    await file(runtime, fs, "/permissions/reopen-denied", 0o200);
+    const deniedRead = await shell(
+      runtime,
+      "exec 3>/permissions/reopen-denied; read -r x </dev/fd/3",
+    );
+    assert.notEqual(deniedRead.status, 0);
+    assert.equal(deniedRead.stderr, "");
+    await file(runtime, fs, "/permissions/reopen-readable", 0o600);
+    const allowedRead = await shell(
+      runtime,
+      "exec 3>>/permissions/reopen-readable; IFS= read -r x </proc/self/fd/3; printf '%s\\n' \"$x\"",
+    );
+    assert.deepEqual(allowedRead, { status: 0, stdout: "payload\n", stderr: "" });
+  }));
+
+test("grep descriptor operands enforce the inode's current permissions", () =>
+  withRuntime(async (runtime, fs) => {
+    await waffle.installGrep(runtime, {
+      workerUrl: new URL("../.build/node/shell.mjs", import.meta.url),
+      module: async () => WebAssembly.compile(await readFile(resolve(guest, "../grep.wasm"))),
+    });
+    await file(runtime, fs, "/permissions/grep-denied", 0o200);
+    const deniedRead = await shell(
+      runtime,
+      "grep payload /permissions/grep-denied; printf '%s\\n' \"$?\"; exec 3>/permissions/grep-denied; grep payload /dev/fd/3; printf '%s\\n' \"$?\"",
+    );
+    assert.equal(deniedRead.status, 0);
+    assert.equal(deniedRead.stdout, "2\n2\n");
+    assert.match(deniedRead.stderr, /^grep: /);
+    await file(runtime, fs, "/permissions/grep-readable", 0o600);
+    const allowedRead = await shell(
+      runtime,
+      "exec 3>>/permissions/grep-readable; grep payload /proc/self/fd/3",
+    );
+    assert.deepEqual(allowedRead, { status: 0, stdout: "payload\n", stderr: "" });
+  }));

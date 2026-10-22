@@ -13,9 +13,8 @@ impl Locale {
         let s = state.borrow();
         let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
             .iter()
-            .filter_map(|name| s.bindings().get(*name))
+            .filter_map(|name| s.scalar_parameter(name))
             .find(|value| !value.is_empty())
-            .map(String::as_str)
             .unwrap_or("C");
         match locale {
             "C" | "POSIX" => Ok(Self::C),

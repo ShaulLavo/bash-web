@@ -517,7 +517,18 @@ impl Abi for Fake {
             })
     }
     fn open(&self, path: &str, options: &OpenOptions) -> Result<u32, i32> {
-        Ok(self.fd(self.fs.open(path, options).map_err(|_| 44)?))
+        let Some(fd) = io::descriptor_number(path) else {
+            return Ok(self.fd(self.fs.open(path, options).map_err(|_| 44)?));
+        };
+        let mut fds = FdTable::default();
+        fds.insert(fd, self.fds.borrow().get(&fd).cloned().ok_or(44)?);
+        let endpoint = io::open_path(path, &fds, options)
+            .map_err(|_| 44)?
+            .open(&self.fs, options)
+            .now_or_never()
+            .unwrap()
+            .map_err(|_| 44)?;
+        Ok(self.fd(endpoint))
     }
     fn read(&self, fd: u32, output: &mut [u8]) -> Result<usize, i32> {
         let endpoint = self.fds.borrow().get(&fd).cloned().ok_or(8)?;
@@ -2212,7 +2223,9 @@ fn substitution_descriptors_cross_the_actual_runtime_spawn_boundary() {
         .find(|binding| binding.child == 0)
         .unwrap()
         .parent;
-    assert_eq!(
+    // Reopening a pipe creates a new physical binding to the same stream.
+    // The streamed output above and cleanup below verify shared ownership.
+    assert_ne!(
         consumer
             .fds
             .iter()

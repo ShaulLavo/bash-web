@@ -115,8 +115,9 @@ descriptors. They do not establish real Bun/browser acceptance: that gate awaits
 waffle's inherited job lookup and the corresponding Bun process-service integration.
 
 File predicates use real virtual-filesystem metadata, with unavailable
-capabilities explicitly unsupported. Command argv and for-list pathname
-expansion support quote-aware basic patterns, incremental directory enumeration,
+capabilities explicitly unsupported. Command argv, indexed compound assignment
+operands and for-list pathname expansion support quote-aware basic patterns,
+incremental directory enumeration,
 `nullglob` and `set -f`; only fields with an unquoted `*`, `?` or `[` keep a
 quote mask. A component that needs more characters than any path can hold
 matches nothing and is read without building its pattern; star-heavy long
@@ -131,8 +132,8 @@ Dynamic `EPOCHREALTIME` supports scalar reads and unset behavior. Generic
 function prefixes remain unsupported, as before this unit.
 The first word area adds quote-aware fields for literals,
 ordinary variables, positional parameters and `PIPESTATUS`, including IFS splitting,
-quoted `@` boundaries, `*` joins and command-name field promotion. Assignment and
-`export`/`local` assignment operands retain scalar expansion. Scalar default and
+quoted `@` boundaries, `*` joins and command-name field promotion. Scalar
+assignments and `export`/`local` assignment operands retain scalar expansion. Scalar default and
 alternative operators (`-`, `:-`, `+`, `:+`) lazily expand selected operands with
 quote protection and shared work limits. Scalar assignment operators (`=`, `:=`)
 store selected, quote-removed values without field splitting; their completed

@@ -261,3 +261,90 @@ test("queued IndexedDB ownership is indefinite but stalled lock-acquired recover
     await second.close();
   }
 });
+
+async function foreignWorkspace(page: Page, name: string) {
+  await page.route("**/storage-seed", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: "<!doctype html><title>Storage fixture</title>",
+    }),
+  );
+  await page.goto("/storage-seed");
+  await preservedWorkspace(page, name, "seed");
+}
+
+async function preservedWorkspace(page: Page, name: string, action: "seed" | "read" = "read") {
+  return page.evaluate(
+    async ({ workspace, action }) => {
+      const request = indexedDB.open(workspace, 1);
+      request.onupgradeneeded = () => {
+        if (action === "seed") request.result.createObjectStore("foreign");
+        else request.transaction?.abort();
+      };
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      try {
+        const stores = Array.from(db.objectStoreNames);
+        const transaction = db.transaction("foreign", action === "seed" ? "readwrite" : "readonly");
+        const completed = new Promise<void>((resolve, reject) => {
+          transaction.oncomplete = () => resolve();
+          transaction.onabort = () => reject(transaction.error);
+        });
+        const store = transaction.objectStore("foreign");
+        if (action === "seed") store.put("owner-data", "sentinel");
+        const read = store.get("sentinel");
+        const value = await new Promise<unknown>((resolve, reject) => {
+          read.onsuccess = () => resolve(read.result);
+          read.onerror = () => reject(read.error);
+        });
+        await completed;
+        return { stores, value };
+      } finally {
+        db.close();
+      }
+    },
+    { workspace: name, action },
+  );
+}
+
+test("foreign IndexedDB shows INVALID_VFS_FORMAT and Restart never wipes owner data", async ({
+  page,
+}) => {
+  const name = `bash-web-foreign-${randomUUID()}`;
+  await foreignWorkspace(page, name);
+  const query = new URLSearchParams({ test: "1", renderer: "canvas", workspace: name });
+  await page.goto(`/?${query}`);
+  await expect(page.getByRole("alert")).toContainText("INVALID_VFS_FORMAT");
+  expect(await page.evaluate(() => window.bashWeb?.metrics())).toBeUndefined();
+  expect(await preservedWorkspace(page, name)).toEqual({
+    stores: ["foreign"],
+    value: "owner-data",
+  });
+  await page.evaluate(() => window.bashWeb?.restart());
+  await expect(page.getByRole("alert")).toContainText("INVALID_VFS_FORMAT");
+  expect(await preservedWorkspace(page, name)).toEqual({
+    stores: ["foreign"],
+    value: "owner-data",
+  });
+});
+
+test("SAFE fails with its typed unsupported error without falling back to FAST", async ({
+  page,
+}) => {
+  const name = `bash-web-safe-${randomUUID()}`;
+  const query = new URLSearchParams({
+    test: "1",
+    renderer: "canvas",
+    storage: "safe",
+    workspace: name,
+  });
+  await page.goto(`/?${query}`);
+  await expect(page.getByRole("alert")).toContainText("UNSUPPORTED_VFS");
+  expect(await page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("failed");
+  expect(await page.evaluate(() => window.bashWeb?.metrics())).toBeUndefined();
+  expect(
+    await page.evaluate(async () => (await indexedDB.databases()).map((db) => db.name)),
+  ).not.toContain(name);
+});

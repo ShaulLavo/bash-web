@@ -464,8 +464,8 @@ async fn unary_value(
             })
         }
         operator if is_unary(operator) => {
-            if let Some(endpoint) = crate::io::device_endpoint(operand, fds) {
-                let Ok(endpoint) = endpoint else {
+            if let Some(fd) = crate::io::descriptor_number(operand) {
+                let Some(endpoint) = fds.get(fd) else {
                     return Ok(false);
                 };
                 if operator == "-p" {
@@ -589,13 +589,12 @@ pub(crate) async fn file_binary(
     operator: &str,
     right: &str,
     state: &SharedState,
-    fds: &FdTable,
+    _fds: &FdTable,
     context: &Context,
     work: &mut Work,
 ) -> Result<bool, i32> {
     step(context, work).await?;
-    if crate::io::device_endpoint(left, fds).is_some()
-        || crate::io::device_endpoint(right, fds).is_some()
+    if crate::io::descriptor_number(left).is_some() || crate::io::descriptor_number(right).is_some()
     {
         return Err(2);
     } // Endpoint identity is not filesystem inode identity.
