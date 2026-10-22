@@ -2355,6 +2355,37 @@ identities, exclusions, and limits. This unit is not the raw-byte field rewrite.
 Detailed source proof and evidence limits are in
 `/work/reports/bash-web/hill-climb/variables/rematch-ifs-prerequisite.md`.
 
+### Inherited nameref IFS joining control from PR60 review
+
+Status: Approved, VARIABLES IFS-family ownership. This is evidence for the
+existing effective-IFS contract above, not extra scope for index enumeration.
+
+At source `728ac9c0c3426bf935789df73df9cd4ae5af50f1`, run with GNU Bash
+`5.3.15(1)-release` or the native shell CLI using `-c`:
+
+```sh
+a=(x y); sep=:; declare -n IFS=sep; sep=; printf '<%s>\n' "${!a[@]}"
+a=(x y); sep=:; declare -n IFS=sep; sep=1; printf '<%s>\n' "${!a[@]}"
+a=(x y); sep=:; declare -n IFS=sep; sep=; printf '<%s>\n' "${a[@]}"
+a=(x y); sep=:; declare -n IFS=sep; sep=1; printf '<%s>\n' "${a[@]}"
+```
+
+Bash stdout is `<0 1>\n`, `<0:1>\n`, `<x y>\n`, `<x:y>\n` respectively.
+Native and fresh production Waffle instead print `<0>\n<1>\n`, `<011>\n`,
+`<x>\n<y>\n`, `<x1y>\n`. All statuses are 0. The first two are retained
+in `review60-r1-minimal-repros.json` and `review60-r1-waffle-repros.json` under
+`/work/reports/wave-20261022/shell/`; the full review records the value controls.
+The 452-probe sweep in `review60-r1-probes.log` reports nine mismatches when a
+nameref IFS target changes, apart from three index-star adjacency failures.
+No crash or nondeterministic output was reported for these controls.
+
+Inspect `Expansion::elements` in `shell/engine/src/expand.rs:1869-1887` and its
+existing `positional_star_separator` and `field_ifs` adapters. The unchanged
+ArrayAccess value path reproduces the same IFS joining policy limitation,
+so fixing inserted index-star separator protection alone cannot resolve it.
+Do not change the frozen oracle or treat the inherited mismatch as an accepted
+semantic match. Resolve the effective-IFS ownership contract in its own family.
+
 ## Indexed array index-name expansion
 
 Status: Approved follow-up in the VARIABLES array-expansion family. Do not add

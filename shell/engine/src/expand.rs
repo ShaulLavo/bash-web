@@ -1880,7 +1880,7 @@ impl Expansion<'_> {
             && matches!(part, WordPart::ArrayIndices { star: true, .. })
             && ifs_separator.is_none();
         let list = !scalar && (at || !quoted && !indices_space_join);
-        self.segments.needs_split |= list;
+        self.segments.needs_split |= list || indices_space_join;
         // An initially empty IFS selects Bash's list-word space path. A
         // nonempty reference IFS whose target later becomes empty does not.
         let reference_ifs = state.borrow().is_nameref("IFS");
@@ -1904,13 +1904,8 @@ impl Expansion<'_> {
         let protection = Protection::expansion(quoted || scalar, state);
         let mut array_index = None;
         for index in 0..count {
-            self.element_boundary(
-                index,
-                list,
-                separator,
-                quoted || scalar || indices_space_join,
-            )
-            .await?;
+            self.element_boundary(index, list, separator, quoted || scalar)
+                .await?;
             if let WordPart::ArrayIndices { name, .. } = part {
                 State::admit_scalar_access(state, name, self.cancel, self.work).await?;
             }
