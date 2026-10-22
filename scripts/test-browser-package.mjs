@@ -1,8 +1,19 @@
 import assert from "node:assert/strict";
-import { copyFile, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { test } from "node:test";
 
 const root = resolve(import.meta.dirname, "..");
@@ -37,6 +48,21 @@ test("browser entry uses one required immutable Waffle peer and matching develop
   assert.equal(pkg.exports["."], "./src/index.ts");
   assert.equal(pkg.exports["./shell"], "./src/shell.ts");
   assert.ok(pkg.files.includes("src"));
+});
+
+test("the installed Waffle source and prepared Node exports match the accepted package", async () => {
+  const installed = await readJson("node_modules/waffle/package.json");
+  assert.equal(installed.version, sources.waffle.version);
+  assert.equal(installed.exports["."].browser, "./index.ts");
+  assert.equal(installed.exports["."].node, "./dist/index.js");
+  const expected = await realpath(resolve(root, "node_modules/waffle/dist/index.js"));
+  assert.equal(import.meta.resolve("waffle"), pathToFileURL(expected).href);
+  const node = await import("waffle");
+  const runtime = await import("waffle/runtime");
+  assert.equal(node.createRuntime, runtime.createRuntime);
+  assert.equal(node.getVfsDescriptor("fast").mode, "fast");
+  assert.equal(node.getVfsDescriptor("memory").persistent, false);
+  assert.throws(() => node.getVfsDescriptor("safe"), { code: "UNSUPPORTED_VFS" });
 });
 
 test("shipped shell source contains no vendored runtime or Bun program implementation", async () => {

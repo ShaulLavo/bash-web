@@ -144,7 +144,13 @@ test("factory lease keeps its readiness and cleanup owner without reading storag
   });
   context.after(releaseReady);
   let releases = 0;
-  const ownedLease = { runtime: fixture.runtime, ready, dispose: async () => { releases++; } };
+  const ownedLease = {
+    runtime: fixture.runtime,
+    ready,
+    dispose: async () => {
+      releases++;
+    },
+  };
   const observe = () => {};
   const lease = acquireBrowserRuntime(
     {

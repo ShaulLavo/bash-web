@@ -647,10 +647,13 @@ for (const mode of ["fast", "memory"] as const) {
     assert.equal(repeated, disposing);
     assert.equal(runtime.disposed, true);
     await turn();
-    assert.equal(worker.disposalRequested, true);
-    assert.equal(worker.terminated, false);
-    worker.finishDisposal();
+    if (mode === "fast") {
+      assert.equal(worker.disposalRequested, true);
+      assert.equal(worker.terminated, false);
+      worker.finishDisposal();
+    }
     await disposing;
+    assert.equal(worker.disposalRequested, mode === "fast");
     assert.equal(worker.terminated, true);
   });
 

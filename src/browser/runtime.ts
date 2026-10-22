@@ -1,4 +1,4 @@
-import { createRuntime, type Runtime, type VfsMode } from "waffle";
+import { createRuntime, VfsError, type Runtime, type VfsMode } from "waffle";
 import type { StartupObserver } from "../runtime/startup-diagnostics";
 import type { StorageStartup } from "./storage";
 
@@ -35,8 +35,15 @@ export function acquireBrowserRuntime(
   if (options.runtime)
     return { runtime: options.runtime, ready: Promise.resolve(), dispose: async () => {} };
   if (options.acquireRuntime) return options.acquireRuntime(creation.onStartupStage);
+  const selected = options.mode;
+  const mode =
+    selected === undefined
+      ? (new URLSearchParams(creation.search).get("mode") ?? "fast")
+      : selected;
+  if (mode !== "fast" && mode !== "memory")
+    throw new VfsError("UNSUPPORTED_VFS", String(mode), `Unsupported VFS mode: ${String(mode)}`);
   const runtime = createRuntime({
-    filesystem: { mode: "fast", workerURL: creation.workerURL },
+    filesystem: { mode, workerURL: creation.workerURL },
     onStartupStage: creation.onStartupStage,
   });
   return { runtime, ready: Promise.resolve(), dispose: () => runtime.dispose() };
