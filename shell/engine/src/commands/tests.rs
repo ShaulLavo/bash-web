@@ -1,5 +1,6 @@
-//! Original contracts against the independent production-view inventory at
-//! bash-web 92ab384. Baseline lists belong in tests, not in production dispatch.
+//! Original contracts that started from the independent production-view
+//! inventory at bash-web 92ab384, plus builtins added since (pushd, popd, dirs).
+//! Baseline lists belong in tests, not in production dispatch.
 use super::*;
 use std::collections::BTreeSet;
 
@@ -19,10 +20,10 @@ fn baseline(names: &[&'static str]) -> Vec<&'static str> {
 }
 
 const BUILTINS: &[&str] = &[
-    ":", "[", "break", "builtin", "cd", "command", "continue", "declare", "echo", "eval", "exec",
-    "exit", "export", "false", "getopts", "jobs", "kill", "let", "local", "printf", "pwd", "read",
-    "readonly", "return", "set", "shift", "shopt", "test", "true", "type", "typeset", "unset",
-    "wait",
+    ":", "[", "break", "builtin", "cd", "command", "continue", "declare", "dirs", "echo", "eval",
+    "exec", "exit", "export", "false", "getopts", "jobs", "kill", "let", "local", "popd", "printf",
+    "pushd", "pwd", "read", "readonly", "return", "set", "shift", "shopt", "test", "true", "type",
+    "typeset", "unset", "wait",
 ];
 
 #[test]
@@ -54,13 +55,14 @@ fn declaration_metadata_matches_only_the_five_literal_syntax_candidates() {
 }
 
 #[test]
-fn adapter_dispatch_preserves_the_old_dispatch_set_not_the_old_is_builtin_set() {
+fn builtin_dispatch_covers_the_current_builtin_arms_not_the_old_is_builtin_set() {
     assert_eq!(
         names(|command| matches!(command.handler(), Some(Handler::Builtin(_)))),
         baseline(&[
             ":", "true", "false", "echo", "printf", "read", "getopts", "export", "local",
-            "readonly", "declare", "typeset", "cd", "pwd", "set", "shift", "shopt", "exit",
-            "return", "jobs", "wait", "kill", "unset", "test", "[", "break", "continue"
+            "readonly", "declare", "typeset", "cd", "pwd", "pushd", "popd", "dirs", "set", "shift",
+            "shopt", "exit", "return", "jobs", "wait", "kill", "unset", "test", "[", "break",
+            "continue"
         ])
     );
     // `command` was recognized by is_builtin but never had a builtins::run arm.
@@ -109,7 +111,7 @@ fn classes_and_capabilities_do_not_mislabel_standins_or_unimplemented_syntax() {
     );
     assert_eq!(
         names(|command| command.availability == Availability::UnsupportedSyntax),
-        baseline(&["select", "time", "coproc"])
+        baseline(&["time", "coproc"])
     );
     for command in COMMANDS {
         if command.class == Class::Keyword {

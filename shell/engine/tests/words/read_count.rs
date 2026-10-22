@@ -14,7 +14,7 @@ fn assert_value(rig: &Rig, name: &str, value: &str) {
             .borrow()
             .bindings()
             .get(name)
-            .map(String::as_str),
+            .map(|value| value.as_str()),
         Some(value)
     );
 }
@@ -158,7 +158,6 @@ fn read_count_rejects_other_modes_and_unrepresentable_input_without_partial_assi
     for source in [
         "read -N3 x <<<hello",
         "read -d: -n3 x <<<hello",
-        "read -n3 x y <<<hello",
         "read -n3 x <&-",
         "LC_ALL=C read -n1 x <<<é",
         "printf '\\xff' | read -n1 x",
@@ -216,7 +215,7 @@ fn read_count_short_local_values_do_not_retain_the_reserved_ceiling() {
             let state = rig.shell.state();
             let state = state.borrow();
             let value = state.bindings().get(name).unwrap();
-            (value.len(), value.capacity())
+            (value.len(), value.scalar().unwrap().capacity())
         })
         .into();
     rig.shell.interrupt();
@@ -310,3 +309,6 @@ fn read_count_signed_zero_descriptor_and_invalid_descriptors() {
         );
     }
 }
+
+#[path = "read_scalar.rs"]
+mod scalar;

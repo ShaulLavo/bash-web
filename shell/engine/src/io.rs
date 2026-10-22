@@ -2,6 +2,7 @@
 use crate::executor::{Cancel, Event, yield_now};
 use futures::future::LocalBoxFuture;
 use std::{
+    borrow::Cow,
     cell::{Cell, RefCell},
     collections::{BTreeMap, VecDeque},
     rc::{Rc, Weak},
@@ -743,19 +744,10 @@ impl MemoryFs {
             }
             None => return Err(IoError::NotFound),
         };
-        if options.truncate {
-            let mut data = file.data.borrow_mut();
-            fs.used -= data.len();
-            *data = Vec::new();
-            file.modified();
-        }
-        Ok(Endpoint(Rc::new(Open::File(FileOpen {
-            file,
-            fs: self.0.clone(),
-            offset: Cell::new(0),
-            options: *options,
-        }))))
+        drop(fs);
+        memory_file_open(self.0.clone(), file, options)
     }
+
     pub fn mkdir(&self, path: &str, parents: bool) -> Result<(), IoError> {
         if !path.starts_with('/') || path.len() > MAX_PATH_BYTES || path.contains('\0') {
             return Err(IoError::InvalidPath);
@@ -965,18 +957,101 @@ impl FileSystem for MemoryFs {
     }
 }
 
-/// Bash's own device names: `/dev/fd/N` duplicates open descriptor N (a
-/// process substitution, for instance); `/dev/stdin`, `/dev/stdout` and
-/// `/dev/stderr` are descriptors 0, 1 and 2. A closed descriptor is an error.
-/// Shared by the shell's redirections and the separately linked utilities.
-pub fn device_endpoint(path: &str, fds: &FdTable) -> Option<Result<Endpoint, i32>> {
-    let fd = match path {
-        "/dev/stdin" => 0,
-        "/dev/stdout" => 1,
-        "/dev/stderr" => 2,
-        _ => path.strip_prefix("/dev/fd/")?.parse::<u32>().ok()?,
+fn memory_file_open(
+    fs: Rc<RefCell<FsState>>,
+    file: Rc<File>,
+    options: &OpenOptions,
+) -> Result<Endpoint, IoError> {
+    if (!options.read && !options.write) || ((options.truncate || options.append) && !options.write)
+    {
+        return Err(IoError::BadDescriptor);
+    }
+    if options.truncate {
+        let mut data = file.data.borrow_mut();
+        fs.borrow_mut().used -= data.len();
+        *data = Vec::new();
+        file.modified();
+    }
+    Ok(Endpoint(Rc::new(Open::File(FileOpen {
+        file,
+        fs,
+        offset: Cell::new(0),
+        options: *options,
+    }))))
+}
+
+/// Shell descriptor names refer to the shell's logical table, not WASI's private fds.
+pub fn descriptor_number(path: &str) -> Option<u32> {
+    match path {
+        "/dev/stdin" => Some(0),
+        "/dev/stdout" => Some(1),
+        "/dev/stderr" => Some(2),
+        _ => path
+            .strip_prefix("/dev/fd/")
+            .or_else(|| path.strip_prefix("/proc/self/fd/"))?
+            .parse()
+            .ok(),
+    }
+}
+
+pub enum DescriptorOpen<'a> {
+    /// Reopen through the production host, preserving inode policy and open state.
+    RuntimePath(Cow<'a, str>),
+    /// In-process streams and unexported buffers retain their existing semantics.
+    Local(Endpoint),
+}
+
+impl DescriptorOpen<'_> {
+    pub async fn open(
+        self,
+        fs: &dyn FileSystem,
+        options: &OpenOptions,
+    ) -> Result<Endpoint, IoError> {
+        match self {
+            Self::RuntimePath(path) => fs.open(&path, options).await,
+            Self::Local(endpoint) => Ok(endpoint),
+        }
+    }
+}
+
+pub fn open_path<'a>(
+    path: &'a str,
+    fds: &FdTable,
+    options: &OpenOptions,
+) -> Result<DescriptorOpen<'a>, IoError> {
+    let Some(logical) = descriptor_number(path) else {
+        return Ok(DescriptorOpen::RuntimePath(Cow::Borrowed(path)));
     };
-    Some(fds.get(fd).ok_or(1))
+    reopen_descriptor(path, fds.get(logical).ok_or(IoError::NotFound)?, options)
+}
+
+fn reopen_descriptor(
+    path: &str,
+    endpoint: Endpoint,
+    options: &OpenOptions,
+) -> Result<DescriptorOpen<'static>, IoError> {
+    if let Some(fd) = endpoint.runtime_fd() {
+        let prefix = if path.starts_with("/proc/") {
+            "/proc/self/fd"
+        } else {
+            "/dev/fd"
+        };
+        return Ok(DescriptorOpen::RuntimePath(Cow::Owned(format!(
+            "{prefix}/{fd}"
+        ))));
+    }
+    match endpoint.0.as_ref() {
+        Open::File(file) => {
+            memory_file_open(file.fs.clone(), file.file.clone(), options).map(DescriptorOpen::Local)
+        }
+        Open::Host(_) => Err(IoError::Unsupported),
+        Open::PipeRead(_)
+        | Open::PipeWrite(_)
+        | Open::Capture(_)
+        | Open::Null
+        | Open::Bytes { .. }
+        | Open::BytesSource(_) => Ok(DescriptorOpen::Local(endpoint)),
+    }
 }
 
 #[cfg(test)]
@@ -988,6 +1063,71 @@ mod tests {
         future::Future,
         task::{Context, Poll},
     };
+    #[test]
+    fn memory_descriptor_reopen_uses_same_inode_and_independent_description() {
+        let fs = MemoryFs::new(32);
+        fs.write_file("/f", b"abcd").unwrap();
+        let source = fs.open("/f", &OpenOptions::default()).unwrap();
+        let mut fds = FdTable::default();
+        fds.insert(7, source.clone());
+        let mut byte = [0];
+        assert_eq!(source.read(&mut byte).now_or_never(), Some(Ok(1)));
+        let reopened = open_path("/dev/fd/7", &fds, &OpenOptions::default())
+            .unwrap()
+            .open(&fs, &OpenOptions::default())
+            .now_or_never()
+            .unwrap()
+            .unwrap();
+        assert!(!source.same_open(&reopened));
+        assert_eq!(reopened.read(&mut byte).now_or_never(), Some(Ok(1)));
+        assert_eq!(&byte, b"a");
+        fs.write_file("/f", b"wxyz").unwrap();
+        assert_eq!(source.read(&mut byte).now_or_never(), Some(Ok(1)));
+        assert_eq!(&byte, b"x");
+        assert_eq!(reopened.read(&mut byte).now_or_never(), Some(Ok(1)));
+        assert_eq!(&byte, b"x");
+        let truncate = OpenOptions {
+            read: false,
+            write: true,
+            truncate: true,
+            ..OpenOptions::default()
+        };
+        let output = open_path("/dev/fd/7", &fds, &truncate)
+            .unwrap()
+            .open(&fs, &truncate)
+            .now_or_never()
+            .unwrap()
+            .unwrap();
+        assert_eq!(fs.used_bytes(), 0);
+        assert_eq!(output.write(b"1234").now_or_never(), Some(Ok(4)));
+        assert_eq!(source.read(&mut byte).now_or_never(), Some(Ok(1)));
+        assert_eq!(&byte, b"3");
+    }
+    #[test]
+    fn local_pipe_duplication_and_unexported_buffer_boundary_are_explicit() {
+        let (reader, writer) = pipe();
+        let mut fds = FdTable::default();
+        fds.insert(7, reader.clone());
+        let options = OpenOptions::default();
+        let DescriptorOpen::Local(duplicate) = open_path("/dev/fd/7", &fds, &options).unwrap()
+        else {
+            panic!("native pipe stays local")
+        };
+        assert!(reader.same_open(&duplicate));
+        assert_eq!(writer.write(b"ab").now_or_never(), Some(Ok(2)));
+        let mut byte = [0];
+        assert_eq!(duplicate.read(&mut byte).now_or_never(), Some(Ok(1)));
+        assert_eq!(&byte, b"a");
+        assert_eq!(reader.read(&mut byte).now_or_never(), Some(Ok(1)));
+        assert_eq!(&byte, b"b");
+        let buffer = Endpoint::bytes(b"ab".to_vec());
+        fds.insert(7, buffer.clone());
+        let DescriptorOpen::Local(retained) = open_path("/dev/fd/7", &fds, &options).unwrap()
+        else {
+            panic!("unexported buffers retain their old shared offset")
+        };
+        assert!(retained.same_open(&buffer));
+    }
     #[test]
     fn filesystem_metadata_preserves_contents_identity_and_access_time() {
         let fs = MemoryFs::new(32);

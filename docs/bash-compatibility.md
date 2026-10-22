@@ -566,9 +566,21 @@ character and collation locales. Non-ASCII data, other locales, captures,
 backreferences and locale collation return explicit unsupported status 2.
 Dynamic `EPOCHREALTIME` emits seconds and six fractional digits, with
 Bash-compatible unset behavior. `shopt` stores and reports
-`inherit_errexit`, `nullglob` and `extglob`; extended-pattern matching remains
-unsupported. For-list pathname expansion uses quote metadata and incremental
+`inherit_errexit`, `nullglob` and `extglob`. Positive `@()`, `?()`, `+()` and
+`*()` groups support nesting and alternatives in case patterns when extglob is
+enabled, and in `[[ == ]]` and `[[ != ]]` regardless of that option. Quote masks
+keep protected punctuation literal. An iterative, work-bounded NFA avoids
+recursive matching and backtracking. Group boundaries preserve balanced literal
+parentheses, bracket context and quote/expansion delimiter boundaries. Malformed
+groups retain Bash's literal fallback. Negative groups, pathname extglob, and
+extglob in scalar trim or replacement remain unsupported. The
+[extglob receipt](evidence/own-shell-extglob.json) records exact production gains
+and losses. For-list pathname expansion uses quote metadata and incremental
 filesystem directory reads, including real positive matches and nullglob misses.
+`cd`, `pushd`, `popd` and `dirs` check real directory metadata and search
+permission, publish `OLDPWD`/`PWD` like Bash, and keep a private directory
+stack; physical (`-P`) resolution remains unsupported. See
+[cd and the directory stack](directories.md).
 
 The new control-flow generator has its own two recorded GNU Bash 5.3.15 seed
 fixtures, each containing 1,848 structured controls plus 600 seeded cases.
