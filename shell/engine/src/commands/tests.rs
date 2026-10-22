@@ -19,9 +19,10 @@ fn baseline(names: &[&'static str]) -> Vec<&'static str> {
 }
 
 const BUILTINS: &[&str] = &[
-    ":", "[", "break", "builtin", "cd", "command", "continue", "declare", "echo", "eval", "exec",
-    "exit", "export", "false", "getopts", "jobs", "kill", "let", "local", "printf", "pwd", "read",
-    "readonly", "return", "set", "shift", "shopt", "test", "true", "typeset", "unset", "wait",
+    ":", "[", "break", "builtin", "cd", "command", "continue", "declare", "dirs", "echo", "eval",
+    "exec", "exit", "export", "false", "getopts", "jobs", "kill", "let", "local", "popd", "printf",
+    "pushd", "pwd", "read", "readonly", "return", "set", "shift", "shopt", "test", "true",
+    "typeset", "unset", "wait",
 ];
 
 #[test]
@@ -58,8 +59,9 @@ fn adapter_dispatch_preserves_the_old_dispatch_set_not_the_old_is_builtin_set() 
         names(|command| matches!(command.handler(), Some(Handler::Builtin(_)))),
         baseline(&[
             ":", "true", "false", "echo", "printf", "read", "getopts", "export", "local",
-            "readonly", "declare", "typeset", "cd", "pwd", "set", "shift", "shopt", "exit",
-            "return", "jobs", "wait", "kill", "unset", "test", "[", "break", "continue"
+            "readonly", "declare", "typeset", "cd", "pwd", "pushd", "popd", "dirs", "set", "shift",
+            "shopt", "exit", "return", "jobs", "wait", "kill", "unset", "test", "[", "break",
+            "continue"
         ])
     );
     // `command` was recognized by is_builtin but never had a builtins::run arm.

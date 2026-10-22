@@ -13,6 +13,7 @@ pub(crate) enum Builtin {
     Declaration,
     Cd,
     Pwd,
+    Directories,
     Set,
     Shift,
     Shopt,
@@ -155,6 +156,9 @@ static COMMANDS: &[Command] = &[
     declaration("typeset", Class::RegularBuiltin),
     regular("cd", Builtin::Cd),
     regular("pwd", Builtin::Pwd),
+    regular("pushd", Builtin::Directories),
+    regular("popd", Builtin::Directories),
+    regular("dirs", Builtin::Directories),
     special("set", Handler::Builtin(Builtin::Set)),
     special("shift", Handler::Builtin(Builtin::Shift)),
     core(

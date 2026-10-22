@@ -1845,5 +1845,27 @@
       "non-ASCII option bytes, which cannot be represented individually by the existing UTF-8 scalar binding storage",
       "byte-identical GNU Bash --help prose"
     ]
+  },
+  "shellDirectories": {
+    "classification": "Original cd, pushd, popd and dirs builtins, private directory-stack state and controls. GNU Bash 5.3.15 observations define behavior; no copied upstream implementation.",
+    "oracle": "GNU Bash 5.3.15(1)-release",
+    "referenceSources": [
+      "GNU Bash 5.3 builtins/cd.def:cd_builtin/change_to_directory/bindpwd",
+      "GNU Bash 5.3 builtins/pushd.def:pushd_builtin/popd_builtin/dirs_builtin/get_dirstack_index",
+      "GNU Bash 5.3 lib/sh/pathcanon.c:sh_canonpath"
+    ],
+    "implementationDestinations": [
+      "shell/engine/src/builtins/directories.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/commands.rs",
+      "shell/engine/src/state.rs"
+    ],
+    "testDestinations": [
+      "shell/engine/tests/directories.rs",
+      "scripts/fixtures/shell-directories.json",
+      "shell/engine/tests/streaming.rs"
+    ],
+    "strategy": "Logical-mode cd over the existing host stat contract: lexical canonicalization that requires a directory before each .. and at the result, host-reported search permission, and the raw path's real error when canonicalization fails. The working directory changes first, then OLDPWD and PWD publish through admitted ordinary assignment; readonly bindings fail the command without undoing it. The directory stack is a private, snapshot-copied State field with per-command storage admission and cooperative checkpoints.",
+    "deferred": "cd -P/-e and the physical raw-path retry need symlink resolution, which the filesystem contract lacks; they fail explicitly. CDPATH tilde entries, the DIRSTACK array (variables family), pwd -L/-P, and decoupled PWD values remain unsupported. See docs/directories.md."
   }
 }
