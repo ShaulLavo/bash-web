@@ -373,11 +373,12 @@
         "paths": [
           "shell/parser/src/parser/mod.rs",
           "shell/parser/src/parser/ast.rs",
+          "shell/parser/src/parser/print_cmd.rs",
           "shell/parser/tests/command_print.rs"
         ],
-        "classification": "Original literal function-name retention adapter over the owned Bashkit parser at 491c3281f668b76d64b15210b8f5d7bf97244be0, crates/bashkit/src/parser/{mod.rs,ast.rs}; no new upstream implementation copied.",
-        "change": "The two existing function parsers retain current_raw token spelling instead of normalized Word text. Document the existing FunctionDef.name contract. Preserve partial quotes, escapes, literal backticks, alias-produced names and line continuations through printing and admitted AST copying. No token recognition, grammar or public type changes.",
-        "reason": "Execution must reject expansion/quoted names with status 1 only when a declaration runs, while ordinary punctuation and literal backticks remain names. Existing raw provenance avoids an extra execution-time lexer and its allocations. The original interpreter adapter validates cooperatively and normalizes only line continuations in the owned name buffer. Escaped POSIX and fully quoted function grammar remain an Approved prerequisite, not a weakened comparison."
+        "classification": "Original literal function-name retention adapter over the owned Bashkit parser at 491c3281f668b76d64b15210b8f5d7bf97244be0, crates/bashkit/src/parser/{mod.rs,ast.rs,print_cmd.rs}; no new upstream implementation copied.",
+        "change": "The two existing function parsers retain current_raw token spelling instead of normalized Word text. Document the existing FunctionDef.name contract. Preserve partial quotes, escapes, literal backticks, alias-produced names and raw line continuations in admitted AST copies. The bounded function printer removes real continuations through the existing raw normalizer while retaining escaped backslashes and single-quoted text; backtick contents follow Bash continuation rules. No token recognition, grammar or public type changes.",
+        "reason": "Execution must reject expansion/quoted names with status 1 only when a declaration runs, while ordinary punctuation and literal backticks remain names. Existing raw provenance avoids an extra execution-time lexer and its allocations. The original interpreter adapter validates cooperatively and normalizes only real line continuations in the owned name buffer, respecting escaped backslashes within literal backticks. Escaped POSIX and fully quoted function grammar remain an Approved prerequisite, not a weakened comparison."
       },
       {
         "paths": [

@@ -51,7 +51,11 @@ unsafe impl GlobalAlloc for TrackedAllocator {
 static ALLOCATOR: TrackedAllocator = TrackedAllocator;
 
 fn command(source: &str) -> Command {
-    Parser::new(source).parse().unwrap().commands.remove(0)
+    Parser::new(source)
+        .parse()
+        .unwrap_or_else(|error| panic!("{source:?}: {error:?}"))
+        .commands
+        .remove(0)
 }
 
 fn with_argument(word: Word) -> Command {
@@ -274,16 +278,23 @@ fn bounded_function_names_and_bodies_are_admitted_before_copying() {
 
 #[test]
 fn function_declaration_spelling_survives_parse_clone_and_print() {
-    for (header, name) in [
-        (r#"function foo"bar""#, r#"foo"bar""#),
-        ("function foo'bar'", "foo'bar'"),
-        (r"function f\oo", r"f\oo"),
-        ("function `echo $x`", "`echo $x`"),
-        ("function foo\\\nbar", "foo\\\nbar"),
-        (r#"foo"bar"()"#, r#"foo"bar""#),
-        ("foo'bar'()", "foo'bar'"),
-        ("`echo $x`()", "`echo $x`"),
-        ("foo\\\nbar()", "foo\\\nbar"),
+    for (header, name, printed) in [
+        (r#"function foo"bar""#, r#"foo"bar""#, r#"foo"bar""#),
+        ("function foo'bar'", "foo'bar'", "foo'bar'"),
+        (r"function f\oo", r"f\oo", r"f\oo"),
+        ("function `echo $x`", "`echo $x`", "`echo $x`"),
+        ("function foo\\\nbar", "foo\\\nbar", "foobar"),
+        (r#"foo"bar"()"#, r#"foo"bar""#, r#"foo"bar""#),
+        ("foo'bar'()", "foo'bar'", "foo'bar'"),
+        ("`echo $x`()", "`echo $x`", "`echo $x`"),
+        ("foo\\\nbar()", "foo\\\nbar", "foobar"),
+        (
+            "function `echo\\\\\nhi`",
+            "`echo\\\\\nhi`",
+            "`echo\\\\\nhi`",
+        ),
+        ("`echo\\\\\nhi`()", "`echo\\\\\nhi`", "`echo\\\\\nhi`"),
+        ("function `echo 'a\\\nb'`", "`echo 'a\\\nb'`", "`echo 'ab'`"),
     ] {
         let source = format!("{header} {{ :; }}");
         let parsed = command(&source);
@@ -293,11 +304,23 @@ fn function_declaration_spelling_survives_parse_clone_and_print() {
         assert_eq!(function.name, name);
         let rendered = command_string(&parsed, &Cell::new(100_000), 100_000, None).unwrap();
         assert!(
-            rendered.starts_with(&format!("function {name} ()")),
+            rendered.starts_with(&format!("function {printed} ()")),
             "{rendered}"
         );
         assert_bounded(&parsed, None, 1);
     }
+}
+
+#[test]
+fn function_name_printer_preserves_single_quoted_continuations() {
+    let mut parsed = command("function foo { :; }");
+    let Command::Function(function) = &mut parsed else {
+        unreachable!()
+    };
+    function.name = "foo'a\\\nb'".into();
+    let rendered = command_string(&parsed, &Cell::new(100_000), 100_000, None).unwrap();
+    assert!(rendered.starts_with("function foo'a\\\nb' ()"));
+    assert_bounded(&parsed, None, 1);
 }
 
 #[test]

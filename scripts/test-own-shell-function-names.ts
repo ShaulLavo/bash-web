@@ -79,6 +79,14 @@ const supportedScripts = ["$foo-bar() { ls ; }\n\n", "foo-$(echo hi)() { ls ; }\
     "$foo\\\n-bar() { :; }; echo after",
     "function \\\n$foo { :; }; echo after",
   ],
+  ["foobar", "foo\\\nbar", "`echo\\\nhi`", "`echo\\\\\nhi`", "`echo 'a\\\nb'`"].flatMap((name) => [
+    `{ ${name}() { :; }; i=0; while [ $i -lt 300000 ]; do i=$((i+1)); done; } & jobs; wait`,
+    `{ function ${name} { :; }; i=0; while [ $i -lt 300000 ]; do i=$((i+1)); done; } & jobs; wait`,
+  ]),
+  ["`echo\\\nhi`", "`echo\\\\\nhi`"].flatMap((name) => [
+    `${name}() { printf called; }; '${name.includes("\\\\") ? name : name.replaceAll("\\\n", "")}'; printf ':status=%s\\n' "$?"`,
+    `function ${name} { printf called; }; '${name.includes("\\\\") ? name : name.replaceAll("\\\n", "")}'; printf ':status=%s\\n' "$?"`,
+  ]),
 );
 const pending = process.env.BASH_FUNCTION_NAMES_PENDING;
 const scripts =

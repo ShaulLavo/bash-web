@@ -958,6 +958,160 @@
         "stdoutBase64": "YWZ0ZXIK",
         "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAyOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
       }
+    },
+    {
+      "script": "{ foobar() { :; }; i=0; while [ $i -lt 300000 ]; do i=$((i+1)); done; } & jobs; wait",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "WzFdKyAgUnVubmluZyAgICAgICAgICAgICAgICAgICAgeyBmdW5jdGlvbiBmb29iYXIgKCkgCnsgCiAgICA6Cn07IGk9MDsgd2hpbGUgWyAkaSAtbHQgMzAwMDAwIF07IGRvCiAgICBpPSQoKGkrMSkpOwpkb25lOyB9ICYK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "{ function foobar { :; }; i=0; while [ $i -lt 300000 ]; do i=$((i+1)); done; } & jobs; wait",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "WzFdKyAgUnVubmluZyAgICAgICAgICAgICAgICAgICAgeyBmdW5jdGlvbiBmb29iYXIgKCkgCnsgCiAgICA6Cn07IGk9MDsgd2hpbGUgWyAkaSAtbHQgMzAwMDAwIF07IGRvCiAgICBpPSQoKGkrMSkpOwpkb25lOyB9ICYK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "{ foo\\\nbar() { :; }; i=0; while [ $i -lt 300000 ]; do i=$((i+1)); done; } & jobs; wait",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "WzFdKyAgUnVubmluZyAgICAgICAgICAgICAgICAgICAgeyBmdW5jdGlvbiBmb29iYXIgKCkgCnsgCiAgICA6Cn07IGk9MDsgd2hpbGUgWyAkaSAtbHQgMzAwMDAwIF07IGRvCiAgICBpPSQoKGkrMSkpOwpkb25lOyB9ICYK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "{ function foo\\\nbar { :; }; i=0; while [ $i -lt 300000 ]; do i=$((i+1)); done; } & jobs; wait",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "WzFdKyAgUnVubmluZyAgICAgICAgICAgICAgICAgICAgeyBmdW5jdGlvbiBmb29iYXIgKCkgCnsgCiAgICA6Cn07IGk9MDsgd2hpbGUgWyAkaSAtbHQgMzAwMDAwIF07IGRvCiAgICBpPSQoKGkrMSkpOwpkb25lOyB9ICYK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "{ `echo\\\nhi`() { :; }; i=0; while [ $i -lt 300000 ]; do i=$((i+1)); done; } & jobs; wait",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "WzFdKyAgUnVubmluZyAgICAgICAgICAgICAgICAgICAgeyBmdW5jdGlvbiBgZWNob2hpYCAoKSAKeyAKICAgIDoKfTsgaT0wOyB3aGlsZSBbICRpIC1sdCAzMDAwMDAgXTsgZG8KICAgIGk9JCgoaSsxKSk7CmRvbmU7IH0gJgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "{ function `echo\\\nhi` { :; }; i=0; while [ $i -lt 300000 ]; do i=$((i+1)); done; } & jobs; wait",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "WzFdKyAgUnVubmluZyAgICAgICAgICAgICAgICAgICAgeyBmdW5jdGlvbiBgZWNob2hpYCAoKSAKeyAKICAgIDoKfTsgaT0wOyB3aGlsZSBbICRpIC1sdCAzMDAwMDAgXTsgZG8KICAgIGk9JCgoaSsxKSk7CmRvbmU7IH0gJgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "{ `echo\\\\\nhi`() { :; }; i=0; while [ $i -lt 300000 ]; do i=$((i+1)); done; } & jobs; wait",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "WzFdKyAgUnVubmluZyAgICAgICAgICAgICAgICAgICAgeyBmdW5jdGlvbiBgZWNob1xcCmhpYCAoKSAKeyAKICAgIDoKfTsgaT0wOyB3aGlsZSBbICRpIC1sdCAzMDAwMDAgXTsgZG8KICAgIGk9JCgoaSsxKSk7CmRvbmU7IH0gJgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "{ function `echo\\\\\nhi` { :; }; i=0; while [ $i -lt 300000 ]; do i=$((i+1)); done; } & jobs; wait",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "WzFdKyAgUnVubmluZyAgICAgICAgICAgICAgICAgICAgeyBmdW5jdGlvbiBgZWNob1xcCmhpYCAoKSAKeyAKICAgIDoKfTsgaT0wOyB3aGlsZSBbICRpIC1sdCAzMDAwMDAgXTsgZG8KICAgIGk9JCgoaSsxKSk7CmRvbmU7IH0gJgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "{ `echo 'a\\\nb'`() { :; }; i=0; while [ $i -lt 300000 ]; do i=$((i+1)); done; } & jobs; wait",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "WzFdKyAgUnVubmluZyAgICAgICAgICAgICAgICAgICAgeyBmdW5jdGlvbiBgZWNobyAnYWInYCAoKSAKeyAKICAgIDoKfTsgaT0wOyB3aGlsZSBbICRpIC1sdCAzMDAwMDAgXTsgZG8KICAgIGk9JCgoaSsxKSk7CmRvbmU7IH0gJgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "{ function `echo 'a\\\nb'` { :; }; i=0; while [ $i -lt 300000 ]; do i=$((i+1)); done; } & jobs; wait",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "WzFdKyAgUnVubmluZyAgICAgICAgICAgICAgICAgICAgeyBmdW5jdGlvbiBgZWNobyAnYWInYCAoKSAKeyAKICAgIDoKfTsgaT0wOyB3aGlsZSBbICRpIC1sdCAzMDAwMDAgXTsgZG8KICAgIGk9JCgoaSsxKSk7CmRvbmU7IH0gJgo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "`echo\\\nhi`() { printf called; }; '`echohi`'; printf ':status=%s\\n' \"$?\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVkOnN0YXR1cz0wCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function `echo\\\nhi` { printf called; }; '`echohi`'; printf ':status=%s\\n' \"$?\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVkOnN0YXR1cz0wCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "`echo\\\\\nhi`() { printf called; }; '`echo\\\\\nhi`'; printf ':status=%s\\n' \"$?\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVkOnN0YXR1cz0wCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function `echo\\\\\nhi` { printf called; }; '`echo\\\\\nhi`'; printf ':status=%s\\n' \"$?\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVkOnN0YXR1cz0wCg==",
+        "stderrBase64": ""
+      }
     }
   ]
 }

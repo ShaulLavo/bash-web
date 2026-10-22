@@ -272,7 +272,7 @@ impl<'a> Printer<'a> {
 
     fn stream_word(&mut self, word: &Word) -> std::fmt::Result {
         if let Some(raw) = &word.raw {
-            return self.stream_normalized_raw(raw);
+            return self.stream_normalized_raw(raw, false);
         }
         let mut quoted_literals = word.quoted;
         if quoted_literals {
@@ -320,9 +320,10 @@ impl<'a> Printer<'a> {
         }
     }
 
-    fn stream_normalized_raw(&mut self, raw: &str) -> std::fmt::Result {
+    fn stream_normalized_raw(&mut self, raw: &str, literal_backticks: bool) -> std::fmt::Result {
         let mut in_single = false;
         let mut in_double = false;
+        let mut in_backtick = false;
         let mut i = 0;
         while let Some(ch) = raw[i..].chars().next() {
             if self.failed() {
@@ -330,15 +331,19 @@ impl<'a> Printer<'a> {
             }
             i += ch.len_utf8();
             match ch {
-                '\'' if !in_double => {
+                '`' if literal_backticks && !in_single => {
+                    in_backtick = !in_backtick;
+                    self.out.write_char(ch)?;
+                }
+                '\'' if !in_double && !in_backtick => {
                     in_single = !in_single;
                     self.out.write_char(ch)?;
                 }
-                '"' if !in_single => {
+                '"' if !in_single && !in_backtick => {
                     in_double = !in_double;
                     self.out.write_char(ch)?;
                 }
-                '$' if !in_single && !in_double && raw[i..].starts_with('\'') => {
+                '$' if !in_single && !in_double && !in_backtick && raw[i..].starts_with('\'') => {
                     // The existing ANSI decoder allocates. Admit its source a
                     // character at a time before it sees a bounded slice.
                     let body_start = i + 1;
@@ -375,7 +380,7 @@ impl<'a> Printer<'a> {
                         None => self.out.write_char(ch)?,
                     }
                 }
-                '$' if !in_single && !in_double && raw[i..].starts_with('"') => {
+                '$' if !in_single && !in_double && !in_backtick && raw[i..].starts_with('"') => {
                     if !self.out.quota.as_ref().unwrap().charge(1) {
                         return Err(std::fmt::Error);
                     }
@@ -644,7 +649,7 @@ impl<'a> Printer<'a> {
             ) {
                 let delim = redirect.heredoc_delim.as_deref().unwrap_or_default();
                 let mut delimiter = Self::with_quota(self.quota().unwrap());
-                let _ = delimiter.stream_normalized_raw(delim);
+                let _ = delimiter.stream_normalized_raw(delim, false);
                 if delimiter.failed() {
                     return;
                 }
@@ -1457,7 +1462,7 @@ impl<'a> Printer<'a> {
     /// Nested `function name () { ... }` inside a body.
     fn print_function_def(&mut self, f: &FunctionDef) {
         self.out.push_str("function ");
-        self.out.push_str(&f.name);
+        let _ = self.stream_normalized_raw(&f.name, true);
         self.out.push_str(" () \n");
         self.indent(self.indentation);
         self.out.push_str("{ \n");

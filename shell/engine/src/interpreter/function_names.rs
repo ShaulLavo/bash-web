@@ -1,4 +1,4 @@
-//! Original execution-time handling of literal function declaration names.
+//! Validate literal function declaration names when they execute.
 use super::*;
 
 pub(super) async fn declare(
@@ -74,7 +74,7 @@ async fn normalize(
     let mut budget = Budget::default();
     while read < bytes.len() {
         budget.checkpoint(cancel).await?;
-        if bytes[read..].starts_with(b"\\\n") {
+        if !spelling.escaped && bytes[read..].starts_with(b"\\\n") {
             read += 2;
             continue;
         }
@@ -102,8 +102,7 @@ fn header_space(source: &str) -> &str {
     }
 }
 
-/// Bash anchors the diagnostic at the body opener, including header newlines.
-/// The retained declaration source supplies that location without re-lexing it.
+/// Locate the declaration header in its retained source without re-lexing it.
 async fn declaration_line(
     function: &FunctionDef,
     cancel: &Cancel,
@@ -161,6 +160,9 @@ mod tests {
         for (raw, expected, valid) in [
             ("foo\\\nbar", "foobar", true),
             ("`echo $x`", "`echo $x`", true),
+            ("`echo\\\\\nhi`", "`echo\\\\\nhi`", true),
+            ("`echo\\\nhi`", "`echohi`", true),
+            ("`echo 'a\\\nb'`", "`echo 'ab'`", true),
             ("`echo \\`x`", "`echo \\`x`", true),
             ("$foo\\\n-bar", "$foo-bar", false),
             ("foo'bar'", "foo'bar'", false),
@@ -217,7 +219,13 @@ mod tests {
     #[test]
     fn ast_copy_admission_counts_all_retained_raw_name_bytes() {
         let plain = copy_bytes("f");
-        for raw in [r#"foo"bar""#, r"f\oo", "`echo $x`", "foo\\\nbar"] {
+        for raw in [
+            r#"foo"bar""#,
+            r"f\oo",
+            "`echo $x`",
+            "foo\\\nbar",
+            "`echo\\\\\nhi`",
+        ] {
             assert_eq!(copy_bytes(raw) - plain, raw.len() - 1);
         }
     }
