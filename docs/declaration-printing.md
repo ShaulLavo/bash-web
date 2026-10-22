@@ -35,3 +35,9 @@ Indexed bindings now reject with status 2 instead of printing element zero as a
 scalar. Direct, empty, sparse, local and raw-nameref controls cover this boundary.
 Full replay and baseline updates use the hosted frozen-ruler artifact during the
 parent lane's serialized landing slot.
+
+The integrated-source hosted replay gained 5 Oils, 45 Brush-suite and 7 Bashkit
+suite passes with no losses or new abnormal outcomes on all 9,221 frozen cases.
+The candidate baseline preserves every nongained historical row. Exact source,
+artifact and review identities are in the declaration-printing evidence receipt;
+final-head CI and merge are separate acceptance gates.

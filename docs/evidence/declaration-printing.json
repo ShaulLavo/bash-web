@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "date": "2026-10-22",
-  "status": "readonly review correction passed targeted native checks; fresh hosted replay and final-head CI pending",
+  "status": "hosted integrated-source qualification complete; candidate membership updated; final-head CI and merge pending",
   "base": "77b3963d904599932c2cd59fe46409f0ab7a6c9a",
   "failingFirstCommit": "cb8bd5364a8f9ba3f76894cb0a069e08fffe177e",
   "identity": {
@@ -212,5 +212,40 @@
     "layers": "42 production/30 test edges, zero violations",
     "fullFrozenReplay": "pending exact corrected-source hosted artifact; no baseline membership write",
     "reviewTransfer": "Sol provider cybersecurity refusal gave no verdict; unchanged independent review transferred to separate Claude Opus5.5 xhigh under standing-order18"
+  },
+  "landingQualification": {
+    "source": "529d0fc3b9ad15c47199d65e6a5d74cf302312dc",
+    "integratedMain": "0fe77bacafaf38f197be10af7efae71af50f558a",
+    "hostedRun": 39846111595,
+    "artifact": "own-shell-current/own-shell-current.json",
+    "artifactSha256": "434bed1f1c0b2d921210ab5596e794cff49ad1aab7434899330a42ccf3d5c55c",
+    "artifactBytes": 1505355,
+    "caseCount": 9221,
+    "orderedIdsAndMetadata": "unchanged",
+    "skippedMembership": 3429,
+    "gains": {
+      "oils": 5,
+      "brush-suite": 45,
+      "bashkit-suite": 7
+    },
+    "losses": {
+      "oils": 0,
+      "brush-suite": 0,
+      "bashkit-suite": 0
+    },
+    "totals": {
+      "oils": 1210,
+      "brush-suite": 1203,
+      "bashkit-suite": 1644
+    },
+    "newAbnormal": [],
+    "inheritedAbnormalIds": [
+      "brush-suite:compound_cmds/until:8",
+      "bashkit-suite:pipes-redirects:345",
+      "bashkit-suite:pipes-redirects:365"
+    ],
+    "baselineUpdate": "normal recompute; only gained rows replaced, all nongains preserved",
+    "integrationReview": "APPROVE @ 529d0fc3b9ad15c47199d65e6a5d74cf302312dc",
+    "limits": "Source replay failed only strict stale membership; candidate final-head CI and merge not yet accepted. Earlier fields remain the original targeted checkpoint."
   }
 }
