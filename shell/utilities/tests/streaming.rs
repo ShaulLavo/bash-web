@@ -242,3 +242,37 @@ fn utility_cat_retains_original_dash_and_device_semantics() {
     assert_eq!(rig.text(), "literal dash");
     assert!(rig.fds.get(1).is_some());
 }
+
+#[test]
+fn grep_descriptor_paths_reopen_regular_files_and_translate_bindings() {
+    for path in ["/dev/fd/4", "/proc/self/fd/4", "/dev//fd/4"] {
+        let rig = Rig::new();
+        rig.fs
+            .write_file("/home/guest/file", b"one\ntwo\n")
+            .unwrap();
+        rig.fs.write_file("/home/guest/other", b"other\n").unwrap();
+        let script = format!(
+            "exec 3<file; exec 4<&3; exec 3<other; IFS= read -r first <&4; grep one {path}; IFS= read -r next <&4; printf '%s:%s\\n' \"$first\" \"$next\""
+        );
+        assert_eq!(rig.run(&script), 0, "{path}: {}", rig.text());
+        assert_eq!(rig.text(), "one\none:two\n", "{path}");
+    }
+}
+
+#[test]
+fn grep_closed_descriptor_errors_keep_operand_and_quiet_priority() {
+    for script in [
+        "grep -q hit /dev/fd/4 file",
+        "grep -q hit /proc/self/fd/5 file",
+        "exec 3<&-; grep -q hit /dev/fd/3 file",
+    ] {
+        let rig = Rig::new();
+        rig.fs.write_file("/home/guest/file", b"hit\n").unwrap();
+        assert_eq!(rig.run(script), 0, "{script}: {}", rig.text());
+        assert!(rig.text().starts_with("grep: "), "{script}");
+        assert!(!rig.text().contains("hit\n"), "{script}");
+    }
+    let rig = Rig::new();
+    assert_eq!(rig.run("printf secret | grep secret /dev/fd/6"), 2);
+    assert!(rig.text().starts_with("grep: "));
+}
