@@ -96,3 +96,20 @@ families also passed on repaired production code. Two report-runner setup errors
 were corrected without source changes: missing WASI sysroot environment and an
 unsupported echo-runner queue flag. Their failed logs remain beside the passing
 focused and fixture receipts. No additional full build or replay was used.
+
+## Integrated hosted qualification
+
+The preceding launch and repair receipts are historical. Hosted Shell run
+39838227748 replayed all 9,221 cases at approved integrated source
+`183ce1c740cb47514cb667d5f08369c129290b16` against main
+`b701c2abad78a94875e7bc1b7c17db8db64621e4`. Oils gained 23, Brush suite
+gained 12, and Bashkit suite gained 35, with zero losses or new abnormal
+outcomes. All ordered case identities, 5,792 scored cases and 3,429 skips
+are unchanged; the same three inherited timeouts remain.
+
+`docs/evidence/type-current.json` records exact gained IDs, source identities
+and the artifact digest. The baseline was recomputed normally from that
+hosted artifact, replacing gained rows only and preserving every other
+historical row. Strict membership comparison passes. Source and integration
+are independently approved. Final metadata-head CI and merged-main checks
+remain required before the coordinator reports a landing.
