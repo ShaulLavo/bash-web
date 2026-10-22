@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { after, test } from "node:test";
 import { liveNodeWorkers } from "./node-worker-host.ts";
+import { runRecordingBash } from "./recorded-bash.ts";
 import { createWaffleRunner } from "./waffle-compat.ts";
 
 const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
@@ -54,14 +55,7 @@ function expectation(script: string) {
       stderr: Buffer.from(entry.stderrBase64, "base64"),
     };
   }
-  const bash = spawnSync("/usr/bin/bash", ["--noprofile", "--norc", "-c", script], {
-    env,
-    timeout: 5000,
-    maxBuffer: 4 * 1024 * 1024,
-  });
-  assert.equal(bash.error, undefined);
-  assert.equal(bash.signal, null);
-  assert.equal(bash.status, 0, bash.stderr.toString());
+  const bash = runRecordingBash(script, env);
   recorded.push({
     script,
     status: bash.status,

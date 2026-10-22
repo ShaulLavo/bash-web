@@ -1998,5 +1998,24 @@
     "strategy": "Borrow only the visible named declaration, with raw immediate nameref target and local-unset metadata; admit a single scalar snapshot and bounded cooperative declaration escaping before descriptor output. No binding mutation or whole-map/array snapshot.",
     "documentation": "docs/declaration-printing.md",
     "qualification": "Targeted production-Waffle evidence only at this checkpoint. Parent owns independent review, serialized main integration, full frozen replay and baseline recomputation."
+  },
+  "shellTilde": {
+    "classification": "Original HOME-only tilde adapter and controls. GNU Bash 5.3.15 is a behavior oracle; no upstream implementation copied or adapted.",
+    "baseRevision": "93fdf762f2a694427440d07156c7a8c458ecc995",
+    "paths": [
+      "shell/engine/src/expand/tilde.rs",
+      "shell/engine/src/expand.rs",
+      "shell/engine/src/interpreter.rs",
+      "shell/engine/src/interpreter/indexed.rs",
+      "shell/engine/tests/words/tilde.rs",
+      "scripts/test-own-shell-tilde.ts",
+      "scripts/recorded-bash.ts",
+      "scripts/fixtures/shell-tilde.json",
+      "shell/parser/src/parser/mod.rs",
+      "shell/parser/tests/api.rs"
+    ],
+    "implementation": "Recognize unquoted HOME tilde prefixes from existing literal parts after brace expansion. Words changed by brace expansion keep only a leading prefix, because Bash gives them fresh flags without assignment eligibility. Snapshot the actual scalar binding at each eligible literal execution segment, following preceding parameter side effects. Protect only substituted home bytes from splitting and pathname expansion. Scalar assignments allow prefixes after literal colons; ordinary words allow this only after an unquoted valid identifier and equals or plus-equals. Declarations and redirect scalar words retain ordinary assignment-looking recognition; only actual scalar RHSs use assignment mode. Admit the retained snapshot before copying and charge each emitted copy to existing raw, field, work and storage budgets. Words without an unquoted literal tilde spend no tilde work; assignment-name scans, tilde candidates and emitted values yield and check cancellation. Normal PR41 integration routes actual scalar-form RHS values, including scalar += and scalar writes through indexed bindings, through the same assignment expansion context without changing subscript evaluation, append, binding storage or compound/list expansion.",
+    "deferred": "Named-user homes and HOME-unset account fallback require an authentic runtime account lookup; preserve those prefixes literally. PWD/OLDPWD, directory-stack forms, parameter operands, compound/list array assignments and non-UTF-8 fields remain outside this slice. Only the separately recorded empty-quote retention changes parser behavior. No AST, state storage, FileSubstitution or pathname traversal changes.",
+    "gate": "Record actual local Bash 5.3.15(1)-release controls once and replay CI without live Bash. The tilde and extglob recorders share the original scripts/recorded-bash.ts runner. Native/WASI resource and cancellation controls plus actual Waffle controls and the unchanged full serial 9221-row frozen scored-only replay. Preserve all former passes, identities, ordered membership, skips and historical diagnostic payloads."
   }
 }

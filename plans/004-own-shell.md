@@ -2356,6 +2356,29 @@ Evidence: `/work/reports/bash-web/hill-climb/expansion/indirect-special-review-r
 (rows `direct:00:` through `indirect:9999…:set -u; `). No frozen scored case
 has been checked against this; claim no gain unless a replay proves one.
 
+## Follow-up: command substitution loses a 700,000-byte capture, 2026-10-22
+
+Status: Approved. Bounded to the command-substitution capture path, which
+the control track owns (`shell/engine/src/expand/command.rs`). Do not fix it
+from the tilde or pathname units.
+
+The pathname unit's budget probe compared GNU Bash 5.3.15 with the release
+Waffle guest built from main `77b3963` (shell tree `2f38c80d`, sha256
+`4329f221…`), locale C.utf8, inside an empty `$TMP`:
+
+| Script | Bash | Waffle |
+| --- | --- | --- |
+| `x=$(printf '%0700000d' 0); echo ${#x}` | `700000`, status 0 | `0`, status 0 |
+| `x=$(printf '%0300000d' 0); echo ${#x}` | `300000`, status 0 | `300000`, status 0 |
+
+The large capture comes back empty with status 0. It neither fails at an
+explicit limit (status 2) nor keeps the bytes. Find which capture or
+assignment ceiling discards the value, then make it either keep the value
+or fail explicitly the way other limits do. Evidence:
+`/work/reports/bash-web/hill-climb/expansion/pathname/budget-probe2.log`
+(rows `capture-700k` and `capture-300k`). No frozen scored case is tied to
+it yet; claim no gain unless a replay proves one.
+
 ## word fields carry bytes, not UTF-8 String
 
 Status: Approved, 2026-10-21. Follow-up to indexed arrays in PR41. Keep this as
@@ -2559,6 +2582,74 @@ Before changing this behavior, reproduce direct case and ordinary argument
 patterns with extglob unset, enabled on the same read unit and enabled on a
 previous read unit. Coordinate with the parser/options and expansion owners;
 do not broaden indexed storage or alter the frozen ruler.
+
+## Leading tilde-colon parameter literal handling
+
+Status: Approved follow-up in the expansion family, outside PR57's reviewed
+assignment-looking brace repair and call-only main integration.
+
+Minimal relevant form from the independent narrow review:
+
+```sh
+HOME=/one; set -- {~,:~}:$HOME; printf '<%s>\n' "$@"
+```
+
+The leading `~:$HOME` result is `</one:$HOME>\n` in GNU Bash
+`5.3.15(1)-release` but `</one:/one>\n` in the reviewed Waffle guest.
+Status is 0 and stderr is empty. The old Word and repaired Generated contexts
+both leave this leading path unchanged. Reproduce and isolate Bash's literal
+parameter handling after the leading tilde-colon before changing it. Preserve
+HOME side-effect order, quote protection, budgets and cancellation.
+
+Exact full control and expected/actual base64 bytes are in
+`/work/reports/bash-web/hill-climb/expansion/tilde/review-r2/classified-results.json`,
+`nonRepairDifferences` entry `context-order-3`, reviewed at
+`19bcd7ffe407d1c3d6c73940fb464d41fc8b4f37`. No fresh integrated-source result or
+frozen gain is claimed for this follow-up.
+
+## Missing redirect diagnostic in tilde fixture 25
+
+Status: Approved follow-up in the redirect/diagnostic family, not a PR57 tilde
+repair. Preserve the actual redirect failure and final command status.
+
+```sh
+HOME=.; printf data >'x=~'; IFS= read -r v <x=~; printf '<%s>\n' "$v"
+```
+
+Both GNU Bash `5.3.15(1)-release` and the reviewed guest return status 0 with
+stdout `<>\n`. Bash stderr is
+`/usr/bin/bash: line 1: x=.: No such file or directory\n`; guest stderr is empty.
+The earlier review incorrectly labelled identical recorded bytes `match=true`
+because it did not compare nonempty expected stderr. This is an existing
+diagnostic difference, not an exact Bash match or a repair regression.
+
+Reproduce through real Waffle and trace the failed input redirection's diagnostic
+publication. Exact evidence is `nonRepairDifferences` entry `fixture-25` in the
+same `review-r2/classified-results.json`; the older bytes are also retained as
+`recorded-25` in `review-r1/observations.json`. Do not weaken status/stdout checks
+or change the frozen diagnostic payloads to hide it.
+
+## Tilde plus brace-generated pathname expansion
+
+Status: Approved follow-up owned by expansion/pathname. Retest after PR54's
+actual normal-main integration before deciding whether further work is needed.
+No pathname source change belongs in PR57.
+
+```sh
+HOME=.; printf data >present; set -- ~/{*,x}; printf '<%s>\n' "$@"
+```
+
+The reviewed guest leaves `./*` literal, while Bash matches `./present`; the
+other result is `./x`. Both return status 0 with empty stderr. Leading tilde
+eligibility is unchanged by the assignment-looking repair. The full recorded
+control also includes unchanged ordinary and assignment-looking brace forms.
+Its exact expected/actual bytes are in `nonRepairDifferences` entry
+`context-order-4` in the same `review-r2/classified-results.json`.
+
+All three follow-ups come from the narrow review's 152 observations: 146 exact
+Bash matches, three declared boundary matches and these three differences.
+The append boundary was still declared at that reviewed pin; PR41 integration
+now compares it directly with its unchanged genuine Bash recording.
 
 ### Approved: special-variable unset follow-ups from declaration review
 

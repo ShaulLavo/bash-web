@@ -1,0 +1,415 @@
+{
+  "schema": 1,
+  "family": "HOME tilde prefixes in words and scalar assignments",
+  "measuredRevision": "f6c8055b5cc4945579c9dcde49e5238e754860c7",
+  "status": "Historical source qualification below. currentMainQualification records the fresh hosted replay; final membership-head gates and exact-main CI remain parent-owned.",
+  "mergedBase": "4bf6a474ef6bb32dd5de44c1b6d30a300a079d93",
+  "implementation": {
+    "model": "claude-opus-5-5",
+    "reason": "Sol provider policy refusal on ordinary shell/build/test work partway through this task; owner standing exception. Continued from the Sol worker's checkpoint. Review stays on Sol."
+  },
+  "integration": {
+    "model": "gpt-6.1-sol",
+    "narrowRepairReview": "19bcd7ffe407d1c3d6c73940fb464d41fc8b4f37",
+    "narrowReviewVerdict": "APPROVE, verdict6330492610; not approval of integration or this replay",
+    "buildRevision": "f6c8055b5cc4945579c9dcde49e5238e754860c7",
+    "sourceProof": "Final evidence commit changes only documentation and the outcome-only baseline. Production source remains identical to measuredRevision. Final PR head is recorded in the external report.",
+    "buildSourceTreeSha256": "da638280959429ff62d0a6172f3a2e45205458250337f73197545e696abcbff2",
+    "borrowedRuntimeNotUsed": "The repaired runtime used by narrow review was dirty-930dbe4 source-equivalent to 19bcd7f, not a fresh 19bcd7f build. This integrated source has its own build and hashes.",
+    "callMigrations": [
+      "interpreter.rs::assignments_body scalar RHS uses expand::assignment",
+      "interpreter/indexed.rs::scalar uses expand::assignment with identical arguments and evaluation order"
+    ],
+    "preservedContexts": "Declaration whole name=rhs and redirect words remain Word; indexed compound remains fields. No binding, index, append, transformation or FileSubstitution semantics changed by integration."
+  },
+  "identity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "replay": {
+    "command": "BASH_COMPAT_JOBS=1 BASH_COMPAT_SKIP_BUILD=1 BASH_COMPAT_RECORD=0 BASH_COMPAT_BASE_REF=4bf6a474ef6bb32dd5de44c1b6d30a300a079d93 npm run compat:shell:prebuilt",
+    "host": "PC shared heavy queue, quiet suite class, one worker; build and gates Rust -j2",
+    "node": "v26.7.0",
+    "artifacts": {
+      "shell-runtime.wasm": {
+        "sha256": "d95d0ed91de9f83b7a767d38d1fd2d0a09acd469a190b11fc268b894276fb494",
+        "bytes": 1972940
+      },
+      "shell-engine.wasm": {
+        "sha256": "b3d443594467642f4770a9967f41a84145cc76a7b67c676ebd80355f5295e48a",
+        "bytes": 2030336
+      },
+      "argv-py.wasm": {
+        "sha256": "af00ab4c359ab0aca81e99b5447db1a71c070e12ada1257891418c392b869970",
+        "bytes": 234056
+      },
+      "printenv-py.wasm": {
+        "sha256": "bcfa58dfe574fcd14e08bb128aaaec789b21e97d4969adf81de1fa572e585918",
+        "bytes": 234064
+      }
+    },
+    "resultSha256": "d723467793c855cf8ddbab228012733ddfaad017fab0fe084ae7cc1e8a8f0f87",
+    "actualExit": 1,
+    "exitReason": "Complete replay exited for stale candidate pass membership. Offline unchanged scoreboard API validation proves exact updated membership, unchanged ordered IDs/skips/identities and zero old-pass losses.",
+    "runs": 1,
+    "deadlinesAndClassifier": "unchanged",
+    "total": 9221,
+    "scored": 5792,
+    "skipped": 3429
+  },
+  "corpora": {
+    "oils": {
+      "scored": 1682,
+      "before": 1154,
+      "after": 1169,
+      "replay": 1169,
+      "gained": [
+        "oils:tilde:3",
+        "oils:tilde:9",
+        "oils:tilde:25",
+        "oils:tilde:80",
+        "oils:tilde:123",
+        "oils:brace-expansion:147",
+        "oils:brace-expansion:157",
+        "oils:brace-expansion:199",
+        "oils:brace-expansion:236",
+        "oils:array:479",
+        "oils:glob:69",
+        "oils:loop:52",
+        "oils:toysh:93",
+        "oils:builtin-eval-source:234",
+        "oils:builtin-eval-source:258"
+      ],
+      "lost": []
+    },
+    "brush-suite": {
+      "scored": 1888,
+      "before": 1120,
+      "after": 1120,
+      "replay": 1120,
+      "gained": [],
+      "lost": []
+    },
+    "bashkit-suite": {
+      "scored": 2222,
+      "before": 1554,
+      "after": 1558,
+      "replay": 1558,
+      "gained": [
+        "bashkit-suite:tilde-expansion:6",
+        "bashkit-suite:tilde-expansion:14",
+        "bashkit-suite:tilde-expansion:34",
+        "bashkit-suite:tilde-expansion:67"
+      ],
+      "lost": []
+    }
+  },
+  "productionChecks": {
+    "file": "scripts/test-own-shell-tilde.ts",
+    "fixture": "scripts/fixtures/shell-tilde.json, GNU Bash 5.3.15(1)-release recorded locally; CI does not run live Bash",
+    "oldRecordings": "All 40 prior records are unchanged and in their original order; 12 genuine integration records appended.",
+    "candidate": "52 controls pass: 49 assert exact status/stdout/stderr, recording 25 asserts status/stdout but retains a known redirect stderr difference, and two assert declared account/operand boundaries. The old += boundary now compares directly with its unchanged genuine Bash recording.",
+    "narrowReviewCorrection": "The independent narrow review observed 146 exact matches, three declared boundary matches and three non-repair differences across 152 observations. Its approval is not acceptance of integration, new callers, replay or hosted CI.",
+    "knownNonRepairDifferences": [
+      "Recording 25: Bash emits a nonempty missing-redirect-file diagnostic while guest stderr is empty. Status/stdout match. Earlier match=true was incorrect; this is not an exact Bash match.",
+      "Narrow review also observed unchanged leading ~:$HOME behavior and an existing pathname gap. Neither was repaired by this call-only integration."
+    ]
+  },
+  "releaseSizes": [
+    "Shell core release WASI (standalone embedding): 2030336 bytes raw; 603011 bytes gzip-9; 467394 bytes brotli-11",
+    "Shell core release WASI (browser runtime): 1972940 bytes raw; 581272 bytes gzip-9; 449939 bytes brotli-11",
+    "Utility add-on cat: 233193 bytes raw; 68164 bytes gzip-9; 56816 bytes brotli-11",
+    "Utility add-on grep: 1302017 bytes raw; 388831 bytes gzip-9; 267447 bytes brotli-11",
+    "Utility add-on mkdir: 228709 bytes raw; 66488 bytes gzip-9; 55801 bytes brotli-11",
+    "Utility add-on seq: 222397 bytes raw; 64389 bytes gzip-9; 53787 bytes brotli-11"
+  ],
+  "gates": [
+    {
+      "exit": 0,
+      "command": "npm run sources:browser"
+    },
+    {
+      "exit": 0,
+      "command": "npm run build:shell"
+    },
+    {
+      "exit": 0,
+      "command": "npm run build:node-harness"
+    },
+    {
+      "exit": 0,
+      "command": "npm run check:capabilities"
+    },
+    {
+      "exit": 0,
+      "command": "node --test scripts/test-own-shell-tilde.ts"
+    },
+    {
+      "exit": 0,
+      "command": "npm run check:rust"
+    },
+    {
+      "exit": 0,
+      "command": "cargo fmt --manifest-path tests/guest/Cargo.toml --check"
+    },
+    {
+      "exit": 0,
+      "command": "cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:shell:wasi"
+    },
+    {
+      "exit": 0,
+      "command": "cargo build --locked --release --manifest-path shell/Cargo.toml -p shell-engine -p shell-compat-fixtures -j2"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-braces:ci -- --shell /work/tmp/bash-web-expansion-tilde-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-words:ci -- --shell /work/tmp/bash-web-expansion-tilde-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-arithmetic:ci -- --shell /work/tmp/bash-web-expansion-tilde-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-readonly:ci -- --shell /work/tmp/bash-web-expansion-tilde-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-substitutions:ci -- --shell /work/tmp/bash-web-expansion-tilde-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-parse-boundaries:ci -- --shell /work/tmp/bash-web-expansion-tilde-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-control-flow:ci -- --shell /work/tmp/bash-web-expansion-tilde-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-job-lifetime:ci -- --shell /work/tmp/bash-web-expansion-tilde-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-functions:ci -- --shell /work/tmp/bash-web-expansion-tilde-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-path:ci -- --shell /work/tmp/bash-web-expansion-tilde-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-printf:ci -- --shell /work/tmp/bash-web-expansion-tilde-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-echo:ci -- --shell /work/tmp/bash-web-expansion-tilde-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:fuzz-shell-braces"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:fuzz-shell-substitutions"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:fuzz-shell-control-flow"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:fuzz-shell-job-lifetime"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:fuzz-shell-functions"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:fuzz-shell-path"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:fuzz-shell-printf"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:fuzz-shell-echo"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-echo:ci -- --waffle --shell /work/tmp/bash-web-expansion-tilde-target/wasm32-wasip1/release/shell-runtime.wasm"
+    },
+    {
+      "exit": 0,
+      "command": "npm run quality:js"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:check-layers"
+    },
+    {
+      "exit": 0,
+      "command": "env LAYERS_BASE_REF=4bf6a474ef6bb32dd5de44c1b6d30a300a079d93 npm run check:layers"
+    },
+    {
+      "exit": 0,
+      "command": "npm run typecheck:layers"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:ci"
+    },
+    {
+      "exit": 0,
+      "command": "npm run typecheck:ci"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:guest-build"
+    },
+    {
+      "exit": 0,
+      "command": "npm run typecheck:guest-build"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:shell:scoreboard"
+    },
+    {
+      "exit": 0,
+      "command": "git diff --check"
+    },
+    {
+      "exit": 1,
+      "command": "frozen replay compat:shell:prebuilt"
+    }
+  ],
+  "notClaimed": {
+    "lazy parameter operands": "HOME tilde inside lazy operands remains outside this slice",
+    "pattern operands": "Pattern-operand tilde remains outside this slice",
+    "named-user homes and unset-HOME fallback": "No authentic runtime account lookup is available",
+    "compound/list array tilde rules, non-UTF-8 fields, directory stacks": "Not implemented or changed by this integration"
+  },
+  "postMembershipChecks": [
+    {
+      "exit": 0,
+      "command": "npm run test:shell:scoreboard"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:ci"
+    },
+    {
+      "exit": 0,
+      "command": "git diff --check"
+    },
+    {
+      "exit": 0,
+      "command": "sha256sum --check /work/reports/bash-web/hill-climb/expansion/tilde/integrated-r1/artifacts.sha256"
+    }
+  ],
+  "localQualification": {
+    "nativeTests": 1443,
+    "wasiTests": 1423,
+    "targetedControls": 52,
+    "scoreboardTests": 722,
+    "ciTests": 105,
+    "blockingSteps": 41,
+    "blockingStepFailures": 0,
+    "layerViolations": {
+      "production": 0,
+      "testOnly": 0
+    },
+    "layerUniqueEdges": {
+      "production": 42,
+      "testOnly": 30
+    }
+  },
+  "followUps": "Three Approved exact follow-ups are in plans/004-own-shell.md: leading tilde-colon literal parameter bytes, fixture25 missing redirect diagnostic, and tilde/brace pathname behavior to retest after PR54 integration. No source fix was attempted.",
+  "currentMainQualification": {
+    "source": "2036aac9ca006b68de1a69beabe0bf1d4806a8ee",
+    "integratedBase": "2417826a21d07ea2bc004cafbd7dd7527413d252",
+    "independentReview": {
+      "verdict": "APPROVE",
+      "source": "0d4cd31574593819eb330bb1f32950fd3927440f",
+      "report": "/work/reports/wave-20261022/shell/review57-main3fd-integration-r3.md",
+      "main64Union": "445 paths automatic merge plus root patch metadata; all 245 production/fixture paths retain reviewed bytes"
+    },
+    "hostedRun": 39860232670,
+    "artifactId": 12463100674,
+    "artifactSha256": "7c5fa0f015fac7e6ec943fa7f68a7230bd531bbbeccf0a586e1e0b5e0520ff45",
+    "artifactBytes": 1503998,
+    "total": 9221,
+    "scored": 5792,
+    "skipped": 3429,
+    "identityAndOrder": "unchanged",
+    "newAbnormal": [],
+    "lost": [],
+    "corpora": {
+      "oils": {
+        "before": 1210,
+        "after": 1225,
+        "gained": [
+          "oils:tilde:3",
+          "oils:tilde:9",
+          "oils:tilde:25",
+          "oils:tilde:80",
+          "oils:tilde:123",
+          "oils:brace-expansion:147",
+          "oils:brace-expansion:157",
+          "oils:brace-expansion:199",
+          "oils:brace-expansion:236",
+          "oils:array:479",
+          "oils:glob:69",
+          "oils:loop:52",
+          "oils:toysh:93",
+          "oils:builtin-eval-source:234",
+          "oils:builtin-eval-source:258"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "brush-suite": {
+        "before": 1203,
+        "after": 1203,
+        "gained": [],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "bashkit-suite": {
+        "before": 1644,
+        "after": 1648,
+        "gained": [
+          "bashkit-suite:tilde-expansion:6",
+          "bashkit-suite:tilde-expansion:14",
+          "bashkit-suite:tilde-expansion:34",
+          "bashkit-suite:tilde-expansion:67"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      }
+    },
+    "membership": "Normal unchanged recompute algorithm with only checkout/import paths adapted; gained rows only, every nongained historical row preserved. No local full replay.",
+    "ci": "Source run failed only on stale pass membership and dependent aggregate. Final membership-head gates and exact-main CI remain parent-owned.",
+    "limits": "Original targeted checks and artifact sizes above are historical. Current source preserves 49 exact tilde controls, two declared boundaries and one inherited stderr discrepancy. Known declaration/function-shadow brace mismatch remains unsupported, not a gained case.",
+    "postMembershipChecks": {
+      "pureScoreboardControls": "45/45",
+      "ciControls": "106/106",
+      "ciTypes": "pass",
+      "whitespace": "pass",
+      "fullLocalScoreboardRecipe": "Not passing: mistakenly invoked without WASM prerequisites. Node harness build completed, then 13 failures from missing artifacts/prerequisites. Retained full log; no gate changed or passing feature result inferred. Final hosted CI runs the unchanged complete recipe with its real same-head artifacts."
+    }
+  }
+}
