@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.81",
+  "version": "0.0.82",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -29,7 +29,7 @@
     "build:shell": "node scripts/build-shell.ts",
     "check:capabilities": "node scripts/check-shell-capabilities.ts",
     "test:shell:wasi": "node scripts/test-shell-wasi.ts",
-    "test:shell:scoreboard": "npm run build:node-harness && node --test scripts/test-shell-scoreboard*.mjs scripts/test-shell-scoreboard-instrument.ts scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-own-shell-root.ts scripts/test-own-shell-permissions.ts scripts/test-own-shell-printf-assignment.ts scripts/test-own-shell-extglob.ts scripts/test-own-shell-tilde.ts scripts/test-own-shell-regex-groups.ts scripts/test-own-shell-file-substitution.ts scripts/test-bash-compat*.mjs",
+    "test:shell:scoreboard": "npm run build:node-harness && node --test scripts/test-shell-scoreboard*.mjs scripts/test-shell-scoreboard-instrument.ts scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-own-shell-root.ts scripts/test-own-shell-permissions.ts scripts/test-own-shell-printf-assignment.ts scripts/test-own-shell-extglob.ts scripts/test-own-shell-tilde.ts scripts/test-own-shell-regex-groups.ts scripts/test-own-shell-file-substitution.ts scripts/test-own-shell-indirect-special.ts scripts/test-bash-compat*.mjs",
     "compat:shell": "npm run build:node-harness && npm run compat:shell:prebuilt",
     "prepare:shell-corpus": "node scripts/prepare-shell-corpus.mjs",
     "fuzz:shell-braces": "node scripts/fuzz-shell-braces.mjs",
