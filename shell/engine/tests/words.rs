@@ -62,6 +62,40 @@ impl Rig {
             fs,
         }
     }
+    fn value(&self, name: &str) -> Option<String> {
+        self.shell
+            .state()
+            .borrow()
+            .bindings()
+            .get(name)
+            .map(|value| value.as_str().to_owned())
+    }
+    fn drive_until_value(&self, turns: usize, name: &str, expected: &str) {
+        for _ in 0..turns {
+            self.ex.drive(1);
+            if self.value(name).as_deref() == Some(expected) {
+                break;
+            }
+        }
+        assert_eq!(self.value(name).as_deref(), Some(expected));
+    }
+    fn start_until_value(
+        &self,
+        source: &str,
+        turns: usize,
+        name: &str,
+        expected: &str,
+    ) -> JoinHandle<i32> {
+        let job = self.shell.start(source).unwrap();
+        self.drive_until_value(turns, name, expected);
+        job
+    }
+    fn interrupt_without_calls(&self, job: JoinHandle<i32>) {
+        assert!(!job.is_finished());
+        self.shell.interrupt();
+        assert_eq!(self.finish(job), 130);
+        assert!(self.calls.borrow().is_empty());
+    }
     fn finish(&self, job: JoinHandle<i32>) -> i32 {
         for _ in 0..100_000 {
             if job.is_finished() {
@@ -105,7 +139,7 @@ impl Rig {
                 .borrow()
                 .bindings()
                 .get(name)
-                .map(String::as_str)
+                .map(|value| value.as_str())
                 == Some(value)
             {
                 return;
@@ -664,7 +698,6 @@ fn unsupported_case_targets_transformations_and_selected_patterns_fail_closed() 
         "${PIPESTATUS[@],,}",
         "${PIPESTATUS^^}",
         "${!v^^}",
-        "${v@U}",
         "${v~}",
         "${v~~}",
         "${v^^~}",
@@ -1179,15 +1212,7 @@ fn trim_selected_substitution_patterns_reach_default_assignment_and_error_operan
             rig.variable("v", "abc");
             assert_eq!(rig.run(&format!("args {form}")), 0, "{form}");
             assert_eq!(*rig.calls.borrow(), &[vec!["pattern"], vec!["bc"]]);
-            assert_eq!(
-                rig.shell
-                    .state()
-                    .borrow()
-                    .bindings()
-                    .get("u")
-                    .map(String::as_str),
-                assigned.then_some("bc"),
-            );
+            assert_eq!(rig.value("u").as_deref(), assigned.then_some("bc"),);
         }
         let rig = Rig::new(Limits::default());
         rig.variable("v", "abc");
@@ -1495,14 +1520,7 @@ fn lazy_lengths_keep_quote_ifs_and_scalar_context_rules() {
 
 #[test]
 fn unsupported_length_targets_fail_closed_even_in_selected_operands() {
-    for token in [
-        "${#0}",
-        "${#@}",
-        "${#*}",
-        "${#arr[0]}",
-        "${#arr[@]}",
-        "${#arr[*]}",
-    ] {
+    for token in ["${#0}", "${#@}", "${#*}"] {
         for source in [format!("args {token}"), format!("args ${{u:-{token}}}")] {
             let rig = Rig::new(Limits::default());
             assert_eq!(rig.run(&source), 2, "{source}");
@@ -1966,24 +1984,7 @@ fn long_splitting_yields_and_cancellation_restores_frames() {
         .shell
         .start("f() { local IFS=' '; args $v; }; f inner")
         .unwrap();
-    for _ in 0..200 {
-        rig.ex.drive(1);
-        if rig
-            .shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("IFS")
-            .map(String::as_str)
-            == Some(" ")
-        {
-            break;
-        }
-    }
-    assert_eq!(
-        rig.shell.state().borrow().bindings().get("IFS").unwrap(),
-        " "
-    );
+    rig.drive_until_value(200, "IFS", " ");
     let peer = rig.ex.spawn(async { 42 });
     rig.ex.drive(4);
     assert!(
@@ -2240,15 +2241,7 @@ fn selected_operand_scanning_yields_and_cancellation_restores_local_frames() {
     let job = rig.shell.start(&source).unwrap();
     for _ in 0..200 {
         rig.ex.drive(1);
-        if rig
-            .shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("v")
-            .map(String::as_str)
-            == Some("inner")
-        {
+        if rig.value("v").as_deref() == Some("inner") {
             break;
         }
     }
@@ -2308,15 +2301,7 @@ fn cancellation_during_nested_token_admission_never_dispatches() {
     let job = rig.shell.start(&source).unwrap();
     for _ in 0..100 {
         rig.ex.drive(1);
-        if rig
-            .shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("v")
-            .map(String::as_str)
-            == Some("inner")
-        {
+        if rig.value("v").as_deref() == Some("inner") {
             break;
         }
     }
@@ -2828,15 +2813,7 @@ fn deferred_list_separator_replay_yields_and_cancels_after_the_ifs_write() {
     let job = rig.shell.start(&source).unwrap();
     for _ in 0..1000 {
         rig.ex.drive(1);
-        if rig
-            .shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("IFS")
-            .map(String::as_str)
-            == Some(":")
-        {
+        if rig.value("IFS").as_deref() == Some(":") {
             break;
         }
     }
@@ -2908,24 +2885,7 @@ fn deferred_ifs_splitting_yields_and_cancels_after_the_parameter_write() {
         .shell
         .start("f() { local IFS=; args ${v}${IFS:= }; }; f")
         .unwrap();
-    for _ in 0..1000 {
-        rig.ex.drive(1);
-        if rig
-            .shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("IFS")
-            .map(String::as_str)
-            == Some(" ")
-        {
-            break;
-        }
-    }
-    assert_eq!(
-        rig.shell.state().borrow().bindings().get("IFS").unwrap(),
-        " "
-    );
+    rig.drive_until_value(1000, "IFS", " ");
     let peer = rig.ex.spawn(async { 42 });
     rig.ex.drive(4);
     assert!(peer.is_finished());
@@ -3459,11 +3419,11 @@ fn parameter_writes_share_storage_admission_even_when_fields_fit() {
     let state = rig.shell.state();
     let state = state.borrow();
     assert_eq!(
-        state.bindings().get("aa").map(String::as_str),
+        state.bindings().get("aa").map(|value| value.as_str()),
         Some("123456789")
     );
     assert_eq!(
-        state.bindings().get("bb").map(String::as_str),
+        state.bindings().get("bb").map(|value| value.as_str()),
         Some("123456789")
     );
     assert!(!state.bindings().contains_key("cc"));
@@ -3477,27 +3437,9 @@ fn cancellation_keeps_completed_rhs_effects_and_restores_local_prefix_frames() {
         "f() {{ local v=; a=${{saved:=yes}} b=${{v:=inner}} c=${{long:={}}} args; }}; f arg",
         "x".repeat(100_000)
     );
-    let job = rig.shell.start(&source).unwrap();
-    for _ in 0..500 {
-        rig.ex.drive(1);
-        if rig.shell.state().borrow().bindings().contains_key("saved") {
-            break;
-        }
-    }
-    assert_eq!(
-        rig.shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("saved")
-            .map(String::as_str),
-        Some("yes")
-    );
+    let job = rig.start_until_value(&source, 500, "saved", "yes");
     rig.ex.drive(4);
-    assert!(!job.is_finished());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert!(rig.calls.borrow().is_empty());
+    rig.interrupt_without_calls(job);
     assert_eq!(rig.run(r#"args "$saved" "$v" "$a" "$b" "$long" "$#""#), 0);
     assert_eq!(
         *rig.calls.borrow(),
@@ -3539,26 +3481,8 @@ fn cancellation_during_error_operand_keeps_effects_without_partial_diagnostic() 
         "f() {{ local v=inside; args ${{u:?${{saved:=yes}}{}}}; }}; f arg",
         "x".repeat(100_000)
     );
-    let job = rig.shell.start(&source).unwrap();
-    for _ in 0..500 {
-        rig.ex.drive(1);
-        if rig.shell.state().borrow().bindings().contains_key("saved") {
-            break;
-        }
-    }
-    assert_eq!(
-        rig.shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("saved")
-            .map(String::as_str),
-        Some("yes")
-    );
-    assert!(!job.is_finished());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert!(rig.calls.borrow().is_empty());
+    let job = rig.start_until_value(&source, 500, "saved", "yes");
+    rig.interrupt_without_calls(job);
     assert!(rig.errors.bytes().is_empty());
     assert_eq!(rig.run(r#"args "$saved" "$v" "$#""#), 0);
     assert_eq!(*rig.calls.borrow(), &[vec!["yes", "", "0"]]);
@@ -4037,22 +3961,7 @@ fn cancellation_during_redirect_target_keeps_effects_and_restores_frames() {
         "f() {{ local v=inner; echo body 2>&1 >${{u:?${{saved:=yes}}{}}}; }}; f arg",
         "x".repeat(100_000)
     );
-    let job = rig.shell.start(&source).unwrap();
-    for _ in 0..500 {
-        rig.ex.drive(1);
-        if rig.shell.state().borrow().bindings().contains_key("saved") {
-            break;
-        }
-    }
-    assert_eq!(
-        rig.shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("saved")
-            .map(String::as_str),
-        Some("yes")
-    );
+    let job = rig.start_until_value(&source, 500, "saved", "yes");
     assert!(!job.is_finished());
     rig.shell.interrupt();
     assert_eq!(rig.finish(job), 130);
@@ -4116,6 +4025,9 @@ mod echo;
 #[path = "words/read_count.rs"]
 mod read_count;
 
+#[path = "words/transformation.rs"]
+mod transformation;
+
 #[path = "words/printf_escaped_fields.rs"]
 mod printf_escaped_fields;
 #[path = "words/printf_fields.rs"]
@@ -4136,6 +4048,330 @@ mod printf_options;
 #[path = "words/printf_quoting.rs"]
 mod printf_quoting;
 
+#[path = "words/builtin_wrapper.rs"]
+mod builtin_wrapper;
+
+#[test]
+fn indexed_arrays_compound_sparse_and_quoted_fields() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("a=('one two' '' three); a[7]=last; args \"${a[@]}\" \"${a[7]}\" \"${#a[@]}\""),
+        0
+    );
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["one two", "", "three", "last", "last", "4"]]
+    );
+}
+
+#[test]
+fn indexed_arrays_append_scalar_zero_and_negative_index() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run(
+            "a=zero; a[3]=three; a+=(four five); a[-1]=LAST; a=new; args \"${a[@]}\" \"${a[-2]}\""
+        ),
+        0
+    );
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["new", "three", "four", "LAST", "four"]]
+    );
+}
+
+#[test]
+fn indexed_arrays_restore_prefix_local_and_subshell_bindings() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(outer kept); a=prefix echo \"$a\"; f() { local a=local; a=(inner x); args \"${a[@]}\"; }; f; (a=(child)); args \"${a[@]}\""), 0);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["inner", "x"], vec!["outer", "kept"]]
+    );
+}
+
+#[test]
+fn indexed_arrays_lengths_empty_lists_and_scalar_zero() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(); args \"${a[@]}\"; a[7]=last; args \"$a\" \"${a[*]}\" \"${#a[@]}\" \"${#a[7]}\"; a+=zero; args \"${a[@]}\""), 0);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![
+            Vec::<String>::new(),
+            vec!["", "last", "1", "4"]
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+            vec!["zero", "last"]
+                .into_iter()
+                .map(str::to_owned)
+                .collect()
+        ]
+    );
+}
+
+#[test]
+fn indexed_arrays_readonly_and_scalar_builtin_writes_preserve_elements() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(old kept); printf -v a %s new; args \"${a[@]}\"; a=prefix printf -v a %s temporary; args \"${a[@]}\""), 0);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["new", "kept"], vec!["new", "kept"]]
+    );
+    assert_eq!(rig.run("readonly a; a[3]=bad"), 1);
+    assert_eq!(rig.run("args \"${a[@]}\""), 0);
+    assert_eq!(rig.calls.borrow().last().unwrap(), &vec!["new", "kept"]);
+}
+
+#[test]
+fn indexed_arrays_reject_oversize_replacement_before_changing_binding() {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 2048,
+        ..Limits::default()
+    });
+    assert_eq!(rig.run("a=(saved kept)"), 0);
+    assert_eq!(rig.run(&format!("a=({})", "x".repeat(2049))), 2);
+    assert_eq!(rig.run("args \"${a[@]}\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["saved", "kept"]]);
+}
+
+#[test]
+fn indexed_arrays_element_length_and_reads_obey_nounset() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(set); set -u; args \"${a[5]}\""), 127);
+    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.run("args \"${#a[5]}\""), 0);
+    assert_eq!(rig.run("a=(); args \"${#a[@]}\" \"${a[@]}\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["0"], vec!["0"]]);
+}
+
+#[test]
+fn indexed_review_rhs_precedes_subscript_side_effects() {
+    check(
+        "a=(x y); i=0; a[i++]=${i} a[i++]=${i}; args \"$i\" \"${a[@]}\"",
+        &[&["2", "0", "1"]],
+    );
+}
+
+#[test]
+fn indexed_review_invalid_negative_assignment_ends_read_unit() {
+    for (source, subscript) in [
+        ("a=(); a[-1]=x; args AFTER", "-1"),
+        ("a=(x y); a[-3]=z; args AFTER", "-3"),
+        ("a=(x y); i=-3; a[i]=z; args AFTER", "i"),
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 1, "{source}");
+        assert_eq!(
+            rig.errors.bytes(),
+            format!("/usr/bin/bash: line 1: a[{subscript}]: bad array subscript\n").as_bytes()
+        );
+        assert!(rig.calls.borrow().is_empty(), "{source}");
+    }
+}
+
+#[test]
+fn indexed_review_negative_reads_at_largest_sparse_index() {
+    check(
+        "a=(zero one); a[9223372036854775807]=last; args \"${a[-1]}\" \"${a[-9223372036854775808]}\"",
+        &[&["last", "zero"]],
+    );
+}
+
+#[test]
+fn indexed_review_array_ifs_disables_field_splitting() {
+    for assignment in ["IFS=(, :)", "IFS=()", "IFS=,; IFS[1]=:"] {
+        check(
+            &format!("{assignment}; v='x,y:z q'; args $v; IFS=,; args $v"),
+            &[&["x,y:z q"], &["x,y:z q"]],
+        );
+    }
+}
+
+#[test]
+fn indexed_review_local_scalar_ifs_restores_array_binding() {
+    check(
+        "IFS=(, :); v='x,y:z'; f() { local IFS=,; args $v; }; f; args $v",
+        &[&["x", "y:z"], &["x,y:z"]],
+    );
+}
+
+#[test]
+fn indexed_r1_incremental_writes_fit_default_limits() {
+    check(
+        "for ((i=0; i<5000; i++)); do a[i]=x || break; done; args \"$i\" \"${#a[@]}\" \"${a[4999]}\"",
+        &[&["5000", "5000", "x"]],
+    );
+}
+
+#[test]
+fn indexed_r1_incremental_appends_fit_default_limits() {
+    check(
+        "for ((i=0; i<5000; i++)); do a+=(x) || break; done; args \"$i\" \"${#a[@]}\" \"${a[4999]}\"",
+        &[&["5000", "5000", "x"]],
+    );
+}
+
+#[test]
+fn indexed_r1_compound_ten_thousand_elements_fit_default_limits() {
+    check(
+        "a=({1..10000}); args \"$?\" \"${#a[@]}\" \"${a[9999]}\"",
+        &[&["0", "10000", "10000"]],
+    );
+}
+
+#[test]
+fn indexed_r1_explicit_compound_subscripts_fail_closed() {
+    for source in ["a=([0]=x [5]=y)", "a+=([1]+=x)", "a=([$i]=x)"] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run("a=(saved kept)"), 0);
+        assert_eq!(rig.run(source), 2, "{source}");
+        assert_eq!(rig.run("args \"${a[@]}\""), 0);
+        assert_eq!(*rig.calls.borrow(), vec![vec!["saved", "kept"]]);
+    }
+    check(
+        "a=('[0]=x' \"[5]+=y\" \\[7]=z); args \"${a[@]}\"",
+        &[&["[0]=x", "[5]+=y", "[7]=z"]],
+    );
+}
+
+#[test]
+fn indexed_r1_pipeline_element_lengths_use_special_producer() {
+    check(
+        "true | false; args \"${#PIPESTATUS[0]}\" \"${#PIPESTATUS[1]}\" \"${#PIPESTATUS[8]}\"; false; args \"${u:-${#PIPESTATUS[0]}}\"",
+        &[&["1", "1", "0"], &["1"]],
+    );
+}
+
+#[test]
+fn indexed_r1_pipeline_negative_element_lengths_use_special_producer() {
+    check(
+        "true | false; args \"${#PIPESTATUS[0]}\" \"${#PIPESTATUS[1]}\" \"${#PIPESTATUS[8]}\" \"${#PIPESTATUS[-1]}\" \"${#PIPESTATUS[-2]}\"",
+        &[&["1", "1", "0", "1", "1"]],
+    );
+}
+
+#[test]
+fn indexed_r1_pipeline_negative_lengths_in_selected_operands() {
+    check(
+        "true | false; args \"${u:-${#PIPESTATUS[-1]}}\" \"${u:-${#PIPESTATUS[-2]}}\"",
+        &[&["1", "1"]],
+    );
+}
+
+#[test]
+fn indexed_r1_pipeline_negative_lengths_obey_nounset_and_missing_policy() {
+    check(
+        "set -u; true | false; args \"${#PIPESTATUS[-1]}\" \"${#PIPESTATUS[-2]}\" \"${#PIPESTATUS[8]}\" \"${#PIPESTATUS[9223372036854775807]}\"",
+        &[&["1", "1", "0", "0"]],
+    );
+}
+
+#[test]
+fn indexed_r1_pipeline_negative_lengths_reject_invalid_boundaries() {
+    for options in ["", "set -u; "] {
+        for subscript in ["-3", "-9223372036854775808"] {
+            let rig = Rig::new(Limits::default());
+            let source = format!(
+                "{options}true | false; args \"${{#PIPESTATUS[{subscript}]}}\"; args AFTER"
+            );
+            assert_eq!(rig.run(&source), 1, "{source}");
+            assert_eq!(
+                rig.errors.bytes(),
+                format!("/usr/bin/bash: line 1: [{subscript}]: bad array subscript\n").as_bytes()
+            );
+            assert!(rig.calls.borrow().is_empty(), "{source}");
+        }
+    }
+}
+
+#[test]
+fn indexed_r1_completed_assignments_survive_later_errors() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("a=(x y)\na[0]=new a[-3]=bad; args SAME\nargs \"$?\" \"${a[@]}\""),
+        0
+    );
+    assert_eq!(*rig.calls.borrow(), vec![vec!["1", "new", "y"]]);
+}
+
+#[test]
+fn indexed_r1_completed_scalar_assignments_survive_later_errors() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("x=old; readonly r\nx=new r=bad\nargs \"$?\" \"$x\""),
+        0
+    );
+    assert_eq!(*rig.calls.borrow(), vec![vec!["1", "new"]]);
+}
+
+fn cancel_indexed_assignment(rig: &Rig, source: &str) {
+    let job = rig.shell.start(source).unwrap();
+    rig.ex.drive(256);
+    assert!(!job.is_finished());
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+}
+
+fn assert_indexed_calls(rig: &Rig, expected: &[&str]) {
+    let calls = rig.calls.borrow();
+    assert!(!calls.is_empty());
+    for call in calls.iter() {
+        assert_eq!(call, expected);
+    }
+}
+
+#[test]
+fn indexed_r1_cancelled_staging_preserves_live_array_and_refunds_invocation() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(saved kept)"), 0);
+    for _ in 0..8 {
+        cancel_indexed_assignment(&rig, "a=(new $(while true; do :; done))");
+        assert_eq!(rig.run("args \"${a[@]}\""), 0);
+    }
+    assert_indexed_calls(&rig, &["saved", "kept"]);
+}
+
+#[test]
+fn indexed_r1_resource_rejection_rolls_back_completed_writes() {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 4096,
+        ..Limits::default()
+    });
+    assert_eq!(rig.run("a=(saved kept); x=old"), 0);
+    rig.variable("VALUE", &"x".repeat(4090));
+    for source in ["a[0]=new b=$VALUE", "a+=(new) b=$VALUE", "x=new b=$VALUE"] {
+        assert_eq!(rig.run(source), 2, "{source}");
+        assert_eq!(rig.run("args \"${a[@]}\" \"$x\""), 0);
+    }
+    assert_indexed_calls(&rig, &["saved", "kept", "old"]);
+}
+
+#[test]
+fn indexed_r1_cancellation_rolls_back_completed_writes() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(saved kept); x=old"), 0);
+    for prefix in ["a[0]=new", "a+=(new)", "x=new"] {
+        let source = format!("{prefix} b=$(while true; do :; done)");
+        cancel_indexed_assignment(&rig, &source);
+        assert_eq!(rig.run("args \"${a[@]}\" \"$x\""), 0);
+    }
+    assert_indexed_calls(&rig, &["saved", "kept", "old"]);
+}
+
+#[test]
+fn indexed_r1_cancellation_keeps_later_durable_rhs_writes_to_completed_targets() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=('' kept); x=old"), 0);
+    cancel_indexed_assignment(
+        &rig,
+        "a[0]= x= y=${a:=durable} z=${x:=effect} b=$(while true; do :; done)",
+    );
+    assert_eq!(rig.run("args \"${a[@]}\" \"$x\" \"$y\" \"$z\""), 0);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["durable", "kept", "effect", "", ""]]
+    );
+}
 #[path = "words/getopts.rs"]
 mod getopts;
 

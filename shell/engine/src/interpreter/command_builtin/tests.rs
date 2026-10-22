@@ -21,6 +21,7 @@ struct Host {
     inner: InProcessHost,
     stall: Cell<bool>,
     requests: Cell<usize>,
+    spawns: Cell<usize>,
     live: Rc<Cell<usize>>,
 }
 impl ProcessHost for Host {
@@ -53,6 +54,7 @@ impl ProcessHost for Host {
         .boxed_local()
     }
     fn spawn(&self, request: SpawnRequest) -> Result<ProcessId, ProcessError> {
+        self.spawns.set(self.spawns.get() + 1);
         self.inner.spawn(request)
     }
     fn wait_start(
@@ -112,6 +114,7 @@ impl Rig {
             inner: InProcessHost::new(executor.clone()),
             stall: Cell::new(false),
             requests: Cell::new(0),
+            spawns: Cell::new(0),
             live: Rc::new(Cell::new(0)),
         });
         host.inner
@@ -137,6 +140,49 @@ impl Rig {
     }
     fn run(&self, source: &str) -> i32 {
         finish(&self.executor, self.session.start(source).unwrap())
+    }
+    fn dispatch_wrappers(
+        &self,
+        argv: Vec<String>,
+        steps: usize,
+        cancel: Cancel,
+        line: Option<usize>,
+    ) -> JoinHandle<Result<Outcome, i32>> {
+        let core = self.session.core.clone();
+        let group = self.host.allocate_group();
+        let signal = Rc::new(Cell::new(None));
+        let context = Context {
+            evaluation: crate::exec::Scope::new(
+                core.limits.source_bytes,
+                core.eval_storage.clone(),
+                core.execution_storage.clone(),
+            ),
+            source: crate::exec::Source::root(""),
+            scope: Scope::new(0),
+            group,
+            invocation_group: group,
+            signal: signal.clone(),
+            lifetime: (cancel.clone(), signal),
+            cancel,
+            parameter_error_status: 127,
+            loop_depth: 0,
+            ignore_errexit: false,
+            compound_child: false,
+            core,
+        };
+        let prepared = PreparedCommand {
+            line,
+            argv,
+            assigned: Vec::new(),
+            fds: self.session.core.descriptors.clone(),
+            work: expand::Work::new(steps, 0, 0),
+        };
+        self.executor.spawn(dispatch_simple_command(
+            prepared,
+            self.session.state.clone(),
+            context,
+            WeakStderr::Closed,
+        ))
     }
     fn path(&self, value: &str) {
         self.session
@@ -331,4 +377,144 @@ fn lookup_scan_fuel_is_shared_by_all_query_operands_but_not_later_commands() {
         requests < 3200,
         "all operands must share one scan allowance"
     );
+}
+
+#[test]
+fn builtin_wrapper_rejected_targets_never_access_or_spawn_registered_externals() {
+    let rig = Rig::new(Limits::default());
+    rig.path("/home/guest/a");
+    for source in [
+        "builtin probe",
+        "command builtin probe",
+        "builtin /home/guest/a/probe",
+        "builtin if",
+        "builtin absent",
+    ] {
+        assert_eq!(rig.run(source), 1, "{source}");
+    }
+    assert_eq!(rig.host.requests.get(), 0);
+    assert_eq!(rig.host.spawns.get(), 0);
+    assert_eq!(rig.host.inner.active_count(), 0);
+    assert_eq!(rig.host.inner.retained_count(), 0);
+    rig.shutdown();
+}
+
+#[test]
+fn builtin_wrapper_selection_spends_shared_work_without_recharging_argv() {
+    let rig = Rig::new(Limits::default());
+    let words = || vec!["builtin".into(), "command".into(), "true".into()];
+    for steps in [0, 1] {
+        let job = rig.dispatch_wrappers(words(), steps, Cancel::new(), Some(9));
+        assert_eq!(finish(&rig.executor, job).unwrap_err(), 2);
+    }
+    let job = rig.dispatch_wrappers(words(), 2, Cancel::new(), Some(9));
+    assert_eq!(finish(&rig.executor, job).unwrap().code, 0);
+    assert_eq!(rig.host.requests.get(), 0);
+    assert_eq!(rig.host.spawns.get(), 0);
+    rig.shutdown();
+}
+
+#[test]
+fn builtin_wrapper_selection_yields_and_cancels_without_host_requests() {
+    let rig = Rig::new(Limits::default());
+    let before = rig.session.core.execution_storage.observation().0;
+    let mut words = vec!["builtin".to_owned(); 8192];
+    words.push("true".into());
+    let cancel = Cancel::new();
+    let job = rig.dispatch_wrappers(words, 8192, cancel.clone(), Some(9));
+    rig.executor.drive(1);
+    assert!(!job.is_finished(), "wrapper traversal must yield");
+    let peer = rig.executor.spawn(async { 7 });
+    rig.executor.drive(4);
+    assert!(peer.is_finished());
+    assert!(!job.is_finished());
+    cancel.cancel();
+    assert_eq!(finish(&rig.executor, job).unwrap_err(), 130);
+    assert_eq!(rig.host.requests.get(), 0);
+    assert_eq!(rig.host.spawns.get(), 0);
+    assert_eq!(rig.session.core.execution_storage.observation().0, before);
+    rig.shutdown();
+}
+
+#[test]
+fn builtin_wrapper_blocked_diagnostic_cancellation_releases_all_frames() {
+    let rig = Rig::new(Limits::default());
+    let (reader, writer) = io::pipe();
+    let mut fds = rig.session.core.descriptors.borrow().clone();
+    fds.insert(2, writer);
+    rig.session.set_descriptors(fds).unwrap();
+    let source = format!("a=temporary builtin {}", "n".repeat(96 * 1024));
+    let job = rig.session.start(&source).unwrap();
+    for _ in 0..1000 {
+        rig.executor.drive(64);
+    }
+    assert!(
+        !job.is_finished(),
+        "the bounded stderr pipe must backpressure"
+    );
+    rig.session.interrupt();
+    assert_eq!(finish(&rig.executor, job), 130);
+    assert!(!rig.session.state.borrow().bindings().contains_key("a"));
+    assert_eq!(rig.host.requests.get(), 0);
+    assert_eq!(rig.host.spawns.get(), 0);
+    drop(reader);
+    rig.shutdown();
+}
+
+#[test]
+fn builtin_wrapper_usage_diagnostic_cancellation_and_broken_pipe() {
+    let rig = Rig::new(Limits::default());
+    let before = rig.session.core.execution_storage.observation().0;
+    let (reader, writer) = io::pipe();
+    assert_eq!(
+        writer.write(&vec![0; io::PIPE_CAPACITY]).now_or_never(),
+        Some(Ok(io::PIPE_CAPACITY))
+    );
+    let mut fds = rig.session.core.descriptors.borrow().clone();
+    fds.insert(2, writer);
+    rig.session.set_descriptors(fds).unwrap();
+    let job = rig.session.start("a=temporary builtin -z").unwrap();
+    rig.executor.drive(1024);
+    assert!(!job.is_finished());
+    rig.session.interrupt();
+    assert_eq!(finish(&rig.executor, job), 130);
+    assert_eq!(rig.session.core.execution_storage.observation().0, before);
+    assert!(!rig.session.state.borrow().bindings().contains_key("a"));
+    drop(reader);
+    assert_eq!(rig.run("builtin -z"), 141);
+    assert_eq!(rig.host.requests.get(), 0);
+    assert_eq!(rig.host.spawns.get(), 0);
+    rig.shutdown();
+}
+
+#[test]
+fn builtin_wrapper_unknown_line_omits_numeric_label() {
+    for (args, status, expected) in [
+        (
+            vec!["builtin".into(), "missing".into()],
+            1,
+            "/usr/bin/bash: builtin: missing: not a shell builtin\n",
+        ),
+        (
+            vec!["builtin".into(), "-z".into()],
+            2,
+            "/usr/bin/bash: builtin: -z: invalid option\nbuiltin: usage: builtin [shell-builtin [arg ...]]\n",
+        ),
+    ] {
+        let rig = Rig::new(Limits::default());
+        let mut fds = rig.session.core.descriptors.borrow().clone();
+        fds.insert(2, fds.get(1).unwrap().clone());
+        rig.session.set_descriptors(fds).unwrap();
+        let job = rig.dispatch_wrappers(args, 1, Cancel::new(), None);
+        assert_eq!(
+            finish(&rig.executor, job)
+                .map(|outcome| outcome.code)
+                .unwrap_or_else(|code| code),
+            status
+        );
+        assert_eq!(rig.output.bytes(), expected.as_bytes());
+        assert_eq!(rig.host.requests.get(), 0);
+        assert_eq!(rig.host.spawns.get(), 0);
+        rig.shutdown();
+    }
 }

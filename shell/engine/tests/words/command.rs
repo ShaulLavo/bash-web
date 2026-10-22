@@ -515,7 +515,7 @@ fn async_identity_obeys_nounset_before_launch_and_is_bound_after_completion() {
         b"/usr/bin/bash: line 1: !: unbound variable\n"
     );
     assert_eq!(rig.run(r#"false & pid=$!; wait "$pid"; args "$?" "$!""#), 0);
-    let pid = rig.shell.state().borrow().bindings()["pid"].clone();
+    let pid = rig.value("pid").unwrap();
     assert_eq!(*rig.calls.borrow(), [vec!["1".to_owned(), pid]]);
 }
 
@@ -527,8 +527,8 @@ fn numeric_async_handles_select_pending_children_independently_of_job_numbers() 
     let job = rig.shell.start(r#"first & one=$!; second & two=$!; ready=yes; wait "$two"; args second "$?"; wait %1; args first "$?"; args "$!""#).unwrap();
     rig.drive_until_variable("ready", "yes");
     assert_eq!(rig.host.active_count(), 2);
-    let one = rig.shell.state().borrow().bindings()["one"].clone();
-    let two = rig.shell.state().borrow().bindings()["two"].clone();
+    let one = rig.shell.state().borrow().bindings()["one"].to_string();
+    let two = rig.shell.state().borrow().bindings()["two"].to_string();
     assert_ne!(one, two);
     second.cancel();
     for _ in 0..200 {
@@ -592,7 +592,7 @@ fn bounded_wait_history_evicts_completed_handles_without_evicting_pending_jobs()
     for round in 0..32 {
         assert_eq!(rig.run(r#"false & pid=$!; wait "$pid"; wait "$pid""#), 1);
         if round == 0 {
-            oldest = rig.shell.state().borrow().bindings()["pid"].clone();
+            oldest = rig.value("pid").unwrap();
         }
         assert_eq!(rig.shell.background_jobs(), 1);
         assert_eq!(rig.host.active_count(), 1);
@@ -626,7 +626,7 @@ fn async_identity_expands_in_nested_operands_and_arithmetic_without_reparsing_a_
         rig.run(r#"false & pid=$!; args "${u:-$!}" "${u:-${!}}" "$(( $! > 0 ))"; wait "$pid""#),
         1
     );
-    let pid = rig.shell.state().borrow().bindings()["pid"].clone();
+    let pid = rig.value("pid").unwrap();
     assert_eq!(
         *rig.calls.borrow(),
         [vec![pid.clone(), pid, "1".to_owned()]]
@@ -648,7 +648,7 @@ fn braced_async_identity_is_empty_before_launch_and_readable_under_nounset_after
         rig.run(r#"false & pid=$!; set -u; args "$!" "${!}" "${u:-${!}}"; wait "$pid""#),
         1
     );
-    let pid = rig.shell.state().borrow().bindings()["pid"].clone();
+    let pid = rig.value("pid").unwrap();
     assert_eq!(*rig.calls.borrow(), [vec![pid.clone(), pid.clone(), pid]]);
 
     let rig = Rig::new(Limits::default());
@@ -674,7 +674,7 @@ fn async_scalar_operators_test_presence_lazily_in_direct_and_nested_operands() {
         assert_eq!(rig.run(
             r#"false & pid=$!; args "${!-fallback}" "${!:-fallback}" "${!+set}" "${!:+set}" "${u:-${!+set}}" "${!:=unused}" "${!:?$missing}"; wait "$pid""#
         ), 1);
-        let pid = rig.shell.state().borrow().bindings()["pid"].clone();
+        let pid = rig.value("pid").unwrap();
         assert_eq!(
             rig.calls.borrow()[1],
             [
@@ -820,7 +820,7 @@ fn invalid_signal_preserves_a_finite_background_job_and_wait_status() {
 fn isolated_readers_inherit_async_identity_without_changing_the_caller() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run(r#"false & parent=$!; capture=$(wait "$parent"; status=$?; true & child=$!; wait %1; printf '%s:%s:%s' "$status" "$parent" "$!"); args "$parent" "$!" "$capture"; (args "$!"; wait "$parent"; args $?; false & local=$!; args "$local" "$!"; wait "$local"; args $?); args "$!"; args "$!" | :; wait "$parent"; args $?"#), 0);
-    let parent = rig.shell.state().borrow().bindings()["parent"].clone();
+    let parent = rig.shell.state().borrow().bindings()["parent"].to_string();
     let calls = rig.calls.borrow();
     assert_eq!(calls.len(), 8);
     assert_eq!(calls[0][0], parent);
@@ -852,8 +852,8 @@ fn background_children_inherit_the_previous_async_identity() {
     assert_eq!(
         *rig.calls.borrow(),
         [
-            vec![state.bindings()["previous"].clone()],
-            vec![state.bindings()["current"].clone()],
+            vec![state.bindings()["previous"].to_string()],
+            vec![state.bindings()["current"].to_string()],
             vec!["1".to_owned()]
         ]
     );
@@ -873,7 +873,7 @@ fn process_substitution_handles_retain_status_without_taking_job_numbers() {
             vec!["1".to_owned()],
             vec!["0".to_owned()],
             vec!["1".to_owned()],
-            vec![state.bindings()["background"].clone()],
+            vec![state.bindings()["background"].to_string()],
             vec!["0".to_owned()]
         ]
     );
@@ -901,7 +901,10 @@ fn process_substitution_inherits_the_callers_previous_async_identity() {
     );
     assert_eq!(
         *rig.calls.borrow(),
-        [vec!["0".to_owned(), state.bindings()["process"].clone()]]
+        [vec![
+            "0".to_owned(),
+            state.bindings()["process"].to_string()
+        ]]
     );
 }
 
@@ -1040,11 +1043,11 @@ fn failed_builtin_prefix_admission_restores_existing_and_absent_bindings() {
         let state = rig.shell.state();
         let state = state.borrow();
         assert_eq!(
-            state.bindings().get("a").map(String::as_str),
+            state.bindings().get("a").map(|value| value.as_str()),
             existing.then_some("before_a")
         );
         assert_eq!(
-            state.bindings().get("b").map(String::as_str),
+            state.bindings().get("b").map(|value| value.as_str()),
             existing.then_some("before_b")
         );
         assert!(rig.calls.borrow().is_empty());
