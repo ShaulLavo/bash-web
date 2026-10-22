@@ -400,6 +400,179 @@
       "status": 0,
       "stdout": "got:trap -- 'echo parent' EXIT\ngot:trap -- '' SIGINT\n",
       "stderr": ""
+    },
+    {
+      "id": "process-substitution-reset-signals",
+      "code": "trap 'echo p' INT; trap '' TERM; trap 'echo x' EXIT; while read -r l; do echo \"got:$l\"; done < <(trap -p); trap - INT TERM EXIT",
+      "status": 0,
+      "stdout": "got:trap -- '' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "process-substitution-nested-query",
+      "code": "trap 'echo p' INT; trap '' TERM; trap 'echo x' EXIT; while read -r l; do echo \"got:$l\"; done < <(trap -p; (trap -p)); trap - INT TERM EXIT",
+      "status": 0,
+      "stdout": "got:trap -- '' SIGTERM\ngot:trap -- '' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "process-substitution-special-mutation",
+      "code": "trap 'echo e' ERR; trap '' RETURN; while read -r l; do echo \"got:$l\"; done < <(trap : HUP; trap -p); trap - ERR RETURN",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGHUP\ngot:trap -- 'echo e' ERR\ngot:trap -- '' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "process-substitution-ignored-exit",
+      "code": "trap '' EXIT INT DEBUG ERR RETURN; while read -r l; do echo \"got:$l\"; done < <(trap : HUP; trap -p); trap - EXIT INT DEBUG ERR RETURN",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGHUP\ngot:trap -- '' SIGINT\ngot:trap -- '' DEBUG\ngot:trap -- '' ERR\ngot:trap -- '' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "process-substitution-nested-mutation",
+      "code": "trap 'echo e' ERR; trap '' TERM RETURN; while read -r l; do echo \"got:$l\"; done < <((trap : HUP; trap -p); trap -p); trap - ERR TERM RETURN",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGHUP\ngot:trap -- '' SIGTERM\ngot:trap -- '' SIGTERM\ngot:trap -- 'echo e' ERR\ngot:trap -- '' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "invalid-digit-action",
+      "code": "trap old INT; trap 99 INT; echo s:$?; trap -p INT; trap - INT",
+      "status": 0,
+      "stdout": "s:0\ntrap -- '99' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "invalid-padded-digit-action",
+      "code": "trap old INT TERM; trap 0099 INT TERM; echo s:$?; trap -p; trap - INT TERM",
+      "status": 0,
+      "stdout": "s:0\ntrap -- '0099' SIGINT\ntrap -- '0099' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "unrecorded-aliases",
+      "code": "trap : IOT CLD POLL; echo s:$?; trap -p; trap - 6 17 29",
+      "status": 0,
+      "stdout": "s:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: IOT: invalid signal specification\n/usr/bin/bash: line 1: trap: CLD: invalid signal specification\n/usr/bin/bash: line 1: trap: POLL: invalid signal specification\n"
+    },
+    {
+      "id": "unrecorded-prefixed-aliases",
+      "code": "trap : SIGIOT SIGCLD SIGPOLL; echo s:$?; trap -p; trap - 6 17 29",
+      "status": 0,
+      "stdout": "s:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: SIGIOT: invalid signal specification\n/usr/bin/bash: line 1: trap: SIGCLD: invalid signal specification\n/usr/bin/bash: line 1: trap: SIGPOLL: invalid signal specification\n"
+    },
+    {
+      "id": "numeric-placeholder-names-rejected",
+      "code": "trap : 32 33; trap -p SIG32 SIG33; echo q:$?; trap -p 32 33; trap - 32 33",
+      "status": 0,
+      "stdout": "q:1\ntrap -- ':' 32\ntrap -- ':' 33\n",
+      "stderr": "/usr/bin/bash: line 1: trap: SIG32: invalid signal specification\n/usr/bin/bash: line 1: trap: SIG33: invalid signal specification\n"
+    },
+    {
+      "id": "numeric-placeholder-registration-rejected",
+      "code": "trap : SIG32 SIG33; echo s:$?; trap -p; trap - 32 33",
+      "status": 0,
+      "stdout": "s:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: SIG32: invalid signal specification\n/usr/bin/bash: line 1: trap: SIG33: invalid signal specification\n"
+    },
+    {
+      "id": "ignored-err-child-mutation",
+      "code": "trap '' ERR; (trap : INT; trap -p ERR; echo c); trap -p ERR; trap - ERR",
+      "status": 0,
+      "stdout": "c\ntrap -- '' ERR\n",
+      "stderr": ""
+    },
+    {
+      "id": "ignored-debug-return-child-mutation",
+      "code": "trap '' DEBUG RETURN; (trap : INT; trap -p; echo c); trap - DEBUG RETURN",
+      "status": 0,
+      "stdout": "trap -- ':' SIGINT\nc\n",
+      "stderr": ""
+    },
+    {
+      "id": "ignored-exit-signal-child-mutation",
+      "code": "trap '' EXIT TERM DEBUG ERR RETURN; (trap : INT; trap -p); trap -p; trap - EXIT TERM DEBUG ERR RETURN",
+      "status": 0,
+      "stdout": "trap -- '' EXIT\ntrap -- ':' SIGINT\ntrap -- '' SIGTERM\ntrap -- '' EXIT\ntrap -- '' SIGTERM\ntrap -- '' DEBUG\ntrap -- '' ERR\ntrap -- '' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "ignored-special-command-substitution",
+      "code": "trap '' ERR RETURN; x=$(trap : INT; trap -p); printf '[%s]\\n' \"$x\"; trap -p; trap - ERR RETURN",
+      "status": 0,
+      "stdout": "[trap -- ':' SIGINT]\ntrap -- '' ERR\ntrap -- '' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "ignored-special-pipeline-child",
+      "code": "trap '' ERR RETURN; trap : INT | trap -p; trap -p; trap - ERR RETURN",
+      "status": 0,
+      "stdout": "trap -- '' ERR\ntrap -- '' RETURN\ntrap -- '' ERR\ntrap -- '' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "ignored-special-background-child",
+      "code": "trap '' ERR RETURN; { trap : INT; trap -p; } & wait; trap -p; trap - ERR RETURN",
+      "status": 0,
+      "stdout": "trap -- ':' SIGINT\ntrap -- '' ERR\ntrap -- '' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "single-quote-action",
+      "code": "trap \"'\" INT; trap -p INT; trap -P INT; trap - INT",
+      "status": 0,
+      "stdout": "trap -- \\' SIGINT\n'\n",
+      "stderr": ""
+    },
+    {
+      "id": "numeric-leading-whitespace",
+      "code": "trap : ' 2'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "numeric-trailing-whitespace",
+      "code": "trap : '2 '; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "numeric-signed-whitespace",
+      "code": "trap : ' +2 ' ' -0 '; echo s:$?; trap -p; trap - 0 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' EXIT\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "rtmin-negative-zero",
+      "code": "trap : RTMIN+-0; echo s:$?; trap -p; trap - 34",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGRTMIN\n",
+      "stderr": ""
+    },
+    {
+      "id": "rtmin-space-offset",
+      "code": "trap : 'RTMIN+ 5'; echo s:$?; trap -p; trap - 39",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGRTMIN+5\n",
+      "stderr": ""
+    },
+    {
+      "id": "rtmin-signed-offset-control",
+      "code": "trap : RTMIN++5; echo s:$?; trap -p; trap - 39",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGRTMIN+5\n",
+      "stderr": ""
     }
-  ]
+  ],
+  "correctionRecording": {
+    "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "reviewedHead": "6609e3cb0b8b5ababcca7ba0ee0269f09492d337",
+    "addedCases": 24
+  }
 }
