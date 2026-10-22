@@ -22,9 +22,11 @@ pub(crate) mod pattern;
 mod positional;
 mod printable;
 mod replacement;
+mod tilde;
 mod transformation;
 pub(crate) use printable::Printability;
 use std::{borrow::Cow, collections::BTreeSet};
+pub(crate) use tilde::assignment;
 
 pub(crate) use crate::exec::{Error, ShellBoundaryStage};
 
@@ -642,6 +644,7 @@ struct ExpansionOptions {
     max_raw: usize,
     scalar: bool,
     admitted: bool,
+    tilde: tilde::Context,
 }
 
 struct Expansion<'a> {
@@ -2107,6 +2110,7 @@ async fn expand_one(
         max_raw,
         scalar,
         admitted,
+        tilde,
     } = options;
     let mut expansion = Expansion {
         segments: Segments {
@@ -2135,6 +2139,8 @@ async fn expand_one(
         expansion.work.checkpoint(cancel).await?;
         has_part_quotes |= quoted;
     }
+    let tildes =
+        tilde::WordTildes::new(word, scalar, tilde, has_part_quotes, &mut expansion).await?;
     for (index, part) in word.parts.iter().enumerate() {
         expansion.work.checkpoint(cancel).await?;
         let quoted = part_quoted(word, index, has_part_quotes);
@@ -2142,8 +2148,8 @@ async fn expand_one(
             expansion.elements(part, state, quoted, scalar).await?;
             continue;
         }
-        if let WordPart::Literal(value) = part {
-            expansion.literal(value, state, scalar || quoted).await?;
+        if matches!(part, WordPart::Literal(_)) {
+            tildes.literal(&mut expansion, index, state).await?;
             continue;
         }
         expansion.part(part, state, quoted, scalar, 0).await?;
@@ -2279,6 +2285,7 @@ async fn expand(
             ExpansionOptions {
                 max_bytes: bytes_remaining,
                 max_fields: max_fields.saturating_sub(values.len()),
+                tilde: tilde::Context::Generated,
                 ..options
             },
             &mut raw_remaining,
@@ -2373,6 +2380,7 @@ pub(crate) async fn fields(
             max_raw,
             scalar: false,
             admitted: false,
+            tilde: tilde::Context::Word,
         },
         work,
     )
@@ -2404,6 +2412,7 @@ pub(crate) async fn fields_admitted(
             max_raw,
             scalar: false,
             admitted: true,
+            tilde: tilde::Context::Word,
         },
         work,
     )
@@ -2422,6 +2431,27 @@ pub(crate) async fn word(
     max_raw: usize,
     work: &mut Work,
 ) -> Result<String, Error> {
+    scalar_word(
+        word,
+        state,
+        cancel,
+        max,
+        max_raw,
+        tilde::Context::Word,
+        work,
+    )
+    .await
+}
+
+async fn scalar_word(
+    word: &Word,
+    state: &SharedState,
+    cancel: &Cancel,
+    max: usize,
+    max_raw: usize,
+    tilde: tilde::Context,
+    work: &mut Work,
+) -> Result<String, Error> {
     let values = expand(
         word,
         state,
@@ -2432,6 +2462,7 @@ pub(crate) async fn word(
             max_raw,
             scalar: true,
             admitted: false,
+            tilde,
         },
         work,
     )

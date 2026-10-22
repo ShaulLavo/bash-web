@@ -10,12 +10,12 @@
   "counts": {
     "oils": {
       "total": 2492,
-      "passed": 1210,
+      "passed": 1225,
       "skipped": 810,
       "categories": {
         "Quoting and word splitting": {
           "total": 181,
-          "passed": 61,
+          "passed": 66,
           "skipped": 108
         },
         "Parameter expansion": {
@@ -25,7 +25,7 @@
         },
         "Brace expansion": {
           "total": 55,
-          "passed": 49,
+          "passed": 53,
           "skipped": 2
         },
         "Arithmetic": {
@@ -35,7 +35,7 @@
         },
         "Arrays and assoc arrays": {
           "total": 234,
-          "passed": 47,
+          "passed": 48,
           "skipped": 107
         },
         "Assignment, scope and special vars": {
@@ -50,7 +50,7 @@
         },
         "Globbing and extglob": {
           "total": 128,
-          "passed": 60,
+          "passed": 61,
           "skipped": 52
         },
         "Conditionals, test, [[ ]] and case": {
@@ -60,7 +60,7 @@
         },
         "Grammar, functions and control flow": {
           "total": 235,
-          "passed": 166,
+          "passed": 168,
           "skipped": 55
         },
         "Here-docs and redirects": {
@@ -85,7 +85,7 @@
         },
         "Other builtins (cd, eval, source, type, alias...)": {
           "total": 234,
-          "passed": 99,
+          "passed": 101,
           "skipped": 79
         },
         "Real-world idioms": {
@@ -704,7 +704,7 @@
     },
     "bashkit-suite": {
       "total": 3835,
-      "passed": 1644,
+      "passed": 1648,
       "skipped": 1613,
       "categories": {
         "alias": {
@@ -1924,7 +1924,7 @@
         },
         "tilde-expansion": {
           "total": 6,
-          "passed": 0,
+          "passed": 4,
           "skipped": 1
         },
         "time": {
@@ -2160,17 +2160,17 @@
 {"id":"oils:var-sub-quote:289","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:var-sub-quote:314","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:var-sub-quote:344","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"pass"},
-{"id":"oils:tilde:3","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"fi9zcmMK","stderr":""}},
-{"id":"oils:tilde:9","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"fi9zcmMK","stderr":""}},
+{"id":"oils:tilde:3","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"pass"},
+{"id":"oils:tilde:9","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:tilde:18","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"pass"},
-{"id":"oils:tilde:25","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"eD1+Cg==","stderr":""}},
+{"id":"oils:tilde:25","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:tilde:34","corpus":"oils","category":"Quoting and word splitting","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:tilde:41","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:tilde:48","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"fgp+Cg==","stderr":""}},
 {"id":"oils:tilde:61","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":""}},
-{"id":"oils:tilde:80","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"Zm9vOn4KZm9vOn4KZm9vOn4KZm9vOn4sCn46Zm9vCmZvbzp+Cg==","stderr":""}},
+{"id":"oils:tilde:80","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:tilde:105","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"Zm9vOn4KCg==","stderr":"L3Vzci9iaW4vYmFzaDogbGluZSA5OiBhcml0aG1ldGljIGV4cHJlc3Npb246IHN5bnRheCBlcnJvcjogb3BlcmFuZCBleHBlY3RlZAo="}},
-{"id":"oils:tilde:123","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"Zm9vOn4K","stderr":""}},
+{"id":"oils:tilde:123","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:tilde:137","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"Cg==","stderr":""}},
 {"id":"oils:tilde:153","corpus":"oils","category":"Quoting and word splitting","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:tilde:172","corpus":"oils","category":"Quoting and word splitting","kind":"needs-commands","outcome":"skip"},
@@ -2452,10 +2452,10 @@
 {"id":"oils:brace-expansion:130","corpus":"oils","category":"Brace expansion","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:brace-expansion:134","corpus":"oils","category":"Brace expansion","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:brace-expansion:141","corpus":"oils","category":"Brace expansion","kind":"builtins-only","outcome":"pass"},
-{"id":"oils:brace-expansion:147","corpus":"oils","category":"Brace expansion","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"fgp+Cg==","stderr":""}},
-{"id":"oils:brace-expansion:157","corpus":"oils","category":"Brace expansion","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"Zm9vfi9iYXIgfi9iYXIKLS0gZm9vfi9iYXIKLS0gfi9iYXIKPT0gZm9vfi9iYXIKPT0gfi9iYXIK","stderr":""}},
-{"id":"oils:brace-expansion:199","corpus":"oils","category":"Brace expansion","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"fi9zcmMgfnJvb3QKLS0gfi9zcmMKLS0gfnJvb3QKPT0gfi9zcmMKPT0gfnJvb3QK","stderr":""}},
-{"id":"oils:brace-expansion:236","corpus":"oils","category":"Brace expansion","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"fgp+Cg==","stderr":""}},
+{"id":"oils:brace-expansion:147","corpus":"oils","category":"Brace expansion","kind":"builtins-only","outcome":"pass"},
+{"id":"oils:brace-expansion:157","corpus":"oils","category":"Brace expansion","kind":"builtins-only","outcome":"pass"},
+{"id":"oils:brace-expansion:199","corpus":"oils","category":"Brace expansion","kind":"builtins-only","outcome":"pass"},
+{"id":"oils:brace-expansion:236","corpus":"oils","category":"Brace expansion","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:brace-expansion:249","corpus":"oils","category":"Brace expansion","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:brace-expansion:260","corpus":"oils","category":"Brace expansion","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:brace-expansion:270","corpus":"oils","category":"Brace expansion","kind":"builtins-only","outcome":"pass"},
@@ -2651,7 +2651,7 @@
 {"id":"oils:array:443","corpus":"oils","category":"Arrays and assoc arrays","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:array:452","corpus":"oils","category":"Arrays and assoc arrays","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:array:472","corpus":"oils","category":"Arrays and assoc arrays","kind":"needs-commands","outcome":"skip"},
-{"id":"oils:array:479","corpus":"oils","category":"Arrays and assoc arrays","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"fi9zcmMgfi9naXQK","stderr":""}},
+{"id":"oils:array:479","corpus":"oils","category":"Arrays and assoc arrays","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:array:485","corpus":"oils","category":"Arrays and assoc arrays","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:array:490","corpus":"oils","category":"Arrays and assoc arrays","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:array:495","corpus":"oils","category":"Arrays and assoc arrays","kind":"builtins-only","outcome":"pass"},
@@ -3075,7 +3075,7 @@
 {"id":"oils:glob:48","corpus":"oils","category":"Globbing and extglob","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:glob:54","corpus":"oils","category":"Globbing and extglob","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:glob:61","corpus":"oils","category":"Globbing and extglob","kind":"builtins-only","outcome":"pass"},
-{"id":"oils:glob:69","corpus":"oils","category":"Globbing and extglob","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"fi8qLnB5Cg==","stderr":""}},
+{"id":"oils:glob:69","corpus":"oils","category":"Globbing and extglob","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:glob:74","corpus":"oils","category":"Globbing and extglob","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:glob:82","corpus":"oils","category":"Globbing and extglob","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:glob:90","corpus":"oils","category":"Globbing and extglob","kind":"builtins-only","outcome":"pass"},
@@ -3359,7 +3359,7 @@
 {"id":"oils:loop:20","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:loop:28","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:loop:39","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
-{"id":"oils:loop:52","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"fi9zcmMKfi9naXQK","stderr":""}},
+{"id":"oils:loop:52","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:loop:62","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:loop:77","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:loop:93","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
@@ -3564,7 +3564,7 @@
 {"id":"oils:toysh:48","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":""}},
 {"id":"oils:toysh:59","corpus":"oils","category":"Grammar, functions and control flow","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:toysh:84","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":""}},
-{"id":"oils:toysh:93","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"fi9wd2QgfnJvb3QvcHdkCnt+LH5yb290fS9wd2QKfi9wd2QgfnJvb3QvcHdkCg==","stderr":""}},
+{"id":"oils:toysh:93","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:toysh:113","corpus":"oils","category":"Grammar, functions and control flow","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:toysh:123","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"PWVmPQo9Z2g9Cj1paj0KPWtsPQo9bW49Cg==","stderr":"L3Vzci9iaW4vYmFzaDogYjogY29tbWFuZCBub3QgZm91bmQK"}},
 {"id":"oils:toysh-posix:4","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
@@ -4229,8 +4229,8 @@
 {"id":"oils:builtin-eval-source:186","corpus":"oils","category":"Other builtins (cd, eval, source, type, alias...)","outcome":"skip","excluded":"reads Oils repository test data"},
 {"id":"oils:builtin-eval-source:210","corpus":"oils","category":"Other builtins (cd, eval, source, type, alias...)","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"c3RhdHVzPTEyNwo=","stderr":"L3Vzci9iaW4vYmFzaDogLjogY29tbWFuZCBub3QgZm91bmQK"}},
 {"id":"oils:builtin-eval-source:224","corpus":"oils","category":"Other builtins (cd, eval, source, type, alias...)","kind":"builtins-only","outcome":"pass"},
-{"id":"oils:builtin-eval-source:234","corpus":"oils","category":"Other builtins (cd, eval, source, type, alias...)","kind":"builtins-only","outcome":"fail","actual":{"status":1,"stdout":"RkFMU0UK","stderr":""}},
-{"id":"oils:builtin-eval-source:258","corpus":"oils","category":"Other builtins (cd, eval, source, type, alias...)","kind":"builtins-only","outcome":"fail","actual":{"status":1,"stdout":"RkFMU0UK","stderr":""}},
+{"id":"oils:builtin-eval-source:234","corpus":"oils","category":"Other builtins (cd, eval, source, type, alias...)","kind":"builtins-only","outcome":"pass"},
+{"id":"oils:builtin-eval-source:258","corpus":"oils","category":"Other builtins (cd, eval, source, type, alias...)","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:builtin-eval-source:291","corpus":"oils","category":"Other builtins (cd, eval, source, type, alias...)","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"c3RhdHVzPTEyNwo=","stderr":"L3Vzci9iaW4vYmFzaDogLjogY29tbWFuZCBub3QgZm91bmQK"}},
 {"id":"oils:builtin-eval-source:311","corpus":"oils","category":"Other builtins (cd, eval, source, type, alias...)","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:builtin-eval-source:321","corpus":"oils","category":"Other builtins (cd, eval, source, type, alias...)","kind":"needs-commands","outcome":"skip"},
@@ -10914,12 +10914,12 @@
 {"id":"bashkit-suite:textrev:122","corpus":"bashkit-suite","category":"textrev","kind":"needs-commands","outcome":"skip"},
 {"id":"bashkit-suite:textrev:130","corpus":"bashkit-suite","category":"textrev","kind":"needs-commands","outcome":"skip"},
 {"id":"bashkit-suite:textrev:138","corpus":"bashkit-suite","category":"textrev","kind":"needs-commands","outcome":"skip"},
-{"id":"bashkit-suite:tilde-expansion:6","corpus":"bashkit-suite","category":"tilde-expansion","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"fi9iIH4vYiB+L3kgfnkgfiB+IH46eAo=","stderr":""}},
-{"id":"bashkit-suite:tilde-expansion:14","corpus":"bashkit-suite","category":"tilde-expansion","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"YTp+On5yb290L3g6fjp+Cn4Kfgp+L2IKfi9iaW46fi9zYmluCg==","stderr":""}},
-{"id":"bashkit-suite:tilde-expansion:34","corpus":"bashkit-suite","category":"tilde-expansion","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"eD1+IHg9fjp+IGE9Yjp+IDF4PX4gZm9vOn4Kfjp+Cng6fgo=","stderr":""}},
+{"id":"bashkit-suite:tilde-expansion:6","corpus":"bashkit-suite","category":"tilde-expansion","kind":"builtins-only","outcome":"pass"},
+{"id":"bashkit-suite:tilde-expansion:14","corpus":"bashkit-suite","category":"tilde-expansion","kind":"builtins-only","outcome":"pass"},
+{"id":"bashkit-suite:tilde-expansion:34","corpus":"bashkit-suite","category":"tilde-expansion","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:tilde-expansion:47","corpus":"bashkit-suite","category":"tilde-expansion","kind":"needs-commands","outcome":"skip"},
 {"id":"bashkit-suite:tilde-expansion:57","corpus":"bashkit-suite","category":"tilde-expansion","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":""}},
-{"id":"bashkit-suite:tilde-expansion:67","corpus":"bashkit-suite","category":"tilde-expansion","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"fi9zcmMgfnJvb3QK","stderr":""}},
+{"id":"bashkit-suite:tilde-expansion:67","corpus":"bashkit-suite","category":"tilde-expansion","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:time:1","corpus":"bashkit-suite","category":"time","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":""}},
 {"id":"bashkit-suite:time:8","corpus":"bashkit-suite","category":"time","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"Mgo=","stderr":""}},
 {"id":"bashkit-suite:time:16","corpus":"bashkit-suite","category":"time","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"Mgo=","stderr":""}},
