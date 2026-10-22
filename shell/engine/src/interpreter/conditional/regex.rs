@@ -1372,6 +1372,30 @@ mod tests {
         }
     }
     #[test]
+    fn counted_nullable_repeats_preserve_current_enclosing_capture() {
+        for (source, value, expected) in [
+            ("((a*|b){2,3})*", "bb", vec!["bb", "b", "b"]),
+            ("((a*|b){2,3})*", "bbb", vec!["bbb", "b", "b"]),
+            ("(((a*)|b){2,3})*", "bb", vec!["bb", "b", "b", ""]),
+            ("(((a*)|b){2,3})*", "bbb", vec!["bbb", "b", "b", ""]),
+            ("((a*|b){3,4})*", "bb", vec!["bb", "b", "b"]),
+            ("((a*|b){3,4})*", "bbb", vec!["bbb", "b", "b"]),
+            ("((a?|b){2,3})*", "bb", vec!["bb", "b", "b"]),
+            ("((a?|b){2,3})*", "bbb", vec!["bbb", "b", "b"]),
+        ] {
+            let pattern = self::pattern(source);
+            let mut work = Work::new(10_000_000, 10_000_000, 16);
+            let ranges = finish(matches(&pattern, value, &mut work, &Cancel::new()))
+                .unwrap_or_else(|_| panic!("capture failed: {source:?} on {value:?}"))
+                .unwrap();
+            let actual: Vec<_> = ranges
+                .into_iter()
+                .map(|range| range.map_or("", |(start, end)| &value[start..end]))
+                .collect();
+            assert_eq!(actual, expected, "{source:?} on {value:?}");
+        }
+    }
+    #[test]
     fn state_vector_admission_precedes_growth() {
         let mut work = Work::new(64, 0, 1);
         let mut nodes = Vec::new();

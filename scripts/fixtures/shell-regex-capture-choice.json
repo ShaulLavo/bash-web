@@ -1841,6 +1841,70 @@
       "stdoutBase64": "Y2FzZT0wIHM9MCBuPTI8YT48YT4KY2FzZT0xIHM9MCBuPTI8YT48YT4KY2FzZT0yIHM9MCBuPTM8YT48YT48YT4KY2FzZT0zIHM9MCBuPTM8YWI+PGI+PGE+CmNhc2U9NCBzPTAgbj0zPGFiPjxiPjxhPgpjYXNlPTUgcz0wIG49MjxhPjxhPgpjYXNlPTYgcz0wIG49MjxhYT48PgpjYXNlPTcgcz0wIG49MjxhPjxhPgpjYXNlPTggcz0wIG49MjxhPjw+CmNhc2U9OSBzPTAgbj0yPGE+PD4KY2FzZT0xMCBzPTAgbj0yPGE+PD4KY2FzZT0xMSBzPTAgbj0zPGE+PGE+PD4KY2FzZT0xMiBzPTAgbj00PGE+PGE+PGE+PD4KY2FzZT0xMyBzPTAgbj0zPGE+PGE+PGE+CmNhc2U9MTQgcz0wIG49MjxhPjxhPgpjYXNlPTE1IHM9MCBuPTM8YT48Pjw+Cg==",
       "stderrBase64": "",
       "diagnostic": true
+    },
+    {
+      "name": "counted nested ((a*|b){2,3})* on bb",
+      "script": "p='((a*|b){2,3})*'; [[ bb =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MzxiYj48Yj48Yj4=",
+      "stderrBase64": "",
+      "diagnostic": true
+    },
+    {
+      "name": "counted nested ((a*|b){2,3})* on bbb",
+      "script": "p='((a*|b){2,3})*'; [[ bbb =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MzxiYmI+PGI+PGI+",
+      "stderrBase64": "",
+      "diagnostic": true
+    },
+    {
+      "name": "counted nested (((a*)|b){2,3})* on bb",
+      "script": "p='(((a*)|b){2,3})*'; [[ bb =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYj48Yj48Yj48Pg==",
+      "stderrBase64": "",
+      "diagnostic": true
+    },
+    {
+      "name": "counted nested (((a*)|b){2,3})* on bbb",
+      "script": "p='(((a*)|b){2,3})*'; [[ bbb =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYmI+PGI+PGI+PD4=",
+      "stderrBase64": "",
+      "diagnostic": true
+    },
+    {
+      "name": "counted nested ((a*|b){3,4})* on bb",
+      "script": "p='((a*|b){3,4})*'; [[ bb =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MzxiYj48Yj48Yj4=",
+      "stderrBase64": "",
+      "diagnostic": true
+    },
+    {
+      "name": "counted nested ((a*|b){3,4})* on bbb",
+      "script": "p='((a*|b){3,4})*'; [[ bbb =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MzxiYmI+PGI+PGI+",
+      "stderrBase64": "",
+      "diagnostic": true
+    },
+    {
+      "name": "counted nested ((a?|b){2,3})* on bb",
+      "script": "p='((a?|b){2,3})*'; [[ bb =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MzxiYj48Yj48Yj4=",
+      "stderrBase64": "",
+      "diagnostic": true
+    },
+    {
+      "name": "counted nested ((a?|b){2,3})* on bbb",
+      "script": "p='((a?|b){2,3})*'; [[ bbb =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49MzxiYmI+PGI+PGI+",
+      "stderrBase64": "",
+      "diagnostic": true
     }
   ],
   "discriminators": 160,
