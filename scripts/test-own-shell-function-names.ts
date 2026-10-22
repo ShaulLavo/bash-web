@@ -140,7 +140,6 @@ const runner = recordPath
       env: { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" },
     });
 
-
 test("recorded Bash observations cover exactly the function-name controls", () => {
   if (recordPath) return;
   assert.deepEqual(
