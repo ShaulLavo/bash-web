@@ -12,14 +12,16 @@ type Recorded = {
   stderrBase64: string;
   diagnostic?: boolean;
 };
-const fixture: { bash: string; cases: Recorded[] } = JSON.parse(
-  readFileSync(
-    process.env.BASH_REGEX_CAPTURES_FIXTURE ??
-      new URL("fixtures/shell-regex-captures.json", import.meta.url),
-    "utf8",
-  ),
-);
-assert.equal(fixture.bash, "5.3.15(1)-release");
+function recording(path: string | URL): Recorded[] {
+  const fixture: { bash: string; cases: Recorded[] } = JSON.parse(readFileSync(path, "utf8"));
+  assert.equal(fixture.bash, "5.3.15(1)-release");
+  return fixture.cases;
+}
+const cases = process.env.BASH_REGEX_CAPTURES_FIXTURE
+  ? recording(process.env.BASH_REGEX_CAPTURES_FIXTURE)
+  : recording(new URL("fixtures/shell-regex-captures.json", import.meta.url)).concat(
+      recording(new URL("fixtures/shell-regex-capture-choice.json", import.meta.url)),
+    );
 const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
 const runner = await createWaffleRunner({
   env: { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C" },
@@ -36,7 +38,7 @@ after(() => {
       JSON.stringify(observations, null, 2) + "\n",
     );
 });
-for (const expected of fixture.cases)
+for (const expected of cases)
   test(`production Waffle regex captures: ${expected.name}`, async () => {
     const actual = await runner(expected.script);
     observations.push({

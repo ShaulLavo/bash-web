@@ -8,7 +8,8 @@
 //! locales. Other input/locale combinations fail closed rather than pretending
 //! Unicode classes or byte-oriented C-locale matching have been implemented.
 //! Matching selects the leftmost-longest span. A reverse reachability table
-//! reconstructs left-alternative/greedy captures without speculative input scans.
+//! reconstructs ordered captures with per-copy optional-group metadata and
+//! terminal assertion provenance, without speculative input scans.
 //! Backreferences and locale collating/equivalence constructs fail closed (2).
 use crate::{
     executor::Cancel,
@@ -134,6 +135,7 @@ enum Node {
     Start(usize),
     End(usize),
     Save(usize, usize),
+    OptionalSave(usize, usize),
     Begin { repeat: usize, next: usize },
     Repeat { body: usize, next: usize },
 }
@@ -520,13 +522,42 @@ async fn parse(
     Ok((expressions, root, count))
 }
 
+// Copying an expanded subtree resets its optional-group markers. A newly
+// optional wrapper can then mark its own root group without marking descendants.
+#[derive(Clone, Copy, Default)]
+struct CopyContext {
+    duplicated: bool,
+    optional: bool,
+}
+impl CopyContext {
+    fn close(self, slot: usize, next: usize) -> Node {
+        if self.optional {
+            return Node::OptionalSave(slot, next);
+        }
+        Node::Save(slot, next)
+    }
+    fn child(self) -> Self {
+        Self {
+            optional: false,
+            ..self
+        }
+    }
+    fn copy(self, duplicated: bool, optional: bool) -> Self {
+        Self {
+            duplicated: self.duplicated || duplicated,
+            optional: !self.duplicated && optional,
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 enum Compile {
-    Visit(usize, usize),
-    Sequence(usize),
+    Visit(usize, usize, CopyContext),
+    Sequence(usize, CopyContext),
     Alternative {
         left: usize,
         next: usize,
+        context: CopyContext,
     },
     Join(usize),
     Capture(usize),
@@ -535,6 +566,7 @@ enum Compile {
         child: usize,
         required: usize,
         optional: usize,
+        context: CopyContext,
     },
     Optional(usize),
     Loop {
@@ -547,6 +579,7 @@ fn copies(
     child: usize,
     required: usize,
     optional: usize,
+    context: CopyContext,
     next: usize,
     tasks: &mut Vec<Compile>,
     work: &mut Work,
@@ -558,11 +591,20 @@ fn copies(
                 child,
                 required,
                 optional: optional - 1,
+                context,
             },
             work,
         )?;
         push(tasks, Compile::Optional(next), work)?;
-        push(tasks, Compile::Visit(child, next), work)?;
+        push(
+            tasks,
+            Compile::Visit(
+                child,
+                next,
+                context.copy(required > 0 || optional > 1, optional == 1),
+            ),
+            work,
+        )?;
         return Ok(());
     }
     if required > 0 {
@@ -572,10 +614,15 @@ fn copies(
                 child,
                 required: required - 1,
                 optional: 0,
+                context,
             },
             work,
         )?;
-        push(tasks, Compile::Visit(child, next), work)?;
+        push(
+            tasks,
+            Compile::Visit(child, next, context.copy(required > 1, false)),
+            work,
+        )?;
     }
     Ok(())
 }
@@ -591,6 +638,7 @@ fn atom_node(atom: Atom, next: usize) -> Node {
 fn visit(
     expression: Expression,
     next: usize,
+    context: CopyContext,
     nodes: &mut Vec<Node>,
     tasks: &mut Vec<Compile>,
     work: &mut Work,
@@ -600,17 +648,25 @@ fn visit(
         Expression::Atom(atom) => return push(nodes, atom_node(atom, next), work),
         Expression::Group(child, number) => {
             let slot = number.checked_mul(2).ok_or(2)?;
-            let end = push(nodes, Node::Save(slot + 1, next), work)?;
+            let end = push(nodes, context.close(slot + 1, next), work)?;
             push(tasks, Compile::Capture(slot), work)?;
-            push(tasks, Compile::Visit(child, end), work)?;
+            push(tasks, Compile::Visit(child, end, context.child()), work)?;
         }
         Expression::Sequence(left, right) => {
-            push(tasks, Compile::Sequence(left), work)?;
-            push(tasks, Compile::Visit(right, next), work)?;
+            push(tasks, Compile::Sequence(left, context), work)?;
+            push(tasks, Compile::Visit(right, next, context.child()), work)?;
         }
         Expression::Alternative(left, right) => {
-            push(tasks, Compile::Alternative { left, next }, work)?;
-            push(tasks, Compile::Visit(right, next), work)?;
+            push(
+                tasks,
+                Compile::Alternative {
+                    left,
+                    next,
+                    context,
+                },
+                work,
+            )?;
+            push(tasks, Compile::Visit(right, next, context.child()), work)?;
         }
         Expression::Repeat {
             child,
@@ -623,6 +679,7 @@ fn visit(
                     child,
                     required: min,
                     optional: max - min,
+                    context,
                 },
                 work,
             )?;
@@ -640,11 +697,16 @@ fn visit(
                     child,
                     required: min,
                     optional: 0,
+                    context,
                 },
                 work,
             )?;
             push(tasks, Compile::Loop { split, next }, work)?;
-            push(tasks, Compile::Visit(child, split), work)?;
+            push(
+                tasks,
+                Compile::Visit(child, split, context.copy(min > 0, false)),
+                work,
+            )?;
         }
     }
     Ok(next)
@@ -659,15 +721,19 @@ fn compile_task(
     mut result: usize,
 ) -> Result<usize, Error> {
     match task {
-        Compile::Visit(child, next) => {
-            result = visit(expressions[child], next, nodes, tasks, work)?
+        Compile::Visit(child, next, context) => {
+            result = visit(expressions[child], next, context, nodes, tasks, work)?
         }
-        Compile::Sequence(left) => {
-            push(tasks, Compile::Visit(left, result), work)?;
+        Compile::Sequence(left, context) => {
+            push(tasks, Compile::Visit(left, result, context.child()), work)?;
         }
-        Compile::Alternative { left, next } => {
+        Compile::Alternative {
+            left,
+            next,
+            context,
+        } => {
             push(tasks, Compile::Join(result), work)?;
-            push(tasks, Compile::Visit(left, next), work)?;
+            push(tasks, Compile::Visit(left, next, context.child()), work)?;
         }
         Compile::Join(right) => result = push(nodes, Node::Split(result, right), work)?,
         Compile::Capture(slot) => result = push(nodes, Node::Save(slot, result), work)?,
@@ -685,7 +751,8 @@ fn compile_task(
             child,
             required,
             optional,
-        } => copies(child, required, optional, result, tasks, work)?,
+            context,
+        } => copies(child, required, optional, context, result, tasks, work)?,
         Compile::Optional(next) => result = push(nodes, Node::Split(result, next), work)?,
         Compile::Loop { split, next } => {
             nodes[split] = Node::Repeat { body: result, next };
@@ -704,7 +771,11 @@ async fn compile(
     let mut nodes = Vec::new();
     push(&mut nodes, Node::Accept, work)?;
     let mut tasks = Vec::new();
-    push(&mut tasks, Compile::Visit(root, 0), work)?;
+    push(
+        &mut tasks,
+        Compile::Visit(root, 0, CopyContext::default()),
+        work,
+    )?;
     let mut result = 0;
     while let Some(task) = tasks.pop() {
         work.checkpoint(cancel).await?;
@@ -726,9 +797,11 @@ fn epsilon(node: Node) -> (Option<usize>, Option<usize>) {
     match node {
         Node::Split(left, right) => (Some(left), Some(right)),
         Node::Repeat { body, next } => (Some(body), Some(next)),
-        Node::Save(_, next) | Node::Start(next) | Node::End(next) | Node::Begin { next, .. } => {
-            (Some(next), None)
-        }
+        Node::Save(_, next)
+        | Node::OptionalSave(_, next)
+        | Node::Start(next)
+        | Node::End(next)
+        | Node::Begin { next, .. } => (Some(next), None),
         _ => (None, None),
     }
 }
@@ -870,6 +943,7 @@ async fn reachability(
     pattern: &Pattern,
     value: &str,
     span: (usize, usize),
+    terminal_unconstrained: bool,
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<Reachable, Error> {
@@ -924,7 +998,11 @@ async fn reachability(
             &reverse,
             &mut result,
             &mut stack,
-            position..value.len(),
+            CapturePosition {
+                offset: position,
+                length: value.len(),
+                unconstrained: terminal_unconstrained && position == span.1,
+            },
             work,
             cancel,
         )
@@ -933,28 +1011,36 @@ async fn reachability(
     Ok(result)
 }
 
+struct CapturePosition {
+    offset: usize,
+    length: usize,
+    unconstrained: bool,
+}
 async fn reverse_closure(
     nodes: &[Node],
     reverse: &Reverse,
     result: &mut Reachable,
     stack: &mut Vec<usize>,
-    position: std::ops::Range<usize>,
+    position: CapturePosition,
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<(), Error> {
-    while let Some(index) = stack.pop() {
+    let mut edge: Option<usize> = None;
+    while edge.is_some() || !stack.is_empty() {
         work.checkpoint(cancel).await?;
-        let mut edge = reverse.heads[index];
-        while let Some(id) = edge {
-            work.checkpoint(cancel).await?;
-            let (prior, previous) = reverse.edges[id];
-            edge = previous;
-            if !anchor(nodes[prior], position.start, position.end) {
-                continue;
-            }
-            if !result.insert(prior, position.start) {
-                continue;
-            }
+        let Some(id) = edge else {
+            edge = reverse.heads[stack.pop().ok_or(2)?];
+            continue;
+        };
+        let (prior, previous) = reverse.edges[id];
+        edge = previous;
+        if position.unconstrained && matches!(nodes[prior], Node::Start(_) | Node::End(_)) {
+            continue;
+        }
+        if !anchor(nodes[prior], position.offset, position.length) {
+            continue;
+        }
+        if result.insert(prior, position.offset) {
             push(stack, prior, work)?;
         }
     }
@@ -969,11 +1055,13 @@ struct Iteration {
 #[derive(Clone, Copy)]
 enum Undo {
     Slot(usize, Option<usize>),
+    Previous(usize, Option<usize>),
     Iteration(usize, Iteration),
     Branch(usize),
 }
 struct Trace {
     slots: Vec<Option<usize>>,
+    previous: Vec<Option<usize>>,
     iterations: Vec<Iteration>,
     seen: Vec<bool>,
     undo: Vec<Undo>,
@@ -984,6 +1072,7 @@ impl Trace {
             work.checkpoint(cancel).await?;
             match undo {
                 Undo::Slot(slot, old) => self.slots[slot] = old,
+                Undo::Previous(slot, old) => self.previous[slot] = old,
                 Undo::Iteration(id, old) => self.iterations[id] = old,
                 Undo::Branch(next) => return Ok(Some(next)),
             }
@@ -999,12 +1088,54 @@ impl Trace {
         self.iterations[id] = value;
         Ok(())
     }
-    fn step(
+    // Empty optional closes restore the last completed nonempty register set,
+    // including enclosing and nested groups. Required closes still overwrite.
+    async fn save(
+        &mut self,
+        slot: usize,
+        position: usize,
+        optional: bool,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<(), Error> {
+        push(&mut self.undo, Undo::Slot(slot, self.slots[slot]), work)?;
+        self.slots[slot] = Some(position);
+        if slot.is_multiple_of(2) {
+            push(
+                &mut self.undo,
+                Undo::Slot(slot + 1, self.slots[slot + 1]),
+                work,
+            )?;
+            self.slots[slot + 1] = None;
+            return Ok(());
+        }
+        let nonempty = self.slots[slot - 1].is_some_and(|start| start < position);
+        if !nonempty && (!optional || self.previous[slot - 1].is_none()) {
+            return Ok(());
+        }
+        for index in 0..self.slots.len() {
+            work.checkpoint(cancel).await?;
+            if nonempty {
+                push(
+                    &mut self.undo,
+                    Undo::Previous(index, self.previous[index]),
+                    work,
+                )?;
+                self.previous[index] = self.slots[index];
+            } else {
+                push(&mut self.undo, Undo::Slot(index, self.slots[index]), work)?;
+                self.slots[index] = self.previous[index];
+            }
+        }
+        Ok(())
+    }
+    async fn step(
         &mut self,
         nodes: &[Node],
         index: usize,
         position: usize,
         work: &mut Work,
+        cancel: &Cancel,
     ) -> Result<Option<usize>, Error> {
         let seen = self.seen[index];
         self.seen[index] = true;
@@ -1045,9 +1176,15 @@ impl Trace {
                 )?;
                 Ok(Some(next))
             }
-            Node::Save(slot, next) => {
-                push(&mut self.undo, Undo::Slot(slot, self.slots[slot]), work)?;
-                self.slots[slot] = Some(position);
+            Node::Save(slot, next) | Node::OptionalSave(slot, next) => {
+                self.save(
+                    slot,
+                    position,
+                    matches!(nodes[index], Node::OptionalSave(..)),
+                    work,
+                    cancel,
+                )
+                .await?;
                 Ok(Some(next))
             }
             Node::Start(next) | Node::End(next) => Ok(Some(next)),
@@ -1067,6 +1204,7 @@ async fn captures(
     let count = count.checked_add(1).ok_or(2)?;
     let mut trace = Trace {
         slots: initialized(count.checked_mul(2).ok_or(2)?, None, work, cancel).await?,
+        previous: initialized(count.checked_mul(2).ok_or(2)?, None, work, cancel).await?,
         iterations: initialized(nodes.len(), Iteration::default(), work, cancel).await?,
         seen: initialized(nodes.len(), false, work, cancel).await?,
         undo: Vec::new(),
@@ -1089,7 +1227,7 @@ async fn captures(
             }
             continue;
         }
-        index = match trace.step(nodes, index, position, work)? {
+        index = match trace.step(nodes, index, position, work, cancel).await? {
             Some(next) => next,
             None => trace.restore(work, cancel).await?.ok_or(2)?,
         };
@@ -1121,7 +1259,13 @@ pub(super) async fn matches(
         result.push(Some(span));
         return Ok(Some(result));
     }
-    let reachable = reachability(&nodes, pattern, value, span, work, cancel).await?;
+    // Assertions constrain their epsilon suffix, not the whole matching path.
+    // Prefer the original accepting terminal over an assertion-derived terminal
+    // at the same span; retain ordinary branch order inside either terminal.
+    let mut reachable = reachability(&nodes, pattern, value, span, true, work, cancel).await?;
+    if !reachable.get(start, span.0) {
+        reachable = reachability(&nodes, pattern, value, span, false, work, cancel).await?;
+    }
     captures(&nodes, start, count, &reachable, span, work, cancel)
         .await
         .map(Some)
@@ -1166,6 +1310,14 @@ mod tests {
     fn bash_capture_order_and_leftmost_longest_spans() {
         for (source, value, expected) in [
             ("(a|aa)(a?)", "aa", vec!["aa", "a", "a"]),
+            ("(a*){2,3}", "a", vec!["a", "a"]),
+            ("((a*){2,3}){2}", "a", vec!["a", "", ""]),
+            ("(a(b*)?){2,3}", "aba", vec!["aba", "a", ""]),
+            ("(a*){2}", "a", vec!["a", ""]),
+            ("(a*){1,3}", "a", vec!["a", ""]),
+            ("((a$)|a)", "a", vec!["a", "a", ""]),
+            ("((a*)|a)", "a", vec!["a", "a", "a"]),
+            ("((a*)$|a$)", "a", vec!["a", "a", "a"]),
             ("(a*)(a*)", "aa", vec!["aa", "aa", ""]),
             ("(a|aa)*", "aa", vec!["aa", "a"]),
             ("(a?)*", "aa", vec!["aa", "a"]),
@@ -1233,7 +1385,7 @@ mod tests {
             .unwrap_or_else(|_| panic!("fixture must compile"));
         let reachable = trace.then(|| {
             finish(reachability(
-                &nodes, &pattern, &text, span, &mut work, &cancel,
+                &nodes, &pattern, &text, span, true, &mut work, &cancel,
             ))
             .unwrap_or_else(|_| panic!("fixture span must be reachable"))
         });
@@ -1253,9 +1405,17 @@ mod tests {
                 )
                 .await
                 .map(|_| ()),
-                None => reachability(&nodes, &pattern, &text, span, &mut work, &child_cancel)
-                    .await
-                    .map(|_| ()),
+                None => reachability(
+                    &nodes,
+                    &pattern,
+                    &text,
+                    span,
+                    true,
+                    &mut work,
+                    &child_cancel,
+                )
+                .await
+                .map(|_| ()),
             };
             match result {
                 Err(Error::Status(status)) => status,
@@ -1288,6 +1448,7 @@ mod tests {
             &pattern,
             "aa",
             (0, 2),
+            true,
             &mut work,
             &cancel,
         ))
@@ -1299,6 +1460,7 @@ mod tests {
                 &pattern,
                 "aa",
                 (0, 2),
+                true,
                 &mut work,
                 &cancel
             )),

@@ -13,10 +13,10 @@ pattern='^((ab|c){2,3})+$'
 [[ '(a|b)' =~ '(a|b)' ]] && echo literal
 ```
 
-This is a boolean matching slice. It does not publish captures or update
-`BASH_REMATCH`. Capture arrays and POSIX submatch selection belong to variable
-state work. Backreferences remain unsupported with status 2. Callers that need
-capture results must treat that as an explicit missing feature.
+Matching publishes indexed `BASH_REMATCH` captures through the state-owned
+adapter. See [capture choice](regex-capture-choice.md) for nullable repeats,
+assertion precedence, recorded controls and the remaining publication boundaries.
+Backreferences remain unsupported with status 2.
 
 The existing ASCII input and locale domain is unchanged: C, POSIX, C.UTF-8 and
 C.utf8. Non-ASCII input, other locales, collating/equivalence elements and GNU
