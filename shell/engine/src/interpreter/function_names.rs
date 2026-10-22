@@ -147,6 +147,14 @@ async fn invalid_name(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::FutureExt;
+
+    fn finish<T>(operation: impl std::future::Future<Output = T>) -> T {
+        futures::pin_mut!(operation);
+        (0..2048)
+            .find_map(|_| operation.as_mut().now_or_never())
+            .expect("function-name operation exceeded bounded polls")
+    }
 
     #[test]
     fn normalization_reuses_storage_and_preserves_literal_backtick_bytes() {
@@ -160,7 +168,7 @@ mod tests {
         ] {
             let name = raw.to_owned();
             let pointer = name.as_ptr();
-            let result = futures::executor::block_on(normalize(name, &Cancel::new())).unwrap();
+            let result = finish(normalize(name, &Cancel::new())).unwrap();
             assert_eq!(result.0.as_ptr(), pointer);
             assert_eq!(result, (expected.to_owned(), valid));
         }
@@ -176,7 +184,7 @@ mod tests {
         assert_eq!(executor.drive(1).pending, 1);
         cancel.cancel();
         executor.drive(64);
-        assert!(futures::executor::block_on(handle).is_err());
+        assert!(handle.now_or_never().unwrap().is_err());
         assert_eq!(executor.drive(1).pending, 0);
     }
 
@@ -193,7 +201,7 @@ mod tests {
         assert_eq!(function.name, name);
         function.source = None;
         let mut work = crate::exec::Work::new(100_000, 100_000, 0);
-        futures::executor::block_on(crate::ast_copy::command(
+        finish(crate::ast_copy::command(
             &command,
             &Cancel::new(),
             &mut work,
