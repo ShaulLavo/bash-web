@@ -73,8 +73,6 @@ const supportedScripts = ["$foo-bar() { ls ; }\n\n", "foo-$(echo hi)() { ls ; }\
     "\n\n$foo() { :; }\necho after",
     "function a=b { echo called; }; 'a=b'",
     "function f\\oo { :; }; echo status=$?",
-    "shopt -s expand_aliases; alias def=function\ndef $foo { :; }; echo after",
-    "shopt -s expand_aliases; alias make='function `echo $x` { echo called; }'\nmake\n'`echo $x`'",
     "$foo()\n{ :; }; echo after",
     "exec 2>&-; $foo() { :; }; echo status=$?",
     "foo\\\nbar() { echo called; }; foobar",
@@ -82,19 +80,24 @@ const supportedScripts = ["$foo-bar() { ls ; }\n\n", "foo-$(echo hi)() { ls ; }\
     "function \\\n$foo { :; }; echo after",
   ],
 );
-const pending = process.env.BASH_FUNCTION_NAMES_PENDING === "1";
-const scripts = pending
-  ? [
-      'f\\oo() { echo BAD_BODY; }; printf \'status=%s x=<%s>\\n\' "$?" "${x-unset}"',
-      "'foo'() { :; }; echo status=$?",
-      '"foo"() { :; }; echo status=$?',
-    ]
-  : supportedScripts;
+const pending = process.env.BASH_FUNCTION_NAMES_PENDING;
+const scripts =
+  pending === "1"
+    ? [
+        'f\\oo() { echo BAD_BODY; }; printf \'status=%s x=<%s>\\n\' "$?" "${x-unset}"',
+        "'foo'() { :; }; echo status=$?",
+        '"foo"() { :; }; echo status=$?',
+      ]
+    : pending === "aliases"
+      ? [
+          "shopt -s expand_aliases; alias def=function\ndef $foo { :; }; echo after",
+          "shopt -s expand_aliases; alias make='function `echo $x` { echo called; }'\nmake\n'`echo $x`'",
+        ]
+      : supportedScripts;
 const recordPath = process.env.BASH_FUNCTION_NAMES_RECORD;
-const fixturePath = new URL(
-  `fixtures/shell-function-names${pending ? "-pending" : ""}.json`,
-  import.meta.url,
-);
+const fixtureSuffix =
+  pending === "1" ? "-pending" : pending === "aliases" ? "-aliases-pending" : "";
+const fixturePath = new URL(`fixtures/shell-function-names${fixtureSuffix}.json`, import.meta.url);
 const version = "5.3.15(1)-release";
 type Recording = { schema: number; bash: string; cases: { script: string; bash: EncodedResult }[] };
 const fixture: Recording = recordPath

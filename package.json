@@ -103,7 +103,8 @@
     "bundle:browser:assets": "vite build && node scripts/finish-build.mjs",
     "build:browser:assets:ci": "npm run notices:browser:ci && npm run bundle:browser:assets",
     "test:file-substitution": "npm run build:node-harness && node --test scripts/test-own-shell-file-substitution.ts",
-    "test:shell:function-names:pending": "npm run build:node-harness && BASH_FUNCTION_NAMES_PENDING=1 node --test scripts/test-own-shell-function-names.ts"
+    "test:shell:function-names:pending": "npm run build:node-harness && BASH_FUNCTION_NAMES_PENDING=1 node --test scripts/test-own-shell-function-names.ts",
+    "test:shell:function-names:aliases-pending": "npm run build:node-harness && BASH_FUNCTION_NAMES_PENDING=aliases node --test scripts/test-own-shell-function-names.ts"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",

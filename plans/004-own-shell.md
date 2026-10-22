@@ -2251,3 +2251,15 @@ Before/after evidence, including the original escaped-POSIX failure, is retained
 The follow-up must admit these names in the owning grammar, keep dead definitions
 inert, and reuse the execution-time validator rather than adding a parse-time
 identifier rejection. No new frozen case, exclusion or oracle change is authorized.
+
+### Alias runtime prerequisite
+
+Status: Approved. The parser's injected-alias function-name and print controls pass,
+but this base has no `alias` builtin and rejects `shopt -s expand_aliases`. End-to-end
+alias declaration controls therefore remain strict pending comparisons under
+`npm run test:shell:function-names:aliases-pending`, using
+`scripts/fixtures/shell-function-names-aliases-pending.json`. Their exact failures
+are retained in the function-name report's `verify6.log` and `aliases-pending.log`.
+This is a separate builtin prerequisite, not permission to add alias, shopt or
+function-name grammar in the literal-name validation change. Keep parser alias
+coverage and reuse its raw-token provenance when runtime aliases are implemented.
