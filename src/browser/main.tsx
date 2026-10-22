@@ -15,7 +15,7 @@ import {
   type StartupObserver,
   type StartupSnapshot,
 } from "../runtime/startup-diagnostics";
-import { createRuntime, type Runtime, type SharedFilesystemState } from "waffle";
+import { createRuntime, VfsError, type Runtime, type SharedFilesystemState } from "waffle";
 import { createStorageStartup, waitForStorage, type StorageStartup } from "./storage";
 import filesystemWorkerUrl from "../../.build/browser/fs-worker.js?url";
 import { TerminalNewlines } from "../index";
@@ -56,6 +56,7 @@ const query = new URLSearchParams(location.search);
 const encoder = new TextEncoder();
 
 function errorText(cause: unknown): string {
+  if (cause instanceof VfsError) return `${cause.code}: ${cause.message}`;
   if (cause instanceof Error) return cause.message;
   if (typeof cause === "string") return cause;
   return "The browser session stopped unexpectedly. Restart the session to continue.";
@@ -316,7 +317,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
           lease = options.acquireRuntime(onStartupStage);
         } else {
           const owned = createRuntime({
-            filesystem: { workerURL: filesystemWorkerUrl },
+            filesystem: { mode: "fast", workerURL: filesystemWorkerUrl },
             onStartupStage,
           });
           lease = { runtime: owned, ready: Promise.resolve(), dispose: () => owned.dispose() };

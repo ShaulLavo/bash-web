@@ -257,3 +257,45 @@ fn getopts_review_unset_and_local_optind_destinations_are_strings() {
         "0:a\n0:a\n",
     );
 }
+
+#[test]
+fn getopts_indexed_integration_resource_rollback_restores_cluster() {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 4096,
+        ..Limits::default()
+    });
+    assert_eq!(rig.run("getopts abc o -abc"), 0);
+    rig.variable("VALUE", &"x".repeat(4090));
+    assert_eq!(rig.run("OPTIND=1 b=$VALUE"), 2);
+    check_restored_cluster(&rig);
+}
+
+#[test]
+fn getopts_indexed_integration_cancellation_restores_cluster() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("getopts abc o -abc"), 0);
+    cancel_indexed_assignment(&rig, "OPTIND=1 b=$(while true; do :; done)");
+    check_restored_cluster(&rig);
+}
+
+fn check_restored_cluster(rig: &Rig) {
+    assert_eq!(rig.run("getopts abc o -abc; echo \"$o:$OPTIND\""), 0);
+    assert_eq!(rig.output.bytes(), b"b:1\n");
+}
+
+#[test]
+fn getopts_indexed_integration_durable_rhs_reset_survives_cancellation() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("getopts abc o -abc"), 0);
+    cancel_indexed_assignment(&rig, "OPTIND= x=${OPTIND:=1} b=$(while true; do :; done)");
+    assert_eq!(rig.run("getopts abc o -abc; echo \"$o:$OPTIND\""), 0);
+    assert_eq!(rig.output.bytes(), b"a:1\n");
+}
+
+#[test]
+fn getopts_indexed_integration_subscript_assignment_resets_cluster() {
+    check(
+        r#"getopts abc o -abc; OPTIND[0]=1; getopts abc o -abc; echo "$o:$OPTIND"; OPTIND=2; getopts abcxyz o -abc -xyz; echo "$o:$OPTIND""#,
+        "a:1\nb:2\n",
+    );
+}

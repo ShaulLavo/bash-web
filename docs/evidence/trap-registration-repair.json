@@ -154,5 +154,87 @@
     "reviewResolution": "Coordinator applied precise independent reviewer fixcheck.patch with two focused state tests and77 failing-first local Bash recordings. No action execution or admission-policy change. Independent main integration review and hosted frozen qualification remain pending.",
     "diagnostics": "Compare status and stdout. Require empty stderr when Bash recorded none. Nonempty stderr is retained, not exact-parity evidence.",
     "excludedQuirk": "Re-ignoring inherited EXIT after clearing it may remain invisible in Bash until a handler is set. Approved plan004 follow-up, not covered or claimed fixed."
+  },
+  "mainIntegration": {
+    "status": "Normal main integration verified locally. Independent integrated-union review and hosted frozen qualification remain parent-owned and pending. No new gain/loss claim.",
+    "sourceParent": "1292df94f46cb7d61b67bafddc33e5f5daf524f4",
+    "mainParent": "3fd615b514c30b5d7b667b7ab76c90048d037247",
+    "versions": {
+      "package": "0.0.89",
+      "engine": "0.0.57"
+    },
+    "sourceSha256": {
+      "shell/engine/src/builtins/trap.rs": "6e6bae8d3ddc6762a53c30150c0df2d768d9d9d7e651cc58405f40dddfd5db56",
+      "shell/engine/src/state/traps.rs": "b7fd69edc950819155f6b2ea1aebb2a9ba71f3fc6cff669292e24e81be2b8502",
+      "shell/engine/src/expand.rs": "4a990ca2b9244d5bc0644131b571e126f03e6ff6e3497b3f67c911c196e14b60",
+      "shell/engine/src/state.rs": "a62b225d490ebafa8a41ce9f9943336deacef7b05629f493dcf31bcc8d6e244d",
+      "shell/engine/src/commands.rs": "51979fafe53f09763a3623ad2f3a157fff0f82295abd071cea940eab7311d722",
+      "shell/engine/src/builtins.rs": "6ea8f1a6ff6d065881653b848f44840467afda40b13071d2684cd046d9af77c4",
+      "shell/engine/src/interpreter.rs": "de22ffad587db89e7be746aac0fb2dce4f1a410a9b0d06729ab3e231c3e246aa",
+      "scripts/fixtures/shell-trap-registration.json": "528d4cb1271a0e98e5bc1c5e88cf8fbbe42d067864698cc7437f96c3a892d916"
+    },
+    "artifacts": {
+      "nativeShellEngine": {
+        "sha256": "bdc0ce5809d032994e953a1f35df1c75be8d9d6dd85560f3d06dc1f3c30dcafb",
+        "bytes": 53266208
+      },
+      "shellRuntimeWasm": {
+        "sha256": "78c299e607448fa9b01644568746bf8384aee87eda72fdf81076b2f79105f725",
+        "bytes": 2081540
+      }
+    },
+    "nodeBundleSha256": {
+      ".build/node/api.mjs": "a3d785527c14b4e92fba6ef4707eeee880e64988cb9efdb6d929338689f0e569",
+      ".build/node/child.mjs": "8fd3f45ee4603084446e2fdb01079b7d3c9622edc9f3a9b452c39ad5eef82814",
+      ".build/node/fs.mjs": "374837e29b66ce049b63d4815a1906550a19d979edb7cd56404db1837f3918dc",
+      ".build/node/root.mjs": "7cb815a85d7888690d551c0fe43ed3ca9ac16ec42749084b4d56bede8f4d4267",
+      ".build/node/shell.mjs": "426b194921d99aea2fd09e1cacb63bfa729d6b1696c5261a90022e8c04859ac2"
+    },
+    "waffle": {
+      "version": "0.0.63",
+      "pin": "c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289",
+      "provenance": "Exact inherited main pin. Reinstalled frozen dependencies and rebuilt node harness before production-Waffle checks."
+    },
+    "verification": {
+      "trapNative": {
+        "passed": 173,
+        "total": 173
+      },
+      "trapProductionWaffle": {
+        "passed": 173,
+        "total": 173
+      },
+      "prior96Preserved": true,
+      "trapStateUnits": 5,
+      "commandRegistryUnits": 7,
+      "trapSessionUnits": 2,
+      "recordedNativeFixtureTest": 1,
+      "mainDeclarationTests": 5,
+      "mainTypeTests": 9,
+      "mainFunctionTests": 21,
+      "mainDeclarationWaffleControls": 40,
+      "mainFunctionWaffleControls": 16,
+      "customUnionControls": {
+        "nativePassed": 7,
+        "wafflePassed": 7,
+        "total": 8,
+        "knownMainLimit": "array-declaration retains the documented unsupported indexed declaration printing boundary; expected Bash output and mismatch are retained. The declaration module is byte-identical to exact main."
+      },
+      "engineAllTargetClippy": "pass",
+      "productionBuild": "Normal patched-libc build verifies all eight guests and unchanged 256MiB cap.",
+      "static": "format, lint, CI types, 43 workflow/layer-scanner tests, layers, capabilities, parser provenance, Rustfmt and source-union audit pass."
+    },
+    "baseline": {
+      "sha256": "056d4026cf056f57bc79ae1b2cda63900ba2128071b3116bb255d41dd666ec26",
+      "source": "Exact main bytes, not regenerated or hand-picked. Hosted replay and membership recomputation remain pending.",
+      "inheritedPassCounts": {
+        "oils": 1210,
+        "brush-suite": 1203,
+        "bashkit-suite": 1644
+      }
+    },
+    "sourceUnion": "All447 tracked paths checked against exact main plus unchanged source additions and explicit mechanical conflict resolutions. Layer graph/policy/edge sets unchanged. Trap module/state implementation, recordings and non-execution tests remain exact source-parent bytes.",
+    "scopeLimits": "Registration only. No action execution, root EXIT, child-completion, IFS, runtime rewrite, oracle/gate/pin changes, local9221 replay, slot, watcher or merge. Four coincidental historical gains and optional re-ignored EXIT quirk remain limitations.",
+    "report": "/work/reports/wave-20261022/shell/pr63-main3fd-integration-r3.md"
   }
 }

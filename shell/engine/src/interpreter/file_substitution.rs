@@ -8,24 +8,25 @@ impl Substitutions {
         work: &mut expand::Work,
     ) -> Result<Option<io::Endpoint>, expand::Error> {
         work.checkpoint(&self.context.cancel).await?;
-        let device = io::device_endpoint(target, &self.fds.borrow());
-        let result = if let Some(device) = device {
-            device.map_err(|_| io::IoError::BadDescriptor)
-        } else {
-            work.admit_storage(
-                state
-                    .borrow()
-                    .cwd
-                    .len()
-                    .saturating_add(target.len())
-                    .saturating_add(1),
-            )?;
-            let path = absolute(&state.borrow().cwd, target);
-            self.context
+        work.admit_storage(
+            state
+                .borrow()
+                .cwd
+                .len()
+                .saturating_add(target.len())
+                .saturating_add(1),
+        )?;
+        let path = absolute(&state.borrow().cwd, target);
+        let options = OpenOptions::default();
+        let opening = io::open_path(&path, &self.fds.borrow(), &options);
+        let result = match opening {
+            Ok(opening) => self
+                .context
                 .cancel
-                .run(self.context.fs().open(&path, &OpenOptions::default()))
+                .run(opening.open(self.context.fs(), &options))
                 .await
-                .map_err(|_| 130)?
+                .map_err(|_| 130)?,
+            Err(error) => Err(error),
         };
         match result {
             Ok(endpoint) => Ok(Some(endpoint)),

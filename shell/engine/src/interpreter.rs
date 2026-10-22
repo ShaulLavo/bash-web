@@ -24,8 +24,11 @@ mod conditional;
 mod control;
 pub(crate) mod eval;
 mod file_substitution;
+mod indexed;
+mod select;
 #[cfg(test)]
 mod trap_tests;
+mod type_builtin;
 
 #[derive(Clone, Debug)]
 pub struct Limits {
@@ -1455,6 +1458,7 @@ async fn compound_command(
         CompoundCommand::Arithmetic(_)
             | CompoundCommand::Case(_)
             | CompoundCommand::For(_)
+            | CompoundCommand::Select(_)
             | CompoundCommand::ArithmeticFor(_)
             | CompoundCommand::Test(_)
     )
@@ -1527,6 +1531,7 @@ fn execute_compound_body<'a>(
             Outcome::status,
         ),
         CompoundCommand::For(loop_) => control::run_for(loop_, state, fds, context, work),
+        CompoundCommand::Select(loop_) => select::run(loop_, state, fds, context, work),
         CompoundCommand::ArithmeticFor(loop_) => {
             control::run_arithmetic_for(loop_, state, fds, context)
         }
@@ -1915,6 +1920,7 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
     } else if matches!(
         error,
         expand::Error::AssignmentDepth
+            | expand::Error::BadArraySubscript { .. }
             | expand::Error::Arithmetic { .. }
             | expand::Error::Readonly { .. }
             | expand::Error::ShellBoundary {
@@ -1933,6 +1939,9 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
         expand::Error::AssignmentDepth => return Outcome { code: 1, flow },
         expand::Error::SpecialAssignment { name, line } => {
             (name, "cannot assign in this way".to_owned(), line, 1)
+        }
+        expand::Error::BadArraySubscript { name, line } => {
+            (name, "bad array subscript".to_owned(), line, 1)
         }
         expand::Error::Readonly { name, line, .. } => {
             (name, "readonly variable".to_owned(), line, 1)
@@ -3114,6 +3123,12 @@ async fn dispatch_simple_command_body(
         }
         return Ok(eval::run(args, state, fds, context).await);
     }
+    if handler == Some(commands::Handler::Type) {
+        let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
+            .await
+            .map_err(admission_status)?;
+        return type_builtin::run(&args, &state, &fds, &context, &mut work).await;
+    }
     if let Some(commands::Handler::Builtin(builtin)) = handler {
         let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
             .await
@@ -3127,7 +3142,7 @@ async fn dispatch_simple_command_body(
     }
     // A pipe named by an open descriptor exists but cannot be executed.
     if name.starts_with("/dev/fd/")
-        && crate::io::device_endpoint(&name, &fds.borrow()).is_some_and(|endpoint| endpoint.is_ok())
+        && crate::io::descriptor_number(&name).is_some_and(|fd| fds.borrow().get(fd).is_some())
     {
         let diagnostic = format!("/usr/bin/bash: {name}: Permission denied\n");
         let stderr = fds.borrow().get(2);
@@ -3378,17 +3393,65 @@ async fn assignments(
     if assignments.is_empty() {
         return Ok(Vec::new());
     }
-    let frame = PrefixFrame::enter(state.clone());
+    let mut completed = crate::state::AssignmentFrame::enter(state.clone())?;
+    let result = assignments_body(
+        assignments,
+        state,
+        context,
+        bytes,
+        work,
+        (commit, function_diagnostics),
+        &mut completed,
+    )
+    .await;
+    if !matches!(
+        result,
+        Err(expand::Error::Status(
+            2 | 130 | crate::exec::RESOURCE_STATUS
+        ))
+    ) {
+        completed.keep();
+    }
+    result
+}
+
+async fn assignments_body(
+    assignments: Vec<Assignment>,
+    state: &SharedState,
+    context: &Context,
+    bytes: &mut usize,
+    work: &mut expand::Work,
+    mode: (bool, Option<&Descriptors>),
+    completed: &mut crate::state::AssignmentFrame,
+) -> Result<Vec<(String, String)>, expand::Error> {
+    let (commit, function_diagnostics) = mode;
+    if assignments.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut frame = PrefixFrame::enter(state.clone());
     let mut names = Vec::new();
     let initial_bytes = *bytes;
     let mut budget = Budget::default();
     for assignment in assignments {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-        if assignment.index.is_some() || assignment.append {
+        let indexed = assignment.index.is_some()
+            || assignment.append
+            || matches!(assignment.value, AssignmentValue::Array(_))
+            || (commit
+                && matches!(
+                    state.borrow().binding(&assignment.name),
+                    Some(crate::state::Binding::Indexed(_))
+                ));
+        if indexed && !commit {
             return Err(2.into());
         }
+        if indexed {
+            indexed::assign(&assignment, state, context, work, frame, bytes, completed).await?;
+            frame = PrefixFrame::enter(state.clone());
+            continue;
+        }
         let AssignmentValue::Scalar(word) = assignment.value else {
-            return Err(2.into());
+            unreachable!()
         };
         let value = expand::word(
             &word,
@@ -3412,9 +3475,25 @@ async fn assignments(
         }
         expand::admit_assignment(state, &assignment.name, value.len(), &context.cancel, work)
             .await?;
+        let storage = state
+            .borrow()
+            .binding(&assignment.name)
+            .filter(|value| matches!(value, crate::state::Binding::Indexed(_)))
+            .map_or(0, |value| {
+                value
+                    .storage_bytes()
+                    .saturating_add(crate::state::Binding::node_bytes())
+            });
         frame
-            .reserve(&assignment.name, value.len())
+            .reserve(&assignment.name, value.len().saturating_add(storage))
             .map_err(expand::Error::from)?;
+        let retained = state
+            .borrow()
+            .binding(&assignment.name)
+            .map_or(0, crate::state::Binding::storage_bytes);
+        if commit {
+            completed.reserve(&assignment.name, retained)?;
+        }
         let assignment_name = assignment.name.clone();
         if let Err(name) = frame.set(assignment.name, value) {
             if let Some(fds) = function_diagnostics {
@@ -3435,6 +3514,13 @@ async fn assignments(
             });
         }
         names.push(assignment_name);
+        if commit {
+            frame.commit(Some(completed)).map_err(expand::Error::from)?;
+            frame = PrefixFrame::enter(state.clone());
+        }
+    }
+    if commit {
+        return Ok(Vec::new());
     }
     let mut assigned = Vec::new();
     *bytes = initial_bytes;
@@ -3459,9 +3545,6 @@ async fn assignments(
             }
             assigned.push((state.assignment_name(name)?, value.to_owned()));
         }
-    }
-    if commit {
-        frame.commit().map_err(expand::Error::from)?;
     }
     Ok(assigned)
 }
@@ -3673,15 +3756,6 @@ async fn redirects(
             | RedirectKind::Append
             | RedirectKind::OutputBoth
             | RedirectKind::ReadWrite => {
-                let device = crate::io::device_endpoint(&target, &fds.borrow());
-                if let Some(endpoint) = device {
-                    let endpoint = endpoint?;
-                    if redirect.kind == RedirectKind::OutputBoth {
-                        fds.borrow_mut().insert(2, endpoint.clone());
-                    }
-                    fds.borrow_mut().insert(fd, endpoint);
-                    continue;
-                }
                 let path = absolute(&state.borrow().cwd, &target);
                 let read_write = redirect.kind == RedirectKind::ReadWrite;
                 let options = OpenOptions {
@@ -3694,12 +3768,14 @@ async fn redirects(
                     ),
                     append: redirect.kind == RedirectKind::Append,
                 };
+                let opening = io::open_path(&path, &fds.borrow(), &options)
+                    .map_err(|error| error.status())?;
                 let endpoint = context
                     .cancel
-                    .run(context.fs().open(&path, &options))
+                    .run(opening.open(context.fs(), &options))
                     .await
                     .map_err(|_| 130)?
-                    .map_err(|e| e.status())?;
+                    .map_err(|error| error.status())?;
                 if redirect.kind == RedirectKind::OutputBoth {
                     fds.borrow_mut().insert(2, endpoint.clone());
                 }
