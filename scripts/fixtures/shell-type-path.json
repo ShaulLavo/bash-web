@@ -1,0 +1,203 @@
+{
+  "schema": 1,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "provenance": "Recorded by independent R1b reviewer, path-results.json. No CI host Bash invocation. Original fixture cwd is retained for virtual Waffle; selected native cases have cwd-independent stdout. Six longer delimiter-run controls were recorded from the same verified Bash version during repair, colon-observations.json. No candidate output was recorded as reference. Exact local --version first line is retained in type/colon-observations.json; reviewer reference streams are retained unchanged in type-review-r1b/path-results.json.",
+  "cases": [
+    {
+      "id": "path-",
+      "code": "PATH='' type -aP probe",
+      "status": 0,
+      "stdout": "./probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-:",
+      "code": "PATH=':' type -aP probe",
+      "status": 0,
+      "stdout": "./probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-::",
+      "code": "PATH='::' type -aP probe",
+      "status": 0,
+      "stdout": "./probe\n./probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-a:",
+      "code": "PATH='a:' type -aP probe",
+      "status": 0,
+      "stdout": "a/probe\n./probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-a::",
+      "code": "PATH='a::' type -aP probe",
+      "status": 0,
+      "stdout": "a/probe\n./probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-:a:",
+      "code": "PATH=':a:' type -aP probe",
+      "status": 0,
+      "stdout": "./probe\na/probe\n./probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-::a",
+      "code": "PATH='::a' type -aP probe",
+      "status": 0,
+      "stdout": "./probe\na/probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-a::b",
+      "code": "PATH='a::b' type -aP probe",
+      "status": 0,
+      "stdout": "a/probe\n./probe\nb/probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-a:b:",
+      "code": "PATH='a:b:' type -aP probe",
+      "status": 0,
+      "stdout": "a/probe\nb/probe\n./probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-.:.",
+      "code": "PATH='.:.' type -aP probe",
+      "status": 0,
+      "stdout": "./probe\n./probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-::.:",
+      "code": "PATH='::.:' type -aP probe",
+      "status": 0,
+      "stdout": "./probe\n./probe\n./probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-a:a",
+      "code": "PATH='a:a' type -aP probe",
+      "status": 0,
+      "stdout": "a/probe\na/probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-a::a",
+      "code": "PATH='a::a' type -aP probe",
+      "status": 0,
+      "stdout": "a/probe\n./probe\na/probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-:.:a",
+      "code": "PATH=':.:a' type -aP probe",
+      "status": 0,
+      "stdout": "./probe\n./probe\na/probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-.::.",
+      "code": "PATH='.::.' type -aP probe",
+      "status": 0,
+      "stdout": "./probe\n./probe\n./probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-a:a:",
+      "code": "PATH='a:a:' type -aP probe",
+      "status": 0,
+      "stdout": "a/probe\na/probe\n./probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "unset--at",
+      "code": "unset PATH; type -at probe",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "unset--ap",
+      "code": "unset PATH; type -ap probe",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "unset--aP",
+      "code": "unset PATH; type -aP probe",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "unset--t",
+      "code": "unset PATH; type -t probe",
+      "status": 0,
+      "stdout": "file\n",
+      "stderr": ""
+    },
+    {
+      "id": "minimal-trailing-empty",
+      "code": "PATH=: type -aP probe",
+      "status": 0,
+      "stdout": "./probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "minimal-all-keyword-unset",
+      "code": "unset PATH; type -at while echo",
+      "status": 0,
+      "stdout": "keyword\nbuiltin\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-:::",
+      "code": "PATH=':::' type -aP probe",
+      "status": 0,
+      "stdout": "./probe\n./probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-a:::",
+      "code": "PATH='a:::' type -aP probe",
+      "status": 0,
+      "stdout": "a/probe\n./probe\n./probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-a:::b",
+      "code": "PATH='a:::b' type -aP probe",
+      "status": 0,
+      "stdout": "a/probe\n./probe\nb/probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-a::::b",
+      "code": "PATH='a::::b' type -aP probe",
+      "status": 0,
+      "stdout": "a/probe\n./probe\n./probe\nb/probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-:a::b:",
+      "code": "PATH=':a::b:' type -aP probe",
+      "status": 0,
+      "stdout": "./probe\na/probe\n./probe\nb/probe\n./probe\n",
+      "stderr": ""
+    },
+    {
+      "id": "path-:a:::b:",
+      "code": "PATH=':a:::b:' type -aP probe",
+      "status": 0,
+      "stdout": "./probe\na/probe\n./probe\nb/probe\n./probe\n",
+      "stderr": ""
+    }
+  ]
+}
