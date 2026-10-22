@@ -559,7 +559,10 @@ enum Compile {
         next: usize,
         context: CopyContext,
     },
-    Join(usize),
+    Join {
+        right: usize,
+        next: usize,
+    },
     Capture(usize),
     Begin(usize),
     Copies {
@@ -614,13 +617,13 @@ fn copies(
                 child,
                 required: required - 1,
                 optional: 0,
-                context,
+                context: context.child(),
             },
             work,
         )?;
         push(
             tasks,
-            Compile::Visit(child, next, context.copy(required > 1, false)),
+            Compile::Visit(child, next, context.copy(required > 1, context.optional)),
             work,
         )?;
     }
@@ -679,7 +682,10 @@ fn visit(
                     child,
                     required: min,
                     optional: max - min,
-                    context,
+                    context: CopyContext {
+                        optional: min > 1 && max > min,
+                        ..context
+                    },
                 },
                 work,
             )?;
@@ -697,7 +703,10 @@ fn visit(
                     child,
                     required: min,
                     optional: 0,
-                    context,
+                    context: CopyContext {
+                        optional: min > 1,
+                        ..context
+                    },
                 },
                 work,
             )?;
@@ -732,10 +741,20 @@ fn compile_task(
             next,
             context,
         } => {
-            push(tasks, Compile::Join(result), work)?;
+            push(
+                tasks,
+                Compile::Join {
+                    right: result,
+                    next,
+                },
+                work,
+            )?;
             push(tasks, Compile::Visit(left, next, context.child()), work)?;
         }
-        Compile::Join(right) => result = push(nodes, Node::Split(result, right), work)?,
+        Compile::Join { right, next } if result == next => {
+            result = push(nodes, Node::Split(right, result), work)?;
+        }
+        Compile::Join { right, .. } => result = push(nodes, Node::Split(result, right), work)?,
         Compile::Capture(slot) => result = push(nodes, Node::Save(slot, result), work)?,
         Compile::Begin(repeat) => {
             result = push(
@@ -1089,7 +1108,7 @@ impl Trace {
         Ok(())
     }
     // Empty optional closes restore the last completed nonempty register set,
-    // including enclosing and nested groups. Required closes still overwrite.
+    // including enclosing and nested groups. Unmarked closes still overwrite.
     async fn save(
         &mut self,
         slot: usize,

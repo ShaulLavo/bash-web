@@ -2227,3 +2227,32 @@ Remaining scored transformation failures need arrays, positional lists, integer
 or case attributes, `@P` or indirect names. See
 [the behavior notes](../docs/parameter-transformation.md) and
 [the receipt](../docs/evidence/parameter-transformation.json).
+
+
+## Conditional regex parity follow-up
+
+Status: Approved, separate CONTROL family after PR53's two matcher blockers.
+
+The r3 review at `9a83ef8a42f48b96d7b5234b42350b5a5f178104` found two
+remaining GNU libc behaviors outside the bounded counted-copy and absent-branch
+repair. Owner: CONTROL parent. Evidence is retained in
+`/work/reports/bash-web/hill-climb/control/review-regex-captures-r3-opus/`.
+
+- Anchor anomalies affect status and whole span. Run Bash 5.3.15 in `LC_ALL=C`
+  with `p='(((^a){0,2}){1,3})'; [[ aa =~ $p ]]`. Bash returns 1; the PR53
+  Waffle guest returns 0 and captures `a`. The other minimal probe is
+  `p='((b+|$a){0,2})*(b*)'` on `aa`: Bash's whole span is `aa`, Waffle's is
+  empty. See `confirm-cases.json`, `confirm-bash.json`, `confirm-results.json`
+  and the 164 historical anchor-related mismatches in `random-results.json`.
+  Trace `longest()` and `anchor()` in `interpreter/conditional/regex.rs` before
+  choosing a separate repair. Terminal provenance controls already pass.
+- Open-start restoration affects captures. For `p='((b?)+a)*'` on `aa`, Bash
+  prints `<aa><aa><>` and Waffle prints `<aa><a><>`. See the same confirmation
+  files. Inspect `Trace::save()` and the upstream completed-register snapshot
+  behavior. The current span selection agrees. Do not fold this into a global
+  longest-subgroup preference or undo the terminal-provenance correction.
+
+Reproduce through the production Waffle runner with a new exact Bash recording,
+keep admission, cancellation and capture undo bounded, and retain every PR53
+control. These are explicit limitations, not accepted frozen-score gains or new
+exclusions. PR53's current repair does not claim to resolve them.

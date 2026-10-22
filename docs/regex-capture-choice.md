@@ -6,16 +6,28 @@ then follows ordered paths through that span, not a longest-subgroup rule.
 
 ## Nullable counted copies
 
-Required empty copies overwrite the capture. The first optional copy carries an
-optional-group marker; an empty close restores the last completed nonempty
-register snapshot, including nested groups. Subsequent copies reset that marker.
-Copying an outer expanded subtree also resets optional markers inside it.
+Empty required copies overwrite captures for exact counts. Expandable counts
+with a minimum of at least two mark the last required root group as optional,
+as well as the first optional root. An empty optional close restores the last
+completed nonempty register snapshot, including nested groups. Earlier required
+copies and later optional copies do not carry that marker. Copying an outer
+expanded subtree also resets optional markers inside it.
 
-On `a`, `(a*){2}` captures empty, `(a*){2,3}` captures `a`, and `(a*){1,3}`
-captures empty. Preserving every nonempty capture would be wrong. The compiler
-retains copy provenance instead. Both current registers and their saved snapshot
-participate in epsilon-choice undo. Allocation admission and cooperative work and
-cancellation apply to snapshots and restoration.
+On `a`, `(a*){2}` captures empty, `(a*){2,3}` and `(a*){2,}` capture `a`,
+and `(a*){1,3}` captures empty. Preserving every nonempty capture would be wrong.
+The compiler retains copy provenance instead. Both current registers and their
+saved snapshot participate in epsilon-choice undo. Allocation admission and
+cooperative work and cancellation apply to snapshots and restoration.
+
+## Absent alternatives
+
+A branch that emits no nodes follows a branch that emits nodes. This applies
+to a truly empty alternative or a branch erased by a zero count. An explicit
+empty group still emits capture nodes and keeps its original order.
+
+On `a`, `(|a)a?` and `(a|)a?` capture `a`, while `(()|a)a?` captures empty.
+On `aa`, `(|aa+){1,3}` captures empty, not `aa`. These choices do not reverse
+all alternatives or rank all nullable branches after nonnullable branches.
 
 ## Assertions and accepting terminals
 
@@ -35,7 +47,9 @@ anchored alternatives are reversed.
 `scripts/fixtures/shell-regex-capture-choice.json` records exact
 `5.3.15(1)-release` output in `LC_ALL=C`. It preserves the independent review's
 780 matcher probes in 33 complete batches, 14 smaller confirmations and 160
-interval, nesting, repeated-group and assertion discriminators. The production
+interval, nesting, repeated-group and assertion discriminators. The repair adds
+660 counted-copy and terminal probes, 180 absent-branch discriminators, and 16
+confirmations in 23 additional batches without changing those 207 tests. The production
 runner includes these alongside the unchanged 244 ordinary capture controls.
 CI reads recordings, never its host's Bash.
 
@@ -53,3 +67,16 @@ Direct/resolved IFS, compound-local restoration, array enumeration, declaration
 printing and Oils611 operand quoting retain their separately owned prerequisites.
 No full frozen-score gain, current-main integration or final publication
 acceptance is implied by these focused controls.
+
+## Known Bash differences
+
+These focused controls do not establish full GNU libc regex parity. The r3
+review found anchor anomalies when `$` precedes or `^` follows a consuming atom
+inside repeats. For example, `(((^a){0,2}){1,3})` on `aa` does not match in
+Bash 5.3.15, while this matcher finds `a`. The unchanged whole-span scan owns
+that difference, not accepting-terminal capture reconstruction.
+
+`((b?)+a)*` on `aa` captures `aa` in Bash's outer group and `a` here. GNU libc
+restores a register snapshot that changes an open enclosing group's start.
+That restoration behavior remains outside this repair. Both differences have
+an Approved follow-up in plan 004. No fixture exclusion or scoring rule changes.
