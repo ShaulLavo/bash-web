@@ -2,7 +2,7 @@
   "schema": 1,
   "family": "HOME tilde prefixes in words and scalar assignments",
   "measuredRevision": "f6c8055b5cc4945579c9dcde49e5238e754860c7",
-  "status": "Fresh normal-main integrated source qualification. Review-ready only; parent owns integration review, hosted CI, merge and exact-main CI.",
+  "status": "Historical source qualification below. currentMainQualification records the fresh hosted replay; final membership-head gates and exact-main CI remain parent-owned.",
   "mergedBase": "4bf6a474ef6bb32dd5de44c1b6d30a300a079d93",
   "implementation": {
     "model": "claude-opus-5-5",
@@ -337,5 +337,79 @@
       "testOnly": 30
     }
   },
-  "followUps": "Three Approved exact follow-ups are in plans/004-own-shell.md: leading tilde-colon literal parameter bytes, fixture25 missing redirect diagnostic, and tilde/brace pathname behavior to retest after PR54 integration. No source fix was attempted."
+  "followUps": "Three Approved exact follow-ups are in plans/004-own-shell.md: leading tilde-colon literal parameter bytes, fixture25 missing redirect diagnostic, and tilde/brace pathname behavior to retest after PR54 integration. No source fix was attempted.",
+  "currentMainQualification": {
+    "source": "2036aac9ca006b68de1a69beabe0bf1d4806a8ee",
+    "integratedBase": "2417826a21d07ea2bc004cafbd7dd7527413d252",
+    "independentReview": {
+      "verdict": "APPROVE",
+      "source": "0d4cd31574593819eb330bb1f32950fd3927440f",
+      "report": "/work/reports/wave-20261022/shell/review57-main3fd-integration-r3.md",
+      "main64Union": "445 paths automatic merge plus root patch metadata; all 245 production/fixture paths retain reviewed bytes"
+    },
+    "hostedRun": 39860232670,
+    "artifactId": 12463100674,
+    "artifactSha256": "7c5fa0f015fac7e6ec943fa7f68a7230bd531bbbeccf0a586e1e0b5e0520ff45",
+    "artifactBytes": 1503998,
+    "total": 9221,
+    "scored": 5792,
+    "skipped": 3429,
+    "identityAndOrder": "unchanged",
+    "newAbnormal": [],
+    "lost": [],
+    "corpora": {
+      "oils": {
+        "before": 1210,
+        "after": 1225,
+        "gained": [
+          "oils:tilde:3",
+          "oils:tilde:9",
+          "oils:tilde:25",
+          "oils:tilde:80",
+          "oils:tilde:123",
+          "oils:brace-expansion:147",
+          "oils:brace-expansion:157",
+          "oils:brace-expansion:199",
+          "oils:brace-expansion:236",
+          "oils:array:479",
+          "oils:glob:69",
+          "oils:loop:52",
+          "oils:toysh:93",
+          "oils:builtin-eval-source:234",
+          "oils:builtin-eval-source:258"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "brush-suite": {
+        "before": 1203,
+        "after": 1203,
+        "gained": [],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "bashkit-suite": {
+        "before": 1644,
+        "after": 1648,
+        "gained": [
+          "bashkit-suite:tilde-expansion:6",
+          "bashkit-suite:tilde-expansion:14",
+          "bashkit-suite:tilde-expansion:34",
+          "bashkit-suite:tilde-expansion:67"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      }
+    },
+    "membership": "Normal unchanged recompute algorithm with only checkout/import paths adapted; gained rows only, every nongained historical row preserved. No local full replay.",
+    "ci": "Source run failed only on stale pass membership and dependent aggregate. Final membership-head gates and exact-main CI remain parent-owned.",
+    "limits": "Original targeted checks and artifact sizes above are historical. Current source preserves 49 exact tilde controls, two declared boundaries and one inherited stderr discrepancy. Known declaration/function-shadow brace mismatch remains unsupported, not a gained case.",
+    "postMembershipChecks": {
+      "pureScoreboardControls": "45/45",
+      "ciControls": "106/106",
+      "ciTypes": "pass",
+      "whitespace": "pass",
+      "fullLocalScoreboardRecipe": "Not passing: mistakenly invoked without WASM prerequisites. Node harness build completed, then 13 failures from missing artifacts/prerequisites. Retained full log; no gate changed or passing feature result inferred. Final hosted CI runs the unchanged complete recipe with its real same-head artifacts."
+    }
+  }
 }
