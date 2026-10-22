@@ -3,7 +3,9 @@
 `trap` stores default, ignored, and handler bindings separately. It supports signal
 names and numeric aliases, reset, `--`, `-p`, `-P`, and `-l`. Printing quotes actions
 so they can be read again. Action text has a retained memory reservation shared by
-isolated state snapshots. Removing the final binding refunds that reservation.
+isolated state snapshots. The reservation is refunded when the final action
+reference is released, including references held by snapshots and an in-flight
+handler.
 
 `Session::start` remains a persistent submission. `Session::start_script` ends a
 complete script and runs its root EXIT action. Explicit exit and errexit also run
