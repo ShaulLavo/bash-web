@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "family": "HOME tilde prefixes in words and scalar assignments",
+  "measuredRevision": "6dec1814e1d8a780e45ef07b1f2346cd4d7e3e4e",
+  "mergedBase": "93fdf762f2a694427440d07156c7a8c458ecc995",
+  "implementation": {
+    "model": "claude-opus-5-5",
+    "reason": "Sol provider policy refusal on ordinary shell/build/test work partway through this task; owner standing exception. Continued from the Sol worker's checkpoint. Review stays on Sol."
+  },
+  "identity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "replay": {
+    "command": "BASH_COMPAT_JOBS=1 BASH_COMPAT_SKIP_BUILD=1 BASH_COMPAT_RECORD=0 BASH_COMPAT_BASE_REF=93fdf762f2a694427440d07156c7a8c458ecc995 npm run compat:shell:prebuilt",
+    "host": "PC shared heavy queue, suite class, one worker; build and gates Rust -j2",
+    "node": "v26.7.0",
+    "shellRuntimeSha256": "cd980230bef7531ad46c4f84def210f0224167333ffbb0c2eda54f9b7bbee38a",
+    "shellRuntimeBytes": 1917516,
+    "resultSha256": "8fe0dffdae26694ca09938c1198cd3abc5258553d4d4436f635fab21974cfa0b",
+    "actualExit": 1,
+    "exitReason": "Complete replay exited only for stale candidate pass membership. Offline comparison proves exact updated membership and no previous-pass losses.",
+    "deadlinesAndClassifier": "unchanged",
+    "total": 9221,
+    "scored": 5792,
+    "skipped": 3429
+  },
+  "corpora": {
+    "oils": {
+      "scored": 1682,
+      "before": 1099,
+      "after": 1110,
+      "replay": 1110,
+      "gained": [
+        "oils:tilde:3",
+        "oils:tilde:9",
+        "oils:tilde:25",
+        "oils:tilde:80",
+        "oils:tilde:123",
+        "oils:brace-expansion:147",
+        "oils:brace-expansion:236",
+        "oils:glob:69",
+        "oils:loop:52",
+        "oils:toysh:93",
+        "oils:builtin-eval-source:234"
+      ],
+      "lost": []
+    },
+    "brush-suite": {
+      "scored": 1888,
+      "before": 1080,
+      "after": 1080,
+      "replay": 1080,
+      "gained": [],
+      "lost": []
+    },
+    "bashkit-suite": {
+      "scored": 2222,
+      "before": 1469,
+      "after": 1473,
+      "replay": 1473,
+      "gained": [
+        "bashkit-suite:tilde-expansion:6",
+        "bashkit-suite:tilde-expansion:14",
+        "bashkit-suite:tilde-expansion:34",
+        "bashkit-suite:tilde-expansion:67"
+      ],
+      "lost": []
+    }
+  },
+  "productionChecks": {
+    "file": "scripts/test-own-shell-tilde.ts",
+    "fixture": "scripts/fixtures/shell-tilde.json (GNU Bash 5.3.15(1)-release, recorded locally)",
+    "baseGuest": "27 Bash-compared cases: 24 fail on the main 77b3963 guest (sha256 4329f221)",
+    "candidate": "34/34 pass, including 3 named boundaries (unset HOME, ${v:-~} operand, a+= append)"
+  },
+  "notClaimed": {
+    "oils:tilde:48 oils:tilde:137 bashkit-suite:tilde-expansion:57": "tilde inside lazy parameter operands (${v:-~}, ${v-~:~}) stays explicitly unsupported",
+    "oils:tilde:61": "pattern operands (${x//~/~root}) are outside this slice",
+    "oils:tilde:105 oils:brace-expansion:157 oils:brace-expansion:199": "array assignments (Variables track); their tilde lines already match Bash"
+  }
+}
