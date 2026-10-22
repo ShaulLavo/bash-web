@@ -16,6 +16,10 @@ the exact pin in `package.json`:
 git+https://github.com/ShaulLavo/waffle.git#b20fad173ebaa225cb87c51776f35edaaafd4a40
 ```
 
+Run `npm run test:installed-waffle` after Bun installation to verify the prepared
+Node exports. Browser-only CI installs without lifecycle scripts and checks the
+source export declarations separately.
+
 The package's development dependency uses that same published commit. There
 is no local runtime-tree alias or vendored runtime fallback.
 
