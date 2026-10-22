@@ -1108,7 +1108,7 @@ impl Trace {
         Ok(())
     }
     // Empty optional closes restore the last completed nonempty register set,
-    // including enclosing and nested groups. Unmarked closes still overwrite.
+    // without replacing an enclosing group that is still open. Unmarked closes overwrite.
     async fn save(
         &mut self,
         slot: usize,
@@ -1134,6 +1134,10 @@ impl Trace {
         }
         for index in 0..self.slots.len() {
             work.checkpoint(cancel).await?;
+            let enclosing_open = self.slots[index / 2 * 2 + 1].is_none();
+            if !nonempty && enclosing_open {
+                continue;
+            }
             if nonempty {
                 push(
                     &mut self.undo,

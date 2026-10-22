@@ -1596,7 +1596,7 @@
         "posix/regcomp.c",
         "posix/regexec.c"
       ],
-      "localChanges": "Retain optional-group copy provenance, including the last required root of expandable counted repeats, in the existing continuation compiler and restore admitted, cooperative register snapshots. Rank absent compiled alternatives after branches with emitted nodes without reversing explicit empty-group alternatives. Select unconstrained versus assertion-derived accepting-terminal reachability without changing whole-span longest matching or importing the upstream DFA/node-cloning machinery. Exact Bash 5.3.15 fixtures cover independent and nested discriminators."
+      "localChanges": "Retain optional-group copy provenance, including the last required root of expandable counted repeats, in the existing continuation compiler and restore admitted, cooperative register snapshots for completed groups without replacing a currently open enclosing capture. Rank absent compiled alternatives after branches with emitted nodes without reversing explicit empty-group alternatives. Select unconstrained versus assertion-derived accepting-terminal reachability without changing whole-span longest matching or importing the upstream DFA/node-cloning machinery. Exact Bash 5.3.15 fixtures cover independent and nested discriminators."
     }
   },
   "shellFunctions": {

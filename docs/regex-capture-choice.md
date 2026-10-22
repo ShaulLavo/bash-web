@@ -9,7 +9,8 @@ then follows ordered paths through that span, not a longest-subgroup rule.
 Empty required copies overwrite captures for exact counts. Expandable counts
 with a minimum of at least two mark the last required root group as optional,
 as well as the first optional root. An empty optional close restores the last
-completed nonempty register snapshot, including nested groups. Earlier required
+completed nonempty register snapshot for completed groups. An enclosing group
+that is still open keeps its current start. Earlier required
 copies and later optional copies do not carry that marker. Copying an outer
 expanded subtree also resets optional markers inside it.
 
@@ -51,6 +52,9 @@ interval, nesting, repeated-group and assertion discriminators. The repair adds
 660 counted-copy and terminal probes, 180 absent-branch discriminators, and 16
 confirmations in 23 additional batches without changing those 207 tests. The production
 runner includes these alongside the unchanged 244 ordinary capture controls.
+Eight further recorded controls cover nullable counted groups nested inside a
+star on `bb` and `bbb`. These preserve every prior recording and bring the
+choice fixture to 238 records, alongside 244 ordinary capture controls.
 CI reads recordings, never its host's Bash.
 
 This is an original implementation using the existing local Thompson arena,
