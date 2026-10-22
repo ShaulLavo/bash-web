@@ -201,12 +201,14 @@ mod tests {
         assert_eq!(function.name, name);
         function.source = None;
         let mut work = crate::exec::Work::new(100_000, 100_000, 0);
-        finish(crate::ast_copy::command(
-            &command,
-            &Cancel::new(),
-            &mut work,
-        ))
-        .unwrap();
+        assert!(
+            finish(crate::ast_copy::command(
+                &command,
+                &Cancel::new(),
+                &mut work,
+            ))
+            .is_ok()
+        );
         let cloned = command.clone();
         assert!(matches!(cloned, Command::Function(function) if function.name == name));
         100_000 - work.storage_left()
