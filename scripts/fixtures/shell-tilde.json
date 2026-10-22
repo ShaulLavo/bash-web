@@ -1,0 +1,193 @@
+{
+  "schema": 1,
+  "bash": "5.3.15(1)-release",
+  "env": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "LC_ALL": "C.utf8",
+    "LANG": "C.utf8"
+  },
+  "cases": [
+    {
+      "script": "printf '<%s>\\n' ~ ~/src ~:suffix; HOME=/changed; printf '<%s>\\n' ~ ~/src",
+      "status": 0,
+      "stdoutBase64": "PC9ob21lL3VzZXI+CjwvaG9tZS91c2VyL3NyYz4KPC9ob21lL3VzZXI6c3VmZml4Pgo8L2NoYW5nZWQ+CjwvY2hhbmdlZC9zcmM+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=; printf '<%s>\\n' x=~:${HOME:=/next}:~",
+      "status": 0,
+      "stdoutBase64": "PHg9Oi9uZXh0Oi9uZXh0Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=; set -- ~ ~/src ~:suffix; printf '%s\\n' \"$#\"; printf '<%s>\\n' \"$@\"",
+      "status": 0,
+      "stdoutBase64": "Mwo8Pgo8L3NyYz4KPDpzdWZmaXg+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; x=y; printf '<%s>\\n' ~/\"b\" ~\"/b\" ~/$x ~$x \"~\" \\~ ~:x",
+      "status": 0,
+      "stdoutBase64": "PC9ob21lL3R0L2I+Cjx+L2I+CjwvaG9tZS90dC95Pgo8fnk+Cjx+Pgo8fj4KPC9ob21lL3R0Ong+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; printf '<%s>\\n' ~'' ~\"\" ''~ \"\"~ '~'/src \\~/src ~/'src'",
+      "status": 0,
+      "stdoutBase64": "PH4+Cjx+Pgo8fj4KPH4+Cjx+L3NyYz4KPH4vc3JjPgo8L2hvbWUvdHQvc3JjPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; printf '<%s>\\n' ~\\/src ~/:~ ~:~/src x~ ~/../src ~~ ~__bash_web_missing_account__/src",
+      "status": 0,
+      "stdoutBase64": "PH4vc3JjPgo8L2hvbWUvdHQvOn4+CjwvaG9tZS90dDp+L3NyYz4KPHh+Pgo8L2hvbWUvdHQvLi4vc3JjPgo8fn4+Cjx+X19iYXNoX3dlYl9taXNzaW5nX2FjY291bnRfXy9zcmM+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME='/home/a b*?[x]'; IFS=' /:'; set -- ~ ~/src ~:x; printf '%s\\n' \"$#\"; printf '<%s>\\n' \"$@\"",
+      "status": 0,
+      "stdoutBase64": "Mwo8L2hvbWUvYSBiKj9beF0+CjwvaG9tZS9hIGIqP1t4XS9zcmM+CjwvaG9tZS9hIGIqP1t4XTp4Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME='/tmp/spec/*'; printf data >present; set -- ~; printf '%s:<%s>\\n' \"$#\" \"$1\"",
+      "status": 0,
+      "stdoutBase64": "MTo8L3RtcC9zcGVjLyo+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; x='~/from-value'; printf '<%s>\\n' $x \"$x\"; y=$x; printf '<%s>\\n' \"$y\"",
+      "status": 0,
+      "stdoutBase64": "PH4vZnJvbS12YWx1ZT4KPH4vZnJvbS12YWx1ZT4KPH4vZnJvbS12YWx1ZT4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; x='~'; a=$x; printf '<%s>\\n' \"$a\"; printf '<%s>\\n' x=$x",
+      "status": 0,
+      "stdoutBase64": "PH4+Cjx4PX4+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; a=~/src; b=~:~/bin:~; c=foo:~; printf '<%s>\\n' \"$a\" \"$b\" \"$c\"",
+      "status": 0,
+      "stdoutBase64": "PC9ob21lL3R0L3NyYz4KPC9ob21lL3R0Oi9ob21lL3R0L2JpbjovaG9tZS90dD4KPGZvbzovaG9tZS90dD4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; a=foo:~:~/src; printf '<%s>\\n' \"$a\"; a+=:~; printf '<%s>\\n' \"$a\"",
+      "status": 0,
+      "stdoutBase64": "PGZvbzovaG9tZS90dDovaG9tZS90dC9zcmM+Cjxmb286L2hvbWUvdHQ6L2hvbWUvdHQvc3JjOi9ob21lL3R0Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; printf '<%s>\\n' x=~ x=~:~ a=b:~ 1x=~ foo:~ a+=~ _=~/src",
+      "status": 0,
+      "stdoutBase64": "PHg9L2hvbWUvdHQ+Cjx4PS9ob21lL3R0Oi9ob21lL3R0Pgo8YT1iOi9ob21lL3R0Pgo8MXg9fj4KPGZvbzp+Pgo8YSs9L2hvbWUvdHQ+CjxfPS9ob21lL3R0L3NyYz4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; printf '<%s>\\n' 'x'=~ x'='~ x\\=~ x=~'' x=~\"/src\" x=~/'src'",
+      "status": 0,
+      "stdoutBase64": "PHg9fj4KPHg9fj4KPHg9fj4KPHg9fj4KPHg9fi9zcmM+Cjx4PS9ob21lL3R0L3NyYz4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; printf '<%s>\\n' a=:~ a=':'~ a=\\:~ a=~':' a=~/':'~",
+      "status": 0,
+      "stdoutBase64": "PGE9Oi9ob21lL3R0Pgo8YT06fj4KPGE9On4+CjxhPX46Pgo8YT0vaG9tZS90dC86fj4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; v=prefix; a=$v:~; b=$v~; c=~$v; printf '<%s>\\n' \"$a\" \"$b\" \"$c\"",
+      "status": 0,
+      "stdoutBase64": "PHByZWZpeDovaG9tZS90dD4KPHByZWZpeH4+Cjx+cHJlZml4Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; v=; a=~$v; b=$v~; printf '<%s>\\n' \"$a\" \"$b\"; printf '<%s>\\n' ~$v $v~",
+      "status": 0,
+      "stdoutBase64": "PH4+Cjx+Pgo8fj4KPH4+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; readonly a=~/src; export b=~:~/bin; printf '<%s>\\n' \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "PC9ob21lL3R0L3NyYz4KPC9ob21lL3R0Oi9ob21lL3R0L2Jpbj4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; f() { local a=foo:~; printf '<%s>\\n' \"$a\"; }; f",
+      "status": 0,
+      "stdoutBase64": "PGZvbzovaG9tZS90dD4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/one; a=~ HOME=/two b=~; printf '<%s>\\n' \"$a\" \"$b\" ~",
+      "status": 0,
+      "stdoutBase64": "PC9vbmU+CjwvdHdvPgo8L3R3bz4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; printf '<%s>\\n' ~{/src,:suffix} {~,~/src} ~{/a,/b}/tail",
+      "status": 0,
+      "stdoutBase64": "PC9ob21lL3R0L3NyYz4KPC9ob21lL3R0OnN1ZmZpeD4KPC9ob21lL3R0Pgo8L2hvbWUvdHQvc3JjPgo8L2hvbWUvdHQvYS90YWlsPgo8L2hvbWUvdHQvYi90YWlsPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; printf '<%s>\\n' ~{/src,__bash_web_missing_account__}",
+      "status": 0,
+      "stdoutBase64": "PC9ob21lL3R0L3NyYz4KPH5fX2Jhc2hfd2ViX21pc3NpbmdfYWNjb3VudF9fPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=.; printf data >~/file; IFS= read -r v <~/file; printf '<%s>\\n' \"$v\"",
+      "status": 0,
+      "stdoutBase64": "PGRhdGE+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=.; printf data >'x=~'; IFS= read -r v <x=~; printf '<%s>\\n' \"$v\"",
+      "status": 0,
+      "stdoutBase64": "PD4K",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB4PS46IE5vIHN1Y2ggZmlsZSBvciBkaXJlY3RvcnkK"
+    },
+    {
+      "script": "HOME=/home/tt; set -- x=~:~ x=~; printf '<%s>\\n' \"$@\"",
+      "status": 0,
+      "stdoutBase64": "PHg9L2hvbWUvdHQ6L2hvbWUvdHQ+Cjx4PS9ob21lL3R0Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; for v in ~ ~/src x=~; do printf '<%s>\\n' \"$v\"; done",
+      "status": 0,
+      "stdoutBase64": "PC9ob21lL3R0Pgo8L2hvbWUvdHQvc3JjPgo8eD0vaG9tZS90dD4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; a=~; HOME=/next; b=~; printf '<%s>\\n' \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "PC9ob21lL3R0Pgo8L25leHQ+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME='é/🙂 space'; a=~/tail; printf '<%s>\\n' ~ \"$a\"",
+      "status": 0,
+      "stdoutBase64": "PMOpL/CfmYIgc3BhY2U+CjzDqS/wn5mCIHNwYWNlL3RhaWw+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "unset HOME; printf '<%s>\\n' ~",
+      "status": 0,
+      "stdoutBase64": "PC9ob21lL3NoYXVsPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; unset v; printf '<%s>\\n' ${v:-~}",
+      "status": 0,
+      "stdoutBase64": "PC9ob21lL3R0Pgo=",
+      "stderrBase64": ""
+    }
+  ]
+}
