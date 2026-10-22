@@ -67,6 +67,21 @@ the Waffle pin and normalized dependency lock. Build, receipt and gate helper
 changes therefore invalidate the receipt. Exact source SHA remains a separate,
 stronger requirement even when these inputs are unchanged.
 
+## Browser dependency transport
+
+The browser job keeps the Playwright cache and installs both Chromium and Firefox
+with their system dependencies. Before installation, it removes Azure's HTTP
+archive from the runner's apt mirror list. The runner's existing HTTPS Ubuntu
+archive and security archive remain unchanged, including their priorities.
+An empty remaining mirror list fails before installation. No package signatures,
+repositories, browser versions, timeouts or test selections change.
+
+On October 22, the browser cache restored 387 MiB successfully, but Azure package
+downloads consumed the 20-minute job before any tests ran. The runner's mirror
+list fails over when a source fails, not when it continues to return packages
+slowly. Choosing its existing HTTPS alternatives avoids that slow-success path.
+The mirror list comes from the [runner image configuration](https://github.com/actions/runner-images/blob/main/images/ubuntu/scripts/build/configure-apt-sources.sh).
+
 ## Verification and timing evidence
 
 `npm run test:ci` checks input invalidation, exact ten-target selection,
