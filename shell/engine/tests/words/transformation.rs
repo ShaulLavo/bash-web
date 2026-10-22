@@ -213,15 +213,21 @@ fn transformation_array_backed_parameters_fail_closed() {
         (r#"a[4]=four; args "${a@A}""#, 2),
         (r#"a[4]=four; declare -n r=a; args "${r@a}""#, 2),
         (r#"f() { local a; a=(one two); args "${a@A}"; }; f"#, 2),
-        (r#"f() { local a; a=(); declare -n r=a; args "${r@a}"; }; f"#, 2),
+        (
+            r#"f() { local a; a=(); declare -n r=a; args "${r@a}"; }; f"#,
+            2,
+        ),
         (r#"set -u; a=(one two); args "${a@A}""#, 2),
-        (r#"set -u; a=(); args "${a@A}""#, 1),
-        (r#"set -u; a[4]=four; declare -n r=a; args "${r@a}""#, 1),
+        (r#"set -u; a=(); args "${a@A}""#, 127),
+        (r#"set -u; a[4]=four; declare -n r=a; args "${r@a}""#, 127),
     ]
     .into_iter()
     .filter_map(|(source, status)| {
         let rig = Rig::new(Limits::default());
         let actual = rig.run(source);
+        if status == 127 {
+            assert!(String::from_utf8_lossy(&rig.errors.bytes()).contains("unbound variable"));
+        }
         (actual != status || !rig.calls.borrow().is_empty()).then_some(source)
     })
     .collect();

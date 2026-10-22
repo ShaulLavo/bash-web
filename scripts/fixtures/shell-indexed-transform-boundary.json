@@ -115,14 +115,14 @@
       "status": 127,
       "stdoutHex": "",
       "stderrHex": "2f7573722f62696e2f626173683a206c696e6520313a20613a20756e626f756e64207661726961626c650a",
-      "unsupportedGuestStatus": 1
+      "unsupportedGuestStatus": 127
     },
     {
       "script": "set -u; a[4]=four; declare -n r=a; printf '%s\\n' \"${r@a}\"",
       "status": 0,
       "stdoutHex": "610a",
       "stderrHex": "",
-      "unsupportedGuestStatus": 1
+      "unsupportedGuestStatus": 127
     }
   ]
 }
