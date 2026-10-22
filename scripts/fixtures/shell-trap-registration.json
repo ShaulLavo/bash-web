@@ -568,11 +568,116 @@
       "status": 0,
       "stdout": "s:0\ntrap -- ':' SIGRTMIN+5\n",
       "stderr": ""
+    },
+    {
+      "id": "process-ignored-exit-query",
+      "code": "trap '' EXIT; while read -r l; do echo \"got:$l\"; done < <(trap -p); trap - EXIT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "process-ignored-exit-set",
+      "code": "while read -r l; do echo \"got:$l\"; done < <(trap '' EXIT; trap -p)",
+      "status": 0,
+      "stdout": "got:trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "process-ignored-exit-query-reset",
+      "code": "trap '' EXIT INT; while read -r l; do echo \"got:$l\"; done < <(trap -p; trap : HUP; trap -p); trap - EXIT INT",
+      "status": 0,
+      "stdout": "got:trap -- '' SIGINT\ngot:trap -- ':' SIGHUP\ngot:trap -- '' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'\\x0b2'",
+      "code": "trap : '\u000b2'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'2\\x0b'",
+      "code": "trap : '2\u000b'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'\\x0c2'",
+      "code": "trap : '\f2'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'2\\x0c'",
+      "code": "trap : '2\f'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'\\r2'",
+      "code": "trap : '\r2'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'2\\r'",
+      "code": "trap : '2\r'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'\\n2'",
+      "code": "trap : '\n2'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'2\\n'",
+      "code": "trap : '2\n'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'\\t2'",
+      "code": "trap : '\t2'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'2\\t'",
+      "code": "trap : '2\t'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'\\xa02'",
+      "code": "trap : '\u00a02'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: \u00a02: invalid signal specification\n"
+    },
+    {
+      "id": "number-'2\\xa0'",
+      "code": "trap : '2\u00a0'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: 2\u00a0: invalid signal specification\n"
     }
   ],
   "correctionRecording": {
     "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
     "reviewedHead": "6609e3cb0b8b5ababcca7ba0ee0269f09492d337",
-    "addedCases": 24
+    "addedCases": 39
   }
 }
