@@ -10,7 +10,7 @@
   "counts": {
     "oils": {
       "total": 2492,
-      "passed": 1096,
+      "passed": 1099,
       "skipped": 810,
       "categories": {
         "Quoting and word splitting": {
@@ -20,7 +20,7 @@
         },
         "Parameter expansion": {
           "total": 228,
-          "passed": 108,
+          "passed": 111,
           "skipped": 55
         },
         "Brace expansion": {
@@ -97,7 +97,7 @@
     },
     "brush-suite": {
       "total": 2894,
-      "passed": 1079,
+      "passed": 1080,
       "skipped": 1006,
       "categories": {
         "and_or": {
@@ -682,7 +682,7 @@
         },
         "word_expansion/params": {
           "total": 59,
-          "passed": 18,
+          "passed": 19,
           "skipped": 4
         },
         "word_expansion/quotes": {
@@ -2367,8 +2367,8 @@
 {"id":"oils:var-ref:33","corpus":"oils","category":"Parameter expansion","kind":"builtins-only","outcome":"fail","actual":{"status":1,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogbGluZSAxOiB1bmRlZjogaW52YWxpZCBpbmRpcmVjdCBleHBhbnNpb24K"}},
 {"id":"oils:var-ref:57","corpus":"oils","category":"Parameter expansion","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:var-ref:98","corpus":"oils","category":"Parameter expansion","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"c3RhdHVzPTIKc3RhdHVzPTIK","stderr":""}},
-{"id":"oils:var-ref:129","corpus":"oils","category":"Parameter expansion","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":""}},
-{"id":"oils:var-ref:137","corpus":"oils","category":"Parameter expansion","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":""}},
+{"id":"oils:var-ref:129","corpus":"oils","category":"Parameter expansion","kind":"builtins-only","outcome":"pass","actual":{"status":2,"stdout":"","stderr":""}},
+{"id":"oils:var-ref:137","corpus":"oils","category":"Parameter expansion","kind":"builtins-only","outcome":"pass","actual":{"status":2,"stdout":"","stderr":""}},
 {"id":"oils:var-ref:149","corpus":"oils","category":"Parameter expansion","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:var-ref:161","corpus":"oils","category":"Parameter expansion","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"bGluZW5vPQo=","stderr":""}},
 {"id":"oils:var-ref:168","corpus":"oils","category":"Parameter expansion","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"Cg==","stderr":""}},
@@ -2386,7 +2386,7 @@
 {"id":"oils:var-ref:423","corpus":"oils","category":"Parameter expansion","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"IWFbMF0gCiFhQCAKeEBRICd5Jwpkb25lCg==","stderr":""}},
 {"id":"oils:var-ref:458","corpus":"oils","category":"Parameter expansion","kind":"builtins-only","outcome":"fail","actual":{"status":1,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogbGluZSAyOiBiYWQgdmFyIG5hbWU6IGludmFsaWQgdmFyaWFibGUgbmFtZQo="}},
 {"id":"oils:var-ref:467","corpus":"oils","category":"Parameter expansion","kind":"builtins-only","outcome":"fail","actual":{"status":1,"stdout":"","stderr":"L3Vzci9iaW4vYmFzaDogbGluZSAyOiAvOiBpbnZhbGlkIHZhcmlhYmxlIG5hbWUK"}},
-{"id":"oils:var-ref:475","corpus":"oils","category":"Parameter expansion","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":""}},
+{"id":"oils:var-ref:475","corpus":"oils","category":"Parameter expansion","kind":"builtins-only","outcome":"pass","actual":{"status":2,"stdout":"","stderr":""}},
 {"id":"oils:var-ref:491","corpus":"oils","category":"Parameter expansion","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:var-ref:509","corpus":"oils","category":"Parameter expansion","kind":"needs-commands","outcome":"skip"},
 {"id":"oils:var-ref:536","corpus":"oils","category":"Parameter expansion","kind":"needs-commands","outcome":"skip"},
@@ -7332,7 +7332,7 @@
 {"id":"brush-suite:word_expansion/params:14","corpus":"brush-suite","category":"word_expansion/params","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":""}},
 {"id":"brush-suite:word_expansion/params:15","corpus":"brush-suite","category":"word_expansion/params","kind":"builtins-only","outcome":"pass"},
 {"id":"brush-suite:word_expansion/params:16","corpus":"brush-suite","category":"word_expansion/params","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"SGVsbG8K","stderr":""}},
-{"id":"brush-suite:word_expansion/params:17","corpus":"brush-suite","category":"word_expansion/params","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":""}},
+{"id":"brush-suite:word_expansion/params:17","corpus":"brush-suite","category":"word_expansion/params","kind":"builtins-only","outcome":"pass","actual":{"status":2,"stdout":"","stderr":""}},
 {"id":"brush-suite:word_expansion/params:18","corpus":"brush-suite","category":"word_expansion/params","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"","stderr":""}},
 {"id":"brush-suite:word_expansion/params:19","corpus":"brush-suite","category":"word_expansion/params","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"RHVtcGluZyAqCkR1bXBpbmcgQAo=","stderr":""}},
 {"id":"brush-suite:word_expansion/params:20","corpus":"brush-suite","category":"word_expansion/params","kind":"builtins-only","outcome":"fail","actual":{"status":2,"stdout":"JHt2YXJefTogICBIZWxsbwoke3Zhcl5ofTogIEhlbGxvCiR7dmFyXkh9OiAgaGVsbG8KJHt2YXJebH06ICBoZWxsbwoke3Zhcl5oKn06IEhlbGxvCiR7dmFyXmhlfTogaGVsbG8KJHt2YXJeP306ICBIZWxsbwoke3Zhcl4qfTogIEhlbGxvCiR7dmFyXkh9KG5vY2FzZW1hdGNoKTogaGVsbG8KJHthcnJefTogCg==","stderr":"L3Vzci9iaW4vYmFzaDogc2hvcHQ6IG5vY2FzZW1hdGNoOiBpbnZhbGlkIHNoZWxsIG9wdGlvbiBuYW1lCi91c3IvYmluL2Jhc2g6IHNob3B0OiBub2Nhc2VtYXRjaDogaW52YWxpZCBzaGVsbCBvcHRpb24gbmFtZQo="}},

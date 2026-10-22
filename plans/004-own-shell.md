@@ -349,7 +349,7 @@ fallback.
       - Scalar length for ordinary names, positive positions, status and positional count (#20): Oils 314→322, Brush-suite 328→332, Bashkit-suite 492→505. UTF-8 locales count Unicode scalar values; C/POSIX and unrecognized locales count bytes. Input snapshots, decimal output and counting share the existing bounds and cancellation budget.
       - Scalar prefix/suffix pattern removal with bounded cooperative matching (#21): Oils 322→340, Brush-suite 332→333, Bashkit-suite 505→528. Shortest/longest scalar trims preserve inner pattern quotes, outer result protection and final-IFS effects; matcher exhaustion fails explicitly without partial results or candidate-string allocation.
       - Scalar case modification with ordinary identifiers and `^`, `^^`, `,`, `,,` (#23): Oils 340→345, Brush-suite 333→334, Bashkit-suite 528→539. C/POSIX ASCII and C.UTF-8/C.utf8 Latin-1 input mappings reuse bounded single-character pattern matching; full Unicode and locale collation remain deferred. Matcher and mapping capacities are admitted before allocation, with shared work bounds and cancellation.
-      - Scalar one-level indirection on ordinary names (`${!v}` and the eight scalar conditional operators) (#24): Oils 345→350, Brush-suite 334→335, Bashkit-suite 539→548. Pointer and target snapshots are bounded before copying; invalid pointers fail with fatal status 1, while valid unset targets remain distinct. Arrays, namerefs, special names and generic indirect suffixes remain deferred.
+      - Scalar one-level indirection on ordinary names (`${!v}` and the eight scalar conditional operators) (#24): Oils 345→350, Brush-suite 334→335, Bashkit-suite 539→548. Pointer and target snapshots are bounded before copying; invalid pointers fail with fatal status 1, while valid unset targets remain distinct. Arrays, namerefs, special names and generic indirect suffixes remain deferred. Bare `${!p}` to positional and special targets (`1`, `10`, `#`, `?`, `$`, `!`, `-`, `@`, `*`) reuses the direct-read and positional-list adapters; operators, nested operands, patterns and array targets on those targets stay unsupported.
       - Scalar replacement on ordinary names (`${v/p/r}`, `${v//p/r}`, `${v/#p/r}`, `${v/%p/r}`) (#25): Oils 350→379, Brush-suite 335→338, Bashkit-suite 548→584. Leftmost-longest basic-pattern search, lazy operands, typed ampersand protection, final-IFS behavior and shared raw/storage/work/field bounds are preserved; arrays, namerefs, options, locale collation and unsupported pattern forms remain deferred.
       - Scalar arithmetic, positional/scalar slices, readonly writes and read-unit error recovery (#28): Oils 380→481, Brush-suite 340→384, Bashkit-suite 595→754, with no lost cases. Boxed arithmetic futures and explicit scalar depth bounds retain native/WASI stack safety; staged shell-boundary checks preserve Bash error status before lazy evaluation.
       - Brace lists and numeric/ASCII-letter ranges (#29): Oils 481→525, Brush-suite 384→394, Bashkit-suite 754→785, with no lost cases; brace generator seeds 1/42 match Bash on 5,318 cases each. Fused `$((`/`<((` spans end by raw parenthesis matching and are classified by `chk_arithsub`; other substitution bodies (also inside `${…}` operands and raw `$((` text) are parsed with the script and fail with status 127, strictly separated. Nested parses run after each word's scan loop (debug stack per nesting level ~21 KB→~7 KB). Brace temporaries are charged by peak storage; the default argument count is 65,536. Follow-ups owned by later units: running `UnparsedCommandSubstitution` (a non-arithmetic `$((` whose text fails to parse) at expansion with status 2 belongs to command substitution; prefix assignments on function calls (`TEMP=x f`) remain unsupported and belong to functions/locals.
@@ -2227,3 +2227,32 @@ Remaining scored transformation failures need arrays, positional lists, integer
 or case attributes, `@P` or indirect names. See
 [the behavior notes](../docs/parameter-transformation.md) and
 [the receipt](../docs/evidence/parameter-transformation.json).
+
+## Follow-up: all-zero and overflowing digit parameters, 2026-10-22
+
+Status: Approved. Fix this in the direct parameter adapter, not in indirection.
+Bare `${!p}` reaches digit targets through the same direct read, so one fix
+covers both spellings.
+
+The review of the indirect special-target unit (PR #46) compared GNU Bash
+5.3.15 with the release Waffle guest (sha256 `e0aa18e3…`) after
+`set -- a b c d e f g h i j`:
+
+| Form | Bash | Waffle |
+| --- | --- | --- |
+| `"${00}"`, `"${000}"`, `r=00; "${!r}"` | `$0` (`/usr/bin/bash`) | empty |
+| `"${18446744073709551616}"` and its `${!r}` form | `a` | empty |
+| `"${9999999999999999999999999999999999999999}"` and its `${!r}` form | `i` | empty |
+| the two overflowing forms under `set -u` | `a` / `i`, status 0 | fatal `unbound variable`, status 127 |
+
+`r=01` and `r=0010` already match Bash. Suspected cause:
+`State::parameter` (`shell/engine/src/state.rs:343`) matches `$0` only on
+the literal `"0"`, so `00` parses to 0, fails `checked_sub(1)` and reads as
+empty. Overflowing digit strings fail `parse::<usize>()` and also read as
+empty. `require_bound` (`shell/engine/src/expand.rs:668`) treats the failed
+parse as unset under nounset. Bash converts the digits with wrapping
+arithmetic and selects the resulting positional. Derive the exact wrap rule
+from Bash's source and check it against controls before changing the code.
+Evidence: `/work/reports/bash-web/hill-climb/expansion/indirect-special-review-r2/controls.json`
+(rows `direct:00:` through `indirect:9999…:set -u; `). No frozen scored case
+has been checked against this; claim no gain unless a replay proves one.
