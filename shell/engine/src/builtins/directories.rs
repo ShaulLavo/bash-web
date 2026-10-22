@@ -1,5 +1,6 @@
-//! Original cd, pushd, popd and dirs after Bash 5.3's cd_builtin,
-//! change_to_directory, bindpwd and pushd.def. Only logical paths are
+//! cd, pushd, popd and dirs written for this engine. Behavior follows recorded
+//! GNU Bash 5.3.15 runs; Bash's cd_builtin, change_to_directory, bindpwd and
+//! pushd.def are named as semantic references only. Only logical paths are
 //! supported. Bash's physical modes (`cd -P`, and the raw-path chdir after
 //! logical canonicalization fails) need symlink resolution, which the host
 //! filesystem contract does not offer, so they fail explicitly.
@@ -16,8 +17,8 @@ const PUSHD_USAGE: &str = "pushd: usage: pushd [-n] [+N | -N | dir]\n";
 const POPD_USAGE: &str = "popd: usage: popd [-n] [+N | -N]\n";
 const DIRS_USAGE: &str = "dirs: usage: dirs [-clpv] [+N] [-N]\n";
 
-/// Why a directory change was refused. Every variant comes from a real host
-/// observation; nothing is inferred from an open succeeding.
+/// Why a directory change was refused: a host failure, or a local path-length
+/// or capability refusal. Successful opens are never used as metadata.
 enum Refusal {
     Missing,
     NotDirectory,
@@ -93,7 +94,9 @@ async fn emit(name: &str, text: &str, fds: &FdTable, context: &Context) -> Resul
     }
 }
 
-/// cd prints before publishing PWD; a failed print still publishes, then fails.
+/// cd prints before publishing PWD. A write that fails with status 1 is reported,
+/// publication still runs and the command returns 1. Other write failures and
+/// cancellation return before anything is published.
 async fn announce_and_commit(
     name: &str,
     shown: Option<&str>,
@@ -432,7 +435,6 @@ fn legal_number(text: &str) -> Option<i64> {
         .ok()
 }
 
-/// A rejected pushd/popd/dirs word, reported after parsing.
 enum Rejected {
     Number(String),
     Option(String),

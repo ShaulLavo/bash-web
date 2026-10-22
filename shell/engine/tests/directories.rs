@@ -1,6 +1,9 @@
-//! Original cd/pushd/popd/dirs contracts against the pinned GNU Bash 5.3.15
-//! recording in scripts/fixtures/shell-directories.json. The recording ran in a
-//! sandbox shaped like this filesystem: /, /home/guest (cwd and HOME), /tmp.
+//! cd/pushd/popd/dirs contracts against the pinned GNU Bash 5.3.15 recording in
+//! scripts/fixtures/shell-directories.json. The recording ran in a sandbox
+//! shaped like this filesystem: /, /home/guest (cwd and HOME), /tmp. Its stderr
+//! had Bash's `/usr/bin/bash: line N: ` prefix rewritten to `/usr/bin/bash: `
+//! (the fixture's `stderrNormalization`), because the engine prints no line
+//! numbers; stdout and status are unmodified.
 use futures::FutureExt;
 use shell_engine::{
     Limits, Session,

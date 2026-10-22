@@ -1,5 +1,6 @@
 {
   "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "stderrNormalization": "Bash's '/usr/bin/bash: line N: ' stderr prefix is rewritten to '/usr/bin/bash: ' at recording time; stdout and status are unmodified.",
   "cases": [
     {
       "name": "missing-dotdot",
@@ -172,7 +173,7 @@
       "stderr": "/usr/bin/bash: dirs: -x: invalid number\ndirs: usage: dirs [-clpv] [+N] [-N]\n/usr/bin/bash: dirs: -lv: invalid number\ndirs: usage: dirs [-clpv] [+N] [-N]\n/usr/bin/bash: dirs: zz: invalid option\ndirs: usage: dirs [-clpv] [+N] [-N]\n/usr/bin/bash: dirs: directory stack empty\n"
     },
     {
-      "name": "errexit",
+      "name": "successful-stack-commands-under-errexit",
       "setup": [],
       "code": "set -e; cd /; pushd /tmp; popd; echo done",
       "status": 0,

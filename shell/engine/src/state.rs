@@ -122,7 +122,6 @@ pub struct State {
     /// Scalar reference targets, distinct from ordinary variable values.
     namerefs: BTreeMap<String, String>,
     pub cwd: String,
-    /// Private pushd/popd/dirs storage with its own retained charge.
     directories: DirectoryStack,
     /// Function bodies are immutable. Isolated shells copy bindings, not ASTs.
     functions: BTreeMap<String, StoredFunction>,

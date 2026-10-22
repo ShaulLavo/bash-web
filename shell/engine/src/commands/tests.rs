@@ -1,5 +1,6 @@
-//! Original contracts against the independent production-view inventory at
-//! bash-web 92ab384. Baseline lists belong in tests, not in production dispatch.
+//! Original contracts that started from the independent production-view
+//! inventory at bash-web 92ab384, plus builtins added since (pushd, popd, dirs).
+//! Baseline lists belong in tests, not in production dispatch.
 use super::*;
 use std::collections::BTreeSet;
 
@@ -54,7 +55,7 @@ fn declaration_metadata_matches_only_the_five_literal_syntax_candidates() {
 }
 
 #[test]
-fn adapter_dispatch_preserves_the_old_dispatch_set_not_the_old_is_builtin_set() {
+fn builtin_dispatch_covers_the_current_builtin_arms_not_the_old_is_builtin_set() {
     assert_eq!(
         names(|command| matches!(command.handler(), Some(Handler::Builtin(_)))),
         baseline(&[

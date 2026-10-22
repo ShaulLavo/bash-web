@@ -1,6 +1,9 @@
-//! Private storage for pushd/popd/dirs. Its retained bytes stay charged to
-//! the shell's storage budget for as long as the entries live, like the
-//! positional parameters, rather than only for the command that added them.
+//! Private storage for pushd/popd/dirs. Like the positional parameters, its
+//! retained bytes (vector slots and string capacities) are charged to a ticket
+//! on the State memory budget for as long as the entries live; the builtins'
+//! Work admissions cover only transient copies. State::snapshot copies the
+//! entries and forks the ticket, while a derived Clone shares the ticket's Rc.
+//! A State without a memory budget holds no ticket.
 use super::State;
 use crate::exec::{RESOURCE_STATUS, StorageAllocation};
 use std::{cell::RefCell, rc::Rc};
@@ -42,7 +45,6 @@ impl State {
     pub(crate) fn directories(&self) -> &[String] {
         &self.directories.entries
     }
-    /// Charge or refund the stack's current retained size.
     fn recharge_directories(&mut self) -> Result<(), i32> {
         let bytes = retained_bytes(&self.directories.entries)?;
         if let Some(memory) = &self.directories.memory {
