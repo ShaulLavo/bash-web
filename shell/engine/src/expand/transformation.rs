@@ -5,7 +5,7 @@ use super::{
     Error, Expansion, Printability, Protection, TransformContext, admit_string_growth,
     admit_vec_slot, bounded, case::Locale, operand, utf8_locale,
 };
-use crate::state::{ScalarResolution, SharedState, State};
+use crate::state::{Binding, ScalarResolution, SharedState, State};
 
 /// A snapshot of the transformed parameter, taken before any suspension.
 struct Subject {
@@ -64,7 +64,10 @@ impl Expansion<'_> {
                 return Ok(subject);
             };
             // Array-backed targets stay outside this scalar adapter.
-            if target == "PIPESTATUS" || !operand::scalar_name(target) {
+            if target == "PIPESTATUS"
+                || !operand::scalar_name(target)
+                || matches!(s.binding(target), Some(Binding::Indexed(_)))
+            {
                 return Err(2.into());
             }
             self.work.admit_storage(target.len())?;

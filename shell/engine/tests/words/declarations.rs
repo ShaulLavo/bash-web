@@ -70,3 +70,28 @@ fn declaration_inspection_yields_and_cancels_without_mutation() {
         "$".repeat(12000)
     );
 }
+
+#[test]
+fn indexed_declarations_reject_without_scalar_projection_or_mutation() {
+    for setup in ["a=(zero one)", "a=()", "a=(); a[7]=seven"] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(setup), 0, "{setup}");
+        let before = rig.shell.state().borrow().bindings()["a"].clone();
+        assert_eq!(rig.run("declare -p a"), 2, "{setup}");
+        assert!(rig.output.bytes().is_empty(), "{setup}");
+        assert_eq!(rig.shell.state().borrow().bindings()["a"], before);
+    }
+}
+
+#[test]
+fn indexed_declaration_rejection_preserves_local_and_raw_reference() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("a=(global); f() { local a; a=(local); declare -p a; }; f"),
+        2
+    );
+    assert_eq!(rig.run("printf '%s\\n' \"${a[@]}\""), 0);
+    assert_eq!(rig.output.bytes(), b"global\n");
+    assert_eq!(rig.run("declare -n r=a; declare -p r"), 0);
+    assert_eq!(rig.output.bytes(), b"global\ndeclare -n r=\"a\"\n");
+}

@@ -60,6 +60,7 @@ async fn snapshot(
     let bytes = state
         .borrow()
         .declaration(name)
+        .map_err(|()| 2)?
         .and_then(|view| view.value)
         .map_or(0, str::len);
     scan_bytes(bytes, context, work).await?;
@@ -69,7 +70,7 @@ async fn snapshot(
         nameref,
         readonly,
         exported,
-    }) = state.declaration(name)
+    }) = state.declaration(name).map_err(|()| 2)?
     else {
         return Ok(None);
     };

@@ -70,11 +70,12 @@
   },
   "waffle": {
     "repository": "https://github.com/ShaulLavo/waffle",
-    "revision": "fc58a532f0d7a617e631ea4b7580a190915d4ed6",
+    "revision": "c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289",
     "package": "waffle",
-    "version": "0.0.58",
-    "specifier": "git+https://github.com/ShaulLavo/waffle.git#fc58a532f0d7a617e631ea4b7580a190915d4ed6",
+    "version": "0.0.63",
+    "specifier": "git+https://github.com/ShaulLavo/waffle.git#c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289",
     "license": "MIT",
+    "descriptorAdapter": "Original local Rust logical-to-physical fd translation and WASI path_open flags/rights adapter, from docs/host-abi.md at the selected revision. No copied runtime implementation. Native MemoryFs uses its own same-node/new-description operation; unexported buffers retain their explicit boundary. See docs/descriptor-reopening.md and plan 004.",
     "permissionAdapter": "Original local Rust adapter from runtime_fs.path_permissions_get documentation at the selected revision. No copied upstream implementation. Preserve the four-word supported-mode/access contract; query metadata without opening payloads. Test-only storage conformance imports fs/vfs-internal.ts from the same pinned source module as SharedFilesystem; product composition stays default FAST and the frozen runner stays public memory.",
     "strategy": "Required peer imported by the JavaScript shell adapter; exact same Git pin used as development dependency for browser builds and tests. One application-created runtime per page owns shared services. No runtime source tree is vendored. Waffle reports runtime_proc startup failures only through typed parent outcomes and full host diagnostics, without child-stdio bytes even before adapter entry. Host-root reporting stays unchanged. Waffle owns lowest-free preopen placement and the single wasi-libc scanner patch; every locally built WASI guest final-links the patched sysroot."
   },
@@ -1124,10 +1125,11 @@
       "Selected-token whitelist extension using the existing bounded operand parser, with no parser/AST changes",
       "Explicit fatal invalid-indirection error metadata using the existing source/descriptor/containment layer, with unconditional status 1",
       "Separate optional diagnostic pointer spelling in existing scalar operators, preserving nested errors and charging the resolved assignment key",
-      "Original fixture bounds, exact snapshot/work/diagnostic-field boundaries, cancellation130, frame recovery and no-partial-dispatch controls"
+      "Original fixture bounds, exact snapshot/work/diagnostic-field boundaries, cancellation130, frame recovery and no-partial-dispatch controls",
+      "Bare positional and special-parameter targets (digits, #, ?, $, !, -, @, *) dispatch to the existing direct-read and positional-list adapters; Bash's indirect nounset quirks for empty * and unset ! are original GNU Bash 5.3.15 controls, with no upstream code"
     ],
     "strategy": "Resolve one ordinary identifier pointer to one ordinary identifier target. Preserve unset pointer versus empty/invalid pointer versus valid unset target. Reuse the existing quote-aware field path and lazy scalar -, :-, +, :+, =, :=, ?, :? dispatch. Assign through the resolved target, retain completed writes and post-expansion IFS behavior, and report !pointer for the outer selected error while nested errors keep their own names. Pointer/value snapshots are bounded by raw bytes and remaining work/storage before copying; the atomic copy is bounded by the existing command expansion ceiling and followed by cooperative byte scanning. Identifier validation checks every byte through shared Work. All recursive selected operands keep the existing 4096-byte token, cumulative parse-work and 32-level depth limits. No state borrow crosses await. Invalid indirection uses the existing diagnostic owner, source anchor and child containment, with status 1; selected ? errors retain the current environment-specific parameter-error status. Native/WASI fixtures include exact work/storage/field controls, lazy unsupported operands, diagnostics, side effects, frame restoration, cancellation and recovery. No process, filesystem, browser, parser or executor code is ported or changed.",
-    "localDivergence": "Only identifier pointers to identifier scalars are supported. Positional/special pointer names and targets, zero, arrays and namerefs, prefix listings, transformations/options and every generic IndirectSuffix (including indirect trim/case/replacement/substring) remain explicit status 2. All subscript-bearing target values, including malformed ones, are deliberately rejected as unsupported without interpreting their contents. Composability is through the AST scalar operators and nested operands/patterns/diagnostics/declarations; it is not a claim that indirect suffixes or indirect length work. Unlike upstream, never reparse a target string, insert sentinels, truncate an invalid-name diagnostic to 256 characters, or import accumulated output/mapfile logic. Bounded diagnostic failure uses the existing explicit limit status. The prior unsupported-operand assertion is retained with an array-pointer source (${!v[0]}) replacing its newly supported ordinary-pointer spelling; all earlier assertions and upstream parser/API/streaming files remain intact.",
+    "localDivergence": "Only identifier pointers are supported. Their targets are identifier scalars or bare positional and special parameters (digits including 0, #, ?, $, !, -, @, *) read through the existing direct-read and positional-list adapters. Positional/special pointer names, special targets under operators, patterns, replacements or nested operands, arrays and namerefs, prefix listings, transformations/options and every generic IndirectSuffix (including indirect trim/case/replacement/substring) remain explicit status 2. Existing direct-read limits for all-zero and overflowing digit targets are separate: they currently read empty with status 0, or fail under nounset with status 127, rather than returning unsupported status 2. All subscript-bearing target values, including malformed ones, are deliberately rejected as unsupported without interpreting their contents. Composability is through the AST scalar operators and nested operands/patterns/diagnostics/declarations; it is not a claim that indirect suffixes or indirect length work. Unlike upstream, never reparse a target string, insert sentinels, truncate an invalid-name diagnostic to 256 characters, or import accumulated output/mapfile logic. Bounded diagnostic failure uses the existing explicit limit status. The prior unsupported-operand assertion is retained with an array-pointer source (${!v[0]}) replacing its newly supported ordinary-pointer spelling; all earlier assertions and upstream parser/API/streaming files remain intact.",
     "fixedOracleInspection": {
       "identity": "unchanged committed docs/evidence/own-shell-oracle.json and own-shell-baseline.json",
       "standaloneCandidateCases": [
@@ -1545,7 +1547,7 @@
       "shell/utilities/tests/streaming.rs",
       "shell/engine/tests/support/streaming.rs"
     ],
-    "strategy": "Port only the grep behaviors needed by step 1 acceptance. Read descriptors in 8 KiB chunks, retain at most min(Limits.line_bytes, 64 KiB) per record, write selected records immediately with descriptor backpressure, and checkpoint cancellation while reading/scanning. Pattern input is at most 4096 bytes; the linear-time regex crate has 256 KiB compiled-program and DFA-cache limits and nesting limit 64. An original small BRE translator supplies unescaped literal versus escaped operator rules and preserves caret/dollar anchors only at BRE branch boundaries, including escaped groups and alternation (GNU grep oracle regressions); do not import Bashkit grep_pattern, backtracking engines, whole-file reads, output buffers or the bug25 buffering architecture. Preserve record bytes including CR, NUL and invalid UTF-8 instead of binary-file suppression. Multiple operands get filename prefixes; count is per input; -q stops at the first selected record. Original mkdir and -p resolve against shell cwd and use FileSystem plus preview1 path_create_directory/path_filestat_get, validating an existing directory rather than accepting files. The memory filesystem tracks bounded directory metadata. Runtime metadata calls share the explicitly deferred synchronous-filesystem stall/cancellation limitation; there is no compatibility fallback. General utilities remain plan 004 step 4.",
+    "strategy": "Port only the grep behaviors needed by step 1 acceptance. Read descriptors in 8 KiB chunks, retain at most min(Limits.line_bytes, 64 KiB) per record, write selected records immediately with descriptor backpressure, and checkpoint cancellation while reading/scanning. Pattern input is at most 4096 bytes; the linear-time regex crate has 256 KiB compiled-program and DFA-cache limits and nesting limit 64. An original small BRE translator supplies unescaped literal versus escaped operator rules and preserves caret/dollar anchors only at BRE branch boundaries, including escaped groups and alternation (GNU grep oracle regressions); do not import Bashkit grep_pattern, backtracking engines, whole-file reads, output buffers or the bug25 buffering architecture. Preserve record bytes including CR, NUL and invalid UTF-8 instead of binary-file suppression. Multiple operands get filename prefixes; count is per input; -q stops at the first selected record. Original mkdir and -p resolve against shell cwd and use FileSystem plus preview1 path_create_directory/path_filestat_get, validating an existing directory rather than accepting files. The memory filesystem tracks bounded directory metadata. Runtime metadata calls share the explicitly deferred synchronous-filesystem stall/cancellation limitation; there is no compatibility fallback. General utilities remain plan 004 step 4. Cat and grep operands use the original io::open_path adapter before opening files, so descriptor names resolve through the logical shell table rather than private WASI descriptors. The grep adapter retains per-operand errors, cancellation and quiet-success precedence.",
     "excluded": [
       "grep long options, -e/-f, recursive traversal, context and binary-file classification",
       "full GNU BRE/ERE syntax and locale/collation parity, backreferences and PCRE",
@@ -1553,11 +1555,13 @@
     ]
   },
   "shellControlFlow": {
+    "select": "Original bounded noninteractive select adapter and controls observed against GNU Bash 5.3.15. Reuses admitted expansion, scalar assignments and structured loop outcomes without copying upstream code. One-byte input reads preserve pipe ownership; per-iteration work and live buffers preserve cancellation and storage admission.",
     "classification": "Original structured execution, argv test, conditional, filesystem metadata/directory, no-capture ERE and dynamic-time adapters; GNU Bash 5.3.15 is a behavior oracle, not copied implementation.",
     "paths": [
       "shell/engine/src/exec.rs",
       "shell/engine/src/interpreter.rs",
       "shell/engine/src/interpreter/control.rs",
+      "shell/engine/src/interpreter/select.rs",
       "shell/engine/src/interpreter/conditional.rs",
       "shell/engine/src/interpreter/eval.rs",
       "shell/engine/src/builtins.rs",
@@ -1569,6 +1573,9 @@
       "shell/engine/src/runtime/wasi.rs",
       "shell/engine/src/runtime/tests.rs",
       "shell/engine/tests/words/control.rs",
+      "shell/engine/tests/words/select.rs",
+      "scripts/test-own-shell-select.ts",
+      "scripts/fixtures/shell-select.json",
       "shell/engine/tests/words/conditional.rs",
       "shell/engine/tests/words/test_builtin.rs",
       "shell/engine/tests/cli.rs",
@@ -1763,8 +1770,8 @@
       "shell/engine/tests/words/read_count.rs",
       "tests/external-commands.spec.ts"
     ],
-    "implementation": "Original incremental counted input with one-byte reads, bounded UTF-8 validation, escape/continuation processing, NUL skipping, scalar IFS-whitespace trimming, count validation and exact-boundary stopping. Reuses the existing local locale selector and state/endpoint/work admission. Shared live buffer admission remains retained through assignment; cancellation and errors drop it. Uncounted line-reader implementation is moved unchanged from the exact base.",
-    "deferred": "Uncounted escapes and splitting, multiple destinations, arrays, -N/-d, terminal/editor/timeouts, other locale encodings and malformed UTF-8 scalar representation. No runtime metadata or permissions changes.",
+    "implementation": "Original incremental counted input with one-byte reads, bounded UTF-8 validation, escape/continuation processing, NUL skipping, scalar IFS-whitespace trimming, count validation and exact-boundary stopping. Reuses the existing local locale selector and state/endpoint/work admission. Shared live buffer admission remains retained through assignment; cancellation and errors drop it. The later shellReadScalar adaptation extends this reader to ordinary logical lines and multiple destinations.",
+    "deferred": "Arrays, -N/-d, terminal/editor/timeouts, other locale encodings and malformed UTF-8 scalar representation. No runtime metadata or permissions changes.",
     "gate": "Failing-first original Rust controls, exact raw stdout and status differentials on native shell-cli and production shell-runtime on real Waffle, native/WASI suites, browser external-guest pipe, unchanged frozen 9221-record oracle and zero-lost membership comparison."
   },
   "shellParameterTransformation": {
@@ -1845,6 +1852,91 @@
       "non-ASCII option bytes, which cannot be represented individually by the existing UTF-8 scalar binding storage",
       "byte-identical GNU Bash --help prose"
     ]
+  },
+  "shellIndexedArrays": {
+    "classification": "Original local indexed binding and assignment adapters, with GNU Bash 5.3.15 as a behavior oracle. No upstream implementation copied or adapted.",
+    "baseRevision": "361992834804c5d9325022ddc3580f5e9899bcee",
+    "paths": [
+      "shell/engine/src/state/binding.rs",
+      "shell/engine/src/state/bindings_tests.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/interpreter/indexed.rs",
+      "shell/engine/src/interpreter.rs",
+      "shell/engine/src/exec.rs",
+      "shell/engine/src/expand.rs",
+      "shell/engine/src/expand/positional.rs",
+      "shell/engine/src/expand/operand.rs",
+      "shell/engine/tests/words.rs",
+      "shell/engine/tests/words/getopts.rs",
+      "shell/engine/src/state/getopts_tests.rs",
+      "shell/engine/src/builtins/getopts.rs",
+      "shell/engine/src/builtins/getopts/tests.rs",
+      "scripts/fixtures/shell-indexed-integration.json",
+      "shell/engine/src/expand/transformation.rs",
+      "shell/engine/tests/words/transformation.rs",
+      "scripts/fixtures/shell-indexed-transform-boundary.json"
+    ],
+    "implementation": "One scalar-or-indexed binding map. Unique sparse indexed writes mutate state-owned trees in place; shared snapshots pay full admitted copy-on-write. Cached string accounting and a conservative bound derived from the pinned Rust 1.98.1 B-tree allocation layouts replace whole-map per-write charges. Assignment-only commands synchronously commit each expanded/admitted update and keep session-budgeted element/range inverses for resource/cancellation rollback, preserving earlier completed writes on ordinary semantic errors and durable RHS parameter assignments on rollback. Isolated snapshots and State clones exclude the caller journal. Complete prefix/local restoration, readonly checks and scalar element-zero writes remain state-owned. RHS expansion precedes subscript effects; invalid negative writes abort the read unit; relative reads include i64::MAX. Array-valued IFS disables splitting. PIPESTATUS indexed lengths use the special producer. Parser AST and field expansion are reused without parser changes. After normal PR47 integration, OPTIND indexed updates refresh the shell-owned cursor and the inverse journal restores the hidden cluster cursor on resource rejection/cancellation. Durable RHS OPTIND assignments refresh its saved cursor; ordinary semantic errors and temporary-prefix behavior retain their existing policy. Getopts aggregate admission shares the scalar publication sizing for indexed locals, including missing-zero and repeated resolved aliases, so resource rejection occurs before the hidden cursor commit. Normal-main scalar transformation integration rejects resolved indexed bindings, including namerefs, before scalar projection while preserving prior nounset and scalar-local ordering.",
+    "deferred": "Unquoted syntactic compound subscripts reject status 2 until implemented; quoted/escaped spellings remain data. Array slices/indices/operators/transforms, indexed unset, declare/local array flags, associative arrays, arithmetic array lvalues, BASH_REMATCH capture production and arbitrary non-UTF8 word bytes remain deferred. Array-valued IFS star-join raw sentinel bytes are custom probes, not claimed scored gains.",
+    "gate": "Failing-first native regressions, default-limit 5000 incremental writes/5000 appends/10000 compound elements, copy-on-write/snapshot controls, resource/cancellation/refund and durable-RHS undo tests, production Waffle byte/status differentials, native/WASI suites, unchanged quality/layer gates and frozen 9221-record zero-lost membership comparison. Node allocation derivation cites pinned Rust source; no upstream implementation copied.",
+    "integrationBaseRevision": "93fdf762f2a694427440d07156c7a8c458ecc995",
+    "nodeLayoutReference": {
+      "repository": "https://github.com/rust-lang/rust",
+      "revision": "48a229ceaefd4985c50990b14116b6d856af0985",
+      "path": "library/alloc/src/collections/btree/node.rs",
+      "classification": "Allocation layout reference only. Conservative allocation bound and local adapters are original; no upstream implementation copied."
+    }
+  },
+  "shellReadScalar": {
+    "repository": "https://github.com/everruns/bashkit",
+    "revision": "491c3281f668b76d64b15210b8f5d7bf97244be0",
+    "license": "MIT",
+    "classification": "Adapted scalar field boundaries, last-destination remainder and selected examples; original bounded reader, protection and state adapters.",
+    "implementationSources": [
+      {
+        "path": "crates/bashkit/src/builtins/read.rs",
+        "sha256": "0dfc47078882811b7a6bb4bcff39a37f349de5ce62842185c523447ff4caaa2a",
+        "items": [
+          "split_fields scalar IFS boundaries and last-field versus remainder distinction",
+          "read_record escape, continuation and EOF observations",
+          "multiple-destination, IFS and trimming test examples"
+        ]
+      }
+    ],
+    "implementationDestinations": [
+      "shell/engine/src/builtins/read.rs",
+      "shell/engine/src/builtins/read/fields.rs"
+    ],
+    "testDestinations": [
+      "shell/engine/tests/words/read_scalar.rs",
+      "scripts/test-own-shell-read-scalar.ts"
+    ],
+    "changes": "Use the existing counted incremental reader for ordinary logical lines. Replace upstream protected-character placeholders with an admitted one-bit-per-byte map, avoiding collisions with real Unicode input. Return borrowed source spans instead of a field vector, preserve the last destination remainder, snapshot existing IFS membership before assignments, and use the existing state write API. Keep byte-at-a-time endpoint reads, count/UTF-8 boundaries, command and live storage admission, cancellation and exact-sized retained values. Stop options at the first name; preserve writes before a later invalid name.",
+    "deferred": "No arrays/read-a/mapfile, new option families, general attributes, nameref or scope implementation. Existing state owns scalar resolution and IFS membership.",
+    "oracle": "GNU Bash 5.3.15; exact stdout bytes and exit status through production Waffle, plus native/WASI resource controls."
+  },
+  "shellDirectories": {
+    "classification": "cd, pushd, popd and dirs builtins, private directory-stack state and controls written for this engine by this lane. Behavior is checked against recorded GNU Bash 5.3.15 runs; no Bash source text was copied.",
+    "oracle": "GNU Bash 5.3.15(1)-release",
+    "referenceSources": [
+      "GNU Bash builtins/cd.def: cd_builtin, change_to_directory, bindpwd (named from the author's knowledge; no revision or archive inspected)",
+      "GNU Bash builtins/pushd.def: pushd_builtin, popd_builtin, dirs_builtin, get_dirstack_index (same)",
+      "GNU Bash lib/sh/pathcanon.c: sh_canonpath (same)"
+    ],
+    "implementationDestinations": [
+      "shell/engine/src/builtins/directories.rs",
+      "shell/engine/src/state/directory_stack.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/commands.rs",
+      "shell/engine/src/state.rs"
+    ],
+    "testDestinations": [
+      "shell/engine/tests/directories.rs",
+      "scripts/fixtures/shell-directories.json",
+      "shell/engine/tests/streaming.rs"
+    ],
+    "strategy": "Logical-mode cd over the existing host stat contract: lexical canonicalization that requires a directory before each .. and at the result, host-reported search permission, and the raw path's real error when canonicalization fails. The cwd field is updated directly first; OLDPWD and PWD then publish through the existing admitted assignment path, and a readonly binding fails the command without undoing the change. Each stack version is one immutable Rc value owning its entries and one StorageAllocation ticket on the State memory budget for the Rc box, vector slots and string capacities. A change admits the next version's requested bytes before allocating it, reconciles recorded excess vector capacity into the ticket, and publishes only on success. Clone and State::snapshot share the version; changes build an admitted copy. pushd dir and popd prepare the next version before cd and publish it only after cd succeeds; no-argument and rotating pushd change the stack before cd, as Bash does. Work admission covers only transient copies, and the async paths take cooperative checkpoints; option parsing is synchronous.",
+    "deferred": "cd -P/-e and the physical raw-path retry need symlink resolution, which the filesystem contract lacks; they fail explicitly. CDPATH tilde entries, the DIRSTACK array (variables family), pwd -L/-P, and decoupled PWD values remain unsupported. See docs/directories.md."
   },
   "shellDeclarationPrinting": {
     "classification": "Original read-only Rust declaration view and scalar serializer, with original recorded GNU Bash controls. No upstream implementation copied or adapted.",

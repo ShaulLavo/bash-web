@@ -26,5 +26,7 @@ TypeScript regressions read that recording, not the CI host's Bash.
 Global enumeration, new global declared-unset storage, indexed/associative
 arrays, integer/case attributes, and new special-variable support are excluded.
 The frozen 24-case scalar selection is targeted diagnostic evidence only.
-Full replay, baseline updates, independent review, and landing qualification
-remain the parent lane's responsibility after its serialized integration slot.
+Indexed bindings now reject with status 2 instead of printing element zero as a
+scalar. Direct, empty, sparse, local and raw-nameref controls cover this boundary.
+Full replay and baseline updates use the hosted frozen-ruler artifact during the
+parent lane's serialized landing slot.
