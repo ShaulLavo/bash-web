@@ -307,12 +307,8 @@ impl State {
         )?;
         let shell_name = snapshot_value(source, |s| Some(&s.shell_name), cancel, work).await?;
         let cwd = snapshot_value(source, |s| Some(&s.cwd), cancel, work).await?;
-        let directories = snapshot_vec(source, |s| s.directories.entries(), cancel, work).await?;
-        let directories = source
-            .borrow()
-            .directories
-            .fork(directories)
-            .map_err(|_| Error::Status(crate::exec::RESOURCE_STATUS))?;
+        // Shares the immutable, already charged stack version; changes copy it.
+        let directories = source.borrow().directories.clone();
         let variables = snapshot_map(source, |s| &s.variables, cancel, work).await?;
         let exported = snapshot_set(source, |s| &s.exported, cancel, work).await?;
         let readonly = snapshot_set(source, |s| &s.readonly, cancel, work).await?;

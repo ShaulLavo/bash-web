@@ -36,11 +36,21 @@ published.
 ## Directory stack
 
 The stack is private shell state (`State::directories`, bottom entry first).
-Its retained bytes are charged to a ticket on the shell's State memory budget
-while the entries live, like the positional parameters; per-command Work
-admission covers only transient copies such as listings. Subshells, pipelines
-and command substitutions get a copy through `State::snapshot`, which also forks
-the ticket; a plain derived `Clone` shares it. No variable exposes
+Each version of the stack is one immutable value that owns its entries and a
+ticket on the shell's State memory budget for every byte they keep: the `Rc`
+box, the vector slots and the string capacities. A change admits the next
+version's requested bytes before allocating it and publishes it only on
+success; a refusal leaves data and charge unchanged. Recorded vector capacity
+beyond the request is reconciled into the ticket before publication. That is
+bookkeeping of recorded capacity, not allocator-level accounting.
+`State::snapshot` and `Clone` share the current version, charged once; whoever
+changes it builds an admitted copy. Per-command Work admission covers only
+transient copies such as listings.
+
+`pushd dir` and `popd` prepare the next version before changing directory and
+publish it only if the cd succeeds; a refusal, a failed cd or cancellation
+drops it with its charge. No-argument `pushd` and `pushd +N`/`-N` change the
+stack before the cd and keep that change when the cd fails, as in Bash. No variable exposes
 it: `DIRSTACK` belongs to the variables family and is not implemented.
 
 `pushd [-n] [+N | -N | dir]`, `popd [-n] [+N | -N]` and

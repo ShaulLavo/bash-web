@@ -490,7 +490,8 @@ struct PushdOptions {
 }
 
 /// pushd_builtin's option loop. Every other signed word is a number, so
-/// pushd never reports an invalid option; a bare `-` is an operand.
+/// pushd never reports an invalid option. A bare `-` is an operand, while a
+/// bare `+` is an invalid number.
 fn pushd_options(args: &[String], stored: usize) -> Result<PushdOptions, Rejected> {
     let mut options = PushdOptions {
         nocd: false,
@@ -511,7 +512,7 @@ fn pushd_option(options: &mut PushdOptions, word: &str, stored: usize) -> Result
     match word {
         "-n" => options.nocd = true,
         "--" => return Ok(false),
-        word if word.len() > 1 && signed(word) => options.rotation = Some(rotation(word, stored)?),
+        word if word != "-" && signed(word) => options.rotation = Some(rotation(word, stored)?),
         _ => return Ok(false),
     }
     Ok(true)
@@ -566,12 +567,18 @@ pub(super) async fn pushd(
     if operands.len() > 1 {
         return fail("pushd", "too many arguments", None, 1, fds, context).await;
     }
-    let cwd = state.borrow().cwd.clone();
+    // The pushed stack is admitted before cd changes anything and published
+    // only after it succeeds; failure or cancellation drops it.
+    let entry = if options.nocd {
+        operand.clone()
+    } else {
+        state.borrow().cwd.clone()
+    };
+    let pushed = state.borrow().prepare_push_directory(entry)?;
     if !options.nocd && change("pushd", Some(operand), state, fds, context, work).await? != 0 {
         return Ok(Outcome::status(1));
     }
-    let entry = if options.nocd { operand.clone() } else { cwd };
-    state.borrow_mut().push_directory(entry)?;
+    state.borrow_mut().install_directories(pushed);
     print_stack("pushd", state, fds, context, work).await?;
     Ok(Outcome::status(0))
 }
@@ -587,12 +594,13 @@ async fn swap(
         return fail("pushd", "no other directory", None, 1, fds, context).await;
     };
     work.admit_storage(top.len()).map_err(error_status)?;
+    // Bash swaps before changing directory and keeps the swap when cd fails.
     let cwd = state.borrow().cwd.clone();
+    state.borrow_mut().replace_top_directory(cwd)?;
     let status = change("pushd", Some(&top), state, fds, context, work).await?;
     if status != 0 {
         return Ok(Outcome::status(status));
     }
-    state.borrow_mut().replace_top_directory(cwd)?;
     print_stack("pushd", state, fds, context, work).await?;
     Ok(Outcome::status(0))
 }
@@ -689,6 +697,9 @@ async fn pop_top(
     context: &Context,
     work: &mut Work,
 ) -> Result<Outcome, i32> {
+    // As in pushd, the shorter stack is admitted before the cd and published
+    // only after it succeeds.
+    let popped = state.borrow().prepare_pop_directory()?;
     if !nocd {
         let top = state
             .borrow()
@@ -702,8 +713,7 @@ async fn pop_top(
             return Ok(Outcome::status(status));
         }
     }
-    let top = state.borrow().directories().len().saturating_sub(1);
-    state.borrow_mut().remove_directory(top)?;
+    state.borrow_mut().install_directories(popped);
     print_stack("popd", state, fds, context, work).await?;
     Ok(Outcome::status(0))
 }
@@ -836,7 +846,7 @@ pub(super) async fn dirs(
         Err(rejected) => return reject("dirs", rejected, DIRS_USAGE, stored, fds, context).await,
     };
     if options.clear {
-        state.borrow_mut().clear_directories()?;
+        state.borrow_mut().clear_directories();
         return Ok(Outcome::status(0));
     }
     options.format.only = match options.index {
@@ -848,3 +858,6 @@ pub(super) async fn dirs(
     let printed = emit("dirs", &text, fds, context).await?;
     Ok(Outcome::status(if printed { 0 } else { 1 }))
 }
+
+#[cfg(test)]
+mod tests;

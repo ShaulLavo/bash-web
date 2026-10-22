@@ -199,6 +199,36 @@
       "stderr": ""
     },
     {
+      "name": "swap-missing-directory",
+      "setup": [],
+      "code": "cd /; pushd -n /absent_review_dir >/dev/null; pushd; echo s=$?; pwd; dirs -l",
+      "status": 0,
+      "stdout": "s=1\n/\n/ /\n",
+      "stderr": "/usr/bin/bash: pushd: /absent_review_dir: No such file or directory\n"
+    },
+    {
+      "name": "swap-readonly-oldpwd",
+      "setup": [
+        "/tmp/a/foo",
+        "/tmp/b/foo"
+      ],
+      "code": "cd /; pushd /tmp/a >/dev/null; pushd /tmp/b >/dev/null; readonly OLDPWD; pushd; echo s=$?; pwd; dirs -l",
+      "status": 0,
+      "stdout": "s=1\n/tmp/a\n/tmp/a /tmp/b /\n",
+      "stderr": "/usr/bin/bash: OLDPWD: readonly variable\n"
+    },
+    {
+      "name": "pushd-bare-plus",
+      "setup": [
+        "/tmp/a/foo",
+        "/tmp/b/foo"
+      ],
+      "code": "cd /; pushd +; echo s=$?; pwd; dirs -l; pushd -- +; echo s=$?; cd /tmp/a; cd /tmp/b; pushd - >/dev/null; echo s=$? $PWD; dirs -l; popd +; echo s=$?; dirs +; echo s=$?",
+      "status": 0,
+      "stdout": "s=2\n/\n/\ns=1\ns=0 /tmp/a\n/tmp/a /tmp/b\ns=2\ns=2\n",
+      "stderr": "/usr/bin/bash: pushd: +: invalid number\npushd: usage: pushd [-n] [+N | -N | dir]\n/usr/bin/bash: pushd: +: No such file or directory\n/usr/bin/bash: popd: +: invalid number\npopd: usage: popd [-n] [+N | -N]\n/usr/bin/bash: dirs: +: invalid number\ndirs: usage: dirs [-clpv] [+N] [-N]\n"
+    },
+    {
       "name": "closed-stdout",
       "setup": [
         "/tmp/a"
