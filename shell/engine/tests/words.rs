@@ -4378,5 +4378,8 @@ mod getopts;
 #[path = "words/select.rs"]
 mod select;
 
+#[path = "words/type_builtin.rs"]
+mod type_builtin;
+
 #[path = "words/tilde.rs"]
 mod tilde;
