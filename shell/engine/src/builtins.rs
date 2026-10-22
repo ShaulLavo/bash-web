@@ -1,4 +1,5 @@
 //! Bash builtins. External commands are installed by the embedding runtime.
+mod declarations;
 mod getopts;
 mod printf;
 mod read;
@@ -681,6 +682,7 @@ async fn declarations(
     work: &mut Work,
 ) -> Result<Outcome, i32> {
     let mut args = args.into_iter().peekable();
+    let mut print = false;
     let mut nameref = false;
     let mut readonly = false;
     let mut exported = false;
@@ -697,6 +699,7 @@ async fn declarations(
                     .await
                     .map_err(error_status)?;
                 match flag {
+                    b'p' if matches!(name, "declare" | "typeset") => print = true,
                     b'n' => nameref = true,
                     b'r' => readonly = true,
                     b'x' => exported = true,
@@ -704,6 +707,9 @@ async fn declarations(
                 }
             }
         }
+    }
+    if print {
+        return declarations::print(name, args, state, fds, context, work).await;
     }
     if nameref && (readonly || exported) {
         return Err(2);

@@ -63,10 +63,7 @@ fn declaration_inspection_yields_and_cancels_without_mutation() {
     let rig = Rig::new(Limits::default());
     rig.variable("v", &"$".repeat(12000));
     let job = rig.shell.start("declare -p v").unwrap();
-    rig.ex.drive(1);
-    assert!(!job.is_finished());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
+    rig.interrupt_after_counting_yields(job);
     assert!(rig.output.bytes().is_empty());
     assert_eq!(
         rig.shell.state().borrow().bindings()["v"],

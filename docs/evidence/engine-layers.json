@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "a6f19ff4f4f892c50cdd73227d0b79b22fd7139f73a28d191813e2c59491fc2d",
+    "engineSourceSha256": "0576a1cda1da707921b1a55b90af9e19805f266b6a1c706481810195857dfbb8",
     "binaryBuild": null
   },
   "contract": {
@@ -169,6 +169,7 @@
       "kind": "layer",
       "files": [
         "shell/engine/src/builtins.rs",
+        "shell/engine/src/builtins/declarations.rs",
         "shell/engine/src/builtins/getopts.rs",
         "shell/engine/src/builtins/printf.rs",
         "shell/engine/src/builtins/printf/fields.rs",
@@ -299,7 +300,8 @@
       "kind": "layer",
       "files": [
         "shell/engine/src/state.rs",
-        "shell/engine/src/state/bindings_tests.rs"
+        "shell/engine/src/state/bindings_tests.rs",
+        "shell/engine/src/state/declarations.rs"
       ]
     },
     {
@@ -377,7 +379,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 7,
+        "line": 8,
         "column": 16
       }
     },
@@ -387,7 +389,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 754,
+        "line": 760,
         "column": 39
       }
     },
@@ -397,7 +399,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 8,
+        "line": 9,
         "column": 5
       }
     },
@@ -407,7 +409,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 9,
+        "line": 10,
         "column": 14
       }
     },
@@ -417,7 +419,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 10,
+        "line": 11,
         "column": 19
       }
     },
@@ -427,7 +429,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 11,
+        "line": 12,
         "column": 10
       }
     },
@@ -437,7 +439,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 12,
+        "line": 13,
         "column": 13
       }
     },
@@ -997,7 +999,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 2381,
+        "line": 2384,
         "column": 27
       }
     },
@@ -1007,7 +1009,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 1628,
+        "line": 1631,
         "column": 9
       }
     }

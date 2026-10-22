@@ -12,6 +12,9 @@ use std::{
     rc::Rc,
 };
 
+mod declarations;
+pub(crate) use declarations::DeclarationView;
+
 pub type SharedState = Rc<RefCell<State>>;
 
 const MAX_NAMEREF_DEPTH: usize = 8;

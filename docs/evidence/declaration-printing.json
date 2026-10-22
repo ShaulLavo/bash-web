@@ -1,0 +1,91 @@
+{
+  "schema": 1,
+  "date": "2026-10-22",
+  "status": "targeted checkpoint; independent review and final qualification pending",
+  "base": "77b3963d904599932c2cd59fe46409f0ab7a6c9a",
+  "failingFirstCommit": "cb8bd5364a8f9ba3f76894cb0a069e08fffe177e",
+  "identity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "runner": "Production createWaffleRunner, exact frozen environment and fixtures, utilityDirectory unset",
+  "node": "v26.7.0",
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "engineSourceSha256": "0576a1cda1da707921b1a55b90af9e19805f266b6a1c706481810195857dfbb8",
+  "wasm": {
+    "before": "f761ff9c6be627c21742eadc7ee69083acc69f9d73fdbfa3f50ea9e5fbb19bd8",
+    "after": "f3e1b01655e61cbc7f54e071f8a5081ed3a5f4676e73b60a8851af987fa39d8c"
+  },
+  "selected": {
+    "beforePasses": 0,
+    "afterPasses": 24,
+    "counts": {
+      "oils": {
+        "selected": 4,
+        "gained": 4,
+        "lost": 0
+      },
+      "brush-suite": {
+        "selected": 16,
+        "gained": 16,
+        "lost": 0
+      },
+      "bashkit-suite": {
+        "selected": 4,
+        "gained": 4,
+        "lost": 0
+      }
+    },
+    "gainedIds": [
+      "oils:assign:631",
+      "oils:assign:738",
+      "oils:assign-extended:110",
+      "oils:assign-extended:691",
+      "brush-suite:builtins/local:3",
+      "brush-suite:nameref:13",
+      "brush-suite:nameref:44",
+      "brush-suite:nameref:83",
+      "brush-suite:nameref:87",
+      "brush-suite:nameref:89",
+      "brush-suite:nameref:97",
+      "brush-suite:nameref:100",
+      "brush-suite:nameref:132",
+      "brush-suite:nameref:134",
+      "brush-suite:nameref:162",
+      "brush-suite:nameref:163",
+      "brush-suite:nameref:178",
+      "brush-suite:nameref:183",
+      "brush-suite:nameref:197",
+      "brush-suite:nameref:206",
+      "bashkit-suite:bashbox-declare:245",
+      "bashkit-suite:bashbox-local-scope:238",
+      "bashkit-suite:declare:53",
+      "bashkit-suite:declare:61"
+    ],
+    "lostIds": [],
+    "coverage": "Only 24 previously failing selected scalar cases. Does not establish zero losses over the full ruler."
+  },
+  "recordedControls": {
+    "count": 25,
+    "before": {
+      "pass": 0,
+      "fail": 25
+    },
+    "after": {
+      "pass": 25,
+      "fail": 0
+    },
+    "fixtureSha256": "9d1b580336bf447449bab876f667817bf4601b9df67c9a1fbd48de9cba2c67b6"
+  },
+  "gates": {
+    "quality": "pass, unchanged command; includes host/WASI all-target clippy and 1394 native workspace tests",
+    "layers": "0 production + 0 test-only violations, unchanged graph; 34 scanner tests and strict types pass",
+    "nativeDeclarations": "3 passed, including recorded fixture, storage limit and cooperative cancellation",
+    "fullFrozenReplay": "pending parent integration slot; no baseline write",
+    "wasiDeclarations": "3 passed via wasmtime, including recorded fixture, storage limit and cooperative cancellation"
+  },
+  "excluded": "Optional indexed candidates, special scalars, skipped Brush declare cases, mutable binding redesign. No PR41 integration."
+}
