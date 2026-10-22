@@ -254,6 +254,41 @@
       "status": 0,
       "stdout": "PGE+CjxiPgpkZWNsYXJlIC0tIHNlcD0iOiIKbWlzc2luZzoxCg==",
       "stderr": ""
+    },
+    {
+      "name": "unset-n readonly scalar",
+      "code": "readonly v=ok; unset -n v; echo \"status:$?\"; declare -p v",
+      "status": 0,
+      "stdout": "c3RhdHVzOjEKZGVjbGFyZSAtciB2PSJvayIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB1bnNldDogdjogY2Fubm90IHVuc2V0OiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "name": "unset-n readonly unset scalar",
+      "code": "readonly v; unset -n v; echo \"status:$?\"; declare -p v",
+      "status": 0,
+      "stdout": "c3RhdHVzOjEKZGVjbGFyZSAtciB2Cg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB1bnNldDogdjogY2Fubm90IHVuc2V0OiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "name": "unset-n readonly current local",
+      "code": "f(){ local v=1; readonly v; unset -n v; echo \"current:$?\"; declare -p v; }; f",
+      "status": 0,
+      "stdout": "Y3VycmVudDoxCmRlY2xhcmUgLXIgdj0iMSIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB1bnNldDogdjogY2Fubm90IHVuc2V0OiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "name": "unset-n readonly caller local",
+      "code": "f(){ local w=1; readonly w; g(){ unset -n w; echo \"caller:$?\"; }; g; declare -p w; }; f",
+      "status": 0,
+      "stdout": "Y2FsbGVyOjEKZGVjbGFyZSAtciB3PSIxIgo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB1bnNldDogdzogY2Fubm90IHVuc2V0OiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "name": "unset-n mixed readonly operands",
+      "code": "readonly v=1; declare -n r=v; unset -n r v; echo \"status:$?\"; declare -p r 2>/dev/null; echo \"missing:$?\"; declare -p v",
+      "status": 0,
+      "stdout": "c3RhdHVzOjEKbWlzc2luZzoxCmRlY2xhcmUgLXIgdj0iMSIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB1bnNldDogdjogY2Fubm90IHVuc2V0OiByZWFkb25seSB2YXJpYWJsZQo="
     }
   ]
 }

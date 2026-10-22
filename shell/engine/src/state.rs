@@ -1132,11 +1132,11 @@ impl State {
         Ok(removed)
     }
     pub(crate) fn unset_nameref(&mut self, name: &str) -> Result<bool, i32> {
-        if !self.namerefs.contains_key(name) {
-            return Ok(false);
-        }
         if self.is_readonly(name) {
             return Err(1);
+        }
+        if !self.namerefs.contains_key(name) {
+            return Ok(false);
         }
         self.namerefs.remove(name);
         self.unset_binding(name)?;

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "date": "2026-10-22",
-  "status": "targeted checkpoint; independent review and final qualification pending",
+  "status": "readonly review correction passed targeted native checks; fresh hosted replay and final-head CI pending",
   "base": "77b3963d904599932c2cd59fe46409f0ab7a6c9a",
   "failingFirstCommit": "cb8bd5364a8f9ba3f76894cb0a069e08fffe177e",
   "identity": {
@@ -87,5 +87,130 @@
     "fullFrozenReplay": "pending parent integration slot; no baseline write",
     "wasiDeclarations": "3 passed via wasmtime, including recorded fixture, storage limit and cooperative cancellation"
   },
-  "excluded": "Optional indexed candidates, special scalars, skipped Brush declare cases, mutable binding redesign. No PR41 integration."
+  "excluded": "Optional indexed candidates, special scalars, skipped Brush declare cases, mutable binding redesign. No PR41 integration.",
+  "fullQualification": {
+    "base": "b701c2abad78a94875e7bc1b7c17db8db64621e4",
+    "source": "71eebbd4ff480aeffb68ec4df502d3613f49f3e4",
+    "run": 39828117851,
+    "artifact": "own-shell-current",
+    "resultSha256": "0c1f6480b0f8f955372ee7acaccd196f97f0e04f9c4244bdd97bf2023fdd5e6d",
+    "caseCount": 9221,
+    "scored": 5792,
+    "identity": {
+      "schema": 1,
+      "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+      "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+      "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+      "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+    },
+    "corpora": {
+      "oils": {
+        "before": 1182,
+        "after": 1187,
+        "gained": 5,
+        "lost": 0,
+        "gainedIds": [
+          "oils:assign:631",
+          "oils:assign:738",
+          "oils:assign-extended:110",
+          "oils:assign-extended:691",
+          "oils:ble-idioms:465"
+        ]
+      },
+      "brush-suite": {
+        "before": 1146,
+        "after": 1191,
+        "gained": 45,
+        "lost": 0,
+        "gainedIds": [
+          "brush-suite:builtins/builtin:10",
+          "brush-suite:builtins/builtin:11",
+          "brush-suite:builtins/builtin:14",
+          "brush-suite:builtins/command:11",
+          "brush-suite:builtins/command:12",
+          "brush-suite:builtins/command:18",
+          "brush-suite:builtins/command:37",
+          "brush-suite:builtins/export:5",
+          "brush-suite:builtins/export:6",
+          "brush-suite:builtins/export:14",
+          "brush-suite:builtins/export:15",
+          "brush-suite:builtins/export:18",
+          "brush-suite:builtins/export:19",
+          "brush-suite:builtins/export:23",
+          "brush-suite:builtins/local:3",
+          "brush-suite:builtins/read:10",
+          "brush-suite:builtins/readonly:1",
+          "brush-suite:builtins/readonly:2",
+          "brush-suite:builtins/readonly:4",
+          "brush-suite:builtins/readonly:5",
+          "brush-suite:builtins/unset:14",
+          "brush-suite:nameref:13",
+          "brush-suite:nameref:21",
+          "brush-suite:nameref:44",
+          "brush-suite:nameref:83",
+          "brush-suite:nameref:84",
+          "brush-suite:nameref:87",
+          "brush-suite:nameref:88",
+          "brush-suite:nameref:89",
+          "brush-suite:nameref:96",
+          "brush-suite:nameref:97",
+          "brush-suite:nameref:100",
+          "brush-suite:nameref:131",
+          "brush-suite:nameref:132",
+          "brush-suite:nameref:134",
+          "brush-suite:nameref:162",
+          "brush-suite:nameref:163",
+          "brush-suite:nameref:178",
+          "brush-suite:nameref:183",
+          "brush-suite:nameref:197",
+          "brush-suite:nameref:206",
+          "brush-suite:word_expansion/params:3",
+          "brush-suite:word_expansion/params:4",
+          "brush-suite:word_expansion/params:5",
+          "brush-suite:word_expansion/params:6"
+        ]
+      },
+      "bashkit-suite": {
+        "before": 1602,
+        "after": 1609,
+        "gained": 7,
+        "lost": 0,
+        "gainedIds": [
+          "bashkit-suite:bashbox-declare:146",
+          "bashkit-suite:bashbox-declare:245",
+          "bashkit-suite:bashbox-interpreter-core:491",
+          "bashkit-suite:bashbox-local-scope:101",
+          "bashkit-suite:bashbox-local-scope:238",
+          "bashkit-suite:declare:53",
+          "bashkit-suite:declare:61"
+        ]
+      }
+    },
+    "newAbnormalIds": [],
+    "inheritedTimeoutIds": [
+      "brush-suite:compound_cmds/until:8",
+      "bashkit-suite:pipes-redirects:345",
+      "bashkit-suite:pipes-redirects:365"
+    ],
+    "baseline": "regenerate with normal comparator after independent correction approval and merge-slot acquisition",
+    "ci": "source replay failed solely stale membership; browser job cancelled; final-head full CI required",
+    "historicalEvidence": "Original targeted checkpoint fields above remain unchanged and describe their original source, not this integrated replay.",
+    "status": "historical preceding source only; readonly correction requires fresh hosted artifact"
+  },
+  "readonlyCorrection": {
+    "reviewedParent": "71eebbd4ff480aeffb68ec4df502d3613f49f3e4",
+    "review": "CHANGES REQUESTED, PR55 comment6349213866; earlier whole-source and integration approvals retained",
+    "fix": "Check readonly operands before the non-nameref no-op; no target following or mutation changes",
+    "recordedControls": 40,
+    "newReadonlyControls": 5,
+    "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "fixtureSha256": "b631396a44a8b30597fafd9b15c4d6d0741dc8db22a6586ae9928e71370ff4c2",
+    "failingFirst": "new readonly fixture fails at preceding source, expected status1 versus actual0",
+    "nativeWordsTests": 817,
+    "allTargetEngineClippy": "pass",
+    "format": "pass",
+    "layers": "42 production/30 test edges, zero violations",
+    "fullFrozenReplay": "pending exact corrected-source hosted artifact; no baseline membership write",
+    "reviewTransfer": "Sol provider cybersecurity refusal gave no verdict; unchanged independent review transferred to separate Claude Opus5.5 xhigh under standing-order18"
+  }
 }

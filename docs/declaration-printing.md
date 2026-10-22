@@ -7,6 +7,11 @@ local. A nameref prints its immediate raw target, including chains and cycles.
 Represented local unset values print without `=`, unlike an empty string.
 Missing names report status 1 while valid later operands still print.
 
+`unset -n name...` removes named references without following their targets.
+Ordinary variables and functions remain unchanged; readonly operands report
+status 1. Current locals stay unset
+until return; removing a caller local restores its saved outer declaration.
+
 `state/declarations.rs` owns a borrowed `DeclarationView`. The builtin snapshots
 only the current scalar after storage admission, then scans and formats it with
 cooperative fuel/cancellation checks. Writes use existing descriptors. Printable
