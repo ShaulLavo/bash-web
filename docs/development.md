@@ -42,10 +42,13 @@ bridge to its UI. Terminal rendering and demo controls live in `src/browser/`,
 separate from the shell facade.
 
 `waffle` is a **required peer dependency**, pinned to the published Git commit
-`fc58a532f0d7a617e631ea4b7580a190915d4ed6`:
-`git+https://github.com/ShaulLavo/waffle.git#fc58a532f0d7a617e631ea4b7580a190915d4ed6`.
+`c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289`:
+`git+https://github.com/ShaulLavo/waffle.git#c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289`.
 The development dependency uses the same pin so local builds and tests exercise
 the same runtime applications supply.
+
+See [descriptor reopening](descriptor-reopening.md) for logical fd translation,
+independent host file descriptions and the retained local buffer boundary.
 
 See [file permission predicates](file-permissions.md) for the authoritative runtime
 query, supported masks, unknown answers and real-runtime controls.
