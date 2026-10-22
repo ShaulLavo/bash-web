@@ -673,11 +673,556 @@
       "status": 0,
       "stdout": "s:1\n",
       "stderr": "/usr/bin/bash: line 1: trap: 2\u00a0: invalid signal specification\n"
+    },
+    {
+      "id": "nested-parent-deferred-sub-handlers",
+      "code": "trap : HUP INT QUIT USR1 PIPE ALRM TERM CHLD WINCH; (while read -r l; do echo \"got:$l\"; done < <(trap -p)); trap - HUP INT QUIT USR1 PIPE ALRM TERM CHLD WINCH",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGHUP\ngot:trap -- ':' SIGUSR1\ngot:trap -- ':' SIGPIPE\ngot:trap -- ':' SIGALRM\ngot:trap -- ':' SIGTERM\ngot:trap -- ':' SIGWINCH\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-toplevel-handlers",
+      "code": "trap : HUP INT QUIT USR1 PIPE ALRM TERM CHLD WINCH; while read -r l; do echo \"got:$l\"; done < <(trap -p); trap - HUP INT QUIT USR1 PIPE ALRM TERM CHLD WINCH",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-sub-exit-handler",
+      "code": "trap 'echo x' EXIT; (while read -r l; do echo \"got:$l\"; done < <(trap -p EXIT)); trap - EXIT",
+      "status": 0,
+      "stdout": "got:trap -- 'echo x' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-sub-exit-ignored",
+      "code": "trap '' EXIT; (while read -r l; do echo \"got:$l\"; done < <(trap -p EXIT)); trap - EXIT",
+      "status": 0,
+      "stdout": "got:trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-comsub-exit-ignored",
+      "code": "trap '' EXIT; x=$(while read -r l; do echo \"got:$l\"; done < <(trap -p EXIT)); echo \"[$x]\"; trap - EXIT",
+      "status": 0,
+      "stdout": "[got:trap -- '' EXIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-pipeline-exit-ignored",
+      "code": "trap '' EXIT; echo | { while read -r l; do echo \"got:$l\"; done < <(trap -p EXIT); }; trap - EXIT",
+      "status": 0,
+      "stdout": "got:trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-async-exit-ignored",
+      "code": "trap '' EXIT; { while read -r l; do echo \"got:$l\"; done < <(trap -p EXIT); } & wait; trap - EXIT",
+      "status": 0,
+      "stdout": "got:trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-sub-procsub-mutation",
+      "code": "trap '' DEBUG ERR RETURN; trap 'echo e' ERR; (while read -r l; do echo \"got:$l\"; done < <(trap : HUP; trap -p)); trap - DEBUG ERR RETURN",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGHUP\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-mutated-sub-inherited-exit-ignored",
+      "code": "trap '' EXIT; (trap : HUP; while read -r l; do echo \"got:$l\"; done < <(trap -p EXIT)); trap - EXIT",
+      "status": 0,
+      "stdout": "got:trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-1",
+      "code": "trap : 1; (while read -r l; do echo \"got:$l\"; done < <(trap -p 1)); trap - 1",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGHUP\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-2",
+      "code": "trap : 2; (while read -r l; do echo \"got:$l\"; done < <(trap -p 2)); trap - 2",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-3",
+      "code": "trap : 3; (while read -r l; do echo \"got:$l\"; done < <(trap -p 3)); trap - 3",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-4",
+      "code": "trap : 4; (while read -r l; do echo \"got:$l\"; done < <(trap -p 4)); trap - 4",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGILL\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-5",
+      "code": "trap : 5; (while read -r l; do echo \"got:$l\"; done < <(trap -p 5)); trap - 5",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGTRAP\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-6",
+      "code": "trap : 6; (while read -r l; do echo \"got:$l\"; done < <(trap -p 6)); trap - 6",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGABRT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-7",
+      "code": "trap : 7; (while read -r l; do echo \"got:$l\"; done < <(trap -p 7)); trap - 7",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGBUS\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-8",
+      "code": "trap : 8; (while read -r l; do echo \"got:$l\"; done < <(trap -p 8)); trap - 8",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGFPE\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-9",
+      "code": "trap : 9; (while read -r l; do echo \"got:$l\"; done < <(trap -p 9)); trap - 9",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGKILL\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-10",
+      "code": "trap : 10; (while read -r l; do echo \"got:$l\"; done < <(trap -p 10)); trap - 10",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGUSR1\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-11",
+      "code": "trap : 11; (while read -r l; do echo \"got:$l\"; done < <(trap -p 11)); trap - 11",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGSEGV\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-12",
+      "code": "trap : 12; (while read -r l; do echo \"got:$l\"; done < <(trap -p 12)); trap - 12",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGUSR2\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-13",
+      "code": "trap : 13; (while read -r l; do echo \"got:$l\"; done < <(trap -p 13)); trap - 13",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGPIPE\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-14",
+      "code": "trap : 14; (while read -r l; do echo \"got:$l\"; done < <(trap -p 14)); trap - 14",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGALRM\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-15",
+      "code": "trap : 15; (while read -r l; do echo \"got:$l\"; done < <(trap -p 15)); trap - 15",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-16",
+      "code": "trap : 16; (while read -r l; do echo \"got:$l\"; done < <(trap -p 16)); trap - 16",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGSTKFLT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-17",
+      "code": "trap : 17; (while read -r l; do echo \"got:$l\"; done < <(trap -p 17)); trap - 17",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-18",
+      "code": "trap : 18; (while read -r l; do echo \"got:$l\"; done < <(trap -p 18)); trap - 18",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGCONT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-19",
+      "code": "trap : 19; (while read -r l; do echo \"got:$l\"; done < <(trap -p 19)); trap - 19",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGSTOP\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-20",
+      "code": "trap : 20; (while read -r l; do echo \"got:$l\"; done < <(trap -p 20)); trap - 20",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGTSTP\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-21",
+      "code": "trap : 21; (while read -r l; do echo \"got:$l\"; done < <(trap -p 21)); trap - 21",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGTTIN\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-22",
+      "code": "trap : 22; (while read -r l; do echo \"got:$l\"; done < <(trap -p 22)); trap - 22",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGTTOU\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-23",
+      "code": "trap : 23; (while read -r l; do echo \"got:$l\"; done < <(trap -p 23)); trap - 23",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGURG\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-24",
+      "code": "trap : 24; (while read -r l; do echo \"got:$l\"; done < <(trap -p 24)); trap - 24",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGXCPU\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-25",
+      "code": "trap : 25; (while read -r l; do echo \"got:$l\"; done < <(trap -p 25)); trap - 25",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGXFSZ\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-26",
+      "code": "trap : 26; (while read -r l; do echo \"got:$l\"; done < <(trap -p 26)); trap - 26",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGVTALRM\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-27",
+      "code": "trap : 27; (while read -r l; do echo \"got:$l\"; done < <(trap -p 27)); trap - 27",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGPROF\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-28",
+      "code": "trap : 28; (while read -r l; do echo \"got:$l\"; done < <(trap -p 28)); trap - 28",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGWINCH\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-29",
+      "code": "trap : 29; (while read -r l; do echo \"got:$l\"; done < <(trap -p 29)); trap - 29",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGIO\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-30",
+      "code": "trap : 30; (while read -r l; do echo \"got:$l\"; done < <(trap -p 30)); trap - 30",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGPWR\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-31",
+      "code": "trap : 31; (while read -r l; do echo \"got:$l\"; done < <(trap -p 31)); trap - 31",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGSYS\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-34",
+      "code": "trap : 34; (while read -r l; do echo \"got:$l\"; done < <(trap -p 34)); trap - 34",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-35",
+      "code": "trap : 35; (while read -r l; do echo \"got:$l\"; done < <(trap -p 35)); trap - 35",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+1\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-36",
+      "code": "trap : 36; (while read -r l; do echo \"got:$l\"; done < <(trap -p 36)); trap - 36",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+2\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-37",
+      "code": "trap : 37; (while read -r l; do echo \"got:$l\"; done < <(trap -p 37)); trap - 37",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+3\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-38",
+      "code": "trap : 38; (while read -r l; do echo \"got:$l\"; done < <(trap -p 38)); trap - 38",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+4\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-39",
+      "code": "trap : 39; (while read -r l; do echo \"got:$l\"; done < <(trap -p 39)); trap - 39",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+5\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-40",
+      "code": "trap : 40; (while read -r l; do echo \"got:$l\"; done < <(trap -p 40)); trap - 40",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+6\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-41",
+      "code": "trap : 41; (while read -r l; do echo \"got:$l\"; done < <(trap -p 41)); trap - 41",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+7\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-42",
+      "code": "trap : 42; (while read -r l; do echo \"got:$l\"; done < <(trap -p 42)); trap - 42",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+8\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-43",
+      "code": "trap : 43; (while read -r l; do echo \"got:$l\"; done < <(trap -p 43)); trap - 43",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+9\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-44",
+      "code": "trap : 44; (while read -r l; do echo \"got:$l\"; done < <(trap -p 44)); trap - 44",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+10\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-45",
+      "code": "trap : 45; (while read -r l; do echo \"got:$l\"; done < <(trap -p 45)); trap - 45",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+11\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-46",
+      "code": "trap : 46; (while read -r l; do echo \"got:$l\"; done < <(trap -p 46)); trap - 46",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+12\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-47",
+      "code": "trap : 47; (while read -r l; do echo \"got:$l\"; done < <(trap -p 47)); trap - 47",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+13\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-48",
+      "code": "trap : 48; (while read -r l; do echo \"got:$l\"; done < <(trap -p 48)); trap - 48",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+14\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-49",
+      "code": "trap : 49; (while read -r l; do echo \"got:$l\"; done < <(trap -p 49)); trap - 49",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+15\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-50",
+      "code": "trap : 50; (while read -r l; do echo \"got:$l\"; done < <(trap -p 50)); trap - 50",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-14\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-51",
+      "code": "trap : 51; (while read -r l; do echo \"got:$l\"; done < <(trap -p 51)); trap - 51",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-13\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-52",
+      "code": "trap : 52; (while read -r l; do echo \"got:$l\"; done < <(trap -p 52)); trap - 52",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-12\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-53",
+      "code": "trap : 53; (while read -r l; do echo \"got:$l\"; done < <(trap -p 53)); trap - 53",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-11\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-54",
+      "code": "trap : 54; (while read -r l; do echo \"got:$l\"; done < <(trap -p 54)); trap - 54",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-10\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-55",
+      "code": "trap : 55; (while read -r l; do echo \"got:$l\"; done < <(trap -p 55)); trap - 55",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-9\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-56",
+      "code": "trap : 56; (while read -r l; do echo \"got:$l\"; done < <(trap -p 56)); trap - 56",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-8\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-57",
+      "code": "trap : 57; (while read -r l; do echo \"got:$l\"; done < <(trap -p 57)); trap - 57",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-7\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-58",
+      "code": "trap : 58; (while read -r l; do echo \"got:$l\"; done < <(trap -p 58)); trap - 58",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-6\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-59",
+      "code": "trap : 59; (while read -r l; do echo \"got:$l\"; done < <(trap -p 59)); trap - 59",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-5\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-60",
+      "code": "trap : 60; (while read -r l; do echo \"got:$l\"; done < <(trap -p 60)); trap - 60",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-4\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-61",
+      "code": "trap : 61; (while read -r l; do echo \"got:$l\"; done < <(trap -p 61)); trap - 61",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-3\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-62",
+      "code": "trap : 62; (while read -r l; do echo \"got:$l\"; done < <(trap -p 62)); trap - 62",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-2\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-63",
+      "code": "trap : 63; (while read -r l; do echo \"got:$l\"; done < <(trap -p 63)); trap - 63",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-1\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-64",
+      "code": "trap : 64; (while read -r l; do echo \"got:$l\"; done < <(trap -p 64)); trap - 64",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-invalid-mutation",
+      "code": "trap '' DEBUG; (while read -r l; do echo \"got:$l\"; done < <(trap : BOGUS; trap -p DEBUG)); trap - DEBUG",
+      "status": 0,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: trap: BOGUS: invalid signal specification\n"
+    },
+    {
+      "id": "nested-parent-procsub-in-deferred-procsub",
+      "code": "trap '' EXIT; (while read -r l; do echo \"got:$l\"; done < <(while read -r l; do echo \"got:$l\"; done < <(trap -p EXIT))); trap - EXIT",
+      "status": 0,
+      "stdout": "got:got:trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-mutated-sub-exit-propagates",
+      "code": "trap '' EXIT; (trap : HUP; while read -r l; do echo \"got:$l\"; done < <(while read -r l; do echo \"got:$l\"; done < <(trap -p EXIT))); trap - EXIT",
+      "status": 0,
+      "stdout": "got:got:trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-procsub-nested-sub",
+      "code": "trap 'echo h' HUP; (while read -r l; do echo \"got:$l\"; done < <((trap -p HUP))); trap - HUP",
+      "status": 0,
+      "stdout": "got:trap -- 'echo h' SIGHUP\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-procsub-query-then-ordinary-mutation",
+      "code": "trap '' DEBUG; trap 'echo h' HUP; (while read -r l; do echo \"got:$l\"; done < <(trap -p; (trap : INT; trap -p))); trap - DEBUG HUP",
+      "status": 0,
+      "stdout": "got:trap -- 'echo h' SIGHUP\ngot:trap -- '' DEBUG\ngot:trap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-func-procsub",
+      "code": "trap 'echo h' TERM; f() { while read -r l; do echo \"got:$l\"; done < <(trap -p TERM); }; (f); trap - TERM",
+      "status": 0,
+      "stdout": "got:trap -- 'echo h' SIGTERM\n",
+      "stderr": ""
     }
   ],
   "correctionRecording": {
     "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
     "reviewedHead": "6609e3cb0b8b5ababcca7ba0ee0269f09492d337",
     "addedCases": 39
+  },
+  "nestedParentRecording": {
+    "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "reviewedHead": "535197097ea359ee15b2e73bdf0a944b41df0c82",
+    "addedCases": 77,
+    "bashSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5"
   }
 }
