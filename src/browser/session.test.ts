@@ -8,6 +8,7 @@ import {
   reapFilesystem,
 } from "waffle/fs/protocol";
 import { BrowserSession } from "./session";
+import { acquireBrowserRuntime } from "./runtime";
 
 function pendingRuntime(context: TestContext) {
   const isolation = Object.getOwnPropertyDescriptor(globalThis, "crossOriginIsolated");
@@ -115,5 +116,54 @@ test("an already cancelled host never retains a shell consumer", async (context)
     /Already unmounted/,
   );
   assert.equal(fixture.consumers.size, 0);
+  assert.equal(fixture.ownerDisposals(), 0);
+});
+
+test("borrowed runtime ignores storage selection and lease disposal leaves its owner live", async (context) => {
+  const fixture = pendingRuntime(context);
+  const lease = acquireBrowserRuntime(
+    { runtime: fixture.runtime },
+    { workerURL: "unused", search: "?mode=safe" },
+  );
+  assert.equal(lease.runtime, fixture.runtime);
+  await lease.ready;
+  const controller = new AbortController();
+  const starting = BrowserSession.create({ ...options(lease.runtime), signal: controller.signal });
+  controller.abort(new Error("Borrower stopped"));
+  await assert.rejects(starting, /cancelled/);
+  await lease.dispose();
+  assert.equal(fixture.ownerDisposals(), 0);
+  assert.equal(fixture.consumers.size, 0);
+});
+
+test("factory lease keeps its readiness and cleanup owner without reading storage selection", async (context) => {
+  const fixture = pendingRuntime(context);
+  let releaseReady!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    releaseReady = resolve;
+  });
+  context.after(releaseReady);
+  let releases = 0;
+  const ownedLease = { runtime: fixture.runtime, ready, dispose: async () => { releases++; } };
+  const observe = () => {};
+  const lease = acquireBrowserRuntime(
+    {
+      acquireRuntime(onStartupStage) {
+        assert.equal(onStartupStage, observe);
+        return ownedLease;
+      },
+    },
+    {
+      workerURL: "unused",
+      get search(): string {
+        throw new Error("Borrower read a storage selector");
+      },
+      onStartupStage: observe,
+    },
+  );
+  assert.equal(lease, ownedLease);
+  assert.equal(lease.ready, ready);
+  await lease.dispose();
+  assert.equal(releases, 1);
   assert.equal(fixture.ownerDisposals(), 0);
 });
