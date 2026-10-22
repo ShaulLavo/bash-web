@@ -353,7 +353,7 @@ fallback.
       - Scalar replacement on ordinary names (`${v/p/r}`, `${v//p/r}`, `${v/#p/r}`, `${v/%p/r}`) (#25): Oils 350→379, Brush-suite 335→338, Bashkit-suite 548→584. Leftmost-longest basic-pattern search, lazy operands, typed ampersand protection, final-IFS behavior and shared raw/storage/work/field bounds are preserved; arrays, namerefs, options, locale collation and unsupported pattern forms remain deferred.
       - Scalar arithmetic, positional/scalar slices, readonly writes and read-unit error recovery (#28): Oils 380→481, Brush-suite 340→384, Bashkit-suite 595→754, with no lost cases. Boxed arithmetic futures and explicit scalar depth bounds retain native/WASI stack safety; staged shell-boundary checks preserve Bash error status before lazy evaluation.
       - Brace lists and numeric/ASCII-letter ranges (#29): Oils 481→525, Brush-suite 384→394, Bashkit-suite 754→785, with no lost cases; brace generator seeds 1/42 match Bash on 5,318 cases each. Fused `$((`/`<((` spans end by raw parenthesis matching and are classified by `chk_arithsub`; other substitution bodies (also inside `${…}` operands and raw `$((` text) are parsed with the script and fail with status 127, strictly separated. Nested parses run after each word's scan loop (debug stack per nesting level ~21 KB→~7 KB). Brace temporaries are charged by peak storage; the default argument count is 65,536. Follow-ups owned by later units: running `UnparsedCommandSubstitution` (a non-arithmetic `$((` whose text fails to parse) at expansion with status 2 belongs to command substitution; prefix assignments on function calls (`TEMP=x f`) remain unsupported and belong to functions/locals.
-      - Ordinary argv pathname expansion, `nullglob` and `set -f` (#54): Oils 1099→1101, Brush-suite 1080→1087, Bashkit-suite 1469→1476, with no lost cases. Only fields with an unquoted `*`, `?` or `[` keep a quote mask, so plain argv keeps its budgets; assignments and redirects stay scalar. Receipt: [own-shell-pathname.json](../docs/evidence/own-shell-pathname.json).
+      - Ordinary argv pathname expansion, `nullglob` and `set -f` (#54): Oils 1099→1101, Brush-suite 1080→1087, Bashkit-suite 1469→1476, with no lost cases. Only fields with an unquoted `*`, `?` or `[` keep a quote mask, and components or paths longer than any path match nothing; assignments and redirects stay scalar. Receipt: [own-shell-pathname.json](../docs/evidence/own-shell-pathname.json).
       - Remaining parameter operators, pathname, tilde and brace expansion follow before command substitution. After scalar arithmetic, the next focused word unit is bounded brace lists and numeric/ASCII-letter ranges, preserving quoted punctuation and opaque expansion parts; tilde stays separate. The pinned reference is Bashkit's `crates/bashkit/src/interpreter/brace_expansion.rs`, but resource exhaustion must fail explicitly rather than silently return a literal or partial result.
    2. Command substitution and arithmetic. Scalar arithmetic is the next foundation rather than a constant-only substring implementation: offsets and lengths are arithmetic expressions, so the same bounded evaluator serves `$((...))`, `((...))`, `let` and scalar slices. Command substitution follows separately and must use bounded captures without changing streaming command execution.
    3. Control flow: `if`, `for`, `while`, `until`, `case`, `[[ ]]`, `test`, `&&`/`||`, `!`, `set -e` and its exceptions.
@@ -1093,6 +1093,24 @@ recovery under native/WASI plus the exact no-loss ratchet. Keep spelling scans
 cooperative and allocations admitted. Runtime diagnostics for correctly
 preserved targets are implemented in this control-flow unit; this lexer/parser
 representation work belongs to the redirect unit, with its provenance record.
+
+## Follow-up: 700,000-byte scalars fail with a silent status 2
+
+Status: Approved. Pre-existing and unrelated to pathname expansion (found during
+#54's CI repair, 2026-10-22). Bash 5.3.15 assigns all three; Waffle prints no
+message, returns status 2 and leaves the old value:
+
+- `x=0000000000; x=$x$x$x$x$x$x$x$x$x$x` three more times (100,000 bytes), then
+  `x=$x$x$x$x$x$x$x; echo status=$? length=${#x}` gives `status=2 length=100000`.
+  Six copies (600,000 bytes) still work.
+- `printf -v x '%0700000d' 0` and `x=$(printf '%0700000d' 0)` give `status=2 length=0`.
+
+The 1 MiB per-command expansion budget (`expansion_bytes` in
+`shell/engine/src/interpreter.rs`) is the likely ceiling: a value over half of it
+seems to be charged twice while it is copied into storage. Measure where the
+second charge happens before changing it. Either fix the double charge or report
+the limit with a diagnostic like other budget failures. Do not raise the budget.
+Reproducer: `/work/reports/bash-web/hill-climb/expansion/pathname/ci-fix-opus-r1/scalar700k.ts`.
 
 ## Approved extraction: public `ShaulLavo/bash-web`, with history
 

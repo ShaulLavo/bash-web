@@ -50,6 +50,14 @@ const scripts = [
   // built in argv from a 100 KB scalar; every byte costs Waffle a work checkpoint.
   "x=0000000000; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; set -- $x$x$x$x$x$x; echo $# ${#1}",
   'x=0000000000; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; set -- "$x$x$x$x$x$x"; echo $# ${#1}',
+  // A component longer than any path matches nothing; it never builds an over-budget pattern.
+  // Each 66,000-byte scalar is concatenated cheaply, since Waffle charges a checkpoint per byte.
+  'x=aaaaaaaaaa; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x${x:0:6000}; set -- $x* "$x*" $x[; echo $# ${#1} ${#2} ${#3}',
+  'x=aaaaaaaaaa; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x${x:0:6000}; shopt -s nullglob; set -- start $x* "$x*" $x[ end; echo $# ${#2} ${#3}',
+  "x=aaaaaaaaaa; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x${x:0:6000}; for f in $x* $x[; do echo ${#f}; done; $x* 2>/dev/null; echo $?",
+  "j='[{\"k\":[1,2]}'; while [ ${#j} -lt 80000 ]; do j=$j,$j; done; j=$j']'; set -- $j; echo $# ${#1}",
+  // Paths longer than any path are absent, beside a wildcard or under one.
+  'cd "$TMP"; mkdir d; x=a; while [ ${#x} -lt 5000 ]; do x=$x$x; done; y=${x:0:4096}; x=${x:0:5000}; set -- /$x/* d*/$x /$y/* d*/$y; echo $# ${#1} ${#2} ${#3} ${#4}; for f in d*/$y; do echo ${#f}; done; shopt -s nullglob; set -- /$x/* d*/$x /$y/* d*/$y d*; echo $# $1',
   // Scalar contexts do not expand pathnames.
   'cd "$TMP"; : > a; : > ab; v=a*; printf \'<%s>\\n\' "$v"; declare w=a?; printf \'<%s>\\n\' "$w"',
   "cd \"$TMP\"; echo hi > z*; printf '<%s>\\n' z*",

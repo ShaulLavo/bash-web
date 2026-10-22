@@ -153,6 +153,36 @@
       "stderrBase64": ""
     },
     {
+      "script": "x=aaaaaaaaaa; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x${x:0:6000}; set -- $x* \"$x*\" $x[; echo $# ${#1} ${#2} ${#3}",
+      "status": 0,
+      "stdoutBase64": "MyA2NjAwMSA2NjAwMSA2NjAwMQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "x=aaaaaaaaaa; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x${x:0:6000}; shopt -s nullglob; set -- start $x* \"$x*\" $x[ end; echo $# ${#2} ${#3}",
+      "status": 0,
+      "stdoutBase64": "NCA2NjAwMSA2NjAwMQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "x=aaaaaaaaaa; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x${x:0:6000}; for f in $x* $x[; do echo ${#f}; done; $x* 2>/dev/null; echo $?",
+      "status": 0,
+      "stdoutBase64": "NjYwMDEKNjYwMDEKMTI3Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "j='[{\"k\":[1,2]}'; while [ ${#j} -lt 80000 ]; do j=$j,$j; done; j=$j']'; set -- $j; echo $# ${#1}",
+      "status": 0,
+      "stdoutBase64": "MSAxMDY0OTYK",
+      "stderrBase64": ""
+    },
+    {
+      "script": "cd \"$TMP\"; mkdir d; x=a; while [ ${#x} -lt 5000 ]; do x=$x$x; done; y=${x:0:4096}; x=${x:0:5000}; set -- /$x/* d*/$x /$y/* d*/$y; echo $# ${#1} ${#2} ${#3} ${#4}; for f in d*/$y; do echo ${#f}; done; shopt -s nullglob; set -- /$x/* d*/$x /$y/* d*/$y d*; echo $# $1",
+      "status": 0,
+      "stdoutBase64": "NCA1MDAzIDUwMDMgNDA5OSA0MDk5CjQwOTkKMSBkCg==",
+      "stderrBase64": ""
+    },
+    {
       "script": "cd \"$TMP\"; : > a; : > ab; v=a*; printf '<%s>\\n' \"$v\"; declare w=a?; printf '<%s>\\n' \"$w\"",
       "status": 0,
       "stdoutBase64": "PGEqPgo8YT8+Cg==",
