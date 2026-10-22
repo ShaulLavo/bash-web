@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import {
   createRuntime,
+  VfsError,
   type Runtime,
   type SharedFilesystemOptions,
   type SharedFilesystemState,
@@ -586,4 +587,38 @@ test("a borrowed session bounds acquired recovery without disposing its runtime"
   assert.equal(runtime.disposed, false);
   assert.equal(runtime.filesystem.onStateChange, undefined);
   assert.equal(worker.disposalRequested, false);
+});
+
+test("SAFE selection preserves its typed error before allocating a worker", (context) => {
+  storageWorker(context);
+  assert.throws(
+    () => createRuntime({ filesystem: { mode: "safe" } }),
+    (error: unknown) =>
+      error instanceof VfsError && error.code === "UNSUPPORTED_VFS" && error.vfs === "safe",
+  );
+});
+
+test("foreign workspace startup preserves INVALID_VFS_FORMAT through readiness", async (context) => {
+  const fixture = storageWorker(context);
+  fixture.expectDisposalFailure(/Foreign workspace must not be replaced/);
+  const { runtime, worker } = fixture.create();
+  const opening = waitForStorage(runtime, new AbortController().signal);
+  const rejected = assert.rejects(
+    opening,
+    (error: unknown) =>
+      error instanceof VfsError && error.code === "INVALID_VFS_FORMAT" && error.vfs === "indexeddb",
+  );
+  worker.dispatchEvent(
+    new MessageEvent("message", {
+      data: {
+        type: "filesystem-error",
+        name: "VfsError",
+        code: "INVALID_VFS_FORMAT",
+        vfs: "indexeddb",
+        message: "Foreign workspace must not be replaced",
+      },
+    }),
+  );
+  await rejected;
+  assert.equal(runtime.filesystem.state.status, "failed");
 });

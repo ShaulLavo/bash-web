@@ -1,4 +1,5 @@
 //! Bash builtins. External commands are installed by the embedding runtime.
+mod directories;
 mod getopts;
 mod printf;
 mod read;
@@ -9,7 +10,7 @@ use crate::{
     expand::{Error, Work},
     interpreter::{Context, Flow, JobSelector, Outcome},
     io::{Endpoint, FdTable},
-    state::{SharedState, State, absolute},
+    state::{SharedState, State},
 };
 use shell_parser::parser::{Word, WordPart};
 
@@ -148,13 +149,10 @@ pub(crate) async fn run(
             return declarations(name, args, &state, &fds, &context, work).await;
         }
         Builtin::Unset => return unset(args, &state, &fds, &context, work).await,
-        Builtin::Cd => {
-            if args.len() != 1 {
-                return Err(2);
-            }
-            let cwd = absolute(&state.borrow().cwd, &args[0]);
-            state.borrow_mut().cwd = cwd;
-        }
+        Builtin::Cd => return directories::cd(&args, &state, &fds, &context, work).await,
+        Builtin::Pushd => return directories::pushd(&args, &state, &fds, &context, work).await,
+        Builtin::Popd => return directories::popd(&args, &state, &fds, &context, work).await,
+        Builtin::Dirs => return directories::dirs(&args, &state, &fds, &context, work).await,
         Builtin::Pwd => {
             let cwd = state.borrow().cwd.clone();
             write(&fds, format!("{cwd}\n").as_bytes(), &context).await?;
@@ -807,7 +805,12 @@ async fn nameref_declaration(
             let target = state
                 .namerefs()
                 .get(key)
-                .or_else(|| state.bindings().get(key))
+                .or_else(|| {
+                    state
+                        .bindings()
+                        .get(key)
+                        .and_then(crate::state::Binding::scalar)
+                })
                 .ok_or(2)?;
             work.admit_storage(target.len()).map_err(error_status)?;
             target.clone()

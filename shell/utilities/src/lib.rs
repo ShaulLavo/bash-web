@@ -1,7 +1,6 @@
 //! Separately linked external utilities. No utility is linked into the shell.
 mod acceptance;
 mod grep;
-pub use shell_engine::io::device_endpoint;
 use shell_engine::{
     executor::Cancel,
     io::{Endpoint, FdTable, FileSystem},

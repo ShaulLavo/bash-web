@@ -548,11 +548,17 @@ fn inherited_errexit_nested_echo_and_local_declarations_mask_inner_failure() {
 }
 
 #[test]
-fn extglob_option_does_not_pretend_unsupported_patterns_matched_or_missed() {
-    // The option is real state/introspection. Extended matching remains an
-    // explicit unsupported expression (2), not fabricated match/no-match (0/1).
+fn positive_extglob_case_match_and_miss_preserve_errexit_status() {
     check_output(
-        "set -e\nshopt -s extglob\ncase xyz in a*(b)c) echo forbidden;; esac\nsaved=$?; echo status:$saved; echo after",
+        "set -e\nshopt -s extglob\ncase xyz in a*(b)c) echo forbidden;; esac\nsaved=$?; echo status:$saved; case abbc in a*(b)c) echo matched;; esac; echo after",
+        "status:0\nmatched\nafter\n",
+    );
+}
+
+#[test]
+fn extglob_option_does_not_pretend_unsupported_patterns_matched_or_missed() {
+    check_output(
+        "set -e\nshopt -s extglob\ncase xyz in a!(b)c) echo forbidden;; esac\nsaved=$?; echo status:$saved; echo after",
         "status:2\nafter\n",
     );
 }
