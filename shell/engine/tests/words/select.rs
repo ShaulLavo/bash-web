@@ -10,7 +10,12 @@ fn park(rig: &Rig, job: &JoinHandle<i32>) {
 }
 
 fn value(rig: &Rig, name: &str) -> Option<String> {
-    rig.shell.state().borrow().bindings().get(name).map(|binding| binding.as_str().to_owned())
+    rig.shell
+        .state()
+        .borrow()
+        .bindings()
+        .get(name)
+        .map(|binding| binding.as_str().to_owned())
 }
 
 fn input(rig: &Rig, bytes: &[u8], stderr: Endpoint) -> (Endpoint, Endpoint) {
