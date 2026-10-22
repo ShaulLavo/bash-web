@@ -208,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "shell-engine"
-version = "0.0.52"
+version = "0.0.57"
 dependencies = [
  "futures",
  "pin-project-lite",
@@ -227,7 +227,7 @@ dependencies = [
 
 [[package]]
 name = "shell-utilities"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "futures",
  "regex",

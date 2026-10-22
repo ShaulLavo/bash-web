@@ -42,10 +42,13 @@ bridge to its UI. Terminal rendering and demo controls live in `src/browser/`,
 separate from the shell facade.
 
 `waffle` is a **required peer dependency**, pinned to the published Git commit
-`fc58a532f0d7a617e631ea4b7580a190915d4ed6`:
-`git+https://github.com/ShaulLavo/waffle.git#fc58a532f0d7a617e631ea4b7580a190915d4ed6`.
+`c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289`:
+`git+https://github.com/ShaulLavo/waffle.git#c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289`.
 The development dependency uses the same pin so local builds and tests exercise
 the same runtime applications supply.
+
+See [descriptor reopening](descriptor-reopening.md) for logical fd translation,
+independent host file descriptions and the retained local buffer boundary.
 
 See [file permission predicates](file-permissions.md) for the authoritative runtime
 query, supported masks, unknown answers and real-runtime controls.
@@ -318,9 +321,10 @@ context and deferred substitution failures.
 
 ### Command views and dispatch
 
-| Area                                       | Classification                                                   | Local source and reason                                                                                                                                                                                                                                                                                          |
-| ------------------------------------------ | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Typed command catalogue and view contracts | Original local ownership adapters; no newly copied upstream code | `shell/engine/src/commands.rs`, `commands/tests.rs` and `tests/words/command_metadata.rs` centralize the command-name inventory from bash-web `92ab384516abcf91da811e11ac871b73f6722ba0`. The adapted declaration-word checks remain in `builtins.rs`; their existing Bashkit classification below is unchanged. |
+| Area                                       | Classification                                                                      | Local source and reason                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------ | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Noninteractive select                      | Original local execution and regression controls; GNU Bash is an observation oracle | `shell/engine/src/interpreter/select.rs` expands a retained choice list once, writes literal PS3/menu bytes, reads one bounded line without read-ahead, and uses existing scalar assignment and loop-control contracts. No upstream implementation copied.                                                       |
+| Typed command catalogue and view contracts | Original local ownership adapters; no newly copied upstream code                    | `shell/engine/src/commands.rs`, `commands/tests.rs` and `tests/words/command_metadata.rs` centralize the command-name inventory from bash-web `92ab384516abcf91da811e11ac871b73f6722ba0`. The adapted declaration-word checks remain in `builtins.rs`; their existing Bashkit classification below is unchanged. |
 
 Before extraction, the engine had **31** `is_builtin` names, only **30** builtin
 adapter dispatch names (`command` has no adapter arm), and three interpreter-only
@@ -345,9 +349,10 @@ These are intentionally different views, not one generic builtin predicate:
   command-local context. Functions take precedence before command-wrapper
   unwrapping.
 - Queries still choose keyword, function, reportable builtin, then PATH. Keyword
-  visibility does not claim syntax support: `select`, `time` and `coproc` are
-  explicitly unsupported execution syntax. Availability distinguishes included
-  core commands from unsupported syntax, without build presets or feature filters.
+  visibility does not claim syntax support: `time` and `coproc` are
+  explicitly unsupported execution syntax. Noninteractive `select` is included.
+  Availability distinguishes included core commands from unsupported syntax,
+  without build presets or feature filters.
 - The interpreter retains early direct `exec`, wrapper parsing/function bypass,
   function frames, and `let`/`eval` phases. Prefix restoration, status/diagnostics,
   PATH admission, cancellation and lazy expansion remain with their old owners.

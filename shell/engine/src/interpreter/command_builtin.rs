@@ -83,7 +83,7 @@ pub(super) async fn execution_failure(
     diagnostic(fds, context, b"\n").await
 }
 
-async fn output(fds: &Descriptors, context: &Context, bytes: &[u8]) -> Result<(), i32> {
+pub(super) async fn output(fds: &Descriptors, context: &Context, bytes: &[u8]) -> Result<(), i32> {
     let output = fds.borrow().get(1).ok_or(1)?;
     output
         .write_all(bytes, &context.cancel)
@@ -171,8 +171,29 @@ pub(super) async fn executable(
     if name.is_empty() {
         return Ok(Resolution::Missing);
     }
-    let explicit = name.contains('/');
-    let (cwd, path, path_unset, _snapshot_storage) = {
+    ExecutableSearch::new(name, state, default_path, path_override, context, work)?
+        .next(name, false, context, work)
+        .await
+}
+
+pub(super) struct ExecutableSearch {
+    cwd: String,
+    path: String,
+    path_unset: bool,
+    explicit: bool,
+    cursor: usize,
+    _storage: PathStorage,
+}
+impl ExecutableSearch {
+    pub(super) fn new(
+        name: &str,
+        state: &SharedState,
+        default_path: bool,
+        path_override: Option<&str>,
+        context: &Context,
+        work: &LookupWork,
+    ) -> Result<Self, i32> {
+        let explicit = name.contains('/');
         let state = state.borrow();
         let environment_path = path_override.or_else(|| state.scalar_parameter("PATH"));
         let path_unset = environment_path.is_none() && !default_path;
@@ -185,118 +206,218 @@ pub(super) async fn executable(
             environment_path.unwrap_or(".")
         };
         let storage = work.admit(cwd_storage(&state.cwd, path)?, context)?;
-        (state.cwd.clone(), path.to_owned(), path_unset, storage)
-    };
-    let mut entries = path.split(':');
-    let mut non_executable = None;
-    // Bash remembers the first existing candidate, including a directory. A
-    // directory before a non-runnable regular file suppresses that fallback;
-    // failed metadata lookups (e.g. ENOTDIR ancestors) do not.
-    let mut directory_seen = false;
-    let mut directory_before_fallback = false;
-    loop {
-        let candidate = if explicit {
-            work.copy(name, context)?
-        } else {
-            let Some(directory) = entries.next() else {
-                return Ok(if directory_before_fallback {
-                    Resolution::Missing
-                } else {
-                    non_executable
-                        .map(|path| Resolution::NonExecutable(path, b"Permission denied"))
-                        .unwrap_or(Resolution::Missing)
-                });
-            };
-            let prefix = if path_unset {
-                cwd.as_str()
-            } else if directory.is_empty() {
-                "."
-            } else {
-                directory
-            };
-            work.join(prefix, name, context)?
-        };
-        for _ in candidate.text.bytes() {
-            work.scan
-                .checkpoint(&context.cancel)
-                .await
-                .map_err(admission_status)?;
+        Ok(Self {
+            cwd: state.cwd.clone(),
+            path: path.to_owned(),
+            path_unset,
+            explicit,
+            cursor: 0,
+            _storage: storage,
+        })
+    }
+    pub(super) async fn next(
+        &mut self,
+        name: &str,
+        all: bool,
+        context: &Context,
+        work: &mut LookupWork,
+    ) -> Result<Resolution, i32> {
+        if name.is_empty() || (all && self.path_unset && !self.explicit) {
+            return Ok(Resolution::Missing);
         }
-        // Both owned copies are admitted before crossing the host boundary.
-        // Retire their tickets with the completed/cancelled request, not after
-        // the whole search. A retained fallback keeps its own separate ticket.
-        let result = {
-            let _request_storage = work.admit(cwd_storage(&cwd, &candidate.text)?, context)?;
-            context
-                .cancel
-                .run(
-                    context
-                        .core
-                        .host
-                        .access(candidate.text.clone(), cwd.clone()),
-                )
-                .await
-                .map_err(|_| context.cancel_status())?
-        };
-        match result {
-            Ok(()) => return Ok(Resolution::Executable(candidate)),
-            Err(ProcessError::Runtime(errno @ (2 | 31 | 44))) => {
-                // Metadata only classifies failure; it NEVER admits execution.
-                // Absolute candidates can be borrowed without another copy.
-                let absolute = if candidate.text.starts_with('/') {
-                    None
-                } else {
-                    Some(work.join(&cwd, &candidate.text, context)?)
-                };
-                let path = absolute
-                    .as_ref()
-                    .map(|path| path.text.as_str())
-                    .unwrap_or(&candidate.text);
-                let metadata = context
-                    .cancel
-                    .run(context.fs().stat(path, true))
-                    .await
-                    .map_err(|_| context.cancel_status())?;
-                match metadata {
-                    Ok(metadata) if metadata.kind == io::FileKind::Directory => {
-                        if explicit {
-                            return Ok(Resolution::NonExecutable(candidate, b"Is a directory"));
-                        }
-                        directory_seen = true;
-                    }
-                    Ok(_) => {
-                        if non_executable.is_none() {
-                            directory_before_fallback = directory_seen;
-                            non_executable = Some(candidate);
-                        }
-                    }
-                    Err(io::IoError::NotDirectory) if explicit => {
-                        return Ok(Resolution::NonExecutable(candidate, b"Not a directory"));
-                    }
-                    Err(io::IoError::NotFound) if errno == 44 => {}
-                    Err(_) if explicit => {
-                        let reason = if errno == 31 {
-                            b"Is a directory".as_slice()
-                        } else {
-                            b"Permission denied".as_slice()
-                        };
-                        return Ok(Resolution::NonExecutable(candidate, reason));
-                    }
-                    Err(_) => {}
-                }
+        let mut fallback = FailedSearch::default();
+        loop {
+            let Some(candidate) = self.candidate(name, all, context, work)? else {
+                return Ok(fallback.finish());
+            };
+            let resolution = candidate_resolution(
+                candidate,
+                &self.cwd,
+                self.explicit,
+                context,
+                work,
+                &mut fallback,
+            )
+            .await?;
+            if let Some(resolution) = resolution {
+                return Ok(resolution);
             }
-            Err(ProcessError::Runtime(54)) if explicit => {
-                return Ok(Resolution::NonExecutable(candidate, b"Not a directory"));
+            if self.explicit {
+                return Ok(fallback.finish());
             }
-            Err(ProcessError::Runtime(54)) => {}
-            Err(_) => return Err(2),
-        }
-        if explicit {
-            return Ok(non_executable
-                .map(|path| Resolution::NonExecutable(path, b"Permission denied"))
-                .unwrap_or(Resolution::Missing));
         }
     }
+
+    fn candidate(
+        &mut self,
+        name: &str,
+        all: bool,
+        context: &Context,
+        work: &LookupWork,
+    ) -> Result<Option<PathString>, i32> {
+        if self.explicit {
+            return work.copy(name, context).map(Some);
+        }
+        let Some(directory) = path_entry(&self.path, &mut self.cursor, all) else {
+            return Ok(None);
+        };
+        let prefix = if self.path_unset {
+            self.cwd.as_str()
+        } else if directory.is_empty() {
+            "."
+        } else {
+            directory
+        };
+        work.join(prefix, name, context).map(Some)
+    }
+}
+
+fn path_entry<'a>(path: &'a str, cursor: &mut usize, all: bool) -> Option<&'a str> {
+    let remaining = path.get(*cursor..)?;
+    let directory = remaining.split(':').next()?;
+    let paired_empty =
+        all && directory.is_empty() && (remaining == ":" || remaining.starts_with("::"));
+    *cursor = cursor
+        .saturating_add(directory.len())
+        .saturating_add(1)
+        .saturating_add(usize::from(paired_empty));
+    Some(directory)
+}
+
+// Bash remembers the first existing candidate, including a directory. A
+// directory before a non-runnable regular file suppresses that fallback;
+// failed metadata lookups (e.g. ENOTDIR ancestors) do not.
+#[derive(Default)]
+struct FailedSearch {
+    candidate: Option<PathString>,
+    directory_seen: bool,
+    directory_before_fallback: bool,
+}
+impl FailedSearch {
+    fn remember(&mut self, candidate: PathString) {
+        if self.candidate.is_some() {
+            return;
+        }
+        self.directory_before_fallback = self.directory_seen;
+        self.candidate = Some(candidate);
+    }
+    fn finish(self) -> Resolution {
+        if self.directory_before_fallback {
+            return Resolution::Missing;
+        }
+        self.candidate
+            .map(|path| Resolution::NonExecutable(path, b"Permission denied"))
+            .unwrap_or(Resolution::Missing)
+    }
+}
+
+async fn candidate_resolution(
+    candidate: PathString,
+    cwd: &str,
+    explicit: bool,
+    context: &Context,
+    work: &mut LookupWork,
+    fallback: &mut FailedSearch,
+) -> Result<Option<Resolution>, i32> {
+    for _ in candidate.text.bytes() {
+        work.scan
+            .checkpoint(&context.cancel)
+            .await
+            .map_err(admission_status)?;
+    }
+    // Both owned copies are admitted before crossing the host boundary.
+    // Retire their tickets with the completed/cancelled request, not after
+    // the whole search. A retained fallback keeps its own separate ticket.
+    let result = {
+        let _request_storage = work.admit(cwd_storage(cwd, &candidate.text)?, context)?;
+        context
+            .cancel
+            .run(
+                context
+                    .core
+                    .host
+                    .access(candidate.text.clone(), cwd.to_owned()),
+            )
+            .await
+            .map_err(|_| context.cancel_status())?
+    };
+    match result {
+        Ok(()) => Ok(Some(Resolution::Executable(candidate))),
+        Err(ProcessError::Runtime(errno @ (2 | 31 | 44))) => {
+            failed_candidate(candidate, cwd, explicit, errno, context, work, fallback).await
+        }
+        Err(ProcessError::Runtime(54)) if explicit => Ok(Some(Resolution::NonExecutable(
+            candidate,
+            b"Not a directory",
+        ))),
+        Err(ProcessError::Runtime(54)) => Ok(None),
+        Err(_) => Err(2),
+    }
+}
+
+async fn failed_candidate(
+    candidate: PathString,
+    cwd: &str,
+    explicit: bool,
+    errno: i32,
+    context: &Context,
+    work: &LookupWork,
+    fallback: &mut FailedSearch,
+) -> Result<Option<Resolution>, i32> {
+    // Metadata only classifies failure; it NEVER admits execution.
+    // Absolute candidates can be borrowed without another copy.
+    let absolute = if candidate.text.starts_with('/') {
+        None
+    } else {
+        Some(work.join(cwd, &candidate.text, context)?)
+    };
+    let path = absolute
+        .as_ref()
+        .map(|path| path.text.as_str())
+        .unwrap_or(&candidate.text);
+    let metadata = context
+        .cancel
+        .run(context.fs().stat(path, true))
+        .await
+        .map_err(|_| context.cancel_status())?;
+    Ok(classify_failed_candidate(
+        candidate, explicit, errno, metadata, fallback,
+    ))
+}
+
+fn classify_failed_candidate(
+    candidate: PathString,
+    explicit: bool,
+    errno: i32,
+    metadata: Result<io::FileMetadata, io::IoError>,
+    fallback: &mut FailedSearch,
+) -> Option<Resolution> {
+    if matches!(&metadata, Ok(metadata) if metadata.kind == io::FileKind::Directory) {
+        if explicit {
+            return Some(Resolution::NonExecutable(candidate, b"Is a directory"));
+        }
+        fallback.directory_seen = true;
+        return None;
+    }
+    if metadata.is_ok() {
+        fallback.remember(candidate);
+        return None;
+    }
+    if matches!(metadata, Err(io::IoError::NotDirectory)) && explicit {
+        return Some(Resolution::NonExecutable(candidate, b"Not a directory"));
+    }
+    if matches!(metadata, Err(io::IoError::NotFound)) && errno == 44 {
+        return None;
+    }
+    if !explicit {
+        return None;
+    }
+    let reason = if errno == 31 {
+        b"Is a directory".as_slice()
+    } else {
+        b"Permission denied".as_slice()
+    };
+    Some(Resolution::NonExecutable(candidate, reason))
 }
 
 fn cwd_storage(cwd: &str, path: &str) -> Result<usize, i32> {
@@ -346,39 +467,7 @@ pub(super) async fn query(
             )
             .await?;
             if options.verbose {
-                let limit = context
-                    .limits()
-                    .expansion_bytes
-                    .min(work.storage_left())
-                    .min(context.evaluation.execution_available());
-                // The printer enforces its ceiling before appending. Reserve
-                // that full possible live buffer before it allocates anything.
-                let _render_storage = context.evaluation.admit_execution(limit)?;
-                let rendered = match function_string_bounded(
-                    name,
-                    &function.body,
-                    &Cell::new(limit),
-                    limit,
-                    Some(&context.parser_budget()),
-                ) {
-                    Ok(rendered) => rendered,
-                    Err(_) => {
-                        if context.cancel.is_cancelled() {
-                            return Err(context.cancel_status());
-                        }
-                        diagnostic(
-                            fds,
-                            context,
-                            b"command: function description exceeds memory or print-work limit\n",
-                        )
-                        .await?;
-                        return Err(2);
-                    }
-                };
-                work.admit_storage(rendered.len())
-                    .map_err(admission_status)?;
-                output(fds, context, rendered.as_bytes()).await?;
-                output(fds, context, b"\n").await?;
+                function_description(name, &function, fds, context, work).await?;
             }
         } else if command.is_some_and(commands::Command::query_builtin) {
             output(fds, context, name.as_bytes()).await?;
@@ -445,3 +534,48 @@ pub(super) async fn query(
 
 #[cfg(test)]
 mod tests;
+
+pub(super) async fn function_description(
+    name: &str,
+    function: &StoredFunction,
+    fds: &Descriptors,
+    context: &Context,
+    work: &mut expand::Work,
+) -> Result<(), i32> {
+    let limit = context
+        .limits()
+        .expansion_bytes
+        .min(work.storage_left())
+        .min(context.evaluation.execution_available());
+    // The printer enforces its ceiling before appending. Reserve
+    // that full possible live buffer before it allocates anything.
+    let _render_storage = context.evaluation.admit_execution(limit)?;
+    let rendered = match function_string_bounded(
+        name,
+        &function.body,
+        &Cell::new(limit),
+        limit,
+        Some(&context.parser_budget()),
+    ) {
+        Ok(rendered) => rendered,
+        Err(_) => return function_description_failure(fds, context).await,
+    };
+    work.admit_storage(rendered.len())
+        .map_err(admission_status)?;
+    output(fds, context, rendered.as_bytes()).await?;
+    output(fds, context, b"\n").await?;
+    Ok(())
+}
+
+async fn function_description_failure(fds: &Descriptors, context: &Context) -> Result<(), i32> {
+    if context.cancel.is_cancelled() {
+        return Err(context.cancel_status());
+    }
+    diagnostic(
+        fds,
+        context,
+        b"command: function description exceeds memory or print-work limit\n",
+    )
+    .await?;
+    Err(2)
+}

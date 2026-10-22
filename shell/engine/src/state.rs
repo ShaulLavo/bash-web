@@ -12,6 +12,8 @@ use std::{
     rc::{Rc, Weak},
 };
 
+mod declarations;
+pub(crate) use declarations::DeclarationView;
 mod binding;
 pub use binding::Binding;
 use binding::BindingUndo;
@@ -128,6 +130,7 @@ pub struct State {
     /// Scalar reference targets, distinct from ordinary variable values.
     namerefs: BTreeMap<String, String>,
     pub cwd: String,
+    directories: DirectoryStack,
     /// Function bodies are immutable. Isolated shells copy bindings, not ASTs.
     functions: BTreeMap<String, StoredFunction>,
     status: i32,
@@ -172,6 +175,7 @@ impl Default for State {
             readonly: BTreeSet::new(),
             namerefs: BTreeMap::new(),
             cwd: "/home/guest".into(),
+            directories: DirectoryStack::default(),
             functions: BTreeMap::new(),
             status: 0,
             pipestatus: vec![0],
@@ -320,6 +324,8 @@ impl State {
         )?;
         let shell_name = snapshot_value(source, |s| Some(&s.shell_name), cancel, work).await?;
         let cwd = snapshot_value(source, |s| Some(&s.cwd), cancel, work).await?;
+        // Shares the immutable, already charged stack version; changes copy it.
+        let directories = source.borrow().directories.clone();
         let variables = snapshot_map(source, |s| &s.variables, cancel, work).await?;
         let exported = snapshot_set(source, |s| &s.exported, cancel, work).await?;
         let readonly = snapshot_set(source, |s| &s.readonly, cancel, work).await?;
@@ -360,6 +366,7 @@ impl State {
             readonly,
             namerefs,
             cwd,
+            directories,
             functions,
             status: state.status,
             pipestatus,
@@ -1123,6 +1130,17 @@ impl State {
             self.refresh_star_separator();
         }
         Ok(removed)
+    }
+    pub(crate) fn unset_nameref(&mut self, name: &str) -> Result<bool, i32> {
+        if self.is_readonly(name) {
+            return Err(1);
+        }
+        if !self.namerefs.contains_key(name) {
+            return Ok(false);
+        }
+        self.namerefs.remove(name);
+        self.unset_binding(name)?;
+        Ok(true)
     }
     fn unset_binding(&mut self, name: &str) -> Result<bool, i32> {
         if self.is_readonly(name) {
@@ -2123,6 +2141,9 @@ pub fn absolute(cwd: &str, path: &str) -> String {
     }
     format!("/{}", components.join("/"))
 }
+
+mod directory_stack;
+use directory_stack::DirectoryStack;
 
 #[cfg(test)]
 mod bindings_tests;

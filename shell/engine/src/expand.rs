@@ -166,7 +166,7 @@ fn admit_vec_slot<T>(value: &mut Vec<T>, work: &mut Work) -> Result<(), Error> {
 }
 
 #[derive(Default)]
-struct Ifs {
+pub(crate) struct Ifs {
     small: [char; 3],
     small_len: usize,
     chars: BTreeSet<char>,
@@ -185,7 +185,7 @@ impl Ifs {
     ) -> Result<(), Error> {
         State::admit_scalar_access(state, "IFS", cancel, work).await
     }
-    async fn new(
+    pub(crate) async fn new(
         state: &SharedState,
         cancel: &Cancel,
         max: usize,
@@ -234,7 +234,7 @@ impl Ifs {
     fn is_empty(&self) -> bool {
         self.small_len == 0 && self.chars.is_empty()
     }
-    fn contains(&self, ch: char) -> bool {
+    pub(crate) fn contains(&self, ch: char) -> bool {
         self.small[..self.small_len].contains(&ch) || self.chars.contains(&ch)
     }
     fn insert(&mut self, ch: char, work: &mut Work) -> Result<(), Error> {

@@ -25,6 +25,8 @@ mod control;
 pub(crate) mod eval;
 mod file_substitution;
 mod indexed;
+mod select;
+mod type_builtin;
 
 #[derive(Clone, Debug)]
 pub struct Limits {
@@ -1454,6 +1456,7 @@ async fn compound_command(
         CompoundCommand::Arithmetic(_)
             | CompoundCommand::Case(_)
             | CompoundCommand::For(_)
+            | CompoundCommand::Select(_)
             | CompoundCommand::ArithmeticFor(_)
             | CompoundCommand::Test(_)
     )
@@ -1526,6 +1529,7 @@ fn execute_compound_body<'a>(
             Outcome::status,
         ),
         CompoundCommand::For(loop_) => control::run_for(loop_, state, fds, context, work),
+        CompoundCommand::Select(loop_) => select::run(loop_, state, fds, context, work),
         CompoundCommand::ArithmeticFor(loop_) => {
             control::run_arithmetic_for(loop_, state, fds, context)
         }
@@ -3117,6 +3121,12 @@ async fn dispatch_simple_command_body(
         }
         return Ok(eval::run(args, state, fds, context).await);
     }
+    if handler == Some(commands::Handler::Type) {
+        let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
+            .await
+            .map_err(admission_status)?;
+        return type_builtin::run(&args, &state, &fds, &context, &mut work).await;
+    }
     if let Some(commands::Handler::Builtin(builtin)) = handler {
         let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
             .await
@@ -3130,7 +3140,7 @@ async fn dispatch_simple_command_body(
     }
     // A pipe named by an open descriptor exists but cannot be executed.
     if name.starts_with("/dev/fd/")
-        && crate::io::device_endpoint(&name, &fds.borrow()).is_some_and(|endpoint| endpoint.is_ok())
+        && crate::io::descriptor_number(&name).is_some_and(|fd| fds.borrow().get(fd).is_some())
     {
         let diagnostic = format!("/usr/bin/bash: {name}: Permission denied\n");
         let stderr = fds.borrow().get(2);
@@ -3744,15 +3754,6 @@ async fn redirects(
             | RedirectKind::Append
             | RedirectKind::OutputBoth
             | RedirectKind::ReadWrite => {
-                let device = crate::io::device_endpoint(&target, &fds.borrow());
-                if let Some(endpoint) = device {
-                    let endpoint = endpoint?;
-                    if redirect.kind == RedirectKind::OutputBoth {
-                        fds.borrow_mut().insert(2, endpoint.clone());
-                    }
-                    fds.borrow_mut().insert(fd, endpoint);
-                    continue;
-                }
                 let path = absolute(&state.borrow().cwd, &target);
                 let read_write = redirect.kind == RedirectKind::ReadWrite;
                 let options = OpenOptions {
@@ -3765,12 +3766,14 @@ async fn redirects(
                     ),
                     append: redirect.kind == RedirectKind::Append,
                 };
+                let opening = io::open_path(&path, &fds.borrow(), &options)
+                    .map_err(|error| error.status())?;
                 let endpoint = context
                     .cancel
-                    .run(context.fs().open(&path, &options))
+                    .run(opening.open(context.fs(), &options))
                     .await
                     .map_err(|_| 130)?
-                    .map_err(|e| e.status())?;
+                    .map_err(|error| error.status())?;
                 if redirect.kind == RedirectKind::OutputBoth {
                     fds.borrow_mut().insert(2, endpoint.clone());
                 }

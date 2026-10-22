@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "d2b135a2e1503cb0ace0bf3aa4d96c3f0b30dfe4bfae1bfbf74525e0c4c7cf5a",
+    "engineSourceSha256": "1fff856e1db48d8822dc20230dda78f70775f8d6a002f5491997620a1f0bbf4e",
     "binaryBuild": null
   },
   "contract": {
@@ -169,12 +169,16 @@
       "kind": "layer",
       "files": [
         "shell/engine/src/builtins.rs",
+        "shell/engine/src/builtins/declarations.rs",
+        "shell/engine/src/builtins/directories.rs",
+        "shell/engine/src/builtins/directories/tests.rs",
         "shell/engine/src/builtins/getopts.rs",
         "shell/engine/src/builtins/getopts/tests.rs",
         "shell/engine/src/builtins/printf.rs",
         "shell/engine/src/builtins/printf/fields.rs",
         "shell/engine/src/builtins/printf/quoting.rs",
         "shell/engine/src/builtins/read.rs",
+        "shell/engine/src/builtins/read/fields.rs",
         "shell/engine/src/builtins/test.rs"
       ]
     },
@@ -242,7 +246,9 @@
         "shell/engine/src/interpreter/control.rs",
         "shell/engine/src/interpreter/eval.rs",
         "shell/engine/src/interpreter/file_substitution.rs",
-        "shell/engine/src/interpreter/indexed.rs"
+        "shell/engine/src/interpreter/indexed.rs",
+        "shell/engine/src/interpreter/select.rs",
+        "shell/engine/src/interpreter/type_builtin.rs"
       ]
     },
     {
@@ -304,6 +310,8 @@
         "shell/engine/src/state.rs",
         "shell/engine/src/state/binding.rs",
         "shell/engine/src/state/bindings_tests.rs",
+        "shell/engine/src/state/declarations.rs",
+        "shell/engine/src/state/directory_stack.rs",
         "shell/engine/src/state/getopts_tests.rs"
       ]
     },
@@ -382,7 +390,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 7,
+        "line": 9,
         "column": 16
       }
     },
@@ -392,7 +400,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 754,
+        "line": 758,
         "column": 39
       }
     },
@@ -402,7 +410,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 8,
+        "line": 10,
         "column": 5
       }
     },
@@ -412,7 +420,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 9,
+        "line": 11,
         "column": 14
       }
     },
@@ -422,7 +430,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 10,
+        "line": 12,
         "column": 19
       }
     },
@@ -432,7 +440,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 11,
+        "line": 13,
         "column": 10
       }
     },
@@ -442,7 +450,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 12,
+        "line": 14,
         "column": 13
       }
     },
@@ -552,7 +560,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 1616,
+        "line": 1620,
         "column": 33
       }
     },
@@ -582,7 +590,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 86,
+        "line": 88,
         "column": 30
       }
     },
@@ -771,9 +779,9 @@
       "target": "executor",
       "scope": "testOnly",
       "location": {
-        "path": "shell/engine/src/builtins/getopts/tests.rs",
-        "line": 5,
-        "column": 16
+        "path": "shell/engine/src/builtins/directories/tests.rs",
+        "line": 6,
+        "column": 5
       }
     },
     {
@@ -781,8 +789,8 @@
       "target": "interpreter",
       "scope": "testOnly",
       "location": {
-        "path": "shell/engine/src/builtins/getopts/tests.rs",
-        "line": 3,
+        "path": "shell/engine/src/builtins/directories/tests.rs",
+        "line": 5,
         "column": 5
       }
     },
@@ -791,9 +799,9 @@
       "target": "io",
       "scope": "testOnly",
       "location": {
-        "path": "shell/engine/src/builtins/getopts/tests.rs",
-        "line": 6,
-        "column": 5
+        "path": "shell/engine/src/builtins/directories/tests.rs",
+        "line": 7,
+        "column": 10
       }
     },
     {
@@ -801,8 +809,8 @@
       "target": "process",
       "scope": "testOnly",
       "location": {
-        "path": "shell/engine/src/builtins/getopts/tests.rs",
-        "line": 7,
+        "path": "shell/engine/src/builtins/directories/tests.rs",
+        "line": 8,
         "column": 5
       }
     },
@@ -882,7 +890,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3801,
+        "line": 3804,
         "column": 25
       }
     },
@@ -892,7 +900,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 5114,
+        "line": 5117,
         "column": 17
       }
     },
@@ -912,7 +920,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3787,
+        "line": 3790,
         "column": 17
       }
     },
@@ -922,7 +930,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3787,
+        "line": 3790,
         "column": 31
       }
     },
@@ -942,7 +950,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/io.rs",
-        "line": 985,
+        "line": 1060,
         "column": 9
       }
     },
@@ -1022,7 +1030,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 960,
+        "line": 967,
         "column": 63
       }
     },
@@ -1032,7 +1040,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 2039,
+        "line": 2057,
         "column": 9
       }
     }
