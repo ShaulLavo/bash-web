@@ -1212,6 +1212,552 @@
       "status": 0,
       "stdout": "got:trap -- 'echo h' SIGTERM\n",
       "stderr": ""
+    },
+    {
+      "id": "implicit-INT-root-ignore",
+      "code": "trap '' INT; trap -p INT; trap - INT",
+      "status": 0,
+      "stdout": "trap -- '' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-INT-proc-new-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-INT-proc-handler-then-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : INT; trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-INT-root-ignore-proc-reignore",
+      "code": "trap '' INT; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-INT-root-handler-proc-reignore",
+      "code": "trap : INT; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-INT-ordinary-new-ignore",
+      "code": "(trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "trap -- '' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-INT-ordinary-proc-new-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p INT)); trap - INT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-INT-mutated-ordinary-proc-new-ignore",
+      "code": "(trap : USR1; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p INT)); trap - INT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-QUIT-root-ignore",
+      "code": "trap '' QUIT; trap -p QUIT; trap - QUIT",
+      "status": 0,
+      "stdout": "trap -- '' SIGQUIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-QUIT-proc-new-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-QUIT-proc-handler-then-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : QUIT; trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-QUIT-root-ignore-proc-reignore",
+      "code": "trap '' QUIT; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-QUIT-root-handler-proc-reignore",
+      "code": "trap : QUIT; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-QUIT-ordinary-new-ignore",
+      "code": "(trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "trap -- '' SIGQUIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-QUIT-ordinary-proc-new-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap -p QUIT)); trap - QUIT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-QUIT-mutated-ordinary-proc-new-ignore",
+      "code": "(trap : USR1; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap -p QUIT)); trap - QUIT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-HUP-root-ignore",
+      "code": "trap '' HUP; trap -p HUP; trap - HUP",
+      "status": 0,
+      "stdout": "trap -- '' SIGHUP\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-HUP-proc-new-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap -p HUP); trap - HUP",
+      "status": 0,
+      "stdout": "[trap -- '' SIGHUP]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-HUP-proc-handler-then-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : HUP; trap '' HUP; trap -p HUP); trap - HUP",
+      "status": 0,
+      "stdout": "[trap -- '' SIGHUP]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-HUP-root-ignore-proc-reignore",
+      "code": "trap '' HUP; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap -p HUP); trap - HUP",
+      "status": 0,
+      "stdout": "[trap -- '' SIGHUP]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-HUP-root-handler-proc-reignore",
+      "code": "trap : HUP; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap -p HUP); trap - HUP",
+      "status": 0,
+      "stdout": "[trap -- '' SIGHUP]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-HUP-ordinary-new-ignore",
+      "code": "(trap '' HUP; trap -p HUP); trap - HUP",
+      "status": 0,
+      "stdout": "trap -- '' SIGHUP\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-HUP-ordinary-proc-new-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap -p HUP)); trap - HUP",
+      "status": 0,
+      "stdout": "[trap -- '' SIGHUP]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-HUP-mutated-ordinary-proc-new-ignore",
+      "code": "(trap : USR1; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap -p HUP)); trap - HUP",
+      "status": 0,
+      "stdout": "[trap -- '' SIGHUP]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-TERM-root-ignore",
+      "code": "trap '' TERM; trap -p TERM; trap - TERM",
+      "status": 0,
+      "stdout": "trap -- '' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-TERM-proc-new-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' TERM; trap -p TERM); trap - TERM",
+      "status": 0,
+      "stdout": "[trap -- '' SIGTERM]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-TERM-proc-handler-then-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : TERM; trap '' TERM; trap -p TERM); trap - TERM",
+      "status": 0,
+      "stdout": "[trap -- '' SIGTERM]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-TERM-root-ignore-proc-reignore",
+      "code": "trap '' TERM; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' TERM; trap -p TERM); trap - TERM",
+      "status": 0,
+      "stdout": "[trap -- '' SIGTERM]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-TERM-root-handler-proc-reignore",
+      "code": "trap : TERM; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' TERM; trap -p TERM); trap - TERM",
+      "status": 0,
+      "stdout": "[trap -- '' SIGTERM]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-TERM-ordinary-new-ignore",
+      "code": "(trap '' TERM; trap -p TERM); trap - TERM",
+      "status": 0,
+      "stdout": "trap -- '' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-TERM-ordinary-proc-new-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' TERM; trap -p TERM)); trap - TERM",
+      "status": 0,
+      "stdout": "[trap -- '' SIGTERM]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-TERM-mutated-ordinary-proc-new-ignore",
+      "code": "(trap : USR1; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' TERM; trap -p TERM)); trap - TERM",
+      "status": 0,
+      "stdout": "[trap -- '' SIGTERM]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-CHLD-root-ignore",
+      "code": "trap '' CHLD; trap -p CHLD; trap - CHLD",
+      "status": 0,
+      "stdout": "trap -- '' SIGCHLD\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-CHLD-proc-new-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' CHLD; trap -p CHLD); trap - CHLD",
+      "status": 0,
+      "stdout": "[trap -- '' SIGCHLD]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-CHLD-proc-handler-then-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : CHLD; trap '' CHLD; trap -p CHLD); trap - CHLD",
+      "status": 0,
+      "stdout": "[trap -- '' SIGCHLD]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-CHLD-root-ignore-proc-reignore",
+      "code": "trap '' CHLD; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' CHLD; trap -p CHLD); trap - CHLD",
+      "status": 0,
+      "stdout": "[trap -- '' SIGCHLD]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-CHLD-root-handler-proc-reignore",
+      "code": "trap : CHLD; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' CHLD; trap -p CHLD); trap - CHLD",
+      "status": 0,
+      "stdout": "[trap -- '' SIGCHLD]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-CHLD-ordinary-new-ignore",
+      "code": "(trap '' CHLD; trap -p CHLD); trap - CHLD",
+      "status": 0,
+      "stdout": "trap -- '' SIGCHLD\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-CHLD-ordinary-proc-new-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' CHLD; trap -p CHLD)); trap - CHLD",
+      "status": 0,
+      "stdout": "[trap -- '' SIGCHLD]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-CHLD-mutated-ordinary-proc-new-ignore",
+      "code": "(trap : USR1; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' CHLD; trap -p CHLD)); trap - CHLD",
+      "status": 0,
+      "stdout": "[trap -- '' SIGCHLD]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-EXIT-root-ignore",
+      "code": "trap '' EXIT; trap -p EXIT; trap - EXIT",
+      "status": 0,
+      "stdout": "trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-EXIT-proc-new-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' EXIT; trap -p EXIT); trap - EXIT",
+      "status": 0,
+      "stdout": "[trap -- '' EXIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-EXIT-proc-handler-then-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : EXIT; trap '' EXIT; trap -p EXIT); trap - EXIT",
+      "status": 0,
+      "stdout": "[trap -- '' EXIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-EXIT-root-handler-proc-reignore",
+      "code": "trap : EXIT; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' EXIT; trap -p EXIT); trap - EXIT",
+      "status": 0,
+      "stdout": "[trap -- '' EXIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-EXIT-ordinary-new-ignore",
+      "code": "(trap '' EXIT; trap -p EXIT); trap - EXIT",
+      "status": 0,
+      "stdout": "trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-EXIT-ordinary-proc-new-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' EXIT; trap -p EXIT)); trap - EXIT",
+      "status": 0,
+      "stdout": "[trap -- '' EXIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-EXIT-mutated-ordinary-proc-new-ignore",
+      "code": "(trap : USR1; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' EXIT; trap -p EXIT)); trap - EXIT",
+      "status": 0,
+      "stdout": "[trap -- '' EXIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-DEBUG-active-proc",
+      "code": "trap '' DEBUG; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p DEBUG INT); trap - DEBUG",
+      "status": 0,
+      "stdout": "[trap -- '' DEBUG]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-DEBUG-deferred-proc",
+      "code": "trap '' DEBUG; (while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p DEBUG INT)); trap - DEBUG",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-ERR-active-proc",
+      "code": "trap '' ERR; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p ERR INT); trap - ERR",
+      "status": 0,
+      "stdout": "[trap -- '' ERR]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-ERR-deferred-proc",
+      "code": "trap '' ERR; (while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p ERR INT)); trap - ERR",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-RETURN-active-proc",
+      "code": "trap '' RETURN; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p RETURN INT); trap - RETURN",
+      "status": 0,
+      "stdout": "[trap -- '' RETURN]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-RETURN-deferred-proc",
+      "code": "trap '' RETURN; (while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p RETURN INT)); trap - RETURN",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-corrected-nested-ordinary-spaces",
+      "code": "trap : EXIT HUP INT; ( (while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap -p EXIT HUP INT))) ); trap - EXIT HUP INT",
+      "status": 0,
+      "stdout": "[[trap -- ':' EXIT]]\n[[trap -- ':' SIGHUP]]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-twice",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-deferred-twice",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap '' INT; trap -p INT); trap - INT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-reset-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap - INT; trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-deferred-reset-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap - INT; trap '' INT; trap -p INT); trap - INT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-handler-reset-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : INT; trap - INT; trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-deferred-handler-reset-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : INT; trap - INT; trap '' INT; trap -p INT); trap - INT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-other-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-deferred-other-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap '' INT; trap -p INT); trap - INT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-nested-ordinary",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <((trap '' INT; trap -p INT)); trap - INT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-deferred-nested-ordinary",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <((trap '' INT; trap -p INT)); trap - INT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-nested-process",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p INT)); trap - INT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-deferred-nested-process",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p INT)); trap - INT)",
+      "status": 0,
+      "stdout": "[[trap -- '' SIGINT]]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-twice",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-deferred-twice",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap '' QUIT; trap -p QUIT); trap - QUIT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-reset-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap - QUIT; trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-deferred-reset-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap - QUIT; trap '' QUIT; trap -p QUIT); trap - QUIT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-handler-reset-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : QUIT; trap - QUIT; trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-deferred-handler-reset-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : QUIT; trap - QUIT; trap '' QUIT; trap -p QUIT); trap - QUIT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-other-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-deferred-other-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap '' QUIT; trap -p QUIT); trap - QUIT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-nested-ordinary",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <((trap '' QUIT; trap -p QUIT)); trap - QUIT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-deferred-nested-ordinary",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <((trap '' QUIT; trap -p QUIT)); trap - QUIT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-nested-process",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap -p QUIT)); trap - QUIT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-deferred-nested-process",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap -p QUIT)); trap - QUIT)",
+      "status": 0,
+      "stdout": "[[trap -- '' SIGQUIT]]\n",
+      "stderr": ""
     }
   ],
   "correctionRecording": {
@@ -1223,6 +1769,12 @@
     "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
     "reviewedHead": "535197097ea359ee15b2e73bdf0a944b41df0c82",
     "addedCases": 77,
+    "bashSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5"
+  },
+  "implicitIgnoreRecording": {
+    "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "reviewedHead": "477701c832ef0db48f4a400cab01d45b94c5899b",
+    "addedCases": 78,
     "bashSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5"
   }
 }
