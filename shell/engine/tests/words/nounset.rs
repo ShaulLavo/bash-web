@@ -276,15 +276,7 @@ fn prefix_rhs_failure_is_fatal_even_when_the_command_has_a_heredoc() {
             rig.errors.bytes(),
             b"/usr/bin/bash: line 2: missing: unbound variable\n"
         );
-        assert_eq!(
-            rig.shell
-                .state()
-                .borrow()
-                .bindings()
-                .get("TEMP")
-                .map(String::as_str),
-            Some("before")
-        );
+        assert_eq!(rig.value("TEMP").as_deref(), Some("before"));
         assert!(!rig.shell.state().borrow().bindings().contains_key("value"));
     }
     let rig = Rig::new(Limits::default());
@@ -376,15 +368,7 @@ fn cancellation_before_a_later_unbound_read_has_no_partial_dispatch_or_diagnosti
     assert_eq!(rig.finish(job), 130);
     assert!(rig.calls.borrow().is_empty());
     assert!(rig.errors.bytes().is_empty());
-    assert_eq!(
-        rig.shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("TEMP")
-            .map(String::as_str),
-        Some("before")
-    );
+    assert_eq!(rig.value("TEMP").as_deref(), Some("before"));
     assert!(!rig.shell.state().borrow().bindings().contains_key("value"));
 }
 

@@ -995,6 +995,11 @@ impl Expansion<'_> {
                 expansion.ifs_changed = true;
                 return result.map_err(Error::in_expansion);
             }
+            if let WordPart::ArrayLength(name) = part {
+                return expansion
+                    .indexed_length(name, "@", state, scalar || quoted)
+                    .await;
+            }
             if let WordPart::Length(name) = part {
                 if name.contains(':') {
                     expansion.work.admit_storage(256)?;
@@ -1005,6 +1010,13 @@ impl Expansion<'_> {
                 }
                 expansion.admit_pattern_length(name, state)?;
                 return expansion.length(name, state, scalar || quoted, depth).await;
+            }
+            if let WordPart::ArrayAccess { name, index } = part
+                && name != "PIPESTATUS"
+            {
+                return expansion
+                    .indexed_element(name, index, state, scalar || quoted)
+                    .await;
             }
             if let WordPart::Variable(name) = part {
                 return expansion.variable(name, state, quoted, scalar).await;
@@ -1237,11 +1249,7 @@ impl Expansion<'_> {
                 .find(|v| !v.is_empty());
             (value, locale.is_some_and(|v| utf8_locale(v)))
         };
-        let mut count = 0usize;
-        for byte in value.bytes() {
-            self.work.checkpoint(self.cancel).await?;
-            count += usize::from(!utf8 || byte & 0xc0 != 0x80);
-        }
+        let count = self.character_count(&value, utf8).await?;
         let offset =
             crate::arithmetic::evaluate(offset, state, self.cancel, self.raw_remaining, self.work)
                 .await?;
@@ -1304,6 +1312,16 @@ impl Expansion<'_> {
         self.segment(result, Protection::expansion(protected, state), protected)
             .await
     }
+    async fn character_count(&mut self, value: &str, utf8: bool) -> Result<usize, Error> {
+        let mut count = 0usize;
+        for byte in value.bytes() {
+            self.work.checkpoint(self.cancel).await?;
+            // Rust strings are valid UTF-8. C/POSIX count every byte.
+            count += usize::from(!utf8 || byte & 0xc0 != 0x80);
+        }
+        Ok(count)
+    }
+
     async fn length(
         &mut self,
         name: &str,
@@ -1311,6 +1329,9 @@ impl Expansion<'_> {
         protected: bool,
         depth: usize,
     ) -> Result<(), Error> {
+        if let Some((array, index)) = indexed_name(name) {
+            return self.indexed_length(array, index, state, protected).await;
+        }
         if !operand::length_name(name) || depth >= operand::MAX_DEPTH {
             return Err(2.into());
         }
@@ -1333,13 +1354,7 @@ impl Expansion<'_> {
                 .find(|value| !value.is_empty());
             (value, locale.is_some_and(|value| utf8_locale(value)))
         };
-        let mut count = 0usize;
-        for byte in value.bytes() {
-            self.work.checkpoint(self.cancel).await?;
-            // Rust strings are valid UTF-8. Count each leading byte as one
-            // scalar, including combining marks; C/POSIX count every byte.
-            count += usize::from(!utf8 || byte & 0xc0 != 0x80);
-        }
+        let count = self.character_count(&value, utf8).await?;
         if self.pattern_snapshots {
             self.work.admit_storage(20)?;
         }
@@ -1831,7 +1846,14 @@ impl Expansion<'_> {
             let s = state.borrow();
             match part {
                 WordPart::Variable(name) => (s.positional().len(), name == "@"),
-                WordPart::ArrayAccess { index, .. } => (s.pipeline_status().len(), index == "@"),
+                WordPart::ArrayAccess { name, index } => (
+                    if name == "PIPESTATUS" {
+                        s.pipeline_status().len()
+                    } else {
+                        s.array_count(name)
+                    },
+                    index == "@",
+                ),
                 _ => return Err(2.into()),
             }
         };
@@ -1868,10 +1890,18 @@ impl Expansion<'_> {
             self.segments.empty(self.work)?;
         }
         let protection = Protection::expansion(quoted || scalar, state);
+        let mut array_index = None;
         for index in 0..count {
             self.element_boundary(index, list, separator, quoted || scalar)
                 .await?;
-            let value = list_value(part, state, index, self.raw_remaining, self.work)?;
+            let value = list_value(
+                part,
+                state,
+                index,
+                &mut array_index,
+                self.raw_remaining,
+                self.work,
+            )?;
             self.segment(&value, protection, quoted || scalar).await?;
         }
         Ok(())
@@ -2016,22 +2046,21 @@ fn list_value(
     part: &WordPart,
     state: &SharedState,
     index: usize,
+    array_index: &mut Option<i64>,
     max: usize,
     work: &mut Work,
 ) -> Result<String, Error> {
     let s = state.borrow();
-    match part {
-        WordPart::Variable(_) => {
-            let value = s.positional().get(index).map(String::as_str).unwrap_or("");
-            if value.len() > max {
-                return Err(2.into());
-            }
-            work.admit_storage(value.len())?;
-            bounded(Cow::Borrowed(value), max)
+    let value = match part {
+        WordPart::Variable(_) => s.positional().get(index).map(String::as_str).unwrap_or(""),
+        WordPart::ArrayAccess { name, .. } if name != "PIPESTATUS" => {
+            let (next, value) = s.array_next(name, *array_index).ok_or(2)?;
+            *array_index = Some(next);
+            value
         }
         WordPart::ArrayAccess { .. } => {
             work.admit_storage(20)?;
-            bounded(
+            return bounded(
                 Cow::Owned(
                     s.pipeline_status()
                         .get(index)
@@ -2039,17 +2068,20 @@ fn list_value(
                         .unwrap_or_default(),
                 ),
                 max,
-            )
+            );
         }
-        _ => Err(2.into()),
+        _ => return Err(2.into()),
+    };
+    if value.len() > max {
+        return Err(2.into());
     }
+    work.admit_storage(value.len())?;
+    bounded(Cow::Borrowed(value), max)
 }
 fn is_list(part: &WordPart) -> bool {
     match part {
         WordPart::Variable(name) => matches!(name.as_str(), "@" | "*"),
-        WordPart::ArrayAccess { name, index } => {
-            name == "PIPESTATUS" && matches!(index.as_str(), "@" | "*")
-        }
+        WordPart::ArrayAccess { index, .. } => matches!(index.as_str(), "@" | "*"),
         _ => false,
     }
 }
@@ -2520,6 +2552,11 @@ async fn pattern_with_positionals(
             .await?;
     }
     expansion.pattern.take().ok_or(2.into())
+}
+
+fn indexed_name(name: &str) -> Option<(&str, &str)> {
+    let (name, index) = name.split_once('[')?;
+    Some((name, index.strip_suffix(']')?))
 }
 
 #[cfg(test)]

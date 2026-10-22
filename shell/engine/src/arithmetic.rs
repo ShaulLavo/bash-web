@@ -786,7 +786,11 @@ mod tests {
             }
         }
         assert_eq!(
-            observed.borrow().bindings().get("x").map(String::as_str),
+            observed
+                .borrow()
+                .bindings()
+                .get("x")
+                .map(|value| value.as_str()),
             Some("9")
         );
         assert!(

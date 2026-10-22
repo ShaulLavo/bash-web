@@ -2256,3 +2256,207 @@ from Bash's source and check it against controls before changing the code.
 Evidence: `/work/reports/bash-web/hill-climb/expansion/indirect-special-review-r2/controls.json`
 (rows `direct:00:` through `indirect:9999…:set -u; `). No frozen scored case
 has been checked against this; claim no gain unless a replay proves one.
+
+## word fields carry bytes, not UTF-8 String
+
+Status: Approved, 2026-10-21. Follow-up to indexed arrays in PR41. Keep this as
+one shared item for variables, expansion and control, with exact scored IDs
+added only when byte-level observations establish this boundary.
+
+The engine's word fields, bindings and command-substitution captures currently
+use Rust `String`. That cannot represent a lone `0xff` byte. In
+`expand/command.rs`, invalid-UTF8 capture is rejected before a later case match
+can receive the bytes. Do not replace invalid bytes with Unicode replacement
+characters, emulate allocator-dependent bytes, or change the frozen ruler.
+
+Confirmed scored cases:
+
+- `bashkit-suite:bashbox-declare:301`, "declare -p quotes control characters
+  and bytes that aren't UTF-8". The script sets `z=$'\xff'`; its escaped
+  declaration must be `declare -- z=$'\377'`, not the distinct UTF-8 spelling
+  for U+00FF. The lexer currently converts invalid escape bytes into Unicode
+  scalars in `flush_escape_bytes`. This is a raw-byte prerequisite in a mixed
+  declaration case. Missing declaration formatting is another blocker, so
+  changing word storage alone does not promise this gain. The validated raw
+  native observations and frozen mapping are retained in
+  `/work/reports/bash-web/hill-climb/variables/byte-field-blocked-ids.md`
+  and `.json`.
+- `oils:var-op-slice:107` and `oils:var-op-slice:124`. Both construct
+  `s=$(echo -e "\\xFF")bcdef` then run `echo -${s:1:3}-`, expecting `-bcd-`.
+  The leading raw `0xff` must survive command substitution and word storage.
+- `oils:case_:147`, "matching the byte 0xff against empty string". It captures
+  `c=$(printf \\377)`, then matches both `case $c` and `case "$c"`. Both paths
+  must preserve the captured byte. Control identified invalid-UTF8 rejection in
+  `expand/command.rs` as the current boundary.
+
+Separate custom observations are not scored IDs. Native Bash observations of
+array-valued IFS include a raw `0xff` separator for `IFS=(); ... "${a[*]}"`.
+PR41 fixes the independently reproducible field-splitting and local-restoration
+bugs, but does not claim raw-byte star-join compatibility. The native binary
+identity, environment, status and raw base64/hex streams are retained in
+`/work/reports/bash-web/hill-climb/variables/indexed/review-probes.ts` and
+`review-probes.jsonl`. Cases are not blocked by this item just because they mention arrays
+or IFS. In particular, `oils:var-op-patsub:245` is not in this raw-byte list:
+it exercises locale-C matching of valid UTF-8, which is not itself a String
+representation failure.
+
+Change the word-field representation and its bindings, captures, splitting,
+patterns, argv and output consumers together so arbitrary non-NUL shell bytes
+survive end to end. Keep byte offsets distinct from locale-aware character
+operations. Add failing-first byte-level tests for each confirmed ID and for
+valid UTF-8, ASCII, empty fields, quotes and NUL handling. Preserve bounded
+storage, work admission, cancellation and scope restoration. Qualify through
+production Waffle with the same frozen identities, exact gained/lost IDs and
+zero lost passes. No gate, oracle, environment, exclusion or threshold changes.
+
+
+## Effective IFS publication provenance
+
+Status: Approved, 2026-10-22. Owner: VARIABLES. This is the next VARIABLES
+family after PR41 lands, ahead of explicit-name declaration printing. This
+future plan item does not expand PR41's implementation.
+
+CONTROL's BASH_REMATCH adapter can publish an indexed value through a nameref
+into IFS. Bash uses that value's element zero for field splitting while
+retaining the prior quoted-star separator. Ordinary `IFS=(...)` instead
+disables splitting. The current `field_ifs` returns an empty string for every
+indexed binding. `Ifs::new` enumerates that string, and `IfsMembers` only filters
+its characters. A new cache plus `StarSeparator::Snapshot` cannot supply the
+missing delimiter. Do not use that workaround.
+
+First, have CONTROL retain a distinguishing multi-argument quoted-star control
+and an ordinary indexed-IFS control in its GNU Bash 5.3.15 observations. The
+existing single-argument star print does not distinguish separators. Then
+re-inventory scored failures against merged PR41 and record exact IDs. Separate
+direct IFS gains from cases enabled for CONTROL. No direct scored IFS gain is
+established yet. CONTROL's capture assignment has 18 scored candidates, but none
+mentions IFS. Do not count all captures as gains of this prerequisite.
+
+Define a state-owned effective-IFS source or publication-provenance contract.
+Preserve the distinction between rematch-published indexed IFS and ordinary
+indexed IFS. Cover direct and resolved targets, subsequent assignment, unset,
+nameref changes, no-match publication, local restoration, prefix restoration,
+and isolated state snapshots. Stage and admit fallible work before atomic
+publication. Resource rejection and cancellation must preserve prior state and
+refund storage. Keep ordinary OPTIND assignment separate from rematch
+publication, which must not reset the hidden getopts cursor.
+
+Publish the exact API agreement to CONTROL before implementation. Keep the
+existing `State::publish_rematch` signature and typed publication outcomes
+unless evidence requires a coordinated change. The adapter must consume the
+state contract without manipulating cache bits or restoration records. CONTROL
+keeps its matcher and ordinary publication work disjoint until this prerequisite
+lands, then integrates its actual merge normally before final acceptance.
+
+Use a separate VARIABLES worktree and PR after PR41. Add failing-first native
+and production-Waffle controls, independent exact-source review, unchanged
+blocking gates, and a frozen replay with zero lost cases. Preserve all ruler
+identities, exclusions, and limits. This unit is not the raw-byte field rewrite.
+Detailed source proof and evidence limits are in
+`/work/reports/bash-web/hill-climb/variables/rematch-ifs-prerequisite.md`.
+
+## Indexed array index-name expansion
+
+Status: Approved follow-up in the VARIABLES array-expansion family. Do not add
+this implementation to PR41 or CONTROL's capture adapter.
+
+CONTROL's production-Waffle capture checkpoint exposes two exact scored
+prerequisites: `brush-suite:extended_tests:29` and
+`brush-suite:extended_tests:30` iterate `${!BASH_REMATCH[@]}`. Capture contents
+match, but index enumeration still returns status 2. Evidence is retained in
+`/work/reports/bash-web/hill-climb/control/regex-captures/focused.log`,
+`after.json`, and `assigned-cases.json`. These are pending gains, not accepted
+baseline memberships.
+
+Implement index-name expansion over the existing state-owned sparse traversal
+in a separate bounded family. Verify sparse order, empty arrays, quoted and
+unquoted forms, nameref targets, scalar and positional boundaries, budgets, and
+cancellation against Bash. Re-inventory other scored candidates after PR41
+rather than treating historical array failures as new gains.
+
+## Compound local array declarations
+
+Status: Approved follow-up in the VARIABLES declaration and scope family. Keep
+CONTROL's rematch adapter and PR41 unchanged.
+
+CONTROL's custom production-Waffle control sets `BASH_REMATCH=(global)`, then
+calls a function containing `local BASH_REMATCH=(local spare)` and a regex
+capture. Bash restores the global array after return. The current declaration
+path does not establish that compound local, so the capture remains global.
+The exact script and byte output are retained in CONTROL's
+`regex-captures/focused.log` and `scripts/fixtures/shell-regex-captures.json` in
+its worktree. This custom control is not a scored ID.
+
+Start by reproducing the declaration without regex on merged PR41. Separately
+check scalar locals and existing indexed-local restoration to isolate the
+compound declaration path. Candidate scored rows include
+`bashkit-suite:arrays:213`, `bashkit-suite:arrays:226`,
+`bashkit-suite:arrays:237`, and `bashkit-suite:arrays:250`. Their status must be
+recomputed after PR41. Implement through the typed declaration path and state
+ownership, with no ad hoc BASH_REMATCH scope logic. Preserve local admission,
+readonly and nameref behavior, nested restoration, and resource or cancellation
+rollback. Qualify independently with the unchanged frozen zero-loss gate.
+
+
+## Automatic numeric special-scalar presence and values
+
+Status: Approved prerequisite, scheduled by scored gain and concrete dependency after the indexed-array family. No indexed-array implementation expansion. The existing Approved process-identity unit remains canonical for BASHPID.
+
+PR52 independent review at48634c07141a47fa3569adcd5ef3e96d624189ad demonstrates five deterministic ordinary-control regressions when new arithmetic nounset enforcement treats unsupported automatic scalars as absent. `set -u; printf '%s\n' "$((BASHPID-BASHPID))"` and the corresponding `0*BASHPID`, `0*UID`, `0*EUID` and `0*LINENO` controls print `0\n` with empty stderr/status0 on exact Bash5.3.15 and unchanged production base, but the candidate returns fatal Unbound/status127. These are not claimed frozen-corpus losses. Exact observations and runnable driver are in `/work/reports/bash-web/hill-climb/control/review-52-r1/special-probes.json` and `special-probes.ts`.
+
+VARIABLES owns coherent actual presence/value lookup and its host/session or execution-source inputs. CONTROL owns arithmetic consumers. BASHPID must use real process identity under the existing same-process task decision. UID/EUID need verified runtime identity semantics, and LINENO needs actual execution source position with observed assignment/unset behavior. Preserve local/prefix restoration, snapshots and resource/cancellation guarantees. No special-name whitelist, fabricated values, build-host identity in a browser guest or present-without-value marker. Inspect current runtime capabilities before claiming an external prerequisite is absent. A bounded arithmetic correction can proceed independently if it preserves these controls honestly; otherwise defer the conflicting fatal-absent change until the prerequisite. Scope and ownership receipt: `/work/reports/bash-web/hill-climb/variables/special-scalar-prerequisites.md`.
+
+## Indexed array storage and reads, 2026-10-22
+
+Status: Approved. Current-source local qualification is complete for PR41;
+parent owns independent integration acceptance, hosted CI, merge and exact-main
+verification. This is not a merged-family completion claim.
+
+Source `c94275f4d56767cf0a45f2e448c205c1365285f1` includes a normal merge of exact main
+`93fdf762f2a694427440d07156c7a8c458ecc995`. One authoritative real-Waffle
+replay retains all 9,221 records, 5,792 scored cases, 3,429 skips and the five-field
+frozen identity. Oils gains 55, 1099 to 1154; Brush gains 40, 1080 to 1120;
+Bashkit gains 85, 1469 to 1554. Every corpus loses zero passes. The saved
+finalizer reconstructs membership from immutable main plus those 180 proven
+gains, preserving every nongained historical row and passing the unchanged
+strict comparator. The earlier ad190 replay predates the scalar-transformation boundary correction and is historical, not final proof. Earlier source657 measurements remain historical pre50
+observations, not current-source proof.
+
+State owns unique in-place sparse writes and admitted shared copy-on-write.
+An admitted inverse journal retains completed assignments on ordinary semantic
+errors but reverses them on resource rejection or cancellation, without losing
+durable RHS effects. Local/prefix restoration and getopts cursor state retain
+their existing owners. Indexed-local getopts aggregate preflight admits the same
+publication growth as the synchronous writer, including repeated resolved aliases.
+
+Full native/WASI suites pass 1434/1414 tests. Unchanged Rust, JS quality, layer,
+duplicate and scoreboard checks pass; the scoreboard selection passes 670 tests.
+Nineteen recorded local Bash 5.3.15 controls match native and production Waffle,
+including 5,000 individual writes, 5,000 appends and a 10,000-element compound
+assignment under unchanged default limits. No skipped case is counted as a gain.
+
+See [the behavior and remaining forms](../docs/indexed-arrays.md) and
+[exact source/artifact/result evidence](../docs/evidence/indexed-arrays.json).
+Explicit-name declaration printing, index enumeration, compound-local forms,
+effective IFS provenance and raw-byte fields remain separately scoped. The
+single Approved byte-fields item above remains canonical for its four proven
+scored prerequisites. No pathname/noglob, tilde or rematch branch was copied.
+
+The sole integration-review P2 is repaired by rejecting resolved indexed bindings before scalar transformation projection. Nounset ordering and local scalar behavior are unchanged. Seventeen recorded unsupported-family/nounset controls pass on fresh native and Waffle artifacts; these are not scored gains. The initial replay and scoreboard attempts hit the host light queue's cgroup memory ceiling. Their failed logs remain separate from the completed suite-class final evidence, with no guest limit or gate changes.
+
+### Inherited extglob parse-option timing
+
+Status: Approved follow-up in the parser/options family, not PR41 storage scope.
+A custom scalar-only control on source `ad190b8` runs
+`shopt -s extglob; case foo in @(foo|bar)) printf "yes\n";; esac`.
+Local GNU Bash 5.3.15 rejects the same-line unit with syntax status 2; the native
+shell prints `yes\n` with status 0. Splitting after `shopt` with a newline makes
+the recorded integration control agree. This needs no indexed assignment.
+Parser/grammar source is identical to integrated main `93fdf762`; PR41 does not
+change parser option timing. No frozen scored mapping or lost pass is claimed.
+Exact bytes and binary identities are in
+`/work/reports/bash-web/hill-climb/variables/indexed/post93f-inherited-extglob-timing.json`.
+Before changing this behavior, reproduce direct case and ordinary argument
+patterns with extglob unset, enabled on the same read unit and enabled on a
+previous read unit. Coordinate with the parser/options and expansion owners;
+do not broaden indexed storage or alter the frozen ruler.

@@ -1,0 +1,769 @@
+{
+  "schema": 1,
+  "status": "Fresh corrected-source local qualification complete. Parent verified the sole integration finding; hosted final-head CI, acceptance, merge and exact-main checks remain parent-owned.",
+  "measuredRevision": "c94275f4d56767cf0a45f2e448c205c1365285f1",
+  "integratedMain": "93fdf762f2a694427440d07156c7a8c458ecc995",
+  "integrationCommit": "ad190b8a15c74bdccebdb42869765a3c8e5ada30",
+  "shellTree": "a7e747c3b89240fbaedd82f2bac3707e93929160",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "worktree": "/work/worktrees/bash-web/variables-indexed",
+  "branch": "climb/variables-indexed",
+  "pr": "https://github.com/ShaulLavo/bash-web/pull/41",
+  "versions": {
+    "root": "0.0.82",
+    "engine": "0.0.50",
+    "parser": "0.0.14",
+    "rust": "1.98.1",
+    "rustRevision": "48a229ceaefd4985c50990b14116b6d856af0985",
+    "node": "v26.7.0",
+    "bash": "5.3.15(1)-release"
+  },
+  "classification": "Original local Rust binding, indexed assignment and expansion integration. Rust B-tree source supplies allocation-layout evidence only; no upstream implementation copied.",
+  "artifacts": [
+    {
+      "path": "/work/tmp/bash-web-variables-indexed-target/release/shell-engine",
+      "bytes": 3128048,
+      "sha256": "030d5e31dd526bc37ca1bb277e250495babd0253793725008cf9a1085d23b79c"
+    },
+    {
+      "path": "/work/tmp/bash-web-variables-indexed-target/wasm32-wasip1/release/shell-runtime.wasm",
+      "bytes": 1963754,
+      "sha256": "59130dbed3b13ae7faa7fbd84ec22066cab509caeed96ea7127d927a9cc4b4c4"
+    },
+    {
+      "path": "/work/tmp/bash-web-variables-indexed-target/wasm32-wasip1/release/shell-engine.wasm",
+      "bytes": 2021154,
+      "sha256": "09e1dc28388fd7ba5a9bc36fd1c8be086667812b966a69f597c09cc25794a7c6"
+    },
+    {
+      "path": "/usr/bin/bash",
+      "bytes": 1195144,
+      "sha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5"
+    }
+  ],
+  "qualification": {
+    "exit": 0,
+    "commands": [
+      "npm run sources:browser",
+      "npm run build:worker",
+      "npm run check:rust",
+      "cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast",
+      "cargo build --locked --release --manifest-path shell/Cargo.toml -p shell-engine --bin shell-engine -j2",
+      "npm run build:shell",
+      "npm run test:shell:wasi",
+      "npm run quality:js",
+      "npm run test:shell:scoreboard",
+      "npm run check:layers -- --base-ref 93fdf762f2a694427440d07156c7a8c458ecc995",
+      "npm run check:capabilities",
+      "npm run test:ci"
+    ],
+    "nativeTestPassSummaries": 1434,
+    "wasiTestPassSummaries": 1414,
+    "scoreboardTests": 670,
+    "ciRecipeTests": 105,
+    "duplicates": {
+      "exact": 328,
+      "rustStructural": 14,
+      "newClones": 0,
+      "baselineOrThresholdChanged": false
+    },
+    "layers": {
+      "productionEdges": 42,
+      "testEdges": 30,
+      "productionViolations": 0,
+      "testViolations": 0
+    },
+    "controls": {
+      "recordedBashVersion": "5.3.15(1)-release",
+      "fixture": "scripts/fixtures/shell-indexed-integration.json",
+      "nativeAndWaffleByteStatusMatches": 19,
+      "customNotScored": true,
+      "unsupportedBoundaryFixture": "scripts/fixtures/shell-indexed-transform-boundary.json",
+      "unsupportedBoundaryNativeAndWafflePasses": 17,
+      "unsupportedBoundaryPolicy": "Deliberate status2 for indexed transforms, not Bash parity. Existing direct nounset status127 and diagnostic precede that rejection.",
+      "inheritedParserOptionTimingObservation": "An initial same-line shopt/extglob custom control differed: Bash parse status2, guest0. The separate-read-unit form matches. Parser/grammar source is inherited unchanged from93f, and a scalar-only control reproduces the boundary. Raw observations are retained in post93f-inherited-extglob-timing.json. No scored ID or new integration defect is claimed."
+    },
+    "sizes": {
+      "standaloneCore": {
+        "raw": 2021154,
+        "gzip9": 598791,
+        "brotli11": 464135
+      },
+      "runtimeCore": {
+        "raw": 1963754,
+        "gzip9": 576958,
+        "brotli11": 446898
+      },
+      "unchangedBrotliCeiling": 1000000
+    },
+    "buildReceipt": {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-build-receipt.json",
+      "bytes": 1923,
+      "sha256": "d68569600b5a8c00f66795f7991fe81e74c1a9dedddecdb6dd216c0c1ce1f3ef"
+    },
+    "finalBaselineChecks": {
+      "log": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-final-doc-checks.log",
+      "offlineScoreboardTests": 31,
+      "strictMembership": true,
+      "nonGainsPreserved": true,
+      "frozenIdentityUnchanged": true,
+      "parentPlanAdditionsPreserved": true,
+      "format": true,
+      "layers": true,
+      "diffCheck": true,
+      "exit": 0
+    },
+    "inheritedCustomBoundary": {
+      "description": "Same-line extglob parser-option timing differs on a scalar-only custom control. Parser/grammar is unchanged from93f. No scored mapping or integration regression is claimed.",
+      "evidence": {
+        "path": "/work/reports/bash-web/hill-climb/variables/indexed/post93f-inherited-extglob-timing.json",
+        "bytes": 1215,
+        "sha256": "6239c990baa7c7b5715999487b9bb4497e5fe846401f9f1ab1c8721e2e2062bf"
+      }
+    },
+    "executionAttempts": {
+      "incompleteReplay": {
+        "log": {
+          "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-replay-controller.log",
+          "bytes": 1013,
+          "sha256": "98e1285ac3a684119d2ac701ecd21b0b27d73c43ba2f3d60c1e317e09ef0d8bb"
+        },
+        "exit": 137,
+        "resultProduced": false
+      },
+      "partialGateRun": {
+        "log": {
+          "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-js-gates.log",
+          "bytes": 189210,
+          "sha256": "6ab2bdcda20f5753b50a1ba1e9ce50091ee93e991475e87e39fe696639060725"
+        },
+        "exit": 1,
+        "reason": "Light-class cgroup OOM killed two scoreboard file processes after quality:js passed."
+      },
+      "resourceReceipt": {
+        "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-resource-failures.log",
+        "bytes": 1469,
+        "sha256": "c17a2acb882a096757554b43a9a833d91cdfcae4d7bd35411dff5fe801dabce1"
+      },
+      "successfulReplay": {
+        "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-replay-r2-controller.log",
+        "bytes": 1246,
+        "sha256": "f09b922c5d69a3280cf2379782fa54536de9e6499464ee3ebce795c7af68a5b6"
+      },
+      "successfulScoreboard": {
+        "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-scoreboard-r2.log",
+        "bytes": 147962,
+        "sha256": "c2a8972ac01dbdeeafaa74bfc127d98a196a7e1e8753f57aec1ebbb672d1c803"
+      },
+      "hostQueueClassCorrection": "Shared suite class for memory-heavy replay/scoreboard only; commands, guest budgets and gates unchanged. No duplicate production build."
+    },
+    "gateReceipt": {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-gates-receipt.json",
+      "sha256": "66114232b6c63cca74e99c863a9a5644c084854987875bec4e9c1789ed3d6af7",
+      "bytes": 1641
+    }
+  },
+  "gateReceipts": [
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-native.log",
+      "bytes": 124320,
+      "sha256": "6d4a6b920620cf0948881740032bf2e307c37a6856c91fdba82d4ccd003862e7"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-rust-release.log",
+      "bytes": 1243,
+      "sha256": "d79b44e47c83fa7b215357d31f57782fea56cc6259e08412c3743abd96077be0"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-wasm-build.log",
+      "bytes": 1570,
+      "sha256": "8ed54273e1b568c70fbd3529e5ca7ab08f276b63fe8cf40b74c347f34ec62a4d"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-wasi.log",
+      "bytes": 121285,
+      "sha256": "b6baee59eb12c97d0afa2ee67f7cb1f129d63579efe5a904aff0c4fd6d53bdc7"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-quality-preparation.log",
+      "bytes": 36971,
+      "sha256": "d2243640caf53b13df780857f6e1045057674d313cae3dd7cb3cd1e05dfffae2"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-js-gates.log",
+      "bytes": 189210,
+      "sha256": "6ab2bdcda20f5753b50a1ba1e9ce50091ee93e991475e87e39fe696639060725"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-scoreboard-r2.log",
+      "bytes": 147962,
+      "sha256": "c2a8972ac01dbdeeafaa74bfc127d98a196a7e1e8753f57aec1ebbb672d1c803"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-controls.jsonl",
+      "bytes": 9722,
+      "sha256": "f8c8fc08a2bf7428cee31f08d6fc9bb4ab01300deaabe9ef0d9889989e82ec75"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-replay-r2-controller.log",
+      "bytes": 1246,
+      "sha256": "f09b922c5d69a3280cf2379782fa54536de9e6499464ee3ebce795c7af68a5b6"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/replay-final-transform-r2.log",
+      "bytes": 44408,
+      "sha256": "d63d6f9812ad8eb9d0dffcb5173236fd98739e1709328e1aa9907062b4ee03d1"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/membership-final-transform-r2.log",
+      "bytes": 50879,
+      "sha256": "f3922fd45eded91d0999dc16da2dfce38145645818f5049e29aabb4d4ccdf95a"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/membership-final-transform-r2-original-f3.log",
+      "bytes": 54657,
+      "sha256": "8ae3936fa7b256df1fbb615dfeb44debd6726942834e874d2119cd5cec5f18ba"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/membership-final-transform-r2-original361.log",
+      "bytes": 59316,
+      "sha256": "c9480bd285fd041be2d4e865ab2ddad399c1821b12f24c141b2694e14de75c13"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/membership-final-transform-r2-write.log",
+      "bytes": 50878,
+      "sha256": "7ae57ce03ffd9f15945cfd1140d1946b773de315d463dda1d9df5ee76c16cd60"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/post93f-transform-red2.log",
+      "bytes": 1683,
+      "sha256": "b08f5ebd86eb179691e45aa063be76d2fae37a65912955a0c1bf07991f6f39f2"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/post93f-transform-green3.log",
+      "bytes": 1913,
+      "sha256": "1768d82b6ab0a40fc197d35c9e361f0d5a68b83b5919da1cdf945ac7a7ff2106"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-repair.md",
+      "bytes": 2024,
+      "sha256": "e0a593658a66dd13e8f70573512f6d54a85b927ed1e4307ad9474070bbc8111d"
+    },
+    {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-final-doc-checks.log",
+      "bytes": 10938,
+      "sha256": "6b23bbda0475865c0d31fe3d38764af684c87c8965797fe448e43b03c2d7e679"
+    }
+  ],
+  "reviewScopes": [
+    {
+      "range": "4c2f8c96eefdb3ab275c9467352e42c6bf149b87..f671171cec424a34df4b0a69809d4eaa873cb9b6",
+      "verdict": "APPROVE",
+      "scope": "Mechanical Clippy and duplicate-removal refactor only. Not original implementation approval.",
+      "report": "/work/reports/bash-web/hill-climb/variables/indexed-review-dedup-r1.md.result"
+    },
+    {
+      "range": "f671171cec424a34df4b0a69809d4eaa873cb9b6..53f43675a6459f50e81ba27e35b4741b79abe2af",
+      "verdict": "APPROVE",
+      "scope": "RHS order, bad subscript error, signed boundary and array-valued IFS corrections only. Later ownership rewrite was reviewed separately.",
+      "report": "/work/reports/bash-web/hill-climb/variables/indexed-review-fixes-r1.md.result"
+    },
+    {
+      "range": "c4e407700d44004db19ae84fefaf88182c6b42ac..e1e91c22114a7490f7cf4a8970ed3dcb206640f2",
+      "verdict": "CHANGES REQUESTED",
+      "scope": "One P2 PIPESTATUS negative-length finding, resolved by c00724a. No further ownership/accounting blocker.",
+      "report": "/work/reports/bash-web/hill-climb/variables/indexed-review-ownership-r1.md.result"
+    },
+    {
+      "range": "7f294ac4c7be515db59237681f8ac0c733801584..c00724a420bf79ad4855eed97b90f867180e167d",
+      "verdict": "APPROVE",
+      "scope": "PIPESTATUS length correction only, with 18 independent native/Waffle byte/status controls.",
+      "report": "/work/reports/bash-web/hill-climb/variables/indexed-review-pipestatus-r1.md.result"
+    },
+    {
+      "pin": "657606ae636731558a63b9a7001f3e5f3cb2fc05",
+      "verdict": "CHANGES REQUESTED",
+      "scope": "One indexed-local getopts admission P2. Repaired and approved at e159; no other integration blocker.",
+      "report": "/work/reports/bash-web/hill-climb/variables/indexed-review-post47-r1.md.result"
+    },
+    {
+      "range": "657606ae636731558a63b9a7001f3e5f3cb2fc05..e1596a6771617d584218a25118df9c59ec37abd4",
+      "verdict": "APPROVE",
+      "scope": "Indexed-local getopts publication admission, repeated aliases and rejected-publication cursor recovery. Thirty independent native controls.",
+      "report": "/work/reports/bash-web/hill-climb/variables/indexed-review-admission-r1.md.result"
+    },
+    {
+      "pin": "ad190b8a15c74bdccebdb42869765a3c8e5ada30",
+      "verdict": "CHANGES REQUESTED",
+      "scope": "One newly exposed scalar Transformation adapter P2; no other integration blocker. Repaired separately at c94275f.",
+      "report": "/work/reports/bash-web/hill-climb/variables/indexed-review-post93f-r1.md.result"
+    },
+    {
+      "pin": "c94275f4d56767cf0a45f2e448c205c1365285f1",
+      "verdict": "Sole P2 resolved by VARIABLES parent source/control inspection",
+      "scope": "Parent inspected resolved Binding guard, require_bound ordering, red-test history and all36 native/production-Waffle controls. No fresh broad review requested or claimed.",
+      "report": "/work/reports/bash-web/hill-climb/variables/indexed/final-transform-repair.md"
+    }
+  ],
+  "frozen": {
+    "status": "One completed fresh corrected-source authoritative replay against immutable93f, after one resource-killed attempt without a result. Offline finalizer reconstructs and writes only proven gained membership.",
+    "records": 9221,
+    "scored": 5792,
+    "skipped": 3429,
+    "identity": {
+      "schema": 1,
+      "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+      "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+      "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+      "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+    },
+    "record": {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/replay-final-transform-r2.json",
+      "bytes": 1524026,
+      "sha256": "2bc477a122fec8fd3430e885f5454feca35c07075c1150e6c46f56527315bf43"
+    },
+    "log": {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/replay-final-transform-r2.log",
+      "bytes": 44408,
+      "sha256": "d63d6f9812ad8eb9d0dffcb5173236fd98739e1709328e1aa9907062b4ee03d1"
+    },
+    "baselineWrite": true,
+    "baselineRevision": "93fdf762f2a694427440d07156c7a8c458ecc995",
+    "baselineBeforeSha256": "695983df323b6ec93179380e375b09601aa51330370d62b4d84f68e8b8535754",
+    "baselineAfter": {
+      "path": "/work/worktrees/bash-web/variables-indexed/docs/evidence/own-shell-baseline.json",
+      "bytes": 1520385,
+      "sha256": "0294703ac11d355d9dc36e24dee72b3104aeac4d7dd3d2946a671c5c944e364a"
+    },
+    "correctedTargets": {
+      "oils": 1319,
+      "brush-suite": 1339,
+      "bashkit-suite": 1825
+    },
+    "exit": 0,
+    "counts": {
+      "oils": {
+        "total": 2492,
+        "passed": 1154,
+        "skipped": 810
+      },
+      "brush-suite": {
+        "total": 2894,
+        "passed": 1120,
+        "skipped": 1006
+      },
+      "bashkit-suite": {
+        "total": 3835,
+        "passed": 1554,
+        "skipped": 1613
+      }
+    },
+    "corpora": {
+      "oils": {
+        "before": 1099,
+        "after": 1154,
+        "gained": [
+          "oils:var-op-slice:139",
+          "oils:var-op-test:133",
+          "oils:nameref:4",
+          "oils:nameref:14",
+          "oils:nameref:316",
+          "oils:nameref:577",
+          "oils:arith:17",
+          "oils:arith:620",
+          "oils:arith:644",
+          "oils:arith-context:38",
+          "oils:dparen:159",
+          "oils:array:361",
+          "oils:array:366",
+          "oils:array:371",
+          "oils:array:427",
+          "oils:array:436",
+          "oils:array:443",
+          "oils:array:485",
+          "oils:array:495",
+          "oils:array:612",
+          "oils:array:650",
+          "oils:array:823",
+          "oils:array-assign:161",
+          "oils:array-assoc:185",
+          "oils:array-assoc:238",
+          "oils:array-assoc:336",
+          "oils:array-assoc:403",
+          "oils:array-compat:38",
+          "oils:array-compat:49",
+          "oils:array-compat:60",
+          "oils:array-compat:66",
+          "oils:array-compat:74",
+          "oils:array-compat:84",
+          "oils:array-sparse:67",
+          "oils:array-sparse:208",
+          "oils:array-sparse:293",
+          "oils:array-sparse:632",
+          "oils:array-sparse:972",
+          "oils:array-sparse:1198",
+          "oils:append:5",
+          "oils:append:17",
+          "oils:append:157",
+          "oils:assign:227",
+          "oils:assign:240",
+          "oils:assign:651",
+          "oils:assign-extended:714",
+          "oils:assign-extended:786",
+          "oils:glob:74",
+          "oils:glob:82",
+          "oils:dbracket:234",
+          "oils:regex:355",
+          "oils:ble-idioms:175",
+          "oils:ble-idioms:309",
+          "oils:ble-idioms:394",
+          "oils:bugs:407"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "brush-suite": {
+        "before": 1080,
+        "after": 1120,
+        "gained": [
+          "brush-suite:builtins/readonly:3",
+          "brush-suite:builtins/unset:12",
+          "brush-suite:ifs:20",
+          "brush-suite:ifs:49",
+          "brush-suite:ifs:50",
+          "brush-suite:ifs:51",
+          "brush-suite:ifs:52",
+          "brush-suite:ifs:63",
+          "brush-suite:ifs:64",
+          "brush-suite:ifs:65",
+          "brush-suite:ifs:82",
+          "brush-suite:ifs:83",
+          "brush-suite:ifs:84",
+          "brush-suite:ifs:88",
+          "brush-suite:ifs:90",
+          "brush-suite:ifs:91",
+          "brush-suite:nameref:3",
+          "brush-suite:nameref:51",
+          "brush-suite:nameref:52",
+          "brush-suite:nameref:57",
+          "brush-suite:nameref:151",
+          "brush-suite:nameref:172",
+          "brush-suite:nameref:204",
+          "brush-suite:nameref:211",
+          "brush-suite:nameref:212",
+          "brush-suite:options/set-u:19",
+          "brush-suite:options/set-x:23",
+          "brush-suite:status:8",
+          "brush-suite:variables:1",
+          "brush-suite:word_expansion/arrays:1",
+          "brush-suite:word_expansion/arrays:2",
+          "brush-suite:word_expansion/arrays:3",
+          "brush-suite:word_expansion/arrays:4",
+          "brush-suite:word_expansion/arrays:5",
+          "brush-suite:word_expansion/arrays:6",
+          "brush-suite:word_expansion/braces:12",
+          "brush-suite:word_expansion/braces:13",
+          "brush-suite:word_expansion/braces:14",
+          "brush-suite:word_expansion/braces:15",
+          "brush-suite:word_expansion/braces:26"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "bashkit-suite": {
+        "before": 1469,
+        "after": 1554,
+        "gained": [
+          "bashkit-suite:arith-array-lvalue:63",
+          "bashkit-suite:array-literal-expansion:9",
+          "bashkit-suite:array-literal-expansion:16",
+          "bashkit-suite:array-splat:1",
+          "bashkit-suite:array-splat:13",
+          "bashkit-suite:arrays:1",
+          "bashkit-suite:arrays:8",
+          "bashkit-suite:arrays:15",
+          "bashkit-suite:arrays:22",
+          "bashkit-suite:arrays:29",
+          "bashkit-suite:arrays:36",
+          "bashkit-suite:arrays:43",
+          "bashkit-suite:arrays:50",
+          "bashkit-suite:arrays:62",
+          "bashkit-suite:arrays:69",
+          "bashkit-suite:arrays:76",
+          "bashkit-suite:arrays:83",
+          "bashkit-suite:arrays:118",
+          "bashkit-suite:arrays:128",
+          "bashkit-suite:arrays:136",
+          "bashkit-suite:arrays:146",
+          "bashkit-suite:arrays:183",
+          "bashkit-suite:arrays:190",
+          "bashkit-suite:arrays:197",
+          "bashkit-suite:arrays:204",
+          "bashkit-suite:arrays:278",
+          "bashkit-suite:arrays:290",
+          "bashkit-suite:arrays:301",
+          "bashkit-suite:arrays:314",
+          "bashkit-suite:arrays:325",
+          "bashkit-suite:assoc-arrays:42",
+          "bashkit-suite:assoc-arrays:51",
+          "bashkit-suite:assoc-arrays:58",
+          "bashkit-suite:assoc-arrays:97",
+          "bashkit-suite:assoc-arrays:105",
+          "bashkit-suite:assoc-arrays:116",
+          "bashkit-suite:assoc-arrays:127",
+          "bashkit-suite:bashbox-interpreter-builtins:320",
+          "bashkit-suite:bashbox-interpreter-builtins:492",
+          "bashkit-suite:bashbox-interpreter-core:333",
+          "bashkit-suite:bashbox-local-scope:29",
+          "bashkit-suite:bashbox-local-scope:196",
+          "bashkit-suite:bashbox-parser:147",
+          "bashkit-suite:bashbox-parser:156",
+          "bashkit-suite:bashbox-parser:205",
+          "bashkit-suite:bashbox-security:5",
+          "bashkit-suite:bashbox-shell-variables:76",
+          "bashkit-suite:bashbox-utf8:13",
+          "bashkit-suite:bashbox-word-expander:19",
+          "bashkit-suite:bashbox-word-expander:26",
+          "bashkit-suite:bashbox-word-expander:47",
+          "bashkit-suite:bashbox-word-expander:54",
+          "bashkit-suite:bashbox-word-expander:61",
+          "bashkit-suite:blackbox-edge-cases:246",
+          "bashkit-suite:blackbox-edge-cases:253",
+          "bashkit-suite:blackbox-edge-cases:305",
+          "bashkit-suite:blackbox-edge-cases:514",
+          "bashkit-suite:blackbox-edge-cases:550",
+          "bashkit-suite:blackbox-exploration:29",
+          "bashkit-suite:blackbox-exploration:661",
+          "bashkit-suite:blackbox-exploration:668",
+          "bashkit-suite:blackbox-exploration:696",
+          "bashkit-suite:blackbox-exploration:1066",
+          "bashkit-suite:blackbox-exploration:1075",
+          "bashkit-suite:blackbox-exploration:1199",
+          "bashkit-suite:blackbox-exploration:1344",
+          "bashkit-suite:c-locale-length:28",
+          "bashkit-suite:command-word-expansion:44",
+          "bashkit-suite:declare:43",
+          "bashkit-suite:functions:190",
+          "bashkit-suite:nameref-assoc:33",
+          "bashkit-suite:nameref:5",
+          "bashkit-suite:nameref:18",
+          "bashkit-suite:nameref:185",
+          "bashkit-suite:nameref:233",
+          "bashkit-suite:printf:135",
+          "bashkit-suite:printf:150",
+          "bashkit-suite:printf:160",
+          "bashkit-suite:printf:168",
+          "bashkit-suite:printf:186",
+          "bashkit-suite:quote:394",
+          "bashkit-suite:read-builtin:116",
+          "bashkit-suite:unicode:75",
+          "bashkit-suite:word-split:418",
+          "bashkit-suite:word-split:481"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      }
+    },
+    "gainedTotal": 180,
+    "strictReconstructedMembership": "pass",
+    "nonGainsPreserved": true,
+    "exactPerIdComparison": {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/delta-final-transform-r2.json",
+      "bytes": 7103,
+      "sha256": "387b081c543e99f704033ed93043fa9c3c062ed9f9807c71fb3a59fe499dad45"
+    },
+    "originalBaselineComparisons": [
+      {
+        "base": "f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb",
+        "scope": "Cumulative comparison including already-merged peer gains, not all attributed to PR41.",
+        "corpora": {
+          "oils": {
+            "before": 1051,
+            "after": 1154,
+            "gained": 103,
+            "lost": 0,
+            "newlyFailing": 0
+          },
+          "brush-suite": {
+            "before": 1057,
+            "after": 1120,
+            "gained": 63,
+            "lost": 0,
+            "newlyFailing": 0
+          },
+          "bashkit-suite": {
+            "before": 1443,
+            "after": 1554,
+            "gained": 111,
+            "lost": 0,
+            "newlyFailing": 0
+          }
+        },
+        "exactPerIdComparison": {
+          "path": "/work/reports/bash-web/hill-climb/variables/indexed/delta-final-transform-r2-original-f3.json",
+          "bytes": 10881,
+          "sha256": "d7793a8e834dd032bd67902ddf894944015596ba72274cbb95a042896cea25ad"
+        }
+      },
+      {
+        "base": "361992834804c5d9325022ddc3580f5e9899bcee",
+        "scope": "Cumulative comparison including already-merged peer gains, not all attributed to PR41.",
+        "corpora": {
+          "oils": {
+            "before": 1015,
+            "after": 1154,
+            "gained": 139,
+            "lost": 0,
+            "newlyFailing": 0
+          },
+          "brush-suite": {
+            "before": 1008,
+            "after": 1120,
+            "gained": 112,
+            "lost": 0,
+            "newlyFailing": 0
+          },
+          "bashkit-suite": {
+            "before": 1413,
+            "after": 1554,
+            "gained": 141,
+            "lost": 0,
+            "newlyFailing": 0
+          }
+        },
+        "exactPerIdComparison": {
+          "path": "/work/reports/bash-web/hill-climb/variables/indexed/delta-final-transform-r2-original361.json",
+          "bytes": 15540,
+          "sha256": "fa3324124f6b2faa74e34944b7c547c829496653a0712ec54fc98561726420a5"
+        }
+      }
+    ]
+  },
+  "historicalQualification": {
+    "source": "657606ae636731558a63b9a7001f3e5f3cb2fc05",
+    "integratedMain": "f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb",
+    "status": "Pinned pre50 historical evidence only, not current source qualification.",
+    "gains": [
+      55,
+      40,
+      85
+    ],
+    "lost": 0,
+    "buildReceipt": {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/post47-build-receipt.json",
+      "bytes": 1563,
+      "sha256": "4d12a0162606a4544c4b285974a33cae41b6c864d90c5929f66deacd526d99f7"
+    },
+    "replay": {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/replay-post47.json",
+      "bytes": 1533498,
+      "sha256": "66ed453d687415392bb4d1c7c90398b73ec041ef08c2203a1c9dcc2180ae632a"
+    },
+    "pendingDocumentBackup": {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/post93f-pending/docs/evidence/indexed-arrays.json",
+      "bytes": 32337,
+      "sha256": "cd87d29bd9951d754bd9a2ded2f06403bfd456130dbf6142c94e095813d4530c"
+    }
+  },
+  "boundaries": {
+    "compoundSubscripts": "Unquoted syntactic [k]=v/[k]+=v reject status2 until implemented. Quoted/escaped spellings remain ordinary data.",
+    "bytes": "String storage still cannot preserve arbitrary non-NUL invalid UTF-8. The single Approved plan004 item records oils:case_:147, oils:var-op-slice:107, oils:var-op-slice:124 and mixed declaration prerequisite bashkit-suite:bashbox-declare:301. Custom array-IFS probes are not scored IDs; patsub245 is excluded.",
+    "remaining": "Array slices/indices/operators/transformations, indexed unset, declaration flags, associative arrays, arithmetic array lvalues and BASH_REMATCH production remain deferred."
+  },
+  "reportDirectory": "/work/reports/bash-web/hill-climb/variables/indexed",
+  "cleanup": {
+    "observedAt": "2026-10-22T00:55:50.060104+00:00",
+    "sourceRevision": "c94275f4d56767cf0a45f2e448c205c1365285f1",
+    "ownedControllersAndProbesRemaining": [],
+    "queueCheck": "All indexed final-transform queue jobs finished, including resource-killed first attempts and suite-class retries. Actual queue receipt retained; unrelated jobs and their resources preserved.",
+    "retained": [
+      {
+        "path": "/work/tmp/bash-web-variables-indexed-target",
+        "apparentBytes": 15060961204,
+        "allocatedBytes": 15113609216,
+        "owner": "Indexed worker under VARIABLES parent",
+        "reason": "Current exact-source review, hosted acceptance support and warm integration artifacts/dependencies. Pre-existing source/dependency caches remain available to authorized consumers.",
+        "removalCondition": "Retain until parent releases every review/acceptance consumer and authorizes final cleanup. Never remove another lane resource."
+      },
+      {
+        "path": "/work/worktrees/bash-web/variables-indexed/node_modules",
+        "apparentBytes": 340439328,
+        "allocatedBytes": 398594048,
+        "owner": "Indexed worker under VARIABLES parent",
+        "reason": "Current exact-source review, hosted acceptance support and warm integration artifacts/dependencies. Pre-existing source/dependency caches remain available to authorized consumers.",
+        "removalCondition": "Retain until parent releases every review/acceptance consumer and authorizes final cleanup. Never remove another lane resource."
+      },
+      {
+        "path": "/work/worktrees/bash-web/variables-indexed/.build",
+        "apparentBytes": 3666157,
+        "allocatedBytes": 4415488,
+        "owner": "Indexed worker under VARIABLES parent",
+        "reason": "Current exact-source review, hosted acceptance support and warm integration artifacts/dependencies. Pre-existing source/dependency caches remain available to authorized consumers.",
+        "removalCondition": "Retain until parent releases every review/acceptance consumer and authorizes final cleanup. Never remove another lane resource."
+      },
+      {
+        "path": "/work/worktrees/bash-web/variables-indexed/.sources",
+        "apparentBytes": 3795252,
+        "allocatedBytes": 4534272,
+        "owner": "Indexed worker under VARIABLES parent",
+        "reason": "Current exact-source review, hosted acceptance support and warm integration artifacts/dependencies. Pre-existing source/dependency caches remain available to authorized consumers.",
+        "removalCondition": "Retain until parent releases every review/acceptance consumer and authorizes final cleanup. Never remove another lane resource."
+      },
+      {
+        "path": "/work/worktrees/bash-web/variables-indexed/dist",
+        "apparentBytes": 773243,
+        "allocatedBytes": 778240,
+        "owner": "Indexed worker under VARIABLES parent",
+        "reason": "Current exact-source review, hosted acceptance support and warm integration artifacts/dependencies. Pre-existing source/dependency caches remain available to authorized consumers.",
+        "removalCondition": "Retain until parent releases every review/acceptance consumer and authorizes final cleanup. Never remove another lane resource."
+      }
+    ],
+    "artifactHashesUnchanged": true,
+    "productionWorkingDiff": "empty",
+    "ownedSafetyStash": "d42f3f3ce8c9e7cbd51e98c503d421eba721939e",
+    "stashPreserved": true,
+    "servicesCreated": [],
+    "portsCreated": [],
+    "containersCreated": [],
+    "routesCreated": [],
+    "mountsCreated": [],
+    "hostsCreated": [],
+    "checkoutsCreated": [],
+    "installsCreated": [],
+    "scratch": {
+      "ownedPath": "/work/tmp/bash-web-compat-WGRkeU",
+      "removed": true,
+      "preexistingPreserved": "/work/tmp/bash-web-compat-x7DVzv",
+      "failedAttemptScratchRemoved": "/work/tmp/bash-web-compat-ASrZcy",
+      "note": "Harness finally awaited process/pool shutdown before removing its owned scratch. Existing native/WASI/CI-test teardown completed; no .build test scratch remains."
+    },
+    "unrelatedCompatConsumersPreserved": [],
+    "cleanupOwner": "VARIABLES parent owns final artifact/worktree cleanup after acceptance."
+  },
+  "historicalPost93fQualification": {
+    "source": "ad190b8a15c74bdccebdb42869765a3c8e5ada30",
+    "integratedMain": "93fdf762f2a694427440d07156c7a8c458ecc995",
+    "status": "Completed historical replay of ad190, superseded by the scalar-transform semantic correction. Not final source qualification.",
+    "buildReceipt": {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/post93f-build-receipt.json",
+      "bytes": 1899,
+      "sha256": "975bfd6e0af30623205aa5a2944b217a3ce7f83bd34d0f8d36f4759042010f6b"
+    },
+    "replay": {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/replay-post93f.json",
+      "bytes": 1524106,
+      "sha256": "7cb16a6f52316437190299560e34089a3a504fb81ea102b618187d5b58e9f420"
+    },
+    "comparison": {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/delta-post93f.json",
+      "bytes": 7103,
+      "sha256": "387b081c543e99f704033ed93043fa9c3c062ed9f9807c71fb3a59fe499dad45"
+    },
+    "pendingDocsBackup": {
+      "path": "/work/reports/bash-web/hill-climb/variables/indexed/ad190-pending-final-docs/manifest.json",
+      "bytes": 939,
+      "sha256": "3e522005b1719f89d2f070d5b7897c0f0597c9de4e5d34ab1d57e19919c7f5a3"
+    }
+  }
+}
