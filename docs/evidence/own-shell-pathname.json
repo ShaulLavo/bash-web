@@ -1,0 +1,281 @@
+{
+  "schema": 1,
+  "family": "Ordinary argv pathname expansion, nullglob and set -f",
+  "measuredRevision": "43f1f7dc60d6d2c8192c56f4579badbfe44b18a3",
+  "semanticRevision": "e18244716097743bd557b62c55aff3267364990e",
+  "mergedBase": "93fdf762f2a694427440d07156c7a8c458ecc995",
+  "implementation": {
+    "model": "claude-opus-5-5",
+    "reason": "Sol provider policy refusal before any edits; owner standing exception. Review stays on Sol."
+  },
+  "identity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "replay": {
+    "command": "BASH_COMPAT_JOBS=1 BASH_COMPAT_SKIP_BUILD=1 BASH_COMPAT_RECORD=0 BASH_COMPAT_BASE_REF=93fdf762f2a694427440d07156c7a8c458ecc995 npm run compat:shell:prebuilt",
+    "host": "PC shared heavy queue, suite class, one worker; build and gates Rust -j2",
+    "node": "v26.7.0",
+    "shellRuntimeSha256": "49b8580ea37b3c316f7dbde203d8d75c6275b1c8fc5184faf3750406900dfc78",
+    "shellRuntimeBytes": 1911242,
+    "resultSha256": "81ede9ce2b76cbe6ecfa653e36cf9730420ddf2f762f26f30eaf71950e5b221d",
+    "actualExit": 1,
+    "exitReason": "Complete replay exited only for stale candidate pass membership. Offline comparison proves exact updated membership and no previous-pass losses.",
+    "deadlinesAndClassifier": "unchanged",
+    "total": 9221,
+    "scored": 5792,
+    "skipped": 3429
+  },
+  "corpora": {
+    "oils": {
+      "scored": 1682,
+      "before": 1099,
+      "after": 1101,
+      "replay": 1101,
+      "gained": [
+        "oils:redirect-multi:23",
+        "oils:redirect-multi:39"
+      ],
+      "lost": []
+    },
+    "brush-suite": {
+      "scored": 1888,
+      "before": 1080,
+      "after": 1087,
+      "replay": 1087,
+      "gained": [
+        "brush-suite:options/shopt-nullglob:1",
+        "brush-suite:options/shopt-nullglob:5",
+        "brush-suite:options/shopt-nullglob:7",
+        "brush-suite:options/shopt-nullglob:8",
+        "brush-suite:options/shopt-nullglob:10",
+        "brush-suite:options/shopt-nullglob:11",
+        "brush-suite:options/shopt-nullglob:14"
+      ],
+      "lost": []
+    },
+    "bashkit-suite": {
+      "scored": 2222,
+      "before": 1469,
+      "after": 1476,
+      "replay": 1476,
+      "gained": [
+        "bashkit-suite:globs:1",
+        "bashkit-suite:globs:9",
+        "bashkit-suite:globs:31",
+        "bashkit-suite:globs:76",
+        "bashkit-suite:globs:87",
+        "bashkit-suite:word-split:322",
+        "bashkit-suite:word-split:334"
+      ],
+      "lost": []
+    }
+  },
+  "semanticReplay": {
+    "base": "77b3963d904599932c2cd59fe46409f0ab7a6c9a",
+    "gained": {
+      "oils": [
+        "oils:redirect-multi:23",
+        "oils:redirect-multi:39"
+      ],
+      "brush-suite": [
+        "brush-suite:options/shopt-nullglob:1",
+        "brush-suite:options/shopt-nullglob:5",
+        "brush-suite:options/shopt-nullglob:7",
+        "brush-suite:options/shopt-nullglob:8",
+        "brush-suite:options/shopt-nullglob:10",
+        "brush-suite:options/shopt-nullglob:11",
+        "brush-suite:options/shopt-nullglob:14"
+      ],
+      "bashkit-suite": [
+        "bashkit-suite:globs:1",
+        "bashkit-suite:globs:9",
+        "bashkit-suite:globs:31",
+        "bashkit-suite:globs:76",
+        "bashkit-suite:globs:87",
+        "bashkit-suite:word-split:322",
+        "bashkit-suite:word-split:334"
+      ]
+    },
+    "lost": {
+      "oils": [],
+      "brush-suite": [],
+      "bashkit-suite": []
+    }
+  },
+  "productionChecks": {
+    "file": "scripts/test-own-shell-pathname.ts",
+    "fixture": "scripts/fixtures/shell-pathname.json",
+    "bash": "5.3.15(1)-release",
+    "baseGuest": "admission probe on the stable 77b3963-equivalent extglob guest: ordinary argv a*, ?, [ab] stayed literal and nullglob kept z*; for-lists already matched",
+    "candidate": "28/28 pass"
+  },
+  "gates": [
+    {
+      "exit": 0,
+      "command": "npm run build:shell"
+    },
+    {
+      "exit": 0,
+      "command": "npm run build:node-harness"
+    },
+    {
+      "exit": 0,
+      "command": "node --test scripts/test-own-shell-pathname.ts"
+    },
+    {
+      "exit": 0,
+      "command": "npm run check:rust"
+    },
+    {
+      "exit": 0,
+      "command": "cargo fmt --manifest-path tests/guest/Cargo.toml --check"
+    },
+    {
+      "exit": 0,
+      "command": "cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast"
+    },
+    {
+      "exit": 0,
+      "command": "cargo build --locked --release --manifest-path shell/Cargo.toml -p shell-engine -p shell-compat-fixtures -j2"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-braces:ci -- --shell /work/tmp/bash-web-expansion-pathname-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-words:ci -- --shell /work/tmp/bash-web-expansion-pathname-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-arithmetic:ci -- --shell /work/tmp/bash-web-expansion-pathname-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-readonly:ci -- --shell /work/tmp/bash-web-expansion-pathname-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-substitutions:ci -- --shell /work/tmp/bash-web-expansion-pathname-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-parse-boundaries:ci -- --shell /work/tmp/bash-web-expansion-pathname-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-control-flow:ci -- --shell /work/tmp/bash-web-expansion-pathname-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-job-lifetime:ci -- --shell /work/tmp/bash-web-expansion-pathname-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-functions:ci -- --shell /work/tmp/bash-web-expansion-pathname-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-path:ci -- --shell /work/tmp/bash-web-expansion-pathname-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-printf:ci -- --shell /work/tmp/bash-web-expansion-pathname-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-echo:ci -- --shell /work/tmp/bash-web-expansion-pathname-target/release/shell-cli"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:fuzz-shell-braces"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:fuzz-shell-substitutions"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:fuzz-shell-control-flow"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:fuzz-shell-job-lifetime"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:fuzz-shell-functions"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:fuzz-shell-path"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:fuzz-shell-printf"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:fuzz-shell-echo"
+    },
+    {
+      "exit": 0,
+      "command": "npm run fuzz:shell-echo:ci -- --waffle --shell /work/tmp/bash-web-expansion-pathname-target/wasm32-wasip1/release/shell-runtime.wasm"
+    },
+    {
+      "exit": 0,
+      "command": "npm run quality:js"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:check-layers"
+    },
+    {
+      "exit": 0,
+      "command": "env LAYERS_BASE_REF=93fdf762f2a694427440d07156c7a8c458ecc995 npm run check:layers"
+    },
+    {
+      "exit": 0,
+      "command": "npm run typecheck:layers"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:ci"
+    },
+    {
+      "exit": 0,
+      "command": "npm run typecheck:ci"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:guest-build"
+    },
+    {
+      "exit": 0,
+      "command": "npm run typecheck:guest-build"
+    },
+    {
+      "exit": 0,
+      "command": "npm run test:shell:scoreboard"
+    },
+    {
+      "exit": 1,
+      "command": "frozen replay compat:shell:prebuilt"
+    }
+  ],
+  "counts": {
+    "nativePassed": 1395,
+    "nativeFailed": 0,
+    "scoreboardPassed": 698,
+    "scoreboardFailed": 0
+  },
+  "notClaimed": {
+    "bashkit-suite:glob-options:1 bashkit-suite:glob-options:33 bashkit-suite:glob-options:98 bashkit-suite:glob-options:127": "need a touch utility",
+    "bashkit-suite:globs:38": "globstar",
+    "brush-suite:options/shopt-nullglob:13": "array compound-assignment globbing, Variables family"
+  }
+}
