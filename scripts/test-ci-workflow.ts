@@ -260,13 +260,13 @@ test("compatibility reuses its same-job node build while standalone commands sti
     );
 });
 
-
 test("browser apt uses the runner's existing HTTPS fallbacks instead of the slow Azure archive", () => {
   const browser = object(jobs().browser);
   assert.equal(browser["timeout-minutes"], 20);
   assert.ok(Array.isArray(browser.steps));
   const step = browser.steps.find(
-    (candidate: unknown) => object(candidate).name === "Use Ubuntu HTTPS archives for browser dependencies",
+    (candidate: unknown) =>
+      object(candidate).name === "Use Ubuntu HTTPS archives for browser dependencies",
   );
   assert.ok(step, "configure apt transport before installing browser dependencies");
   const command = commands({ steps: [step] });
@@ -277,7 +277,8 @@ test("browser apt uses the runner's existing HTTPS fallbacks instead of the slow
   const directory = mkdtempSync(join(tmpdir(), "browser-apt-"));
   try {
     const mirrors = join(directory, "apt-mirrors.txt");
-    const fallbacks = "https://archive.ubuntu.com/ubuntu/\tpriority:2\nhttps://security.ubuntu.com/ubuntu/\tpriority:3\n";
+    const fallbacks =
+      "https://archive.ubuntu.com/ubuntu/\tpriority:2\nhttps://security.ubuntu.com/ubuntu/\tpriority:3\n";
     writeFileSync(mirrors, "http://azure.archive.ubuntu.com/ubuntu/\tpriority:1\n" + fallbacks);
     const run = command.replaceAll("sudo ", "").replaceAll("/etc/apt/apt-mirrors.txt", mirrors);
     const result = spawnSync("bash", ["-euc", run], { encoding: "utf8" });
