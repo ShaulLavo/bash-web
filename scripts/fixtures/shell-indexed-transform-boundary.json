@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+  "recordedAt": "2026-10-22T00:36:30.404890+00:00",
+  "scope": "Custom unsupported-family boundary controls. Bash supports array transformations; guest intentionally rejects them with status2 after nounset validation. Not scored gains.",
+  "cases": [
+    {
+      "script": "false | true; printf '%s\\n' \"${PIPESTATUS@Q}\"",
+      "status": 0,
+      "stdoutHex": "2731270a",
+      "stderrHex": "",
+      "unsupportedGuestStatus": 2
+    },
+    {
+      "script": "false | true; printf '%s\\n' \"${PIPESTATUS@A}\"",
+      "status": 0,
+      "stdoutHex": "6465636c617265202d6120504950455354415455533d2731270a",
+      "stderrHex": "",
+      "unsupportedGuestStatus": 2
+    },
+    {
+      "script": "false | true; printf '%s\\n' \"${PIPESTATUS@a}\"",
+      "status": 0,
+      "stdoutHex": "610a",
+      "stderrHex": "",
+      "unsupportedGuestStatus": 2
+    },
+    {
+      "script": "a=(one two); printf '%s\\n' \"${a@A}\"",
+      "status": 0,
+      "stdoutHex": "6465636c617265202d6120613d276f6e65270a",
+      "stderrHex": "",
+      "unsupportedGuestStatus": 2
+    },
+    {
+      "script": "a=(one two); printf '%s\\n' \"${a@a}\"",
+      "status": 0,
+      "stdoutHex": "610a",
+      "stderrHex": "",
+      "unsupportedGuestStatus": 2
+    },
+    {
+      "script": "a=(one two); printf '%s\\n' \"${a@Q}\"",
+      "status": 0,
+      "stdoutHex": "276f6e65270a",
+      "stderrHex": "",
+      "unsupportedGuestStatus": 2
+    },
+    {
+      "script": "a=(one two); declare -n r=a; printf '%s\\n' \"${r@A}\"",
+      "status": 0,
+      "stdoutHex": "6465636c617265202d6120613d276f6e65270a",
+      "stderrHex": "",
+      "unsupportedGuestStatus": 2
+    },
+    {
+      "script": "a=(one two); declare -n r=a; printf '%s\\n' \"${r@a}\"",
+      "status": 0,
+      "stdoutHex": "610a",
+      "stderrHex": "",
+      "unsupportedGuestStatus": 2
+    },
+    {
+      "script": "a=(); printf '%s\\n' \"${a@A}\"",
+      "status": 0,
+      "stdoutHex": "6465636c617265202d6120610a",
+      "stderrHex": "",
+      "unsupportedGuestStatus": 2
+    },
+    {
+      "script": "a=(); declare -n r=a; printf '%s\\n' \"${r@a}\"",
+      "status": 0,
+      "stdoutHex": "610a",
+      "stderrHex": "",
+      "unsupportedGuestStatus": 2
+    },
+    {
+      "script": "a[4]=four; printf '%s\\n' \"${a@A}\"",
+      "status": 0,
+      "stdoutHex": "6465636c617265202d6120610a",
+      "stderrHex": "",
+      "unsupportedGuestStatus": 2
+    },
+    {
+      "script": "a[4]=four; declare -n r=a; printf '%s\\n' \"${r@a}\"",
+      "status": 0,
+      "stdoutHex": "610a",
+      "stderrHex": "",
+      "unsupportedGuestStatus": 2
+    },
+    {
+      "script": "f() { local a; a=(one two); printf '%s\\n' \"${a@A}\"; }; f",
+      "status": 0,
+      "stdoutHex": "6465636c617265202d6120613d276f6e65270a",
+      "stderrHex": "",
+      "unsupportedGuestStatus": 2
+    },
+    {
+      "script": "f() { local a; a=(); declare -n r=a; printf '%s\\n' \"${r@a}\"; }; f",
+      "status": 0,
+      "stdoutHex": "610a",
+      "stderrHex": "",
+      "unsupportedGuestStatus": 2
+    },
+    {
+      "script": "set -u; a=(one two); printf '%s\\n' \"${a@A}\"",
+      "status": 0,
+      "stdoutHex": "6465636c617265202d6120613d276f6e65270a",
+      "stderrHex": "",
+      "unsupportedGuestStatus": 2
+    },
+    {
+      "script": "set -u; a=(); printf '%s\\n' \"${a@A}\"",
+      "status": 127,
+      "stdoutHex": "",
+      "stderrHex": "2f7573722f62696e2f626173683a206c696e6520313a20613a20756e626f756e64207661726961626c650a",
+      "unsupportedGuestStatus": 1
+    },
+    {
+      "script": "set -u; a[4]=four; declare -n r=a; printf '%s\\n' \"${r@a}\"",
+      "status": 0,
+      "stdoutHex": "610a",
+      "stderrHex": "",
+      "unsupportedGuestStatus": 1
+    }
+  ]
+}

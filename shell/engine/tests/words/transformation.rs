@@ -199,17 +199,35 @@ fn transformation_locale_namerefs_fail_closed() {
 
 #[test]
 fn transformation_array_backed_parameters_fail_closed() {
-    let failures: Vec<String> = [
-        ("false | true", "${PIPESTATUS@Q}"),
-        ("false | true", "${PIPESTATUS@A}"),
-        ("false | true", "${PIPESTATUS@a}"),
+    let failures: Vec<&str> = [
+        (r#"false | true; args "${PIPESTATUS@Q}""#, 2),
+        (r#"false | true; args "${PIPESTATUS@A}""#, 2),
+        (r#"false | true; args "${PIPESTATUS@a}""#, 2),
+        (r#"a=(one two); args "${a@A}""#, 2),
+        (r#"a=(one two); args "${a@a}""#, 2),
+        (r#"a=(one two); args "${a@Q}""#, 2),
+        (r#"a=(one two); declare -n r=a; args "${r@A}""#, 2),
+        (r#"a=(one two); declare -n r=a; args "${r@a}""#, 2),
+        (r#"a=(); args "${a@A}""#, 2),
+        (r#"a=(); declare -n r=a; args "${r@a}""#, 2),
+        (r#"a[4]=four; args "${a@A}""#, 2),
+        (r#"a[4]=four; declare -n r=a; args "${r@a}""#, 2),
+        (r#"f() { local a; a=(one two); args "${a@A}"; }; f"#, 2),
+        (r#"f() { local a; a=(); declare -n r=a; args "${r@a}"; }; f"#, 2),
+        (r#"set -u; a=(one two); args "${a@A}""#, 2),
+        (r#"set -u; a=(); args "${a@A}""#, 1),
+        (r#"set -u; a[4]=four; declare -n r=a; args "${r@a}""#, 1),
     ]
     .into_iter()
-    .map(|(setup, form)| format!(r#"{setup}; args "{form}""#))
-    .filter(|source| {
+    .filter_map(|(source, status)| {
         let rig = Rig::new(Limits::default());
-        rig.run(source) != 2 || !rig.calls.borrow().is_empty()
+        let actual = rig.run(source);
+        (actual != status || !rig.calls.borrow().is_empty()).then_some(source)
     })
     .collect();
     assert!(failures.is_empty(), "{failures:?}");
+    check(
+        r#"a=(global); f() { local a=scalar; args "${a@A}" "${a@a}"; }; f"#,
+        &[&["declare a='scalar'", ""]],
+    );
 }
