@@ -121,6 +121,12 @@ mod guest {
             let _ = write(endpoint, bytes).await;
         }
     }
+    async fn finish_input(session: &Session) -> i32 {
+        match session.start_script("exit") {
+            Ok(job) => job.await,
+            Err(error) => error.status(),
+        }
+    }
     async fn run(
         session: Rc<Session>,
         input: Option<Endpoint>,
@@ -131,7 +137,7 @@ mod guest {
     ) -> i32 {
         if let Some(source) = command {
             set_phase(2);
-            return match session.start(&source) {
+            return match session.start_script(&source) {
                 Ok(job) => job.await,
                 Err(error) => {
                     diagnostic(&errors, format!("shell: {error}\n").as_bytes()).await;
@@ -166,7 +172,7 @@ mod guest {
                 match input.read_cancelled(&mut byte, &cancel).await {
                     Ok(0) => {
                         let _ = write(&output, b"\r\n").await;
-                        return session.state().borrow().status();
+                        return finish_input(&session).await;
                     }
                     Err(IoError::Cancelled) => {
                         editor.clear();
@@ -205,7 +211,7 @@ mod guest {
                     }
                     Action::Eof => {
                         let _ = write(&output, b"\r\n").await;
-                        return session.state().borrow().status();
+                        return finish_input(&session).await;
                     }
                     Action::Redraw => {
                         if write(&output, &editor.redraw(&prompt)).await.is_err() {

@@ -3,6 +3,7 @@ mod getopts;
 mod printf;
 mod read;
 pub(crate) mod test;
+mod trap;
 use crate::{
     commands::{self, Builtin, Declaration},
     executor::Budget,
@@ -96,6 +97,7 @@ pub(crate) async fn run(
         Builtin::Noop => {}
         Builtin::False => return Err(1),
         Builtin::Test => return test::run(name, &args, &state, &fds, &context, work).await,
+        Builtin::Trap => return trap::run(&args, &state, &fds, &context, work).await,
         Builtin::Getopts => return getopts::run(&args, &state, &fds, &context, work).await,
         Builtin::Shopt => return shopt(&args, &state, &fds, &context, work).await,
         Builtin::LoopControl => {

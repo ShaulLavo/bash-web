@@ -24,6 +24,7 @@ mod conditional;
 mod control;
 pub(crate) mod eval;
 mod file_substitution;
+mod trap;
 
 #[derive(Clone, Debug)]
 pub struct Limits {
@@ -708,6 +709,17 @@ impl Session {
         Ok(())
     }
     pub fn start(&self, source: &str) -> Result<JoinHandle<i32>, StartError> {
+        self.start_submission(source, false)
+    }
+    /// Execute a complete script, including its EXIT action at natural EOF.
+    pub fn start_script(&self, source: &str) -> Result<JoinHandle<i32>, StartError> {
+        self.start_submission(source, true)
+    }
+    fn start_submission(
+        &self,
+        source: &str,
+        terminal: bool,
+    ) -> Result<JoinHandle<i32>, StartError> {
         if self.core.foreground.borrow().is_some() {
             return Err(StartError::Invalid(
                 "foreground job is already running".into(),
@@ -777,6 +789,15 @@ impl Session {
             }
             if result.flow == Flow::Exit {
                 context.core.exit_requested.set(true);
+            }
+            if terminal || matches!(result.flow, Flow::Exit | Flow::Abort) {
+                result = trap::finish(
+                    result,
+                    state.clone(),
+                    context.core.descriptors.clone(),
+                    context.clone(),
+                )
+                .await;
             }
             let code = context.finish_group(&mut processes, result).await;
             state.borrow_mut().publish_status(code);

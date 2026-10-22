@@ -1,0 +1,195 @@
+{
+  "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "sourceHead": "77b3963d904599932c2cd59fe46409f0ab7a6c9a",
+  "cases": [
+    {
+      "id": "empty",
+      "code": "trap; trap -p; trap -p EXIT; echo status:$?",
+      "status": 0,
+      "stdout": "status:0\n",
+      "stderr": ""
+    },
+    {
+      "id": "registration",
+      "code": "trap 'echo bye' EXIT; trap '' INT; trap 'echo hup' HUP; trap -p; trap - EXIT; trap -p",
+      "status": 0,
+      "stdout": "trap -- 'echo bye' EXIT\ntrap -- 'echo hup' SIGHUP\ntrap -- '' SIGINT\ntrap -- 'echo hup' SIGHUP\ntrap -- '' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "names",
+      "code": "trap : int; echo lower:$?; trap : SIGINT; trap : 2; trap -p INT SIGINT 2; trap -p 999; echo invalid:$?",
+      "status": 0,
+      "stdout": "lower:0\ntrap -- ':' SIGINT\ntrap -- ':' SIGINT\ntrap -- ':' SIGINT\ninvalid:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: 999: invalid signal specification\n"
+    },
+    {
+      "id": "numeric-reset",
+      "code": "trap : INT TERM; trap 2; trap -p; trap 15; trap -p",
+      "status": 0,
+      "stdout": "trap -- ':' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "one-operand",
+      "code": "trap EXIT; echo one:$?; trap 'echo hi'; echo action:$?; trap --; echo empty:$?",
+      "status": 0,
+      "stdout": "one:0\naction:2\nempty:0\n",
+      "stderr": "trap: usage: trap [-Plp] [[action] signal_spec ...]\n"
+    },
+    {
+      "id": "options",
+      "code": "trap -lp; echo s:$?; trap -P; echo s:$?; trap -x; echo s:$?; trap -- -p; echo s:$?",
+      "status": 0,
+      "stdout": " 1) SIGHUP\t 2) SIGINT\t 3) SIGQUIT\t 4) SIGILL\t 5) SIGTRAP\n 6) SIGABRT\t 7) SIGBUS\t 8) SIGFPE\t 9) SIGKILL\t10) SIGUSR1\n11) SIGSEGV\t12) SIGUSR2\t13) SIGPIPE\t14) SIGALRM\t15) SIGTERM\n16) SIGSTKFLT\t17) SIGCHLD\t18) SIGCONT\t19) SIGSTOP\t20) SIGTSTP\n21) SIGTTIN\t22) SIGTTOU\t23) SIGURG\t24) SIGXCPU\t25) SIGXFSZ\n26) SIGVTALRM\t27) SIGPROF\t28) SIGWINCH\t29) SIGIO\t30) SIGPWR\n31) SIGSYS\t34) SIGRTMIN\t35) SIGRTMIN+1\t36) SIGRTMIN+2\t37) SIGRTMIN+3\n38) SIGRTMIN+4\t39) SIGRTMIN+5\t40) SIGRTMIN+6\t41) SIGRTMIN+7\t42) SIGRTMIN+8\n43) SIGRTMIN+9\t44) SIGRTMIN+10\t45) SIGRTMIN+11\t46) SIGRTMIN+12\t47) SIGRTMIN+13\n48) SIGRTMIN+14\t49) SIGRTMIN+15\t50) SIGRTMAX-14\t51) SIGRTMAX-13\t52) SIGRTMAX-12\n53) SIGRTMAX-11\t54) SIGRTMAX-10\t55) SIGRTMAX-9\t56) SIGRTMAX-8\t57) SIGRTMAX-7\n58) SIGRTMAX-6\t59) SIGRTMAX-5\t60) SIGRTMAX-4\t61) SIGRTMAX-3\t62) SIGRTMAX-2\n63) SIGRTMAX-1\t64) SIGRTMAX\t\ns:0\ns:2\ns:2\ns:2\n",
+      "stderr": "/usr/bin/bash: line 1: trap: -P requires at least one signal name\n/usr/bin/bash: line 1: trap: -x: invalid option\ntrap: usage: trap [-Plp] [[action] signal_spec ...]\ntrap: usage: trap [-Plp] [[action] signal_spec ...]\n"
+    },
+    {
+      "id": "list",
+      "code": "trap -l",
+      "status": 0,
+      "stdout": " 1) SIGHUP\t 2) SIGINT\t 3) SIGQUIT\t 4) SIGILL\t 5) SIGTRAP\n 6) SIGABRT\t 7) SIGBUS\t 8) SIGFPE\t 9) SIGKILL\t10) SIGUSR1\n11) SIGSEGV\t12) SIGUSR2\t13) SIGPIPE\t14) SIGALRM\t15) SIGTERM\n16) SIGSTKFLT\t17) SIGCHLD\t18) SIGCONT\t19) SIGSTOP\t20) SIGTSTP\n21) SIGTTIN\t22) SIGTTOU\t23) SIGURG\t24) SIGXCPU\t25) SIGXFSZ\n26) SIGVTALRM\t27) SIGPROF\t28) SIGWINCH\t29) SIGIO\t30) SIGPWR\n31) SIGSYS\t34) SIGRTMIN\t35) SIGRTMIN+1\t36) SIGRTMIN+2\t37) SIGRTMIN+3\n38) SIGRTMIN+4\t39) SIGRTMIN+5\t40) SIGRTMIN+6\t41) SIGRTMIN+7\t42) SIGRTMIN+8\n43) SIGRTMIN+9\t44) SIGRTMIN+10\t45) SIGRTMIN+11\t46) SIGRTMIN+12\t47) SIGRTMIN+13\n48) SIGRTMIN+14\t49) SIGRTMIN+15\t50) SIGRTMAX-14\t51) SIGRTMAX-13\t52) SIGRTMAX-12\n53) SIGRTMAX-11\t54) SIGRTMAX-10\t55) SIGRTMAX-9\t56) SIGRTMAX-8\t57) SIGRTMAX-7\n58) SIGRTMAX-6\t59) SIGRTMAX-5\t60) SIGRTMAX-4\t61) SIGRTMAX-3\t62) SIGRTMAX-2\n63) SIGRTMAX-1\t64) SIGRTMAX\t\n",
+      "stderr": ""
+    },
+    {
+      "id": "quote",
+      "code": "trap \"a'b\nc\\d\" INT; trap -p",
+      "status": 0,
+      "stdout": "trap -- 'a'\\''b\nc\\d' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "mixed-invalid",
+      "code": "trap : INT BAD TERM; echo s:$?; trap -p; trap -p INT BAD TERM; echo s:$?",
+      "status": 0,
+      "stdout": "s:1\ntrap -- ':' SIGINT\ntrap -- ':' SIGTERM\ntrap -- ':' SIGINT\ntrap -- ':' SIGTERM\ns:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: BAD: invalid signal specification\n/usr/bin/bash: line 1: trap: BAD: invalid signal specification\n"
+    },
+    {
+      "id": "kill-stop",
+      "code": "trap : KILL STOP; trap -p; trap - SIGKILL SIGSTOP",
+      "status": 0,
+      "stdout": "trap -- ':' SIGKILL\ntrap -- ':' SIGSTOP\n",
+      "stderr": ""
+    },
+    {
+      "id": "exit-status",
+      "code": "trap 'echo handler:$?; false' EXIT; exit 42",
+      "status": 42,
+      "stdout": "handler:42\n",
+      "stderr": ""
+    },
+    {
+      "id": "exit-override",
+      "code": "trap 'echo handler:$?; exit 7' EXIT; exit 42",
+      "status": 7,
+      "stdout": "handler:42\n",
+      "stderr": ""
+    },
+    {
+      "id": "exit-natural",
+      "code": "trap 'echo handler:$?' 0; false",
+      "status": 1,
+      "stdout": "handler:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "exit-replace",
+      "code": "trap 'echo old' EXIT; trap 'echo new; trap \"echo recursive\" EXIT' EXIT; true",
+      "status": 0,
+      "stdout": "new\n",
+      "stderr": ""
+    },
+    {
+      "id": "exit-eval",
+      "code": "trap 'eval \"echo handler:$?\"' EXIT; false",
+      "status": 1,
+      "stdout": "handler:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "exit-function",
+      "code": "f() { trap 'echo handler:$?' EXIT; }; f; false",
+      "status": 1,
+      "stdout": "handler:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "inherit-subshell",
+      "code": "trap 'echo parent' EXIT; (trap -p; trap); echo end",
+      "status": 0,
+      "stdout": "trap -- 'echo parent' EXIT\ntrap -- 'echo parent' EXIT\nend\nparent\n",
+      "stderr": ""
+    },
+    {
+      "id": "child-reset",
+      "code": "trap 'echo parent' EXIT; (trap : INT; trap -p); trap -p",
+      "status": 0,
+      "stdout": "trap -- ':' SIGINT\ntrap -- 'echo parent' EXIT\nparent\n",
+      "stderr": ""
+    },
+    {
+      "id": "special-names",
+      "code": "trap : ERR DEBUG RETURN; trap -p ERR DEBUG RETURN; trap - ERR DEBUG RETURN",
+      "status": 0,
+      "stdout": "trap -- ':' ERR\ntrap -- ':' DEBUG\ntrap -- ':' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "query-action",
+      "code": "trap 'echo hi' INT; trap -P INT EXIT; trap '' TERM; trap -P TERM; trap -p INT TERM",
+      "status": 0,
+      "stdout": "echo hi\n\ntrap -- 'echo hi' SIGINT\ntrap -- '' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "inherit-query-command",
+      "code": "trap 'echo parent' EXIT; x=$(trap); printf 'query:%s\\n' \"$x\"; x=$(trap -p); printf 'explicit:%s\\n' \"$x\"",
+      "status": 0,
+      "stdout": "query:trap -- 'echo parent' EXIT\nexplicit:trap -- 'echo parent' EXIT\nparent\n",
+      "stderr": ""
+    },
+    {
+      "id": "inherit-invalid-mutation",
+      "code": "trap 'echo parent' EXIT; (trap : BAD; trap -p); echo end",
+      "status": 0,
+      "stdout": "end\nparent\n",
+      "stderr": "/usr/bin/bash: line 1: trap: BAD: invalid signal specification\n"
+    },
+    {
+      "id": "inherited-ignore",
+      "code": "trap '' INT; trap : TERM; (trap : HUP; trap -p); trap -p",
+      "status": 0,
+      "stdout": "trap -- ':' SIGHUP\ntrap -- '' SIGINT\ntrap -- '' SIGINT\ntrap -- ':' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "root-errexit",
+      "code": "trap 'echo handler:$?' EXIT; set -e; false; echo bad",
+      "status": 1,
+      "stdout": "handler:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "root-removal",
+      "code": "trap 'echo bad' EXIT; trap - EXIT; false",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "root-return",
+      "code": "f() { return 42; }; trap 'f' EXIT; exit 7",
+      "status": 7,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "invalid-prefixed-event",
+      "code": "trap : SIGEXIT SIGERR SIGDEBUG SIGRETURN; echo status:$?",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: SIGEXIT: invalid signal specification\n/usr/bin/bash: line 1: trap: SIGERR: invalid signal specification\n/usr/bin/bash: line 1: trap: SIGDEBUG: invalid signal specification\n/usr/bin/bash: line 1: trap: SIGRETURN: invalid signal specification\n"
+    }
+  ]
+}
