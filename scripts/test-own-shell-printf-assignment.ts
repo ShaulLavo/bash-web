@@ -1,17 +1,9 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
 import { test } from "node:test";
-import { createWaffleRunner } from "./waffle-compat.ts";
+import { releaseShellRunner } from "./release-shell-runner.ts";
 
-const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
-const runner = await createWaffleRunner({
-  modulePath: resolve(directory, "shell-runtime.wasm"),
-  fixtureDirectory: directory,
-  utilityDirectory: directory,
-  tmp: "/tmp/spec",
-  env: { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C", LANG: "C" },
-});
+const runner = await releaseShellRunner();
 const cases = [
   "printf '[%b]TAIL' '\\xZ\\cignored'",
   "printf '[%8b][%-8b][%08b]\\n' 'a\\tb' 'a\\tb' 'a\\tb'",

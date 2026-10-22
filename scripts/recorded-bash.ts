@@ -4,11 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 type Recorded = { script: string; status: number; stdoutBase64: string };
 type Observation = { status: number; stdout: Buffer };
 
-/**
- * Committed GNU Bash observations for hosts whose Bash is not the pinned oracle.
- * Replay never starts a shell; with a record path, callers add live observations
- * and `save` writes them with the live Bash identity checked against `version`.
- */
+/** Committed GNU Bash observations for hosts whose Bash is not the pinned oracle. */
 export function recordedBash(
   fixturePath: URL,
   recordPath: string | undefined,

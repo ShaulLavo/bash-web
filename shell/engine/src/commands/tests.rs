@@ -107,7 +107,7 @@ fn classes_and_capabilities_do_not_mislabel_standins_or_unimplemented_syntax() {
     );
     assert_eq!(
         names(|command| command.availability == Availability::UnsupportedSyntax),
-        baseline(&["select", "time", "coproc"])
+        baseline(&["time", "coproc"])
     );
     for command in COMMANDS {
         if command.class == Class::Keyword {
