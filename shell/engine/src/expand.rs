@@ -644,7 +644,7 @@ struct ExpansionOptions {
     max_raw: usize,
     scalar: bool,
     admitted: bool,
-    tilde_assignment: bool,
+    tilde: tilde::Context,
 }
 
 struct Expansion<'a> {
@@ -2078,7 +2078,7 @@ async fn expand_one(
         max_raw,
         scalar,
         admitted,
-        tilde_assignment,
+        tilde,
     } = options;
     let mut expansion = Expansion {
         segments: Segments {
@@ -2107,14 +2107,8 @@ async fn expand_one(
         expansion.work.checkpoint(cancel).await?;
         has_part_quotes |= quoted;
     }
-    let tildes = tilde::WordTildes::new(
-        word,
-        scalar,
-        tilde_assignment,
-        has_part_quotes,
-        &mut expansion,
-    )
-    .await?;
+    let tildes =
+        tilde::WordTildes::new(word, scalar, tilde, has_part_quotes, &mut expansion).await?;
     for (index, part) in word.parts.iter().enumerate() {
         expansion.work.checkpoint(cancel).await?;
         let quoted = part_quoted(word, index, has_part_quotes);
@@ -2259,6 +2253,7 @@ async fn expand(
             ExpansionOptions {
                 max_bytes: bytes_remaining,
                 max_fields: max_fields.saturating_sub(values.len()),
+                tilde: tilde::Context::Generated,
                 ..options
             },
             &mut raw_remaining,
@@ -2353,7 +2348,7 @@ pub(crate) async fn fields(
             max_raw,
             scalar: false,
             admitted: false,
-            tilde_assignment: false,
+            tilde: tilde::Context::Word,
         },
         work,
     )
@@ -2385,7 +2380,7 @@ pub(crate) async fn fields_admitted(
             max_raw,
             scalar: false,
             admitted: true,
-            tilde_assignment: false,
+            tilde: tilde::Context::Word,
         },
         work,
     )
@@ -2404,17 +2399,25 @@ pub(crate) async fn word(
     max_raw: usize,
     work: &mut Work,
 ) -> Result<String, Error> {
-    scalar_word(word, state, cancel, max, max_raw, false, work).await
+    scalar_word(
+        word,
+        state,
+        cancel,
+        max,
+        max_raw,
+        tilde::Context::Word,
+        work,
+    )
+    .await
 }
 
-/// One scalar value; `tilde_assignment` selects assignment tilde prefixes.
 async fn scalar_word(
     word: &Word,
     state: &SharedState,
     cancel: &Cancel,
     max: usize,
     max_raw: usize,
-    tilde_assignment: bool,
+    tilde: tilde::Context,
     work: &mut Work,
 ) -> Result<String, Error> {
     let values = expand(
@@ -2427,7 +2430,7 @@ async fn scalar_word(
             max_raw,
             scalar: true,
             admitted: false,
-            tilde_assignment,
+            tilde,
         },
         work,
     )

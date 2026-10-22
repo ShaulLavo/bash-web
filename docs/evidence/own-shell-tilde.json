@@ -2,6 +2,7 @@
   "schema": 1,
   "family": "HOME tilde prefixes in words and scalar assignments",
   "measuredRevision": "6dec1814e1d8a780e45ef07b1f2346cd4d7e3e4e",
+  "status": "Historical: measured on 6dec181 before the brace-context tilde repair, which invalidates this replay for final acceptance. A fresh replay on the repaired, main-integrated head supersedes it.",
   "mergedBase": "93fdf762f2a694427440d07156c7a8c458ecc995",
   "implementation": {
     "model": "claude-opus-5-5",

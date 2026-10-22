@@ -196,6 +196,42 @@
       "stderrBase64": ""
     },
     {
+      "script": "HOME=/one; set -- x={~,~/tail}; printf 'argc=%s\\n' \"$#\"; printf '<%s>\\n' \"$@\"",
+      "status": 0,
+      "stdoutBase64": "YXJnYz0yCjx4PX4+Cjx4PX4vdGFpbD4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/one; set -- x=foo{:,/}~; printf 'argc=%s\\n' \"$#\"; printf '<%s>\\n' \"$@\"",
+      "status": 0,
+      "stdoutBase64": "YXJnYz0yCjx4PWZvbzp+Pgo8eD1mb28vfj4K",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME='/a b*[x]?/é🙂:~'; IFS=' /:'; set -- {~,~/tail} ~{/a,:b} x={~,~/tail} x=foo{:,/}~; printf 'argc=%s\\n' \"$#\"; printf '<%s>\\n' \"$@\"",
+      "status": 0,
+      "stdoutBase64": "YXJnYz04CjwvYSBiKlt4XT8vw6nwn5mCOn4+CjwvYSBiKlt4XT8vw6nwn5mCOn4vdGFpbD4KPC9hIGIqW3hdPy/DqfCfmYI6fi9hPgo8L2EgYipbeF0/L8Op8J+Zgjp+OmI+Cjx4PX4+Cjx4PX4vdGFpbD4KPHg9Zm9vOn4+Cjx4PWZvby9+Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/one; set -- ~/{a,b}:~ x=~:{a,b}:~ {x=~,y} {,x=}~ x=~/{a} x=~{} x=~ x=~/{1..2}; printf 'argc=%s\\n' \"$#\"; printf '<%s>\\n' \"$@\"",
+      "status": 0,
+      "stdoutBase64": "YXJnYz0xMwo8L29uZS9hOn4+Cjwvb25lL2I6fj4KPHg9fjphOn4+Cjx4PX46Yjp+Pgo8eD1+Pgo8eT4KPC9vbmU+Cjx4PX4+Cjx4PS9vbmUve2F9Pgo8eD1+e30+Cjx4PS9vbmU+Cjx4PX4vMT4KPHg9fi8yPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/one; set -- {~,x=~}; HOME=/two; set -- \"$@\" {~,~/t} x={~,:~}; HOME=; set -- \"$@\" {~,~/t} x={~,b}; printf 'argc=%s\\n' \"$#\"; printf '<%s>\\n' \"$@\"",
+      "status": 0,
+      "stdoutBase64": "YXJnYz0xMAo8L29uZT4KPHg9fj4KPC90d28+CjwvdHdvL3Q+Cjx4PX4+Cjx4PTp+Pgo8Pgo8L3Q+Cjx4PX4+Cjx4PWI+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/one; for v in x={~,~/t} {~,~/t} x=~:~; do printf '<%s>\\n' \"$v\"; done",
+      "status": 0,
+      "stdoutBase64": "PHg9fj4KPHg9fi90Pgo8L29uZT4KPC9vbmUvdD4KPHg9L29uZTovb25lPgo=",
+      "stderrBase64": ""
+    },
+    {
       "script": "unset HOME; printf '<%s>\\n' ~",
       "status": 0,
       "stdoutBase64": "PC9ob21lL3NoYXVsPgo=",

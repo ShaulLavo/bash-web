@@ -48,3 +48,48 @@ fn tilde_literal_search_is_cancellable() {
     let job = rig.shell.start(&source).unwrap();
     rig.interrupt_after_counting_yields(job);
 }
+
+#[test]
+fn tilde_brace_generated_words_keep_only_leading_prefixes() {
+    let rig = Rig::new(Limits::default());
+    rig.variable("HOME", "/one");
+    let source = "args {~,~/tail} ~/{a,b}:~ x={~,~/tail} x=foo{:,/}~ x=~/{a} x=~:~";
+    assert_eq!(rig.run(source), 0);
+    assert_eq!(
+        *rig.calls.borrow(),
+        [vec![
+            "/one",
+            "/one/tail",
+            "/one/a:~",
+            "/one/b:~",
+            "x=~",
+            "x=~/tail",
+            "x=foo:~",
+            "x=foo/~",
+            "x=/one/{a}",
+            "x=/one:/one",
+        ]]
+    );
+}
+
+#[test]
+fn tilde_brace_generated_prefixes_share_expansion_budget() {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 4096,
+        ..Limits::default()
+    });
+    rig.variable("HOME", &"x".repeat(3000));
+    assert_eq!(rig.run("args {~,~/tail}"), 2);
+    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.run("args x={~,~/tail}"), 0);
+    assert_eq!(*rig.calls.borrow(), [vec!["x=~", "x=~/tail"]]);
+}
+
+#[test]
+fn tilde_brace_generated_prefixes_are_cancellable() {
+    let rig = Rig::new(Limits::default());
+    rig.variable("HOME", &"h".repeat(100_000));
+    let job = rig.shell.start("args {~,~/suffix} x={~,~/suffix}").unwrap();
+    rig.interrupt_after_counting_yields(job);
+    assert_eq!(rig.run("args recovered"), 0);
+}

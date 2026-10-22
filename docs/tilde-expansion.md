@@ -10,7 +10,9 @@ words do this only after an unquoted valid scalar name and `=` or `+=`, as in
 `echo path=~:~/bin`. This does not make the rest of that ordinary word scalar:
 unquoted parameter results still split normally. Redirect filenames recognize
 leading prefixes and assignment-looking words, like declaration arguments. Brace variants are expanded
-before tilde recognition. Parameter operands keep their distinct existing path.
+before tilde recognition. As in Bash, a word changed by brace expansion keeps only
+its leading prefix: `x={~,~/tail}` stays `x=~ x=~/tail`, while `{~,~/tail}` and
+the unchanged `x=~/{a}` still expand. Parameter operands keep their distinct existing path.
 
 HOME is snapshotted at each eligible literal segment. Earlier parameter
 expressions in the same word can change the binding seen by a later segment.

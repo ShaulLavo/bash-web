@@ -7,6 +7,18 @@ use crate::{
 };
 use shell_parser::parser::{Word, WordPart};
 
+/// Where a word's spelling may start `=~` and `:~` prefixes.
+#[derive(Clone, Copy)]
+pub(super) enum Context {
+    /// An ordinary word, assignment-looking only if its spelling is.
+    Word,
+    /// An actual assignment value: its start and every later `:~`.
+    Assignment,
+    /// Bash gives words changed by brace expansion fresh flags, dropping
+    /// assignment eligibility; only their leading `~` remains.
+    Generated,
+}
+
 pub(super) struct WordTildes<'a> {
     word: &'a Word,
     scalar: bool,
@@ -19,7 +31,7 @@ impl<'a> WordTildes<'a> {
     pub(super) async fn new(
         word: &'a Word,
         scalar: bool,
-        assignment: bool,
+        context: Context,
         has_part_quotes: bool,
         expansion: &mut Expansion<'_>,
     ) -> Result<Self, Error> {
@@ -29,10 +41,10 @@ impl<'a> WordTildes<'a> {
             !part_quoted(word, index, has_part_quotes)
                 && matches!(part, WordPart::Literal(text) if text.contains('~'))
         });
-        let assignment = match (candidate, assignment) {
-            (false, _) => None,
-            (true, true) => Some((0, 0)),
-            (true, false) => {
+        let assignment = match (candidate, context) {
+            (false, _) | (true, Context::Generated) => None,
+            (true, Context::Assignment) => Some((0, 0)),
+            (true, Context::Word) => {
                 assignment_start(word, has_part_quotes, expansion.work, expansion.cancel).await?
             }
         };
@@ -241,5 +253,5 @@ pub(crate) async fn assignment(
     max_raw: usize,
     work: &mut Work,
 ) -> Result<String, Error> {
-    super::scalar_word(word, state, cancel, max, max_raw, true, work).await
+    super::scalar_word(word, state, cancel, max, max_raw, Context::Assignment, work).await
 }

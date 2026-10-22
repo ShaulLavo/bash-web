@@ -15,6 +15,7 @@ const env = {
   LC_ALL: "C.utf8",
   LANG: "C.utf8",
 };
+const listArgs = `printf 'argc=%s\\n' "$#"; printf '<%s>\\n' "$@"`;
 const cases = [
   "printf '<%s>\\n' ~ ~/src ~:suffix; HOME=/changed; printf '<%s>\\n' ~ ~/src",
   "HOME=; printf '<%s>\\n' x=~:${HOME:=/next}:~",
@@ -47,6 +48,13 @@ const cases = [
   'HOME=/home/tt; a=~; HOME=/next; b=~; printf \'<%s>\\n\' "$a" "$b"',
   "HOME='é/🙂 space'; a=~/tail; printf '<%s>\\n' ~ \"$a\"",
   'HOME=/home/tt; a=x=~; b=x:~; export c=x=~; printf \'<%s>\\n\' "$a" "$b" "$c"; printf \'<%s>\\n\' a=x=~',
+  // Words changed by brace expansion keep only a leading tilde prefix.
+  `HOME=/one; set -- x={~,~/tail}; ${listArgs}`,
+  `HOME=/one; set -- x=foo{:,/}~; ${listArgs}`,
+  `HOME='/a b*[x]?/é🙂:~'; IFS=' /:'; set -- {~,~/tail} ~{/a,:b} x={~,~/tail} x=foo{:,/}~; ${listArgs}`,
+  `HOME=/one; set -- ~/{a,b}:~ x=~:{a,b}:~ {x=~,y} {,x=}~ x=~/{a} x=~{} x=~ x=~/{1..2}; ${listArgs}`,
+  `HOME=/one; set -- {~,x=~}; HOME=/two; set -- "$@" {~,~/t} x={~,:~}; HOME=; set -- "$@" {~,~/t} x={~,b}; ${listArgs}`,
+  "HOME=/one; for v in x={~,~/t} {~,~/t} x=~:~; do printf '<%s>\\n' \"$v\"; done",
 ];
 const boundaries = [
   {
@@ -143,6 +151,7 @@ if (recordPath) {
       assert.equal(actual.crash, undefined);
       assert.equal(actual.outputLimit, undefined);
       assert.equal(actual.status, boundary?.status ?? expected.status);
+      if (!boundary && !expected.stderrBase64) assert.equal(actual.stderr.toString(), "");
       assert.deepEqual(
         actual.stdout,
         boundary ? Buffer.from(boundary.stdout) : Buffer.from(expected.stdoutBase64, "base64"),
