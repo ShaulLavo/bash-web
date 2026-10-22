@@ -150,8 +150,9 @@ async fn shape(
     }
     Ok(Some(shape))
 }
-/// Components longer than any path are read by `shape`; the Pattern
-/// compiler's per-character storage would exceed the expansion budget.
+/// Components longer than any path are read in place by `shape`. Most need
+/// more characters than any name has; building their Pattern costs 8 bytes
+/// per character, over the expansion budget past about 64K characters.
 async fn long_shape(
     component: &str,
     protection: &[bool],
@@ -217,7 +218,7 @@ async fn magic(
     Ok(false)
 }
 /// No directory entry or path is longer than MAX_PATH_BYTES, so a component
-/// needing more characters matches nothing, as ENAMETOOLONG does in Bash.
+/// needing more characters matches nothing; Bash finds no entry for it either.
 async fn unmatchable(
     text: &str,
     protection: &[bool],
@@ -279,7 +280,8 @@ fn joined(
         .checked_add(value.len())
         .and_then(|n| n.checked_add(usize::from(slash)))
         .ok_or(2)?;
-    if length > MAX_PATH_BYTES {
+    // A trailing slash only asks for a directory; the path itself excludes it.
+    if length - usize::from(slash) > MAX_PATH_BYTES {
         return Ok(None);
     }
     if length > limit {
@@ -434,7 +436,8 @@ async fn sort(paths: &mut [String], work: &mut Work, cancel: &Cancel) -> Result<
 }
 
 /// Whether a candidate path exists, as a directory when it ends in a slash.
-/// Missing and too-long paths are absent; other errors stay errors.
+/// The slash is not part of the path that is looked up. Missing and too-long
+/// paths are absent; other errors stay errors.
 async fn exists(
     value: &str,
     slash: bool,
@@ -444,7 +447,11 @@ async fn exists(
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<bool, Error> {
-    let Some(full) = absolute(cwd, value, raw, work)? else {
+    let path = value
+        .strip_suffix('/')
+        .filter(|path| slash && !path.is_empty())
+        .unwrap_or(value);
+    let Some(full) = absolute(cwd, path, raw, work)? else {
         return Ok(false);
     };
     let stat_storage = full.len().saturating_mul(2).saturating_add(256);
@@ -857,29 +864,37 @@ mod tests {
         Some((shape.magic, shape.min_chars))
     }
 
+    const SHAPE_ALPHABET: [char; 10] = ['a', '*', '?', '[', ']', '!', '^', '\\', ':', '('];
+    /// Case `index` of all `length`-character texts over SHAPE_ALPHABET, each
+    /// under every protection mask: the low `length` bits are the mask.
+    fn shape_case(length: u32, index: usize) -> (String, Vec<bool>) {
+        let code = index >> length;
+        let radix = SHAPE_ALPHABET.len();
+        let text = (0..length)
+            .map(|place| SHAPE_ALPHABET[code / radix.pow(place) % radix])
+            .collect();
+        let protection = (0..length).map(|bit| index >> bit & 1 == 1).collect();
+        (text, protection)
+    }
+
     #[test]
     fn long_component_shape_agrees_with_pattern_magic() {
-        let alphabet = ['a', '*', '?', '[', ']', '!', '^', '\\', ':', '('];
+        let cases = (1..=4u32).flat_map(|length| {
+            (0..SHAPE_ALPHABET.len().pow(length) << length).map(move |index| (length, index))
+        });
         let mut checked = 0;
-        for length in 1..=4u32 {
-            for code in 0..alphabet.len().pow(length) {
-                let text: String = (0..length)
-                    .map(|place| alphabet[code / alphabet.len().pow(place) % alphabet.len()])
-                    .collect();
-                for mask in 0..1usize << length {
-                    let protection: Vec<bool> =
-                        (0..length).map(|bit| mask >> bit & 1 == 1).collect();
-                    let Some((magic, _)) = long_shape_of(&text, &protection) else {
-                        continue;
-                    };
-                    assert_eq!(
-                        Some(magic),
-                        pattern_magic(&text, &protection),
-                        "{text:?} {mask:b}"
-                    );
-                    checked += 1;
-                }
-            }
+        for (length, index) in cases {
+            let (text, protection) = shape_case(length, index);
+            let Some((magic, _)) = long_shape_of(&text, &protection) else {
+                continue;
+            };
+            let mask = index & ((1 << length) - 1);
+            assert_eq!(
+                Some(magic),
+                pattern_magic(&text, &protection),
+                "{text:?} {mask:b}"
+            );
+            checked += 1;
         }
         assert!(checked > 100_000);
         for (text, protection, expected) in [
@@ -896,6 +911,50 @@ mod tests {
         }
         assert_eq!(long_shape_of("a[[:alpha:]]", &[false; 12]), None);
         assert_eq!(long_shape_of("*(a)", &[false; 4]), None);
+    }
+
+    #[test]
+    fn a_trailing_slash_is_not_part_of_the_path_limit() {
+        let memory = MemoryFs::new(0);
+        let parent =
+            |name: &str| -> String { (0..19).map(|_| format!("/{}", name.repeat(200))).collect() };
+        let (a, b) = (parent("a"), parent("b"));
+        let leaf = |parent: &str, total: usize| {
+            format!("{parent}/{}", "m".repeat(total - parent.len() - 1))
+        };
+        let (exact, shorter) = (leaf(&a, MAX_PATH_BYTES), leaf(&b, MAX_PATH_BYTES - 1));
+        memory.mkdir(&exact, true).unwrap();
+        memory.mkdir(&shorter, true).unwrap();
+        let fs: Rc<dyn FileSystem> = Rc::new(memory);
+        let cancel = Cancel::new();
+        let first = &a[..201];
+        let relative = &exact[202..];
+        for (cwd, text, expected) in [
+            ("/", format!("{a}/*/"), vec![format!("{exact}/")]),
+            (
+                first,
+                format!("{}/*/", &a[202..]),
+                vec![format!("{relative}/")],
+            ),
+            ("/", format!("{b}/*/"), vec![format!("{shorter}/")]),
+            ("/", format!("{a}/*"), vec![exact.clone()]),
+            ("/", format!("{a}/*/*/"), Vec::new()),
+            ("/", format!("{a}/*/*"), Vec::new()),
+        ] {
+            let mut work = Work::new(10_000_000, 1 << 20, 16);
+            let protection = vec![false; text.len()];
+            let limits = (1 << 20, 16, 1 << 20);
+            let found = finish(matches(
+                &text,
+                &protection,
+                cwd,
+                &fs,
+                limits,
+                &mut work,
+                &cancel,
+            ));
+            assert_eq!(found.ok(), Some(expected), "{} {}", cwd.len(), text.len());
+        }
     }
 
     #[test]
