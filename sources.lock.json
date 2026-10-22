@@ -705,6 +705,15 @@
         ],
         "change": "Retain typed file-read substitution eligibility and lexical backtick origins through quote and scalar assignment transformations. Keep legacy numeric redirect and trailing-input distinctions, escaped newlines and mixed-quote backticks. Traverse and print the dedicated AST variant.",
         "reason": "GNU Bash 5.3.15 treats one input-only command as a parent-side file capture, while specific backtick spellings disable the shortcut. No upstream test removed."
+      },
+      {
+        "paths": [
+          "shell/parser/src/parser/mod.rs",
+          "shell/parser/tests/api.rs"
+        ],
+        "classification": "Original quote-provenance retention over the owned parser; no additional upstream implementation copied. GNU Bash 5.3.15 supplies recorded behavior.",
+        "change": "Preserve existing empty quoted literal parts when an unquoted literal contains '~'. Leave the AST and all other empty-part removal rules unchanged. Add independent parser controls for trailing and leading empty quotes beside tilde.",
+        "reason": "Tilde-prefix recognition must distinguish ~ from ~'' and ~\"\" without reconstructing discarded syntax or adding AST metadata."
       }
     ],
     "removedUpstreamTests": [
@@ -1845,5 +1854,22 @@
       "non-ASCII option bytes, which cannot be represented individually by the existing UTF-8 scalar binding storage",
       "byte-identical GNU Bash --help prose"
     ]
+  },
+  "shellTilde": {
+    "classification": "Original HOME-only tilde adapter and controls. GNU Bash 5.3.15 is a behavior oracle; no upstream implementation copied or adapted.",
+    "baseRevision": "77b3963d904599932c2cd59fe46409f0ab7a6c9a",
+    "paths": [
+      "shell/engine/src/expand/tilde.rs",
+      "shell/engine/src/expand.rs",
+      "shell/engine/src/interpreter.rs",
+      "shell/engine/tests/words/tilde.rs",
+      "scripts/test-own-shell-tilde.ts",
+      "scripts/fixtures/shell-tilde.json",
+      "shell/parser/src/parser/mod.rs",
+      "shell/parser/tests/api.rs"
+    ],
+    "implementation": "Recognize unquoted HOME tilde prefixes from existing literal parts after brace expansion. Snapshot the actual scalar binding at each eligible literal execution segment, following preceding parameter side effects. Protect only substituted home bytes from splitting and pathname expansion. Scalar assignments allow prefixes after literal colons; ordinary words allow this only after an unquoted valid identifier and equals or plus-equals. Declarations and redirect scalar words retain ordinary assignment-looking recognition; only actual scalar RHSs use assignment mode. Admit the retained snapshot before copying and charge each emitted copy to existing raw, field, work and storage budgets. Prefix and value walks yield and check cancellation.",
+    "deferred": "Named-user homes and HOME-unset account fallback require an authentic runtime account lookup; preserve those prefixes literally. PWD/OLDPWD, directory-stack forms, parameter operands, array assignments and non-UTF-8 fields remain outside this slice. Only the separately recorded empty-quote retention changes parser behavior. No AST, state storage, FileSubstitution or pathname traversal changes.",
+    "gate": "Record actual local Bash 5.3.15(1)-release controls once and replay CI without live Bash. Native/WASI resource and cancellation controls plus actual Waffle controls and the unchanged full serial 9221-row frozen scored-only replay. Preserve all former passes, identities, ordered membership, skips and historical diagnostic payloads."
   }
 }

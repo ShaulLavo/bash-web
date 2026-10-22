@@ -2,10 +2,10 @@
 use super::*;
 
 #[test]
-fn tilde_home_is_snapshotted_before_parameter_side_effects() {
+fn tilde_home_lookup_follows_parameter_side_effects() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("HOME=; args x=~:${HOME:=/next}:~"), 0);
-    assert_eq!(*rig.calls.borrow(), [vec!["x=:/next:".to_owned()]]);
+    assert_eq!(*rig.calls.borrow(), [vec!["x=:/next:/next".to_owned()]]);
 }
 
 #[test]

@@ -52,6 +52,18 @@
       "stderrBase64": ""
     },
     {
+      "script": "HOME='/tmp/spec/*'; printf data >present; for v in ~; do printf '<%s>\\n' \"$v\"; done",
+      "status": 0,
+      "stdoutBase64": "PC90bXAvc3BlYy8qPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME='.'; printf data >present; for v in ~/*; do printf '<%s>\\n' \"$v\"; done",
+      "status": 0,
+      "stdoutBase64": "PC4vcHJlc2VudD4K",
+      "stderrBase64": ""
+    },
+    {
       "script": "HOME='/tmp/spec/*'; printf data >present; set -- ~; printf '%s:<%s>\\n' \"$#\" \"$1\"",
       "status": 0,
       "stdoutBase64": "MTo8L3RtcC9zcGVjLyo+Cg==",
@@ -76,9 +88,9 @@
       "stderrBase64": ""
     },
     {
-      "script": "HOME=/home/tt; a=foo:~:~/src; printf '<%s>\\n' \"$a\"; a+=:~; printf '<%s>\\n' \"$a\"",
+      "script": "HOME=/home/tt; a=foo:~:~/src; printf '<%s>\\n' \"$a\"",
       "status": 0,
-      "stdoutBase64": "PGZvbzovaG9tZS90dDovaG9tZS90dC9zcmM+Cjxmb286L2hvbWUvdHQ6L2hvbWUvdHQvc3JjOi9ob21lL3R0Pgo=",
+      "stdoutBase64": "PGZvbzovaG9tZS90dDovaG9tZS90dC9zcmM+Cg==",
       "stderrBase64": ""
     },
     {
@@ -178,6 +190,12 @@
       "stderrBase64": ""
     },
     {
+      "script": "HOME=/home/tt; a=x=~; b=x:~; export c=x=~; printf '<%s>\\n' \"$a\" \"$b\" \"$c\"; printf '<%s>\\n' a=x=~",
+      "status": 0,
+      "stdoutBase64": "PHg9fj4KPHg6L2hvbWUvdHQ+Cjx4PX4+CjxhPXg9fj4K",
+      "stderrBase64": ""
+    },
+    {
       "script": "unset HOME; printf '<%s>\\n' ~",
       "status": 0,
       "stdoutBase64": "PC9ob21lL3NoYXVsPgo=",
@@ -187,6 +205,12 @@
       "script": "HOME=/home/tt; unset v; printf '<%s>\\n' ${v:-~}",
       "status": 0,
       "stdoutBase64": "PC9ob21lL3R0Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "HOME=/home/tt; a=foo:~:~/src; printf '<%s>\\n' \"$a\"; a+=:~; printf '<%s>\\n' \"$a\"",
+      "status": 0,
+      "stdoutBase64": "PGZvbzovaG9tZS90dDovaG9tZS90dC9zcmM+Cjxmb286L2hvbWUvdHQ6L2hvbWUvdHQvc3JjOi9ob21lL3R0Pgo=",
       "stderrBase64": ""
     }
   ]

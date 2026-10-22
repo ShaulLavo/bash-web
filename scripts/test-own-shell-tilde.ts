@@ -22,11 +22,13 @@ const cases = [
   "HOME=/home/tt; printf '<%s>\\n' ~'' ~\"\" ''~ \"\"~ '~'/src \\~/src ~/'src'",
   "HOME=/home/tt; printf '<%s>\\n' ~\\/src ~/:~ ~:~/src x~ ~/../src ~~ ~__bash_web_missing_account__/src",
   "HOME='/home/a b*?[x]'; IFS=' /:'; set -- ~ ~/src ~:x; printf '%s\\n' \"$#\"; printf '<%s>\\n' \"$@\"",
+  "HOME='/tmp/spec/*'; printf data >present; for v in ~; do printf '<%s>\\n' \"$v\"; done",
+  "HOME='.'; printf data >present; for v in ~/*; do printf '<%s>\\n' \"$v\"; done",
   "HOME='/tmp/spec/*'; printf data >present; set -- ~; printf '%s:<%s>\\n' \"$#\" \"$1\"",
   "HOME=/home/tt; x='~/from-value'; printf '<%s>\\n' $x \"$x\"; y=$x; printf '<%s>\\n' \"$y\"",
   "HOME=/home/tt; x='~'; a=$x; printf '<%s>\\n' \"$a\"; printf '<%s>\\n' x=$x",
   'HOME=/home/tt; a=~/src; b=~:~/bin:~; c=foo:~; printf \'<%s>\\n\' "$a" "$b" "$c"',
-  "HOME=/home/tt; a=foo:~:~/src; printf '<%s>\\n' \"$a\"; a+=:~; printf '<%s>\\n' \"$a\"",
+  "HOME=/home/tt; a=foo:~:~/src; printf '<%s>\\n' \"$a\"",
   "HOME=/home/tt; printf '<%s>\\n' x=~ x=~:~ a=b:~ 1x=~ foo:~ a+=~ _=~/src",
   "HOME=/home/tt; printf '<%s>\\n' 'x'=~ x'='~ x\\=~ x=~'' x=~\"/src\" x=~/'src'",
   "HOME=/home/tt; printf '<%s>\\n' a=:~ a=':'~ a=\\:~ a=~':' a=~/':'~",
@@ -43,6 +45,7 @@ const cases = [
   "HOME=/home/tt; for v in ~ ~/src x=~; do printf '<%s>\\n' \"$v\"; done",
   'HOME=/home/tt; a=~; HOME=/next; b=~; printf \'<%s>\\n\' "$a" "$b"',
   "HOME='é/🙂 space'; a=~/tail; printf '<%s>\\n' ~ \"$a\"",
+  'HOME=/home/tt; a=x=~; b=x:~; export c=x=~; printf \'<%s>\\n\' "$a" "$b" "$c"; printf \'<%s>\\n\' a=x=~',
 ];
 const boundaries = [
   {
@@ -56,6 +59,12 @@ const boundaries = [
     stdout: "",
     status: 2,
     reason: "lazy parameter operands are not word literals",
+  },
+  {
+    script: "HOME=/home/tt; a=foo:~:~/src; printf '<%s>\\n' \"$a\"; a+=:~; printf '<%s>\\n' \"$a\"",
+    stdout: "<foo:/home/tt:/home/tt/src>\n<foo:/home/tt:/home/tt/src>\n",
+    status: 0,
+    reason: "append assignment (+=) is rejected before its value expands",
   },
 ];
 type Recorded = { script: string; status: number; stdoutBase64: string; stderrBase64: string };
@@ -141,7 +150,16 @@ if (recordPath) {
   }
 }
 
-function record(script: string, cwd: string): Recorded {
+function record(script: string, parent: string): Recorded {
+  const cwd = mkdtempSync(resolve(parent, "case-"));
+  try {
+    return observeBash(script, cwd);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+function observeBash(script: string, cwd: string): Recorded {
   const bash = spawnSync("/usr/bin/bash", ["--noprofile", "--norc", "-c", script], {
     env,
     cwd,

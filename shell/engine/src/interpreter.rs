@@ -3388,7 +3388,7 @@ async fn assignments(
         let AssignmentValue::Scalar(word) = assignment.value else {
             return Err(2.into());
         };
-        let value = expand::word(
+        let value = expand::assignment(
             &word,
             state,
             &context.cancel,
