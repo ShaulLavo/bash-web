@@ -24,7 +24,15 @@
       "brush-suite:word_expansion/arrays:7",
       "brush-suite:word_expansion/arrays:8"
     ],
-    "scope": "Nine frozen builtins-only candidates plus local GNU Bash controls. Stdout and status only. CI never runs live Bash."
+    "scope": "Nine frozen builtins-only candidates plus local GNU Bash controls. Stdout and status only. CI never runs live Bash.",
+    "repairControls": {
+      "bash": "5.3.15(1)-release",
+      "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+      "recordedAt": "2026-10-22T20:10:44.975823+00:00",
+      "source": "728ac9c0c3426bf935789df73df9cd4ae5af50f1",
+      "count": 24,
+      "scope": "Empty-IFS index-star whole-word separators. Recorded locally; CI replays only."
+    }
   },
   "env": {
     "PATH": "/usr/bin:/bin",
@@ -304,6 +312,150 @@
       "script": "a[21]=x; a[10]=y; a[2]=z; IFS=' '; printf \"<%s>\\n\" \"pre${!a[*]}post\"",
       "status": 0,
       "stdoutHex": "3c70726532203130203231706f73743e0a"
+    },
+    {
+      "id": "review60-r1:star-key-at",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' ${!a[*]}${!a[@]}",
+      "status": 0,
+      "stdoutHex": "3c303e0a3c31303e0a3c313e0a"
+    },
+    {
+      "id": "review60-r1:star-quoted-key-at",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' ${!a[*]}\"${!a[@]}\"",
+      "status": 0,
+      "stdoutHex": "3c303e0a3c31303e0a3c313e0a"
+    },
+    {
+      "id": "review60-r1:key-at-star",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' ${!a[@]}${!a[*]}",
+      "status": 0,
+      "stdoutHex": "3c303e0a3c31303e0a3c313e0a"
+    },
+    {
+      "id": "review60-r1:quoted-key-at-star",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' \"${!a[@]}\"${!a[*]}",
+      "status": 0,
+      "stdoutHex": "3c303e0a3c31303e0a3c313e0a"
+    },
+    {
+      "id": "review60-r1:star-positional-at",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' ${!a[*]}$@",
+      "status": 0,
+      "stdoutHex": "3c303e0a3c31613e0a3c623e0a"
+    },
+    {
+      "id": "review60-r1:star-quoted-positional-at",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' ${!a[*]}\"$@\"",
+      "status": 0,
+      "stdoutHex": "3c303e0a3c31613e0a3c623e0a"
+    },
+    {
+      "id": "review60-r1:positional-at-star",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' $@${!a[*]}",
+      "status": 0,
+      "stdoutHex": "3c613e0a3c62303e0a3c313e0a"
+    },
+    {
+      "id": "review60-r1:quoted-positional-at-star",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' \"$@\"${!a[*]}",
+      "status": 0,
+      "stdoutHex": "3c613e0a3c62303e0a3c313e0a"
+    },
+    {
+      "id": "review60-r1:star-later-ifs-space",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' ${!a[*]}${IFS:= }",
+      "status": 0,
+      "stdoutHex": "3c303e0a3c313e0a"
+    },
+    {
+      "id": "review60-r1:star-later-quoted-ifs-space",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' ${!a[*]}\"${IFS:= }\"",
+      "status": 0,
+      "stdoutHex": "3c303e0a3c31203e0a"
+    },
+    {
+      "id": "review60-r1:star-later-ifs-colon",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' ${!a[*]}${IFS:=:}",
+      "status": 0,
+      "stdoutHex": "3c3020313e0a"
+    },
+    {
+      "id": "review60-r1:star-later-quoted-ifs-colon",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' ${!a[*]}\"${IFS:=:}\"",
+      "status": 0,
+      "stdoutHex": "3c3020313a3e0a"
+    },
+    {
+      "id": "review60-r1:ifs-space-before-star",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' ${IFS:= }${!a[*]}",
+      "status": 0,
+      "stdoutHex": "3c303e0a3c313e0a"
+    },
+    {
+      "id": "review60-r1:quoted-star-key-at",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' \"${!a[*]}\"${!a[@]}",
+      "status": 0,
+      "stdoutHex": "3c3031303e0a3c313e0a"
+    },
+    {
+      "id": "review60-r1:key-at-quoted-star",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' ${!a[@]}\"${!a[*]}\"",
+      "status": 0,
+      "stdoutHex": "3c303e0a3c3130313e0a"
+    },
+    {
+      "id": "review60-r1:quoted-star-later-ifs-space",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' \"${!a[*]}\"${IFS:= }",
+      "status": 0,
+      "stdoutHex": "3c30313e0a"
+    },
+    {
+      "id": "review60-r1:standalone-star",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' ${!a[*]}",
+      "status": 0,
+      "stdoutHex": "3c3020313e0a"
+    },
+    {
+      "id": "review60-r1:quoted-star",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' \"${!a[*]}\"",
+      "status": 0,
+      "stdoutHex": "3c30313e0a"
+    },
+    {
+      "id": "review60-r1:two-stars",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' ${!a[*]}${!a[*]}",
+      "status": 0,
+      "stdoutHex": "3c3020313020313e0a"
+    },
+    {
+      "id": "review60-r1:star-literal",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' ${!a[*]}tail",
+      "status": 0,
+      "stdoutHex": "3c3020317461696c3e0a"
+    },
+    {
+      "id": "review60-r1:star-scalar",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' ${!a[*]}$b",
+      "status": 0,
+      "stdoutHex": "3c3020317461696c207461696c3e0a"
+    },
+    {
+      "id": "review60-r1:scalar-star",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' $b${!a[*]}",
+      "status": 0,
+      "stdoutHex": "3c7461696c207461696c3020313e0a"
+    },
+    {
+      "id": "review60-r1:star-scalar-key-at",
+      "script": "a=(x y); IFS=; set -- a b; b='tail tail'; printf '<%s>\\n' ${!a[*]}$b${!a[@]}",
+      "status": 0,
+      "stdoutHex": "3c303e0a3c317461696c207461696c303e0a3c313e0a"
+    },
+    {
+      "id": "review60-r1:sparse-star-key-at",
+      "script": "a[2]=x; a[10]=y; a[21]=z; IFS=; printf '<%s>\\n' ${!a[*]}${!a[@]}",
+      "status": 0,
+      "stdoutHex": "3c323e0a3c31303e0a3c3231323e0a3c31303e0a3c32313e0a"
     }
   ],
   "unsupported": [
