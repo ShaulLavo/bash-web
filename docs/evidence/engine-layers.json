@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "b248a09d2666a9d92cb03c76d3ef434f3dfc047d5f31e838584eaa3aa16216a1",
+    "engineSourceSha256": "0eee69957443cba89ef0f60b11bf5758b14052d81cc5a73ce809df6baf8ba504",
     "binaryBuild": null
   },
   "contract": {
@@ -170,6 +170,7 @@
       "files": [
         "shell/engine/src/builtins.rs",
         "shell/engine/src/builtins/getopts.rs",
+        "shell/engine/src/builtins/getopts/tests.rs",
         "shell/engine/src/builtins/printf.rs",
         "shell/engine/src/builtins/printf/fields.rs",
         "shell/engine/src/builtins/printf/quoting.rs",
@@ -220,8 +221,11 @@
         "shell/engine/src/expand/indirect.rs",
         "shell/engine/src/expand/operand.rs",
         "shell/engine/src/expand/pattern.rs",
+        "shell/engine/src/expand/pattern/extglob.rs",
         "shell/engine/src/expand/positional.rs",
-        "shell/engine/src/expand/replacement.rs"
+        "shell/engine/src/expand/printable.rs",
+        "shell/engine/src/expand/replacement.rs",
+        "shell/engine/src/expand/transformation.rs"
       ]
     },
     {
@@ -229,13 +233,15 @@
       "kind": "layer",
       "files": [
         "shell/engine/src/interpreter.rs",
+        "shell/engine/src/interpreter/builtin_wrapper.rs",
         "shell/engine/src/interpreter/command_builtin.rs",
         "shell/engine/src/interpreter/command_builtin/tests.rs",
         "shell/engine/src/interpreter/conditional.rs",
         "shell/engine/src/interpreter/conditional/regex.rs",
         "shell/engine/src/interpreter/control.rs",
         "shell/engine/src/interpreter/eval.rs",
-        "shell/engine/src/interpreter/file_substitution.rs"
+        "shell/engine/src/interpreter/file_substitution.rs",
+        "shell/engine/src/interpreter/indexed.rs"
       ]
     },
     {
@@ -295,7 +301,9 @@
       "kind": "layer",
       "files": [
         "shell/engine/src/state.rs",
-        "shell/engine/src/state/bindings_tests.rs"
+        "shell/engine/src/state/binding.rs",
+        "shell/engine/src/state/bindings_tests.rs",
+        "shell/engine/src/state/getopts_tests.rs"
       ]
     },
     {
@@ -453,7 +461,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 956,
+        "line": 959,
         "column": 29
       }
     },
@@ -463,7 +471,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 931,
+        "line": 934,
         "column": 17
       }
     },
@@ -473,7 +481,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 26,
+        "line": 29,
         "column": 30
       }
     },
@@ -493,7 +501,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 55,
+        "line": 58,
         "column": 38
       }
     },
@@ -513,7 +521,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 1166,
+        "line": 1194,
         "column": 15
       }
     },
@@ -543,7 +551,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 1614,
+        "line": 1616,
         "column": 33
       }
     },
@@ -573,7 +581,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 84,
+        "line": 86,
         "column": 30
       }
     },
@@ -749,12 +757,22 @@
     },
     {
       "source": "builtins",
+      "target": "exec",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/builtins/getopts/tests.rs",
+        "line": 4,
+        "column": 5
+      }
+    },
+    {
+      "source": "builtins",
       "target": "executor",
       "scope": "testOnly",
       "location": {
-        "path": "shell/engine/src/builtins/printf.rs",
-        "line": 770,
-        "column": 20
+        "path": "shell/engine/src/builtins/getopts/tests.rs",
+        "line": 5,
+        "column": 16
       }
     },
     {
@@ -762,9 +780,9 @@
       "target": "interpreter",
       "scope": "testOnly",
       "location": {
-        "path": "shell/engine/src/builtins/printf.rs",
-        "line": 769,
-        "column": 9
+        "path": "shell/engine/src/builtins/getopts/tests.rs",
+        "line": 3,
+        "column": 5
       }
     },
     {
@@ -772,9 +790,9 @@
       "target": "io",
       "scope": "testOnly",
       "location": {
-        "path": "shell/engine/src/builtins/printf.rs",
-        "line": 771,
-        "column": 14
+        "path": "shell/engine/src/builtins/getopts/tests.rs",
+        "line": 6,
+        "column": 5
       }
     },
     {
@@ -782,9 +800,19 @@
       "target": "process",
       "scope": "testOnly",
       "location": {
-        "path": "shell/engine/src/builtins/printf.rs",
-        "line": 772,
-        "column": 9
+        "path": "shell/engine/src/builtins/getopts/tests.rs",
+        "line": 7,
+        "column": 5
+      }
+    },
+    {
+      "source": "builtins",
+      "target": "state",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/builtins/getopts/tests.rs",
+        "line": 8,
+        "column": 13
       }
     },
     {
@@ -843,7 +871,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 2701,
+        "line": 2757,
         "column": 21
       }
     },
@@ -853,7 +881,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3691,
+        "line": 3794,
         "column": 25
       }
     },
@@ -863,7 +891,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 5004,
+        "line": 5107,
         "column": 17
       }
     },
@@ -873,7 +901,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter/conditional/regex.rs",
-        "line": 809,
+        "line": 808,
         "column": 37
       }
     },
@@ -883,7 +911,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3677,
+        "line": 3780,
         "column": 17
       }
     },
@@ -893,7 +921,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3677,
+        "line": 3780,
         "column": 31
       }
     },
@@ -903,7 +931,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter/conditional/regex.rs",
-        "line": 809,
+        "line": 808,
         "column": 45
       }
     },
@@ -993,8 +1021,8 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 2375,
-        "column": 27
+        "line": 960,
+        "column": 63
       }
     },
     {
@@ -1003,7 +1031,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 1622,
+        "line": 2039,
         "column": 9
       }
     }
@@ -1016,7 +1044,7 @@
       "violations": 0
     },
     "testOnly": {
-      "edges": 28,
+      "edges": 30,
       "violations": 0
     },
     "violations": 0,

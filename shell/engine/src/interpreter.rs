@@ -18,11 +18,13 @@ use std::{
     rc::Rc,
 };
 
+mod builtin_wrapper;
 mod command_builtin;
 mod conditional;
 mod control;
 pub(crate) mod eval;
 mod file_substitution;
+mod indexed;
 
 #[derive(Clone, Debug)]
 pub struct Limits {
@@ -1912,6 +1914,7 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
     } else if matches!(
         error,
         expand::Error::AssignmentDepth
+            | expand::Error::BadArraySubscript { .. }
             | expand::Error::Arithmetic { .. }
             | expand::Error::Readonly { .. }
             | expand::Error::ShellBoundary {
@@ -1930,6 +1933,9 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
         expand::Error::AssignmentDepth => return Outcome { code: 1, flow },
         expand::Error::SpecialAssignment { name, line } => {
             (name, "cannot assign in this way".to_owned(), line, 1)
+        }
+        expand::Error::BadArraySubscript { name, line } => {
+            (name, "bad array subscript".to_owned(), line, 1)
         }
         expand::Error::Readonly { name, line, .. } => {
             (name, "readonly variable".to_owned(), line, 1)
@@ -2707,6 +2713,7 @@ async fn retain_declaration_syntax(
 }
 
 struct PreparedCommand {
+    line: Option<usize>,
     argv: Vec<String>,
     assigned: Vec<(String, String)>,
     fds: Descriptors,
@@ -2768,6 +2775,7 @@ async fn prepare_simple_command_body(
     fds: Descriptors,
     context: &Context,
 ) -> Result<PreparedCommand, CommandError> {
+    let line = simple.expansion_line;
     retain_declaration_syntax(&mut simple, &context.source, &context.cancel).await?;
     let assignment_count = simple.assignments.len();
     if assignment_count > context.limits().arguments {
@@ -2844,6 +2852,7 @@ async fn prepare_simple_command_body(
         let fds = redirects(&simple.redirects, state, fds, context, &mut work, Some(1)).await?;
         work.substitutions = None;
         return Ok(PreparedCommand {
+            line,
             argv,
             assigned: Vec::new(),
             fds,
@@ -2876,6 +2885,7 @@ async fn prepare_simple_command_body(
     .await?;
     work.substitutions = None;
     Ok(PreparedCommand {
+        line,
         argv,
         assigned,
         fds,
@@ -2922,6 +2932,7 @@ async fn dispatch_simple_command_body(
     parent_stderr: WeakStderr,
 ) -> Result<Outcome, i32> {
     let PreparedCommand {
+        line,
         argv,
         assigned,
         fds,
@@ -2933,29 +2944,49 @@ async fn dispatch_simple_command_body(
         // substitution it ran (words, then redirects and assignments).
         return Ok(Outcome::status(work.substitution_status.unwrap_or(0)));
     };
-    let mut args: Vec<_> = fields.collect();
     let mut bypass_functions = false;
     let mut default_path = false;
-    while commands::handler(&name) == Some(commands::Handler::Command)
-        && (bypass_functions || !state.borrow().functions().contains_key(&name))
+    let mut builtin_only = false;
+    while matches!(
+        commands::handler(&name),
+        Some(commands::Handler::Command | commands::Handler::BuiltinWrapper)
+    ) && (bypass_functions || !state.borrow().functions().contains_key(&name))
     {
-        let mut options = command_builtin::options(&args, &fds, &context, &mut work).await?;
+        work.checkpoint(&context.cancel)
+            .await
+            .map_err(admission_status)?;
+        builtin_only = commands::handler(&name) == Some(commands::Handler::BuiltinWrapper);
+        let mut options = if builtin_only {
+            builtin_wrapper::options(fields.as_slice(), line, &fds, &context).await?
+        } else {
+            command_builtin::options(fields.as_slice(), &fds, &context, &mut work).await?
+        };
         default_path |= options.default_path;
         options.default_path = default_path;
-        args.drain(..options.operands);
+        for _ in 0..options.operands {
+            fields.next();
+        }
         if options.query {
             let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
                 .await
                 .map_err(admission_status)?;
-            return command_builtin::query(&args, &options, &state, &fds, &context, &mut work)
-                .await;
+            return command_builtin::query(
+                fields.as_slice(),
+                &options,
+                &state,
+                &fds,
+                &context,
+                &mut work,
+            )
+            .await;
         }
-        if args.is_empty() {
+        let Some(target) = fields.next() else {
             return Ok(Outcome::status(0));
-        }
-        name = args.remove(0);
+        };
+        name = target;
         bypass_functions = true;
     }
+    let args: Vec<_> = fields.collect();
     // Ordinary function calls share shell state. Their temporary exported
     // bindings belong to call-local restore frames, not an isolated State.
     let function = if bypass_functions {
@@ -3092,6 +3123,10 @@ async fn dispatch_simple_command_body(
             .map_err(admission_status)?;
         let bindings = fds.borrow().clone();
         return builtins::run(builtin, &name, args, state, bindings, context, &mut work).await;
+    }
+    if builtin_only {
+        builtin_wrapper::missing(&name, line, &fds, &context).await?;
+        return Ok(Outcome::status(1));
     }
     // A pipe named by an open descriptor exists but cannot be executed.
     if name.starts_with("/dev/fd/")
@@ -3346,17 +3381,65 @@ async fn assignments(
     if assignments.is_empty() {
         return Ok(Vec::new());
     }
-    let frame = PrefixFrame::enter(state.clone());
+    let mut completed = crate::state::AssignmentFrame::enter(state.clone())?;
+    let result = assignments_body(
+        assignments,
+        state,
+        context,
+        bytes,
+        work,
+        (commit, function_diagnostics),
+        &mut completed,
+    )
+    .await;
+    if !matches!(
+        result,
+        Err(expand::Error::Status(
+            2 | 130 | crate::exec::RESOURCE_STATUS
+        ))
+    ) {
+        completed.keep();
+    }
+    result
+}
+
+async fn assignments_body(
+    assignments: Vec<Assignment>,
+    state: &SharedState,
+    context: &Context,
+    bytes: &mut usize,
+    work: &mut expand::Work,
+    mode: (bool, Option<&Descriptors>),
+    completed: &mut crate::state::AssignmentFrame,
+) -> Result<Vec<(String, String)>, expand::Error> {
+    let (commit, function_diagnostics) = mode;
+    if assignments.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut frame = PrefixFrame::enter(state.clone());
     let mut names = Vec::new();
     let initial_bytes = *bytes;
     let mut budget = Budget::default();
     for assignment in assignments {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-        if assignment.index.is_some() || assignment.append {
+        let indexed = assignment.index.is_some()
+            || assignment.append
+            || matches!(assignment.value, AssignmentValue::Array(_))
+            || (commit
+                && matches!(
+                    state.borrow().binding(&assignment.name),
+                    Some(crate::state::Binding::Indexed(_))
+                ));
+        if indexed && !commit {
             return Err(2.into());
         }
+        if indexed {
+            indexed::assign(&assignment, state, context, work, frame, bytes, completed).await?;
+            frame = PrefixFrame::enter(state.clone());
+            continue;
+        }
         let AssignmentValue::Scalar(word) = assignment.value else {
-            return Err(2.into());
+            unreachable!()
         };
         let value = expand::word(
             &word,
@@ -3380,9 +3463,25 @@ async fn assignments(
         }
         expand::admit_assignment(state, &assignment.name, value.len(), &context.cancel, work)
             .await?;
+        let storage = state
+            .borrow()
+            .binding(&assignment.name)
+            .filter(|value| matches!(value, crate::state::Binding::Indexed(_)))
+            .map_or(0, |value| {
+                value
+                    .storage_bytes()
+                    .saturating_add(crate::state::Binding::node_bytes())
+            });
         frame
-            .reserve(&assignment.name, value.len())
+            .reserve(&assignment.name, value.len().saturating_add(storage))
             .map_err(expand::Error::from)?;
+        let retained = state
+            .borrow()
+            .binding(&assignment.name)
+            .map_or(0, crate::state::Binding::storage_bytes);
+        if commit {
+            completed.reserve(&assignment.name, retained)?;
+        }
         let assignment_name = assignment.name.clone();
         if let Err(name) = frame.set(assignment.name, value) {
             if let Some(fds) = function_diagnostics {
@@ -3403,6 +3502,13 @@ async fn assignments(
             });
         }
         names.push(assignment_name);
+        if commit {
+            frame.commit(Some(completed)).map_err(expand::Error::from)?;
+            frame = PrefixFrame::enter(state.clone());
+        }
+    }
+    if commit {
+        return Ok(Vec::new());
     }
     let mut assigned = Vec::new();
     *bytes = initial_bytes;
@@ -3427,9 +3533,6 @@ async fn assignments(
             }
             assigned.push((state.assignment_name(name)?, value.to_owned()));
         }
-    }
-    if commit {
-        frame.commit().map_err(expand::Error::from)?;
     }
     Ok(assigned)
 }
