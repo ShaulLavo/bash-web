@@ -29,10 +29,9 @@ impl Default for Traps {
 }
 impl Traps {
     pub(crate) fn inherited(&self) -> Self {
-        Self {
-            inherited: true,
-            ..self.clone()
-        }
+        let mut traps = self.clone();
+        traps.inherited = true;
+        traps
     }
     pub(crate) fn get(&self, signal: usize) -> Option<&Binding> {
         self.bindings[signal].as_ref()
