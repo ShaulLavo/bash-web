@@ -2630,8 +2630,11 @@ HOME=/one; declare() { printf '<%s>\n' "$@"; }; declare x={~,~/tail} {~,~/tail}
 ```
 
 Bash 5.3.15 prints `<x=~>\n<x=~/tail>\n</one>\n</one/tail>\n`.
-Native and production Waffle print `<x={~,~/tail}>\n</one>\n</one/tail>\n`.
-Both return status 0 with empty stderr. The old `a03e3a1` native minimal
+The reviewed PR57 source `0d4cd315` prints
+`<x={~,~/tail}>\n</one>\n</one/tail>\n` in native and production Waffle.
+PR60 source `67462b95`, which integrates main241 without PR57, prints
+`<x={~,~/tail}>\n<~>\n<~/tail>\n` in both engines.
+All return status 0 with empty stderr. The old `a03e3a1` native minimal
 control and current PR57 runtime agree on the mismatch. The first old-source
 eight-case probe is invalid because it requires later declaration printing;
 do not use that failed probe as preservation evidence.
@@ -2646,3 +2649,35 @@ its sibling `classification.json`, and the author's `shadow-prior.json` and
 observation. Distinguish real declaration operands from function argv without
 weakening real declaration expansion, storage admission, or cancellation.
 Do not fold the repair into index-name integration or count this as a pass.
+
+
+### Inherited declaration invalid-operand diagnostic
+
+Status: Approved bounded follow-up. Owner: VARIABLES declaration/builtin
+diagnostics. Independent PR60 integration review reproduced both controls once
+in native and production Waffle at `67462b958932322deace9332962080eee7b12702`:
+
+```bash
+v="2 20"; builtin declare k=$v; declare -p k
+```
+
+```bash
+a[20]=twenty; a[2]=two; builtin declare k="${!a[@]}"; declare -p k
+```
+
+Bash 5.3.15 and both engines print `declare -- k="2"` followed by a newline
+and finish with status 0. Bash also diagnoses invalid identifier `20` on stderr;
+both engines omit that diagnostic. Neither control is an exact Bash match.
+The scalar control does not use index-name expansion. The suspected error return
+at `shell/engine/src/builtins.rs:738-743` is byte-identical to main241.
+No exact-main binary was run, so the source proof and scalar isolation, not a
+claimed main execution, establish the inherited boundary.
+
+Reproduce on current main through production Waffle before repair. Record
+Bash all-stream/status observations locally and preserve later-operand behavior,
+status propagation, storage admission and cancellation. Implement the general
+declaration diagnostic in its owning builtin, not in array expansion. Do not
+claim a frozen gain without a qualified replay. Exact scripts, bytes and setup
+failures are retained in
+`/work/reports/wave-20261022/shell/review60-main241-integration-r3/non-blocking-observations.md`
+and sibling `observations.json` / `small-observations.json`.
