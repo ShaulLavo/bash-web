@@ -39,11 +39,32 @@ fn index_names_expansion_limits_prevent_dispatch() {
 fn index_names_cancelled_expansion_preserves_array() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("a=(saved kept)"), 0);
-    let job = rig.shell.start("while true; do : \"${!a[@]}\"; done").unwrap();
+    let job = rig
+        .shell
+        .start("while true; do : \"${!a[@]}\"; done")
+        .unwrap();
     rig.ex.drive(64);
     assert!(!job.is_finished());
     rig.shell.interrupt();
     assert_eq!(rig.finish(job), 130);
     assert_eq!(rig.run("args \"${a[@]}\""), 0);
     assert_eq!(*rig.calls.borrow(), vec![vec!["saved", "kept"]]);
+}
+
+#[test]
+fn index_names_cancelled_large_enumeration_never_dispatches_partial_fields() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=({0..8191})"), 0);
+    let job = rig.shell.start("args \"${!a[@]}\"").unwrap();
+    rig.ex.drive(32);
+    assert!(!job.is_finished());
+    assert!(
+        rig.calls.borrow().is_empty(),
+        "no dispatch before cancellation"
+    );
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.run("args \"${#a[@]}\" \"${a[8191]}\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["8192", "8191"]]);
 }

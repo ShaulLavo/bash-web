@@ -4,7 +4,7 @@
   "provenance": {
     "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
     "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
-    "recordedAt": "2026-10-22T01:21:33.955613+00:00",
+    "recordedAt": "2026-10-22T01:25:38.661638+00:00",
     "base": "4bf6a474ef6bb32dd5de44c1b6d30a300a079d93",
     "frozenIdentity": {
       "schema": 1,
@@ -136,12 +136,6 @@
       "script": "n=0; a=(x y); printf \"<%s>\\n\" \"$((n+=1))\" \"${!a[@]}\" \"$((n+=1))\" \"${!a[@]}\"",
       "status": 0,
       "stdoutHex": "3c313e0a3c303e0a3c313e0a3c323e0a3c303e0a3c313e0a"
-    },
-    {
-      "id": "lazy-selected",
-      "script": "a[4]=x; printf \"<%s>\\n\" \"${x:-${!a[@]}}\" \"${x:-${!a[*]}}\"",
-      "status": 0,
-      "stdoutHex": "3c343e0a3c343e0a"
     },
     {
       "id": "lazy-unselected",
@@ -310,6 +304,16 @@
       "script": "a[21]=x; a[10]=y; a[2]=z; IFS=' '; printf \"<%s>\\n\" \"pre${!a[*]}post\"",
       "status": 0,
       "stdoutHex": "3c70726532203130203231706f73743e0a"
+    }
+  ],
+  "unsupported": [
+    {
+      "id": "lazy-selected",
+      "script": "a[4]=x; printf \"<%s>\\n\" \"${x:-${!a[@]}}\" \"${x:-${!a[*]}}\"",
+      "status": 0,
+      "stdoutHex": "3c343e0a3c343e0a",
+      "engineStatus": 2,
+      "reason": "Selected nested operands do not admit ArrayIndices in the existing operand scanner."
     }
   ]
 }

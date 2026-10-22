@@ -8,6 +8,7 @@ import { createWaffleRunner } from "./waffle-compat.ts";
 const fixture: {
   bash: string;
   env: Record<string, string>;
+  unsupported: { id: string; script: string; engineStatus: number }[];
   cases: { id: string; script: string; status: number; stdoutHex: string }[];
 } = JSON.parse(readFileSync(new URL("fixtures/shell-index-names.json", import.meta.url), "utf8"));
 assert.equal(fixture.bash, "5.3.15(1)-release");
@@ -33,4 +34,11 @@ for (const item of fixture.cases)
     if ("crash" in actual) assert.equal(actual.crash, undefined);
     assert.equal(actual.status, item.status);
     assert.equal(actual.stdout.toString("hex"), item.stdoutHex);
+  });
+
+for (const item of fixture.unsupported)
+  test(`index names unsupported boundary ${item.id}`, async () => {
+    const actual = await runner(item.script);
+    assert.equal(actual.status, item.engineStatus);
+    assert.equal(actual.stdout.length, 0);
   });
