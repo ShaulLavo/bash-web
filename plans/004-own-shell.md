@@ -2267,3 +2267,30 @@ Reproducer and exact observations are in
 `/work/reports/wave-20261022/shell/trap-repair-r1-evidence/redirect-control.ts`
 and `redirect-before.json`. This lane leaves `main.rs`, `compat.rs` and `io.rs` unchanged. The coordinator owns the follow-up and retained evidence until it
 is repaired and verified.
+
+## Re-ignored inherited EXIT registration, 2026-10-22
+
+Status: Approved follow-up. Owner: BUILTINS coordinator. Separate from the
+nested-parent trap correction, with no trap action execution needed. At
+`535197097ea359ee15b2e73bdf0a944b41df0c82`, local GNU Bash 5.3.15
+and the guest differ on these exact registration controls:
+
+```bash
+trap '' EXIT; while read -r l; do echo "got:$l"; done < <(trap '' EXIT; trap -p EXIT); trap - EXIT
+trap '' EXIT; (trap : HUP; trap - EXIT; trap '' EXIT; trap -p EXIT); trap - EXIT
+```
+
+Both Bash scripts exit0 with no stdout. The guest prints
+`got:trap -- '' EXIT\n` for the first and `trap -- '' EXIT\n` for the
+second. The review found three such quirk rows. Setting a handler before the
+new ignore, or using a nested ordinary child, already matches. The suspected
+state belongs to ignored EXIT provenance after the inherited binding is cleared,
+not action execution or general process-substitution inheritance.
+
+Independent native and production-Waffle observations and exact scripts are
+retained in `/work/reports/wave-20261022/shell/review63-trap-opus-r1-evidence/`
+under `probe1.json`, `probe2.json`, `probe3.json` and `probe-categories.json`.
+The nested-parent correction deliberately does not encode this extra state.
+Record a narrow failing-first fixture before fixing it and preserve the173
+registration controls. Do not claim that any new ignored EXIT always stays
+visible in a process substitution. No frozen exclusion or scoring change.

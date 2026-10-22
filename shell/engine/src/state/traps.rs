@@ -19,12 +19,14 @@ pub(crate) enum Binding {
 pub(crate) struct Traps {
     bindings: [Option<Binding>; SLOTS],
     inherited: bool,
+    exit_inherited: bool,
 }
 impl Default for Traps {
     fn default() -> Self {
         Self {
             bindings: std::array::from_fn(|_| None),
             inherited: false,
+            exit_inherited: false,
         }
     }
 }
@@ -32,6 +34,7 @@ impl Traps {
     pub(crate) fn inherited(&self) -> Self {
         let mut traps = self.clone();
         traps.inherited = true;
+        traps.exit_inherited = traps.bindings[0].is_some();
         traps
     }
     pub(crate) fn get(&self, signal: usize) -> Option<&Binding> {
@@ -45,12 +48,27 @@ impl Traps {
     }
     pub(crate) fn set(&mut self, signal: usize, binding: Option<Binding>) {
         self.prepare_mutation();
+        self.exit_inherited &= signal != 0;
         self.bindings[signal] = binding;
     }
-    pub(crate) fn prepare_process_substitution(&mut self) {
-        self.clear_signal_handlers();
-        self.bindings[0] = None;
-        self.inherited = false;
+    pub(crate) fn process_substitution(&self) -> Self {
+        let mut traps = self.clone();
+        for (signal, binding) in traps
+            .bindings
+            .iter_mut()
+            .enumerate()
+            .take(SIGNAL_SLOTS)
+            .skip(1)
+        {
+            let reset = !self.inherited || matches!(signal, 2 | 3 | 17);
+            if reset && matches!(binding, Some(Binding::Handler(_))) {
+                *binding = None;
+            }
+        }
+        if !traps.exit_inherited {
+            traps.bindings[0] = None;
+        }
+        traps
     }
     fn clear_handlers(&mut self) {
         self.clear_signal_handlers();
@@ -98,8 +116,7 @@ mod tests {
         for signal in [15, 65, 67] {
             parent.set(signal, Some(Binding::Ignored));
         }
-        let mut child = parent.inherited();
-        child.prepare_process_substitution();
+        let mut child = parent.process_substitution();
         assert!(child.get(0).is_none());
         assert!(child.get(2).is_none());
         child.set(1, Some(Binding::Ignored));
@@ -114,6 +131,44 @@ mod tests {
             assert!(nested.get(signal).is_none());
         }
         assert!(matches!(parent.get(0), Some(Binding::Handler(_))));
+    }
+    #[test]
+    fn inherited_process_substitution_retains_deferred_state_until_mutation() {
+        let mut parent = Traps::default();
+        let action = Rc::new(Action {
+            text: ":".into(),
+            _storage: None,
+        });
+        for signal in [0, 1, 2, 3, 17, 66] {
+            parent.set(signal, Some(Binding::Handler(action.clone())));
+        }
+        parent.set(65, Some(Binding::Ignored));
+        let inherited = parent.inherited();
+        let mut child = inherited.process_substitution();
+        for signal in [0, 1, 66] {
+            assert!(matches!(child.get(signal), Some(Binding::Handler(_))));
+        }
+        for signal in [2, 3, 17] {
+            assert!(child.get(signal).is_none());
+        }
+        assert!(matches!(child.get(65), Some(Binding::Ignored)));
+        child.prepare_mutation();
+        for signal in [0, 1, 65, 66] {
+            assert!(child.get(signal).is_none());
+        }
+        assert!(matches!(inherited.get(0), Some(Binding::Handler(_))));
+    }
+    #[test]
+    fn inherited_ignored_exit_survives_until_explicitly_set_again() {
+        let mut parent = Traps::default();
+        parent.set(0, Some(Binding::Ignored));
+        let mut child = parent.inherited();
+        child.set(1, Some(Binding::Ignored));
+        let nested = child.process_substitution().process_substitution();
+        assert!(matches!(nested.get(0), Some(Binding::Ignored)));
+        child.set(0, Some(Binding::Ignored));
+        assert!(child.process_substitution().get(0).is_none());
+        assert!(matches!(parent.get(0), Some(Binding::Ignored)));
     }
     #[test]
     fn retained_action_refunds_after_last_child_and_failed_admission_is_atomic() {

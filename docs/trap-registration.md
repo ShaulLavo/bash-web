@@ -11,10 +11,15 @@ Mutation clears inherited handlers and ignored DEBUG, ERR and RETURN bindings.
 It preserves ignored EXIT and signal bindings. Subshells, pipeline stages,
 background commands and command substitutions use this deferred reset.
 
-Process substitutions reset all EXIT bindings and caught signal bindings
-immediately, keep ignored real signals, and retain DEBUG, ERR and RETURN
-registrations. Their next mutation does not clear these retained special bindings.
-Nested ordinary children still use deferred reset. Errtrace and functrace are not
+Process substitutions reset active EXIT bindings and caught signal bindings,
+keep ignored real signals, and retain DEBUG, ERR and RETURN registrations. When
+an ordinary child still has its deferred reset, its process substitution keeps
+that reset and EXIT, and keeps caught signals other than INT, QUIT and CHLD.
+Its first mutating trap invocation then clears the inherited bindings. An
+inherited ignored EXIT surviving an ordinary child's mutation remains visible
+through nested process substitutions until explicitly set again. A later ignore
+after clearing inherited EXIT has a separate, unsupported Bash quirk. Nested
+ordinary children still use deferred reset. Errtrace and functrace are not
 supported.
 
 No event runs a stored action. EXIT, ERR, DEBUG, RETURN and signal execution are
@@ -37,3 +42,9 @@ and adds 39 Bash 5.3.15 rows. Historical frozen gains are not a qualification of
 the corrected head. Four historical gains match stdout and status without proving
 trap execution or active signal-ignore behavior. Current-main integration and
 frozen qualification remain with the coordinator.
+
+The nested-parent correction adds 77 local recordings to the prior 96. It covers
+all caught signal numbers, child execution forms, deferred reset on mutation,
+and inherited ignored EXIT ownership. These remain registration-only controls.
+The earlier correction receipt is historical; its nested-parent section records
+the new source and checks without treating old full-score gains as current.

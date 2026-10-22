@@ -41,7 +41,7 @@
       "receiptRefresh": "source hash and line locations only; policy and edges unchanged"
     }
   },
-  "reviewRuleCorrection": "Bash 5.3.15 clears inherited ignored EXIT at process-substitution entry too. Ordinary child mutation retains ignored EXIT. The initial proposed transform failed the recorded discriminator; the final transform passes it.",
+  "reviewRuleCorrection": "Process substitutions reset active EXIT and caught signals. An ordinary parent still awaiting deferred reset keeps EXIT and caught signals except INT/QUIT/CHLD, and passes the deferred reset to its process substitution. Inherited ignored EXIT surviving mutation stays display-only until explicitly set again. Re-ignored EXIT after clearing is a separate unsupported Bash quirk.",
   "sourceSha256": {
     "shell/engine/src/builtins/trap.rs": "6e6bae8d3ddc6762a53c30150c0df2d768d9d9d7e651cc58405f40dddfd5db56",
     "shell/engine/src/state/traps.rs": "f8f6d786273d5299fb21bb10ea3a1bc60246aaff326fc26fb256e543ccdee93e",
@@ -103,5 +103,56 @@
     "runtime completion"
   ],
   "deferredNativeRedirectBug": "Approved plan 004 follow-up. Native prints 0 for : > /nonexistent/dir/x; echo $?, while Bash and production Waffle print 1. Reproduced before and after; native files unchanged.",
-  "diagnosticPolicy": "Compare status and stdout. Require empty stderr when Bash recorded none. Nonempty stderr is retained, not exact-parity evidence."
+  "diagnosticPolicy": "Compare status and stdout. Require empty stderr when Bash recorded none. Nonempty stderr is retained, not exact-parity evidence.",
+  "earlierCorrectionStatus": "Historical 96-row correction at535197097ea359ee15b2e73bdf0a944b41df0c82. It did not cover nested-parent inheritance and is superseded by nestedParentCorrection. Its hashes and broad-test counts remain historical.",
+  "nestedParentCorrection": {
+    "reviewedHead": "535197097ea359ee15b2e73bdf0a944b41df0c82",
+    "failingFixtureHead": "6e0d748e67e91ef4f0e7277f562249fa64c8fed4",
+    "fixture": {
+      "preservedRows": 96,
+      "addedRows": 77,
+      "total": 173,
+      "preservedOriginalSourceHead": true
+    },
+    "failingFirst": {
+      "native": {
+        "passed": 100,
+        "failed": 73
+      },
+      "productionWaffle": {
+        "passed": 100,
+        "failed": 73
+      },
+      "allOriginal96Pass": true
+    },
+    "corrected": {
+      "native": {
+        "passed": 173,
+        "failed": 0
+      },
+      "productionWaffle": {
+        "passed": 173,
+        "failed": 0
+      },
+      "trapsStateUnitTests": 5,
+      "engineClippyAllTargets": "pass",
+      "productionBuild": "normal patched-libc build, all guests256MiB and no retained libc filesystem code",
+      "layers": "same policy/edges; source digest only",
+      "formatAndCiTypes": "pass",
+      "workflowAndLayerScannerTests": 43
+    },
+    "sourceSha256": {
+      "shell/engine/src/builtins/trap.rs": "6e6bae8d3ddc6762a53c30150c0df2d768d9d9d7e651cc58405f40dddfd5db56",
+      "shell/engine/src/state/traps.rs": "b7fd69edc950819155f6b2ea1aebb2a9ba71f3fc6cff669292e24e81be2b8502",
+      "shell/engine/src/expand.rs": "76d0ac3b9cd460353306aa2f6cf4411c3ac25d5472f5fa79a254181ac790f922",
+      "scripts/fixtures/shell-trap-registration.json": "528d4cb1271a0e98e5bc1c5e88cf8fbbe42d067864698cc7437f96c3a892d916"
+    },
+    "artifacts": {
+      "nativeShellEngine": "7210cfb8abdee9fc7974429c5f8b2bbbeab5be18dc7eb2f9630a962962891f77",
+      "shellRuntimeWasm": "2a8e8bd6e3267a2897a9bbf1530dc10d2c1168aa86e4b454a2e3a73559aa0ff6"
+    },
+    "reviewResolution": "Coordinator applied precise independent reviewer fixcheck.patch with two focused state tests and77 failing-first local Bash recordings. No action execution or admission-policy change. Independent main integration review and hosted frozen qualification remain pending.",
+    "diagnostics": "Compare status and stdout. Require empty stderr when Bash recorded none. Nonempty stderr is retained, not exact-parity evidence.",
+    "excludedQuirk": "Re-ignoring inherited EXIT after clearing it may remain invisible in Bash until a handler is set. Approved plan004 follow-up, not covered or claimed fixed."
+  }
 }
