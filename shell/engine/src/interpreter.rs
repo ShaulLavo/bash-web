@@ -787,9 +787,6 @@ impl Session {
             {
                 result = parse_failure(failure, "-c", &context.core.descriptors, &context).await;
             }
-            if result.flow == Flow::Exit {
-                context.core.exit_requested.set(true);
-            }
             if terminal || matches!(result.flow, Flow::Exit | Flow::Abort) {
                 result = trap::finish(
                     result,
@@ -798,6 +795,9 @@ impl Session {
                     context.clone(),
                 )
                 .await;
+            }
+            if result.flow == Flow::Exit {
+                context.core.exit_requested.set(true);
             }
             let code = context.finish_group(&mut processes, result).await;
             state.borrow_mut().publish_status(code);
@@ -1173,6 +1173,7 @@ fn execute(
                             _
                         )
                 );
+            let root = context.scope.0.id == 0;
             let mut result = command_body(command, state.clone(), fds, context).await;
             if check_errexit
                 && result.flow == Flow::Normal
@@ -1181,7 +1182,9 @@ fn execute(
             {
                 result.flow = Flow::Abort;
             }
-            finish_command(&state, result, preserve)
+            let pending_exit =
+                root && result.flow == Flow::Exit && state.borrow().traps.pending_exit();
+            finish_command(&state, result, preserve || pending_exit)
         },
         Outcome::status,
     )
@@ -3103,10 +3106,17 @@ async fn dispatch_simple_command_body(
         let evaluation = context.evaluation.clone();
         let call = evaluation.frame(
             async move {
-                let _frame = frame;
+                let mut frame = frame;
                 let _call_storage = call_storage;
                 let _allocation = allocation;
-                execute(body.body.as_ref().clone(), state, fds, context).await
+                let result = execute(
+                    body.body.as_ref().clone(),
+                    state.clone(),
+                    fds,
+                    context.clone(),
+                )
+                .await;
+                trap::finish_function_abort(result, &mut frame, state, context).await
             },
             Outcome::status,
         );
@@ -3138,6 +3148,19 @@ async fn dispatch_simple_command_body(
             .await
             .map_err(admission_status)?;
         let bindings = fds.borrow().clone();
+        if builtin == commands::Builtin::ExitReturn {
+            let result = builtins::run(
+                builtin,
+                &name,
+                args,
+                state.clone(),
+                bindings,
+                context.clone(),
+                &mut work,
+            )
+            .await?;
+            return Ok(trap::finish_function_exit(result, state, fds, context).await);
+        }
         return builtins::run(builtin, &name, args, state, bindings, context, &mut work).await;
     }
     if builtin_only {

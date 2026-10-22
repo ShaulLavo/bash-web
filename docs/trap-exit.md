@@ -10,8 +10,12 @@ handler.
 `Session::start` remains a persistent submission. `Session::start_script` ends a
 complete script and runs its root EXIT action. Explicit exit and errexit also run
 the root action. The action sees the terminating status. Ordinary handler results
-do not replace it; an explicit handler exit does. The same shell state is used by
-functions and eval. Completion is marked before evaluation, preventing reentry.
+do not replace it; an explicit handler exit or a return from an active function
+does. Explicit exit inside a function keeps that function's locals, arguments and
+active descriptors while the action runs. Function errexit restores all nested
+local bindings first, retains the innermost arguments and function context, and
+uses root descriptors. Both paths use the same one-shot action helper. Eval uses
+the current shell. Completion is marked before evaluation, preventing reentry.
 Interactive EOF finishes the root through the same script entry.
 
 Inherited child handlers remain query-visible until a mutating trap invocation.

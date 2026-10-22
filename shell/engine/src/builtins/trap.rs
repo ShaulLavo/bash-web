@@ -82,8 +82,9 @@ const NAMES: [&str; SLOTS] = [
     "RETURN",
 ];
 fn signal(name: &str) -> Option<usize> {
-    if name.bytes().all(|b| b.is_ascii_digit()) {
-        return name.parse::<usize>().ok().filter(|&n| n <= 64);
+    let number = name.strip_prefix('+').unwrap_or(name);
+    if !number.is_empty() && number.bytes().all(|b| b.is_ascii_digit()) {
+        return number.parse::<usize>().ok().filter(|&n| n <= 64);
     }
     let prefixed = name.get(..3).is_some_and(|s| s.eq_ignore_ascii_case("SIG"));
     let bare = if prefixed { &name[3..] } else { name };
@@ -100,6 +101,17 @@ fn signal(name: &str) -> Option<usize> {
         s if s.eq_ignore_ascii_case("POLL") => "IO",
         s => s,
     };
+    if alias
+        .get(..6)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("RTMIN+"))
+    {
+        let offset = &alias[6..];
+        return offset
+            .parse::<usize>()
+            .ok()
+            .filter(|&n| n <= 30)
+            .map(|n| n + 34);
+    }
     NAMES.iter().position(|candidate| {
         candidate
             .strip_prefix("SIG")
@@ -161,12 +173,16 @@ pub(super) async fn run(
     }
     let options = options(args, fds, context).await?;
     let args = &args[options.operands..];
-    if options.list {
-        return list(fds, context).await;
+    if options.print && options.action {
+        diagnose(fds, "trap: cannot specify both -p and -P\n", context).await?;
+        return Err(2);
     }
     if options.action && args.is_empty() {
         diagnose(fds, "trap: -P requires at least one signal name\n", context).await?;
         return Err(2);
+    }
+    if options.list {
+        return list(fds, context).await;
     }
     if args.is_empty() || options.print || options.action {
         return query(args, options.action, state, fds, context, work).await;

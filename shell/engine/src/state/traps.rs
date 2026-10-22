@@ -56,6 +56,9 @@ impl Traps {
             }
         }
     }
+    pub(crate) fn pending_exit(&self) -> bool {
+        !self.inherited && !self.completed && matches!(self.bindings[0], Some(Binding::Handler(_)))
+    }
     pub(crate) fn begin_exit(&mut self) -> Option<Rc<Action>> {
         if self.inherited || self.completed {
             return None;

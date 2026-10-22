@@ -190,6 +190,419 @@
       "status": 0,
       "stdout": "status:1\n",
       "stderr": "/usr/bin/bash: line 1: trap: SIGEXIT: invalid signal specification\n/usr/bin/bash: line 1: trap: SIGERR: invalid signal specification\n/usr/bin/bash: line 1: trap: SIGDEBUG: invalid signal specification\n/usr/bin/bash: line 1: trap: SIGRETURN: invalid signal specification\n"
+    },
+    {
+      "id": "r1:exit-function-locals",
+      "code": "v=global; f() { local v=local; trap 'echo \"v:$v args:$*\"' EXIT; exit 3; }; f one two",
+      "status": 3,
+      "stdout": "v:local args:one two\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:exit-function-return",
+      "code": "f() { trap 'echo before; return 7; echo BAD' EXIT; exit 3; }; f; echo after:$?",
+      "status": 7,
+      "stdout": "before\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:exit-nested-functions",
+      "code": "v=global; f() { local v=outer; g one; }; g() { local v=inner; trap 'echo \"$v:$1\"' EXIT; eval 'exit 4'; }; f",
+      "status": 4,
+      "stdout": "inner:one\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:exit-function-errexit",
+      "code": "v=global; f() { local v=local; trap 'echo \"v:$v args:$*\"' EXIT; false; }; set -e; f one two",
+      "status": 1,
+      "stdout": "v:global args:one two\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:exit-trap-function-pipestatus",
+      "code": "f() { false | true; exit 3; }; trap 'echo \"s:$? p:${PIPESTATUS[*]}\"' EXIT; f",
+      "status": 3,
+      "stdout": "s:3 p:1 0\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:exit-function-redirect",
+      "code": "f() { trap 'echo exit:$?' EXIT; exit 3; }; f >out; echo unreachable",
+      "status": 3,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "r1:exit-function-fd",
+      "code": "f() { trap 'echo exit >&3' EXIT; exit 3; }; f 3>&1",
+      "status": 3,
+      "stdout": "exit\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-offset",
+      "code": "trap : RTMIN+20; echo status:$?; trap -p 54; trap - 54",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMAX-10\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmax-offset",
+      "code": "trap : RTMAX-20; echo status:$?; trap -p 44; trap - 44",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMAX-20: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmin-zero",
+      "code": "trap : RTMIN+0; echo status:$?; trap -p 34; trap - 34",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMIN\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:numeric-spelling",
+      "code": "trap : +2; echo plus:$?; trap : 02; echo zero:$?; trap -p 2; trap - 2",
+      "status": 0,
+      "stdout": "plus:0\nzero:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:numeric-one-action",
+      "code": "trap '2' EXIT; echo status:$?; trap -p",
+      "status": 0,
+      "stdout": "status:0\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:query-combined-flags",
+      "code": "trap : INT; trap -pP INT; trap -Pp INT; trap -p -P INT; trap -P -p INT",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n"
+    },
+    {
+      "id": "r1:errexit-override",
+      "code": "trap 'echo handler:$?; exit 0' EXIT; set -e; false",
+      "status": 0,
+      "stdout": "handler:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:root-exit-redirect",
+      "code": "trap 'echo exit:$?' EXIT; exit 3 >out",
+      "status": 3,
+      "stdout": "exit:3\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:brace-exit-redirect",
+      "code": "trap 'echo exit:$?' EXIT; { exit 3; } >out",
+      "status": 3,
+      "stdout": "exit:3\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:eval-exit-redirect",
+      "code": "trap 'echo exit:$?' EXIT; eval 'exit 3' >out",
+      "status": 3,
+      "stdout": "exit:3\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:function-normal-completion",
+      "code": "v=global; trap 'echo $v' EXIT; f() { local v=local; false; }; f",
+      "status": 1,
+      "stdout": "global\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:root-pipestatus-before-exit",
+      "code": "trap 'echo status:$? pipe:${PIPESTATUS[*]}' EXIT; false | true; exit 3",
+      "status": 3,
+      "stdout": "status:3 pipe:1 0\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:handler-return-outside-function",
+      "code": "trap 'echo before; return 7; echo after' EXIT; exit 3",
+      "status": 3,
+      "stdout": "before\nafter\n",
+      "stderr": "/usr/bin/bash: line 1: return: can only `return' from a function or sourced script\n"
+    },
+    {
+      "id": "r1:query-mutually-exclusive-errexit",
+      "code": "set -e; trap : INT; trap -pP INT; echo BAD",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n"
+    },
+    {
+      "id": "r1:query-mutually-exclusive-noargs",
+      "code": "trap -pP; echo status:$?",
+      "status": 0,
+      "stdout": "status:2\n",
+      "stderr": "/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n"
+    },
+    {
+      "id": "r1:query-mutually-exclusive-list",
+      "code": "trap -pPl; echo status:$?",
+      "status": 0,
+      "stdout": "status:2\n",
+      "stderr": "/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n"
+    },
+    {
+      "id": "r1:list-option-priority",
+      "code": "trap -lP; echo status:$?; trap -lp; echo status:$?",
+      "status": 0,
+      "stdout": "status:2\n 1) SIGHUP\t 2) SIGINT\t 3) SIGQUIT\t 4) SIGILL\t 5) SIGTRAP\n 6) SIGABRT\t 7) SIGBUS\t 8) SIGFPE\t 9) SIGKILL\t10) SIGUSR1\n11) SIGSEGV\t12) SIGUSR2\t13) SIGPIPE\t14) SIGALRM\t15) SIGTERM\n16) SIGSTKFLT\t17) SIGCHLD\t18) SIGCONT\t19) SIGSTOP\t20) SIGTSTP\n21) SIGTTIN\t22) SIGTTOU\t23) SIGURG\t24) SIGXCPU\t25) SIGXFSZ\n26) SIGVTALRM\t27) SIGPROF\t28) SIGWINCH\t29) SIGIO\t30) SIGPWR\n31) SIGSYS\t34) SIGRTMIN\t35) SIGRTMIN+1\t36) SIGRTMIN+2\t37) SIGRTMIN+3\n38) SIGRTMIN+4\t39) SIGRTMIN+5\t40) SIGRTMIN+6\t41) SIGRTMIN+7\t42) SIGRTMIN+8\n43) SIGRTMIN+9\t44) SIGRTMIN+10\t45) SIGRTMIN+11\t46) SIGRTMIN+12\t47) SIGRTMIN+13\n48) SIGRTMIN+14\t49) SIGRTMIN+15\t50) SIGRTMAX-14\t51) SIGRTMAX-13\t52) SIGRTMAX-12\n53) SIGRTMAX-11\t54) SIGRTMAX-10\t55) SIGRTMAX-9\t56) SIGRTMAX-8\t57) SIGRTMAX-7\n58) SIGRTMAX-6\t59) SIGRTMAX-5\t60) SIGRTMAX-4\t61) SIGRTMAX-3\t62) SIGRTMAX-2\n63) SIGRTMAX-1\t64) SIGRTMAX\t\nstatus:0\n",
+      "stderr": "/usr/bin/bash: line 1: trap: -P requires at least one signal name\n"
+    },
+    {
+      "id": "r1:trap-handler-nested-function-exit",
+      "code": "trap 'f' EXIT; f() { echo before:$?; exit 6; }; exit 3",
+      "status": 6,
+      "stdout": "before:3\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:trap-handler-nested-function-result",
+      "code": "trap 'f; echo after:$?' EXIT; f() { echo before:$?; return 6; }; exit 3",
+      "status": 3,
+      "stdout": "before:3\nafter:6\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:root-no-trap-errexit",
+      "code": "set -e; false; echo BAD",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "r1:root-no-trap-eval",
+      "code": "eval 'echo okay; exit 5'; echo BAD",
+      "status": 5,
+      "stdout": "okay\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-alias-0",
+      "code": "trap : RTMIN+0; echo status:$?; trap -p 34; trap - 34",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMIN\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-alias-1",
+      "code": "trap : RTMIN+1; echo status:$?; trap -p 35; trap - 35",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMIN+1\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-alias-15",
+      "code": "trap : RTMIN+15; echo status:$?; trap -p 49; trap - 49",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMIN+15\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-alias-16",
+      "code": "trap : RTMIN+16; echo status:$?; trap -p 50; trap - 50",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMAX-14\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-alias-20",
+      "code": "trap : RTMIN+20; echo status:$?; trap -p 54; trap - 54",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMAX-10\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-alias-29",
+      "code": "trap : RTMIN+29; echo status:$?; trap -p 63; trap - 63",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMAX-1\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-alias-30",
+      "code": "trap : RTMIN+30; echo status:$?; trap -p 64; trap - 64",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMAX\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-alias-31",
+      "code": "trap : RTMIN+31; echo status:$?; trap -p 65; trap - 65",
+      "status": 1,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMIN+31: invalid signal specification\n/usr/bin/bash: line 1: trap: 65: invalid signal specification\n/usr/bin/bash: line 1: trap: 65: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmax-alias-0",
+      "code": "trap : RTMAX-0; echo status:$?; trap -p 64; trap - 64",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMAX-0: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmax-alias-1",
+      "code": "trap : RTMAX-1; echo status:$?; trap -p 63; trap - 63",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMAX-1\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmax-alias-14",
+      "code": "trap : RTMAX-14; echo status:$?; trap -p 50; trap - 50",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMAX-14\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmax-alias-15",
+      "code": "trap : RTMAX-15; echo status:$?; trap -p 49; trap - 49",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMAX-15: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmax-alias-16",
+      "code": "trap : RTMAX-16; echo status:$?; trap -p 48; trap - 48",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMAX-16: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmax-alias-20",
+      "code": "trap : RTMAX-20; echo status:$?; trap -p 44; trap - 44",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMAX-20: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmax-alias-29",
+      "code": "trap : RTMAX-29; echo status:$?; trap -p 35; trap - 35",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMAX-29: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmax-alias-30",
+      "code": "trap : RTMAX-30; echo status:$?; trap -p 34; trap - 34",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMAX-30: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmax-alias-31",
+      "code": "trap : RTMAX-31; echo status:$?; trap -p 33; trap - 33",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMAX-31: invalid signal specification\n"
+    },
+    {
+      "id": "r1:numeric-alias-+2",
+      "code": "trap : +2; echo status:$?; trap -p 2; trap - 2",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:numeric-alias-0002",
+      "code": "trap : 0002; echo status:$?; trap -p 2; trap - 2",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:numeric-alias-+02",
+      "code": "trap : +02; echo status:$?; trap -p 2; trap - 2",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:numeric-alias- 2",
+      "code": "trap :  2; echo status:$?; trap -p 2; trap - 2",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:numeric-alias-2 ",
+      "code": "trap : 2 ; echo status:$?; trap -p 2; trap - 2",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:numeric-alias--2",
+      "code": "trap : -2; echo status:$?; trap -p 2; trap - 2",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: -2: invalid signal specification\n"
+    },
+    {
+      "id": "r1:function-inner-exit-redirect",
+      "code": "f() { trap 'echo exit:$?' EXIT; exit 3 >inner; }; f",
+      "status": 3,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "r1:function-inner-brace-redirect",
+      "code": "f() { trap 'echo exit:$?' EXIT; { exit 3; } >inner; }; f",
+      "status": 3,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "r1:function-inner-eval-redirect",
+      "code": "f() { trap 'echo exit:$?' EXIT; eval 'exit 3' >inner; }; f",
+      "status": 3,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "r1:function-definition-redirection",
+      "code": "f() { trap 'echo exit:$?' EXIT; exit 3; } >out; f",
+      "status": 3,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "r1:function-nested-errexit",
+      "code": "v=global; f() { local v=outer; g inner; }; g() { local v=inner; trap 'echo v:$v args:$*' EXIT; false; }; set -e; f outer",
+      "status": 1,
+      "stdout": "v:global args:inner\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:function-errexit-fd",
+      "code": "f() { trap 'echo exit >&3' EXIT; false; }; set -e; f 3>&1",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: 3: Bad file descriptor\n"
+    },
+    {
+      "id": "r1:function-errexit-return",
+      "code": "f() { trap 'echo before; return 7; echo BAD' EXIT; false; }; set -e; f",
+      "status": 7,
+      "stdout": "before\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:explicit-return-after-pipeline",
+      "code": "f() { false | true; exit 3; }; trap 'echo s:$? p:${PIPESTATUS[*]}' EXIT; f",
+      "status": 3,
+      "stdout": "s:3 p:1 0\n",
+      "stderr": ""
     }
   ]
 }
