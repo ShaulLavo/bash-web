@@ -1,4 +1,5 @@
 //! Bash builtins. External commands are installed by the embedding runtime.
+mod declarations;
 mod directories;
 mod getopts;
 mod printf;
@@ -672,6 +673,7 @@ async fn declarations(
     work: &mut Work,
 ) -> Result<Outcome, i32> {
     let mut args = args.into_iter().peekable();
+    let mut print = false;
     let mut nameref = false;
     let mut readonly = false;
     let mut exported = false;
@@ -688,6 +690,7 @@ async fn declarations(
                     .await
                     .map_err(error_status)?;
                 match flag {
+                    b'p' if matches!(name, "declare" | "typeset") => print = true,
                     b'n' => nameref = true,
                     b'r' => readonly = true,
                     b'x' => exported = true,
@@ -695,6 +698,9 @@ async fn declarations(
                 }
             }
         }
+    }
+    if print {
+        return declarations::print(name, args, state, fds, context, work).await;
     }
     if nameref && (readonly || exported) {
         return Err(2);
@@ -850,7 +856,7 @@ fn apply_declaration(
 
 /// `unset [-f] [-v] [-n] [--] name...`. Bash 5.3 ignores names that are not
 /// identifiers. Without `-v` a name with no variable unsets a function.
-/// `-n` (namerefs) is not implemented and fails closed.
+/// `-n` removes the reference itself without following its target.
 async fn unset(
     args: Vec<String>,
     state: &SharedState,
@@ -860,6 +866,7 @@ async fn unset(
 ) -> Result<Outcome, i32> {
     let mut functions = false;
     let mut variables = false;
+    let mut namerefs = false;
     let mut names = args.iter().peekable();
     while let Some(option) = names.next_if(|arg| arg.starts_with('-') && arg.len() > 1) {
         if option == "--" {
@@ -869,7 +876,7 @@ async fn unset(
             match flag {
                 'f' => functions = true,
                 'v' => variables = true,
-                'n' => return Err(2),
+                'n' => namerefs = true,
                 _ => {
                     let diagnostic = format!(
                         "/usr/bin/bash: unset: -{flag}: invalid option\nunset: usage: unset [-f] [-v] [-n] [name ...]\n"
@@ -900,21 +907,12 @@ async fn unset(
             state.borrow_mut().unset_function(name);
             continue;
         }
-        State::admit_scalar_access(state, name, &context.cancel, work)
-            .await
-            .map_err(error_status)?;
-        let target_bytes = {
-            let state = state.borrow();
-            state
-                .namerefs()
-                .contains_key(name)
-                .then(|| state.scalar_target(name))
-                .transpose()?
-                .flatten()
-                .map_or(0, str::len)
+        let removed = if namerefs {
+            state.borrow_mut().unset_nameref(name)
+        } else {
+            admit_unset_target(name, state, context, work).await?;
+            state.borrow_mut().unset_variable(name)
         };
-        work.admit_storage(target_bytes).map_err(error_status)?;
-        let removed = state.borrow_mut().unset_variable(name);
         match removed {
             Err(_) => {
                 let diagnostic =
@@ -922,13 +920,35 @@ async fn unset(
                 diagnose(fds, &diagnostic, context).await?;
                 code = 1;
             }
-            Ok(false) if !variables => {
+            Ok(false) if !variables && !namerefs => {
                 state.borrow_mut().unset_function(name);
             }
             Ok(_) => {}
         }
     }
     Ok(Outcome::status(code))
+}
+
+async fn admit_unset_target(
+    name: &str,
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    State::admit_scalar_access(state, name, &context.cancel, work)
+        .await
+        .map_err(error_status)?;
+    let target_bytes = {
+        let state = state.borrow();
+        state
+            .namerefs()
+            .contains_key(name)
+            .then(|| state.scalar_target(name))
+            .transpose()?
+            .flatten()
+            .map_or(0, str::len)
+    };
+    work.admit_storage(target_bytes).map_err(error_status)
 }
 
 async fn diagnose(fds: &FdTable, diagnostic: &str, context: &Context) -> Result<(), i32> {

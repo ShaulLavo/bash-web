@@ -12,6 +12,8 @@ use std::{
     rc::{Rc, Weak},
 };
 
+mod declarations;
+pub(crate) use declarations::DeclarationView;
 mod binding;
 pub use binding::Binding;
 use binding::BindingUndo;
@@ -1132,6 +1134,17 @@ impl State {
             self.refresh_star_separator();
         }
         Ok(removed)
+    }
+    pub(crate) fn unset_nameref(&mut self, name: &str) -> Result<bool, i32> {
+        if self.is_readonly(name) {
+            return Err(1);
+        }
+        if !self.namerefs.contains_key(name) {
+            return Ok(false);
+        }
+        self.namerefs.remove(name);
+        self.unset_binding(name)?;
+        Ok(true)
     }
     fn unset_binding(&mut self, name: &str) -> Result<bool, i32> {
         if self.is_readonly(name) {
