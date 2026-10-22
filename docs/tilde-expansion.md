@@ -27,9 +27,9 @@ directory-stack forms, lazy parameter operands, arrays and non-UTF-8 fields are
 not implemented here.
 
 `node --test scripts/test-own-shell-tilde.ts` runs the production guest on real
-Waffle against recorded GNU Bash `5.3.15(1)-release` controls. The final two cases
-name the unset-HOME/account and parameter-operand boundaries instead of claiming
-Bash matches. CI never invokes live Bash as this test's oracle. To explicitly
+Waffle against recorded GNU Bash `5.3.15(1)-release` controls. The final three cases
+name the unset-HOME/account, parameter-operand and append-assignment (`+=`)
+boundaries instead of claiming Bash matches. CI never invokes live Bash as this test's oracle. To explicitly
 refresh the recording on the pinned local Bash:
 
 ```sh
