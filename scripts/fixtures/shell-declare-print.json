@@ -1,0 +1,294 @@
+{
+  "schema": 1,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "environment": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "PWD": "/tmp/spec",
+    "SH": "bash",
+    "LC_ALL": "C.UTF-8"
+  },
+  "cases": [
+    {
+      "name": "scalars",
+      "code": "a=hello; b=; declare -p a b; typeset -p a",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSBhPSJoZWxsbyIKZGVjbGFyZSAtLSBiPSIiCmRlY2xhcmUgLS0gYT0iaGVsbG8iCg==",
+      "stderr": ""
+    },
+    {
+      "name": "attributes",
+      "code": "x=value; export x; readonly x; declare -p x; declare -prx x; declare -p x; echo \"$x\"",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtcnggeD0idmFsdWUiCmRlY2xhcmUgLXJ4IHg9InZhbHVlIgpkZWNsYXJlIC1yeCB4PSJ2YWx1ZSIKdmFsdWUK",
+      "stderr": ""
+    },
+    {
+      "name": "raw references",
+      "code": "v=value; declare -n b=v; declare -n a=b; declare -p a b v",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtbiBhPSJiIgpkZWNsYXJlIC1uIGI9InYiCmRlY2xhcmUgLS0gdj0idmFsdWUiCg==",
+      "stderr": ""
+    },
+    {
+      "name": "cycles",
+      "code": "declare -n a=b; declare -n b=a; declare -p a b",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtbiBhPSJiIgpkZWNsYXJlIC1uIGI9ImEiCg==",
+      "stderr": ""
+    },
+    {
+      "name": "missing target",
+      "code": "declare -n a=absent; declare -p a; declare -p absent",
+      "status": 1,
+      "stdout": "ZGVjbGFyZSAtbiBhPSJhYnNlbnQiCg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBhYnNlbnQ6IG5vdCBmb3VuZAo="
+    },
+    {
+      "name": "operand continuation",
+      "code": "a=one; b=two; declare -p missing a absent b; echo status:$?; declare -p missing",
+      "status": 1,
+      "stdout": "ZGVjbGFyZSAtLSBhPSJvbmUiCmRlY2xhcmUgLS0gYj0idHdvIgpzdGF0dXM6MQo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBtaXNzaW5nOiBub3QgZm91bmQKL3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBhYnNlbnQ6IG5vdCBmb3VuZAovdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IGRlY2xhcmU6IG1pc3Npbmc6IG5vdCBmb3VuZAo="
+    },
+    {
+      "name": "typeset continuation",
+      "code": "a=one; typeset -p missing a; echo status:$?",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSBhPSJvbmUiCnN0YXR1czoxCg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB0eXBlc2V0OiBtaXNzaW5nOiBub3QgZm91bmQK"
+    },
+    {
+      "name": "function is not variable",
+      "code": "f(){ :; }; declare -p f",
+      "status": 1,
+      "stdout": "",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBmOiBub3QgZm91bmQK"
+    },
+    {
+      "name": "never localizes",
+      "code": "x=global; f(){ declare -p x; x=changed; }; f; declare -p x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB4PSJnbG9iYWwiCmRlY2xhcmUgLS0geD0iY2hhbmdlZCIK",
+      "stderr": ""
+    },
+    {
+      "name": "local unset empty",
+      "code": "f(){ local unset empty=; declare -p unset empty; }; f",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB1bnNldApkZWNsYXJlIC0tIGVtcHR5PSIiCg==",
+      "stderr": ""
+    },
+    {
+      "name": "local readonly scope",
+      "code": "x=global; f(){ local x=inner; readonly x; declare -p x; g(){ local x=deep; declare -p x; }; g; declare -p x; }; f; declare -p x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtciB4PSJpbm5lciIKZGVjbGFyZSAtLSB4PSJkZWVwIgpkZWNsYXJlIC1yIHg9ImlubmVyIgpkZWNsYXJlIC0tIHg9Imdsb2JhbCIK",
+      "stderr": ""
+    },
+    {
+      "name": "nested local unset metadata",
+      "code": "f(){ local -rx u; g(){ declare -p u; }; g; }; f; declare -p u",
+      "status": 1,
+      "stdout": "ZGVjbGFyZSAtcnggdQo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiB1OiBub3QgZm91bmQK"
+    },
+    {
+      "name": "unset reference target metadata",
+      "code": "f(){ local -r target; declare -n ref=target; declare -p ref target; }; f",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtbiByZWY9InRhcmdldCIKZGVjbGFyZSAtciB0YXJnZXQK",
+      "stderr": ""
+    },
+    {
+      "name": "local export scope",
+      "code": "x=outer; export x; f(){ local x=inner; declare -p x; }; f; declare -p x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAteCB4PSJpbm5lciIKZGVjbGFyZSAteCB4PSJvdXRlciIK",
+      "stderr": ""
+    },
+    {
+      "name": "unset attributes",
+      "code": "export x; readonly y; declare -p x y",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAteCB4CmRlY2xhcmUgLXIgeQo=",
+      "stderr": ""
+    },
+    {
+      "name": "reference attribute",
+      "code": "x=value; declare -n r=x; readonly r; declare -p r x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtbiByPSJ4IgpkZWNsYXJlIC1yIHg9InZhbHVlIgo=",
+      "stderr": ""
+    },
+    {
+      "name": "quoted syntax",
+      "code": "v=' \"`$\\!#*?;[]~'; declare -p v",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB2PSIgXCJcYFwkXFwhIyo/O1tdfiIK",
+      "stderr": ""
+    },
+    {
+      "name": "ansi controls",
+      "code": "v=$'a\\n\\t\\a\\b\\e\\f\\r\\v\\001\\177\"\\047$`\\\\'; declare -p v",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB2PSQnYVxuXHRcYVxiXEVcZlxyXHZcMDAxXDE3NyJcJyRgXFwnCg==",
+      "stderr": ""
+    },
+    {
+      "name": "utf8",
+      "code": "v=\"é中🙂\"; declare -p v",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB2PSLDqeS4rfCfmYIiCg==",
+      "stderr": ""
+    },
+    {
+      "name": "C byte escapes",
+      "code": "LC_ALL=C; v=\"é中🙂\"; declare -p v",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB2PSQnXDMwM1wyNTFcMzQ0XDI3MFwyNTVcMzYwXDIzN1wyMzFcMjAyJwo=",
+      "stderr": ""
+    },
+    {
+      "name": "utf8 controls",
+      "code": "v=$'é\\n中\\u0085\\u2028🙂'; declare -p v",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB2PSQnw6lcbuS4rVwzMDJcMjA1XDM0MlwyMDBcMjUw8J+ZgicK",
+      "stderr": ""
+    },
+    {
+      "name": "closed stdout",
+      "code": "v=kept; declare -p v 1>&-; echo status:$?; echo \"$v\"",
+      "status": 0,
+      "stdout": "c3RhdHVzOjEKa2VwdAo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiB3cml0ZSBlcnJvcjogQmFkIGZpbGUgZGVzY3JpcHRvcgo="
+    },
+    {
+      "name": "closed stderr",
+      "code": "v=kept; declare -p absent v 2>&-; echo status:$?",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB2PSJrZXB0IgpzdGF0dXM6MQo=",
+      "stderr": ""
+    },
+    {
+      "name": "duplicate names",
+      "code": "x=value; declare -pp -- x x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB4PSJ2YWx1ZSIKZGVjbGFyZSAtLSB4PSJ2YWx1ZSIK",
+      "stderr": ""
+    },
+    {
+      "name": "assignment operand",
+      "code": "x=old; declare -p x=new; echo \"$?:$x\"",
+      "status": 0,
+      "stdout": "MTpvbGQK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiB4PW5ldzogbm90IGZvdW5kCg=="
+    },
+    {
+      "name": "unset reference recreation",
+      "code": "target=\"hello\"\ndeclare -n ref=target\necho \"before: $ref\"\nunset -n ref\necho \"after unset -n:\"\ndeclare -p ref 2>/dev/null || echo \"ref gone\"\ndeclare -n ref=target\necho \"recreated: $ref\"\n",
+      "status": 0,
+      "stdout": "YmVmb3JlOiBoZWxsbwphZnRlciB1bnNldCAtbjoKcmVmIGdvbmUKcmVjcmVhdGVkOiBoZWxsbwo=",
+      "stderr": ""
+    },
+    {
+      "name": "unset reference chain",
+      "code": "v=ok; declare -n a=v; declare -n b=a; unset -n b; declare -p a v; declare -p b 2>/dev/null; echo \"missing:$?\"",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtbiBhPSJ2IgpkZWNsYXJlIC0tIHY9Im9rIgptaXNzaW5nOjEK",
+      "stderr": ""
+    },
+    {
+      "name": "unset reference cycle",
+      "code": "declare -n a=b; declare -n b=a; unset -n a; declare -p a 2>/dev/null; echo \"missing:$?\"; declare -p b",
+      "status": 0,
+      "stdout": "bWlzc2luZzoxCmRlY2xhcmUgLW4gYj0iYSIK",
+      "stderr": ""
+    },
+    {
+      "name": "unset reference keeps ordinary names",
+      "code": "v=ok; f(){ echo function; }; unset -n v f absent; declare -p v; f; echo \"status:$?\"",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB2PSJvayIKZnVuY3Rpb24Kc3RhdHVzOjAK",
+      "stderr": ""
+    },
+    {
+      "name": "unset reference readonly target",
+      "code": "readonly t=ok; declare -n r=t; unset -n r; echo \"status:$?\"; declare -p r 2>/dev/null; echo \"missing:$?\"; declare -p t",
+      "status": 0,
+      "stdout": "c3RhdHVzOjAKbWlzc2luZzoxCmRlY2xhcmUgLXIgdD0ib2siCg==",
+      "stderr": ""
+    },
+    {
+      "name": "unset current local reference",
+      "code": "r=global; t=target; f(){ local -n r=t; unset -n r; declare -p r; }; f; declare -p r t",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSByCmRlY2xhcmUgLS0gcj0iZ2xvYmFsIgpkZWNsYXJlIC0tIHQ9InRhcmdldCIK",
+      "stderr": ""
+    },
+    {
+      "name": "unset caller local reference",
+      "code": "r=global; t=target; f(){ local -n r=t; g(){ unset -n r; declare -p r; }; g; declare -p r; }; f; declare -p r t",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSByPSJnbG9iYWwiCmRlY2xhcmUgLS0gcj0iZ2xvYmFsIgpkZWNsYXJlIC0tIHI9Imdsb2JhbCIKZGVjbGFyZSAtLSB0PSJ0YXJnZXQiCg==",
+      "stderr": ""
+    },
+    {
+      "name": "unset reference function option",
+      "code": "f(){ echo old; }; declare -n f=target; target=kept; unset -nf f; declare -p f target; f 2>/dev/null; echo \"function:$?\"",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtbiBmPSJ0YXJnZXQiCmRlY2xhcmUgLS0gdGFyZ2V0PSJrZXB0IgpmdW5jdGlvbjoxMjcK",
+      "stderr": ""
+    },
+    {
+      "name": "unset reference variable option",
+      "code": "v=ok; declare -n r=v; unset -nv r; declare -p v; declare -p r 2>/dev/null; echo \"missing:$?\"",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB2PSJvayIKbWlzc2luZzoxCg==",
+      "stderr": ""
+    },
+    {
+      "name": "unset IFS reference",
+      "code": "sep=:; declare -n IFS=sep; unset -n IFS; value=\"a b\"; printf \"<%s>\\n\" $value; declare -p sep; declare -p IFS 2>/dev/null; echo \"missing:$?\"",
+      "status": 0,
+      "stdout": "PGE+CjxiPgpkZWNsYXJlIC0tIHNlcD0iOiIKbWlzc2luZzoxCg==",
+      "stderr": ""
+    },
+    {
+      "name": "unset-n readonly scalar",
+      "code": "readonly v=ok; unset -n v; echo \"status:$?\"; declare -p v",
+      "status": 0,
+      "stdout": "c3RhdHVzOjEKZGVjbGFyZSAtciB2PSJvayIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB1bnNldDogdjogY2Fubm90IHVuc2V0OiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "name": "unset-n readonly unset scalar",
+      "code": "readonly v; unset -n v; echo \"status:$?\"; declare -p v",
+      "status": 0,
+      "stdout": "c3RhdHVzOjEKZGVjbGFyZSAtciB2Cg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB1bnNldDogdjogY2Fubm90IHVuc2V0OiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "name": "unset-n readonly current local",
+      "code": "f(){ local v=1; readonly v; unset -n v; echo \"current:$?\"; declare -p v; }; f",
+      "status": 0,
+      "stdout": "Y3VycmVudDoxCmRlY2xhcmUgLXIgdj0iMSIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB1bnNldDogdjogY2Fubm90IHVuc2V0OiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "name": "unset-n readonly caller local",
+      "code": "f(){ local w=1; readonly w; g(){ unset -n w; echo \"caller:$?\"; }; g; declare -p w; }; f",
+      "status": 0,
+      "stdout": "Y2FsbGVyOjEKZGVjbGFyZSAtciB3PSIxIgo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB1bnNldDogdzogY2Fubm90IHVuc2V0OiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "name": "unset-n mixed readonly operands",
+      "code": "readonly v=1; declare -n r=v; unset -n r v; echo \"status:$?\"; declare -p r 2>/dev/null; echo \"missing:$?\"; declare -p v",
+      "status": 0,
+      "stdout": "c3RhdHVzOjEKbWlzc2luZzoxCmRlY2xhcmUgLXIgdj0iMSIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB1bnNldDogdjogY2Fubm90IHVuc2V0OiByZWFkb25seSB2YXJpYWJsZQo="
+    }
+  ]
+}

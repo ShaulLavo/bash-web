@@ -2650,3 +2650,31 @@ All three follow-ups come from the narrow review's 152 observations: 146 exact
 Bash matches, three declared boundary matches and these three differences.
 The append boundary was still declared at that reviewed pin; PR41 integration
 now compares it directly with its unchanged genuine Bash recording.
+
+### Approved: special-variable unset follow-ups from declaration review
+
+Owner: VARIABLES, after the bounded declaration-printing landing. Source
+`71eebbd4ff480aeffb68ec4df502d3613f49f3e4`; independent review
+`/work/reports/wave-20261022/shell/review55-opus-r1.md` contains Bash 5.3.15
+observations. These are not claimed frozen-score gains or losses.
+
+- Effective IFS cache: `sep=:; declare -n mid=sep; declare -n IFS=mid;
+  v="a:b c"; printf "<%s>" $v; echo; unset -n mid; printf "<%s>" $v; echo`
+  prints `<a><b c>` twice in Bash, but the second expansion is `<a:b c>`
+  in this engine. Ordinary `unset mid` has the same older mismatch.
+  Diagnose live chain lookup versus Bash's cached effective IFS, preserving
+  the separately planned effective-IFS provenance contract. Direct
+  `unset -n IFS` already matches Bash.
+- OPTIND operand hooks: `set -- -ab; getopts ab o; echo "$o $OPTIND";
+  unset -n OPTIND; getopts ab o; echo "$o $OPTIND"` prints `a 1` twice
+  in Bash, but `a 1` then `b 2` here. The direct non-nameref no-op bypasses
+  `unset_binding`'s hook. Preserve ordinary variable values while applying
+  verified operand-specific hooks. No frozen unset-n case covers this.
+- Ordinary readonly-target diagnostic: `readonly t=x; declare -n r=t;
+  unset r` names `r` here, but Bash names `t`. The pre-existing builtin
+  diagnostic uses the operand instead of its resolved target. Cover both
+  ordinary and reference-only modes with recorded Bash observations.
+
+Reproduce through production Waffle before repair. Keep recorded fixtures,
+local/prefix restoration and cancellation/storage controls; do not invent
+special-variable values or widen the current declaration PR's semantics.
