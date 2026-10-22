@@ -2258,45 +2258,44 @@ See [descriptor contracts and consumer audit](../docs/descriptor-reopening.md).
 
 ### Adoption measurement and landing gate
 
-The integrated production source `6d8fd8bea2321ad3072d7e618e237b48536fbd0c`
-normally merges main `f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb`, including getopts.
+Status: Approved, final integrated replay qualified on 2026-10-22. Parent owns
+hosted CI and landing; this is not merged completion. Root's explicit
+CONTROL48-then49 grant supersedes all older PR50 holds.
+
+Measured production source `d7009e1afbdc06cd29ebb52dc78c97a2326154e3` normally
+merges exact main `4bf6a474ef6bb32dd5de44c1b6d30a300a079d93`, including PR41.
+No Rust semantic conflict required manual resolution. Patch versions, the exact
+combined scoreboard recipe, derived layer receipt and plan text were resolved;
+parent independently accepted the integration delta.
+
 Both ordinary redirects and `interpreter/file_substitution.rs` use the same
 logical-to-physical helper. Independent R2 review found one omitted consumer:
 grep operands opened directly against the utility's physical WASI table.
-`printf 'secret-stdin\n' | grep secret /dev/fd/4` printed the private stdin data
+`printf 'secret-stdin\n' | grep secret /dev/fd/4` printed private stdin data
 and returned 0, while Bash 5.3.15 returned 2 without stdout. Grep now uses the
 existing typed opener and returns 2 without leaking data. Its operand error,
 quiet-success and cancellation policies remain intact. No generic API changed.
+R3 independently approved that repair at `e9740d8`; adoption code is unchanged.
 
-The full production-Waffle replay preserves all 9,221 records and every outcome
-against immutable integrated main. Oils/Brush/Bashkit stay 1051/1057/1443;
-gained=[], lost=[] and newlyFailing=[] in every corpus. The baseline and its
-historical failure payloads are unchanged. The oracle includes 16 descriptor-path
-cases, with 10 passes preserved, four frozen skips and two unrelated failures.
-See the [measurement receipt](../docs/evidence/waffle-descriptor-reopening.json).
+The final production-Waffle replay preserves all 9,221 records and every outcome
+against immutable integrated main. Oils/Brush/Bashkit stay 1154/1120/1554;
+gained=[], lost=[] and newlyFailing=[] in every corpus. Official validation and
+membership comparison pass. Baseline bytes and historical failure payloads are
+unchanged. The oracle includes 16 descriptor-path cases, with 10 passes preserved,
+four frozen skips and two unrelated failures. See the
+[measurement receipt](../docs/evidence/waffle-descriptor-reopening.json).
 
-Native/WASI suites pass 1,342/1,322 tests, production controls pass 154, the exact
-scoreboard recipe passes 573, and runtime controls pass 145. Chromium/Firefox pass
-234 browser cases with 16 existing skips. Foreign format errors survive Restart
-without wiping the sentinel; SAFE never falls back. Both ordinary redirects and
-the file-substitution shortcut pass host-fd translation controls after integration.
-The eight short/large here-input observations above are reverified unchanged.
-
-Status: Approved, implementation integration-ready, with final acceptance pending
-wrapper PR50/main integration. Root issued a new hold at
-2026-10-21T21:51:10.286107Z, with a two-hour ceiling of
-2026-10-21T23:51:10.286107Z. PR50 remains open at this checkpoint. Main is now
-`016b8be51f9be63543208ec009483b7bf0b99186`, with totals 1058/1062/1449. The
-completed PR47-integrated replay above is diagnostic/supporting evidence, not a
-claim of acceptance against that newer main.
-
-After PR50 lands, normally merge main, rerun relevant source/build gates and
-recompute all frozen memberships against immutable integrated main before final
-review-ready status. Do not hand-pick baseline hunks or dispatch the final replay
-before that integration. Parent alone owns exact-head independent review, hosted
-CI and merge. The Approved local-buffer follow-up above remains required before
-claiming full alias removal. This receipt claims neither that parity nor merged
-status.
+Native/WASI suites pass 1,438/1,418 tests, production controls pass 154, the exact
+combined scoreboard recipe passes 710, CI tests pass 105 and runtime controls
+pass 145. Chromium/Firefox pass 234 browser cases with 16 unchanged skips.
+Foreign-format errors survive Restart without wiping the sentinel; SAFE never
+falls back. Both ordinary redirects and the file-substitution shortcut pass
+host-fd translation controls. All eight short/large here-input observations are
+unchanged. Rust, JS quality, typecheck, capability, guest and layer gates pass,
+with zero violations and 42 production/30 test-only edges. Only documentation and
+evidence change after the measured source. The Approved local-buffer follow-up
+above remains required before full alias removal. No new runtime/export contract
+was added, and no skipped case is counted as a gain.
 
 ## Scalar parameter transformations, 2026-10-21
 

@@ -1,8 +1,8 @@
 {
-  "status": "integration-ready; final PR50/main integration and full frozen recomputation pending",
+  "status": "review-ready local qualification; parent hosted CI and landing pending",
   "date": "2026-10-22",
-  "measuredHead": "6d8fd8bea2321ad3072d7e618e237b48536fbd0c",
-  "integratedMain": "f3dbd5e13e9d4875c5efd79db98aeabc7c8838fb",
+  "measuredHead": "d7009e1afbdc06cd29ebb52dc78c97a2326154e3",
+  "integratedMain": "4bf6a474ef6bb32dd5de44c1b6d30a300a079d93",
   "waffle": "c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289",
   "node": "26.7.0",
   "jobs": 1,
@@ -19,22 +19,22 @@
     "ok": true,
     "corpora": {
       "oils": {
-        "before": 1051,
-        "after": 1051,
+        "before": 1154,
+        "after": 1154,
         "gained": [],
         "lost": [],
         "newlyFailing": []
       },
       "brush-suite": {
-        "before": 1057,
-        "after": 1057,
+        "before": 1120,
+        "after": 1120,
         "gained": [],
         "lost": [],
         "newlyFailing": []
       },
       "bashkit-suite": {
-        "before": 1443,
-        "after": 1443,
+        "before": 1554,
+        "after": 1554,
         "gained": [],
         "lost": [],
         "newlyFailing": []
@@ -45,58 +45,54 @@
   "counts": {
     "oils": {
       "total": 2492,
-      "passed": 1051,
+      "passed": 1154,
       "skipped": 810
     },
     "brush-suite": {
       "total": 2894,
-      "passed": 1057,
+      "passed": 1120,
       "skipped": 1006
     },
     "bashkit-suite": {
       "total": 3835,
-      "passed": 1443,
+      "passed": 1554,
       "skipped": 1613
     }
   },
   "artifact": {
-    "path": "/work/reports/bash-web/hill-climb/control/waffle-reopen/integration/frozen.json",
-    "sha256": "84156f07ffed46b984b5b8ceb84d5d620cd71b42ef0286220e41b3eae1d8f283"
+    "path": "/work/reports/bash-web/hill-climb/control/waffle-reopen/final-slot/frozen.json",
+    "sha256": "2bc477a122fec8fd3430e885f5454feca35c07075c1150e6c46f56527315bf43"
   },
   "baselineChanged": false,
   "verification": {
     "productionControls": 154,
-    "nativeTests": 1342,
-    "wasiTests": 1322,
-    "scoreboardTests": 573,
+    "nativeTests": 1438,
+    "wasiTests": 1418,
     "ciTests": 105,
+    "productionLayerEdges": 42,
+    "testLayerEdges": 30,
+    "productionLayerViolations": 0,
+    "testLayerViolations": 0,
+    "shellRuntimeSha256": "b992c73e194049505cace932e3b36b69a0d860f69c22bd9a977444bebda693a3",
+    "grepSha256": "9c9969d364703edaf02e7de866649b3da5df8c061cb0d60b8c6503a77f54d248",
+    "scoreboardTests": 710,
     "guestBuildTests": 18,
     "runtimeTests": 145,
     "browserPassed": 234,
     "browserSkipped": 16,
     "layerTests": 34,
-    "productionLayerEdges": 42,
-    "testLayerEdges": 28,
-    "productionLayerViolations": 0,
-    "testLayerViolations": 0,
-    "browserReceipt": "/work/reports/machine-fleet/remote-gate/waffle-reopen-r2-browser-20261021T214004Z-l9ablpem",
-    "browserTeardown": "ok",
-    "shellRuntimeSha256": "e4e9d2b070b98736ec5f3d8cdf8d5d358c038255bc9011c072d5ac2e3ed73aa4",
-    "grepSha256": "d2eb8e8d385e00bf4a8f326e9e0876e68009d617c1130a3fb308c8934aa91196"
+    "browserReceipt": "/work/reports/bash-web/hill-climb/control/waffle-reopen/final-slot/post-replay-gates.log",
+    "bufferControls": 8,
+    "bufferReceipt": "/work/reports/bash-web/hill-climb/control/waffle-reopen/final-slot/buffer-controls.json",
+    "rustChecks": "fmt, native/WASI clippy, machete and guest size checks passed",
+    "jsChecks": "builds, quality, typechecks, capability and layer checks passed",
+    "browserTeardown": "actual PC checked: no owned consumers, port4493 absent; browser report/results removed",
+    "cleanupReceipt": "/work/reports/bash-web/hill-climb/control/waffle-reopen/final-slot/cleanup.json"
   },
-  "measurementPurpose": "PR47 diagnostic/supporting evidence; not final-current-main acceptance",
+  "measurementPurpose": "final current-main production-Waffle adoption qualification; no scored gain",
   "landing": {
-    "hold": "active",
-    "requiredDependency": "PR50",
-    "dependencyStateAtCheckpoint": "OPEN",
-    "receivedAt": "2026-10-21T21:51:10.286107Z",
-    "expiresAt": "2026-10-21T23:51:10.286107Z",
-    "knownMain": "016b8be51f9be63543208ec009483b7bf0b99186",
-    "knownMainCounts": {
-      "oils": 1058,
-      "brush-suite": 1062,
-      "bashkit-suite": 1449
-    },
-    "remaining": "Normally merge main after PR50; rebuild/check integrated source and recompute full frozen membership before final review-ready status. Parent owns review, CI and merge."
+    "hold": "superseded by explicit root CONTROL48-then49 slot",
+    "integrationDelta": "parent accepted at d7009e1; no manual production conflict resolution",
+    "remaining": "Normal push of docs-only evidence head; parent owns hosted CI and landing."
   }
 }
