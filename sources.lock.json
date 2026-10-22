@@ -1845,5 +1845,28 @@
       "non-ASCII option bytes, which cannot be represented individually by the existing UTF-8 scalar binding storage",
       "byte-identical GNU Bash --help prose"
     ]
+  },
+  "shellTypedOutput": {
+    "classification": "Original local typed printf/echo output adapter and TypeScript production controls. GNU Bash 5.3.15 is a behavior oracle; no upstream implementation copied or adapted.",
+    "baseRevision": "77b3963d904599932c2cd59fe46409f0ab7a6c9a",
+    "implementationDestinations": [
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/printf.rs",
+      "shell/engine/src/builtins/printf/fields.rs",
+      "shell/engine/src/builtins/printf/quoting.rs"
+    ],
+    "contract": "Printer preserves IoError separately from ordinary statuses; only typed BrokenPipe becomes existing Abort141 at the Echo/Printf dispatch boundary. All other builtin contracts, numeric statuses, formatting and diagnostic suppression/order remain unchanged.",
+    "testDestinations": [
+      "scripts/test-own-shell-pipeline-broken-pipe.ts",
+      "scripts/repro-pipeline-broken-pipe.ts",
+      "scripts/fixtures/shell-pipeline-broken-pipe.json",
+      "scripts/fixtures/shell-pipeline-broken-pipe-pending.json"
+    ],
+    "documentation": "docs/pipeline-broken-pipe.md",
+    "excluded": [
+      "Other builtin-output boundaries, generic interpreter/pipeline/session/runtime/state and PIPESTATUS changes",
+      "PIPE trap/disposition behavior",
+      "Existing closed-descriptor diagnostic and Bash diagnostic line-prefix mismatches retained as strict pending reproductions"
+    ]
   }
 }

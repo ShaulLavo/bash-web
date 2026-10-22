@@ -8,7 +8,7 @@ use crate::{
     executor::Budget,
     expand::{Error, Work},
     interpreter::{Context, Flow, JobSelector, Outcome},
-    io::{Endpoint, FdTable},
+    io::{Endpoint, FdTable, IoError},
     state::{SharedState, State, absolute},
 };
 use shell_parser::parser::{Word, WordPart};
@@ -83,6 +83,17 @@ async fn write(fds: &FdTable, bytes: &[u8], context: &Context) -> Result<(), i32
         .await
         .map_err(|e| e.status())
 }
+fn output_outcome(result: Result<(), printf::PrintFailure>) -> Result<Outcome, i32> {
+    match result {
+        Ok(()) => Ok(Outcome::status(0)),
+        Err(printf::PrintFailure::Io(IoError::BrokenPipe)) => Ok(Outcome {
+            code: 141,
+            flow: Flow::Abort,
+        }),
+        Err(printf::PrintFailure::Io(error)) => Err(error.status()),
+        Err(printf::PrintFailure::Status(code)) => Err(code),
+    }
+}
 pub(crate) async fn run(
     builtin: Builtin,
     name: &str,
@@ -141,8 +152,12 @@ pub(crate) async fn run(
                 },
             });
         }
-        Builtin::Echo => printf::echo(&args, &state, &fds, &context, work).await?,
-        Builtin::Printf => printf::run(&args, &state, &fds, &context, work).await?,
+        Builtin::Echo => {
+            return output_outcome(printf::echo(&args, &state, &fds, &context, work).await);
+        }
+        Builtin::Printf => {
+            return output_outcome(printf::run(&args, &state, &fds, &context, work).await);
+        }
         Builtin::Read => return read::run(&args, &state, &fds, &context, work).await,
         Builtin::Declaration => {
             return declarations(name, args, &state, &fds, &context, work).await;
