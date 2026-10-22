@@ -20,6 +20,7 @@ pub(crate) struct Traps {
     bindings: [Option<Binding>; SLOTS],
     inherited: bool,
     exit_inherited: bool,
+    implicit_ignores: [bool; 2],
 }
 impl Default for Traps {
     fn default() -> Self {
@@ -27,6 +28,7 @@ impl Default for Traps {
             bindings: std::array::from_fn(|_| None),
             inherited: false,
             exit_inherited: false,
+            implicit_ignores: [false; 2],
         }
     }
 }
@@ -35,6 +37,7 @@ impl Traps {
         let mut traps = self.clone();
         traps.inherited = true;
         traps.exit_inherited = traps.bindings[0].is_some();
+        traps.implicit_ignores = [false; 2];
         traps
     }
     pub(crate) fn get(&self, signal: usize) -> Option<&Binding> {
@@ -48,6 +51,13 @@ impl Traps {
     }
     pub(crate) fn set(&mut self, signal: usize, binding: Option<Binding>) {
         self.prepare_mutation();
+        if matches!(signal, 2 | 3) {
+            let implicit = &mut self.implicit_ignores[signal - 2];
+            if *implicit && matches!(binding, Some(Binding::Ignored)) {
+                return;
+            }
+            *implicit = false;
+        }
         self.exit_inherited &= signal != 0;
         self.bindings[signal] = binding;
     }
@@ -67,6 +77,13 @@ impl Traps {
         }
         if !traps.exit_inherited {
             traps.bindings[0] = None;
+        }
+        if !self.inherited {
+            // Implicit INT/QUIT ignores do not create query-visible trap bindings.
+            traps.implicit_ignores = [
+                !matches!(traps.bindings[2], Some(Binding::Ignored)),
+                !matches!(traps.bindings[3], Some(Binding::Ignored)),
+            ];
         }
         traps
     }
@@ -169,6 +186,54 @@ mod tests {
         child.set(0, Some(Binding::Ignored));
         assert!(child.process_substitution().get(0).is_none());
         assert!(matches!(parent.get(0), Some(Binding::Ignored)));
+    }
+    #[test]
+    fn implicit_process_ignores_stay_hidden_until_reset_or_handler_assignment() {
+        for signal in [2, 3] {
+            let mut child = Traps::default().process_substitution();
+            child.set(signal, Some(Binding::Ignored));
+            child.set(signal, Some(Binding::Ignored));
+            assert!(child.get(signal).is_none());
+            child.set(signal, None);
+            child.set(signal, Some(Binding::Ignored));
+            assert!(matches!(child.get(signal), Some(Binding::Ignored)));
+            let mut child = Traps::default().process_substitution();
+            child.set(
+                signal,
+                Some(Binding::Handler(Rc::new(Action {
+                    text: ":".into(),
+                    _storage: None,
+                }))),
+            );
+            child.set(signal, Some(Binding::Ignored));
+            assert!(matches!(child.get(signal), Some(Binding::Ignored)));
+        }
+    }
+    #[test]
+    fn explicit_and_deferred_ignores_remain_query_visible() {
+        for signal in [2, 3] {
+            let mut parent = Traps::default();
+            parent.set(signal, Some(Binding::Ignored));
+            let mut child = parent.process_substitution();
+            child.set(signal, Some(Binding::Ignored));
+            assert!(matches!(child.get(signal), Some(Binding::Ignored)));
+            assert!(matches!(parent.get(signal), Some(Binding::Ignored)));
+            let mut child = Traps::default().inherited().process_substitution();
+            child.set(signal, Some(Binding::Ignored));
+            assert!(matches!(child.get(signal), Some(Binding::Ignored)));
+        }
+    }
+    #[test]
+    fn ordinary_child_clears_implicit_ignore_provenance_but_nested_process_does_not() {
+        for signal in [2, 3] {
+            let parent = Traps::default().process_substitution();
+            let mut ordinary = parent.inherited();
+            ordinary.set(signal, Some(Binding::Ignored));
+            assert!(matches!(ordinary.get(signal), Some(Binding::Ignored)));
+            let mut process = parent.process_substitution();
+            process.set(signal, Some(Binding::Ignored));
+            assert!(process.get(signal).is_none());
+        }
     }
     #[test]
     fn retained_action_refunds_after_last_child_and_failed_admission_is_atomic() {

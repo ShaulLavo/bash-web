@@ -156,7 +156,7 @@
     "excludedQuirk": "Re-ignoring inherited EXIT after clearing it may remain invisible in Bash until a handler is set. Approved plan004 follow-up, not covered or claimed fixed."
   },
   "mainIntegration": {
-    "status": "Normal main integration verified locally. Independent integrated-union review and hosted frozen qualification remain parent-owned and pending. No new gain/loss claim.",
+    "status": "Historical normal-main integration at477701c. Independent review requested changes for implicit INT/QUIT ignore provenance; fixed by implicitIgnoreCorrection. Hosted frozen qualification remains pending.",
     "sourceParent": "1292df94f46cb7d61b67bafddc33e5f5daf524f4",
     "mainParent": "3fd615b514c30b5d7b667b7ab76c90048d037247",
     "versions": {
@@ -236,5 +236,69 @@
     "sourceUnion": "All447 tracked paths checked against exact main plus unchanged source additions and explicit mechanical conflict resolutions. Layer graph/policy/edge sets unchanged. Trap module/state implementation, recordings and non-execution tests remain exact source-parent bytes.",
     "scopeLimits": "Registration only. No action execution, root EXIT, child-completion, IFS, runtime rewrite, oracle/gate/pin changes, local9221 replay, slot, watcher or merge. Four coincidental historical gains and optional re-ignored EXIT quirk remain limitations.",
     "report": "/work/reports/wave-20261022/shell/pr63-main3fd-integration-r3.md"
+  },
+  "implicitIgnoreCorrection": {
+    "reviewedHead": "477701c832ef0db48f4a400cab01d45b94c5899b",
+    "failingFixtureHead": "64f46807f4f21b3b5379ad9e59a20ca5be094e7c",
+    "fixture": {
+      "preservedRows": 173,
+      "addedRows": 78,
+      "total": 251,
+      "preservedOriginalSourceHead": true,
+      "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+      "recording": {
+        "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+        "reviewedHead": "477701c832ef0db48f4a400cab01d45b94c5899b",
+        "addedCases": 78,
+        "bashSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5"
+      }
+    },
+    "failingFirst": {
+      "native": {
+        "passed": 236,
+        "failed": 15
+      },
+      "allOriginal173Pass": true,
+      "productionWaffle": "not rerun before production edit; prior independent45/55 isolate confirms defect"
+    },
+    "corrected": {
+      "native": {
+        "passed": 251,
+        "failed": 0
+      },
+      "productionWaffle": {
+        "passed": 251,
+        "failed": 0
+      },
+      "trapsStateUnitTests": 8,
+      "engineClippyAllTargets": "pass",
+      "productionBuild": "normal patched-libc build; eight guests256MiBcap and no retained libc filesystem code",
+      "layers": "42production/30test-onlyedges,zeroviolations; normalrecordagainstimmutablemain241",
+      "ciTests": 105,
+      "layerScannerTests": 34,
+      "ciTypecheck": "pass",
+      "rustFormat": "pass",
+      "whitespace": "pass"
+    },
+    "sourceSha256": {
+      "shell/engine/src/state/traps.rs": "08cd8adc2501a62e1480f716dccd952ed247d0fd795119b9d1fe0d3d58143a82",
+      "scripts/fixtures/shell-trap-registration.json": "f5aacec6f5afdd1624790d79a38c3b1c4726967dc0aedcdce3d040b8c81d50de"
+    },
+    "artifacts": {
+      "nativeShellEngine": {
+        "sha256": "10ec5e4ab34c32c352b6ced03c4a28d105258a7ec409d9d3be2d6b4629d10f3e",
+        "bytes": 53269272
+      },
+      "shellRuntimeWasm": {
+        "sha256": "2983312c76b6c5955fac00b6d63841861bbaf92bbaf09dbf51e0d3732d7712b3",
+        "bytes": 2081744
+      }
+    },
+    "runtime": {
+      "commit": "c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289",
+      "package": "0.0.63"
+    },
+    "resolution": "Separate implicit INT/QUIT ignore flags from displayed bindings. Reset/handler assignment clears the flag; ordinary inheritance clears it; nested process substitution retains it. Deferred ordinary parents keep their existing first-mutation behavior. No action execution, signal disposition or admission-policy change.",
+    "limits": "Known re-ignored inherited EXIT quirk remains unsupported. Independent review, current-main integration and hosted frozen qualification remain pending. No new full-score gains claimed."
   }
 }

@@ -19,8 +19,16 @@ Its first mutating trap invocation then clears the inherited bindings. An
 inherited ignored EXIT surviving an ordinary child's mutation remains visible
 through nested process substitutions until explicitly set again. A later ignore
 after clearing inherited EXIT has a separate, unsupported Bash quirk. Nested
-ordinary children still use deferred reset. Errtrace and functrace are not
-supported.
+ordinary children still use deferred reset.
+
+An active-parent process substitution implicitly ignores INT and QUIT without
+printing a binding. Repeating an empty action keeps that implicit ignore hidden.
+A reset or handler assignment in the substitution clears this provenance, so a
+later explicit ignore is printed. Root explicit ignores remain visible. An
+ordinary child clears implicit-ignore provenance; nested process substitutions
+retain it. A parent with its ordinary-child reset still deferred allows its
+first explicit ignore to be printed. These rules affect registration only, not
+signal delivery. Errtrace and functrace are not supported.
 
 No event runs a stored action. EXIT, ERR, DEBUG, RETURN and signal execution are
 not implemented. Registering them records and prints the binding only; a shell
@@ -48,3 +56,9 @@ all caught signal numbers, child execution forms, deferred reset on mutation,
 and inherited ignored EXIT ownership. These remain registration-only controls.
 The earlier correction receipt is historical; its nested-parent section records
 the new source and checks without treating old full-score gains as current.
+
+The implicit-ignore correction adds 78 local recordings to the prior 173, with
+all earlier case objects unchanged. Native checks fail 15 of 251 before the
+correction and pass all 251 after it. The matching production-Waffle guest also
+passes 251. Eight focused trap-state tests pass. The receipt keeps the earlier
+checks historical and records the new source and artifact identities separately.
