@@ -1,0 +1,985 @@
+{
+  "schema": 1,
+  "bash": "5.3.15(1)-release",
+  "cases": [
+    {
+      "script": "$foo-bar() { ls ; }\n\n",
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvby1iYXInOiBub3QgYSB2YWxpZCBpZGVudGlmaWVyCg=="
+      }
+    },
+    {
+      "script": "foo-$(echo hi)() { ls ; }\n\n",
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgZm9vLSQoZWNobyBoaSknOiBub3QgYSB2YWxpZCBpZGVudGlmaWVyCg=="
+      }
+    },
+    {
+      "script": "foo() { printf called; }; 'foo'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function foo { printf called; }; 'foo'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "foo-bar() { printf called; }; 'foo-bar'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function foo-bar { printf called; }; 'foo-bar'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "9foo() { printf called; }; '9foo'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function 9foo { printf called; }; '9foo'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "a.b() { printf called; }; 'a.b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function a.b { printf called; }; 'a.b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "a/b() { printf called; }; 'a/b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function a/b { printf called; }; 'a/b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "a:b() { printf called; }; 'a:b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function a:b { printf called; }; 'a:b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "a@b() { printf called; }; 'a@b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function a@b { printf called; }; 'a@b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "a+b() { printf called; }; 'a+b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function a+b { printf called; }; 'a+b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "a%b() { printf called; }; 'a%b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function a%b { printf called; }; 'a%b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "a,b() { printf called; }; 'a,b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function a,b { printf called; }; 'a,b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "a?b() { printf called; }; 'a?b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function a?b { printf called; }; 'a?b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "a*b() { printf called; }; 'a*b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function a*b { printf called; }; 'a*b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "a[b]() { printf called; }; 'a[b]'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function a[b] { printf called; }; 'a[b]'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "é() { printf called; }; 'é'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function é { printf called; }; 'é'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "~foo() { printf called; }; '~foo'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function ~foo { printf called; }; '~foo'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "{foo}() { printf called; }; '{foo}'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function {foo} { printf called; }; '{foo}'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "`echo $foo`() { printf called; }; '`echo $foo`'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function `echo $foo` { printf called; }; '`echo $foo`'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "foo`echo hi`() { printf called; }; 'foo`echo hi`'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function foo`echo hi` { printf called; }; 'foo`echo hi`'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "`echo \"x\"`() { printf called; }; '`echo \"x\"`'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function `echo \"x\"` { printf called; }; '`echo \"x\"`'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "`echo \\x`() { printf called; }; '`echo \\x`'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function `echo \\x` { printf called; }; '`echo \\x`'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "`echo \\`x`() { printf called; }; '`echo \\`x`'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function `echo \\`x` { printf called; }; '`echo \\`x`'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVk",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "$foo() { echo BAD_BODY; }; printf 'status=%s x=<%s>\\n' \"$?\" \"${x-unset}\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEgeD08dW5zZXQ+Cg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "function $foo { echo BAD_BODY; }; printf 'status=%s x=<%s>\\n' \"$?\" \"${x-unset}\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEgeD08dW5zZXQ+Cg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "${foo}() { echo BAD_BODY; }; printf 'status=%s x=<%s>\\n' \"$?\" \"${x-unset}\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEgeD08dW5zZXQ+Cg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJHtmb299Jzogbm90IGEgdmFsaWQgaWRlbnRpZmllcgo="
+      }
+    },
+    {
+      "script": "function ${foo} { echo BAD_BODY; }; printf 'status=%s x=<%s>\\n' \"$?\" \"${x-unset}\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEgeD08dW5zZXQ+Cg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJHtmb299Jzogbm90IGEgdmFsaWQgaWRlbnRpZmllcgo="
+      }
+    },
+    {
+      "script": "foo-$(echo hi)() { echo BAD_BODY; }; printf 'status=%s x=<%s>\\n' \"$?\" \"${x-unset}\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEgeD08dW5zZXQ+Cg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgZm9vLSQoZWNobyBoaSknOiBub3QgYSB2YWxpZCBpZGVudGlmaWVyCg=="
+      }
+    },
+    {
+      "script": "function foo-$(echo hi) { echo BAD_BODY; }; printf 'status=%s x=<%s>\\n' \"$?\" \"${x-unset}\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEgeD08dW5zZXQ+Cg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgZm9vLSQoZWNobyBoaSknOiBub3QgYSB2YWxpZCBpZGVudGlmaWVyCg=="
+      }
+    },
+    {
+      "script": "foo-$((1+2))() { echo BAD_BODY; }; printf 'status=%s x=<%s>\\n' \"$?\" \"${x-unset}\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEgeD08dW5zZXQ+Cg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgZm9vLSQoKDErMikpJzogbm90IGEgdmFsaWQgaWRlbnRpZmllcgo="
+      }
+    },
+    {
+      "script": "function foo-$((1+2)) { echo BAD_BODY; }; printf 'status=%s x=<%s>\\n' \"$?\" \"${x-unset}\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEgeD08dW5zZXQ+Cg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgZm9vLSQoKDErMikpJzogbm90IGEgdmFsaWQgaWRlbnRpZmllcgo="
+      }
+    },
+    {
+      "script": "foo${x:=changed}() { echo BAD_BODY; }; printf 'status=%s x=<%s>\\n' \"$?\" \"${x-unset}\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEgeD08dW5zZXQ+Cg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgZm9vJHt4Oj1jaGFuZ2VkfSc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "function foo${x:=changed} { echo BAD_BODY; }; printf 'status=%s x=<%s>\\n' \"$?\" \"${x-unset}\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEgeD08dW5zZXQ+Cg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgZm9vJHt4Oj1jaGFuZ2VkfSc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "foo\"bar\"() { echo BAD_BODY; }; printf 'status=%s x=<%s>\\n' \"$?\" \"${x-unset}\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEgeD08dW5zZXQ+Cg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgZm9vImJhciInOiBub3QgYSB2YWxpZCBpZGVudGlmaWVyCg=="
+      }
+    },
+    {
+      "script": "function foo\"bar\" { echo BAD_BODY; }; printf 'status=%s x=<%s>\\n' \"$?\" \"${x-unset}\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEgeD08dW5zZXQ+Cg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgZm9vImJhciInOiBub3QgYSB2YWxpZCBpZGVudGlmaWVyCg=="
+      }
+    },
+    {
+      "script": "foo'bar'() { echo BAD_BODY; }; printf 'status=%s x=<%s>\\n' \"$?\" \"${x-unset}\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEgeD08dW5zZXQ+Cg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgZm9vJ2JhcicnOiBub3QgYSB2YWxpZCBpZGVudGlmaWVyCg=="
+      }
+    },
+    {
+      "script": "function foo'bar' { echo BAD_BODY; }; printf 'status=%s x=<%s>\\n' \"$?\" \"${x-unset}\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEgeD08dW5zZXQ+Cg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgZm9vJ2JhcicnOiBub3QgYSB2YWxpZCBpZGVudGlmaWVyCg=="
+      }
+    },
+    {
+      "script": "echo before; $foo() { echo BAD; }; echo same\necho next",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YmVmb3JlCnNhbWUKbmV4dAo=",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "if false; then $foo() { :; }; fi; echo after",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWZ0ZXIK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "false && $foo() { :; }; echo after",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWZ0ZXIK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "true || $foo() { :; }; echo after",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWZ0ZXIK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "f() { $foo() { :; }; echo inner; }; echo defined; f; echo outer",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZGVmaW5lZAppbm5lcgpvdXRlcgo=",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "f() { $foo() { :; }; }; echo defined",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "ZGVmaW5lZAo=",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "( $foo() { :; }; echo inner ); echo outer",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "aW5uZXIKb3V0ZXIK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "eval '$foo() { :; }; echo inner'; echo outer",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "aW5uZXIKb3V0ZXIK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "if $foo() { :; }; then echo BAD; else echo rejected; fi; echo after",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cmVqZWN0ZWQKYWZ0ZXIK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "$foo() { :; } || echo recovered; echo after",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cmVjb3ZlcmVkCmFmdGVyCg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "! $foo() { :; }; echo status=$?",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTAK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "set -e; $foo() { :; }; echo BAD",
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "set -e; $foo() { :; } || echo recovered; echo after",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "cmVjb3ZlcmVkCmFmdGVyCg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "set -e; if $foo() { :; }; then echo BAD; fi; echo after",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWZ0ZXIK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "set -e; f() { $foo() { :; }; echo inner; }; f || echo BAD; echo outer",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "aW5uZXIKb3V0ZXIK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "set -e; ( $foo() { :; }; echo BAD ); echo BAD",
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "set -e; eval '$foo() { :; }; echo BAD'; echo BAD",
+      "bash": {
+        "status": 1,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "$foo() { :; }; command -v '$foo'; echo lookup=$?",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "bG9va3VwPTEK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "$foo() { :; } >out; echo status=$?; test -e out; echo file=$?",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEKZmlsZT0xCg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "$foo() { :; } 2>&-; echo status=$?",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "f() {\n$foo() { :; }\n}; f\necho after",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWZ0ZXIK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAyOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "\n\n$foo() { :; }\necho after",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWZ0ZXIK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAzOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "function a=b { echo called; }; 'a=b'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVkCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "function f\\oo { :; }; echo status=$?",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgZlxvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "shopt -s expand_aliases; alias def=function\ndef $foo { :; }; echo after",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWZ0ZXIK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAyOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "shopt -s expand_aliases; alias make='function `echo $x` { echo called; }'\nmake\n'`echo $x`'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVkCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "$foo()\n{ :; }; echo after",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWZ0ZXIK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAyOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "exec 2>&-; $foo() { :; }; echo status=$?",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEK",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "foo\\\nbar() { echo called; }; foobar",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVkCg==",
+        "stderrBase64": ""
+      }
+    },
+    {
+      "script": "$foo\\\n-bar() { :; }; echo after",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWZ0ZXIK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAyOiBgJGZvby1iYXInOiBub3QgYSB2YWxpZCBpZGVudGlmaWVyCg=="
+      }
+    },
+    {
+      "script": "function \\\n$foo { :; }; echo after",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWZ0ZXIK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAyOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    }
+  ]
+}

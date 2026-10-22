@@ -271,3 +271,55 @@ fn bounded_function_names_and_bodies_are_admitted_before_copying() {
             .contains("cancelled")
     );
 }
+
+#[test]
+fn function_declaration_spelling_survives_parse_clone_and_print() {
+    for (header, name) in [
+        (r#"function foo"bar""#, r#"foo"bar""#),
+        ("function foo'bar'", "foo'bar'"),
+        (r"function f\oo", r"f\oo"),
+        ("function `echo $x`", "`echo $x`"),
+        ("function foo\\\nbar", "foo\\\nbar"),
+        (r#"foo"bar"()"#, r#"foo"bar""#),
+        ("foo'bar'()", "foo'bar'"),
+        ("`echo $x`()", "`echo $x`"),
+        ("foo\\\nbar()", "foo\\\nbar"),
+    ] {
+        let source = format!("{header} {{ :; }}");
+        let parsed = command(&source);
+        let Command::Function(function) = parsed.clone() else {
+            panic!("expected function: {source}");
+        };
+        assert_eq!(function.name, name);
+        let rendered = command_string(&parsed, &Cell::new(100_000), 100_000, None).unwrap();
+        assert!(
+            rendered.starts_with(&format!("function {name} ()")),
+            "{rendered}"
+        );
+        assert_bounded(&parsed, None, 1);
+    }
+}
+
+#[test]
+fn alias_function_names_retain_the_expanded_token_not_the_alias_source() {
+    let options = shell_parser::ParseOptions {
+        aliases: Some(Arc::new(std::collections::HashMap::from([
+            ("def".into(), "function".into()),
+            ("make".into(), "function `echo $x` { :; }".into()),
+        ]))),
+        ..Default::default()
+    };
+    for source in ["def `echo $x` { :; }", "make"] {
+        let script = Parser::new(source)
+            .with_options(options.clone())
+            .parse()
+            .unwrap();
+        let Command::Function(function) = &script.commands[0] else {
+            panic!("expected alias function: {source}");
+        };
+        assert_eq!(function.name, "`echo $x`");
+        let rendered =
+            command_string(&script.commands[0], &Cell::new(100_000), 100_000, None).unwrap();
+        assert!(rendered.starts_with("function `echo $x` ()"));
+    }
+}

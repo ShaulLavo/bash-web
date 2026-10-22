@@ -2227,3 +2227,27 @@ Remaining scored transformation failures need arrays, positional lists, integer
 or case attributes, `@P` or indirect names. See
 [the behavior notes](../docs/parameter-transformation.md) and
 [the receipt](../docs/evidence/parameter-transformation.json).
+
+## Function-name grammar prerequisite, 2026-10-22
+
+Status: Approved. Owner: CONTROL follow-up after literal declaration-name validation.
+
+The current parser rejects `f\oo() { :; }`, `'foo'() { :; }` and `"foo"() { :; }`
+with syntax status 2 before producing `Command::Function`. GNU Bash 5.3.15 instead
+executes these declarations as failures with status 1 and an identifier diagnostic.
+For the escaped POSIX form, `parser/mod.rs::command_start` requires
+`current_escapes.is_empty()` before considering `FunctionPosix`; fully quoted
+names do not enter the `Token::Word` branch. `function f\oo { :; }` already reaches
+the function parser and now correctly fails at execution. This PR intentionally
+changes neither grammar nor token admission.
+
+Reproduce strictly after the toolchain setup in `docs/development.md`, with
+`npm run build:shell` then `npm run test:shell:function-names:pending`. The explicit pending recipe must
+fail until its recorded Bash comparisons pass. It is separate from the ordinary
+blocking scoreboard recipe, with no skipped or relaxed assertions. Expected bytes
+and exact Bash version are in `scripts/fixtures/shell-function-names-pending.json`.
+Before/after evidence, including the original escaped-POSIX failure, is retained in
+`/work/reports/bash-web/hill-climb/control/function-names/{before,after,pending}.log`.
+The follow-up must admit these names in the owning grammar, keep dead definitions
+inert, and reuse the execution-time validator rather than adding a parse-time
+identifier rejection. No new frozen case, exclusion or oracle change is authorized.

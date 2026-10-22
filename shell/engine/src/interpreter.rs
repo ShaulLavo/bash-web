@@ -24,6 +24,7 @@ mod conditional;
 mod control;
 pub(crate) mod eval;
 mod file_substitution;
+mod function_names;
 
 #[derive(Clone, Debug)]
 pub struct Limits {
@@ -1190,16 +1191,7 @@ fn command_body(
             evaluation.frame(simple_command(simple, state, fds, context), Outcome::status)
         }
         Command::Function(function) => evaluation.frame(
-            async move {
-                state.borrow_mut().define_function(
-                    function.name,
-                    StoredFunction {
-                        body: Rc::new(*function.body),
-                        storage: context.evaluation.retained(),
-                    },
-                );
-                Outcome::status(0)
-            },
+            function_names::declare(function, state, fds, context),
             Outcome::status,
         ),
         Command::Pipeline(pipeline) => evaluation.frame(
