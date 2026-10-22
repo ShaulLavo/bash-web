@@ -46,7 +46,10 @@ const scripts = [
   // Many fields: an argv without patterns, and with one, stays within budget.
   'cd "$TMP"; : > a; x=$(printf \'%s\\n\' {1..20000}); set -- $x; echo $#; set -- $x a*; echo $# "${@: -1}"',
   'cd "$TMP"; for i in {1..150}; do : > f$i; done; set -- f*; echo $# $1 $2 $3',
-  'x=0000000000; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x; set -- $x; echo ${#1}; set -- "$x"; echo ${#1}',
+  // One 600,000-byte field, over half the 1 MiB expansion budget, unquoted and quoted. The field is
+  // built in argv from a 100 KB scalar; every byte costs Waffle a work checkpoint.
+  "x=0000000000; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; set -- $x$x$x$x$x$x; echo $# ${#1}",
+  'x=0000000000; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; set -- "$x$x$x$x$x$x"; echo $# ${#1}',
   // Scalar contexts do not expand pathnames.
   'cd "$TMP"; : > a; : > ab; v=a*; printf \'<%s>\\n\' "$v"; declare w=a?; printf \'<%s>\\n\' "$w"',
   "cd \"$TMP\"; echo hi > z*; printf '<%s>\\n' z*",

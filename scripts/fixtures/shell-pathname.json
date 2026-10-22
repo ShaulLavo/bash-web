@@ -141,9 +141,15 @@
       "stderrBase64": ""
     },
     {
-      "script": "x=0000000000; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x; set -- $x; echo ${#1}; set -- \"$x\"; echo ${#1}",
+      "script": "x=0000000000; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; set -- $x$x$x$x$x$x; echo $# ${#1}",
       "status": 0,
-      "stdoutBase64": "NjAwMDAwCjYwMDAwMAo=",
+      "stdoutBase64": "MSA2MDAwMDAK",
+      "stderrBase64": ""
+    },
+    {
+      "script": "x=0000000000; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; x=$x$x$x$x$x$x$x$x$x$x; set -- \"$x$x$x$x$x$x\"; echo $# ${#1}",
+      "status": 0,
+      "stdoutBase64": "MSA2MDAwMDAK",
       "stderrBase64": ""
     },
     {
