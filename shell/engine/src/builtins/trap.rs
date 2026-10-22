@@ -1,4 +1,4 @@
-//! Original Bash-compatible registration and query; signal delivery is not implemented.
+//! Original Bash-compatible registration and query. No event or signal runs an action.
 use super::{diagnose, error_status, scan_bytes, write};
 use crate::{
     expand::Work,
@@ -333,12 +333,15 @@ mod tests {
         let held = budget.observation().0;
         assert!(binding(&"x".repeat(256), false, &state).is_err());
         assert_eq!(budget.observation().0, held);
-        let action = state.borrow_mut().traps.begin_exit().unwrap();
+        let snapshot = state.borrow().traps.inherited();
+        let Some(Binding::Handler(action)) = snapshot.get(0).cloned() else {
+            panic!("snapshot lost the inherited handler");
+        };
         assert_eq!(action.text, "echo original");
-        assert!(state.borrow_mut().traps.begin_exit().is_none());
+        drop(action);
         state.borrow_mut().traps.set(0, None);
         assert_eq!(budget.observation().0, held);
-        drop(action);
+        drop(snapshot);
         assert_eq!(budget.observation().0, 0);
         assert!(binding("echo recovered", false, &state).is_ok());
         assert_eq!(budget.observation().0, 0);

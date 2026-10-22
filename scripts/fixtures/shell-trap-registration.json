@@ -73,62 +73,6 @@
       "stderr": ""
     },
     {
-      "id": "exit-status",
-      "code": "trap 'echo handler:$?; false' EXIT; exit 42",
-      "status": 42,
-      "stdout": "handler:42\n",
-      "stderr": ""
-    },
-    {
-      "id": "exit-override",
-      "code": "trap 'echo handler:$?; exit 7' EXIT; exit 42",
-      "status": 7,
-      "stdout": "handler:42\n",
-      "stderr": ""
-    },
-    {
-      "id": "exit-natural",
-      "code": "trap 'echo handler:$?' 0; false",
-      "status": 1,
-      "stdout": "handler:1\n",
-      "stderr": ""
-    },
-    {
-      "id": "exit-replace",
-      "code": "trap 'echo old' EXIT; trap 'echo new; trap \"echo recursive\" EXIT' EXIT; true",
-      "status": 0,
-      "stdout": "new\n",
-      "stderr": ""
-    },
-    {
-      "id": "exit-eval",
-      "code": "trap 'eval \"echo handler:$?\"' EXIT; false",
-      "status": 1,
-      "stdout": "handler:1\n",
-      "stderr": ""
-    },
-    {
-      "id": "exit-function",
-      "code": "f() { trap 'echo handler:$?' EXIT; }; f; false",
-      "status": 1,
-      "stdout": "handler:1\n",
-      "stderr": ""
-    },
-    {
-      "id": "inherit-subshell",
-      "code": "trap 'echo parent' EXIT; (trap -p; trap); echo end",
-      "status": 0,
-      "stdout": "trap -- 'echo parent' EXIT\ntrap -- 'echo parent' EXIT\nend\nparent\n",
-      "stderr": ""
-    },
-    {
-      "id": "child-reset",
-      "code": "trap 'echo parent' EXIT; (trap : INT; trap -p); trap -p",
-      "status": 0,
-      "stdout": "trap -- ':' SIGINT\ntrap -- 'echo parent' EXIT\nparent\n",
-      "stderr": ""
-    },
-    {
       "id": "special-names",
       "code": "trap : ERR DEBUG RETURN; trap -p ERR DEBUG RETURN; trap - ERR DEBUG RETURN",
       "status": 0,
@@ -143,31 +87,10 @@
       "stderr": ""
     },
     {
-      "id": "inherit-query-command",
-      "code": "trap 'echo parent' EXIT; x=$(trap); printf 'query:%s\\n' \"$x\"; x=$(trap -p); printf 'explicit:%s\\n' \"$x\"",
-      "status": 0,
-      "stdout": "query:trap -- 'echo parent' EXIT\nexplicit:trap -- 'echo parent' EXIT\nparent\n",
-      "stderr": ""
-    },
-    {
-      "id": "inherit-invalid-mutation",
-      "code": "trap 'echo parent' EXIT; (trap : BAD; trap -p); echo end",
-      "status": 0,
-      "stdout": "end\nparent\n",
-      "stderr": "/usr/bin/bash: line 1: trap: BAD: invalid signal specification\n"
-    },
-    {
       "id": "inherited-ignore",
       "code": "trap '' INT; trap : TERM; (trap : HUP; trap -p); trap -p",
       "status": 0,
       "stdout": "trap -- ':' SIGHUP\ntrap -- '' SIGINT\ntrap -- '' SIGINT\ntrap -- ':' SIGTERM\n",
-      "stderr": ""
-    },
-    {
-      "id": "root-errexit",
-      "code": "trap 'echo handler:$?' EXIT; set -e; false; echo bad",
-      "status": 1,
-      "stdout": "handler:1\n",
       "stderr": ""
     },
     {
@@ -178,67 +101,11 @@
       "stderr": ""
     },
     {
-      "id": "root-return",
-      "code": "f() { return 42; }; trap 'f' EXIT; exit 7",
-      "status": 7,
-      "stdout": "",
-      "stderr": ""
-    },
-    {
       "id": "invalid-prefixed-event",
       "code": "trap : SIGEXIT SIGERR SIGDEBUG SIGRETURN; echo status:$?",
       "status": 0,
       "stdout": "status:1\n",
       "stderr": "/usr/bin/bash: line 1: trap: SIGEXIT: invalid signal specification\n/usr/bin/bash: line 1: trap: SIGERR: invalid signal specification\n/usr/bin/bash: line 1: trap: SIGDEBUG: invalid signal specification\n/usr/bin/bash: line 1: trap: SIGRETURN: invalid signal specification\n"
-    },
-    {
-      "id": "r1:exit-function-locals",
-      "code": "v=global; f() { local v=local; trap 'echo \"v:$v args:$*\"' EXIT; exit 3; }; f one two",
-      "status": 3,
-      "stdout": "v:local args:one two\n",
-      "stderr": ""
-    },
-    {
-      "id": "r1:exit-function-return",
-      "code": "f() { trap 'echo before; return 7; echo BAD' EXIT; exit 3; }; f; echo after:$?",
-      "status": 7,
-      "stdout": "before\n",
-      "stderr": ""
-    },
-    {
-      "id": "r1:exit-nested-functions",
-      "code": "v=global; f() { local v=outer; g one; }; g() { local v=inner; trap 'echo \"$v:$1\"' EXIT; eval 'exit 4'; }; f",
-      "status": 4,
-      "stdout": "inner:one\n",
-      "stderr": ""
-    },
-    {
-      "id": "r1:exit-function-errexit",
-      "code": "v=global; f() { local v=local; trap 'echo \"v:$v args:$*\"' EXIT; false; }; set -e; f one two",
-      "status": 1,
-      "stdout": "v:global args:one two\n",
-      "stderr": ""
-    },
-    {
-      "id": "r1:exit-trap-function-pipestatus",
-      "code": "f() { false | true; exit 3; }; trap 'echo \"s:$? p:${PIPESTATUS[*]}\"' EXIT; f",
-      "status": 3,
-      "stdout": "s:3 p:1 0\n",
-      "stderr": ""
-    },
-    {
-      "id": "r1:exit-function-redirect",
-      "code": "f() { trap 'echo exit:$?' EXIT; exit 3; }; f >out; echo unreachable",
-      "status": 3,
-      "stdout": "",
-      "stderr": ""
-    },
-    {
-      "id": "r1:exit-function-fd",
-      "code": "f() { trap 'echo exit >&3' EXIT; exit 3; }; f 3>&1",
-      "status": 3,
-      "stdout": "exit\n",
-      "stderr": ""
     },
     {
       "id": "r1:rtmin-offset",
@@ -283,55 +150,6 @@
       "stderr": "/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n"
     },
     {
-      "id": "r1:errexit-override",
-      "code": "trap 'echo handler:$?; exit 0' EXIT; set -e; false",
-      "status": 0,
-      "stdout": "handler:1\n",
-      "stderr": ""
-    },
-    {
-      "id": "r1:root-exit-redirect",
-      "code": "trap 'echo exit:$?' EXIT; exit 3 >out",
-      "status": 3,
-      "stdout": "exit:3\n",
-      "stderr": ""
-    },
-    {
-      "id": "r1:brace-exit-redirect",
-      "code": "trap 'echo exit:$?' EXIT; { exit 3; } >out",
-      "status": 3,
-      "stdout": "exit:3\n",
-      "stderr": ""
-    },
-    {
-      "id": "r1:eval-exit-redirect",
-      "code": "trap 'echo exit:$?' EXIT; eval 'exit 3' >out",
-      "status": 3,
-      "stdout": "exit:3\n",
-      "stderr": ""
-    },
-    {
-      "id": "r1:function-normal-completion",
-      "code": "v=global; trap 'echo $v' EXIT; f() { local v=local; false; }; f",
-      "status": 1,
-      "stdout": "global\n",
-      "stderr": ""
-    },
-    {
-      "id": "r1:root-pipestatus-before-exit",
-      "code": "trap 'echo status:$? pipe:${PIPESTATUS[*]}' EXIT; false | true; exit 3",
-      "status": 3,
-      "stdout": "status:3 pipe:1 0\n",
-      "stderr": ""
-    },
-    {
-      "id": "r1:handler-return-outside-function",
-      "code": "trap 'echo before; return 7; echo after' EXIT; exit 3",
-      "status": 3,
-      "stdout": "before\nafter\n",
-      "stderr": "/usr/bin/bash: line 1: return: can only `return' from a function or sourced script\n"
-    },
-    {
       "id": "r1:query-mutually-exclusive-errexit",
       "code": "set -e; trap : INT; trap -pP INT; echo BAD",
       "status": 2,
@@ -358,20 +176,6 @@
       "status": 0,
       "stdout": "status:2\n 1) SIGHUP\t 2) SIGINT\t 3) SIGQUIT\t 4) SIGILL\t 5) SIGTRAP\n 6) SIGABRT\t 7) SIGBUS\t 8) SIGFPE\t 9) SIGKILL\t10) SIGUSR1\n11) SIGSEGV\t12) SIGUSR2\t13) SIGPIPE\t14) SIGALRM\t15) SIGTERM\n16) SIGSTKFLT\t17) SIGCHLD\t18) SIGCONT\t19) SIGSTOP\t20) SIGTSTP\n21) SIGTTIN\t22) SIGTTOU\t23) SIGURG\t24) SIGXCPU\t25) SIGXFSZ\n26) SIGVTALRM\t27) SIGPROF\t28) SIGWINCH\t29) SIGIO\t30) SIGPWR\n31) SIGSYS\t34) SIGRTMIN\t35) SIGRTMIN+1\t36) SIGRTMIN+2\t37) SIGRTMIN+3\n38) SIGRTMIN+4\t39) SIGRTMIN+5\t40) SIGRTMIN+6\t41) SIGRTMIN+7\t42) SIGRTMIN+8\n43) SIGRTMIN+9\t44) SIGRTMIN+10\t45) SIGRTMIN+11\t46) SIGRTMIN+12\t47) SIGRTMIN+13\n48) SIGRTMIN+14\t49) SIGRTMIN+15\t50) SIGRTMAX-14\t51) SIGRTMAX-13\t52) SIGRTMAX-12\n53) SIGRTMAX-11\t54) SIGRTMAX-10\t55) SIGRTMAX-9\t56) SIGRTMAX-8\t57) SIGRTMAX-7\n58) SIGRTMAX-6\t59) SIGRTMAX-5\t60) SIGRTMAX-4\t61) SIGRTMAX-3\t62) SIGRTMAX-2\n63) SIGRTMAX-1\t64) SIGRTMAX\t\nstatus:0\n",
       "stderr": "/usr/bin/bash: line 1: trap: -P requires at least one signal name\n"
-    },
-    {
-      "id": "r1:trap-handler-nested-function-exit",
-      "code": "trap 'f' EXIT; f() { echo before:$?; exit 6; }; exit 3",
-      "status": 6,
-      "stdout": "before:3\n",
-      "stderr": ""
-    },
-    {
-      "id": "r1:trap-handler-nested-function-result",
-      "code": "trap 'f; echo after:$?' EXIT; f() { echo before:$?; return 6; }; exit 3",
-      "status": 3,
-      "stdout": "before:3\nafter:6\n",
-      "stderr": ""
     },
     {
       "id": "r1:root-no-trap-errexit",
@@ -549,59 +353,52 @@
       "stderr": "/usr/bin/bash: line 1: trap: -2: invalid signal specification\n"
     },
     {
-      "id": "r1:function-inner-exit-redirect",
-      "code": "f() { trap 'echo exit:$?' EXIT; exit 3 >inner; }; f",
+      "id": "r1:no-trap-explicit-exit",
+      "code": "v=global; f() { local v=local; exit 3; }; f one two; echo BAD",
       "status": 3,
       "stdout": "",
       "stderr": ""
     },
     {
-      "id": "r1:function-inner-brace-redirect",
-      "code": "f() { trap 'echo exit:$?' EXIT; { exit 3; } >inner; }; f",
-      "status": 3,
-      "stdout": "",
+      "id": "inherit-subshell-registration",
+      "code": "trap 'echo parent' EXIT; (trap -p; trap); echo end; trap - EXIT",
+      "status": 0,
+      "stdout": "trap -- 'echo parent' EXIT\ntrap -- 'echo parent' EXIT\nend\n",
       "stderr": ""
     },
     {
-      "id": "r1:function-inner-eval-redirect",
-      "code": "f() { trap 'echo exit:$?' EXIT; eval 'exit 3' >inner; }; f",
-      "status": 3,
-      "stdout": "",
+      "id": "child-reset-registration",
+      "code": "trap 'echo parent' EXIT; (trap : INT; trap -p); trap -p; trap - EXIT",
+      "status": 0,
+      "stdout": "trap -- ':' SIGINT\ntrap -- 'echo parent' EXIT\n",
       "stderr": ""
     },
     {
-      "id": "r1:function-definition-redirection",
-      "code": "f() { trap 'echo exit:$?' EXIT; exit 3; } >out; f",
-      "status": 3,
-      "stdout": "",
+      "id": "inherit-query-command-registration",
+      "code": "trap 'echo parent' EXIT; x=$(trap); printf 'query:%s\\n' \"$x\"; x=$(trap -p); printf 'explicit:%s\\n' \"$x\"; trap - EXIT",
+      "status": 0,
+      "stdout": "query:trap -- 'echo parent' EXIT\nexplicit:trap -- 'echo parent' EXIT\n",
       "stderr": ""
     },
     {
-      "id": "r1:function-nested-errexit",
-      "code": "v=global; f() { local v=outer; g inner; }; g() { local v=inner; trap 'echo v:$v args:$*' EXIT; false; }; set -e; f outer",
-      "status": 1,
-      "stdout": "v:global args:inner\n",
+      "id": "inherit-invalid-mutation-registration",
+      "code": "trap 'echo parent' EXIT; (trap : BAD; trap -p); echo end; trap - EXIT",
+      "status": 0,
+      "stdout": "end\n",
+      "stderr": "/usr/bin/bash: line 1: trap: BAD: invalid signal specification\n"
+    },
+    {
+      "id": "inherit-child-reset-exit",
+      "code": "trap 'echo parent' EXIT; (trap - EXIT; trap -p; echo child:$?); trap -p; trap - EXIT",
+      "status": 0,
+      "stdout": "child:0\ntrap -- 'echo parent' EXIT\n",
       "stderr": ""
     },
     {
-      "id": "r1:function-errexit-fd",
-      "code": "f() { trap 'echo exit >&3' EXIT; false; }; set -e; f 3>&1",
-      "status": 1,
-      "stdout": "",
-      "stderr": "/usr/bin/bash: line 1: 3: Bad file descriptor\n"
-    },
-    {
-      "id": "r1:function-errexit-return",
-      "code": "f() { trap 'echo before; return 7; echo BAD' EXIT; false; }; set -e; f",
-      "status": 7,
-      "stdout": "before\n",
-      "stderr": ""
-    },
-    {
-      "id": "r1:explicit-return-after-pipeline",
-      "code": "f() { false | true; exit 3; }; trap 'echo s:$? p:${PIPESTATUS[*]}' EXIT; f",
-      "status": 3,
-      "stdout": "s:3 p:1 0\n",
+      "id": "inherit-pipeline-query",
+      "code": "trap 'echo parent' EXIT; trap '' INT; trap -p | { while read -r line; do echo \"got:$line\"; done; }; trap - EXIT",
+      "status": 0,
+      "stdout": "got:trap -- 'echo parent' EXIT\ngot:trap -- '' SIGINT\n",
       "stderr": ""
     }
   ]

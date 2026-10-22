@@ -1638,14 +1638,6 @@ impl FunctionFrame {
             positional_memory,
         })
     }
-    pub(crate) fn restore_locals_for_exit(&mut self) {
-        let mut state = self.state.borrow_mut();
-        for index in (0..state.locals.len()).rev() {
-            let locals = std::mem::take(&mut state.locals[index]);
-            restore_function_locals(&mut state, locals);
-        }
-        state.refresh_star_separator();
-    }
     /// Prefix bindings sit below the function's declaration scope. `unset`
     /// can therefore reveal the caller, while `local` keeps a separate shadow.
     pub(crate) fn prefixes(&mut self, assigned: Vec<(String, String)>) -> Result<(), i32> {
@@ -1683,30 +1675,26 @@ impl Drop for FunctionFrame {
         s.function_calls -= 1;
         for _ in 0..if self.prefix { 2 } else { 1 } {
             let Some(locals) = s.locals.pop() else { break };
-            restore_function_locals(&mut s, locals);
+            for (name, local) in locals {
+                s.restore_getopts(local.getopts);
+                restore_nameref(&mut s.namerefs, &name, local.nameref);
+                // Only local declarations restore their export attribute;
+                // ordinary export changes in functions belong to the caller.
+                if local.exported {
+                    s.exported.insert(name.clone());
+                } else {
+                    s.exported.remove(&name);
+                }
+                if let Some(value) = local.previous {
+                    s.variables.insert(name, value);
+                } else {
+                    s.variables.remove(&name);
+                }
+            }
         }
         // Bash refreshes special-variable state when a function frame returns,
         // including a frame that did not declare a local IFS binding.
         s.refresh_star_separator();
-    }
-}
-
-fn restore_function_locals(state: &mut State, locals: BTreeMap<String, LocalVariable>) {
-    for (name, local) in locals {
-        state.restore_getopts(local.getopts);
-        restore_nameref(&mut state.namerefs, &name, local.nameref);
-        // Only local declarations restore their export attribute;
-        // ordinary export changes in functions belong to the caller.
-        if local.exported {
-            state.exported.insert(name.clone());
-        } else {
-            state.exported.remove(&name);
-        }
-        if let Some(value) = local.previous {
-            state.variables.insert(name, value);
-        } else {
-            state.variables.remove(&name);
-        }
     }
 }
 

@@ -16,9 +16,9 @@ struct Case {
 }
 
 #[test]
-fn pinned_bash_trap_registration_and_exit() {
+fn pinned_bash_trap_registration() {
     let fixture: Fixture = serde_json::from_str(include_str!(
-        "../../../scripts/fixtures/shell-trap-exit.json"
+        "../../../scripts/fixtures/shell-trap-registration.json"
     ))
     .unwrap();
     assert!(fixture.version.starts_with("GNU bash, version 5.3.15("));

@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "5a19f50d33687ca98a279e3c71b550cb0099dd0952790e419387ac99be326605",
+    "engineSourceSha256": "085dd24b8186f9408550865befe27dae39e9d9acc0ae7a28c0eccfb65615a236",
     "binaryBuild": null
   },
   "contract": {
@@ -241,7 +241,7 @@
         "shell/engine/src/interpreter/control.rs",
         "shell/engine/src/interpreter/eval.rs",
         "shell/engine/src/interpreter/file_substitution.rs",
-        "shell/engine/src/interpreter/trap.rs"
+        "shell/engine/src/interpreter/trap_tests.rs"
       ]
     },
     {
@@ -550,7 +550,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 1639,
+        "line": 1617,
         "column": 33
       }
     },
@@ -580,7 +580,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 86,
+        "line": 87,
         "column": 30
       }
     },
@@ -880,7 +880,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3772,
+        "line": 3730,
         "column": 25
       }
     },
@@ -890,7 +890,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 5085,
+        "line": 5043,
         "column": 17
       }
     },
@@ -910,7 +910,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3758,
+        "line": 3716,
         "column": 17
       }
     },
@@ -920,7 +920,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3758,
+        "line": 3716,
         "column": 31
       }
     },
@@ -1020,7 +1020,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 2397,
+        "line": 2385,
         "column": 27
       }
     },

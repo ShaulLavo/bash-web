@@ -1,4 +1,5 @@
 //! Original retained trap bindings. Inherited handlers are query-only until mutation.
+//! Bindings are registration state only: no event runs a stored action.
 use crate::exec::StorageAllocation;
 use std::rc::Rc;
 
@@ -17,14 +18,12 @@ pub(crate) enum Binding {
 pub(crate) struct Traps {
     bindings: [Option<Binding>; SLOTS],
     inherited: bool,
-    completed: bool,
 }
 impl Default for Traps {
     fn default() -> Self {
         Self {
             bindings: std::array::from_fn(|_| None),
             inherited: false,
-            completed: false,
         }
     }
 }
@@ -32,7 +31,6 @@ impl Traps {
     pub(crate) fn inherited(&self) -> Self {
         Self {
             inherited: true,
-            completed: false,
             ..self.clone()
         }
     }
@@ -56,19 +54,6 @@ impl Traps {
             }
         }
     }
-    pub(crate) fn pending_exit(&self) -> bool {
-        !self.inherited && !self.completed && matches!(self.bindings[0], Some(Binding::Handler(_)))
-    }
-    pub(crate) fn begin_exit(&mut self) -> Option<Rc<Action>> {
-        if self.inherited || self.completed {
-            return None;
-        }
-        self.completed = true;
-        match &self.bindings[0] {
-            Some(Binding::Handler(action)) => Some(action.clone()),
-            _ => None,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -88,10 +73,11 @@ mod tests {
         );
         assert!(budget.admit(21).is_err());
         let mut child = parent.inherited();
-        assert!(child.begin_exit().is_none());
+        assert!(matches!(child.get(0), Some(Binding::Handler(_))));
         parent.set(0, None);
         assert_eq!(budget.observation().0, 80);
         child.set(2, Some(Binding::Ignored));
+        assert!(child.get(0).is_none());
         assert_eq!(budget.observation().0, 0);
     }
 }

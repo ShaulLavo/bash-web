@@ -543,7 +543,7 @@ pub fn standalone(install: impl FnOnce(&InProcessHost, &MemoryFs, Rc<dyn FileSys
     fds.insert(1, writer);
     fds.insert(2, error_writer);
     session.set_descriptors(fds).unwrap();
-    let job = match session.start_script(&args[2]) {
+    let job = match session.start(&args[2]) {
         Ok(job) => job,
         Err(error) => {
             eprintln!("{error}");

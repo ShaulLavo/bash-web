@@ -9,7 +9,7 @@ type Fixture = {
   cases: { id: string; code: string; status: number; stdout: string; stderr: string }[];
 };
 const fixture: Fixture = JSON.parse(
-  readFileSync(new URL("fixtures/shell-trap-exit.json", import.meta.url), "utf8"),
+  readFileSync(new URL("fixtures/shell-trap-registration.json", import.meta.url), "utf8"),
 );
 assert.match(fixture.version, /^GNU bash, version 5\.3\.15\(/u);
 const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");

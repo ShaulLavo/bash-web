@@ -24,7 +24,8 @@ mod conditional;
 mod control;
 pub(crate) mod eval;
 mod file_substitution;
-mod trap;
+#[cfg(test)]
+mod trap_tests;
 
 #[derive(Clone, Debug)]
 pub struct Limits {
@@ -709,17 +710,6 @@ impl Session {
         Ok(())
     }
     pub fn start(&self, source: &str) -> Result<JoinHandle<i32>, StartError> {
-        self.start_submission(source, false)
-    }
-    /// Execute a complete script, including its EXIT action at natural EOF.
-    pub fn start_script(&self, source: &str) -> Result<JoinHandle<i32>, StartError> {
-        self.start_submission(source, true)
-    }
-    fn start_submission(
-        &self,
-        source: &str,
-        terminal: bool,
-    ) -> Result<JoinHandle<i32>, StartError> {
         if self.core.foreground.borrow().is_some() {
             return Err(StartError::Invalid(
                 "foreground job is already running".into(),
@@ -786,15 +776,6 @@ impl Session {
                 && let Some(failure) = failure
             {
                 result = parse_failure(failure, "-c", &context.core.descriptors, &context).await;
-            }
-            if terminal || matches!(result.flow, Flow::Exit | Flow::Abort) {
-                result = trap::finish(
-                    result,
-                    state.clone(),
-                    context.core.descriptors.clone(),
-                    context.clone(),
-                )
-                .await;
             }
             if result.flow == Flow::Exit {
                 context.core.exit_requested.set(true);
@@ -1173,7 +1154,6 @@ fn execute(
                             _
                         )
                 );
-            let root = context.scope.0.id == 0;
             let mut result = command_body(command, state.clone(), fds, context).await;
             if check_errexit
                 && result.flow == Flow::Normal
@@ -1182,9 +1162,7 @@ fn execute(
             {
                 result.flow = Flow::Abort;
             }
-            let pending_exit =
-                root && result.flow == Flow::Exit && state.borrow().traps.pending_exit();
-            finish_command(&state, result, preserve || pending_exit)
+            finish_command(&state, result, preserve)
         },
         Outcome::status,
     )
@@ -3106,17 +3084,10 @@ async fn dispatch_simple_command_body(
         let evaluation = context.evaluation.clone();
         let call = evaluation.frame(
             async move {
-                let mut frame = frame;
+                let _frame = frame;
                 let _call_storage = call_storage;
                 let _allocation = allocation;
-                let result = execute(
-                    body.body.as_ref().clone(),
-                    state.clone(),
-                    fds,
-                    context.clone(),
-                )
-                .await;
-                trap::finish_function_abort(result, &mut frame, state, context).await
+                execute(body.body.as_ref().clone(), state, fds, context).await
             },
             Outcome::status,
         );
@@ -3148,19 +3119,6 @@ async fn dispatch_simple_command_body(
             .await
             .map_err(admission_status)?;
         let bindings = fds.borrow().clone();
-        if builtin == commands::Builtin::ExitReturn {
-            let result = builtins::run(
-                builtin,
-                &name,
-                args,
-                state.clone(),
-                bindings,
-                context.clone(),
-                &mut work,
-            )
-            .await?;
-            return Ok(trap::finish_function_exit(result, state, fds, context).await);
-        }
         return builtins::run(builtin, &name, args, state, bindings, context, &mut work).await;
     }
     if builtin_only {
