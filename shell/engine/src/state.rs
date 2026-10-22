@@ -128,6 +128,7 @@ pub struct State {
     /// Scalar reference targets, distinct from ordinary variable values.
     namerefs: BTreeMap<String, String>,
     pub cwd: String,
+    directories: DirectoryStack,
     /// Function bodies are immutable. Isolated shells copy bindings, not ASTs.
     functions: BTreeMap<String, StoredFunction>,
     status: i32,
@@ -172,6 +173,7 @@ impl Default for State {
             readonly: BTreeSet::new(),
             namerefs: BTreeMap::new(),
             cwd: "/home/guest".into(),
+            directories: DirectoryStack::default(),
             functions: BTreeMap::new(),
             status: 0,
             pipestatus: vec![0],
@@ -320,6 +322,8 @@ impl State {
         )?;
         let shell_name = snapshot_value(source, |s| Some(&s.shell_name), cancel, work).await?;
         let cwd = snapshot_value(source, |s| Some(&s.cwd), cancel, work).await?;
+        // Shares the immutable, already charged stack version; changes copy it.
+        let directories = source.borrow().directories.clone();
         let variables = snapshot_map(source, |s| &s.variables, cancel, work).await?;
         let exported = snapshot_set(source, |s| &s.exported, cancel, work).await?;
         let readonly = snapshot_set(source, |s| &s.readonly, cancel, work).await?;
@@ -360,6 +364,7 @@ impl State {
             readonly,
             namerefs,
             cwd,
+            directories,
             functions,
             status: state.status,
             pipestatus,
@@ -2123,6 +2128,9 @@ pub fn absolute(cwd: &str, path: &str) -> String {
     }
     format!("/{}", components.join("/"))
 }
+
+mod directory_stack;
+use directory_stack::DirectoryStack;
 
 #[cfg(test)]
 mod bindings_tests;

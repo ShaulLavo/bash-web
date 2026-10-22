@@ -1914,5 +1914,28 @@
     "changes": "Use the existing counted incremental reader for ordinary logical lines. Replace upstream protected-character placeholders with an admitted one-bit-per-byte map, avoiding collisions with real Unicode input. Return borrowed source spans instead of a field vector, preserve the last destination remainder, snapshot existing IFS membership before assignments, and use the existing state write API. Keep byte-at-a-time endpoint reads, count/UTF-8 boundaries, command and live storage admission, cancellation and exact-sized retained values. Stop options at the first name; preserve writes before a later invalid name.",
     "deferred": "No arrays/read-a/mapfile, new option families, general attributes, nameref or scope implementation. Existing state owns scalar resolution and IFS membership.",
     "oracle": "GNU Bash 5.3.15; exact stdout bytes and exit status through production Waffle, plus native/WASI resource controls."
+  },
+  "shellDirectories": {
+    "classification": "cd, pushd, popd and dirs builtins, private directory-stack state and controls written for this engine by this lane. Behavior is checked against recorded GNU Bash 5.3.15 runs; no Bash source text was copied.",
+    "oracle": "GNU Bash 5.3.15(1)-release",
+    "referenceSources": [
+      "GNU Bash builtins/cd.def: cd_builtin, change_to_directory, bindpwd (named from the author's knowledge; no revision or archive inspected)",
+      "GNU Bash builtins/pushd.def: pushd_builtin, popd_builtin, dirs_builtin, get_dirstack_index (same)",
+      "GNU Bash lib/sh/pathcanon.c: sh_canonpath (same)"
+    ],
+    "implementationDestinations": [
+      "shell/engine/src/builtins/directories.rs",
+      "shell/engine/src/state/directory_stack.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/commands.rs",
+      "shell/engine/src/state.rs"
+    ],
+    "testDestinations": [
+      "shell/engine/tests/directories.rs",
+      "scripts/fixtures/shell-directories.json",
+      "shell/engine/tests/streaming.rs"
+    ],
+    "strategy": "Logical-mode cd over the existing host stat contract: lexical canonicalization that requires a directory before each .. and at the result, host-reported search permission, and the raw path's real error when canonicalization fails. The cwd field is updated directly first; OLDPWD and PWD then publish through the existing admitted assignment path, and a readonly binding fails the command without undoing the change. Each stack version is one immutable Rc value owning its entries and one StorageAllocation ticket on the State memory budget for the Rc box, vector slots and string capacities. A change admits the next version's requested bytes before allocating it, reconciles recorded excess vector capacity into the ticket, and publishes only on success. Clone and State::snapshot share the version; changes build an admitted copy. pushd dir and popd prepare the next version before cd and publish it only after cd succeeds; no-argument and rotating pushd change the stack before cd, as Bash does. Work admission covers only transient copies, and the async paths take cooperative checkpoints; option parsing is synchronous.",
+    "deferred": "cd -P/-e and the physical raw-path retry need symlink resolution, which the filesystem contract lacks; they fail explicitly. CDPATH tilde entries, the DIRSTACK array (variables family), pwd -L/-P, and decoupled PWD values remain unsupported. See docs/directories.md."
   }
 }
