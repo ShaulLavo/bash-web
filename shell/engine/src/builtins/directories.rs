@@ -425,21 +425,6 @@ pub(super) async fn cd(
     Ok(Outcome::status(status))
 }
 
-pub(super) async fn run(
-    name: &str,
-    args: &[String],
-    state: &SharedState,
-    fds: &FdTable,
-    context: &Context,
-    work: &mut Work,
-) -> Result<Outcome, i32> {
-    match name {
-        "pushd" => pushd(args, state, fds, context, work).await,
-        "popd" => popd(args, state, fds, context, work).await,
-        _ => dirs(args, state, fds, context, work).await,
-    }
-}
-
 /// Bash legal_number: optional surrounding whitespace and sign, decimal only.
 fn legal_number(text: &str) -> Option<i64> {
     text.trim_matches(|c: char| c.is_ascii_whitespace())
@@ -543,7 +528,7 @@ fn rotation(word: &str, stored: usize) -> Result<usize, Rejected> {
         .ok_or_else(|| Rejected::Range(word.to_owned()))
 }
 
-async fn pushd(
+pub(super) async fn pushd(
     args: &[String],
     state: &SharedState,
     fds: &FdTable,
@@ -665,15 +650,16 @@ fn popd_options(args: &[String]) -> Result<PopdOptions, Rejected> {
     Ok(options)
 }
 
-async fn popd(
+pub(super) async fn popd(
     args: &[String],
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
 ) -> Result<Outcome, i32> {
+    let parsed = popd_options(args);
     let stored = state.borrow().directories().len();
-    let options = match popd_options(args) {
+    let options = match parsed {
         Ok(options) => options,
         Err(rejected) => return reject("popd", rejected, POPD_USAGE, stored, fds, context).await,
     };
@@ -835,7 +821,7 @@ fn position(word: &str, stored: usize) -> Result<Result<usize, String>, Rejected
     Ok(position.ok_or_else(|| word[1..].to_owned()))
 }
 
-async fn dirs(
+pub(super) async fn dirs(
     args: &[String],
     state: &SharedState,
     fds: &FdTable,

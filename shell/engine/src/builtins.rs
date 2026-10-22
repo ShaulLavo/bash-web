@@ -150,9 +150,9 @@ pub(crate) async fn run(
         }
         Builtin::Unset => return unset(args, &state, &fds, &context, work).await,
         Builtin::Cd => return directories::cd(&args, &state, &fds, &context, work).await,
-        Builtin::Directories => {
-            return directories::run(name, &args, &state, &fds, &context, work).await;
-        }
+        Builtin::Pushd => return directories::pushd(&args, &state, &fds, &context, work).await,
+        Builtin::Popd => return directories::popd(&args, &state, &fds, &context, work).await,
+        Builtin::Dirs => return directories::dirs(&args, &state, &fds, &context, work).await,
         Builtin::Pwd => {
             let cwd = state.borrow().cwd.clone();
             write(&fds, format!("{cwd}\n").as_bytes(), &context).await?;

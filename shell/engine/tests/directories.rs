@@ -36,6 +36,12 @@ struct Run {
 fn run(case: &Case) -> Run {
     let executor = Executor::new();
     let host = InProcessHost::new(executor.clone());
+    let (stdout, output) = capture(65536);
+    let (stderr, errors) = capture(65536);
+    let mut fds = FdTable::default();
+    for (fd, endpoint) in [(0, Endpoint::null()), (1, stdout), (2, stderr)] {
+        fds.insert(fd, endpoint);
+    }
     let fs = MemoryFs::new(65536);
     for directory in &case.setup {
         fs.mkdir(directory, true).unwrap();
@@ -51,12 +57,6 @@ fn run(case: &Case) -> Run {
         .borrow_mut()
         .assign_parameter("HOME".into(), "/home/guest".into())
         .unwrap();
-    let (stdout, output) = capture(65536);
-    let (stderr, errors) = capture(65536);
-    let mut fds = FdTable::default();
-    fds.insert(0, Endpoint::null());
-    fds.insert(1, stdout);
-    fds.insert(2, stderr);
     session.set_descriptors(fds).unwrap();
     let job = session.start(&case.code).unwrap();
     for _ in 0..100_000 {
