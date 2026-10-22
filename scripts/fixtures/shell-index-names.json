@@ -1,0 +1,315 @@
+{
+  "schema": 1,
+  "bash": "5.3.15(1)-release",
+  "provenance": {
+    "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+    "recordedAt": "2026-10-22T01:21:33.955613+00:00",
+    "base": "4bf6a474ef6bb32dd5de44c1b6d30a300a079d93",
+    "frozenIdentity": {
+      "schema": 1,
+      "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+      "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+      "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+      "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+    },
+    "directIDs": [
+      "bashkit-suite:arrays:90",
+      "bashkit-suite:bashbox-word-expander:68",
+      "bashkit-suite:blackbox-exploration:689",
+      "bashkit-suite:negative-tests:1",
+      "brush-suite:nameref:108",
+      "brush-suite:nameref:46",
+      "brush-suite:nameref:56",
+      "brush-suite:word_expansion/arrays:7",
+      "brush-suite:word_expansion/arrays:8"
+    ],
+    "scope": "Nine frozen builtins-only candidates plus local GNU Bash controls. Stdout and status only. CI never runs live Bash."
+  },
+  "env": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "PWD": "/tmp/spec",
+    "SH": "bash",
+    "LC_ALL": "C.UTF-8"
+  },
+  "cases": [
+    {
+      "id": "brush-suite:nameref:46",
+      "script": "arr=(a b c d e)\ndeclare -n ref=arr\necho \"len: ${#ref[@]}\"\necho \"keys: ${!ref[@]}\"\necho \"elem0len: ${#ref}\"\n",
+      "status": 0,
+      "stdoutHex": "6c656e3a20350a6b6579733a203020312032203320340a656c656d306c656e3a20310a"
+    },
+    {
+      "id": "brush-suite:nameref:56",
+      "script": "declare -a arr\narr[5]=five\narr[10]=ten\ndeclare -n ref=arr\necho \"keys: ${!ref[@]}\"\necho \"len: ${#ref[@]}\"\necho \"elem5: ${ref[5]}\"\n",
+      "status": 0,
+      "stdoutHex": "6b6579733a20352031300a6c656e3a20320a656c656d353a20666976650a"
+    },
+    {
+      "id": "brush-suite:nameref:108",
+      "script": "arr=(a b c)\ndeclare -n ref=arr\necho \"!ref[@]: ${!ref[@]}\"\n",
+      "status": 0,
+      "stdoutHex": "217265665b405d3a2030203120320a"
+    },
+    {
+      "id": "brush-suite:word_expansion/arrays:7",
+      "script": "arr=(\"element1\" \"element2\" \"element3\")\necho \"@: ${!arr[@]}\"\necho \"*: ${!arr[*]}\"\n\necho \"Dumping [@]\"\nfor i in \"${!arr[@]}\"; do\n    echo \"@i: $i\"\ndone\n\necho \"Dumping [*]\"\nfor i in \"${!arr[*]}\"; do\n    echo \"*i: $i\"\ndone\n",
+      "status": 0,
+      "stdoutHex": "403a2030203120320a2a3a2030203120320a44756d70696e67205b405d0a40693a20300a40693a20310a40693a20320a44756d70696e67205b2a5d0a2a693a2030203120320a"
+    },
+    {
+      "id": "brush-suite:word_expansion/arrays:8",
+      "script": "arr=()\necho \"@: ${!arr[@]}\"\necho \"*: ${!arr[*]}\"\n\necho \"Dumping [@]\"\nfor i in \"${!arr[@]}\"; do\n    echo \"@i: $i\"\ndone\n\necho \"Dumping [*]\"\nfor i in \"${!arr[*]}\"; do\n    echo \"*i: $i\"\ndone\n",
+      "status": 0,
+      "stdoutHex": "403a200a2a3a200a44756d70696e67205b405d0a44756d70696e67205b2a5d0a2a693a200a"
+    },
+    {
+      "id": "bashkit-suite:arrays:90",
+      "script": "arr=(a b c); echo ${!arr[@]}\n",
+      "status": 0,
+      "stdoutHex": "30203120320a"
+    },
+    {
+      "id": "bashkit-suite:bashbox-word-expander:68",
+      "script": "a=(b a); echo ${!a[@]} ${#a[@]} ${a[*]}\n",
+      "status": 0,
+      "stdoutHex": "3020312032206220610a"
+    },
+    {
+      "id": "bashkit-suite:blackbox-exploration:689",
+      "script": "arr=(a b c); echo ${!arr[@]}\n",
+      "status": 0,
+      "stdoutHex": "30203120320a"
+    },
+    {
+      "id": "bashkit-suite:negative-tests:1",
+      "script": "arr=(); echo \">${!arr[@]}<\"\n",
+      "status": 0,
+      "stdoutHex": "3e3c0a"
+    },
+    {
+      "id": "sparse-numeric-order",
+      "script": "a[20]=twenty; a[2]=two; a[10]=ten; a[0]=zero; printf \"<%s>\\n\" \"${!a[@]}\"",
+      "status": 0,
+      "stdoutHex": "3c303e0a3c323e0a3c31303e0a3c32303e0a"
+    },
+    {
+      "id": "scalar-empty-and-unset",
+      "script": "s=value; e=\"\"; a=(); printf \"s:<%s>\\n\" \"${!s[@]}\"; printf \"e:<%s>\\n\" \"${!e[@]}\"; for i in \"${!a[@]}\" \"${!missing[@]}\"; do echo BAD; done; printf \"star:<%s>\\n\" \"${!a[*]}\" \"${!missing[*]}\"",
+      "status": 0,
+      "stdoutHex": "733a3c303e0a653a3c303e0a737461723a3c3e0a737461723a3c3e0a"
+    },
+    {
+      "id": "nounset-empty-and-unset",
+      "script": "set -u; a=(); for i in \"${!a[@]}\" \"${!missing[@]}\"; do echo BAD; done; printf \"<%s>\\n\" \"${!a[*]}\" \"${!missing[*]}\"",
+      "status": 0,
+      "stdoutHex": "3c3e0a3c3e0a"
+    },
+    {
+      "id": "nameref-chain",
+      "script": "a[7]=x; a[1]=y; declare -n r=a; declare -n s=r; printf \"<%s>\\n\" \"${!s[@]}\" \"${!s[*]}\"",
+      "status": 0,
+      "stdoutHex": "3c313e0a3c373e0a3c3120373e0a"
+    },
+    {
+      "id": "nameref-unbound",
+      "script": "set -u; declare -n r=missing; for i in \"${!r[@]}\"; do echo BAD; done; printf \"<%s>\\n\" \"${!r[*]}\"",
+      "status": 0,
+      "stdoutHex": "3c3e0a"
+    },
+    {
+      "id": "pipeline-keys-and-values",
+      "script": "false | true | false; printf \"<%s>\\n\" \"${!PIPESTATUS[@]}\" \"${!PIPESTATUS[*]}\" \"${PIPESTATUS[@]}\"",
+      "status": 0,
+      "stdoutHex": "3c303e0a3c313e0a3c323e0a3c30203120323e0a3c313e0a3c303e0a3c313e0a"
+    },
+    {
+      "id": "pipeline-after-command",
+      "script": "false | true; :; printf \"<%s>\\n\" \"${!PIPESTATUS[@]}\"",
+      "status": 0,
+      "stdoutHex": "3c303e0a"
+    },
+    {
+      "id": "left-to-right",
+      "script": "n=0; a=(x y); printf \"<%s>\\n\" \"$((n+=1))\" \"${!a[@]}\" \"$((n+=1))\" \"${!a[@]}\"",
+      "status": 0,
+      "stdoutHex": "3c313e0a3c303e0a3c313e0a3c323e0a3c303e0a3c313e0a"
+    },
+    {
+      "id": "lazy-selected",
+      "script": "a[4]=x; printf \"<%s>\\n\" \"${x:-${!a[@]}}\" \"${x:-${!a[*]}}\"",
+      "status": 0,
+      "stdoutHex": "3c343e0a3c343e0a"
+    },
+    {
+      "id": "lazy-unselected",
+      "script": "a[4]=x; x=keep; printf \"<%s>\\n\" \"${x:-${!a[@]}}\"",
+      "status": 0,
+      "stdoutHex": "3c6b6565703e0a"
+    },
+    {
+      "id": "scalar-at",
+      "script": "a[4]=x; a[2]=y; x=${!a[@]}; printf \"<%s>\\n\" \"$x\"",
+      "status": 0,
+      "stdoutHex": "3c3220343e0a"
+    },
+    {
+      "id": "scalar-star",
+      "script": "a[4]=x; a[2]=y; IFS=:; x=${!a[*]}; printf \"<%s>\\n\" \"$x\"",
+      "status": 0,
+      "stdoutHex": "3c323a343e0a"
+    },
+    {
+      "id": "field-metadata",
+      "script": "a[4]=\"a b\"; a[2]=\"*\"; printf \"<%s>\\n\" \"prefix${!a[@]}suffix\" \"${a[@]}\"",
+      "status": 0,
+      "stdoutHex": "3c707265666978323e0a3c347375666669783e0a3c2a3e0a3c6120623e0a"
+    },
+    {
+      "id": "default-@-quotedFalse",
+      "script": "a[21]=x; a[10]=y; a[2]=z; printf \"<%s>\\n\" pre${!a[@]}post",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c31303e0a3c3231706f73743e0a"
+    },
+    {
+      "id": "default-@-quotedTrue",
+      "script": "a[21]=x; a[10]=y; a[2]=z; printf \"<%s>\\n\" \"pre${!a[@]}post\"",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c31303e0a3c3231706f73743e0a"
+    },
+    {
+      "id": "default-*-quotedFalse",
+      "script": "a[21]=x; a[10]=y; a[2]=z; printf \"<%s>\\n\" pre${!a[*]}post",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c31303e0a3c3231706f73743e0a"
+    },
+    {
+      "id": "default-*-quotedTrue",
+      "script": "a[21]=x; a[10]=y; a[2]=z; printf \"<%s>\\n\" \"pre${!a[*]}post\"",
+      "status": 0,
+      "stdoutHex": "3c70726532203130203231706f73743e0a"
+    },
+    {
+      "id": "empty-@-quotedFalse",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS=''; printf \"<%s>\\n\" pre${!a[@]}post",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c31303e0a3c3231706f73743e0a"
+    },
+    {
+      "id": "empty-@-quotedTrue",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS=''; printf \"<%s>\\n\" \"pre${!a[@]}post\"",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c31303e0a3c3231706f73743e0a"
+    },
+    {
+      "id": "empty-*-quotedFalse",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS=''; printf \"<%s>\\n\" pre${!a[*]}post",
+      "status": 0,
+      "stdoutHex": "3c70726532203130203231706f73743e0a"
+    },
+    {
+      "id": "empty-*-quotedTrue",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS=''; printf \"<%s>\\n\" \"pre${!a[*]}post\"",
+      "status": 0,
+      "stdoutHex": "3c7072653231303231706f73743e0a"
+    },
+    {
+      "id": "colon-@-quotedFalse",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS=':'; printf \"<%s>\\n\" pre${!a[@]}post",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c31303e0a3c3231706f73743e0a"
+    },
+    {
+      "id": "colon-@-quotedTrue",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS=':'; printf \"<%s>\\n\" \"pre${!a[@]}post\"",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c31303e0a3c3231706f73743e0a"
+    },
+    {
+      "id": "colon-*-quotedFalse",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS=':'; printf \"<%s>\\n\" pre${!a[*]}post",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c31303e0a3c3231706f73743e0a"
+    },
+    {
+      "id": "colon-*-quotedTrue",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS=':'; printf \"<%s>\\n\" \"pre${!a[*]}post\"",
+      "status": 0,
+      "stdoutHex": "3c707265323a31303a3231706f73743e0a"
+    },
+    {
+      "id": "digit-@-quotedFalse",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS='1'; printf \"<%s>\\n\" pre${!a[@]}post",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c3e0a3c303e0a3c323e0a3c706f73743e0a"
+    },
+    {
+      "id": "digit-@-quotedTrue",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS='1'; printf \"<%s>\\n\" \"pre${!a[@]}post\"",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c31303e0a3c3231706f73743e0a"
+    },
+    {
+      "id": "digit-*-quotedFalse",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS='1'; printf \"<%s>\\n\" pre${!a[*]}post",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c3e0a3c303e0a3c323e0a3c706f73743e0a"
+    },
+    {
+      "id": "digit-*-quotedTrue",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS='1'; printf \"<%s>\\n\" \"pre${!a[*]}post\"",
+      "status": 0,
+      "stdoutHex": "3c70726532313130313231706f73743e0a"
+    },
+    {
+      "id": "multi-@-quotedFalse",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS='xy'; printf \"<%s>\\n\" pre${!a[@]}post",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c31303e0a3c3231706f73743e0a"
+    },
+    {
+      "id": "multi-@-quotedTrue",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS='xy'; printf \"<%s>\\n\" \"pre${!a[@]}post\"",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c31303e0a3c3231706f73743e0a"
+    },
+    {
+      "id": "multi-*-quotedFalse",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS='xy'; printf \"<%s>\\n\" pre${!a[*]}post",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c31303e0a3c3231706f73743e0a"
+    },
+    {
+      "id": "multi-*-quotedTrue",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS='xy'; printf \"<%s>\\n\" \"pre${!a[*]}post\"",
+      "status": 0,
+      "stdoutHex": "3c70726532783130783231706f73743e0a"
+    },
+    {
+      "id": "space-@-quotedFalse",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS=' '; printf \"<%s>\\n\" pre${!a[@]}post",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c31303e0a3c3231706f73743e0a"
+    },
+    {
+      "id": "space-@-quotedTrue",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS=' '; printf \"<%s>\\n\" \"pre${!a[@]}post\"",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c31303e0a3c3231706f73743e0a"
+    },
+    {
+      "id": "space-*-quotedFalse",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS=' '; printf \"<%s>\\n\" pre${!a[*]}post",
+      "status": 0,
+      "stdoutHex": "3c707265323e0a3c31303e0a3c3231706f73743e0a"
+    },
+    {
+      "id": "space-*-quotedTrue",
+      "script": "a[21]=x; a[10]=y; a[2]=z; IFS=' '; printf \"<%s>\\n\" \"pre${!a[*]}post\"",
+      "status": 0,
+      "stdoutHex": "3c70726532203130203231706f73743e0a"
+    }
+  ]
+}

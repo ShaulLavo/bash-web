@@ -4374,3 +4374,6 @@ fn indexed_r1_cancellation_keeps_later_durable_rhs_writes_to_completed_targets()
 }
 #[path = "words/getopts.rs"]
 mod getopts;
+
+#[path = "words/index_names.rs"]
+mod index_names;
