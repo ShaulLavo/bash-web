@@ -351,7 +351,7 @@ impl<'a> Printer<'a> {
                     let mut escaped = false;
                     while let Some(next) = raw[end..].chars().next() {
                         let bytes = next.len_utf8();
-                        if !self.out.quota.as_ref().unwrap().charge(bytes) {
+                        if !self.out.quota.as_ref().is_none_or(|quota| quota.charge(bytes)) {
                             return Err(std::fmt::Error);
                         }
                         end += bytes;
@@ -381,13 +381,13 @@ impl<'a> Printer<'a> {
                     }
                 }
                 '$' if !in_single && !in_double && !in_backtick && raw[i..].starts_with('"') => {
-                    if !self.out.quota.as_ref().unwrap().charge(1) {
+                    if !self.out.quota.as_ref().is_none_or(|quota| quota.charge(1)) {
                         return Err(std::fmt::Error);
                     }
                 }
                 '\\' if !in_single => {
                     if raw[i..].starts_with('\n') {
-                        if !self.out.quota.as_ref().unwrap().charge(2) {
+                        if !self.out.quota.as_ref().is_none_or(|quota| quota.charge(2)) {
                             return Err(std::fmt::Error);
                         }
                         i += 1;
