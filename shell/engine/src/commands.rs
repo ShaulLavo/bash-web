@@ -196,7 +196,7 @@ static COMMANDS: &[Command] = &[
     keyword("case", Availability::Included),
     keyword("esac", Availability::Included),
     keyword("for", Availability::Included),
-    keyword("select", Availability::UnsupportedSyntax),
+    keyword("select", Availability::Included),
     keyword("while", Availability::Included),
     keyword("until", Availability::Included),
     keyword("do", Availability::Included),

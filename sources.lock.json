@@ -1555,11 +1555,13 @@
     ]
   },
   "shellControlFlow": {
+    "select": "Original bounded noninteractive select adapter and controls observed against GNU Bash 5.3.15. Reuses admitted expansion, scalar assignments and structured loop outcomes without copying upstream code. One-byte input reads preserve pipe ownership; per-iteration work and live buffers preserve cancellation and storage admission.",
     "classification": "Original structured execution, argv test, conditional, filesystem metadata/directory, no-capture ERE and dynamic-time adapters; GNU Bash 5.3.15 is a behavior oracle, not copied implementation.",
     "paths": [
       "shell/engine/src/exec.rs",
       "shell/engine/src/interpreter.rs",
       "shell/engine/src/interpreter/control.rs",
+      "shell/engine/src/interpreter/select.rs",
       "shell/engine/src/interpreter/conditional.rs",
       "shell/engine/src/interpreter/eval.rs",
       "shell/engine/src/builtins.rs",
@@ -1571,6 +1573,9 @@
       "shell/engine/src/runtime/wasi.rs",
       "shell/engine/src/runtime/tests.rs",
       "shell/engine/tests/words/control.rs",
+      "shell/engine/tests/words/select.rs",
+      "scripts/test-own-shell-select.ts",
+      "scripts/fixtures/shell-select.json",
       "shell/engine/tests/words/conditional.rs",
       "shell/engine/tests/words/test_builtin.rs",
       "shell/engine/tests/cli.rs",
