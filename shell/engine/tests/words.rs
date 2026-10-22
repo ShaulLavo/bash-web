@@ -4143,3 +4143,6 @@ mod builtin_wrapper;
 
 #[path = "words/getopts.rs"]
 mod getopts;
+
+#[path = "words/nameref_invalid.rs"]
+mod nameref_invalid;
