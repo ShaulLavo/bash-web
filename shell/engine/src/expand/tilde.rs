@@ -1,5 +1,5 @@
 //! Original HOME-only word-prefix expansion over the parser's existing quote flags.
-use super::{Expansion, ExpansionOptions, Protection, Work, expand, part_quoted};
+use super::{Expansion, Protection, Work, part_quoted};
 use crate::{
     exec::Error,
     executor::Cancel,
@@ -241,20 +241,5 @@ pub(crate) async fn assignment(
     max_raw: usize,
     work: &mut Work,
 ) -> Result<String, Error> {
-    let values = expand(
-        word,
-        state,
-        cancel,
-        ExpansionOptions {
-            max_bytes: max,
-            max_fields: 1,
-            max_raw,
-            scalar: true,
-            admitted: false,
-            tilde_assignment: true,
-        },
-        work,
-    )
-    .await?;
-    Ok(values.into_iter().next().unwrap_or_default())
+    super::scalar_word(word, state, cancel, max, max_raw, true, work).await
 }

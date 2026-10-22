@@ -2404,6 +2404,19 @@ pub(crate) async fn word(
     max_raw: usize,
     work: &mut Work,
 ) -> Result<String, Error> {
+    scalar_word(word, state, cancel, max, max_raw, false, work).await
+}
+
+/// One scalar value; `tilde_assignment` selects assignment tilde prefixes.
+async fn scalar_word(
+    word: &Word,
+    state: &SharedState,
+    cancel: &Cancel,
+    max: usize,
+    max_raw: usize,
+    tilde_assignment: bool,
+    work: &mut Work,
+) -> Result<String, Error> {
     let values = expand(
         word,
         state,
@@ -2414,7 +2427,7 @@ pub(crate) async fn word(
             max_raw,
             scalar: true,
             admitted: false,
-            tilde_assignment: false,
+            tilde_assignment,
         },
         work,
     )

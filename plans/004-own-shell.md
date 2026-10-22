@@ -2256,3 +2256,26 @@ from Bash's source and check it against controls before changing the code.
 Evidence: `/work/reports/bash-web/hill-climb/expansion/indirect-special-review-r2/controls.json`
 (rows `direct:00:` through `indirect:9999…:set -u; `). No frozen scored case
 has been checked against this; claim no gain unless a replay proves one.
+
+## Follow-up: command substitution loses a 700,000-byte capture, 2026-10-22
+
+Status: Approved. Bounded to the command-substitution capture path, which
+the control track owns (`shell/engine/src/expand/command.rs`). Do not fix it
+from the tilde or pathname units.
+
+The pathname unit's budget probe compared GNU Bash 5.3.15 with the release
+Waffle guest built from main `77b3963` (shell tree `2f38c80d`, sha256
+`4329f221…`), locale C.utf8, inside an empty `$TMP`:
+
+| Script | Bash | Waffle |
+| --- | --- | --- |
+| `x=$(printf '%0700000d' 0); echo ${#x}` | `700000`, status 0 | `0`, status 0 |
+| `x=$(printf '%0300000d' 0); echo ${#x}` | `300000`, status 0 | `300000`, status 0 |
+
+The large capture comes back empty with status 0. It neither fails at an
+explicit limit (status 2) nor keeps the bytes. Find which capture or
+assignment ceiling discards the value, then make it either keep the value
+or fail explicitly the way other limits do. Evidence:
+`/work/reports/bash-web/hill-climb/expansion/pathname/budget-probe2.log`
+(rows `capture-700k` and `capture-300k`). No frozen scored case is tied to
+it yet; claim no gain unless a replay proves one.

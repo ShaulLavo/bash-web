@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { after, test } from "node:test";
 import { liveNodeWorkers } from "./node-worker-host.ts";
+import { runRecordingBash } from "./recorded-bash.ts";
 import { createWaffleRunner } from "./waffle-compat.ts";
 
 const env = {
@@ -160,15 +161,7 @@ function record(script: string, parent: string): Recorded {
 }
 
 function observeBash(script: string, cwd: string): Recorded {
-  const bash = spawnSync("/usr/bin/bash", ["--noprofile", "--norc", "-c", script], {
-    env,
-    cwd,
-    timeout: 5000,
-    maxBuffer: 4 * 1024 * 1024,
-  });
-  assert.equal(bash.error, undefined);
-  assert.equal(bash.signal, null);
-  assert.equal(bash.status, 0, bash.stderr.toString());
+  const bash = runRecordingBash(script, env, cwd);
   return {
     script,
     status: bash.status,
