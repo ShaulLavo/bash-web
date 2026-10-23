@@ -19,7 +19,7 @@ removing the attribute from `IFS` does not recompute the separator used by `$*`.
 
 Bare references without a target, array-element targets, associative arrays,
 integer attributes, `-g`, and `+n` combined with other attributes remain outside
-this change. Invalid scalar-target statuses belong to the separate PR #59.
+this change. Invalid scalar-target statuses are inherited from main through PR #59.
 
 The recorded Bash 5.3.15 controls are in
 [`shell-nameref-attributes.json`](../scripts/fixtures/shell-nameref-attributes.json).
