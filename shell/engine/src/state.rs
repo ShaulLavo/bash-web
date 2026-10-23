@@ -2228,6 +2228,9 @@ mod tests {
             + 6
             + snapshot_node_bytes::<String>().unwrap_or_else(|_| panic!("node fits"))
             + 9
+            + snapshot_node_bytes::<Binding>().unwrap_or_else(|_| panic!("node fits"))
+            + "_".len()
+            + "bash".len()
             + std::mem::size_of::<i32>();
         let mut small = Work::new(100_000, bytes - 1, 0);
         assert!(matches!(

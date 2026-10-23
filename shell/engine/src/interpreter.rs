@@ -2746,6 +2746,9 @@ async fn simple_command(
     let last = last.to_owned();
     let stderr = original_fds.borrow().get(2).map(|fd| fd.downgrade());
     let result = run_prepared_command(prepared, state.clone(), original_fds, context.clone()).await;
+    if context.cancel.is_cancelled() || matches!(result.flow, Flow::Resource) {
+        return result;
+    }
     let publication = publish_last_argument(last, &state, &context).await;
     drop(storage);
     if let Err(error) = publication {

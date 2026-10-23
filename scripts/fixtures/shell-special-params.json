@@ -245,6 +245,13 @@
       "status": 0,
       "stdout": "status=1 _=_=x x=_=x\n",
       "stderr": "/usr/bin/bash: x: readonly variable\n/usr/bin/bash: x: readonly variable\n/usr/bin/bash: x: readonly variable\n/usr/bin/bash: x: readonly variable\n"
+    },
+    {
+      "name": "read-underscore-last-argument",
+      "script": "{ read -n3 _; echo \"[$_]:$?\"; read -r tail; echo \"[$tail]:$?\"; } <<<abcdef\n",
+      "status": 0,
+      "stdout": "[_]:0\n[def]:0\n",
+      "stderr": ""
     }
   ]
 }
