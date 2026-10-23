@@ -60,6 +60,14 @@ cases.push(
   "p=\"\\$'literal'\"; printf '[%s]\\n' \"${p@P}\"",
   "p='\\w'; HOME=/tmp; mkdir '/tmp/bash-web-expansion-transform-prompt-$((2+3))'; cd '/tmp/bash-web-expansion-transform-prompt-$((2+3))'; printf '[%s]\\n' \"${p@P}\"",
 );
+cases.push(
+  "p='\\303\\251\\360\\237\\231\\202'; printf '[%s]\\n' \"${p@P}\"",
+  "p='\\044x|\\140echo CS\\140'; x=VALUE; printf '[%s]\\n' \"${p@P}\"",
+  "p='\\\\$HOME'; printf '[%s]\\n' \"${p@P}\"",
+  "p='${v@Q}'; v=\"a'b\"; printf '[%s]\\n' \"${p@P}\"",
+  "p='done'; a='${p@P}'; b='${a@P}'; printf '[%s]\\n' \"${b@P}\"",
+  'x=a; printf \'[%s]\\n\' "${w:-${x@Q}}" "${x#${x@Q}}"',
+);
 const oracle = recordedBash(
   new URL("fixtures/shell-prompt.json", import.meta.url),
   process.env.BASH_PROMPT_RECORD,

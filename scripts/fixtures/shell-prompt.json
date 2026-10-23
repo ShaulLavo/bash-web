@@ -161,6 +161,36 @@
       "script": "p='\\w'; HOME=/tmp; mkdir '/tmp/bash-web-expansion-transform-prompt-$((2+3))'; cd '/tmp/bash-web-expansion-transform-prompt-$((2+3))'; printf '[%s]\\n' \"${p@P}\"",
       "status": 0,
       "stdoutBase64": "W34vYmFzaC13ZWItZXhwYW5zaW9uLXRyYW5zZm9ybS1wcm9tcHQtJCgoMiszKSldCg=="
+    },
+    {
+      "script": "p='\\303\\251\\360\\237\\231\\202'; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "W8Op8J+Zgl0K"
+    },
+    {
+      "script": "p='\\044x|\\140echo CS\\140'; x=VALUE; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "W1ZBTFVFfENTXQo="
+    },
+    {
+      "script": "p='\\\\$HOME'; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "WyRIT01FXQo="
+    },
+    {
+      "script": "p='${v@Q}'; v=\"a'b\"; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "WydhJ1wnJ2InXQo="
+    },
+    {
+      "script": "p='done'; a='${p@P}'; b='${a@P}'; printf '[%s]\\n' \"${b@P}\"",
+      "status": 0,
+      "stdoutBase64": "W2RvbmVdCg=="
+    },
+    {
+      "script": "x=a; printf '[%s]\\n' \"${w:-${x@Q}}\" \"${x#${x@Q}}\"",
+      "status": 0,
+      "stdoutBase64": "WydhJ10KW2FdCg=="
     }
   ]
 }
