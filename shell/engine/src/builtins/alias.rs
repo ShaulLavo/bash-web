@@ -1,10 +1,5 @@
 use super::{diagnose, error_status, scan_bytes, write};
-use crate::{
-    expand::Work,
-    interpreter::{Context, Outcome},
-    io::FdTable,
-    state::SharedState,
-};
+use crate::{expand::Work, interpreter::Context, io::FdTable, state::SharedState};
 
 const ALIAS_USAGE: &str = "alias: usage: alias [-p] [name[=value] ... ]\n";
 const UNALIAS_USAGE: &str = "unalias: usage: unalias [-a] name [name ...]\n";
@@ -16,7 +11,8 @@ pub(super) async fn run(
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
-) -> Result<Outcome, i32> {
+) -> Result<i32, i32> {
+    let removing = name == "unalias";
     for arg in args {
         scan_bytes(arg.len(), context, work).await?;
     }
@@ -38,18 +34,18 @@ pub(super) async fn run(
         }
     };
     let args = &args[index..];
-    if name == "unalias" {
+    if removing {
         return remove(args, flag, state, fds, context, work).await;
     }
     if args.is_empty() || flag {
         list(state, fds, context, work).await?;
-        return Ok(Outcome::status(0));
+        return Ok(0);
     }
     let mut status = 0;
     for arg in args {
         status |= operand(arg, state, fds, context, work).await?;
     }
-    Ok(Outcome::status(status))
+    Ok(status)
 }
 
 fn options(name: &str, args: &[String]) -> Result<(usize, bool), char> {
@@ -171,10 +167,10 @@ async fn remove(
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
-) -> Result<Outcome, i32> {
+) -> Result<i32, i32> {
     if all {
         state.borrow_mut().clear_aliases();
-        return Ok(Outcome::status(0));
+        return Ok(0);
     }
     if args.is_empty() {
         diagnose(fds, UNALIAS_USAGE, context).await?;
@@ -194,5 +190,5 @@ async fn remove(
         diagnose(fds, &format!("unalias: {arg}: not found\n"), context).await?;
         status = 1;
     }
-    Ok(Outcome::status(status))
+    Ok(status)
 }

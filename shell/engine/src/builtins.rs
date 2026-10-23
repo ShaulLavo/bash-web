@@ -113,7 +113,11 @@ pub(crate) async fn run(
         Builtin::Test => return test::run(name, &args, &state, &fds, &context, work).await,
         Builtin::Trap => return trap::run(&args, &state, &fds, &context, work).await,
         Builtin::Getopts => return getopts::run(&args, &state, &fds, &context, work).await,
-        Builtin::Alias => return alias::run(name, &args, &state, &fds, &context, work).await,
+        Builtin::Alias => {
+            return alias::run(name, &args, &state, &fds, &context, work)
+                .await
+                .map(Outcome::status);
+        }
         Builtin::Shopt => return shopt(&args, &state, &fds, &context, work).await,
         Builtin::LoopControl => {
             return loop_control(name, &args, &fds, &context, work).await;

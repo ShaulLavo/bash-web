@@ -26,16 +26,8 @@ pub(crate) fn script(
     reader(source, source_bytes, budget, options, Position::new())
 }
 
-/// Joined eval arguments, admitted and retained by the eval reader. Keep this
-/// distinct from script entry even though their grammar is currently identical.
-pub(crate) fn eval(
-    source: &str,
-    source_bytes: usize,
-    budget: &ExecutionBudget,
-    options: ParseOptions,
-) -> Result<(ParsedScript, Option<ParseFailure>), String> {
-    reader(source, source_bytes, budget, options, Position::new())
-}
+/// Joined eval arguments use the script reader's grammar and lexical options.
+pub(crate) use script as eval;
 
 /// Where parsing stopped. Bash reads and runs a script one complete line at
 /// a time, so the commands on earlier lines still run first.
