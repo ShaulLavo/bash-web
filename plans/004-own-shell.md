@@ -2761,3 +2761,39 @@ observations. These are not claimed frozen-score gains or losses.
 Reproduce through production Waffle before repair. Keep recorded fixtures,
 local/prefix restoration and cancellation/storage controls; do not invent
 special-variable values or widen the current declaration PR's semantics.
+
+## Function-name grammar prerequisite, 2026-10-22
+
+Status: Approved. Owner: CONTROL follow-up after literal declaration-name validation.
+
+The current parser rejects `f\oo() { :; }`, `'foo'() { :; }` and `"foo"() { :; }`
+with syntax status 2 before producing `Command::Function`. GNU Bash 5.3.15 instead
+executes these declarations as failures with status 1 and an identifier diagnostic.
+For the escaped POSIX form, `parser/mod.rs::command_start` requires
+`current_escapes.is_empty()` before considering `FunctionPosix`; fully quoted
+names do not enter the `Token::Word` branch. `function f\oo { :; }` already reaches
+the function parser and now correctly fails at execution. This PR intentionally
+changes neither grammar nor token admission.
+
+Reproduce strictly after the toolchain setup in `docs/development.md`, with
+`npm run build:shell` then `npm run test:shell:function-names:pending`. The explicit pending recipe must
+fail until its recorded Bash comparisons pass. It is separate from the ordinary
+blocking scoreboard recipe, with no skipped or relaxed assertions. Expected bytes
+and exact Bash version are in `scripts/fixtures/shell-function-names-pending.json`.
+Before/after evidence, including the original escaped-POSIX failure, is retained in
+`/work/reports/bash-web/hill-climb/control/function-names/{before,after,pending}.log`.
+The follow-up must admit these names in the owning grammar, keep dead definitions
+inert, and reuse the execution-time validator rather than adding a parse-time
+identifier rejection. No new frozen case, exclusion or oracle change is authorized.
+
+### Alias runtime prerequisite
+
+Status: Approved. The parser's injected-alias function-name and print controls pass,
+but this base has no `alias` builtin and rejects `shopt -s expand_aliases`. End-to-end
+alias declaration controls therefore remain strict pending comparisons under
+`npm run test:shell:function-names:aliases-pending`, using
+`scripts/fixtures/shell-function-names-aliases-pending.json`. Their exact failures
+are retained in the function-name report's `verify6.log` and `aliases-pending.log`.
+This is a separate builtin prerequisite, not permission to add alias, shopt or
+function-name grammar in the literal-name validation change. Keep parser alias
+coverage and reuse its raw-token provenance when runtime aliases are implemented.

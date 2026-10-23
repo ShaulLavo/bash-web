@@ -10,7 +10,7 @@
   "counts": {
     "oils": {
       "total": 2492,
-      "passed": 1227,
+      "passed": 1229,
       "skipped": 810,
       "categories": {
         "Quoting and word splitting": {
@@ -60,7 +60,7 @@
         },
         "Grammar, functions and control flow": {
           "total": 235,
-          "passed": 168,
+          "passed": 170,
           "skipped": 55
         },
         "Here-docs and redirects": {
@@ -3401,8 +3401,8 @@
 {"id":"oils:func-parsing:43","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:func-parsing:47","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:func-parsing:55","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
-{"id":"oils:func-parsing:66","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"","stderr":""}},
-{"id":"oils:func-parsing:71","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"","stderr":""}},
+{"id":"oils:func-parsing:66","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
+{"id":"oils:func-parsing:71","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:func-parsing:76","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:func-parsing:82","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
 {"id":"oils:func-parsing:88","corpus":"oils","category":"Grammar, functions and control flow","kind":"builtins-only","outcome":"pass"},
