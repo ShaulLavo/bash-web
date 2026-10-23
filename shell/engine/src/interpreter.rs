@@ -286,6 +286,45 @@ pub(crate) struct Context {
     trace: xtrace::Trace,
 }
 impl Context {
+    fn root(
+        core: Rc<Core>,
+        source: crate::exec::Source,
+        evaluation: crate::exec::Scope,
+        group: GroupId,
+        lifetime: (Cancel, Rc<Cell<Option<i32>>>),
+    ) -> Self {
+        Self {
+            core,
+            source,
+            cancel: lifetime.0.clone(),
+            signal: lifetime.1.clone(),
+            lifetime,
+            group,
+            invocation_group: group,
+            scope: Scope::new(0),
+            parameter_error_status: 127,
+            compound_child: false,
+            loop_depth: 0,
+            ignore_errexit: false,
+            trace: xtrace::Trace::default(),
+            evaluation,
+        }
+    }
+    fn descend(mut self) -> Result<Self, i32> {
+        self.evaluation = self.evaluation.descend()?;
+        Ok(self)
+    }
+    fn substitution(&self, cancel: Cancel, signal: Rc<Cell<Option<i32>>>, group: GroupId) -> Self {
+        Self {
+            cancel,
+            signal,
+            group,
+            parameter_error_status: 1,
+            compound_child: false,
+            trace: self.trace.nested(),
+            ..self.isolated()
+        }
+    }
     fn stop_signal(&self) -> i32 {
         self.signal.get().unwrap_or(2)
     }
@@ -751,22 +790,13 @@ impl Session {
         let foreground_cancel = cancel.clone();
         let signal = Rc::new(Cell::new(None));
         let foreground_signal = signal.clone();
-        let context = Context {
-            core: self.core.clone(),
-            source: crate::exec::Source::root(source),
-            lifetime: (cancel.clone(), signal.clone()),
-            cancel,
-            signal,
-            group,
-            invocation_group: group,
-            scope: Scope::new(0),
-            parameter_error_status: 127,
-            compound_child: false,
-            loop_depth: 0,
-            ignore_errexit: false,
-            trace: xtrace::Trace::default(),
+        let context = Context::root(
+            self.core.clone(),
+            crate::exec::Source::root(source),
             evaluation,
-        };
+            group,
+            (cancel, signal),
+        );
         let state = self.state.clone();
         let join = self.core.executor.spawn(async move {
             let _foreground = ForegroundGuard(context.core.clone());
@@ -1135,15 +1165,11 @@ fn execute(
     if state.borrow().noexec {
         return futures::future::Either::Left(futures::future::ready(Outcome::status(0)));
     }
-    let evaluation = match context.evaluation.descend() {
-        Ok(scope) => scope,
+    let context = match context.descend() {
+        Ok(context) => context,
         Err(code) => {
             return futures::future::Either::Left(futures::future::ready(Outcome::status(code)));
         }
-    };
-    let context = Context {
-        evaluation,
-        ..context
     };
     let evaluation = context.evaluation.clone();
     evaluation.frame(
@@ -1673,16 +1699,13 @@ fn loop_arithmetic<'a>(
     if context.cancel.is_cancelled() {
         return futures::future::Either::Left(futures::future::ready(Outcome::status(130)));
     }
-    let evaluation = match context.evaluation.descend() {
-        Ok(scope) => scope,
+    let context = match context.compound_body().descend() {
+        Ok(context) => context,
         Err(code) => {
             return futures::future::Either::Left(futures::future::ready(Outcome::status(code)));
         }
     };
-    let context = Context {
-        evaluation: evaluation.clone(),
-        ..context.compound_body()
-    };
+    let evaluation = context.evaluation.clone();
     // The retained loop already owns this typed source. Replay borrows it;
     // every evaluation still owns fresh Work and command-local descriptors.
     evaluation.frame(
@@ -1935,6 +1958,12 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
     };
     let (name, message, line, status) = match error {
         expand::Error::Status(code) => return Outcome::status(code),
+        expand::Error::Abort(code) => {
+            return Outcome {
+                code,
+                flow: Flow::Abort,
+            };
+        }
         expand::Error::AssignmentDepth => return Outcome { code: 1, flow },
         expand::Error::SpecialAssignment { name, line } => {
             (name, "cannot assign in this way".to_owned(), line, 1)
@@ -2324,7 +2353,7 @@ async fn async_identity(
 
 fn admission_status(error: expand::Error) -> i32 {
     match error {
-        expand::Error::Status(code) => code,
+        expand::Error::Status(code) | expand::Error::Abort(code) => code,
         _ => 2,
     }
 }
@@ -2418,15 +2447,9 @@ impl Substitutions {
         let parent = self.context.cancel.clone();
         let parent_signal = self.context.signal.clone();
         let parent_scope = self.context.scope.clone();
-        let context = Context {
-            cancel: cancel.clone(),
-            signal: signal.clone(),
-            group,
-            parameter_error_status: 1,
-            compound_child: false,
-            trace: self.context.trace.nested(),
-            ..self.context.isolated()
-        };
+        let context = self
+            .context
+            .substitution(cancel.clone(), signal.clone(), group);
         let link = cancel.clone();
         let link_signal = signal.clone();
         let capture_complete = Cancel::new();
@@ -2563,15 +2586,9 @@ impl Substitutions {
         let cancel = Cancel::new();
         let group = core.host.allocate_background_group();
         let signal = Rc::new(Cell::new(None));
-        let context = Context {
-            cancel: cancel.clone(),
-            signal: signal.clone(),
-            group,
-            parameter_error_status: 1,
-            compound_child: false,
-            trace: self.context.trace.nested(),
-            ..self.context.isolated()
-        };
+        let context = self
+            .context
+            .substitution(cancel.clone(), signal.clone(), group);
         let parent = self.context.cancel.clone();
         let parent_signal = self.context.signal.clone();
         let parent_scope = self.context.scope.clone();
@@ -2766,7 +2783,7 @@ async fn simple_command(
     )
     .await
     {
-        return Outcome::status(error);
+        return expansion_failure(error.into(), &original_fds, &context).await;
     }
     drop(original_fds);
     dispatch_simple_command(prepared, state, context, parent_stderr)
@@ -4352,26 +4369,18 @@ mod residual_review_tests {
             let cancel = Cancel::new();
             let signal = Rc::new(Cell::new(None));
             let group = self.host.allocate_group();
-            Context {
-                evaluation: crate::exec::Scope::new(
-                    core.limits.source_bytes,
-                    core.eval_storage.clone(),
-                    core.execution_storage.clone(),
-                ),
+            let evaluation = crate::exec::Scope::new(
+                core.limits.source_bytes,
+                core.eval_storage.clone(),
+                core.execution_storage.clone(),
+            );
+            Context::root(
                 core,
-                source: crate::exec::Source::root(""),
-                lifetime: (cancel.clone(), signal.clone()),
-                cancel,
-                signal,
+                crate::exec::Source::root(""),
+                evaluation,
                 group,
-                invocation_group: group,
-                scope: Scope::new(0),
-                parameter_error_status: 127,
-                compound_child: false,
-                loop_depth: 0,
-                ignore_errexit: false,
-                trace: xtrace::Trace::default(),
-            }
+                (cancel, signal),
+            )
         }
         fn shutdown(mut self) {
             let session = self.session.take().unwrap();

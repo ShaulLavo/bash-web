@@ -2273,7 +2273,8 @@ mod tests {
             state.xtrace = true;
         }
         let mut work = Work::new(100_000, 64 * 1024, 0);
-        let mut child = finish_snapshot(&state, &Cancel::new(), &mut work).unwrap();
+        let mut child = finish_snapshot(&state, &Cancel::new(), &mut work)
+            .unwrap_or_else(|_| panic!("option snapshot fits"));
         assert_eq!(child.parameter("-"), "efhmnuxBc");
         child.command_string = false;
         child.xtrace = false;

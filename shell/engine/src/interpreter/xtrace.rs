@@ -21,14 +21,12 @@ pub(super) async fn command(
     state: &SharedState,
     fds: &Descriptors,
     context: &Context,
-) -> Result<(), i32> {
+) -> Result<(), expand::Error> {
     if !state.borrow().xtrace || context.trace.prompt || argv.is_empty() {
         return Ok(());
     }
     for (name, value) in assigned {
-        assignment(name, value, state, fds, context)
-            .await
-            .map_err(super::admission_status)?;
+        assignment(name, value, state, fds, context).await?;
     }
     let Some(mut writer) = Writer::start(state, fds, context).await? else {
         return Ok(());
@@ -39,7 +37,7 @@ pub(super) async fn command(
         }
         writer.word(arg).await?;
     }
-    writer.finish().await
+    writer.finish().await.map_err(Into::into)
 }
 
 pub(crate) async fn builtin_assignment(
@@ -92,18 +90,15 @@ impl<'a> Writer<'a> {
         state: &SharedState,
         fds: &Descriptors,
         context: &'a Context,
-    ) -> Result<Option<Self>, i32> {
-        let Some(endpoint) = fds.borrow().get(2) else {
-            return Ok(None);
-        };
+    ) -> Result<Option<Self>, expand::Error> {
+        let endpoint = fds.borrow().get(2);
         let mut prompt_context = context.clone();
         prompt_context.trace.prompt = true;
         let mut work = substitution_work(&prompt_context, fds);
         let raw = {
             let state = state.borrow();
             let value = state.parameter("PS4");
-            work.admit_storage(value.len())
-                .map_err(super::admission_status)?;
+            work.admit_storage(value.len())?;
             value.into_owned()
         };
         let prefix = match expand::prompt(
@@ -116,11 +111,18 @@ impl<'a> Writer<'a> {
         .await
         {
             Ok(prefix) => prefix,
-            Err(expand::Error::Status(code)) => return Err(code),
+            Err(error @ (expand::Error::Status(_) | expand::Error::Abort(_))) => return Err(error),
             Err(error) => {
-                super::expansion_failure(error.into(), fds, context).await;
+                prompt_context.parameter_error_status = 1;
+                let failure = super::expansion_failure(error.into(), fds, &prompt_context).await;
+                if state.borrow().errexit && failure.flow == super::Flow::Abort {
+                    return Err(expand::Error::Abort(failure.code));
+                }
                 raw
             }
+        };
+        let Some(endpoint) = endpoint else {
+            return Ok(None);
         };
         let mut writer = Self {
             endpoint,

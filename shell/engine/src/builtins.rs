@@ -337,7 +337,7 @@ fn ascii_eq_ignore_case(value: &str, expected: &str) -> bool {
 
 fn error_status(error: Error) -> i32 {
     match error {
-        Error::Status(code) => code,
+        Error::Status(code) | Error::Abort(code) => code,
         _ => 2,
     }
 }

@@ -711,7 +711,32 @@ struct Expansion<'a> {
     /// Empty array/positional elements consume work even when they emit no text.
     elements_remaining: usize,
 }
-impl Expansion<'_> {
+impl<'a> Expansion<'a> {
+    fn scalar(work: &'a mut Work, cancel: &'a Cancel, max: usize) -> Self {
+        Self {
+            segments: Segments {
+                account_storage: true,
+                ..Segments::default()
+            },
+            captured: Some(Captured {
+                value: String::new(),
+                max_bytes: max,
+            }),
+            pattern: None,
+            replacement: None,
+            pattern_context: false,
+            pattern_snapshots: true,
+            admit_frames: true,
+            ifs: None,
+            ifs_changed: false,
+            work,
+            cancel,
+            max_raw: max,
+            raw_remaining: max,
+            elements_remaining: max,
+        }
+    }
+
     /// Only actual value reads require a binding. The target of a lazy
     /// default/replacement/error operator is tested for absence, not read;
     /// ordinary expansions in its selected operand still pass through here.
@@ -2409,28 +2434,8 @@ pub(crate) async fn arithmetic_text(
     max: usize,
     work: &mut Work,
 ) -> Result<String, Error> {
-    let mut expansion = Expansion {
-        segments: Segments {
-            account_storage: true,
-            ..Segments::default()
-        },
-        captured: Some(Captured {
-            value: String::new(),
-            max_bytes: max,
-        }),
-        pattern: None,
-        replacement: None,
-        pattern_context: true,
-        pattern_snapshots: true,
-        admit_frames: true,
-        ifs: None,
-        ifs_changed: false,
-        work,
-        cancel,
-        max_raw: max,
-        raw_remaining: max,
-        elements_remaining: max,
-    };
+    let mut expansion = Expansion::scalar(work, cancel, max);
+    expansion.pattern_context = true;
     let mut scanner = operand::Scanner::arithmetic(source);
     while let Some(piece) = scanner.next(expansion.work, expansion.cancel).await? {
         expansion.operand_piece(piece, state, true, true, 0).await?;
@@ -2560,28 +2565,7 @@ pub(crate) async fn conditional_word(
     work: &mut Work,
 ) -> Result<String, Error> {
     work.checkpoint(cancel).await?;
-    let mut expansion = Expansion {
-        segments: Segments {
-            account_storage: true,
-            ..Segments::default()
-        },
-        captured: Some(Captured {
-            value: String::new(),
-            max_bytes: max,
-        }),
-        pattern: None,
-        replacement: None,
-        pattern_context: false,
-        pattern_snapshots: true,
-        admit_frames: true,
-        ifs: None,
-        ifs_changed: false,
-        work,
-        cancel,
-        max_raw: max,
-        raw_remaining: max,
-        elements_remaining: max,
-    };
+    let mut expansion = Expansion::scalar(work, cancel, max);
     let mut has_part_quotes = false;
     for &quoted in &word.part_quoted {
         expansion.work.checkpoint(cancel).await?;
@@ -2608,28 +2592,7 @@ pub(crate) async fn prompt(
     max: usize,
     work: &mut Work,
 ) -> Result<String, Error> {
-    let mut expansion = Expansion {
-        segments: Segments {
-            account_storage: true,
-            ..Segments::default()
-        },
-        captured: Some(Captured {
-            value: String::new(),
-            max_bytes: max,
-        }),
-        pattern: None,
-        replacement: None,
-        pattern_context: false,
-        pattern_snapshots: true,
-        admit_frames: true,
-        ifs: None,
-        ifs_changed: false,
-        work,
-        cancel,
-        max_raw: max,
-        raw_remaining: max,
-        elements_remaining: max,
-    };
+    let mut expansion = Expansion::scalar(work, cancel, max);
     let mut scanner = operand::Scanner::prompt(source);
     while let Some(piece) = scanner.next(expansion.work, cancel).await? {
         expansion.operand_piece(piece, state, true, true, 0).await?;
