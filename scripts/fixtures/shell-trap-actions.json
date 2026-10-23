@@ -588,6 +588,132 @@
       "stdout": "err\nerr\nerr\ndone\n",
       "stderr": "",
       "status": 0
+    },
+    {
+      "id": "review-r2-lastpipe-err-simple",
+      "code": "set +m; shopt -s lastpipe; trap 'echo E:$?' ERR; true | false; echo end:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "E:1\nE:1\nend:1:0 1\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-lastpipe-err-simple-errtrace",
+      "code": "set -E; set +m; shopt -s lastpipe; trap 'echo E:$?' ERR; true | false; echo end:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "E:1\nE:1\nend:1:0 1\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-lastpipe-err-function",
+      "code": "set +m; shopt -s lastpipe; trap 'echo E:$?' ERR; f(){ false; }; true | f; echo end:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "E:1\nE:1\nend:1:0 1\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-lastpipe-err-function-errtrace",
+      "code": "set -E; set +m; shopt -s lastpipe; trap 'echo E:$?' ERR; f(){ false; }; true | f; echo end:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "E:1\nE:1\nE:1\nend:1:0 1\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-lastpipe-err-errexit",
+      "code": "set -e; set +m; shopt -s lastpipe; trap 'echo E:$?' ERR; true | false; echo BAD",
+      "status": 1,
+      "stdout": "E:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-lastpipe-err-errexit-errtrace",
+      "code": "set -E; set -e; set +m; shopt -s lastpipe; trap 'echo E:$?' ERR; true | false; echo BAD",
+      "status": 1,
+      "stdout": "E:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-return-failed-pipeline",
+      "code": "f(){ trap 'echo ret:$?:${PIPESTATUS[*]}' RETURN; true | false; }; f; echo after:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "ret:1:0 1\nafter:1:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-return-failed-pipeline-errtrace",
+      "code": "set -E; f(){ trap 'echo ret:$?:${PIPESTATUS[*]}' RETURN; true | false; }; f; echo after:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "ret:1:0 1\nafter:1:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-return-successful-pipeline",
+      "code": "f(){ trap 'echo ret:$?:${PIPESTATUS[*]}' RETURN; false | true; }; f; echo after:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "ret:0:1 0\nafter:0:0\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-return-successful-pipeline-errtrace",
+      "code": "set -E; f(){ trap 'echo ret:$?:${PIPESTATUS[*]}' RETURN; false | true; }; f; echo after:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "ret:0:1 0\nafter:0:0\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-return-functrace-pipeline",
+      "code": "set -T; trap 'echo ret:$?:${PIPESTATUS[*]}' RETURN; f(){ true | false; }; f; echo after:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "ret:1:0 1\nafter:1:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-return-functrace-pipeline-errtrace",
+      "code": "set -E; set -T; trap 'echo ret:$?:${PIPESTATUS[*]}' RETURN; f(){ true | false; }; f; echo after:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "ret:1:0 1\nafter:1:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-return-if-body-pipeline",
+      "code": "set -T; trap 'echo ret:$?:${PIPESTATUS[*]}' RETURN; f() if true; then true | false; fi; f; echo after:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "ret:1:0 1\nafter:1:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-return-if-body-pipeline-errtrace",
+      "code": "set -E; set -T; trap 'echo ret:$?:${PIPESTATUS[*]}' RETURN; f() if true; then true | false; fi; f; echo after:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "ret:1:0 1\nafter:1:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-return-arithmetic-body",
+      "code": "set -T; trap 'echo ret:$?:${PIPESTATUS[*]}' RETURN; f() ((0)); true | true; f; echo after:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "ret:1:1\nafter:1:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-return-arithmetic-body-errtrace",
+      "code": "set -E; set -T; trap 'echo ret:$?:${PIPESTATUS[*]}' RETURN; f() ((0)); true | true; f; echo after:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "ret:1:1\nafter:1:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-return-test-body",
+      "code": "set -T; trap 'echo ret:$?:${PIPESTATUS[*]}' RETURN; f() [[ a = b ]]; true | true; f; echo after:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "ret:1:1\nafter:1:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "review-r2-return-test-body-errtrace",
+      "code": "set -E; set -T; trap 'echo ret:$?:${PIPESTATUS[*]}' RETURN; f() [[ a = b ]]; true | true; f; echo after:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "ret:1:1\nafter:1:1\n",
+      "stderr": ""
     }
   ]
 }
