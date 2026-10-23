@@ -104,15 +104,15 @@ impl<'a> Scanner<'a> {
         }
     }
     pub(super) fn prompt(source: &'a str) -> Self {
-        Self {
-            context: Context::Prompt,
-            case_positionals: true,
-            ..Self::new(source, true, true, false)
-        }
+        Self::quoted(source, Context::Prompt)
     }
     pub(super) fn arithmetic(source: &'a str) -> Self {
+        Self::quoted(source, Context::Arithmetic)
+    }
+    fn quoted(source: &'a str, context: Context) -> Self {
         Self {
-            context: Context::Arithmetic,
+            context,
+            case_positionals: context == Context::Prompt,
             ..Self::new(source, true, true, false)
         }
     }
