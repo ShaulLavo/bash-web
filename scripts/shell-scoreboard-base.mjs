@@ -119,9 +119,10 @@ function sameExceptEnvironment(target, candidate) {
  * @param {any} [receipt] the committed receipt unless supplied (tests only)
  */
 export function instrumentMigrationEvidence(root, ref, candidateOracle, receipt = undefined) {
-  const transition = ref === authorizedRuntimeTransition.target
-    ? authorizedRuntimeTransition
-    : authorizedInstrumentTransition;
+  const transition =
+    ref === authorizedRuntimeTransition.target
+      ? authorizedRuntimeTransition
+      : authorizedInstrumentTransition;
   assert.equal(ref, transition.target, "instrument migration is authorized only for its target");
   const { pins, oracle, baseline } = targetEvidence(root, ref, candidateOracle);
   assert.equal(oracle.identity.environment, transition.fromEnvironment, "target environment");
@@ -136,9 +137,8 @@ export function instrumentMigrationEvidence(root, ref, candidateOracle, receipt 
     sameExceptEnvironment(oracle, candidateOracle),
     "instrument migration requires unchanged Bash observations, case set, sources and schema",
   );
-  const receiptPath = transition === authorizedRuntimeTransition
-    ? runtimeReceiptPath
-    : instrumentReceiptPath;
+  const receiptPath =
+    transition === authorizedRuntimeTransition ? runtimeReceiptPath : instrumentReceiptPath;
   const recorded = receipt ?? JSON.parse(readFileSync(resolve(root, receiptPath), "utf8"));
   assert.equal(recorded.schema, 1, "instrument receipt schema");
   assert.deepEqual(

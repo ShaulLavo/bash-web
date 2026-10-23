@@ -181,10 +181,13 @@ test("the authorized receipt rejects nonexistent and unrelated plan items", () =
   }
 });
 
-
 test("the runtime update preserves every target outcome and all Bash observations", () => {
   const oracle = read(oraclePath);
-  const { baseline } = instrumentMigrationEvidence(root, authorizedRuntimeTransition.target, oracle);
+  const { baseline } = instrumentMigrationEvidence(
+    root,
+    authorizedRuntimeTransition.target,
+    oracle,
+  );
   assert.equal(oracle.environment.nodeVersion, "v26.12.1");
   assert.equal(oracle.environment.runner, "waffle-node");
   assertInstrumentChanges(baseline, read(baselinePath), read(runtimeReceiptPath));
@@ -195,7 +198,11 @@ test("the runtime receipt rejects any new loss or changed host environment", () 
   const changed = read(baselinePath);
   const index = changed.cases.findIndex((item: { outcome: string }) => item.outcome === "pass");
   changed.cases[index] = { ...changed.cases[index], outcome: "fail" };
-  const { baseline } = instrumentMigrationEvidence(root, authorizedRuntimeTransition.target, oracle);
+  const { baseline } = instrumentMigrationEvidence(
+    root,
+    authorizedRuntimeTransition.target,
+    oracle,
+  );
   assert.throws(() => assertInstrumentChanges(baseline, changed, read(runtimeReceiptPath)));
   oracle.environment.nodeVersion = "v26.12.2";
   assert.throws(
