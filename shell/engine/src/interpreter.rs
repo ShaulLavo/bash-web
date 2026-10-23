@@ -1125,10 +1125,8 @@ fn execute(
     fds: Descriptors,
     context: Context,
 ) -> eval::Frame<'static, Outcome> {
-    let cancelled = context.cancel.is_cancelled();
-    if cancelled || state.borrow().noexec {
-        let code = if cancelled { 130 } else { 0 };
-        return futures::future::Either::Left(futures::future::ready(Outcome::status(code)));
+    if context.cancel.is_cancelled() {
+        return futures::future::Either::Left(futures::future::ready(Outcome::status(130)));
     }
     let evaluation = match context.evaluation.descend() {
         Ok(scope) => scope,
@@ -1136,6 +1134,9 @@ fn execute(
             return futures::future::Either::Left(futures::future::ready(Outcome::status(code)));
         }
     };
+    if state.borrow().noexec {
+        return futures::future::Either::Left(futures::future::ready(Outcome::status(0)));
+    }
     let context = Context {
         evaluation,
         ..context
