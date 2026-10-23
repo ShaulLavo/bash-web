@@ -52,3 +52,13 @@ hash
     "/unregistered\nstatus=127\n/unregistered\n['ran']\nhash: hash table empty\n",
   );
 });
+
+test("2048 explicit literal paths fit the unchanged production work budget", async () => {
+  const names = Array.from({ length: 2048 }, (_, i) => `q${String(i).padStart(5, "0")}`);
+  const script = `hash -p /kept ${names.join(" ")}; printf 'insert=%s\\n' "$?"; hash -t ${names.at(-1)}; printf 'last=%s\\n' "$?"`;
+  const actual = await runner(script);
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.status, 0);
+  assert.equal(actual.stdout.toString(), "insert=0\n/kept\nlast=0\n");
+  assert.equal(actual.stderr.toString(), "");
+});

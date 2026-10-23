@@ -238,3 +238,59 @@ fn command_hash_reset_admission_is_atomic_and_refunds() {
     drop(table);
     assert_eq!(budget.observation().0, 0);
 }
+
+#[derive(Debug)]
+struct Costs {
+    insert: usize,
+    missing: usize,
+    replace: usize,
+    delete: usize,
+}
+fn measured_update(state: &SharedState, name: &str, path: Option<&str>) -> usize {
+    let mut work = work();
+    block_on(update(state, name, path, &Cancel::new(), &mut work))
+        .ok()
+        .expect("measured update");
+    1_000_000 - work.remaining
+}
+fn costs(count: usize) -> Costs {
+    let (state, budget) = state(20_000_000);
+    let insert = (0..count)
+        .map(|i| measured_update(&state, &format!("q{i:05}"), Some("/kept")))
+        .sum();
+    let table = state.borrow().command_hash.clone();
+    let mut fuel = Work::new(100_000_000, 1_000_000, 1024);
+    for _ in 0..count {
+        assert!(
+            block_on(table.find("absent", &Cancel::new(), &mut fuel))
+                .ok()
+                .expect("missing lookup")
+                .is_none()
+        );
+    }
+    let missing = 100_000_000 - fuel.remaining;
+    drop(table);
+    let replace = measured_update(&state, "q00000", Some("/new"));
+    let delete = measured_update(&state, "q00000", None);
+    eprintln!(
+        "HASH_COST n={count} insert={insert} missing={missing} replace={replace} delete={delete} retained={}",
+        budget.observation().0
+    );
+    Costs {
+        insert,
+        missing,
+        replace,
+        delete,
+    }
+}
+#[test]
+fn command_hash_doubling_scales_with_indexed_paths_not_whole_tables() {
+    let samples = [128, 256, 512, 1024].map(costs);
+    for pair in samples.windows(2) {
+        let [small, large] = pair else { unreachable!() };
+        assert!(large.insert * 10 < small.insert * 27, "insert {pair:?}");
+        assert!(large.missing * 10 < small.missing * 27, "missing {pair:?}");
+        assert!(large.replace * 10 < small.replace * 15, "replace {pair:?}");
+        assert!(large.delete * 10 < small.delete * 15, "delete {pair:?}");
+    }
+}
