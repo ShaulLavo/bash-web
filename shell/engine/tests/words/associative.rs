@@ -90,3 +90,40 @@ fn associative_rejects_empty_keys_without_mutating_existing_entries() {
     );
     assert_indexed_calls(&rig, &["saved", "1"]);
 }
+
+#[test]
+fn associative_r2_incremental_stress() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("declare -A h; for ((i=0;i<2000;i++)); do h[k$i]=$i; done; args ${#h[@]}"), 0);
+    assert_indexed_calls(&rig, &["2000"]);
+}
+
+#[test]
+fn associative_r2_hash_order_and_space_keys() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run(r#"declare -A h=([a]=A [b]=B [c]=C); args "${!h[@]}" "${h[@]}"; h[a b]=space; args "${h[a b]}"; unset 'h[a b]'; args ${#h[@]}"#), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["c", "b", "a", "C", "B", "A"], vec!["space"], vec!["3"]]);
+}
+
+#[test]
+fn associative_r2_partial_declaration() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run(r#"declare -A h=([a]=A plain tail [b]=B)
+args $? "${h[a]}" ${#h[@]}"#), 0);
+    assert_indexed_calls(&rig, &["1", "A", "1"]);
+}
+
+#[test]
+fn associative_r2_empty_read_continues() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run(r#"declare -A h=([a]=1); k=; x=${h[$k]}; args "$?" "$x"; args next"#), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["0", ""], vec!["next"]]);
+}
+
+#[test]
+fn associative_r2_nounset_lengths() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run(r#"set -u; declare -A h=([a]=A); args "${#h[missing]}"; args next"#), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["0"], vec!["next"]]);
+    assert_eq!(rig.run("declare -A uninitialized; args ${#uninitialized[@]}"), 1);
+}
