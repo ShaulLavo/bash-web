@@ -181,7 +181,7 @@ async fn prepare_terminal(
     fds: &FdTable,
     context: &Context,
 ) -> Result<(), i32> {
-    if options.prompt.is_none() && !options.silent {
+    if options.count.maximum() == 0 || (options.prompt.is_none() && !options.silent) {
         return Ok(());
     }
     if input.descriptor_kind().map_err(|error| error.status())? != DescriptorKind::Terminal {
@@ -190,8 +190,10 @@ async fn prepare_terminal(
     if options.silent {
         return Err(2);
     }
-    if let Some(prompt) = options.prompt {
-        diagnose(fds, prompt, context).await?;
+    if let Some(prompt) = options.prompt
+        && diagnose(fds, prompt, context).await == Err(130)
+    {
+        return Err(130);
     }
     Ok(())
 }
