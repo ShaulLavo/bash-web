@@ -205,6 +205,20 @@
       "stderr": ""
     },
     {
+      "id": "xtrace-closed-stderr-abort",
+      "code": "{ PS4='$missing '; set -eux; echo hi; set +x; } 2>&-",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-closed-stderr-effects",
+      "code": "{ PS4='$((a+=1)) '; a=0; set -x; echo hi; set +x; echo $a; } 2>&-",
+      "status": 0,
+      "stdout": "hi\n2\n",
+      "stderr": ""
+    },
+    {
       "id": "flags",
       "code": "echo \"$-\"; set -euxf; echo \"$-\"; set +euxf; echo \"$-\"",
       "status": 0,
