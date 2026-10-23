@@ -34,8 +34,8 @@ impl AliasOptions {
         }
     }
 
-    fn same(&self, other: &Self) -> bool {
-        self.enabled == other.enabled && self.aliases.same(&other.aliases)
+    fn revision(&self) -> Option<u64> {
+        self.enabled.then_some(self.aliases.revision())
     }
 }
 
@@ -44,7 +44,7 @@ pub(super) struct Reader {
     ends: IntoIter<usize>,
     starts: IntoIter<(usize, usize)>,
     failure: Option<ParseFailure>,
-    aliases: AliasOptions,
+    aliases: Option<u64>,
     budget: ExecutionBudget,
     next_position: Option<Position>,
 }
@@ -61,7 +61,7 @@ impl Reader {
             ends: script.command_end_lines.into_iter(),
             starts: script.command_starts.into_iter(),
             failure,
-            aliases,
+            aliases: aliases.revision(),
             budget,
             next_position: None,
         }
@@ -74,7 +74,7 @@ impl Reader {
         previous_line: usize,
     ) -> Result<(), String> {
         let aliases = AliasOptions::snapshot(state);
-        let changed = !self.aliases.same(&aliases);
+        let changed = self.aliases != aliases.revision();
         let restart = self.starts.as_slice().first().and_then(|&(offset, line)| {
             // Definitions cannot alter another command in the same read unit.
             (changed && line > previous_line).then_some(Position {
@@ -171,7 +171,12 @@ pub(super) async fn run(
 
 #[cfg(test)]
 mod tests {
-    use crate::{executor::Executor, interpreter::{Limits, Session}, io::MemoryFs, process::InProcessHost};
+    use crate::{
+        executor::Executor,
+        interpreter::{Limits, Session},
+        io::MemoryFs,
+        process::InProcessHost,
+    };
     use futures::FutureExt;
     use std::rc::Rc;
 
@@ -179,12 +184,73 @@ mod tests {
     fn alias_readers_do_not_retain_tables_between_read_units() {
         let executor = Executor::new();
         let host = InProcessHost::new(executor.clone());
-        let shell = Session::new(executor.clone(), Rc::new(host), Rc::new(MemoryFs::new(4096)), Limits::default());
-        shell.state().borrow_mut().update_alias("anchor", Some("unchanged")).unwrap();
+        let shell = Session::new(
+            executor.clone(),
+            Rc::new(host),
+            Rc::new(MemoryFs::new(4096)),
+            Limits::default(),
+        );
+        shell
+            .state()
+            .borrow_mut()
+            .update_alias("anchor", Some("unchanged"))
+            .unwrap();
         let value = shell.state().borrow().aliases().values().unwrap()["anchor"].as_ptr();
-        let job = shell.start("shopt -s expand_aliases\nalias first=:\nalias second=:\n").unwrap();
+        let job = shell
+            .start("shopt -s expand_aliases\nalias first=:\nalias second=:\n")
+            .unwrap();
         executor.drive(4096);
         assert_eq!(job.now_or_never(), Some(0));
-        assert_eq!(shell.state().borrow().aliases().values().unwrap()["anchor"].as_ptr(), value);
+        assert_eq!(
+            shell.state().borrow().aliases().values().unwrap()["anchor"].as_ptr(),
+            value
+        );
+    }
+    #[test]
+    fn cancelling_a_real_alias_snapshot_copy_never_publishes_the_update() {
+        let executor = Executor::new();
+        let host = InProcessHost::new(executor.clone());
+        let shell = Session::new(
+            executor.clone(),
+            Rc::new(host),
+            Rc::new(MemoryFs::new(4096)),
+            Limits::default(),
+        );
+        let state = shell.state();
+        state
+            .borrow_mut()
+            .update_alias("anchor", Some(&"x".repeat(50_000)))
+            .unwrap();
+        let snapshot = state.borrow().aliases();
+        let job = shell.start("ready=1; alias new=:\necho BAD\n").unwrap();
+        for _ in 0..128 {
+            executor.drive(1);
+            if state.borrow().bindings().get("ready").is_some() {
+                break;
+            }
+        }
+        assert!(state.borrow().bindings().get("ready").is_some());
+        executor.drive(8);
+        assert!(
+            !job.is_finished(),
+            "the real copy must yield before publication"
+        );
+        assert!(
+            state.try_borrow_mut().is_ok(),
+            "no source borrow crosses a yield"
+        );
+        shell.interrupt();
+        executor.drive(4096);
+        assert_eq!(job.now_or_never(), Some(130));
+        assert_eq!(state.borrow().aliases().revision(), snapshot.revision());
+        assert!(
+            !state
+                .borrow()
+                .aliases()
+                .values()
+                .unwrap()
+                .contains_key("new")
+        );
+        assert_eq!(snapshot.values().unwrap()["anchor"].len(), 50_000);
     }
 }

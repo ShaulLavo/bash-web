@@ -89,8 +89,8 @@ async fn operand(
             .await?;
             return Ok(1);
         }
-        let aliases = state.borrow().aliases();
-        scan_bytes(aliases.bytes(), context, work).await?;
+        let bytes = state.borrow().alias_update_work(name, Some(value))?;
+        scan_bytes(bytes, context, work).await?;
         state.borrow_mut().update_alias(name, Some(value))?;
         return Ok(0);
     }
@@ -168,7 +168,7 @@ async fn remove(
     work: &mut Work,
 ) -> Result<i32, i32> {
     if all {
-        state.borrow_mut().clear_aliases();
+        state.borrow_mut().clear_aliases()?;
         return Ok(0);
     }
     if args.is_empty() {
@@ -177,12 +177,14 @@ async fn remove(
     }
     let mut status = 0;
     for arg in args {
-        let aliases = state.borrow().aliases();
-        scan_bytes(aliases.bytes(), context, work).await?;
-        if aliases
+        let bytes = state.borrow().alias_update_work(arg, None)?;
+        scan_bytes(bytes, context, work).await?;
+        let present = state
+            .borrow()
+            .aliases()
             .values()
-            .is_some_and(|values| values.contains_key(arg))
-        {
+            .is_some_and(|values| values.contains_key(arg));
+        if present {
             state.borrow_mut().update_alias(arg, None)?;
             continue;
         }

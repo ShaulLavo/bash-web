@@ -2965,18 +2965,18 @@ results are under `/work/reports/wave-20261022/shell/review75-r2-evidence/`
 and sibling `review75-r1-evidence/`. These gaps need separate bounded controls.
 The reader-budget and alias-printing blockers are fixed in PR #75, not deferred.
 
-- Alias-definition table-copy cost, measured after the reader fix. At source
-  `342c935`, UpCloud-4 debug runs of 1,000, 2,000 and 4,000 distinct definitions
-  took 1.02, 3.94 and 15.94 seconds. Every run returned 0 with `done\n`.
-  Evidence is `alias-takeover-focused2-20261023T115659Z-6o_04p6j/gate.log`
-  under `/work/reports/machine-fleet/remote-gate/`. Generate the input with
-  `shopt -s expand_aliases`, then `alias aN=echo` for each N on its own line,
-  then `echo done`. The reader no longer parses the unread suffix. The remaining
-  suspected cost is `State::update_alias` in `state/aliases.rs`, which admits
-  and copies the whole immutable table on each mutation. Compare with expansion
-  disabled and profile that copy before changing it. Preserve atomic rejection,
-  retained-version charging, parser snapshots, and cancellation. Do not describe
-  the reader fix as making all alias-definition workloads linear.
+- Alias-definition table-copy cost, confirmed by review r4 at `2ccb34a`.
+  Release native definitions at 4k/8k/16k/32k took 1.04/4.21/15.62/61.21
+  seconds on the PC, with the same cost when expansion was disabled.
+  PR #75's r5 repair gives the reader a revision stamp rather than a retained
+  alias table. Unique tables update in place; genuine snapshots retain their
+  admitted immutable versions and require a charged, separately admitted copy.
+  Geometric table growth admits both old and new storage before allocation.
+  Deterministic pointer, cumulative-work, snapshot, rejection, refund and
+  cancellation controls accompany the same-artifact native/production-Waffle
+  scaling recordings. Evidence and current qualification are in
+  `/work/reports/wave-20261022/shell/builtins-alias-table-cost-fix-r5.md`.
+  This does not change the read-unit or function-definition timing contract.
 - Command-substitution alias timing, finding 4. After `alias x='echo YES'`,
   `echo "${v:-$(x)}"`, `: "${v:=$(x)}"` and `${v:-\`x\`}` run `x` in Bash,
   but our lazy substitution parsers receive no aliases. Arithmetic substitution
@@ -3002,6 +3002,15 @@ The reader-budget and alias-printing blockers are fixed in PR #75, not deferred.
 - Alias-value newlines, finding 7. `alias a=$'alias b=echo\nb yes'` followed
   by `a` introduces a new Bash read unit inside the alias replacement.
   The original-source continuation alone cannot represent that boundary.
+  Review r4 also reproduced a here-doc entirely inside an alias value:
+  `shopt -s expand_aliases`, `alias h=$'read -r a <<E\nfrom alias\nE'`,
+  `h`, `echo "[$a]"`, `echo next`, each on its own line. Bash 5.3.15 prints
+  `[from alias]\nnext\n`, status 0. Source `2ccb34a` prints
+  `[echo "[]"]\nnext\n`, status 0: the next source line becomes the here-doc
+  body and never executes. The exact probe and results are in
+  `review75-opus-refusal-r4-evidence/probes2.json` under the wave shell reports.
+  Fix the replacement-text/source continuation boundary with a recorded control
+  in a separate bounded parser change; do not fold it into table ownership.
 - Alias queries and order, finding 7. `alias é=one z=two; alias -p` lists é
   before z in Bash's signed-byte ordering, unlike our Rust string ordering.
   `type x` and `command -v x` also omit aliases. Add recorded query and sorting
