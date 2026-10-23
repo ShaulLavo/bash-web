@@ -3512,6 +3512,11 @@ async fn assignments_body(
         if commit {
             completed.reserve(&assignment.name, retained)?;
         }
+        let value = if commit {
+            state.borrow().case_value(&assignment.name, value)?
+        } else {
+            value
+        };
         let assignment_name = assignment.name.clone();
         if let Err(name) = frame.set(assignment.name, value) {
             if let Some(fds) = function_diagnostics {

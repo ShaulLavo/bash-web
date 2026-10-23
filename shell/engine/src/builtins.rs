@@ -694,36 +694,20 @@ async fn declarations(
     work: &mut Work,
 ) -> Result<Outcome, i32> {
     let mut args = args.into_iter().peekable();
-    let mut print = false;
-    let mut nameref = false;
-    let mut readonly = false;
-    let mut exported = false;
     if name == "local" && state.borrow().function_calls == 0 {
         return Err(1);
     }
-    if matches!(name, "local" | "declare" | "typeset") {
-        while let Some(option) = args.next_if(|arg| arg.starts_with('-')) {
-            if option == "--" {
-                break;
-            }
-            for flag in option[1..].bytes() {
-                work.checkpoint(&context.cancel)
-                    .await
-                    .map_err(error_status)?;
-                match flag {
-                    b'p' if matches!(name, "declare" | "typeset") => print = true,
-                    b'n' => nameref = true,
-                    b'r' => readonly = true,
-                    b'x' => exported = true,
-                    _ => return Err(2),
-                }
-            }
-        }
-    }
+    let DeclarationOptions {
+        print,
+        nameref,
+        readonly,
+        exported,
+        case,
+    } = declaration_options(name, &mut args, context, work).await?;
     if print {
         return declarations::print(name, args, state, fds, context, work).await;
     }
-    if nameref && (readonly || exported) {
+    if nameref && (readonly || exported || case.specified()) {
         return Err(2);
     }
     if args.peek().is_none() && (nameref || matches!(name, "declare" | "typeset")) {
@@ -767,12 +751,7 @@ async fn declarations(
         }
         if nameref {
             let result = nameref_declaration(&key, value, local, state, context, work).await;
-            status |= i32::from(result.is_err());
-            if let Err(code) = result
-                && matches!(code, 2 | crate::exec::RESOURCE_STATUS)
-            {
-                return Err(code);
-            }
+            status |= declaration_status(result)?;
             continue;
         }
         if let Some(value) = &value
@@ -789,17 +768,15 @@ async fn declarations(
         } else {
             key
         };
-        let result = apply_declaration(name, &key, value, &mut state.borrow_mut());
-        if result == Err(crate::exec::RESOURCE_STATUS) {
-            return result.map(|()| Outcome::status(0));
-        }
-        if result.is_ok() {
-            if exported {
-                state.borrow_mut().export(key.clone(), None)?;
-            }
-            if readonly {
-                state.borrow_mut().readonly(key.clone(), None)?;
-            }
+        let result = if case.specified() {
+            state
+                .borrow_mut()
+                .declare_case(key.clone(), value, local, case, work)
+        } else {
+            apply_declaration(name, &key, value, &mut state.borrow_mut())
+        };
+        if declaration_status(result)? == 0 {
+            declaration_attributes(&key, exported, readonly, &mut state.borrow_mut())?;
             continue;
         }
         status = 1;
@@ -808,6 +785,81 @@ async fn declarations(
         }
     }
     Ok(Outcome::status(status))
+}
+
+fn declaration_status(result: Result<(), i32>) -> Result<i32, i32> {
+    match result {
+        Ok(()) => Ok(0),
+        Err(code @ (2 | crate::exec::RESOURCE_STATUS)) => Err(code),
+        Err(_) => Ok(1),
+    }
+}
+
+fn declaration_attributes(
+    key: &str,
+    exported: bool,
+    readonly: bool,
+    state: &mut crate::state::State,
+) -> Result<(), i32> {
+    if exported {
+        state.export(key.to_owned(), None)?;
+    }
+    if readonly {
+        state.readonly(key.to_owned(), None)?;
+    }
+    Ok(())
+}
+
+#[derive(Default)]
+struct DeclarationOptions {
+    print: bool,
+    nameref: bool,
+    readonly: bool,
+    exported: bool,
+    case: crate::state::CaseOptions,
+}
+
+async fn declaration_options(
+    name: &str,
+    args: &mut std::iter::Peekable<std::vec::IntoIter<String>>,
+    context: &Context,
+    work: &mut Work,
+) -> Result<DeclarationOptions, i32> {
+    let mut flags = DeclarationOptions::default();
+    if !matches!(name, "local" | "declare" | "typeset") {
+        return Ok(flags);
+    }
+    while let Some(option) = args.next_if(|arg| arg.starts_with(['-', '+'])) {
+        if option == "--" {
+            break;
+        }
+        declaration_option(name, &option, &mut flags, context, work).await?;
+    }
+    Ok(flags)
+}
+
+async fn declaration_option(
+    name: &str,
+    option: &str,
+    flags: &mut DeclarationOptions,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    let enabled = option.starts_with('-');
+    for flag in option[1..].bytes() {
+        work.checkpoint(&context.cancel)
+            .await
+            .map_err(error_status)?;
+        match flag {
+            b'p' if enabled && name != "local" => flags.print = true,
+            b'n' if enabled => flags.nameref = true,
+            b'r' if enabled => flags.readonly = true,
+            b'x' if enabled => flags.exported = true,
+            b'l' | b'u' => flags.case.flag(flag == b'u', enabled),
+            _ => return Err(2),
+        }
+    }
+    Ok(())
 }
 
 async fn nameref_declaration(

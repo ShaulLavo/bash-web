@@ -81,6 +81,9 @@ async fn scalar(
     };
     let previous = old.and_then(|old| old.slot(index));
     let value = append(previous, value, assignment.append, limit, work)?;
+    let value = state
+        .case_value(&assignment.name, value)
+        .map_err(expand::Error::from)?;
     if assignment.index.is_none() && !matches!(old, Some(Binding::Indexed(_))) {
         return Ok(BindingUpdate::Replace(value.into()));
     }
@@ -148,6 +151,7 @@ async fn compound(
         )
         .await?;
         bytes = bytes.saturating_add(fields.iter().map(String::len).sum::<usize>());
+        let fields = case_fields(fields, &assignment.name, state)?;
         insert_fields(&mut values, &mut index, fields, work, &context.cancel).await?;
     }
     if assignment.append {
@@ -155,6 +159,18 @@ async fn compound(
     } else {
         Ok(BindingUpdate::Replace(Binding::Indexed(Rc::new(values))))
     }
+}
+
+fn case_fields(
+    mut fields: Vec<String>,
+    name: &str,
+    state: &SharedState,
+) -> Result<Vec<String>, expand::Error> {
+    let state = state.borrow();
+    for value in &mut fields {
+        *value = state.case_value(name, std::mem::take(value))?;
+    }
+    Ok(fields)
 }
 
 async fn insert_fields(

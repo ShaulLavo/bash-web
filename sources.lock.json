@@ -1530,7 +1530,9 @@
     },
     "invalidTargetStatus": {
       "classification": "Original GNU Bash 5.3.15 semantic adapter and nonmutation, operand-continuation, local, readonly, admission and cancellation controls. No upstream implementation copied. Nine fixture scripts are adapted separately from the frozen corpus below.",
-      "implementationDestinations": ["shell/engine/src/builtins.rs::nameref_declaration"],
+      "implementationDestinations": [
+        "shell/engine/src/builtins.rs::nameref_declaration"
+      ],
       "testDestinations": [
         "shell/engine/tests/words/nameref_invalid.rs",
         "shell/engine/tests/words/namerefs.rs",
@@ -1546,7 +1548,9 @@
           "path": "spec/nameref.test.sh",
           "sha256": "8aa55ed6c5dbf24d414175c988819411b60ba459ae8e43f3b1e543b6c492f304",
           "license": "Apache-2.0",
-          "caseIds": ["oils:nameref:604"]
+          "caseIds": [
+            "oils:nameref:604"
+          ]
         },
         {
           "repository": "https://github.com/reubeno/brush",
@@ -1570,7 +1574,9 @@
           "path": "crates/bashkit/tests/spec_cases/bash/bashbox-declare.test.sh",
           "sha256": "fdcd96c28f338796272a1928491d37dbae60a561fd624aefa19a73e8c7a2291f",
           "license": "MIT",
-          "caseIds": ["bashkit-suite:bashbox-declare:220"]
+          "caseIds": [
+            "bashkit-suite:bashbox-declare:220"
+          ]
         }
       ]
     }
@@ -2147,5 +2153,33 @@
     ],
     "deferred": "Executing -F/-C callbacks, alias generation pending alias state, readline bindings, and job-command completion. Registration and printing retain callback text without executing it.",
     "documentation": "docs/completion.md"
+  },
+  "shellCaseAttributes": {
+    "classification": "Original scalar case-attribute metadata and write adapters, observed against GNU Bash 5.3.15. No upstream implementation copied or adapted.",
+    "oracle": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "implementationDestinations": [
+      "shell/engine/src/state/case.rs",
+      "shell/engine/src/state/case_attributes.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/declarations.rs",
+      "shell/engine/src/state/declarations.rs",
+      "shell/engine/src/interpreter.rs",
+      "shell/engine/src/interpreter/indexed.rs",
+      "shell/engine/src/expand/transformation.rs"
+    ],
+    "strategy": "Keep lower/upper metadata in state, save and restore it with locals, admit it in snapshots, and map owned scalar values before assignment publication. Reuse the existing bounded locale mapper moved unchanged below expansion. Preserve attribute-only values and expose case metadata through named declaration and parameter-transform rendering.",
+    "fixture": {
+      "path": "scripts/fixtures/shell-declare-attrs.json",
+      "sha256": "5c6274e5112f7086be86557ba114429de1133860e96de500564648b550dd7868"
+    },
+    "documentation": "docs/declaration-printing.md",
+    "deferred": [
+      "integer attributes",
+      "array declaration and printing",
+      "global declaration enumeration",
+      "declare -g",
+      "export -n and attribute removal other than +l/+u"
+    ]
   }
 }

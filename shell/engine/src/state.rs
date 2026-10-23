@@ -14,6 +14,10 @@ use std::{
 };
 
 pub(crate) mod completion;
+mod case;
+mod case_attributes;
+pub(crate) use case::Locale as CaseLocale;
+pub(crate) use case_attributes::{CaseMapping, CaseOptions};
 mod declarations;
 pub(crate) use declarations::DeclarationView;
 mod binding;
@@ -66,6 +70,7 @@ pub(crate) struct LocalVariable {
     previous: Option<Binding>,
     nameref: Option<String>,
     exported: bool,
+    case_mapping: Option<CaseMapping>,
     readonly: bool,
     function_prefix: bool,
     storage_base: usize,
@@ -129,6 +134,7 @@ pub struct State {
     variables: BTreeMap<String, Binding>,
     exported: BTreeSet<String>,
     readonly: BTreeSet<String>,
+    case_attributes: BTreeMap<String, CaseMapping>,
     /// Scalar reference targets, distinct from ordinary variable values.
     namerefs: BTreeMap<String, String>,
     pub cwd: String,
@@ -179,6 +185,7 @@ impl Default for State {
             ]),
             exported: BTreeSet::new(),
             readonly: BTreeSet::new(),
+            case_attributes: BTreeMap::new(),
             namerefs: BTreeMap::new(),
             cwd: "/home/guest".into(),
             directories: DirectoryStack::default(),
@@ -339,6 +346,7 @@ impl State {
         let exported = snapshot_set(source, |s| &s.exported, cancel, work).await?;
         let readonly = snapshot_set(source, |s| &s.readonly, cancel, work).await?;
         let namerefs = snapshot_map(source, |s| &s.namerefs, cancel, work).await?;
+        let case_attributes = snapshot_map(source, |s| &s.case_attributes, cancel, work).await?;
         let functions = snapshot_map(source, |s| &s.functions, cancel, work).await?;
         let pipestatus = snapshot_vec(source, |s| &s.pipestatus, cancel, work).await?;
         let positional_memory = source
@@ -373,6 +381,7 @@ impl State {
             variables,
             exported,
             readonly,
+            case_attributes,
             namerefs,
             cwd,
             directories,
@@ -878,6 +887,7 @@ impl State {
         if self.is_readonly(&name) {
             return Err(1);
         }
+        let value = self.case_value(&name, value)?;
         let changes = self.assignment_undo.0.upgrade();
         if let Some(changes) = &changes {
             let mut changes = changes.borrow_mut();
@@ -1176,6 +1186,7 @@ impl State {
         {
             let local = self.locals[index].remove(name).ok_or(1)?;
             restore_nameref(&mut self.namerefs, name, local.nameref);
+            self.restore_case(name, local.case_mapping);
             if local.exported {
                 self.exported.insert(name.to_owned());
             } else {
@@ -1209,6 +1220,7 @@ impl State {
         // its live value charge. Shrinking cannot fail admission.
         self.reserve_local_value(name, 0).map_err(|_| 1)?;
         self.exported.remove(name);
+        self.case_attributes.remove(name);
         let removed = self.variables.remove(name).is_some() || was_dynamic;
         if name == "IFS" {
             self.refresh_star_separator();
@@ -1236,7 +1248,16 @@ impl State {
         } else {
             0
         };
-        let value = value.map(Binding::from);
+        let value = value
+            .map(|value| {
+                if already_local {
+                    self.case_value(&name, value)
+                } else {
+                    Ok(value)
+                }
+            })
+            .transpose()?
+            .map(Binding::from);
         let bytes = value
             .as_ref()
             .map_or(inherited_bytes, Binding::storage_bytes);
@@ -1288,6 +1309,8 @@ impl State {
                 .checked_add(self.variables.get(name).map_or(0, Binding::storage_bytes))
                 .ok_or(2)?
                 .checked_add(self.namerefs.get(name).map_or(0, String::len))
+                .ok_or(2)?
+                .checked_add(self.saved_case_storage(name))
                 .ok_or(2)?;
             let memory = self
                 .memory
@@ -1304,6 +1327,7 @@ impl State {
                 previous: self.variables.remove(name),
                 nameref: self.namerefs.remove(name),
                 exported: self.exported.contains(name),
+                case_mapping: self.case_attributes.remove(name),
                 readonly: false,
                 function_prefix: false,
                 storage_base,
@@ -1315,6 +1339,24 @@ impl State {
                 .insert(name.to_owned(), previous);
         }
         Ok(())
+    }
+    fn restore_locals(&mut self, locals: BTreeMap<String, LocalVariable>) {
+        for (name, local) in locals {
+            self.restore_getopts(local.getopts);
+            restore_nameref(&mut self.namerefs, &name, local.nameref);
+            self.restore_case(&name, local.case_mapping);
+            // Ordinary export changes in functions belong to the caller.
+            if local.exported {
+                self.exported.insert(name.clone());
+            } else {
+                self.exported.remove(&name);
+            }
+            if let Some(value) = local.previous {
+                self.variables.insert(name, value);
+            } else {
+                self.variables.remove(&name);
+            }
+        }
     }
     /// `declare -n` is local inside a function, like `local -n`. Only ordinary
     /// scalar targets are admitted by the declaration adapter.
@@ -1362,7 +1404,8 @@ impl State {
             .saturating_add(snapshot_node_bytes::<LocalVariable>()?)
             .saturating_add(name.len())
             .saturating_add(self.variables.get(name).map_or(0, Binding::storage_bytes))
-            .saturating_add(self.namerefs.get(name).map_or(0, String::len));
+            .saturating_add(self.namerefs.get(name).map_or(0, String::len))
+            .saturating_add(self.saved_case_storage(name));
         Ok(bytes)
     }
 }
@@ -2112,22 +2155,7 @@ impl Drop for FunctionFrame {
         s.function_calls -= 1;
         for _ in 0..if self.prefix { 2 } else { 1 } {
             let Some(locals) = s.locals.pop() else { break };
-            for (name, local) in locals {
-                s.restore_getopts(local.getopts);
-                restore_nameref(&mut s.namerefs, &name, local.nameref);
-                // Only local declarations restore their export attribute;
-                // ordinary export changes in functions belong to the caller.
-                if local.exported {
-                    s.exported.insert(name.clone());
-                } else {
-                    s.exported.remove(&name);
-                }
-                if let Some(value) = local.previous {
-                    s.variables.insert(name, value);
-                } else {
-                    s.variables.remove(&name);
-                }
-            }
+            s.restore_locals(locals);
         }
         // Bash refreshes special-variable state when a function frame returns,
         // including a frame that did not declare a local IFS binding.
@@ -2187,6 +2215,17 @@ mod tests {
         panic!("bounded snapshot did not finish");
     }
 
+    fn snapshot_at_exact_limit(state: &SharedState, bytes: usize) -> State {
+        let mut small = Work::new(100_000, bytes - 1, 0);
+        assert!(matches!(
+            finish_snapshot(state, &Cancel::new(), &mut small),
+            Err(Error::Status(2))
+        ));
+        let mut exact = Work::new(100_000, bytes, 0);
+        finish_snapshot(state, &Cancel::new(), &mut exact)
+            .unwrap_or_else(|_| panic!("exact metadata allowance fits"))
+    }
+
     fn short_ifs_members(state: &SharedState) -> IfsMembers {
         let cancel = Cancel::new();
         let mut work = Work::new(256, 0, 0);
@@ -2213,14 +2252,7 @@ mod tests {
             + snapshot_node_bytes::<String>().unwrap_or_else(|_| panic!("node fits"))
             + 9
             + std::mem::size_of::<i32>();
-        let mut small = Work::new(100_000, bytes - 1, 0);
-        assert!(matches!(
-            finish_snapshot(&state, &Cancel::new(), &mut small),
-            Err(Error::Status(2))
-        ));
-        let mut exact = Work::new(100_000, bytes, 0);
-        let mut child = finish_snapshot(&state, &Cancel::new(), &mut exact)
-            .unwrap_or_else(|_| panic!("exact metadata allowance fits"));
+        let mut child = snapshot_at_exact_limit(&state, bytes);
         child
             .assign_parameter("ref".into(), "child".into())
             .unwrap();
@@ -2736,6 +2768,7 @@ mod tests {
                     getopts: None,
                     previous: Some("before local".into()),
                     nameref: None,
+                    case_mapping: None,
                     exported: true,
                     readonly: true,
                     function_prefix: false,
@@ -2781,6 +2814,7 @@ mod tests {
                         getopts: None,
                         previous: Some("x".repeat(128 * 1024).into()),
                         nameref: None,
+                        case_mapping: None,
                         exported: false,
                         readonly: false,
                         function_prefix: false,
@@ -3109,5 +3143,32 @@ mod tests {
             drop(frame);
             assert_eq!(memory.observation().0, 0);
         }
+    }
+    #[test]
+    fn case_attribute_snapshot_admits_metadata_and_cancellation() {
+        let state = State::default().shared();
+        let mut baseline = Work::new(100_000, 100_000, 0);
+        finish_snapshot(&state, &Cancel::new(), &mut baseline)
+            .unwrap_or_else(|_| panic!("plain snapshot fits"));
+        let plain_bytes = 100_000 - baseline.storage_left();
+        state
+            .borrow_mut()
+            .case_attributes
+            .insert("x".into(), CaseMapping::Upper);
+        let bytes = plain_bytes
+            + snapshot_node_bytes::<CaseMapping>().unwrap_or_else(|_| panic!("node fits"))
+            + 1;
+        let mut child = snapshot_at_exact_limit(&state, bytes);
+        child.assign_parameter("x".into(), "child".into()).unwrap();
+        assert_eq!(child.parameter("x"), "CHILD");
+        assert_eq!(state.borrow().parameter("x"), "");
+        let cancel = Cancel::new();
+        cancel.cancel();
+        let mut work = Work::new(100_000, bytes, 0);
+        assert!(matches!(
+            finish_snapshot(&state, &cancel, &mut work),
+            Err(Error::Status(130))
+        ));
+        assert_eq!(state.borrow().case_mapping("x"), CaseMapping::Upper);
     }
 }
