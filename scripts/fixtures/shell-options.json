@@ -149,6 +149,20 @@
       "stderr": ""
     },
     {
+      "id": "xtrace-ps4-nounset",
+      "code": "{ PS4='$missing '; set -eux; echo hi; set +x; } 2>/dev/null",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-required",
+      "code": "{ PS4='${missing:?oops} '; set -ex; echo hi; set +x; } 2>/dev/null",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
       "id": "flags",
       "code": "echo \"$-\"; set -euxf; echo \"$-\"; set +euxf; echo \"$-\"",
       "status": 0,

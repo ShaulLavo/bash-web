@@ -23,7 +23,7 @@ for (const entry of fixture.cases) {
     assert.equal(result.crash, undefined);
     assert.equal(result.status, entry.status);
     assert.equal(result.stdout.toString(), entry.stdout);
-    // Parser diagnostic wording is tracked separately from execution output.
-    if (entry.id !== "noexec-parse") assert.equal(result.stderr.toString(), entry.stderr);
+    if (entry.id === "noexec-parse") assert.notEqual(result.stderr.length, 0);
+    else assert.equal(result.stderr.toString(), entry.stderr);
   });
 }
