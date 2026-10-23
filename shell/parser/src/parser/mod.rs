@@ -891,7 +891,7 @@ impl<'a> Parser<'a> {
     fn parse_inner(&mut self) -> Result<Script> {
         let mut commands = Vec::new();
         let start_span = self.current_span;
-        self.parse_script_into(&mut commands)?;
+        self.parse_script_into(&mut commands, false)?;
         Ok(self.finish_script(commands, start_span))
     }
 
@@ -911,9 +911,24 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_recovering(mut self) -> (Script, Option<Error>) {
+        let (script, error, _) = self.parse_recovering_input(false);
+        (script, error)
+    }
+
+    /// Parse one complete top-level read unit, including multiline compounds
+    /// and here-documents. The caller retains the original source; this AST
+    /// does not copy it. Resume at the returned original-source position.
+    pub fn parse_read_unit_recovering(mut self) -> (Script, Option<Error>, Option<Position>) {
+        self.parse_recovering_input(true)
+    }
+
+    fn parse_recovering_input(
+        &mut self,
+        read_unit: bool,
+    ) -> (Script, Option<Error>, Option<Position>) {
         let mut commands = Vec::new();
         let start_span = self.current_span;
-        let result = self.parse_script_into(&mut commands);
+        let result = self.parse_script_into(&mut commands, read_unit);
         let end_span = self.current_span;
         let (keep, err) = match result {
             Ok(()) => (commands.len(), None),
@@ -953,27 +968,37 @@ impl<'a> Parser<'a> {
             command_starts.truncate(keep);
             command_starts.push(rest);
         }
+        let next = (err.is_none() && self.current_token.is_some())
+            .then_some(self.current_span.start);
         (
             Script {
                 commands,
                 span: start_span.merge(end_span),
                 trailing_error: None,
                 command_end_lines,
-                source: Some(Arc::from(self.input)),
+                source: (!read_unit).then(|| Arc::from(self.input)),
                 command_starts,
             },
             err,
+            next,
         )
     }
 
     /// Top-level command loop. Each command is stored with the line its
     /// terminator (newline, `;`, `&` or EOF) sits on.
     // THREAT[TM-DOS-044]: on the recursive path; bookkeeping is out of line.
-    fn parse_script_into(&mut self, commands: &mut Vec<(Command, usize)>) -> Result<()> {
+    fn parse_script_into(
+        &mut self,
+        commands: &mut Vec<(Command, usize)>,
+        read_unit: bool,
+    ) -> Result<()> {
         self.check_error_token()?;
         while let Some(start) = self.next_script_command()? {
             let parsed = self.parse_command_list()?;
             self.end_script_command(commands, parsed, start)?;
+            if read_unit && matches!(self.current_token, Some(tokens::Token::Newline)) {
+                break;
+            }
         }
         self.take_script_deferred_error()
     }

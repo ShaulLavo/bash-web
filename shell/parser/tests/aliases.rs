@@ -72,3 +72,87 @@ fn suffix_reader_keeps_original_source_offsets_and_lines() {
     assert_eq!(simple.span.start.offset, 12);
     assert_eq!(simple.span.start.line, 2);
 }
+
+#[test]
+fn read_units_stop_after_compounds_quotes_and_heredocs_without_copying_source() {
+    for unit in [
+        "x one; x two\n",
+        "if true; then\nx one\nfi\n",
+        "f() {\nx one\n}\n",
+        "x 'one\ntwo'\n",
+        "read -r line <<EOF\none\nEOF\n",
+    ] {
+        let source = format!("{unit}x later\n");
+        let (script, error, next) = Parser::new(&source)
+            .with_options(options(&[("x", "echo")]))
+            .parse_read_unit_recovering();
+        assert!(error.is_none(), "{source}: {error:?}");
+        assert_eq!(script.commands.len(), 1, "{source}");
+        assert!(
+            script.source.is_none(),
+            "read units borrow their caller's source"
+        );
+        let position = next.expect("next read unit");
+        assert!(position.offset < unit.len(), "{position:?}: {source}");
+        let (rest, error, _) = Parser::at_position(
+            &source,
+            100,
+            100_000,
+            None,
+            options(&[("x", "printf")]),
+            position,
+        )
+        .parse_read_unit_recovering();
+        assert!(error.is_none(), "{source}: {error:?}");
+        assert_eq!(
+            rest.command_starts,
+            [(unit.len(), unit.lines().count() + 1)]
+        );
+        assert_eq!(
+            command_string(&rest.commands[0], &Cell::new(100_000), 100_000, None).unwrap(),
+            "printf later",
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn read_unit_does_not_parse_or_charge_the_unread_suffix() {
+    let source = format!("x first\n{}", "x later\n".repeat(4_000));
+    let aliases = options(&[("x", "echo -------------------------------------")]);
+    assert!(
+        Parser::with_fuel(&source, 200)
+            .with_options(aliases.clone())
+            .parse()
+            .is_err()
+    );
+    let (script, error, next) = Parser::with_fuel(&source, 200)
+        .with_options(aliases)
+        .parse_read_unit_recovering();
+    assert!(error.is_none(), "{error:?}");
+    assert_eq!(script.commands.len(), 1);
+    assert_eq!(next.unwrap().line, 1);
+    assert!(script.source.is_none());
+}
+
+#[test]
+fn read_unit_keeps_syntax_recovery_and_multiline_failure_lines() {
+    let source = "x before\nif;\nx after\n";
+    let (_, error, next) = Parser::new(source).parse_read_unit_recovering();
+    assert!(error.is_none());
+    let (script, error, next) = Parser::at_position(
+        source,
+        100,
+        100_000,
+        None,
+        ParseOptions::default(),
+        next.unwrap(),
+    )
+    .parse_read_unit_recovering();
+    assert!(script.commands.is_empty());
+    assert!(matches!(
+        error,
+        Some(shell_parser::Error::Parse { line: 2, .. })
+    ));
+    assert!(next.is_none());
+}

@@ -172,7 +172,9 @@ async fn run_body(
             context.cancel.cancel();
             return Outcome::status(130);
         }
-        Err(_) => return Outcome::status(2),
+        Err(error) => {
+            return super::abort_diagnostic(&fds, &context, error.as_bytes(), 2).await;
+        }
     };
     if context.cancel.is_cancelled() {
         return Outcome::status(130);

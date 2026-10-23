@@ -144,19 +144,18 @@ async fn print(
     .await?;
     write(fds, name.as_bytes(), context).await?;
     write(fds, b"=", context).await?;
-    let mut parts = value.split('\'').peekable();
-    let mut first = true;
-    while let Some(part) = parts.next() {
-        if !part.is_empty() || (!first && parts.peek().is_some()) || value.is_empty() {
-            write(fds, b"'", context).await?;
-            write(fds, part.as_bytes(), context).await?;
-            write(fds, b"'", context).await?;
-        }
-        if parts.peek().is_some() {
-            write(fds, b"\\'", context).await?;
-        }
-        first = false;
+    if value == "'" {
+        write(fds, b"\\'", context).await?;
+        return write(fds, b"\n", context).await;
     }
+    write(fds, b"'", context).await?;
+    for (index, part) in value.split('\'').enumerate() {
+        if index != 0 {
+            write(fds, b"'\\''", context).await?;
+        }
+        write(fds, part.as_bytes(), context).await?;
+    }
+    write(fds, b"'", context).await?;
     write(fds, b"\n", context).await
 }
 

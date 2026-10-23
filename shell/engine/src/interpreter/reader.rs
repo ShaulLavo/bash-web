@@ -46,6 +46,7 @@ pub(super) struct Reader {
     failure: Option<ParseFailure>,
     aliases: AliasOptions,
     budget: ExecutionBudget,
+    next_position: Option<Position>,
 }
 
 impl Reader {
@@ -62,6 +63,7 @@ impl Reader {
             failure,
             aliases,
             budget,
+            next_position: None,
         }
     }
 
@@ -70,32 +72,36 @@ impl Reader {
         state: &SharedState,
         context: &Context,
         previous_line: usize,
-    ) -> Result<(), ()> {
-        let Some(&(offset, line)) = self.starts.as_slice().first() else {
-            return Ok(());
-        };
-        // Definitions cannot alter another command in the same parsed read unit.
-        if line <= previous_line {
-            return Ok(());
-        }
+    ) -> Result<(), String> {
         let aliases = AliasOptions::snapshot(state);
-        if self.aliases.same(&aliases) {
+        let changed = !self.aliases.same(&aliases);
+        let restart = self.starts.as_slice().first().and_then(|&(offset, line)| {
+            // Definitions cannot alter another command in the same read unit.
+            (changed && line > previous_line).then_some(Position {
+                offset,
+                line,
+                column: 1,
+            })
+        });
+        let position = restart.or_else(|| {
+            self.commands
+                .as_slice()
+                .is_empty()
+                .then_some(self.next_position)
+                .flatten()
+        });
+        let Some(position) = position else {
             return Ok(());
-        }
-        let position = Position {
-            offset,
-            line,
-            column: 1,
         };
-        let (script, failure) = parse::reader(
+        let (script, failure, next) = parse::read_unit(
             &context.source,
             context.limits().source_bytes,
             &self.budget,
             aliases.options(),
             position,
-        )
-        .map_err(|_| ())?;
+        )?;
         *self = Self::new(script, failure, aliases, self.budget.clone());
+        self.next_position = next;
         Ok(())
     }
 }
@@ -111,8 +117,11 @@ pub(super) async fn run(
     let mut discarded_line = 0;
     let mut previous_line = 0;
     loop {
-        if reader.refresh(&state, &context, previous_line).is_err() {
-            return Outcome::status(if context.cancel.probe_now() { 130 } else { 2 });
+        if let Err(error) = reader.refresh(&state, &context, previous_line) {
+            if context.cancel.probe_now() {
+                return Outcome::status(130);
+            }
+            return abort_diagnostic(&fds, &context, error.as_bytes(), 2).await;
         }
         let Some(command) = reader.commands.next() else {
             break;

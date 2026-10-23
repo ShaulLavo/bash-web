@@ -53,26 +53,57 @@ pub(crate) fn reader(
     options: ParseOptions,
     position: Position,
 ) -> Result<(ParsedScript, Option<ParseFailure>), String> {
+    let (script, error) =
+        parser(source, source_bytes, budget, options, position)?.parse_recovering();
+    recovered(script, error, budget)
+}
+
+/// Re-read only the next complete read unit with the current alias table.
+/// AST offsets remain relative to the caller-owned original source.
+pub(crate) fn read_unit(
+    source: &str,
+    source_bytes: usize,
+    budget: &ExecutionBudget,
+    options: ParseOptions,
+    position: Position,
+) -> Result<(ParsedScript, Option<ParseFailure>, Option<Position>), String> {
+    let (script, error, next) =
+        parser(source, source_bytes, budget, options, position)?.parse_read_unit_recovering();
+    let (script, failure) = recovered(script, error, budget)?;
+    Ok((script, failure, next))
+}
+
+fn parser<'a>(
+    source: &'a str,
+    source_bytes: usize,
+    budget: &ExecutionBudget,
+    options: ParseOptions,
+    position: Position,
+) -> Result<Parser<'a>, String> {
     if source.len() > source_bytes {
         return Err("shell source limit exceeded".into());
     }
-    let parser_limits = shell_parser::limits::ExecutionLimits {
+    let limits = ExecutionLimits {
         max_input_bytes: source_bytes,
         ..Default::default()
     };
-    let (script, error) = Parser::at_position(
+    Ok(Parser::at_position(
         source,
-        parser_limits.max_ast_depth,
-        parser_limits.max_parser_operations,
-        Some(parser_limits.parser_timeout),
+        limits.max_ast_depth,
+        limits.max_parser_operations,
+        Some(limits.parser_timeout),
         options,
         position,
     )
     .with_execution_budget(budget.clone())
-    // The whole script is parsed before aliases it defines exist, so the
-    // top level stays lenient; substitution bodies get bash's grammar.
-    .with_strict_substitution_bodies()
-    .parse_recovering();
+    .with_strict_substitution_bodies())
+}
+
+fn recovered(
+    script: shell_parser::parser::Script,
+    error: Option<shell_parser::Error>,
+    budget: &ExecutionBudget,
+) -> Result<(ParsedScript, Option<ParseFailure>), String> {
     budget.check().map_err(|error| error.to_string())?;
     let failure = match error {
         None => None,
