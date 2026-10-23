@@ -1559,3 +1559,32 @@ fn last_async_lazy_operators_are_scalar_nodes_and_named_bang_targets_stay_indire
         matches!(&word.parts[0], WordPart::IndirectExpansion { name, operator: Some(ParameterOp::UseReplacement), .. } if name == "pointer")
     );
 }
+
+#[test]
+fn empty_quotes_next_to_unquoted_tilde_keep_quote_provenance() {
+    for source in ["args ~''", "args ~\"\"", "args x=~''"] {
+        let word = argument(source);
+        assert_eq!(word.parts.len(), 2, "{source}: {word:?}");
+        assert!(
+            word.parts
+                .iter()
+                .zip(&word.part_quoted)
+                .any(|(part, quoted)| *quoted
+                    && matches!(part, WordPart::Literal(text) if text.is_empty())),
+            "{source}: {word:?}"
+        );
+        assert!(
+            word.parts
+                .iter()
+                .zip(&word.part_quoted)
+                .any(|(part, quoted)| !*quoted
+                    && matches!(part, WordPart::Literal(text) if text.contains('~'))),
+            "{source}: {word:?}"
+        );
+    }
+    // The lexer already reads `''~` as one quoted word, so it has no
+    // unquoted tilde prefix and Bash prints it literally.
+    let word = argument("args ''~");
+    assert!(word.quoted, "{word:?}");
+    assert!(matches!(&word.parts[..], [WordPart::Literal(text)] if text == "~"));
+}
