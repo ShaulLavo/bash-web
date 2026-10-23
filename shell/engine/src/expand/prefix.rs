@@ -3,7 +3,20 @@ use crate::state::SharedState;
 use std::ops::Bound::{Excluded, Included, Unbounded};
 
 impl Expansion<'_> {
-    pub(super) async fn prefix_names(
+    pub(super) fn prefix_names<'a>(
+        &'a mut self,
+        prefix: &'a str,
+        star: bool,
+        state: &'a SharedState,
+        quoted: bool,
+        scalar: bool,
+    ) -> crate::exec::ResultFuture<'a, ()> {
+        self.part_frame(move |expansion| {
+            expansion.prefix_name_fields(prefix, star, state, quoted, scalar)
+        })
+    }
+
+    async fn prefix_name_fields(
         &mut self,
         prefix: &str,
         star: bool,
