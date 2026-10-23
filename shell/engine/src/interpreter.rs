@@ -1128,6 +1128,9 @@ fn execute(
     if context.cancel.is_cancelled() {
         return futures::future::Either::Left(futures::future::ready(Outcome::status(130)));
     }
+    if state.borrow().noexec {
+        return futures::future::Either::Left(futures::future::ready(Outcome::status(0)));
+    }
     let evaluation = match context.evaluation.descend() {
         Ok(scope) => scope,
         Err(code) => {
