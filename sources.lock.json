@@ -2122,6 +2122,7 @@
       "shell/engine/src/state.rs",
       "shell/engine/src/builtins.rs",
       "shell/engine/src/builtins/declarations.rs",
+      "shell/engine/src/builtins/getopts.rs",
       "shell/engine/src/interpreter/eval.rs"
     ],
     "testDestinations": [
@@ -2129,6 +2130,8 @@
       "scripts/fixtures/shell-special-params.json",
       "shell/engine/src/state/bindings_tests.rs",
       "shell/engine/tests/words/read_count.rs",
+      "shell/engine/tests/words/getopts.rs",
+      "shell/engine/tests/words/declarations.rs",
       "scripts/fixtures/shell-special-params-publication.json"
     ],
     "testSources": [
@@ -2172,7 +2175,7 @@
         ]
       }
     ],
-    "strategy": "Retain the admitted expanded last argument, then publish it through ordinary binding storage after dispatch and temporary-scope restoration. Assignment-only commands publish an empty value. Preserve terminal cancellation and resource outcomes, pipeline/subshell isolation, readonly target diagnostics and export clearing. Startup uses the actual shell name unless the environment supplied _. No runtime facts or command add-ons are introduced.",
+    "strategy": "Retain the admitted expanded last argument, then publish it through ordinary binding storage after dispatch. Builtin prefix frames remain active until publication reaches their temporary nameref targets, then restore the caller bindings. Automatic publication uses the existing numeric OPTIND publication policy without applying explicit-assignment cursor resets. External dispatch clones its retained command name once for argv and borrows the original for diagnostics. Assignment-only commands publish an empty value. Preserve internal dispatch errors, terminal cancellation and resource outcomes, pipeline/subshell isolation, readonly target diagnostics and export clearing. Startup uses the actual shell name unless the environment supplied _. No runtime facts or command add-ons are introduced.",
     "oracle": "Local GNU Bash 5.3.15(1)-release observations. CI replays the recording through production Waffle, without invoking host Bash. Frozen oracle, baseline, exclusions and scoring are unchanged.",
     "deferred": "Other special parameters and well-known variables, including BASHPID, UID, EUID and LINENO."
   }

@@ -210,6 +210,12 @@ impl Default for State {
         }
     }
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AssignmentKind {
+    Explicit,
+    Publication,
+}
+
 impl State {
     /// Ordinary bindings, without special-parameter or nameref resolution.
     pub fn bindings(&self) -> &BTreeMap<String, Binding> {
@@ -259,7 +265,7 @@ impl State {
             || matches!(self.star_separator, StarSeparator::Snapshot { .. })
                 && self.ifs_members.is_none()
     }
-    pub(crate) fn publish_last_argument(&mut self, value: String) -> Result<(), Error> {
+    pub(crate) fn publish_last_argument(&mut self, mut value: String) -> Result<(), Error> {
         self.exported.remove("_");
         let name = if self.namerefs.contains_key("_") {
             Cow::Owned(self.assignment_name("_".into())?)
@@ -273,7 +279,8 @@ impl State {
                 expansion: false,
             });
         }
-        self.assign_resolved_parameter(name, value)
+        self.normalize_getopts_publication(&name, &mut value);
+        self.assign_resolved_parameter(name, value, AssignmentKind::Publication)
             .map_err(Error::from)
     }
     pub(crate) fn last_async(&self) -> Option<&str> {
@@ -903,9 +910,14 @@ impl State {
     }
     pub fn assign_parameter(&mut self, name: String, value: String) -> Result<(), i32> {
         let name = self.assignment_name(name)?;
-        self.assign_resolved_parameter(Cow::Owned(name), value)
+        self.assign_resolved_parameter(Cow::Owned(name), value, AssignmentKind::Explicit)
     }
-    fn assign_resolved_parameter(&mut self, name: Cow<'_, str>, value: String) -> Result<(), i32> {
+    fn assign_resolved_parameter(
+        &mut self,
+        name: Cow<'_, str>,
+        value: String,
+        kind: AssignmentKind,
+    ) -> Result<(), i32> {
         if self.is_readonly(&name) {
             return Err(1);
         }
@@ -934,8 +946,11 @@ impl State {
             *saved = Some(binding);
         }
         let direct_ifs = name == "IFS";
-        self.assign_getopts_index(&name, &value);
-        if name == "OPTIND"
+        if kind == AssignmentKind::Explicit {
+            self.assign_getopts_index(&name, &value);
+        }
+        if kind == AssignmentKind::Explicit
+            && name == "OPTIND"
             && let Some(changes) = changes
         {
             changes.borrow_mut().getopts = Some(self.getopts);
@@ -1006,6 +1021,12 @@ impl State {
     }
     pub(crate) fn getopts_numeric(&self, name: &str) -> bool {
         name == "OPTIND" && self.getopts_numeric
+    }
+    pub(crate) fn normalize_getopts_publication(&self, target: &str, value: &mut String) {
+        if self.getopts_numeric(target) && value.bytes().any(|byte| !byte.is_ascii_digit()) {
+            value.clear();
+            value.push('0');
+        }
     }
     #[cfg(test)]
     pub(crate) fn getopts_publication_budget(&self) -> Option<crate::exec::StorageBudget> {

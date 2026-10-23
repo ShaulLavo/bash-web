@@ -2754,9 +2754,11 @@ async fn simple_command(
     let PreparedCommand { argv, execution } = prepared.as_mut().unwrap();
     let argv = Cell::new(std::mem::take(argv));
     let mut last_storage = None;
+    let builtin_prefix = Cell::new(None);
     dispatch_simple_command(
         &argv,
         &mut last_storage,
+        &builtin_prefix,
         execution,
         &state,
         &context,
@@ -3090,6 +3092,7 @@ pin_project_lite::pin_project! {
         context: &'a Context,
         stderr: WeakStderr,
         publication: Option<eval::Frame<'static>>,
+        dispatch_error: Option<i32>,
     }
 }
 
@@ -3104,7 +3107,9 @@ impl<F: std::future::Future<Output = Result<Outcome, i32>>> std::future::Future
     ) -> std::task::Poll<Self::Output> {
         let this = self.project();
         if this.publication.is_none() {
-            let outcome = std::task::ready!(this.future.poll(cx)).unwrap_or_else(Outcome::status);
+            let result = std::task::ready!(this.future.poll(cx));
+            *this.dispatch_error = result.as_ref().err().copied();
+            let outcome = result.unwrap_or_else(Outcome::status);
             *this.publication = Some(finish_last_argument(
                 this.argv.take(),
                 outcome,
@@ -3115,14 +3120,26 @@ impl<F: std::future::Future<Output = Result<Outcome, i32>>> std::future::Future
         }
         std::pin::Pin::new(this.publication.as_mut().unwrap())
             .poll(cx)
-            .map(Ok)
+            .map(|outcome| preserve_dispatch_error(outcome, *this.dispatch_error))
     }
+}
+
+fn preserve_dispatch_error(outcome: Outcome, error: Option<i32>) -> Result<Outcome, i32> {
+    let Some(code) = error else {
+        return Ok(outcome);
+    };
+    let original = Outcome::status(code);
+    if outcome.code == original.code && outcome.flow == original.flow {
+        return Err(code);
+    }
+    Ok(outcome)
 }
 
 #[inline(never)]
 fn dispatch_simple_command<'a>(
     argv: &'a Cell<Vec<String>>,
     last_storage: &'a mut Option<crate::exec::StorageAllocation>,
+    builtin_prefix: &'a Cell<Option<PrefixFrame>>,
     execution: &'a mut Result<PreparedExecution, CommandError>,
     state: &'a SharedState,
     context: &'a Context,
@@ -3135,6 +3152,7 @@ fn dispatch_simple_command<'a>(
                 future: dispatch_arguments(
                     argv,
                     last_storage,
+                    builtin_prefix,
                     execution,
                     state,
                     context,
@@ -3145,6 +3163,7 @@ fn dispatch_simple_command<'a>(
                 context,
                 stderr,
                 publication: None,
+                dispatch_error: None,
             },
             Err,
         ),
@@ -3156,6 +3175,7 @@ fn dispatch_simple_command<'a>(
                 context,
                 stderr,
                 publication: None,
+                dispatch_error: None,
             },
             Err,
         ),
@@ -3188,6 +3208,7 @@ impl Drop for CommandArguments<'_> {
 async fn dispatch_arguments(
     arguments: &Cell<Vec<String>>,
     last_storage: &mut Option<crate::exec::StorageAllocation>,
+    builtin_prefix: &Cell<Option<PrefixFrame>>,
     execution: &mut PreparedExecution,
     state: &SharedState,
     context: &Context,
@@ -3229,11 +3250,14 @@ async fn dispatch_arguments(
             fields.next();
         }
         if options.query {
-            let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, work)
+            let frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, work)
                 .await
                 .map_err(admission_status)?;
-            return command_builtin::query(fields.as_slice(), &options, state, &fds, context, work)
-                .await;
+            let result =
+                command_builtin::query(fields.as_slice(), &options, state, &fds, context, work)
+                    .await;
+            builtin_prefix.set(Some(frame));
+            return result;
         }
         let Some(target) = fields.next() else {
             return Ok(Outcome::status(0));
@@ -3382,13 +3406,15 @@ async fn dispatch_arguments(
         return Ok(eval::run(arguments, state, fds, context).await);
     }
     if handler == Some(commands::Handler::Type) {
-        let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, work)
+        let frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, work)
             .await
             .map_err(admission_status)?;
-        return type_builtin::run(args, state, &fds, context, work).await;
+        let result = type_builtin::run(args, state, &fds, context, work).await;
+        builtin_prefix.set(Some(frame));
+        return result;
     }
     if let Some(commands::Handler::Builtin(builtin)) = handler {
-        let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, work)
+        let frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, work)
             .await
             .map_err(admission_status)?;
         let bindings = fds.borrow().clone();
@@ -3402,7 +3428,9 @@ async fn dispatch_arguments(
         } else {
             (name.as_str(), std::borrow::Cow::Borrowed(args))
         };
-        return builtins::run(builtin, name, arguments, state, &bindings, context, work).await;
+        let result = builtins::run(builtin, name, arguments, state, &bindings, context, work).await;
+        builtin_prefix.set(Some(frame));
+        return result;
     }
     if builtin_only {
         builtin_wrapper::missing(name, line, &fds, context).await?;
@@ -3465,10 +3493,10 @@ async fn dispatch_arguments(
         (s.environment(), s.cwd.clone())
     };
     env.extend(assigned);
-    let command = name.clone();
     let mut arguments =
         take_command_arguments(argv, last_storage, argument_offset, context).await?;
-    arguments.insert(0, command.clone());
+    let command = argv[argument_offset - 1].as_str();
+    arguments.insert(0, command.to_owned());
     let pid = context.core.host.spawn(SpawnRequest {
         executable,
         argv: arguments,
@@ -3483,7 +3511,7 @@ async fn dispatch_arguments(
         Err(ProcessError::Runtime(errno @ (6 | 29 | 48))) => {
             return external_wait_failure(
                 ProcessError::StartFailed(errno),
-                &command,
+                command,
                 None,
                 parent_stderr,
                 context,
@@ -3493,7 +3521,7 @@ async fn dispatch_arguments(
         Err(ProcessError::ProcessLimit) => {
             return external_wait_failure(
                 ProcessError::StartFailed(6),
-                &command,
+                command,
                 None,
                 parent_stderr,
                 context,
@@ -3510,9 +3538,9 @@ async fn dispatch_arguments(
     drop(fds);
     let startup = context.cancel.run(context.core.host.wait_start(pid)).await;
     let failure = match startup {
-        Ok(Err(error @ ProcessError::StartFailed(_))) => Some(
-            external_wait_failure(error, &command, stderr.take(), parent_stderr, context).await,
-        ),
+        Ok(Err(error @ ProcessError::StartFailed(_))) => {
+            Some(external_wait_failure(error, command, stderr.take(), parent_stderr, context).await)
+        }
         Ok(Err(ProcessError::Runtime(11))) | Ok(Ok(())) | Err(_) => None,
         Ok(Err(_)) => {
             let _ = context.core.host.kill(pid, context.stop_signal());

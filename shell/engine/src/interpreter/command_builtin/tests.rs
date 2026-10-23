@@ -179,10 +179,12 @@ impl Rig {
         let state = self.session.state.clone();
         self.executor.spawn(async move {
             let argv = Cell::new(argv);
+            let builtin_prefix = Cell::new(None);
             let mut execution = Ok(execution);
             dispatch_simple_command(
                 &argv,
                 &mut None,
+                &builtin_prefix,
                 &mut execution,
                 &state,
                 &context,
