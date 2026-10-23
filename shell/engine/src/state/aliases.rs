@@ -76,7 +76,12 @@ impl Aliases {
         let grow = count > old.map_or(0, HashMap::capacity);
         let slots = table_slots(count)?;
         let slots = if self.unique() {
-            slots.max(self.version.as_ref().map_or(0, |version| version.slots))
+            let retained = self.version.as_ref().unwrap().slots;
+            if grow {
+                retained.checked_mul(2).ok_or(RESOURCE_STATUS)?.max(slots)
+            } else {
+                retained
+            }
         } else {
             slots
         };
@@ -198,8 +203,8 @@ impl Version {
         })
     }
 
-    fn update(&mut self, name: &str, value: Option<&str>, change: Change) -> Result<(), i32> {
-        let final_charge = change.storage()?;
+    fn update(&mut self, name: &str, value: Option<&str>, mut change: Change) -> Result<(), i32> {
+        change.storage()?;
         let old_charge = self.memory.as_ref().map_or(0, StorageAllocation::bytes);
         let temporary = old_charge
             .checked_add(change.incoming)
@@ -213,9 +218,13 @@ impl Version {
             self.resize(old_charge);
             return Err(error);
         }
+        if change.grow {
+            change.slots =
+                table_slots(self.values.capacity()).expect("admitted alias table layout");
+        }
         self.bytes = change.text;
         self.slots = change.slots;
-        self.resize(final_charge);
+        self.resize(change.storage().expect("admitted alias update layout"));
         Ok(())
     }
 
@@ -260,8 +269,8 @@ fn table_slots(count: usize) -> Result<usize, i32> {
     // Cover power-of-two buckets, the seven-eighths load factor and control bytes.
     count
         .checked_mul(8)
+        .and_then(|count| count.checked_add(6))
         .and_then(|count| count.checked_div(7))
-        .and_then(|count| count.checked_add(1))
         .and_then(usize::checked_next_power_of_two)
         .map(|buckets| buckets.max(4))
         .and_then(|buckets| buckets.checked_mul(size_of::<(String, String)>() + 1))
@@ -422,6 +431,26 @@ mod tests {
         state.clear_aliases().unwrap();
         state.update_alias("absent", None).unwrap();
         assert_eq!(state.aliases.revision(), revision);
+        assert_eq!(memory.observation().0, 0);
+    }
+    #[test]
+    fn alias_delete_insert_churn_keeps_actual_capacity_charged_without_inflation() {
+        let memory = StorageBudget::new(20_000_000);
+        let mut state = State::with_memory(memory.clone());
+        for n in 0..1024 {
+            state
+                .update_alias(&format!("anchor{n}"), Some(":"))
+                .unwrap();
+        }
+        let charged = memory.observation().0;
+        for n in 0..10_000 {
+            let name = format!("temporary{n}");
+            state.update_alias(&name, Some(":")).unwrap();
+            state.update_alias(&name, None).unwrap();
+            assert!(memory.observation().0 <= charged * 4);
+        }
+        assert_eq!(state.aliases.values().unwrap().len(), 1024);
+        state.clear_aliases().unwrap();
         assert_eq!(memory.observation().0, 0);
     }
 }
