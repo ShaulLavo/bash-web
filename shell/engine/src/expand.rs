@@ -2657,6 +2657,17 @@ fn indexed_name(name: &str) -> Option<(&str, &str)> {
 }
 
 #[cfg(test)]
+fn poll_argv(
+    word: &Word,
+    state: &SharedState,
+    cancel: &Cancel,
+    limits: (usize, usize, usize),
+    work: &mut Work,
+) -> Option<Result<Vec<String>, Error>> {
+    fields(word, state, cancel, FieldContext::Argv, limits, work).now_or_never()
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -2688,8 +2699,7 @@ mod tests {
         // Ordinary argv keeps its existing separate allocation accounting.
         let mut work = Work::new(128, 0, 1);
         assert!(
-            matches!(fields(&word, &state, &cancel, FieldContext::Argv, (16, 1, 16), &mut work)
-            .now_or_never(), Some(Ok(value)) if value == ["abc"])
+            matches!(poll_argv(&word, &state, &cancel, (16, 1, 16), &mut work), Some(Ok(value)) if value == ["abc"])
         );
     }
 
@@ -2704,17 +2714,9 @@ mod tests {
         for source in ["$v", "\"$v\"", "{a,b}$v", "{a,b}\"$v\""] {
             let word = shell_parser::Parser::parse_word_string_with_limits(source, 16, 4096);
             let mut legacy = Work::new(65536, 1024 * 1024, 16);
-            let expected = fields(
-                &word,
-                &state,
-                &cancel,
-                FieldContext::Argv,
-                (4096, 16, 4096),
-                &mut legacy,
-            )
-            .now_or_never()
-            .expect("short fixture must not suspend")
-            .unwrap_or_else(|_| panic!("legacy fixture must expand: {source}"));
+            let expected = poll_argv(&word, &state, &cancel, (4096, 16, 4096), &mut legacy)
+                .expect("short fixture must not suspend")
+                .unwrap_or_else(|_| panic!("legacy fixture must expand: {source}"));
             let mut admitted = Work::new(65536, 1024 * 1024, 16);
             let actual = fields(
                 &word,
@@ -2886,20 +2888,12 @@ mod tests {
         let cancel = Cancel::new();
         let mut work = Work::new(64, storage - 1, 1);
         assert!(matches!(
-            fields(
-                &token,
-                &state,
-                &cancel,
-                FieldContext::Argv,
-                (64, 1, 64),
-                &mut work
-            )
-            .now_or_never(),
+            poll_argv(&token, &state, &cancel, (64, 1, 64), &mut work),
             Some(Err(Error::Status(2))),
         ));
         let mut work = Work::new(64, storage, 1);
         assert!(matches!(
-            fields(&token, &state, &cancel, FieldContext::Argv, (64, 1, 64), &mut work).now_or_never(),
+            poll_argv(&token, &state, &cancel, (64, 1, 64), &mut work),
             Some(Err(Error::Unbound { name, line: None })) if name == "missing",
         ));
         assert_eq!(work.storage_remaining, 0);

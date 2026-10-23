@@ -282,16 +282,8 @@ mod tests {
         let token = shell_parser::Parser::parse_word_string_with_limits("${!p}", 10, 1000);
         let mut work = Work::new(steps, storage, 1);
         let cancel = Cancel::new();
-        let value = fields(
-            &token,
-            &state,
-            &cancel,
-            FieldContext::Argv,
-            (64, 1, raw),
-            &mut work,
-        )
-        .now_or_never()
-        .expect("the tiny expansion uses fewer than 64 checkpoints")?;
+        let value = poll_argv(&token, &state, &cancel, (64, 1, raw), &mut work)
+            .expect("the tiny expansion uses fewer than 64 checkpoints")?;
         Ok((value, steps - work.remaining, work.storage_remaining))
     }
 
@@ -322,15 +314,7 @@ mod tests {
         cancel.cancel();
         let mut work = Work::new(64, 7, 1);
         assert!(matches!(
-            fields(
-                &token,
-                &state,
-                &cancel,
-                FieldContext::Argv,
-                (64, 1, 64),
-                &mut work
-            )
-            .now_or_never(),
+            poll_argv(&token, &state, &cancel, (64, 1, 64), &mut work),
             Some(Err(Error::Status(130)))
         ));
         assert_eq!(work.storage_remaining, 7);
@@ -382,15 +366,7 @@ mod tests {
                 .now_or_never()
                 .map(|value| value.map(|value| vec![value]))
         } else {
-            fields(
-                &token,
-                state,
-                &cancel,
-                FieldContext::Argv,
-                (4096, 16, 4096),
-                &mut work,
-            )
-            .now_or_never()
+            poll_argv(&token, state, &cancel, (4096, 16, 4096), &mut work)
         };
         result.expect("short fixture must not suspend")
     }
