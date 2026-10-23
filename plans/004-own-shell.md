@@ -3048,3 +3048,95 @@ Bash 5.3.15 controls before the next bounded correction.
 Exact Bash/native observations, file locations and the review reproducer are in
 `/work/reports/wave-20261022/shell/review77-r1.md` and `review77-r1-evidence/`.
 Keep frozen observations, exclusions and blocking gates unchanged.
+
+
+## Read option review follow-ups, 2026-10-23
+
+Status: Approved. Owner: BUILTINS read, with the shared byte-field and
+runtime/state prerequisite owners. Independent PR72 review approved
+`967fd177652ea12a974d63c6ab9862830fb04650`. These are explicit capability
+boundaries, not newly lost main passes or claimed repairs in that PR.
+
+- Multibyte delimiter suffix. Reproduce through production Waffle:
+  `printf 'a\xc3\xa9:tail\n' | { read -d é a; IFS= read -r tail; printf '%s|<%s>\n' "$?" "$tail"; }`.
+  Bash 5.3.15 leaves bytes `a9 3a 74 61 69 6c` in `tail` with read status 0.
+  The engine prints `2|<>` because scalar assignment rejects the invalid UTF-8
+  suffix left after the delimiter's first byte. Route this to the shared
+  "word fields carry bytes, not UTF-8 String" item above. Preserve raw bytes,
+  unread offsets, bounded storage and cancellation. Do not substitute Unicode
+  replacement characters or change the delimiter or frozen expectations.
+- Positive-count terminal silent reads. `read -s -n1 value` on a terminal
+  remains unsupported with status 2. `read -s -n0 value` succeeds without
+  consuming input or changing terminal echo. Use a real terminal input fixture,
+  not a pipe, when implementing echo control. Restore echo on success, EOF,
+  cancellation and output failure. PR72 does not change echo state and does not
+  claim silent-terminal support.
+- Timers and array destinations remain unsupported. Recorded reproducers are
+  `printf 'x\n' | { REPLY=old; read -t0; printf '%s|<%s>\n' "$?" "$REPLY"; }`
+  and `printf 'a:b\n' | { REPLY=old; read -d : -a arr; printf '%s|<%s>|<%s>\n' "$?" "$REPLY" "${arr[0]}"; }`.
+  Bash returns read status 0 and keeps `REPLY=old` in each control, and stores
+  `a` in `arr[0]` in the array control. Coordinate readiness/deadline support
+  with the runtime and array writes with state. Preserve input offsets,
+  nonmutation on rejected options, resource accounting and cancellation.
+
+Reproduce on current native and production Waffle before repair. Record exact
+Bash 5.3.15 streams/status locally. The original review, 309-case fixture and
+eight classified boundary differences remain in
+`/work/reports/wave-20261022/shell/review72-takeover-r2.md`, its sibling evidence
+directory and `/work/reports/wave-20261022/shell/review72-r1/neighbors.json`.
+The terminal controls are in `scripts/fixtures/shell-read-terminal.json` and
+`shell/engine/tests/words/read_options.rs`. Do not relax their assertions or
+claim a frozen gain without a qualified unchanged-ruler replay.
+
+## Completion nonblocking review follow-ups, 2026-10-23
+
+Status: Approved, deferred beyond PR #79's bounded integration after read #72.
+Independent review `review79-takeover-r2.md` approves completion source
+`f13a5c310bf082da56e00401b43d4a1c2b0dd28b` and records these three remaining
+corners. These are not demonstrated regressions against main. Preserve the
+reviewer's recordings and ordinary argv behavior when implementing them.
+Evidence is in `/work/reports/wave-20261022/shell/review79-takeover-r2-evidence/`.
+
+### Preserve word-list newlines when IFS excludes newline
+
+Owner: completion word-list parsing, `builtins/completion/wordlist.rs`.
+
+```bash
+IFS=:; compgen -W $'a\nb:c'; echo status:$?
+```
+
+The generated word list contains a literal newline, not a backslash followed by
+`n`. GNU Bash 5.3.15 prints `a\nb\nc\nstatus:0\n`. Reviewed source prints
+`ab\nc\nstatus:0\n`. Preserve that newline instead of encoding it as a removed
+line continuation. The review's retained recording uses this equivalent input:
+
+```bash
+IFS=:; compgen -W 'a
+b:c'; echo status:$?
+```
+
+### Enable POSIX classes for completion pathname patterns
+
+Owner: completion pathname matching, `expand/glob.rs`.
+
+```bash
+printf x >zz_a; compgen -G 'zz_[[:alpha:]]'; echo status:$?
+```
+
+GNU Bash 5.3.15 prints `zz_a\nstatus:0\n`. Reviewed source prints `status:2\n`.
+The difference occurs both with extglob off and after `shopt -s extglob`.
+Apply the supported named-class policy to `-G` without changing argv globbing.
+
+### Recognize explicitly dotted positive-extglob alternatives
+
+Owner: completion pathname matching, `expand/glob.rs`.
+
+```bash
+shopt -s extglob; printf x >.zz_a; printf x >zz_a
+compgen -G '@(.zz_a|zz_a)'; echo status:$?
+```
+
+GNU Bash 5.3.15 prints `.zz_a\nzz_a\nstatus:0\n`. Reviewed source prints
+`zz_a\nstatus:0\n`. Treat explicitly dotted alternatives as eligible when
+excluding hidden entries. Keep implicit hidden-name exclusion and ordinary
+argv matching unchanged. Add nested and suffix controls before the fix.
