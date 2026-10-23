@@ -27,6 +27,7 @@ mod file_substitution;
 mod function_names;
 mod indexed;
 mod select;
+mod timing;
 #[cfg(test)]
 mod trap_tests;
 mod type_builtin;
@@ -78,6 +79,9 @@ pub(crate) enum Flow {
     Break(usize),
     Continue(usize),
     DiscardReadUnit,
+    // Bash's report_error: the failing command's `execute` frame turns this
+    // into DiscardReadUnit, or into Abort when errexit is set.
+    ReportedError,
     Resource,
 }
 #[derive(Clone, Copy, Debug)]
@@ -1145,7 +1149,12 @@ fn execute(
             if context.cancel.is_cancelled() {
                 return Outcome::status(130);
             }
-            let preserve = matches!(command, Command::Pipeline(_) | Command::List(_));
+            let preserve = matches!(
+                command,
+                Command::Pipeline(_)
+                    | Command::List(_)
+                    | Command::Compound(CompoundCommand::Time(_), _)
+            );
             let check_errexit = !context.ignore_errexit
                 && matches!(
                     &command,
@@ -1159,6 +1168,7 @@ fn execute(
                         )
                 );
             let mut result = command_body(command, state.clone(), fds, context).await;
+            result.flow = settle_reported_error(result.flow, &state);
             if check_errexit
                 && result.flow == Flow::Normal
                 && result.code != 0
@@ -1170,6 +1180,16 @@ fn execute(
         },
         Outcome::status,
     )
+}
+
+/// Bash's report_error ends the script under errexit and otherwise discards
+/// the rest of the read unit, even where errexit is otherwise ignored.
+fn settle_reported_error(flow: Flow, state: &SharedState) -> Flow {
+    match flow {
+        Flow::ReportedError if state.borrow().errexit => Flow::Abort,
+        Flow::ReportedError => Flow::DiscardReadUnit,
+        flow => flow,
+    }
 }
 
 fn finish_command(state: &SharedState, result: Outcome, preserve_pipeline: bool) -> Outcome {
@@ -1530,6 +1550,7 @@ fn execute_compound_body<'a>(
         CompoundCommand::Case(case_) => {
             evaluation.frame(run_case(case_, state, fds, context, work), Outcome::status)
         }
+        CompoundCommand::Time(time) => timing::run(*time, state, fds, context),
         _ => futures::future::Either::Left(futures::future::ready(Outcome::status(2))),
     }
 }
@@ -1921,6 +1942,8 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
             }
     ) {
         Flow::DiscardReadUnit
+    } else if matches!(error, expand::Error::BadSubstitution { .. }) {
+        Flow::ReportedError
     } else {
         // Abort this submitted script, not the persistent interactive session.
         // Only the explicit exit builtin requests session shutdown.

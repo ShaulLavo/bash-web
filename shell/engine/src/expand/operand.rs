@@ -507,7 +507,7 @@ impl<'a> Scanner<'a> {
 
 // Only a selected operand reaches these EOF failures. Unsupported complete
 // substitutions and every byte/work/depth/cancellation limit retain their own
-// status; malformed lazy substitution syntax is Bash's fatal status 1.
+// status; malformed lazy substitution syntax fails its read unit with status 1.
 fn bad_substitution(message: &'static str, work: &mut Work) -> Result<(), Error> {
     // The renderer owns name/message and their formatted diagnostic together.
     work.admit_storage(("bad substitution".len() + message.len()) * 2 + 96)?;

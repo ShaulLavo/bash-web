@@ -376,3 +376,62 @@ fn exec_in_an_unredirected_loop_changes_the_surrounding_descriptor_bindings() {
         "restored\ninner\n",
     );
 }
+
+#[test]
+fn time_reports_real_time_after_the_pipeline_and_keeps_its_status() {
+    let rig = Rig::new(Limits::default());
+    let script = "TIMEFORMAT='%0R|%0lR|%%|x%'; time true | false";
+    assert_eq!(rig.run(script), 1);
+    assert_eq!(rig.errors.bytes(), b"0|0m0s|%|x%\n");
+}
+
+#[test]
+fn time_default_reports_omit_cpu_lines_the_runtime_cannot_measure() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("time true"), 0);
+    let report = String::from_utf8(rig.errors.bytes()).unwrap();
+    assert!(report.starts_with("\nreal\t0m0."), "{report:?}");
+    assert!(
+        report.ends_with("s\n") && !report.contains("user"),
+        "{report:?}"
+    );
+}
+
+#[test]
+fn time_rejects_cpu_and_unknown_directives_without_a_report() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("TIMEFORMAT='a %U b'; time true; TIMEFORMAT='%X'; time true"),
+        0
+    );
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: TIMEFORMAT: `U': CPU time is unavailable\n/usr/bin/bash: TIMEFORMAT: `X': invalid format character\n"
+    );
+}
+
+#[test]
+fn time_takes_only_bash_options_and_reports_once_for_nested_keywords() {
+    let rig = Rig::new(Limits::default());
+    let script =
+        "TIMEFORMAT=T; time -p -- args a; time -- args b; time time args c; time -p -p args d";
+    assert_eq!(rig.run(script), 127);
+    assert_eq!(*rig.calls.borrow(), [vec!["a"], vec!["b"], vec!["c"]]);
+    let errors = String::from_utf8(rig.errors.bytes()).unwrap();
+    assert_eq!(errors.matches("real ").count(), 3, "{errors:?}");
+    assert_eq!(errors.matches("T\n").count(), 1, "{errors:?}");
+}
+
+#[test]
+fn bad_substitution_discards_its_line_or_exits_under_errexit() {
+    let rig = Rig::new(Limits::default());
+    let script = "f() { args ${x!}; args in; }\nf; args same\n( args ${x!}; args in ); args sub $?\nargs next $?";
+    assert_eq!(rig.run(script), 0);
+    assert_eq!(*rig.calls.borrow(), [vec!["sub", "1"], vec!["next", "0"]]);
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("set -e; f() { args ${x!}; }; f || args handled\nargs after"),
+        1
+    );
+    assert!(rig.calls.borrow().is_empty());
+}

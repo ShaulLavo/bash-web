@@ -717,6 +717,14 @@
         ],
         "change": "Retain typed file-read substitution eligibility and lexical backtick origins through quote and scalar assignment transformations. Keep legacy numeric redirect and trailing-input distinctions, escaped newlines and mixed-quote backticks. Traverse and print the dedicated AST variant.",
         "reason": "GNU Bash 5.3.15 treats one input-only command as a parent-side file capture, while specific backtick spellings disable the shortcut. No upstream test removed."
+      },
+      {
+        "paths": [
+          "shell/parser/src/parser/ast.rs",
+          "shell/parser/src/parser/mod.rs"
+        ],
+        "change": "Parse `time` with Bash's grammar: only `-p` and one `--` are options, a bare `--` selects the POSIX report, other words start the timed pipeline, and a newline, `;`, `&` or end of input right after them times nothing. Remove the GNU-time format, output, append, verbose and deferred option-error fields.",
+        "reason": "GNU Bash 5.3.15 runs `time -f x cmd` as the command `-f`, reports a bare `time` before the next line, and rejects `time &&` or `time |`. No upstream test removed."
       }
     ],
     "removedUpstreamTests": [
@@ -1633,6 +1641,9 @@
       "shell/engine/tests/words/select.rs",
       "scripts/test-own-shell-select.ts",
       "scripts/fixtures/shell-select.json",
+      "shell/engine/src/interpreter/timing.rs",
+      "scripts/test-own-shell-interpreter-core.ts",
+      "scripts/fixtures/shell-interpreter-core.json",
       "shell/engine/tests/words/conditional.rs",
       "shell/engine/tests/words/test_builtin.rs",
       "shell/engine/tests/cli.rs",

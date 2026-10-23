@@ -2370,82 +2370,43 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    /// Parse the reserved-word pipeline form, plus the useful GNU report flags.
+    /// Parse Bash's `time [-p] [--] [pipeline]`. Only `-p` and one `--` are
+    /// options; any other word starts the timed pipeline. A list terminator
+    /// right after them times nothing.
     fn parse_time(&mut self) -> Result<CompoundCommand> {
         let start_span = self.current_span;
         self.advance(); // consume 'time'
-        self.skip_newlines()?;
-
-        let mut posix_format = false;
-        let mut format = None;
-        let mut output = None;
-        let mut append = false;
-        let mut verbose = false;
-        let mut option_error = None;
-
-        while let Some(option) = self.current_word_str() {
-            if option == "--" {
-                self.advance();
-                self.skip_newlines()?;
-                break;
-            }
-            if !option.starts_with('-') || option == "-" {
-                break;
-            }
-
-            self.advance();
-            match option.as_str() {
-                "-p" => posix_format = true,
-                "-a" | "--append" => append = true,
-                "-v" | "--verbose" => verbose = true,
-                "-f" | "--format" => {
-                    format = self.current_word_to_word();
-                    if format.is_some() {
-                        self.advance();
-                    } else {
-                        option_error = Some(format!("option '{option}' requires an argument"));
-                    }
-                }
-                "-o" | "--output" => {
-                    output = self.current_word_to_word();
-                    if output.is_some() {
-                        self.advance();
-                    } else {
-                        option_error = Some(format!("option '{option}' requires an argument"));
-                    }
-                }
-                _ if option.starts_with("--format=") => {
-                    format = Some(Word::literal(option[9..].to_string()));
-                }
-                _ if option.starts_with("--output=") => {
-                    output = Some(Word::literal(option[9..].to_string()));
-                }
-                _ if option.starts_with("-f") && option.len() > 2 => {
-                    format = Some(Word::literal(option[2..].to_string()));
-                }
-                _ if option.starts_with("-o") && option.len() > 2 => {
-                    output = Some(Word::literal(option[2..].to_string()));
-                }
-                _ => option_error = Some(format!("unrecognized option '{option}'")),
-            }
-            self.skip_newlines()?;
-            if option_error.is_some() {
-                break;
-            }
-        }
-
-        let command = self.parse_pipeline()?;
+        let mut posix_format = self.time_option("-p");
+        posix_format |= self.time_option("--");
+        let command = if matches!(
+            self.current_token,
+            None | Some(
+                tokens::Token::Newline | tokens::Token::Semicolon | tokens::Token::Background
+            )
+        ) {
+            None
+        } else {
+            Some(
+                self.parse_pipeline()?
+                    .ok_or_else(|| self.error("expected command after time"))?,
+            )
+        };
 
         Ok(CompoundCommand::Time(Box::new(TimeCommand {
             posix_format,
-            format,
-            output,
-            append,
-            verbose,
-            option_error,
             command,
             span: start_span.merge(self.current_span),
         })))
+    }
+
+    /// Consume one unquoted `time` option word when it is next.
+    fn time_option(&mut self, option: &str) -> bool {
+        let matched = self.current_escapes.is_empty()
+            && matches!(&self.current_token, Some(tokens::Token::Word(word)) if word == option);
+        if matched {
+            self.advance();
+        }
+        matched
     }
 
     /// Parse a coproc command: `coproc [NAME] command`
