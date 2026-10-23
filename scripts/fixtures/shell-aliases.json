@@ -1,0 +1,692 @@
+{
+  "schema": 1,
+  "bash": "5.3.15(1)-release",
+  "cases": [
+    {
+      "id": "oils:alias:10",
+      "code": "shopt -s expand_aliases || true\nalias -- foo=echo\necho status=$?\nfoo x\nunalias -- foo\nfoo x\n",
+      "status": 127,
+      "stdout": "c3RhdHVzPTAKeAo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSA2OiBmb286IGNvbW1hbmQgbm90IGZvdW5kCg=="
+    },
+    {
+      "id": "oils:alias:28",
+      "code": "shopt -s expand_aliases  # bash requires this\nalias hi='echo hello world'\nhi || echo 'should not run this'\necho hi  # second word is not\n'hi' || echo 'expected failure'\n",
+      "status": 0,
+      "stdout": "aGVsbG8gd29ybGQKaGkKZXhwZWN0ZWQgZmFpbHVyZQo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSA1OiBoaTogY29tbWFuZCBub3QgZm91bmQK"
+    },
+    {
+      "id": "oils:alias:40",
+      "code": "shopt -s expand_aliases\nalias e=echo; e one  # this is not alias-expanded because we parse lines at once\ne two; e three\n",
+      "status": 0,
+      "stdout": "dHdvCnRocmVlCg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAyOiBlOiBjb21tYW5kIG5vdCBmb3VuZAo="
+    },
+    {
+      "id": "oils:alias:49",
+      "code": "shopt -s expand_aliases\nalias echo='echo foo'\necho bar\n\n",
+      "status": 0,
+      "stdout": "Zm9vIGJhcgo=",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:55",
+      "code": "shopt -s expand_aliases  # bash requires this\nx=x\ny=y\nalias echo-x='echo $x' echo-y='echo $y'\necho status=$?\necho-x X\necho-y Y\nunalias echo-x echo-y\necho status=$?\necho-x X || echo undefined\necho-y Y || echo undefined\n",
+      "status": 0,
+      "stdout": "c3RhdHVzPTAKeCBYCnkgWQpzdGF0dXM9MAp1bmRlZmluZWQKdW5kZWZpbmVkCg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxMDogZWNoby14OiBjb21tYW5kIG5vdCBmb3VuZAovdXNyL2Jpbi9iYXNoOiBsaW5lIDExOiBlY2hvLXk6IGNvbW1hbmQgbm90IGZvdW5kCg=="
+    },
+    {
+      "id": "oils:alias:76",
+      "code": "alias e='echo' nonexistentZ\necho status=$?\n",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBhbGlhczogbm9uZXhpc3RlbnRaOiBub3QgZm91bmQK"
+    },
+    {
+      "id": "oils:alias:87",
+      "code": "alias e=echo ll='ls -l'\nunalias e nonexistentZ ll\necho status=$?\n",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAyOiB1bmFsaWFzOiBub25leGlzdGVudFo6IG5vdCBmb3VuZAo="
+    },
+    {
+      "id": "oils:alias:112",
+      "code": "alias e=echo ll='ls -l'\nalias e ll\n\n",
+      "status": 0,
+      "stdout": "YWxpYXMgZT0nZWNobycKYWxpYXMgbGw9J2xzIC1sJwo=",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:150",
+      "code": "unalias\nif test \"$?\" != 0; then echo usage-error; fi\n",
+      "status": 0,
+      "stdout": "dXNhZ2UtZXJyb3IK",
+      "stderr": "dW5hbGlhczogdXNhZ2U6IHVuYWxpYXMgWy1hXSBuYW1lIFtuYW1lIC4uLl0K"
+    },
+    {
+      "id": "oils:alias:159",
+      "code": "shopt -s expand_aliases  # bash requires this\n\nalias hi='echo hello world '\nalias punct='!!!'\n\nhi punct\n\nalias hi='echo hello world'  # No trailing space\n\nhi punct\n\n",
+      "status": 0,
+      "stdout": "aGVsbG8gd29ybGQgISEhCmhlbGxvIHdvcmxkIHB1bmN0Cg==",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:176",
+      "code": "shopt -s expand_aliases  # bash requires this\nalias hi='e_ hello world'\nalias e_='echo __'\nhi   # first hi is expanded to echo hello world; then echo is expanded.  gah.\n",
+      "status": 0,
+      "stdout": "X18gaGVsbG8gd29ybGQK",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:185",
+      "code": "shopt -s expand_aliases  # bash requires this\nalias one='ONE '\nalias two='TWO '\nalias e_='echo one '\ne_ two hello world\n",
+      "status": 0,
+      "stdout": "b25lIFRXTyBoZWxsbyB3b3JsZAo=",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:195",
+      "code": "shopt -s expand_aliases  # bash requires this\nx=x\nalias echo-x='echo $x'  # nothing is evaluated here\nx=y\necho-x hi\n",
+      "status": 0,
+      "stdout": "eSBoaQo=",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:205",
+      "code": "shopt -s expand_aliases  # bash requires this\nalias echo_alias_='echo'\ncmd=echo_alias_\necho_alias_ X  # this works\n$cmd X  # this fails because it's quoted\necho status=$?\n",
+      "status": 0,
+      "stdout": "WApzdGF0dXM9MTI3Cg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSA1OiBlY2hvX2FsaWFzXzogY29tbWFuZCBub3QgZm91bmQK"
+    },
+    {
+      "id": "oils:alias:217",
+      "code": "shopt -s expand_aliases  # bash requires this\nx=x\nalias echo-x='echo $x'  # nothing is evaluated here\necho-x echo-x\n",
+      "status": 0,
+      "stdout": "eCBlY2hvLXgK",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:226",
+      "code": "shopt -s expand_aliases  # bash requires this\nx=x\nalias echo-x='echo $x '  # nothing is evaluated here\necho-x echo-x\n",
+      "status": 0,
+      "stdout": "eCBlY2hvIHgK",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:235",
+      "code": "shopt -s expand_aliases  # bash requires this\nalias echo_alias_= 'echo --; echo'  # bad space here\necho_alias_ x\n\n",
+      "status": 127,
+      "stdout": "",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAyOiBhbGlhczogZWNobyAtLTsgZWNobzogbm90IGZvdW5kCi91c3IvYmluL2Jhc2g6IGxpbmUgMzogeDogY29tbWFuZCBub3QgZm91bmQK"
+    },
+    {
+      "id": "oils:alias:241",
+      "code": "shopt -s expand_aliases  # bash requires this\nx=x\nname='echo_alias_'\nval='=echo'\nalias \"$name$val\"\necho_alias_ X\n\n",
+      "status": 0,
+      "stdout": "WAo=",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:250",
+      "code": "shopt -s expand_aliases  # bash requires this\nalias e_+.~x='echo'\ne_+.~x X\n\n",
+      "status": 0,
+      "stdout": "WAo=",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:258",
+      "code": "shopt -s expand_aliases  # bash requires this\nalias e_=';; oops'\ne_ x\n\n",
+      "status": 2,
+      "stdout": "",
+      "stderr": "L3Vzci9iaW4vYmFzaDogLWM6IGxpbmUgMzogc3ludGF4IGVycm9yIG5lYXIgdW5leHBlY3RlZCB0b2tlbiBgOzsnCi91c3IvYmluL2Jhc2g6IC1jOiBsaW5lIDM6IGA7OyBvb3BzJwo="
+    },
+    {
+      "id": "oils:alias:265",
+      "code": "shopt -s expand_aliases  # bash requires this\nalias e_='for i in 1 2 3; do echo $i;'\ne_ done\n",
+      "status": 0,
+      "stdout": "MQoyCjMK",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:275",
+      "code": "shopt -s expand_aliases\nalias e_='for i in 1 2 3; do echo '\ne_ $i; done\n",
+      "status": 0,
+      "stdout": "MQoyCjMK",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:287",
+      "code": "shopt -s expand_aliases  # bash requires this\nalias FOR1='for '\nalias FOR2='FOR1 '\nalias eye1='i '\nalias eye2='eye1 '\nalias IN='in '\nalias onetwo='$one \"2\" '  # NOTE: this does NOT work in any shell except bash.\none=1\nFOR2 eye2 IN onetwo 3; do echo $i; done\n",
+      "status": 0,
+      "stdout": "MQoyCjMK",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:306",
+      "code": "shopt -s expand_aliases\nalias e_='echo \"'\nvar=x\ne_ '${var}\"'\n\n",
+      "status": 2,
+      "stdout": "",
+      "stderr": "L3Vzci9iaW4vYmFzaDogLWM6IGxpbmUgNDogdW5leHBlY3RlZCBFT0Ygd2hpbGUgbG9va2luZyBmb3IgbWF0Y2hpbmcgYCcnCg=="
+    },
+    {
+      "id": "oils:alias:314",
+      "code": "shopt -s expand_aliases\nalias e_='echo 1\necho 2\necho 3'\nvar='echo foo'\ne_ ${var}\n",
+      "status": 0,
+      "stdout": "MQoyCjMgZWNobyBmb28K",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:327",
+      "code": "shopt -s expand_aliases\nalias e_='echo 1\necho 2\necho 3\n'\nvar='echo foo'\ne_ ${var}\n",
+      "status": 0,
+      "stdout": "MQoyCjMKZm9vCg==",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:356",
+      "code": "shopt -s expand_aliases\necho $(alias sayhi='echo hello')\nsayhi\n\n",
+      "status": 127,
+      "stdout": "Cg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAzOiBzYXloaTogY29tbWFuZCBub3QgZm91bmQK"
+    },
+    {
+      "id": "oils:alias:363",
+      "code": "shopt -s expand_aliases\nalias sayhi='echo hello'; sayhi same line\nsayhi other line\n",
+      "status": 0,
+      "stdout": "aGVsbG8gb3RoZXIgbGluZQo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAyOiBzYXloaTogY29tbWFuZCBub3QgZm91bmQK"
+    },
+    {
+      "id": "oils:alias:371",
+      "code": "shopt -s expand_aliases\neval \"alias sayhi='echo hello'\nsayhi inside\"\nsayhi outside\n",
+      "status": 0,
+      "stdout": "aGVsbG8gaW5zaWRlCmhlbGxvIG91dHNpZGUK",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:407",
+      "code": "shopt -s expand_aliases\nalias e_='echo '\nalias one='ONE '\nalias two='TWO '\nalias three='THREE'  # no trailing space\ne_ one \\\n  two one \\\n  two three two \\\n  one\n\n",
+      "status": 0,
+      "stdout": "T05FIFRXTyBPTkUgVFdPIFRIUkVFIHR3byBvbmUK",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:419",
+      "code": "shopt -s expand_aliases\nalias LEFT='{'\nLEFT echo one; echo two; }\n",
+      "status": 0,
+      "stdout": "b25lCnR3bwo=",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:430",
+      "code": "shopt -s expand_aliases\nalias LEFT='('\nLEFT echo one; echo two )\n",
+      "status": 0,
+      "stdout": "b25lCnR3bwo=",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:441",
+      "code": "shopt -s expand_aliases\nalias echo_='echo [ '\n( echo_ subshell; )\necho $(echo_ commandsub)\n",
+      "status": 0,
+      "stdout": "WyBzdWJzaGVsbApbIGNvbW1hbmRzdWIK",
+      "stderr": ""
+    },
+    {
+      "id": "oils:alias:545",
+      "code": "shopt -s expand_aliases\nalias a=\n\n\na (( var = 0 ))\n\necho done\n\n\n",
+      "status": 0,
+      "stdout": "ZG9uZQo=",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:1",
+      "code": "shopt -s expand_aliases\nalias myalias=echo\nalias\nmyalias 'hello'\n",
+      "status": 0,
+      "stdout": "YWxpYXMgbXlhbGlhcz0nZWNobycKaGVsbG8K",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:2",
+      "code": "alias a=echo\nalias b='ls -l'\nalias\necho \"---\"\nalias -p\necho \"---\"\nalias a\necho \"exit=$?\"\n",
+      "status": 0,
+      "stdout": "YWxpYXMgYT0nZWNobycKYWxpYXMgYj0nbHMgLWwnCi0tLQphbGlhcyBhPSdlY2hvJwphbGlhcyBiPSdscyAtbCcKLS0tCmFsaWFzIGE9J2VjaG8nCmV4aXQ9MAo=",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:3",
+      "code": "alias e=5\nalias c=3\nalias a=1\nalias f=6\nalias d=4\nalias b=2\nalias\n",
+      "status": 0,
+      "stdout": "YWxpYXMgYT0nMScKYWxpYXMgYj0nMicKYWxpYXMgYz0nMycKYWxpYXMgZD0nNCcKYWxpYXMgZT0nNScKYWxpYXMgZj0nNicK",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:4",
+      "code": "shopt -s expand_aliases\nalias r='echo one'\nr\nalias r='echo two'\nr\n",
+      "status": 0,
+      "stdout": "b25lCnR3bwo=",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:5",
+      "code": "shopt -s expand_aliases\nalias x='echo aliased'\nx\nunalias x\nx 2>/dev/null || echo \"gone: $?\"\n",
+      "status": 0,
+      "stdout": "YWxpYXNlZApnb25lOiAxMjcK",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:6",
+      "code": "alias a=echo\nalias b=echo\nunalias -a\nalias\necho \"exit=$?\"\n",
+      "status": 0,
+      "stdout": "ZXhpdD0wCg==",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:7",
+      "code": "unalias nosuchalias\necho \"exit=$?\"\n",
+      "status": 0,
+      "stdout": "ZXhpdD0xCg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB1bmFsaWFzOiBub3N1Y2hhbGlhczogbm90IGZvdW5kCg=="
+    },
+    {
+      "id": "brush-suite:builtins/alias:8",
+      "code": "shopt -s expand_aliases\nalias fmt='printf \"[%s]\\n\" -a --format \"table {{.Names}}\\t{{.State}}\"'\nfmt\n",
+      "status": 0,
+      "stdout": "Wy1hXQpbLS1mb3JtYXRdClt0YWJsZSB7ey5OYW1lc319XHR7ey5TdGF0ZX19XQo=",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:9",
+      "code": "shopt -s expand_aliases\nalias q=\"printf '[%s]\\n' 'a b' c\"\nq\n",
+      "status": 0,
+      "stdout": "W2EgYl0KW2NdCg==",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:10",
+      "code": "shopt -s expand_aliases\nalias esc='printf \"[%s]\\n\" a\\ b c'\nesc\n",
+      "status": 0,
+      "stdout": "W2EgYl0KW2NdCg==",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:11",
+      "code": "shopt -s expand_aliases\nalias d='printf \"[%s]\\n\" $'\"'\"'a\\tb'\"'\"''\nd\n",
+      "status": 0,
+      "stdout": "W2EJYl0K",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:12",
+      "code": "shopt -s expand_aliases\nexport MYVAR=\"a b\"\nalias e='printf \"[%s]\\n\" $MYVAR \"$MYVAR\"'\ne\n",
+      "status": 0,
+      "stdout": "W2FdCltiXQpbYSBiXQo=",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:13",
+      "code": "shopt -s expand_aliases\nalias t='echo ~/sub'\n[ \"$(t)\" = \"$HOME/sub\" ] && echo \"tilde expanded\"\n",
+      "status": 0,
+      "stdout": "dGlsZGUgZXhwYW5kZWQK",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:14",
+      "code": "shopt -s expand_aliases\nalias c='echo $(echo inner)'\nc\n",
+      "status": 0,
+      "stdout": "aW5uZXIK",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:16",
+      "code": "shopt -s expand_aliases\nalias e='echo $MYVAR'\nMYVAR=first\ne\nMYVAR=second\ne\n",
+      "status": 0,
+      "stdout": "Zmlyc3QKc2Vjb25kCg==",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:17",
+      "code": "shopt -s expand_aliases\nalias empty=''\nempty\necho \"exit=$?\"\n",
+      "status": 0,
+      "stdout": "ZXhpdD0wCg==",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:18",
+      "code": "shopt -s expand_aliases\nalias p='printf \"[%s]\\n\" first'\np second \"third fourth\"\n",
+      "status": 0,
+      "stdout": "W2ZpcnN0XQpbc2Vjb25kXQpbdGhpcmQgZm91cnRoXQo=",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:19",
+      "code": "shopt -s expand_aliases\nmyfunc() { echo function-version; }\nalias myfunc='echo alias-version'\nmyfunc\nunalias myfunc\nmyfunc\n",
+      "status": 0,
+      "stdout": "YWxpYXMtdmVyc2lvbgpmdW5jdGlvbi12ZXJzaW9uCg==",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:20",
+      "code": "shopt -s expand_aliases\nalias echo='echo prefix'\necho hello\n",
+      "status": 0,
+      "stdout": "cHJlZml4IGhlbGxvCg==",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:21",
+      "code": "alias x='echo aliased'\nx 2>/dev/null || echo \"not-expanded\"\n",
+      "status": 0,
+      "stdout": "bm90LWV4cGFuZGVkCg==",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:23",
+      "code": "shopt -s expand_aliases\nalias e='echo ran'\ntrue && e\nfalse || e\n",
+      "status": 0,
+      "stdout": "cmFuCnJhbgo=",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:24",
+      "code": "shopt -s expand_aliases\nalias body='echo from-alias'\nf() { body; }\nf\n",
+      "status": 0,
+      "stdout": "ZnJvbS1hbGlhcwo=",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:25",
+      "code": "shopt -s expand_aliases\nalias pr='echo item'\nfor i in 1 2; do pr $i; done\n",
+      "status": 0,
+      "stdout": "aXRlbSAxCml0ZW0gMgo=",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:26",
+      "code": "shopt -s expand_aliases\nalias e='echo aliased'\ne\n\\e 2>/dev/null || echo \"backslash-suppressed\"\n\"e\" 2>/dev/null || echo \"quote-suppressed\"\n",
+      "status": 0,
+      "stdout": "YWxpYXNlZApiYWNrc2xhc2gtc3VwcHJlc3NlZApxdW90ZS1zdXBwcmVzc2VkCg==",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:29",
+      "code": "shopt -s expand_aliases\nalias two='echo one; echo two'\ntwo\n",
+      "status": 0,
+      "stdout": "b25lCnR3bwo=",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:30",
+      "code": "shopt -s expand_aliases\nalias sl='echo same-line'; sl\n",
+      "status": 127,
+      "stdout": "",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAyOiBzbDogY29tbWFuZCBub3QgZm91bmQK"
+    },
+    {
+      "id": "brush-suite:builtins/alias:31",
+      "code": "shopt -s expand_aliases\nalias cmd='echo '\nalias other='replaced '\nalias otherother='also-replaced'\n\ncmd other otherother\n",
+      "status": 0,
+      "stdout": "cmVwbGFjZWQgYWxzby1yZXBsYWNlZAo=",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:32",
+      "code": "shopt -s expand_aliases\nalias myalias=echo\nalias outeralias=myalias\nouteralias 'hello'\n",
+      "status": 0,
+      "stdout": "aGVsbG8K",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:33",
+      "code": "shopt -s expand_aliases\nalias myalias=if\nmyalias true; then echo \"true\"; fi\n",
+      "status": 0,
+      "stdout": "dHJ1ZQo=",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/alias:34",
+      "code": "alias q1=\"a'b\"\nalias q2=\"'\"\nalias q3=\"a''b\"\nalias q4='a \"b\" $c'\nalias q5=\"$(printf 'a\\tb')\"\nalias q6=\"a\nb\"\n\nalias\nalias -p\nalias q1 q3\n",
+      "status": 0,
+      "stdout": "YWxpYXMgcTE9J2EnXCcnYicKYWxpYXMgcTI9XCcKYWxpYXMgcTM9J2EnXCcnJ1wnJ2InCmFsaWFzIHE0PSdhICJiIiAkYycKYWxpYXMgcTU9J2EJYicKYWxpYXMgcTY9J2EKYicKYWxpYXMgcTE9J2EnXCcnYicKYWxpYXMgcTI9XCcKYWxpYXMgcTM9J2EnXCcnJ1wnJ2InCmFsaWFzIHE0PSdhICJiIiAkYycKYWxpYXMgcTU9J2EJYicKYWxpYXMgcTY9J2EKYicKYWxpYXMgcTE9J2EnXCcnYicKYWxpYXMgcTM9J2EnXCcnJ1wnJ2InCg==",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/unalias:1",
+      "code": "shopt -s expand_aliases\nalias echo='echo prefixed'\necho 'something'\nunalias echo\necho 'something'\n",
+      "status": 0,
+      "stdout": "cHJlZml4ZWQgc29tZXRoaW5nCnNvbWV0aGluZwo=",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/unalias:2",
+      "code": "shopt -s expand_aliases\nunalias not_an_alias\n",
+      "status": 1,
+      "stdout": "",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAyOiB1bmFsaWFzOiBub3RfYW5fYWxpYXM6IG5vdCBmb3VuZAo="
+    },
+    {
+      "id": "bashkit-suite:alias:5",
+      "code": "\nshopt -s expand_aliases\nalias hi='echo hello world'\nhi\n",
+      "status": 0,
+      "stdout": "aGVsbG8gd29ybGQK",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:alias:15",
+      "code": "\nshopt -s expand_aliases\nalias echo='echo foo'\necho bar\n",
+      "status": 0,
+      "stdout": "Zm9vIGJhcgo=",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:alias:25",
+      "code": "\nshopt -s expand_aliases\nalias echo_x='echo X' echo_y='echo Y'\necho_x\necho_y\n",
+      "status": 0,
+      "stdout": "WApZCg==",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:alias:37",
+      "code": "\nshopt -s expand_aliases\nalias hi='echo hello'\nhi\nunalias hi\nhi 2>/dev/null\necho status=$?\n",
+      "status": 0,
+      "stdout": "aGVsbG8Kc3RhdHVzPTEyNwo=",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:alias:62",
+      "code": "\nalias nonexistentZZZ 2>/dev/null\necho status=$?\n",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:alias:71",
+      "code": "\nunalias nonexistentZZZ 2>/dev/null\necho status=$?\n",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:alias:80",
+      "code": "shopt -s expand_aliases\nx=early\nalias echo_x='echo $x'\nx=late\necho_x\n",
+      "status": 0,
+      "stdout": "bGF0ZQo=",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:alias:92",
+      "code": "\nshopt -s expand_aliases\nalias hi='echo hello world '\nalias punct='!!!'\nhi punct\n",
+      "status": 0,
+      "stdout": "aGVsbG8gd29ybGQgISEhCg==",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:alias:103",
+      "code": "\nshopt -s expand_aliases\nalias hi='e_ hello world'\nalias e_='echo __'\nhi\n",
+      "status": 0,
+      "stdout": "X18gaGVsbG8gd29ybGQK",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:alias:114",
+      "code": "\nshopt -s expand_aliases\nalias echo_alias_='echo'\ncmd=echo_alias_\necho_alias_ X\n$cmd X 2>/dev/null\necho status=$?\n",
+      "status": 0,
+      "stdout": "WApzdGF0dXM9MTI3Cg==",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:alias:139",
+      "code": "\nshopt -s expand_aliases\nalias echo_='echo [ '\n( echo_ subshell; )\necho $(echo_ commandsub)\n",
+      "status": 0,
+      "stdout": "WyBzdWJzaGVsbApbIGNvbW1hbmRzdWIK",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:alias:151",
+      "code": "\nshopt -s expand_aliases\nalias t1='echo one && echo two'\nt1\n",
+      "status": 0,
+      "stdout": "b25lCnR3bwo=",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:alias:171",
+      "code": "\nshopt -s expand_aliases\nalias pass='printf \"<%s>\\n\" '\npayload='A B;C'\npass \"$payload\"\n",
+      "status": 0,
+      "stdout": "PEEgQjtDPgo=",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:alias:207",
+      "code": "shopt -s expand_aliases\nalias -- foo=echo; echo \"status=$?\"\nfoo x\nalias -p\nunalias -- foo\nfoo y 2>/dev/null; echo \"after=$?\"\n",
+      "status": 0,
+      "stdout": "c3RhdHVzPTAKeAphbGlhcyBmb289J2VjaG8nCmFmdGVyPTEyNwo=",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:alias:221",
+      "code": "shopt -s expand_aliases\nalias e_='echo ' one='ONE ' two='TWO ' three='THREE'\ne_ one two one \\\n  two three two one\n",
+      "status": 0,
+      "stdout": "T05FIFRXTyBPTkUgVFdPIFRIUkVFIHR3byBvbmUK",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:alias:238",
+      "code": "shopt -s expand_aliases\nalias a='printf [%s]'\na `echo foo bar` $(echo baz); echo\n",
+      "status": 0,
+      "stdout": "W2Zvb11bYmFyXVtiYXpdCg==",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:alias:246",
+      "code": "shopt -s expand_aliases\nalias e_=';; oops'\ne_ x\n",
+      "status": 2,
+      "stdout": "",
+      "stderr": "L3Vzci9iaW4vYmFzaDogLWM6IGxpbmUgMzogc3ludGF4IGVycm9yIG5lYXIgdW5leHBlY3RlZCB0b2tlbiBgOzsnCi91c3IvYmluL2Jhc2g6IC1jOiBsaW5lIDM6IGA7OyBvb3BzJwo="
+    },
+    {
+      "id": "control:0",
+      "code": "shopt -s expand_aliases\nalias x='x'\nx 2>/dev/null; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEyNwo=",
+      "stderr": ""
+    },
+    {
+      "id": "control:1",
+      "code": "shopt -s expand_aliases\nalias x=y y=x\nx 2>/dev/null; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEyNwo=",
+      "stderr": ""
+    },
+    {
+      "id": "control:2",
+      "code": "shopt -s expand_aliases\nalias x='echo old'\nf() { x; }\nalias x='echo new'\nf\nx",
+      "status": 0,
+      "stdout": "b2xkCm5ldwo=",
+      "stderr": ""
+    },
+    {
+      "id": "control:3",
+      "code": "shopt -s expand_aliases\nf() { x 2>/dev/null || echo unexpanded; }\nalias x='echo new'\nf",
+      "status": 0,
+      "stdout": "dW5leHBhbmRlZAo=",
+      "stderr": ""
+    },
+    {
+      "id": "control:4",
+      "code": "shopt -s expand_aliases\nalias x='echo old'\n{ unalias x; x; }\nx 2>/dev/null || echo gone",
+      "status": 0,
+      "stdout": "b2xkCmdvbmUK",
+      "stderr": ""
+    },
+    {
+      "id": "control:5",
+      "code": "shopt -s expand_aliases\nalias x='echo value'\nshopt -u expand_aliases\nx 2>/dev/null || echo disabled\nshopt -s expand_aliases\nx",
+      "status": 0,
+      "stdout": "ZGlzYWJsZWQKdmFsdWUK",
+      "stderr": ""
+    },
+    {
+      "id": "control:6",
+      "code": "shopt -s expand_aliases\nalias x='echo value'\neval 'x; unalias x; x'\nx 2>/dev/null || echo gone",
+      "status": 0,
+      "stdout": "dmFsdWUKdmFsdWUKZ29uZQo=",
+      "stderr": ""
+    },
+    {
+      "id": "control:7",
+      "code": "shopt -s expand_aliases\nalias x='echo parent'\n( alias x='echo child'; eval x )\nx",
+      "status": 0,
+      "stdout": "Y2hpbGQKcGFyZW50Cg==",
+      "stderr": ""
+    },
+    {
+      "id": "control:8",
+      "code": "alias bad/name=x 'bad name=y' '=z'; echo status=$?; alias",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBhbGlhczogYGJhZC9uYW1lJzogaW52YWxpZCBhbGlhcyBuYW1lCi91c3IvYmluL2Jhc2g6IGxpbmUgMTogYWxpYXM6IGBiYWQgbmFtZSc6IGludmFsaWQgYWxpYXMgbmFtZQovdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IGFsaWFzOiA9ejogbm90IGZvdW5kCg=="
+    },
+    {
+      "id": "control:9",
+      "code": "alias -- -x=one z=two; alias -p z; alias -- -x; unalias -- -x; alias",
+      "status": 0,
+      "stdout": "YWxpYXMgLS0gLXg9J29uZScKYWxpYXMgej0ndHdvJwphbGlhcyAtLSAteD0nb25lJwphbGlhcyB6PSd0d28nCg==",
+      "stderr": ""
+    },
+    {
+      "id": "control:10",
+      "code": "alias a=one; alias -p b=two a; alias; unalias -a ignored; alias; echo status=$?",
+      "status": 0,
+      "stdout": "YWxpYXMgYT0nb25lJwphbGlhcyBhPSdvbmUnCnN0YXR1cz0wCg==",
+      "stderr": ""
+    },
+    {
+      "id": "control:11",
+      "code": "unalias; echo $?; alias -z; echo $?; unalias -z; echo $?",
+      "status": 0,
+      "stdout": "MgoyCjIK",
+      "stderr": "dW5hbGlhczogdXNhZ2U6IHVuYWxpYXMgWy1hXSBuYW1lIFtuYW1lIC4uLl0KL3Vzci9iaW4vYmFzaDogbGluZSAxOiBhbGlhczogLXo6IGludmFsaWQgb3B0aW9uCmFsaWFzOiB1c2FnZTogYWxpYXMgWy1wXSBbbmFtZVs9dmFsdWVdIC4uLiBdCi91c3IvYmluL2Jhc2g6IGxpbmUgMTogdW5hbGlhczogLXo6IGludmFsaWQgb3B0aW9uCnVuYWxpYXM6IHVzYWdlOiB1bmFsaWFzIFstYV0gbmFtZSBbbmFtZSAuLi5dCg=="
+    },
+    {
+      "id": "control:12",
+      "code": "shopt -s expand_aliases\nalias p='printf \"[%s]\\n\"'\np tail\np\nprintf end",
+      "status": 0,
+      "stdout": "W3RhaWxdCltdCmVuZA==",
+      "stderr": ""
+    },
+    {
+      "id": "control:13",
+      "code": "shopt -s expand_aliases\nalias x='echo hi'\nx | x\nx && x; x || x",
+      "status": 0,
+      "stdout": "aGkKaGkKaGkKaGkK",
+      "stderr": ""
+    },
+    {
+      "id": "control:14",
+      "code": "shopt -s expand_aliases\nalias echo='echo prefix'\nfunction f { echo body; }\nunalias echo\nf",
+      "status": 0,
+      "stdout": "cHJlZml4IGJvZHkK",
+      "stderr": ""
+    }
+  ]
+}
