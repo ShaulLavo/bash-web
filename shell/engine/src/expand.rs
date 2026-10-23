@@ -1709,6 +1709,14 @@ impl Expansion<'_> {
             scalar,
             depth,
         } = context;
+        // Bash rejects a direct special target before expanding its operand;
+        // an indirect target is only checked after the operand expands.
+        let direct_special = matches!(operator, ParameterOp::AssignDefault)
+            && error_pointer.is_none()
+            && !operand::scalar_name(name);
+        if direct_special {
+            return self.special_assignment(name);
+        }
         // Reserve target/diagnostic bytes before copying either name or value.
         let diagnostic_bytes =
             error_pointer.map_or(name.len(), |pointer| pointer.len().saturating_add(1));
@@ -1778,12 +1786,7 @@ impl Expansion<'_> {
             self.admit_replacement_output().await?;
         }
         if !operand::scalar_name(name) {
-            self.work
-                .admit_storage(name.len().saturating_mul(2).saturating_add(128))?;
-            return Err(Error::SpecialAssignment {
-                name: format!("${name}"),
-                line: None,
-            });
+            return self.special_assignment(name);
         }
         admit_assignment(state, name, captured.value.len(), self.cancel, self.work).await?;
         State::admit_scalar_access(state, "IFS", self.cancel, self.work).await?;
@@ -1816,6 +1819,14 @@ impl Expansion<'_> {
             scalar || quoted,
         )
         .await
+    }
+    fn special_assignment(&mut self, name: &str) -> Result<(), Error> {
+        self.work
+            .admit_storage(name.len().saturating_mul(2).saturating_add(128))?;
+        Err(Error::SpecialAssignment {
+            name: format!("${name}"),
+            line: None,
+        })
     }
     async fn diagnostic_operand(
         &mut self,
