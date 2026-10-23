@@ -122,7 +122,10 @@ pub(crate) async fn run(
             } else {
                 &args[..]
             };
-            if name == "return" && state.borrow().function_calls == 0 {
+            if name == "return"
+                && state.borrow().function_calls == 0
+                && state.borrow().source_calls == 0
+            {
                 return Err(2);
             }
             let code = match args.first() {

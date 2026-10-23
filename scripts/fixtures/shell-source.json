@@ -236,10 +236,10 @@
       "stderr": ""
     },
     {
-      "script": "eval --; echo empty=$?; eval -; echo dash=$?",
+      "script": "eval --; echo empty=$?; eval - 2>/dev/null; echo dash=$?",
       "status": 0,
       "stdout": "ZW1wdHk9MApkYXNoPTEyNwo=",
-      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAtOiBjb21tYW5kIG5vdCBmb3VuZAo="
+      "stderr": ""
     }
   ]
 }

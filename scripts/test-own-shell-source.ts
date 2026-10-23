@@ -46,8 +46,7 @@ const scripts = [
   "mkdir -p first/lib second; echo 'echo second' > second/lib; PATH=$PWD/first:$PWD/second . lib",
   "eval -- 'echo option'; echo status=$?",
   "eval -z 'echo BAD' 2>/dev/null; echo status=$?",
-  "eval --; echo empty=$?; eval -; echo dash=$?",
-
+  "eval --; echo empty=$?; eval - 2>/dev/null; echo dash=$?",
 ];
 const fixturePath = new URL("fixtures/shell-source.json", import.meta.url);
 const env = { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" };

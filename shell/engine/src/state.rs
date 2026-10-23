@@ -157,10 +157,12 @@ pub struct State {
     pub(crate) star_separator: StarSeparator,
     ifs_members: Option<IfsMembers>,
     positional: Vec<String>,
+    positional_set: bool,
     pub(crate) getopts: GetoptsState,
     getopts_numeric: bool,
     locals: Vec<BTreeMap<String, LocalVariable>>,
     pub(crate) function_calls: usize,
+    pub(crate) source_calls: usize,
     memory: Option<crate::exec::StorageBudget>,
     positional_memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
     prefixes: Vec<BTreeMap<String, Option<Binding>>>,
@@ -198,10 +200,12 @@ impl Default for State {
             star_separator: StarSeparator::Live,
             ifs_members: None,
             positional: Vec::new(),
+            positional_set: false,
             getopts: GetoptsState::default(),
             getopts_numeric: true,
             locals: Vec::new(),
             function_calls: 0,
+            source_calls: 0,
             memory: None,
             positional_memory: None,
             prefixes: Vec::new(),
@@ -391,9 +395,11 @@ impl State {
             star_separator: state.star_separator,
             ifs_members: state.ifs_members,
             positional,
+            positional_set: state.positional_set,
             getopts: state.getopts,
             getopts_numeric: state.getopts_numeric,
             function_calls: state.function_calls,
+            source_calls: state.source_calls,
             memory: state.memory.clone(),
             positional_memory,
             locals,
@@ -534,6 +540,7 @@ impl State {
             )));
         }
         self.positional = args;
+        self.positional_set = true;
         Ok(())
     }
     /// Drop shifted argument strings while retaining the actual Vec capacity.
@@ -2032,6 +2039,68 @@ fn positional_bytes(args: &Vec<String>) -> Result<usize, i32> {
     )
 }
 
+struct SourcePositionals {
+    args: Vec<String>,
+    memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
+}
+
+pub(crate) struct SourceFrame {
+    state: SharedState,
+    positional: Option<SourcePositionals>,
+}
+impl SourceFrame {
+    pub(crate) fn enter(state: SharedState, args: Vec<String>) -> Result<Self, i32> {
+        let mut shell = state.borrow_mut();
+        let positional = if args.is_empty() {
+            None
+        } else {
+            Some(Self::replace(&mut shell, args)?)
+        };
+        shell.source_calls += 1;
+        drop(shell);
+        Ok(Self { state, positional })
+    }
+
+    pub(crate) fn finish(mut self) {
+        let mut shell = self.state.borrow_mut();
+        if self.positional.is_some() && shell.function_calls == 0 && shell.positional_set {
+            self.positional.take();
+            shell.positional_set = false;
+        }
+    }
+
+    fn replace(shell: &mut State, args: Vec<String>) -> Result<SourcePositionals, i32> {
+        let memory = shell
+            .memory
+            .as_ref()
+            .map(|memory| {
+                memory
+                    .admit(positional_bytes(&args)?)
+                    .map_err(|_| crate::exec::RESOURCE_STATUS)
+            })
+            .transpose()?
+            .map(|ticket| Rc::new(RefCell::new(ticket)));
+        shell.positional_set = false;
+        Ok(SourcePositionals {
+            args: std::mem::replace(&mut shell.positional, args),
+            memory: std::mem::replace(&mut shell.positional_memory, memory),
+        })
+    }
+}
+impl Drop for SourceFrame {
+    fn drop(&mut self) {
+        let mut state = self.state.borrow_mut();
+        state.source_calls -= 1;
+        if self.positional.is_some() {
+            state.positional_set = false;
+        }
+        if let Some(saved) = self.positional.take() {
+            state.positional = saved.args;
+            state.positional_memory = saved.memory;
+        }
+    }
+}
+
 /// No borrow is held over an await. Dropping a cancelled function future restores
 /// the positional/local frame, including when it is nested inside another call.
 pub(crate) struct FunctionFrame {
@@ -2106,6 +2175,7 @@ impl Drop for FunctionFrame {
         s.positional = std::mem::take(&mut self.positional);
         s.positional_memory = self.positional_memory.take();
         s.function_calls -= 1;
+        s.positional_set = false;
         for _ in 0..if self.prefix { 2 } else { 1 } {
             let Some(locals) = s.locals.pop() else { break };
             for (name, local) in locals {
@@ -3107,3 +3177,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod source_tests;

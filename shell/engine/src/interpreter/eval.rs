@@ -1,4 +1,4 @@
-use super::{Context, Descriptors, Flow, Outcome, parse_failure, script_sequence};
+use super::{Context, Descriptors, Flow, Outcome, command_builtin, parse_failure, script_sequence};
 use crate::{
     exec::{JoinedSource, Scope, StorageAllocation},
     executor::Budget,
@@ -63,7 +63,7 @@ impl Shape {
 }
 
 #[inline(never)]
-fn join<'a>(
+pub(super) fn join<'a>(
     args: Vec<String>,
     scope: &'a Scope,
     context: &'a Context,
@@ -144,16 +144,37 @@ pub(super) fn run(
 }
 
 async fn run_body(
-    args: Vec<String>,
+    mut args: Vec<String>,
     state: SharedState,
     fds: Descriptors,
     context: Context,
     evaluation: Scope,
 ) -> Outcome {
+    if args.first().is_some_and(|arg| arg == "--") {
+        args.remove(0);
+    } else if args
+        .first()
+        .is_some_and(|arg| arg.starts_with('-') && arg != "-")
+    {
+        let diagnostic = b"/usr/bin/bash: eval: invalid option\n";
+        let status = command_builtin::diagnostic(&fds, &context, diagnostic).await;
+        return Outcome::status(status.err().unwrap_or(2));
+    }
     let source = match join(args, &evaluation, &context).await {
         Ok(source) => source,
         Err(code) => return Outcome::status(code),
     };
+    read(source, evaluation, "eval", state, fds, context).await
+}
+
+pub(super) async fn read(
+    source: JoinedSource,
+    evaluation: Scope,
+    reader: &str,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> Outcome {
     let parser = context.parser_budget();
     let (script, failure) = match parse::eval(source.text(), context.limits().source_bytes, &parser)
     {
@@ -200,7 +221,7 @@ async fn run_body(
     if result.flow == Flow::Normal
         && let Some(failure) = failure
     {
-        result = parse_failure(failure, "eval", &fds, &context).await;
+        result = parse_failure(failure, reader, &fds, &context).await;
         if result.code == 2 && result.flow == Flow::Exit {
             result.flow = Flow::Normal;
         }

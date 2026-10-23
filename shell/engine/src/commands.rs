@@ -37,6 +37,7 @@ pub(crate) enum Handler {
     Type,
     Exec,
     Eval,
+    Source,
     Let,
 }
 
@@ -197,6 +198,13 @@ static COMMANDS: &[Command] = &[
     special("continue", Handler::Builtin(Builtin::LoopControl)),
     special("exec", Handler::Exec),
     special("eval", Handler::Eval),
+    special(".", Handler::Source),
+    core(
+        "source",
+        Class::RegularBuiltin,
+        Declaration::Ordinary,
+        Handler::Source,
+    ),
     core(
         "let",
         Class::RegularBuiltin,
