@@ -1128,18 +1128,17 @@ fn execute(
     if context.cancel.is_cancelled() {
         return futures::future::Either::Left(futures::future::ready(Outcome::status(130)));
     }
-    let evaluation = match context.evaluation.descend() {
-        Ok(scope) => scope,
-        Err(code) => {
-            return futures::future::Either::Left(futures::future::ready(Outcome::status(code)));
-        }
-    };
     if state.borrow().noexec {
         return futures::future::Either::Left(futures::future::ready(Outcome::status(0)));
     }
-    let context = Context {
-        evaluation,
-        ..context
+    let context = match context.evaluation.descend() {
+        Ok(evaluation) => Context {
+            evaluation,
+            ..context
+        },
+        Err(code) => {
+            return futures::future::Either::Left(futures::future::ready(Outcome::status(code)));
+        }
     };
     let evaluation = context.evaluation.clone();
     evaluation.frame(
