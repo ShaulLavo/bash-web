@@ -15,6 +15,7 @@ mod case;
 mod case_pattern;
 mod command;
 mod glob;
+pub(crate) use glob::{completion_matches, sort as sort_candidates};
 mod ifs;
 mod indices;
 mod indirect;
@@ -687,6 +688,7 @@ struct ExpansionOptions {
     max_fields: usize,
     max_raw: usize,
     scalar: bool,
+    pathname: bool,
     admitted: bool,
     tilde: tilde::Context,
 }
@@ -2172,6 +2174,7 @@ async fn expand_one(
         max_fields,
         max_raw,
         scalar,
+        pathname,
         admitted,
         tilde,
     } = options;
@@ -2220,7 +2223,8 @@ async fn expand_one(
     *raw_remaining = expansion.raw_remaining;
     expansion.current_ifs(state).await?;
     let ifs = expansion.ifs.take().ok_or(2)?;
-    let pathname = !scalar && expansion.work.substitutions.is_some() && !state.borrow().noglob;
+    let pathname =
+        pathname && !scalar && expansion.work.substitutions.is_some() && !state.borrow().noglob;
     let mut fields = Fields::new(max_bytes, max_fields);
     fields.pathname = pathname;
     fields.extglob_groups = pathname && admitted && state.borrow().extglob;
@@ -2458,6 +2462,7 @@ pub(crate) async fn fields(
             max_fields,
             max_raw,
             scalar: false,
+            pathname: true,
             admitted: false,
             tilde: tilde::Context::Word,
         },
@@ -2490,6 +2495,7 @@ pub(crate) async fn fields_admitted(
             max_fields,
             max_raw,
             scalar: false,
+            pathname: true,
             admitted: true,
             tilde: tilde::Context::Word,
         },
@@ -2498,6 +2504,32 @@ pub(crate) async fn fields_admitted(
     .await?;
     work.fields_remaining = work.fields_remaining.saturating_sub(values.len());
     Ok(values)
+}
+
+/// Completion word lists perform shell expansion and IFS splitting, never globbing.
+pub(crate) async fn completion_fields(
+    word: &Word,
+    state: &SharedState,
+    cancel: &Cancel,
+    limits: (usize, usize),
+    work: &mut Work,
+) -> Result<Vec<String>, Error> {
+    expand(
+        word,
+        state,
+        cancel,
+        ExpansionOptions {
+            max_bytes: limits.0,
+            max_fields: limits.1,
+            max_raw: limits.0,
+            scalar: false,
+            pathname: false,
+            admitted: true,
+            tilde: tilde::Context::Word,
+        },
+        work,
+    )
+    .await
 }
 
 /// Assignments and redirects are scalar contexts, distinct from argv fields.
@@ -2540,6 +2572,7 @@ async fn scalar_word(
             max_fields: 1,
             max_raw,
             scalar: true,
+            pathname: false,
             admitted: false,
             tilde,
         },

@@ -289,6 +289,19 @@ impl Context {
     fn cancel_status(&self) -> i32 {
         128 + self.stop_signal()
     }
+    /// Runtime executable registration is authoritative; never infer X_OK from open.
+    pub(crate) async fn executable_path(&self, path: String, cwd: String) -> Result<bool, i32> {
+        match self
+            .cancel
+            .run(self.core.host.access(path, cwd))
+            .await
+            .map_err(|_| self.cancel_status())?
+        {
+            Ok(()) => Ok(true),
+            Err(ProcessError::Runtime(2 | 31 | 44 | 54)) => Ok(false),
+            Err(_) => Err(2),
+        }
+    }
     pub(crate) fn fs(&self) -> &dyn FileSystem {
         self.core.fs.as_ref()
     }
@@ -3125,6 +3138,13 @@ async fn dispatch_simple_command_body(
         let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
             .await
             .map_err(admission_status)?;
+        if builtin == commands::Builtin::Completion && name == "compgen" {
+            work.substitutions = Some(Substitutions {
+                context: context.clone(),
+                fds: fds.clone(),
+                process_fds: None,
+            });
+        }
         let bindings = fds.borrow().clone();
         return builtins::run(builtin, &name, args, state, bindings, context, &mut work).await;
     }

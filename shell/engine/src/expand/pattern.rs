@@ -29,6 +29,21 @@ pub(crate) struct Pattern {
     pub(super) join_positionals: bool,
 }
 impl Pattern {
+    /// Already-expanded pattern text, without another parameter expansion pass.
+    pub(crate) async fn literal(
+        text: &str,
+        extglob: bool,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<Self, Error> {
+        let mut pattern = Self::with_options(false, extglob);
+        for ch in text.chars() {
+            work.checkpoint(cancel).await?;
+            pattern.push(ch, Protection::None, work)?;
+        }
+        Ok(pattern)
+    }
+
     /// Borrow quote-aware source without glob normalization; ERE escaping has
     /// different rules and must not change the shared shell expansion result.
     pub(crate) fn regex_character(&self, index: usize) -> Option<(char, bool)> {

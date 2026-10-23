@@ -1,0 +1,341 @@
+{
+  "schema": 1,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "cases": [
+    {
+      "script": "myfunc() {\n  echo hi\n}\n\nmyfunc2() {\n  echo hello\n}\n\ncompgen -A function myfunc\n",
+      "status": 0,
+      "stdoutBase64": "bXlmdW5jCm15ZnVuYzIK"
+    },
+    {
+      "script": "e() { :; }\nc() { :; }\na() { :; }\nf() { :; }\nd() { :; }\nb() { :; }\n\ncompgen -A function\n",
+      "status": 0,
+      "stdoutBase64": "YQpiCmMKZAplCmYK"
+    },
+    {
+      "script": "zzfa() { :; }\nzzfb() { :; }\ntotally_unrelated() { :; }\n\ncompgen -A function zzf\necho \"[$?]\"\ncompgen -A function nomatch\necho \"[$?]\"\n",
+      "status": 0,
+      "stdoutBase64": "enpmYQp6emZiClswXQpbMV0K"
+    },
+    {
+      "script": "zzfe() { :; }\nzzfc() { :; }\nzzfa() { :; }\n\ncompgen -A command zzf\n",
+      "status": 0,
+      "stdoutBase64": "enpmYQp6emZjCnp6ZmUK"
+    },
+    {
+      "script": "zzfa() { :; }\nzzfb() { :; }\ntotally_unrelated() { :; }\n\ncompgen -A command zzf\n",
+      "status": 0,
+      "stdoutBase64": "enpmYQp6emZiCg=="
+    },
+    {
+      "script": "echo \"[brace words after default splitting]\"\ncompgen -W '{a,b} c'\n\necho \"[IFS separator breaks brace syntax]\"\nIFS=,\ncompgen -W 'x{1,2}'\n\necho \"[empty list fields are removed]\"\nIFS=:\ncompgen -W 'a::b'\n",
+      "status": 0,
+      "stdoutBase64": "W2JyYWNlIHdvcmRzIGFmdGVyIGRlZmF1bHQgc3BsaXR0aW5nXQphCmIKYwpbSUZTIHNlcGFyYXRvciBicmVha3MgYnJhY2Ugc3ludGF4XQp4ezEKMn0KW2VtcHR5IGxpc3QgZmllbGRzIGFyZSByZW1vdmVkXQphCmIK"
+    },
+    {
+      "script": "compgen -W 'c b d a'\n",
+      "status": 0,
+      "stdoutBase64": "YwpiCmQKYQo="
+    },
+    {
+      "script": "compgen -W '--abc --def' -- '--ab'\n",
+      "status": 0,
+      "stdoutBase64": "LS1hYmMK"
+    },
+    {
+      "script": "compgen -W yes no && echo \"1. Result\"\n",
+      "status": 1,
+      "stdoutBase64": ""
+    },
+    {
+      "script": "echo \"[Take 1]\"\ncompgen -W 'foo bar' -X 'foo' ''\n\necho \"[Take 2]\"\ncompgen -W 'foo bar' -X 'f*' ''\n\necho \"[Take 3]\"\ncompgen -W '&1 foo' -X '\\&*' ''\n",
+      "status": 0,
+      "stdoutBase64": "W1Rha2UgMV0KYmFyCltUYWtlIDJdCmJhcgpbVGFrZSAzXQpmb28K"
+    },
+    {
+      "script": "compgen -W 'foo bar fab' -X '!f*' ''\necho \"rc=$?\"\ncompgen -W 'foo bar' -X '!z*' ''\necho \"rc=$?\"\n",
+      "status": 0,
+      "stdoutBase64": "Zm9vCmZhYgpyYz0wCnJjPTEK"
+    },
+    {
+      "script": "echo \"[Take 1]\"\ncompgen -W 'somebody something' -X '&b*' some\n",
+      "status": 0,
+      "stdoutBase64": "W1Rha2UgMV0Kc29tZXRoaW5nCg=="
+    },
+    {
+      "script": "compgen -k\n",
+      "status": 0,
+      "stdoutBase64": "aWYKdGhlbgplbHNlCmVsaWYKZmkKY2FzZQplc2FjCmZvcgpzZWxlY3QKd2hpbGUKdW50aWwKZG8KZG9uZQppbgpmdW5jdGlvbgp0aW1lCnsKfQohCltbCl1dCmNvcHJvYwo="
+    },
+    {
+      "script": "PATH=/nonexistent\ncompgen -A command -- do\nfor w in $(compgen -A command -- f); do\n  case $w in fi|for|function) echo \"$w\" ;; esac\ndone\n",
+      "status": 0,
+      "stdoutBase64": "ZG8KZG9uZQpmaQpmb3IKZnVuY3Rpb24K"
+    },
+    {
+      "script": "compgen -A helptopic whil\n",
+      "status": 0,
+      "stdoutBase64": "d2hpbGUK"
+    },
+    {
+      "script": "compgen -W 'fo\"o'; echo \"rc=$?\"\ncompgen -W 'fo\"o bar'; echo \"rc=$?\"\ncompgen -W 'fo\"o bar' -- f; echo \"rc=$?\"\ncompgen -W \"a 'b c\"; echo \"rc=$?\"\n# A backslash left dangling at the end is dropped, except in single quotes.\nword='fo\"o\\'; compgen -W \"$word\"; echo \"rc=$?\"\nword='fo\\'; compgen -W \"$word\"; echo \"rc=$?\"\nword=\"fo'o\\\\\"; compgen -W \"$word\"; echo \"rc=$?\"\n",
+      "status": 0,
+      "stdoutBase64": "Zm9vCnJjPTAKZm9vIGJhcgpyYz0wCmZvbyBiYXIKcmM9MAphCmIgYwpyYz0wCmZvbwpyYz0wCmZvCnJjPTAKZm9vXApyYz0wCg=="
+    },
+    {
+      "script": "set -u\ncompgen -W '$nope'; echo \"rc=$?\"\necho next\n",
+      "status": 127,
+      "stdoutBase64": ""
+    },
+    {
+      "script": "complete -W foo mycmd\ncomplete\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLVcgJ2ZvbycgbXljbWQK"
+    },
+    {
+      "script": "complete -W foo mycmd\ncomplete -p mycmd\n\ncomplete -W 'foo bar' mycmd\ncomplete -p mycmd\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLVcgJ2ZvbycgbXljbWQKY29tcGxldGUgLVcgJ2ZvbyBiYXInIG15Y21kCg=="
+    },
+    {
+      "script": "complete -P myprefix mycmd\ncomplete -p mycmd\n\ncomplete -P 'my prefix' mycmd\ncomplete -p mycmd\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLVAgJ215cHJlZml4JyBteWNtZApjb21wbGV0ZSAtUCAnbXkgcHJlZml4JyBteWNtZAo="
+    },
+    {
+      "script": "complete -W x cmd\ncompopt -o nospace +o nospace cmd\ncomplete -p cmd\ncompopt +o nospace -o nospace cmd\ncomplete -p cmd\ncompopt -o nospace +o filenames -o filenames cmd\ncomplete -p cmd\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLVcgJ3gnIGNtZApjb21wbGV0ZSAtVyAneCcgY21kCmNvbXBsZXRlIC1vIG5vc3BhY2UgLVcgJ3gnIGNtZAo="
+    },
+    {
+      "script": "complete -S mysuffix mycmd\ncomplete -p mycmd\n\ncomplete -S 'my suffix' mycmd\ncomplete -p mycmd\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLVMgJ215c3VmZml4JyBteWNtZApjb21wbGV0ZSAtUyAnbXkgc3VmZml4JyBteWNtZAo="
+    },
+    {
+      "script": "complete -Fmyfunc mycmd\ncomplete -p mycmd\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLUYgbXlmdW5jIG15Y21kCg=="
+    },
+    {
+      "script": "complete -G pattern mycmd\ncomplete -p mycmd\n\ncomplete -G 'pat tern' mycmd\ncomplete -p mycmd\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLUcgJ3BhdHRlcm4nIG15Y21kCmNvbXBsZXRlIC1HICdwYXQgdGVybicgbXljbWQK"
+    },
+    {
+      "script": "complete -X pattern mycmd\ncomplete -p mycmd\n\ncomplete -X 'pat tern' mycmd\ncomplete -p mycmd\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLVggJ3BhdHRlcm4nIG15Y21kCmNvbXBsZXRlIC1YICdwYXQgdGVybicgbXljbWQK"
+    },
+    {
+      "script": "complete -C cmd mycmd\ncomplete -p mycmd\n\ncomplete -C 'c md' mycmd\ncomplete -p mycmd\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLUMgJ2NtZCcgbXljbWQKY29tcGxldGUgLUMgJ2MgbWQnIG15Y21kCg=="
+    },
+    {
+      "script": "for action in alias arrayvar binding builtin command directory disabled enabled export file 'function' group helptopic hostname job keyword running service setopt shopt signal stopped user variable; do\n  complete -A ${action} mycmd\n  complete -p mycmd\ndone\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLWEgbXljbWQKY29tcGxldGUgLUEgYXJyYXl2YXIgbXljbWQKY29tcGxldGUgLUEgYmluZGluZyBteWNtZApjb21wbGV0ZSAtYiBteWNtZApjb21wbGV0ZSAtYyBteWNtZApjb21wbGV0ZSAtZCBteWNtZApjb21wbGV0ZSAtQSBkaXNhYmxlZCBteWNtZApjb21wbGV0ZSAtQSBlbmFibGVkIG15Y21kCmNvbXBsZXRlIC1lIG15Y21kCmNvbXBsZXRlIC1mIG15Y21kCmNvbXBsZXRlIC1BIGZ1bmN0aW9uIG15Y21kCmNvbXBsZXRlIC1nIG15Y21kCmNvbXBsZXRlIC1BIGhlbHB0b3BpYyBteWNtZApjb21wbGV0ZSAtQSBob3N0bmFtZSBteWNtZApjb21wbGV0ZSAtaiBteWNtZApjb21wbGV0ZSAtayBteWNtZApjb21wbGV0ZSAtQSBydW5uaW5nIG15Y21kCmNvbXBsZXRlIC1zIG15Y21kCmNvbXBsZXRlIC1BIHNldG9wdCBteWNtZApjb21wbGV0ZSAtQSBzaG9wdCBteWNtZApjb21wbGV0ZSAtQSBzaWduYWwgbXljbWQKY29tcGxldGUgLUEgc3RvcHBlZCBteWNtZApjb21wbGV0ZSAtdSBteWNtZApjb21wbGV0ZSAtdiBteWNtZAo="
+    },
+    {
+      "script": "for opt in bashdefault default dirnames filenames noquote nosort nospace plusdirs; do\n  echo \"--- Testing option: ${opt} ------------------\"\n  complete -o ${opt} mycmd_${opt}\n  complete -p mycmd_${opt}\ndone\n",
+      "status": 0,
+      "stdoutBase64": "LS0tIFRlc3Rpbmcgb3B0aW9uOiBiYXNoZGVmYXVsdCAtLS0tLS0tLS0tLS0tLS0tLS0KY29tcGxldGUgLW8gYmFzaGRlZmF1bHQgbXljbWRfYmFzaGRlZmF1bHQKLS0tIFRlc3Rpbmcgb3B0aW9uOiBkZWZhdWx0IC0tLS0tLS0tLS0tLS0tLS0tLQpjb21wbGV0ZSAtbyBkZWZhdWx0IG15Y21kX2RlZmF1bHQKLS0tIFRlc3Rpbmcgb3B0aW9uOiBkaXJuYW1lcyAtLS0tLS0tLS0tLS0tLS0tLS0KY29tcGxldGUgLW8gZGlybmFtZXMgbXljbWRfZGlybmFtZXMKLS0tIFRlc3Rpbmcgb3B0aW9uOiBmaWxlbmFtZXMgLS0tLS0tLS0tLS0tLS0tLS0tCmNvbXBsZXRlIC1vIGZpbGVuYW1lcyBteWNtZF9maWxlbmFtZXMKLS0tIFRlc3Rpbmcgb3B0aW9uOiBub3F1b3RlIC0tLS0tLS0tLS0tLS0tLS0tLQpjb21wbGV0ZSAtbyBub3F1b3RlIG15Y21kX25vcXVvdGUKLS0tIFRlc3Rpbmcgb3B0aW9uOiBub3NvcnQgLS0tLS0tLS0tLS0tLS0tLS0tCmNvbXBsZXRlIC1vIG5vc29ydCBteWNtZF9ub3NvcnQKLS0tIFRlc3Rpbmcgb3B0aW9uOiBub3NwYWNlIC0tLS0tLS0tLS0tLS0tLS0tLQpjb21wbGV0ZSAtbyBub3NwYWNlIG15Y21kX25vc3BhY2UKLS0tIFRlc3Rpbmcgb3B0aW9uOiBwbHVzZGlycyAtLS0tLS0tLS0tLS0tLS0tLS0KY29tcGxldGUgLW8gcGx1c2RpcnMgbXljbWRfcGx1c2RpcnMK"
+    },
+    {
+      "script": "complete -o nospace -o filenames -W x mycmd\ncompopt +o nospace mycmd; echo \"rc=$?\"\ncomplete -p\n",
+      "status": 0,
+      "stdoutBase64": "cmM9MApjb21wbGV0ZSAtbyBmaWxlbmFtZXMgLVcgJ3gnIG15Y21kCg=="
+    },
+    {
+      "script": "complete -W x -- +cmd -cmd\ncompopt -o nospace -- +cmd -cmd; echo \"rc=$?\"\ncomplete -p -- +cmd -cmd\n",
+      "status": 0,
+      "stdoutBase64": "cmM9MApjb21wbGV0ZSAtbyBub3NwYWNlIC1XICd4JyArY21kCmNvbXBsZXRlIC1vIG5vc3BhY2UgLVcgJ3gnIC1jbWQK"
+    },
+    {
+      "script": "echo \"[Removing non-existent]\"\ncomplete -r nonexistent\necho $?\n\necho \"[Removing existing]\"\ncomplete -W token mycmd\ncomplete -r mycmd\necho $?\ncomplete -p mycmd 2>/dev/null\n",
+      "status": 1,
+      "stdoutBase64": "W1JlbW92aW5nIG5vbi1leGlzdGVudF0KMApbUmVtb3ZpbmcgZXhpc3RpbmddCjAK"
+    },
+    {
+      "script": "complete -W token mycmd1\ncomplete -W token mycmd2\n\ncomplete -r\necho $?\n\ncomplete -p\n",
+      "status": 0,
+      "stdoutBase64": "MAo="
+    },
+    {
+      "script": "complete -W token mycmd\ncomplete -W other -E\n\ncomplete -r -E\necho $?\n\ncomplete -p\n",
+      "status": 0,
+      "stdoutBase64": "MApjb21wbGV0ZSAtVyAndG9rZW4nIG15Y21kCg=="
+    },
+    {
+      "script": "complete -v -o nospace -A function -a -o default -F fn -G '*.c' -W 'w1 w2' -X '*.x' -P pre -S suf -C cmd mycmd\ncomplete -p mycmd\ncomplete -A signal -A arrayvar -b -a -A builtin other\ncomplete -p other\ncomplete -X '*.y' -W x 'a b'\ncomplete -p 'a b'\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLW8gZGVmYXVsdCAtbyBub3NwYWNlIC1hIC12IC1BIGZ1bmN0aW9uIC1HICcqLmMnIC1XICd3MSB3MicgLVAgJ3ByZScgLVMgJ3N1ZicgLVggJyoueCcgLUMgJ2NtZCcgLUYgZm4gbXljbWQKY29tcGxldGUgLWEgLWIgLUEgYXJyYXl2YXIgLUEgc2lnbmFsIG90aGVyCmNvbXBsZXRlIC1XICd4JyAtWCAnKi55JyAnYSBiJwo="
+    },
+    {
+      "script": "complete -o filenames -A function -X '*.x' -P pre -W 'w1 w2' mycmd\ncomplete -D -X '*.y' -F fn\nbefore=$(complete -p mycmd; complete -p -D)\ncomplete -r\neval \"$before\"\nafter=$(complete -p mycmd; complete -p -D)\necho \"$after\"\n[[ $before == \"$after\" ]] && echo \"round-tripped\"\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLW8gZmlsZW5hbWVzIC1BIGZ1bmN0aW9uIC1XICd3MSB3MicgLVAgJ3ByZScgLVggJyoueCcgbXljbWQKY29tcGxldGUgLVggJyoueScgLUYgZm4gLUQKcm91bmQtdHJpcHBlZAo="
+    },
+    {
+      "script": "complete -F '#fn' -W x '~'\ncomplete -F a,b cmd1\ncomplete -F fn 'a,b'\nbefore=$(complete -p '~' cmd1 'a,b')\necho \"$before\"\ncomplete -r\neval \"$before\"\nafter=$(complete -p '~' cmd1 'a,b')\n[[ $before == \"$after\" ]] && echo \"round-tripped\"\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLVcgJ3gnIC1GICcjZm4nICd+Jwpjb21wbGV0ZSAtRiBhLGIgY21kMQpjb21wbGV0ZSAtRiBmbiBhLGIKcm91bmQtdHJpcHBlZAo="
+    },
+    {
+      "script": "compgen -W \"a b a c b\"\n",
+      "status": 0,
+      "stdoutBase64": "YQpiCmEKYwpiCg=="
+    },
+    {
+      "script": "compgen -W \"z y x a\"\n",
+      "status": 0,
+      "stdoutBase64": "egp5CngKYQo="
+    },
+    {
+      "script": "complete -f -X '!*.txt' mycmd\ncomplete -p mycmd\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLWYgLVggJyEqLnR4dCcgbXljbWQK"
+    },
+    {
+      "script": "complete\ncomplete -W 'foo bar' mycommand\ncomplete -p\ncomplete -F myfunc other\ncomplete -W \"it's\" q\ncomplete -p other q\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLVcgJ2ZvbyBiYXInIG15Y29tbWFuZApjb21wbGV0ZSAtRiBteWZ1bmMgb3RoZXIKY29tcGxldGUgLVcgJ2l0J1wnJ3MnIHEK"
+    },
+    {
+      "script": "complete -o nospace -o default -A function -a -v -G '*.c' -W 'a b' -X '!x' -P pre -S suf -F fn -C cmd -A setopt x\ncomplete -p x\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLW8gZGVmYXVsdCAtbyBub3NwYWNlIC1hIC12IC1BIGZ1bmN0aW9uIC1BIHNldG9wdCAtRyAnKi5jJyAtVyAnYSBiJyAtUCAncHJlJyAtUyAnc3VmJyAtWCAnIXgnIC1DICdjbWQnIC1GIGZuIHgK"
+    },
+    {
+      "script": "complete -D -F f\ncomplete -E -W e\ncomplete -p -D\ncomplete -p -E\n",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLUYgZiAtRApjb21wbGV0ZSAtVyAnZScgLUUK"
+    },
+    {
+      "script": "complete -F f\necho status=$?\ncomplete -p nosuch\necho status=$?\ncomplete -r nosuch\necho status=$?\ncomplete foo\necho status=$?\ncomplete -r foo\ncomplete -p\necho done\n",
+      "status": 0,
+      "stdoutBase64": "c3RhdHVzPTIKc3RhdHVzPTEKc3RhdHVzPTAKc3RhdHVzPTAKZG9uZQo="
+    },
+    {
+      "script": "compgen -A foo\necho status=$?\ncompgen -o bogus -W x\necho status=$?\n",
+      "status": 0,
+      "stdoutBase64": "c3RhdHVzPTIKc3RhdHVzPTIK"
+    },
+    {
+      "script": "compopt -o invalid\necho status=$?\ncompopt -o filenames +o nospace\necho status=$?\ncomplete -W x c1\ncompopt -o nospace c1\ncomplete -p c1\n",
+      "status": 0,
+      "stdoutBase64": "c3RhdHVzPTIKc3RhdHVzPTEKY29tcGxldGUgLW8gbm9zcGFjZSAtVyAneCcgYzEK"
+    },
+    {
+      "script": "compgen -W 'one two three'\necho --\ncompgen -W 'aa ab b' -P '<' -S '>' a\necho --\ncompgen -W 'aa ab' -X '&b' a\n",
+      "status": 0,
+      "stdoutBase64": "b25lCnR3bwp0aHJlZQotLQo8YWE+CjxhYj4KLS0KYWEK"
+    },
+    {
+      "script": "IFS=':%'\ncompgen -W '$(echo \"spam:eggs%ham cheese\")'\ncompgen -W 'x:y%z w\\:v'\n",
+      "status": 0,
+      "stdoutBase64": "c3BhbQplZ2dzCmhhbSBjaGVlc2UKeAp5Cnogdzp2Cg=="
+    },
+    {
+      "script": "compgen -W '${'\necho status=$?\ncompgen -W 'foo $(( 1 / 0 )) bar'\necho status=$?\ncompgen -W '' -- foo\necho status=$?\n",
+      "status": 0,
+      "stdoutBase64": "c3RhdHVzPTEKc3RhdHVzPTEKc3RhdHVzPTEK"
+    },
+    {
+      "script": "export v1_global=0\nunexported=1\nf() { local v2_local=0; export v2_local; compgen -e v; }\nf\ncompgen -e unexported\necho status=$?\n",
+      "status": 0,
+      "stdoutBase64": "djFfZ2xvYmFsCnYyX2xvY2FsCnN0YXR1cz0xCg=="
+    },
+    {
+      "script": "complete -W x cmd; (complete -W child cmd; complete -p cmd); complete -p cmd",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLVcgJ2NoaWxkJyBjbWQKY29tcGxldGUgLVcgJ3gnIGNtZAo="
+    },
+    {
+      "script": "complete -W x cmd; compopt cmd; compopt -o nospace cmd; compopt cmd",
+      "status": 0,
+      "stdoutBase64": "Y29tcG9wdCArbyBiYXNoZGVmYXVsdCArbyBkZWZhdWx0ICtvIGRpcm5hbWVzICtvIGZpbGVuYW1lcyArbyBmdWxscXVvdGUgK28gbm9xdW90ZSArbyBub3NvcnQgK28gbm9zcGFjZSArbyBwbHVzZGlycyBjbWQKY29tcG9wdCArbyBiYXNoZGVmYXVsdCArbyBkZWZhdWx0ICtvIGRpcm5hbWVzICtvIGZpbGVuYW1lcyArbyBmdWxscXVvdGUgK28gbm9xdW90ZSArbyBub3NvcnQgLW8gbm9zcGFjZSArbyBwbHVzZGlycyBjbWQK"
+    },
+    {
+      "script": "compgen; printf \"status=%s\\n\" \"$?\"; compgen -Z; printf \"status=%s\\n\" \"$?\"",
+      "status": 0,
+      "stdoutBase64": "c3RhdHVzPTAKc3RhdHVzPTIK"
+    },
+    {
+      "script": "complete -W \"a'b\" \"#command\"; complete -p '#command'",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLVcgJ2EnXCcnYicgJyNjb21tYW5kJwo="
+    },
+    {
+      "script": "compgen -W 'a b' -P '<' -S '>' -X '!a'",
+      "status": 0,
+      "stdoutBase64": "PGE+Cg=="
+    },
+    {
+      "script": "compgen -v zz_completion; zz_completion_a=x; zz_completion_b=y; compgen -v zz_completion; compgen -A arrayvar zz_completion; exit 0",
+      "status": 0,
+      "stdoutBase64": "enpfY29tcGxldGlvbl9hCnp6X2NvbXBsZXRpb25fYgo="
+    },
+    {
+      "script": "compgen -u definitely_missing_runtime_user; printf \"status=%s\\n\" \"$?\"",
+      "status": 0,
+      "stdoutBase64": "c3RhdHVzPTEK"
+    },
+    {
+      "script": "compgen -b comp; compgen -k do",
+      "status": 0,
+      "stdoutBase64": "Y29tcGdlbgpjb21wbGV0ZQpjb21wb3B0CmRvCmRvbmUK"
+    },
+    {
+      "script": "complete -W x -D -E -I; complete -p -D -E -I; complete -r -D -E -I; complete -p -D; printf 'status=%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLVcgJ3gnIC1ECnN0YXR1cz0xCg=="
+    },
+    {
+      "script": "complete -W x z a q b c d k mycmd1 mycmd2 cmd; complete -p; complete -W replaced z; complete -p",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLVcgJ3gnIGNtZApjb21wbGV0ZSAtVyAneCcgegpjb21wbGV0ZSAtVyAneCcgcQpjb21wbGV0ZSAtVyAneCcgawpjb21wbGV0ZSAtVyAneCcgZApjb21wbGV0ZSAtVyAneCcgYwpjb21wbGV0ZSAtVyAneCcgYgpjb21wbGV0ZSAtVyAneCcgYQpjb21wbGV0ZSAtVyAneCcgbXljbWQyCmNvbXBsZXRlIC1XICd4JyBteWNtZDEKY29tcGxldGUgLVcgJ3gnIGNtZApjb21wbGV0ZSAtVyAncmVwbGFjZWQnIHoKY29tcGxldGUgLVcgJ3gnIHEKY29tcGxldGUgLVcgJ3gnIGsKY29tcGxldGUgLVcgJ3gnIGQKY29tcGxldGUgLVcgJ3gnIGMKY29tcGxldGUgLVcgJ3gnIGIKY29tcGxldGUgLVcgJ3gnIGEKY29tcGxldGUgLVcgJ3gnIG15Y21kMgpjb21wbGV0ZSAtVyAneCcgbXljbWQxCg=="
+    },
+    {
+      "script": "complete -W d -D; complete -W e -E; complete -W i -I; complete -W x cmd z a; complete -p",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGUgLVcgJ2knIC1JCmNvbXBsZXRlIC1XICd4JyBjbWQKY29tcGxldGUgLVcgJ2QnIC1ECmNvbXBsZXRlIC1XICd4JyB6CmNvbXBsZXRlIC1XICd4JyBhCmNvbXBsZXRlIC1XICdlJyAtRQo="
+    },
+    {
+      "script": "mkdir completion-files; printf x >completion-files/one; printf x >completion-files/two; mkdir completion-files/three; compgen -f completion-files/one; compgen -d completion-files/th; compgen -G 'completion-files/t*' ignored",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGlvbi1maWxlcy9vbmUKY29tcGxldGlvbi1maWxlcy90aHJlZQpjb21wbGV0aW9uLWZpbGVzL3RocmVlCmNvbXBsZXRpb24tZmlsZXMvdHdvCg=="
+    },
+    {
+      "script": "mkdir completion-options; mkdir completion-options/dir; printf x >completion-options/file; compgen -W '' -o default completion-options/f; compgen -W '' -o dirnames completion-options/d; compgen -W x -o plusdirs completion-options/d",
+      "status": 0,
+      "stdoutBase64": "Y29tcGxldGlvbi1vcHRpb25zL2ZpbGUKY29tcGxldGlvbi1vcHRpb25zL2Rpcgpjb21wbGV0aW9uLW9wdGlvbnMvZGlyCg=="
+    },
+    {
+      "script": "printf x >completion-glob-file; compgen -W 'completion-*'; compgen -W 'a* literal' -X 'a*'; compgen -W 'one two' -X '!@(one|other)'",
+      "status": 1,
+      "stdoutBase64": "Y29tcGxldGlvbi0qCmxpdGVyYWwK"
+    },
+    {
+      "script": "IFS=,; compgen -W 'a b,c\\,d,e;f'; IFS=; compgen -W 'a b'; compgen -W ''",
+      "status": 1,
+      "stdoutBase64": "YSBiCmMsZAplO2YKYSBiCg=="
+    },
+    {
+      "script": "x='alpha beta'; compgen -W '$x'; compgen -W '\"$x\"'; compgen -W '$(printf \"z y\\n\")'; compgen -W '$((2+3))'",
+      "status": 0,
+      "stdoutBase64": "YWxwaGEKYmV0YQphbHBoYSBiZXRhCnoKeQo1Cg=="
+    },
+    {
+      "script": "compgen -A signal; compgen -A signal 3; echo status:$?",
+      "status": 0,
+      "stdoutBase64": "RVhJVApTSUdIVVAKU0lHSU5UClNJR1FVSVQKU0lHSUxMClNJR1RSQVAKU0lHQUJSVApTSUdCVVMKU0lHRlBFClNJR0tJTEwKU0lHVVNSMQpTSUdTRUdWClNJR1VTUjIKU0lHUElQRQpTSUdBTFJNClNJR1RFUk0KU0lHU1RLRkxUClNJR0NITEQKU0lHQ09OVApTSUdTVE9QClNJR1RTVFAKU0lHVFRJTgpTSUdUVE9VClNJR1VSRwpTSUdYQ1BVClNJR1hGU1oKU0lHVlRBTFJNClNJR1BST0YKU0lHV0lOQ0gKU0lHSU8KU0lHUFdSClNJR1NZUwpTSUdKVU5LKDMyKQpTSUdKVU5LKDMzKQpTSUdSVE1JTgpTSUdSVE1JTisxClNJR1JUTUlOKzIKU0lHUlRNSU4rMwpTSUdSVE1JTis0ClNJR1JUTUlOKzUKU0lHUlRNSU4rNgpTSUdSVE1JTis3ClNJR1JUTUlOKzgKU0lHUlRNSU4rOQpTSUdSVE1JTisxMApTSUdSVE1JTisxMQpTSUdSVE1JTisxMgpTSUdSVE1JTisxMwpTSUdSVE1JTisxNApTSUdSVE1JTisxNQpTSUdSVE1BWC0xNApTSUdSVE1BWC0xMwpTSUdSVE1BWC0xMgpTSUdSVE1BWC0xMQpTSUdSVE1BWC0xMApTSUdSVE1BWC05ClNJR1JUTUFYLTgKU0lHUlRNQVgtNwpTSUdSVE1BWC02ClNJR1JUTUFYLTUKU0lHUlRNQVgtNApTSUdSVE1BWC0zClNJR1JUTUFYLTIKU0lHUlRNQVgtMQpTSUdSVE1BWApERUJVRwpFUlIKUkVUVVJOCnN0YXR1czoxCg=="
+    },
+    {
+      "script": "mkdir completion-default; printf x >completion-default/file; compgen -o bashdefault completion-default/f; echo status:$?; compgen -o default completion-default/f",
+      "status": 0,
+      "stdoutBase64": "c3RhdHVzOjEKY29tcGxldGlvbi1kZWZhdWx0L2ZpbGUK"
+    }
+  ]
+}

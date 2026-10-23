@@ -13,6 +13,7 @@ use std::{
     rc::{Rc, Weak},
 };
 
+pub(crate) mod completion;
 mod declarations;
 pub(crate) use declarations::DeclarationView;
 mod binding;
@@ -132,6 +133,7 @@ pub struct State {
     namerefs: BTreeMap<String, String>,
     pub cwd: String,
     directories: DirectoryStack,
+    pub(crate) completions: completion::CompletionTable,
     /// Function bodies are immutable. Isolated shells copy bindings, not ASTs.
     functions: BTreeMap<String, StoredFunction>,
     pub(crate) traps: traps::Traps,
@@ -180,6 +182,7 @@ impl Default for State {
             namerefs: BTreeMap::new(),
             cwd: "/home/guest".into(),
             directories: DirectoryStack::default(),
+            completions: completion::CompletionTable::default(),
             functions: BTreeMap::new(),
             traps: traps::Traps::default(),
             status: 0,
@@ -373,6 +376,7 @@ impl State {
             namerefs,
             cwd,
             directories,
+            completions: state.completions.clone(),
             functions,
             traps: state.traps.inherited(),
             status: state.status,
