@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import {
   authorizedInstrumentTransition,
   authorizedRuntimeTransition,
+  baseBranchBaseline,
   runtimeReceiptPath,
   baselinePath,
   instrumentReceiptPath,
@@ -806,6 +807,11 @@ test("runtime migration builds and supplies immutable target utility guests", as
     update(candidate);
     put(runtimeReceiptPath, readFileSync(resolve(root, runtimeReceiptPath)));
     put(baselinePath, readFileSync(resolve(root, baselinePath)));
+    const migratedTarget = {
+      identity: candidate.identity,
+      cases: baseBranchBaseline(root, authorizedRuntimeTransition.target).cases,
+    };
+    put("fixture-target-score.json", JSON.stringify(migratedTarget));
     put("scripts/build-node-harness.ts", "");
     const compiler = resolve(runner, "../bin/cargo");
     writeFileSync(
@@ -837,11 +843,48 @@ const release = dirname(process.env.BASH_COMPAT_SHELL_WASM);
 assert.equal(process.env.BASH_COMPAT_UTILITY_DIR, release);
 for (const name of ['cat', 'grep', 'mkdir', 'seq'])
   assert.ok(readFileSync(resolve(release, name + '.wasm')).length > 0);
-writeFileSync(process.env.BASH_COMPAT_OUT, readFileSync('${baselinePath}'));
+writeFileSync(process.env.BASH_COMPAT_OUT, readFileSync('fixture-target-score.json'));
 `,
     );
     const result = await targetBranchBaseline(repo, authorizedRuntimeTransition.target, candidate);
-    assert.deepEqual(result.cases, JSON.parse(readFileSync(resolve(root, baselinePath))).cases);
+    assert.deepEqual(result, migratedTarget);
+    const candidateScore = JSON.parse(readFileSync(resolve(repo, baselinePath)));
+    const delta = compareScores(result, candidateScore);
+    assert.equal(delta.ok, true);
+    assert.ok(
+      Object.values(delta.corpora).some((row) => row.gained.length > 0),
+      "later candidate gains remain separate from target evidence",
+    );
+    const passing = result.cases.find((item) => item.outcome === "pass");
+    const failing = result.cases.find((item) => item.outcome === "fail");
+    assert.ok(passing && failing);
+    for (const mutations of [
+      { [passing.id]: "fail" },
+      { [failing.id]: "pass" },
+      { [passing.id]: "fail", [failing.id]: "pass" },
+    ]) {
+      const changed = {
+        ...migratedTarget,
+        cases: migratedTarget.cases.map((item) => ({
+          ...item,
+          outcome: mutations[item.id] ?? item.outcome,
+        })),
+      };
+      put("fixture-target-score.json", JSON.stringify(changed));
+      await assert.rejects(
+        targetBranchBaseline(repo, authorizedRuntimeTransition.target, candidate),
+        /recorded transition/,
+      );
+    }
+    const changedIdentity = {
+      ...migratedTarget,
+      identity: { ...migratedTarget.identity, environment: "wrong" },
+    };
+    put("fixture-target-score.json", JSON.stringify(changedIdentity));
+    await assert.rejects(
+      targetBranchBaseline(repo, authorizedRuntimeTransition.target, candidate),
+      /incomparable/,
+    );
     assert.deepEqual(readdirSync(runner), []);
   });
 });
