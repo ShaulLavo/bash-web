@@ -396,6 +396,24 @@
       "status": 0,
       "stdout": "c3RhdHVzPTIK",
       "stderr": "ZGlyL2xpYjogbGluZSAxOiBtaXNzaW5nOiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5CmRpci9saWI6IGxpbmUgMTogZXZhbDogLXg6IGludmFsaWQgb3B0aW9uCmV2YWw6IHVzYWdlOiBldmFsIFthcmcgLi4uXQo="
+    },
+    {
+      "script": "i=0; : > lib; while (( i < 200 )); do echo 'x=1' >> lib; i=$((i+1)); done; . ./lib; echo src=$? x=$x",
+      "status": 0,
+      "stdout": "c3JjPTAgeD0xCg==",
+      "stderr": ""
+    },
+    {
+      "script": "i=0; : > lib; while (( i < 800 )); do echo 'x=$((x+1))' >> lib; i=$((i+1)); done; x=0; . ./lib; echo src=$? x=$x",
+      "status": 0,
+      "stdout": "c3JjPTAgeD04MDAK",
+      "stderr": ""
+    },
+    {
+      "script": "i=0; : > lib; while (( i < 300 )); do echo \"f$i() { value=$i; }\" >> lib; i=$((i+1)); done; . ./lib; status=$?; f299; echo src=$status value=$value",
+      "status": 0,
+      "stdout": "c3JjPTAgdmFsdWU9Mjk5Cg==",
+      "stderr": ""
     }
   ]
 }
