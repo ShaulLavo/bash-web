@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "a46c61419e1a5b757cdac117ee5c9271f9376237f4bae118a9b6a1c40d69a525",
+    "engineSourceSha256": "1dbafc4145f0bb13970da97a43b65af9ec689627f83ca85caae25e3dcaa61971",
     "binaryBuild": null
   },
   "contract": {
@@ -229,6 +229,7 @@
         "shell/engine/src/expand/pattern.rs",
         "shell/engine/src/expand/pattern/extglob.rs",
         "shell/engine/src/expand/positional.rs",
+        "shell/engine/src/expand/prefix.rs",
         "shell/engine/src/expand/printable.rs",
         "shell/engine/src/expand/replacement.rs",
         "shell/engine/src/expand/tilde.rs",
@@ -475,7 +476,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 1007,
+        "line": 1008,
         "column": 29
       }
     },
@@ -485,7 +486,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 981,
+        "line": 982,
         "column": 17
       }
     },
@@ -495,7 +496,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 32,
+        "line": 33,
         "column": 30
       }
     },
@@ -515,7 +516,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 61,
+        "line": 62,
         "column": 38
       }
     },
@@ -535,7 +536,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 1245,
+        "line": 1259,
         "column": 15
       }
     },
@@ -885,7 +886,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 2867,
+        "line": 2887,
         "column": 21
       }
     },

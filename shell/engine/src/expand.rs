@@ -21,6 +21,7 @@ mod indirect;
 mod operand;
 pub(crate) mod pattern;
 mod positional;
+mod prefix;
 mod printable;
 mod replacement;
 mod tilde;
@@ -1043,8 +1044,21 @@ impl Expansion<'_> {
                 expansion.ifs_changed = true;
                 return result.map_err(Error::in_expansion);
             }
-            if matches!(part, WordPart::ArrayIndices { .. }) {
-                return expansion.elements(part, state, quoted, scalar).await;
+            if is_list(part) {
+                return expansion
+                    .elements(part, state, quoted, scalar || expansion.captured.is_some())
+                    .await;
+            }
+            if let WordPart::PrefixMatch { prefix, star } = part {
+                return expansion
+                    .prefix_names(
+                        prefix,
+                        *star,
+                        state,
+                        quoted,
+                        scalar || expansion.captured.is_some(),
+                    )
+                    .await;
             }
             if let WordPart::ArrayLength(name) = part {
                 return expansion
@@ -1432,9 +1446,15 @@ impl Expansion<'_> {
             depth,
         } = context;
         self.slice_boundaries(operand).await?;
-        if error_pointer.is_none() && !operand::parameter_name(name) || depth >= operand::MAX_DEPTH
-        {
+        let supported_name = operand::parameter_name(name)
+            || operand::indirect_operator(operator) && matches!(name, "@" | "*");
+        if error_pointer.is_none() && !supported_name || depth >= operand::MAX_DEPTH {
             return Err(2.into());
+        }
+        if matches!(name, "@" | "*") && operand::indirect_operator(operator) {
+            return self
+                .positional_parameter(name, operator, operand, colon, context)
+                .await;
         }
         // These operators read their source value, unlike the four lazy
         // presence-testing operators below. Check before operand side effects.

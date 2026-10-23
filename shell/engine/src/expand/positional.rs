@@ -1,7 +1,83 @@
-use super::{Error, Expansion, Protection};
+use super::{Error, Expansion, OperandContext, Protection};
 use crate::{arithmetic, state::SharedState};
+use shell_parser::parser::{ParameterOp, WordPart};
 
 impl Expansion<'_> {
+    pub(super) async fn positional_parameter(
+        &mut self,
+        name: &str,
+        operator: &ParameterOp,
+        source: &str,
+        colon: bool,
+        context: OperandContext<'_>,
+    ) -> Result<(), Error> {
+        let context = OperandContext {
+            scalar: context.scalar || self.captured.is_some(),
+            ..context
+        };
+        let OperandContext {
+            state,
+            quoted,
+            scalar,
+            depth,
+        } = context;
+        let absent = self.positional_absent(name == "@", colon, context).await?;
+        if absent && matches!(operator, ParameterOp::AssignDefault | ParameterOp::Error) {
+            return self
+                .effect_operand(name, operator, source, colon, context, None)
+                .await;
+        }
+        let replacement = matches!(operator, ParameterOp::UseReplacement);
+        if replacement != absent {
+            return self
+                .operand(source, state, quoted, scalar, depth + 1, false)
+                .await;
+        }
+        if replacement {
+            let keep = scalar || quoted && (name == "*" || !state.borrow().positional().is_empty());
+            return self.segment("", Protection::All, keep).await;
+        }
+        self.work.admit_storage(name.len())?;
+        self.elements(&WordPart::Variable(name.to_owned()), state, quoted, scalar)
+            .await
+    }
+
+    async fn positional_absent(
+        &mut self,
+        at: bool,
+        colon: bool,
+        context: OperandContext<'_>,
+    ) -> Result<bool, Error> {
+        let OperandContext {
+            state,
+            quoted,
+            scalar,
+            ..
+        } = context;
+        self.work.checkpoint(self.cancel).await?;
+        let count = state.borrow().positional().len();
+        if count == 0 {
+            return Ok(true);
+        }
+        // In assignments Bash keeps '@' as a list, even with one null member.
+        if !colon || at && scalar {
+            return Ok(false);
+        }
+        if count == 1 {
+            return Ok(state.borrow().positional()[0].is_empty());
+        }
+        if at || !quoted && !scalar || self.positional_star_separator(state).await?.is_some() {
+            return Ok(false);
+        }
+        for index in 0..count {
+            self.work.checkpoint(self.cancel).await?;
+            if !state.borrow().positional()[index].is_empty() {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
     pub(super) async fn indexed_element(
         &mut self,
         name: &str,
@@ -244,4 +320,64 @@ fn slice_start(offset: i64, count: usize) -> Option<usize> {
     usize::try_from(offset)
         .ok()
         .filter(|&offset| offset <= count)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{executor::Cancel, state::State};
+    use futures::FutureExt;
+
+    #[test]
+    fn alternate_does_not_snapshot_unused_positional_payloads() {
+        let mut state = State::default();
+        state
+            .replace_positional(vec!["x".repeat(128 * 1024)])
+            .unwrap();
+        let state = state.shared();
+        let word = shell_parser::Parser::parse_word_string("${@:+small}");
+        let cancel = Cancel::new();
+        let mut work = super::super::Work::new(4096, 65536, 1);
+        let result = super::super::fields_admitted(&word, &state, &cancel, 16, 1, 16, &mut work)
+            .now_or_never()
+            .unwrap()
+            .unwrap();
+        assert_eq!(result, ["small"]);
+        assert_eq!(state.borrow().positional()[0].len(), 128 * 1024);
+    }
+
+    #[test]
+    fn lazy_lists_honor_work_storage_fields_raw_and_cancellation() {
+        let mut state = State::default();
+        state
+            .replace_positional(vec!["a".into(), "b".into()])
+            .unwrap();
+        let state = state.shared();
+        let word = shell_parser::Parser::parse_word_string("${@:-unused}");
+        let cancel = Cancel::new();
+        for (steps, storage, fields, raw) in [
+            (0, 65536, 8, 64),
+            (4096, 0, 8, 64),
+            (4096, 65536, 0, 64),
+            (4096, 65536, 8, 0),
+        ] {
+            let mut work = super::super::Work::new(steps, storage, fields);
+            let result =
+                super::super::fields_admitted(&word, &state, &cancel, 64, fields, raw, &mut work)
+                    .now_or_never()
+                    .unwrap();
+            assert!(matches!(result, Err(Error::Status(2))));
+        }
+        let mut work = super::super::Work::new(4096, 65536, 8);
+        let result = super::super::fields_admitted(&word, &state, &cancel, 64, 8, 64, &mut work)
+            .now_or_never()
+            .unwrap()
+            .unwrap();
+        assert_eq!(result, ["a", "b"]);
+        cancel.cancel();
+        let result = super::super::fields_admitted(&word, &state, &cancel, 64, 8, 64, &mut work)
+            .now_or_never()
+            .unwrap();
+        assert!(matches!(result, Err(Error::Status(130))));
+    }
 }

@@ -1,5 +1,10 @@
 {
   "bash": "5.3.15(1)-release",
+  "provenance": {
+    "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+    "base": "e6430b1554de7d2efad092f40751858292cb071d",
+    "scope": "Local Bash controls and frozen scored candidates. Status and stdout; CI replays recordings only."
+  },
   "env": {
     "PATH": "/usr/bin:/bin",
     "HOME": "/home/user",
@@ -499,10 +504,164 @@
       "stderr": ""
     },
     {
+      "id": "list-nounset",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -u; set --; show \"${@-x}\" \"${@+x}\" \"${*-x}\"; set -- \"\"; show \"${@:-x}\" \"${*:+x}\"",
+      "status": 0,
+      "stdout": "argc=2 <x> <x>\nargc=2 <x> <>\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-nounset",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -u; show \"${!param_none_@}\"; param_null=; show \"${!param_@}\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nargc=1 <param_null>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-captured-operands",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- a \"b c\"; show \"${captured:=$@}\" \"$captured\"; IFS=:; unset captured; show \"${captured:=$*}\" \"$captured\"; param_a=1 param_b=2; unset captured; show \"${captured:=${!param_@}}\" \"$captured\"",
+      "status": 0,
+      "stdout": "argc=2 <a b c> <a b c>\nargc=2 <a:b c> <a:b c>\nargc=2 <param_a:param_b> <param_a:param_b>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-nonempty-ifs",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=:; show \"${@:-x}\" \"${*:-x}\" ${@:-x} ${*:-x}; a=${@:-x}; b=${*:-x}; show \"$a\" \"$b\"",
+      "status": 0,
+      "stdout": "argc=5 <> <> <:> <> <>\nargc=2 < > <:>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-assignment-failure",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; printf \"before\\n\"; echo \"${@:=x}\"; echo after",
+      "status": 1,
+      "stdout": "before\n",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "list-error-empty",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; printf \"before\\n\"; echo \"${@:?missing}\"; echo after",
+      "status": 127,
+      "stdout": "before\n",
+      "stderr": "/usr/bin/bash: line 1: @: missing\n"
+    },
+    {
+      "id": "list-error-null",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; printf \"before\\n\"; echo \"${*:?missing}\"; echo after",
+      "status": 127,
+      "stdout": "before\n",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "list-selected-effects",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; show \"${@:-${selected:=yes}}\" \"${@+${selected}}\"; show \"$selected\"; set -- a b; show \"${@:=bad}\" \"${*?bad}\"",
+      "status": 0,
+      "stdout": "argc=2 <yes> <yes>\nargc=1 <yes>\nargc=3 <a> <b> <a b>\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-empty-ifs-fields",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; param_a=1 param_b=2; IFS=; show ${!param_@} ${!param_*} \"${!param_@}\" \"${!param_*}\"",
+      "status": 0,
+      "stdout": "argc=6 <param_a> <param_b> <param_aparam_b> <param_a> <param_b> <param_aparam_b>\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-literal-edges",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; param_a=1 param_b=2; show x\"${!param_@}\"y x\"${!param_*}\"y; IFS=_; show ${!param_@} ${!param_*} \"${!param_*}\"",
+      "status": 0,
+      "stdout": "argc=3 <xparam_a> <param_by> <xparam_a param_by>\nargc=9 <param> <a> <param> <b> <param> <a> <param> <b> <param_a_param_b>\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-reference",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; param_target=x; declare -n param_ref=param_target; show \"${!param_@}\"; unset param_target; show \"${!param_@}\"",
+      "status": 0,
+      "stdout": "argc=2 <param_ref> <param_target>\nargc=1 <param_ref>\n",
+      "stderr": ""
+    },
+    {
       "id": "prefix-nested",
       "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; param_a=1 param_b=2; show \"${u:-${!param_@}}\"; IFS=; a=${!param_@}; b=${!param_*}; show \"$a\" \"$b\"",
       "status": 0,
       "stdout": "argc=2 <param_a> <param_b>\nargc=2 <param_a param_b> <param_aparam_b>\n",
+      "stderr": ""
+    },
+    {
+      "id": "oils:var-op-bash:237",
+      "script": "hello1=1 hello2=2 hello3=3\necho ${!hello@}\nhello=()\necho ${!hello@}\n",
+      "status": 0,
+      "stdout": "hello1 hello2 hello3\nhello hello1 hello2 hello3\n",
+      "stderr": ""
+    },
+    {
+      "id": "oils:var-op-test:396",
+      "script": "echo argv=${@-minus}\necho argv=${@+plus}\necho argv=${@:-minus}\necho argv=${@:+plus}\n",
+      "status": 0,
+      "stdout": "argv=minus\nargv=\nargv=minus\nargv=\n",
+      "stderr": ""
+    },
+    {
+      "id": "oils:var-op-test:414",
+      "script": "set -- \"\"\necho argv=${@-minus}\necho argv=${@+plus}\necho argv=${@:-minus}\necho argv=${@:+plus}\n",
+      "status": 0,
+      "stdout": "argv=\nargv=plus\nargv=minus\nargv=\n",
+      "stderr": ""
+    },
+    {
+      "id": "oils:var-op-test:437",
+      "script": "set -- \"\" \"\"\necho argv=${@-minus}\necho argv=${@+plus}\necho argv=${@:-minus}\necho argv=${@:+plus}\n",
+      "status": 0,
+      "stdout": "argv=\nargv=plus\nargv=\nargv=plus\n",
+      "stderr": ""
+    },
+    {
+      "id": "oils:var-op-test:450",
+      "script": "set -- \"\" \"\"\nIFS=\necho argv=${*-minus}\necho argv=${*+plus}\necho argv=${*:-minus}\necho argv=${*:+plus}\n",
+      "status": 0,
+      "stdout": "argv=\nargv=plus\nargv=\nargv=plus\n",
+      "stderr": ""
+    },
+    {
+      "id": "oils:var-op-test:470",
+      "script": "set -- \"\" \"\"\nIFS=\necho \"argv=${*-minus}\"\necho \"argv=${*+plus}\"\necho \"argv=${*:-minus}\"\necho \"argv=${*:+plus}\"\n",
+      "status": 0,
+      "stdout": "argv=\nargv=plus\nargv=minus\nargv=\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:word_expansion/params:19",
+      "script": "var1=\"Hello\"\nvar2=\"World\"\n\necho \"${!var*}\"\necho \"${!var@}\"\n\necho \"Dumping *\"\nfor i in \"${!var*}\"; do\n    echo \"i: $i\"\ndone\n\necho \"Dumping @\"\nfor i in \"${!var@}\"; do\n    echo \"i: $i\"\ndone\n",
+      "status": 0,
+      "stdout": "var1 var2\nvar1 var2\nDumping *\ni: var1 var2\nDumping @\ni: var1\ni: var2\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:param-expansion-gaps:17",
+      "script": "cfg_host=localhost cfg_port=80 other=1\nfor v in ${!cfg_@}; do echo \"$v=${!v}\"; done\nn=0; for v in ${!cfg_*}; do n=$((n+1)); done; echo $n\nset -- ${!cfg_@}; echo $#\n",
+      "status": 0,
+      "stdout": "cfg_host=localhost\ncfg_port=80\n2\n2\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:var-op-test:167",
+      "script": "set --\necho \"argv=${@-minus}\"\necho \"argv=${@+plus}\"\necho \"argv=${@:-minus}\"\necho \"argv=${@:+plus}\"\n",
+      "status": 0,
+      "stdout": "argv=minus\nargv=\nargv=minus\nargv=\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:var-op-test:181",
+      "script": "set -- \"\"\necho \"argv=${@-minus}\"\necho \"argv=${@+plus}\"\necho \"argv=${@:-minus}\"\necho \"argv=${@:+plus}\"\n",
+      "status": 0,
+      "stdout": "argv=\nargv=plus\nargv=minus\nargv=\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:var-op-test:195",
+      "script": "set -- \"\" \"\"\necho \"argv=${@-minus}\"\necho \"argv=${@+plus}\"\necho \"argv=${@:-minus}\"\necho \"argv=${@:+plus}\"\n",
+      "status": 0,
+      "stdout": "argv= \nargv=plus\nargv= \nargv=plus\n",
       "stderr": ""
     }
   ]
