@@ -134,13 +134,16 @@ async fn choices(
     let mut choices = Vec::new();
     let mut remaining = context.limits().expansion_bytes;
     for word in &command.words {
-        let fields = expand::fields_admitted(
+        let fields = expand::fields(
             word,
             state,
             &context.cancel,
-            context.limits().expansion_bytes,
-            context.limits().arguments.saturating_sub(choices.len()),
-            remaining,
+            expand::FieldContext::ForList,
+            (
+                context.limits().expansion_bytes,
+                context.limits().arguments.saturating_sub(choices.len()),
+                remaining,
+            ),
             work,
         )
         .await?;

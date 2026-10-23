@@ -181,13 +181,12 @@ async fn for_values_body(
     let mut raw_remaining = context.limits().expansion_bytes;
     for word in words {
         let remaining = context.limits().arguments.saturating_sub(values.len());
-        let fields = match expand::fields_admitted(
+        let fields = match expand::fields(
             word,
             state,
             &context.cancel,
-            context.limits().expansion_bytes,
-            remaining,
-            raw_remaining,
+            expand::FieldContext::ForList,
+            (context.limits().expansion_bytes, remaining, raw_remaining),
             work,
         )
         .await

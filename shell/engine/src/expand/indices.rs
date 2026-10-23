@@ -84,22 +84,42 @@ mod tests {
             (1024, 65536, 8, 0),
         ] {
             let mut work = Work::new(steps, storage, fields);
-            let result =
-                super::super::fields_admitted(&word, &state, &cancel, 64, fields, raw, &mut work)
-                    .now_or_never()
-                    .unwrap();
+            let result = super::super::fields(
+                &word,
+                &state,
+                &cancel,
+                super::super::FieldContext::ForList,
+                (64, fields, raw),
+                &mut work,
+            )
+            .now_or_never()
+            .unwrap();
             assert!(matches!(result, Err(Error::Status(2))));
         }
         let mut work = Work::new(1024, 65536, 8);
-        let result = super::super::fields_admitted(&word, &state, &cancel, 64, 8, 64, &mut work)
-            .now_or_never()
-            .unwrap()
-            .unwrap_or_else(|_| panic!("admitted key must expand"));
+        let result = super::super::fields(
+            &word,
+            &state,
+            &cancel,
+            super::super::FieldContext::ForList,
+            (64, 8, 64),
+            &mut work,
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap_or_else(|_| panic!("admitted key must expand"));
         assert_eq!(result, ["0"]);
         cancel.cancel();
-        let result = super::super::fields_admitted(&word, &state, &cancel, 64, 8, 64, &mut work)
-            .now_or_never()
-            .unwrap();
+        let result = super::super::fields(
+            &word,
+            &state,
+            &cancel,
+            super::super::FieldContext::ForList,
+            (64, 8, 64),
+            &mut work,
+        )
+        .now_or_never()
+        .unwrap();
         assert!(matches!(result, Err(Error::Status(130))));
     }
 }

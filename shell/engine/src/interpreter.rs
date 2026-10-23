@@ -2801,9 +2801,12 @@ async fn prepare_simple_command_body(
         &simple.name,
         state,
         &context.cancel,
-        context.limits().expansion_bytes,
-        context.limits().arguments - assignment_count,
-        context.limits().expansion_bytes,
+        expand::FieldContext::Argv,
+        (
+            context.limits().expansion_bytes,
+            context.limits().arguments - assignment_count,
+            context.limits().expansion_bytes,
+        ),
         &mut work,
     )
     .await?;
@@ -2837,9 +2840,12 @@ async fn prepare_simple_command_body(
                 &word,
                 state,
                 &context.cancel,
-                remaining_bytes,
-                remaining_words,
-                context.limits().expansion_bytes,
+                expand::FieldContext::Argv,
+                (
+                    remaining_bytes,
+                    remaining_words,
+                    context.limits().expansion_bytes,
+                ),
                 &mut work,
             )
             .await?

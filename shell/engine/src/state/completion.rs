@@ -7,18 +7,15 @@ use crate::{
 use std::{mem::size_of, rc::Rc};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub(crate) enum Special {
-    Default,
-    Empty,
-    Initial,
+    Default = b'D',
+    Empty = b'E',
+    Initial = b'I',
 }
 impl Special {
-    pub(crate) fn flag(self) -> &'static str {
-        match self {
-            Self::Default => "-D",
-            Self::Empty => "-E",
-            Self::Initial => "-I",
-        }
+    pub(crate) fn flag(self) -> [u8; 2] {
+        [b'-', self as u8]
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

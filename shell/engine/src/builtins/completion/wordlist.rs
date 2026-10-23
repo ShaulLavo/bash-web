@@ -204,14 +204,13 @@ pub(super) async fn expand(
                 .saturating_add(512),
         )?;
         let word = crate::parse::generated_word(&spelling).map_err(|_| Error::Status(1))?;
-        let expanded = expand::completion_fields(
+        let max_bytes = limits.0.saturating_sub(bytes);
+        let expanded = expand::fields(
             &word,
             state,
             cancel,
-            (
-                limits.0.saturating_sub(bytes),
-                limits.1.saturating_sub(values.len()),
-            ),
+            expand::FieldContext::Completion,
+            (max_bytes, limits.1.saturating_sub(values.len()), max_bytes),
             work,
         )
         .await?;

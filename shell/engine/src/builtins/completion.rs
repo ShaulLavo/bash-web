@@ -204,7 +204,7 @@ async fn print(
     }
     write(fds, b" ", context).await?;
     match target {
-        Target::Special(kind) => write(fds, kind.flag().as_bytes(), context).await?,
+        Target::Special(kind) => write(fds, &kind.flag(), context).await?,
         Target::Name(name) => quote(name, false, fds, context).await?,
     }
     write(fds, b"\n", context).await
