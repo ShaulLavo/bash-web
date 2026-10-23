@@ -1412,6 +1412,18 @@ mod tests {
         ))
         .unwrap_or_else(|_| panic!("pattern expansion must succeed"))
     }
+    fn assert_captures(source: &str, value: &str, expected: &[&str]) {
+        let pattern = self::pattern(source);
+        let mut work = Work::new(10_000_000, 10_000_000, 16);
+        let ranges = finish(matches(&pattern, value, &mut work, &Cancel::new()))
+            .unwrap_or_else(|_| panic!("capture failed: {source:?} on {value:?}"))
+            .unwrap();
+        let actual: Vec<_> = ranges
+            .into_iter()
+            .map(|range| range.map_or("", |(start, end)| &value[start..end]))
+            .collect();
+        assert_eq!(actual, expected, "{source:?} on {value:?}");
+    }
     #[test]
     fn bash_capture_order_and_leftmost_longest_spans() {
         for (source, value, expected) in [
@@ -1446,16 +1458,7 @@ mod tests {
             ("[0-9]+", "x12z345", vec!["12"]),
             ("(a)?(b*)", "z", vec!["", "", ""]),
         ] {
-            let pattern = self::pattern(source);
-            let mut work = Work::new(10_000_000, 10_000_000, 16);
-            let ranges = finish(matches(&pattern, value, &mut work, &Cancel::new()))
-                .unwrap_or_else(|_| panic!("capture failed: {source:?} on {value:?}"))
-                .unwrap();
-            let actual: Vec<_> = ranges
-                .into_iter()
-                .map(|range| range.map_or("", |(start, end)| &value[start..end]))
-                .collect();
-            assert_eq!(actual, expected, "{source:?} on {value:?}");
+            assert_captures(source, value, &expected);
         }
     }
     #[test]
@@ -1470,16 +1473,7 @@ mod tests {
             ("((a?|b){2,3})*", "bb", vec!["bb", "b", "b"]),
             ("((a?|b){2,3})*", "bbb", vec!["bbb", "b", "b"]),
         ] {
-            let pattern = self::pattern(source);
-            let mut work = Work::new(10_000_000, 10_000_000, 16);
-            let ranges = finish(matches(&pattern, value, &mut work, &Cancel::new()))
-                .unwrap_or_else(|_| panic!("capture failed: {source:?} on {value:?}"))
-                .unwrap();
-            let actual: Vec<_> = ranges
-                .into_iter()
-                .map(|range| range.map_or("", |(start, end)| &value[start..end]))
-                .collect();
-            assert_eq!(actual, expected, "{source:?} on {value:?}");
+            assert_captures(source, value, &expected);
         }
     }
     #[test]
