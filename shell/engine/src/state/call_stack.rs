@@ -311,8 +311,7 @@ mod tests {
         frame
     }
 
-    #[test]
-    fn stack_facts_and_entry_arguments_survive_positional_changes_and_isolation() {
+    fn debug_state() -> (StorageBudget, SharedState) {
         let memory = StorageBudget::new(32_768);
         let state = State::with_memory(memory.clone()).shared();
         state.borrow_mut().extdebug = true;
@@ -322,6 +321,12 @@ mod tests {
             &mut work(),
         ))
         .unwrap_or_else(|_| panic!("stack operation failed"));
+        (memory, state)
+    }
+
+    #[test]
+    fn stack_facts_and_entry_arguments_survive_positional_changes_and_isolation() {
+        let (memory, state) = debug_state();
         let outer = enter(&state, "outer", vec!["a".into(), "b".into()], 7);
         let inner = enter(&state, "inner", vec!["x".into()], 3);
         assert_eq!(state.borrow().array_element("FUNCNAME", -1), Some("outer"));
@@ -356,15 +361,7 @@ mod tests {
 
     #[test]
     fn stack_slice_views_borrow_facts_without_storage_or_frame_growth() {
-        let memory = StorageBudget::new(32_768);
-        let state = State::with_memory(memory.clone()).shared();
-        state.borrow_mut().extdebug = true;
-        finish(State::initialize_arguments(
-            &state,
-            &Cancel::new(),
-            &mut work(),
-        ))
-        .unwrap_or_else(|_| panic!("stack operation failed"));
+        let (memory, state) = debug_state();
         state
             .borrow_mut()
             .assign_parameter("FUNCNAME".into(), "ignored".into())
