@@ -1,0 +1,312 @@
+{
+  "schema": 1,
+  "bash": "5.3.15(1)-release",
+  "cases": [
+    {
+      "id": "oils:sh-options:157",
+      "script": "echo 1\nset -n\necho 2\nset +n\necho 3\n",
+      "bash": {
+        "status": 0,
+        "stdout": "MQo=",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "brush-suite:options/set-n:1",
+      "script": "set -n\ntouch somefile.txt\nls\n",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:bashbox-interpreter-core:934",
+      "script": "echo a; set -n; echo b\n",
+      "bash": {
+        "status": 0,
+        "stdout": "YQo=",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:bashbox-interpreter-core:941",
+      "script": "set -o noexec; echo hi\n",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:set-noexec:1",
+      "script": "echo a\nset -n\necho not-run\nset +n\necho still-not-run\n",
+      "bash": {
+        "status": 0,
+        "stdout": "YQo=",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:set-noexec:11",
+      "script": "echo a; set -o noexec; echo b\n",
+      "bash": {
+        "status": 0,
+        "stdout": "YQo=",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-0",
+      "script": "false; set -n",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-1",
+      "script": "set +n; echo enabled",
+      "bash": {
+        "status": 0,
+        "stdout": "ZW5hYmxlZAo=",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-2",
+      "script": "set -o noexec; echo BAD; set +o noexec; echo BAD",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-3",
+      "script": "set -en; false; echo BAD",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-4",
+      "script": "set -n; echo ${unset:?BAD}; missing-command; exit 7",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-5",
+      "script": "set -n; echo \"$(echo BAD >&2)\"; echo $((1/0)); echo ${x!}",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-6",
+      "script": "set -n; echo BAD > /missing/file",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-7",
+      "script": "set -n; echo BAD | missing-command",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-8",
+      "script": "set -n; missing-command & wait; echo BAD",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-9",
+      "script": "set -n; f() { echo BAD; }; f",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-10",
+      "script": "set -n; for x in a b; do echo BAD; done",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-11",
+      "script": "set -n; while true; do echo BAD; done",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-12",
+      "script": "set -n; if true; then echo BAD; fi",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-13",
+      "script": "set -n; cat <<EOF\nignored\nEOF\necho BAD",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-14",
+      "script": "f() { echo before; set -n; echo BAD; }; f; echo BAD",
+      "bash": {
+        "status": 0,
+        "stdout": "YmVmb3JlCg==",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-15",
+      "script": "{ echo before; set -n; echo BAD; }; echo BAD",
+      "bash": {
+        "status": 0,
+        "stdout": "YmVmb3JlCg==",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-16",
+      "script": "if true; then set -n; echo BAD; fi; echo BAD",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-17",
+      "script": "for x in a b; do echo \"$x\"; set -n; done; echo BAD",
+      "bash": {
+        "status": 0,
+        "stdout": "YQo=",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-18",
+      "script": "until false; do echo before; set -n; done; echo BAD",
+      "bash": {
+        "status": 0,
+        "stdout": "YmVmb3JlCg==",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-19",
+      "script": "set -n && echo BAD || echo BAD",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-20",
+      "script": "(set -n; echo BAD); echo parent",
+      "bash": {
+        "status": 0,
+        "stdout": "cGFyZW50Cg==",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-21",
+      "script": "x=$(set -n; echo BAD); printf \"<%s>\\n\" \"$x\"",
+      "bash": {
+        "status": 0,
+        "stdout": "PD4K",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-22",
+      "script": "set -n | echo other; echo parent",
+      "bash": {
+        "status": 0,
+        "stdout": "b3RoZXIKcGFyZW50Cg==",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-23",
+      "script": "{ set -n; echo BAD; } & wait; echo parent",
+      "bash": {
+        "status": 0,
+        "stdout": "cGFyZW50Cg==",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-24",
+      "script": "set -n; echo BAD\nif true; then echo BAD; fi",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-25",
+      "script": "false\nset -n\nfalse",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-26",
+      "script": "set -n -- changed; echo BAD",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-27",
+      "script": "set -n; echo BAD\necho BAD",
+      "bash": {
+        "status": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    }
+  ]
+}
