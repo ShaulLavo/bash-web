@@ -418,11 +418,6 @@
       "stdoutBase64": "fi96el9kaXIKfi96el9kaXIKc3RhdHVzOjEK"
     },
     {
-      "script": "printf '127.0.0.1 zz_z zz_a zz_z\\n' >zz_hosts; HOSTFILE=zz_hosts compgen -A hostname zz_; HOSTFILE=zz_absent compgen -A hostname zz_; echo status:$?",
-      "status": 0,
-      "stdoutBase64": "enpfegp6el9hCnp6X3oKenpfCnN0YXR1czowCg=="
-    },
-    {
       "script": "for pattern in '[[:digit:]]' '[![:alpha:]]' '[[:upper:][:digit:]]' '[x[:lower:]]' '[[:xdigit:]]' '[[:notaclass:]]'; do compgen -W 'a b Z x 1 7 +' -X \"$pattern\"; done",
       "status": 0,
       "stdoutBase64": "YQpiCloKeAorCmEKYgpaCngKYQpiCngKKwpaCjEKNworCloKeAorCmEKYgpaCngKMQo3CisK"
@@ -471,6 +466,16 @@
       "script": "compgen -W '${missing:-$'\"'\"'a b'\"'\"'} c'",
       "status": 0,
       "stdoutBase64": "JGEgYgpjCg=="
+    },
+    {
+      "script": "printf '127.0.0.1 zz_z zz_a zz_z\\n' >zz_hosts; HOSTFILE=zz_hosts compgen -A hostname zz_",
+      "status": 0,
+      "stdoutBase64": "enpfegp6el9hCnp6X3oK"
+    },
+    {
+      "script": "LC_ALL=C compgen -W 'é A 1' -X '[[:alpha:]]'; LC_ALL=C.UTF-8 compgen -W 'é A 1' -X '[[:alpha:]]'",
+      "status": 0,
+      "stdoutBase64": "w6kKMQoxCg=="
     }
   ]
 }
