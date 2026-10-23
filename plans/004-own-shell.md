@@ -2965,6 +2965,18 @@ results are under `/work/reports/wave-20261022/shell/review75-r2-evidence/`
 and sibling `review75-r1-evidence/`. These gaps need separate bounded controls.
 The reader-budget and alias-printing blockers are fixed in PR #75, not deferred.
 
+- Alias-definition table-copy cost, measured after the reader fix. At source
+  `342c935`, UpCloud-4 debug runs of 1,000, 2,000 and 4,000 distinct definitions
+  took 1.02, 3.94 and 15.94 seconds. Every run returned 0 with `done\n`.
+  Evidence is `alias-takeover-focused2-20261023T115659Z-6o_04p6j/gate.log`
+  under `/work/reports/machine-fleet/remote-gate/`. Generate the input with
+  `shopt -s expand_aliases`, then `alias aN=echo` for each N on its own line,
+  then `echo done`. The reader no longer parses the unread suffix. The remaining
+  suspected cost is `State::update_alias` in `state/aliases.rs`, which admits
+  and copies the whole immutable table on each mutation. Compare with expansion
+  disabled and profile that copy before changing it. Preserve atomic rejection,
+  retained-version charging, parser snapshots, and cancellation. Do not describe
+  the reader fix as making all alias-definition workloads linear.
 - Command-substitution alias timing, finding 4. After `alias x='echo YES'`,
   `echo "${v:-$(x)}"`, `: "${v:=$(x)}"` and `${v:-\`x\`}` run `x` in Bash,
   but our lazy substitution parsers receive no aliases. Arithmetic substitution
