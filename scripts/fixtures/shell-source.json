@@ -1,0 +1,185 @@
+{
+  "bash": "5.3.15(1)-release",
+  "cases": [
+    {
+      "script": "echo 'value=loaded; greet() { echo hello:$1:$value; }' > lib; . ./lib; greet world",
+      "status": 0,
+      "stdout": "aGVsbG86d29ybGQ6bG9hZGVkCg==",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'echo sourced' > lib; source -- ./lib",
+      "status": 0,
+      "stdout": "c291cmNlZAo=",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'echo sourced' > lib; . -- ./lib",
+      "status": 0,
+      "stdout": "c291cmNlZAo=",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'false' > lib; source ./lib; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": ""
+    },
+    {
+      "script": ": > lib; false; source ./lib; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTAK",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'echo before; return 7; echo BAD' > lib; source ./lib; echo status=$?",
+      "status": 0,
+      "stdout": "YmVmb3JlCnN0YXR1cz03Cg==",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'return' > lib; false; . ./lib; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'exit 42' > lib; . ./lib; echo BAD",
+      "status": 42,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'echo before; echo >' > lib; . ./lib 2>/dev/null; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTIK",
+      "stderr": ""
+    },
+    {
+      "script": "source missing 2>/dev/null; echo status=$?; source 2>/dev/null; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEKc3RhdHVzPTIK",
+      "stderr": ""
+    },
+    {
+      "script": "source . 2>/dev/null; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": ""
+    },
+    {
+      "script": "set -- outer tail; echo 'printf \"%s:%s:%s\\n\" \"$#\" \"$1\" \"$2\"; shift' > lib; . ./lib first second; printf '%s:%s:%s\\n' \"$#\" \"$1\" \"$2\"",
+      "status": 0,
+      "stdout": "MjpmaXJzdDpzZWNvbmQKMjpvdXRlcjp0YWlsCg==",
+      "stderr": ""
+    },
+    {
+      "script": "set -- outer tail; echo 'shift' > lib; . ./lib; echo count=$# arg=$1",
+      "status": 0,
+      "stdout": "Y291bnQ9MSBhcmc9dGFpbAo=",
+      "stderr": ""
+    },
+    {
+      "script": "set -- outer; echo 'set -- changed more' > lib; . ./lib inner; echo count=$# arg=$1",
+      "status": 0,
+      "stdout": "Y291bnQ9MiBhcmc9Y2hhbmdlZAo=",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'echo inner:$1; return 3' > inner; echo '. ./inner nested; echo inner-status=$?; echo outer:$1' > outer; set -- original; . ./outer supplied; echo after:$1",
+      "status": 0,
+      "stdout": "aW5uZXI6bmVzdGVkCmlubmVyLXN0YXR1cz0zCm91dGVyOnN1cHBsaWVkCmFmdGVyOm9yaWdpbmFsCg==",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'local value=changed; echo inside:$value' > lib; f() { local value=old; . ./lib; echo function:$value; }; f; echo outside:${value-unset}",
+      "status": 0,
+      "stdout": "aW5zaWRlOmNoYW5nZWQKZnVuY3Rpb246Y2hhbmdlZApvdXRzaWRlOnVuc2V0Cg==",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'local value=bad' > lib; . ./lib 2>/dev/null; echo status=$? value=${value-unset}",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEgdmFsdWU9dW5zZXQK",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'read value; echo body:$value' > lib; . ./lib <<EOF\npayload\nEOF",
+      "status": 0,
+      "stdout": "Ym9keTpwYXlsb2FkCg==",
+      "stderr": ""
+    },
+    {
+      "script": "value=outer; value=scoped . /dev/stdin <<'END'\necho body:$value; other=retained\nEND\necho after:$value:$other",
+      "status": 0,
+      "stdout": "Ym9keTpzY29wZWQKYWZ0ZXI6b3V0ZXI6cmV0YWluZWQK",
+      "stderr": ""
+    },
+    {
+      "script": "printf 'echo stdin\\nreturn 6\\necho BAD\\n' | { . /dev/stdin; echo status=$?; }",
+      "status": 0,
+      "stdout": "c3RkaW4Kc3RhdHVzPTYK",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'echo path' > lib; PATH=$PWD . lib",
+      "status": 0,
+      "stdout": "cGF0aAo=",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'echo fallback' > lib; PATH=/nowhere . lib",
+      "status": 0,
+      "stdout": "ZmFsbGJhY2sK",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'echo fallback' > lib; unset PATH; . lib",
+      "status": 0,
+      "stdout": "ZmFsbGJhY2sK",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'echo fallback' > lib; PATH= . lib",
+      "status": 0,
+      "stdout": "ZmFsbGJhY2sK",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'echo explicit' > lib; PATH=/nowhere . ./lib",
+      "status": 0,
+      "stdout": "ZXhwbGljaXQK",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'echo wrapped' > lib; builtin source ./lib; command . ./lib",
+      "status": 0,
+      "stdout": "d3JhcHBlZAp3cmFwcGVkCg==",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'false' > lib; set -e; . ./lib; echo BAD",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'false; echo reached' > lib; set -e; if . ./lib; then echo conditional; fi",
+      "status": 0,
+      "stdout": "cmVhY2hlZApjb25kaXRpb25hbAo=",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'echo retained' > lib; . ./lib > out; cat out",
+      "status": 0,
+      "stdout": "cmV0YWluZWQK",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'return 5' > lib; f() { . ./lib; echo source-status=$?; }; f; echo function-status=$?",
+      "status": 0,
+      "stdout": "c291cmNlLXN0YXR1cz01CmZ1bmN0aW9uLXN0YXR1cz0wCg==",
+      "stderr": ""
+    }
+  ]
+}
