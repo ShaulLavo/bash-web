@@ -398,11 +398,6 @@
       "stdoutBase64": "CiRhIGIKYQpiCmMK"
     },
     {
-      "script": "compgen -W '$(printf \"%s\\n\" \"$'a b'\") c'; compgen -W '${missing:-$'a b'} c' ",
-      "status": 1,
-      "stdoutBase64": ""
-    },
-    {
       "script": "mkdir zz_dir; printf x >zz_file; compgen -W 'zz_word' -o plusdirs -P '<' -S '>' -X '!zz_word' zz_",
       "status": 0,
       "stdoutBase64": "PHp6X3dvcmQ+Cnp6X2Rpcgo="
@@ -466,6 +461,16 @@
       "script": "mkdir -p /etc; printf %s 'zz_z 1234/tcp zz_alias\nzz_a 1235/tcp\nzz_z 1234/udp\n' > /etc/services; compgen -A service zz_",
       "status": 0,
       "stdoutBase64": "enpfegp6el9hCnp6X3oK"
+    },
+    {
+      "script": "compgen -W '$(printf '\"'\"'%s\\n'\"'\"' $'\"'\"'a b'\"'\"') c'",
+      "status": 0,
+      "stdoutBase64": "YQpiCmMK"
+    },
+    {
+      "script": "compgen -W '${missing:-$'\"'\"'a b'\"'\"'} c'",
+      "status": 0,
+      "stdoutBase64": "JGEgYgpjCg=="
     }
   ]
 }
