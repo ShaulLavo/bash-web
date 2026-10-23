@@ -1,0 +1,124 @@
+{
+  "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "cases": [
+    {
+      "id": "function-array",
+      "code": "inner() { printf \"<%s>\\n\" \"${FUNCNAME[@]}\"; }; outer() { inner; }; outer; echo \"after:${#FUNCNAME[@]}\"",
+      "status": 0,
+      "stdout": "<inner>\n<outer>\nafter:0\n",
+      "stderr": ""
+    },
+    {
+      "id": "scalar-nameref",
+      "code": "outer() { local -n ref=FUNCNAME; echo \"$FUNCNAME:${ref[0]}:${FUNCNAME[*]}\"; }; outer",
+      "status": 0,
+      "stdout": "outer:outer:outer\n",
+      "stderr": ""
+    },
+    {
+      "id": "call-lines",
+      "code": "g() { printf \"lines:%s\\n\" \"${BASH_LINENO[*]}\"; }\nf() {\n  g\n}\nf",
+      "status": 0,
+      "stdout": "lines:3 5\n",
+      "stderr": ""
+    },
+    {
+      "id": "caller-top",
+      "code": "caller; echo \"empty:$?\"; caller 0; echo \"zero:$?\"; caller 99; echo \"range:$?\"",
+      "status": 0,
+      "stdout": "empty:1\nzero:1\nrange:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "caller-nested",
+      "code": "g() { caller; caller 0; caller 1; echo \"range:$?\"; }\nf() {\n g\n}\nf",
+      "status": 0,
+      "stdout": "3 bash\n3 f bash\nrange:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "caller-operands",
+      "code": "f() { caller x; echo \"text:$?\"; caller -1; echo \"negative:$?\"; caller 0x0; echo \"hex:$?\"; caller 0 extra; echo \"extra:$?\"; }; f",
+      "status": 0,
+      "stdout": "text:2\nnegative:2\nhex:2\nextra:1\n",
+      "stderr": "bash: line 1: caller: x: invalid number\ncaller: usage: caller [expr]\nbash: line 1: caller: -1: invalid option\ncaller: usage: caller [expr]\nbash: line 1: caller: 0x0: invalid hex number\ncaller: usage: caller [expr]\n"
+    },
+    {
+      "id": "argument-counts",
+      "code": "shopt -s extdebug\ninner() { echo \"argc:${BASH_ARGC[*]}\"; echo \"argv:${BASH_ARGV[*]}\"; }\nouter() { inner x y; }\nouter a b c",
+      "status": 0,
+      "stdout": "argc:2 3 0\nargv:y x c b a\n",
+      "stderr": ""
+    },
+    {
+      "id": "argument-empty",
+      "code": "shopt -s extdebug; f() { echo \"argc:${BASH_ARGC[*]}:argv:${BASH_ARGV[*]}\"; }; f",
+      "status": 0,
+      "stdout": "argc:0 0:argv:\n",
+      "stderr": ""
+    },
+    {
+      "id": "argument-snapshot",
+      "code": "shopt -s extdebug; f() { shift; set -- changed; echo \"argc:${BASH_ARGC[*]}:argv:${BASH_ARGV[*]}\"; }; f a b",
+      "status": 0,
+      "stdout": "argc:2 0:argv:b a\n",
+      "stderr": ""
+    },
+    {
+      "id": "argument-no-debug",
+      "code": "f() { printf \"argc:%s:argv:%s\\n\" \"${BASH_ARGC[*]}\" \"${BASH_ARGV[*]}\"; }; f a b",
+      "status": 0,
+      "stdout": "argc::argv:\n",
+      "stderr": ""
+    },
+    {
+      "id": "subshell-stack",
+      "code": "g() { (echo \"sub:${FUNCNAME[*]}:${BASH_LINENO[*]}\"); echo \"cmd:$(echo \"${FUNCNAME[*]}:${BASH_LINENO[*]}\")\"; }; f() { g; }; f",
+      "status": 0,
+      "stdout": "sub:g f:1 1\ncmd:g f:1 1\n",
+      "stderr": ""
+    },
+    {
+      "id": "eval-stack",
+      "code": "g() { echo \"${FUNCNAME[*]}:${BASH_SOURCE[*]}:${BASH_LINENO[*]}\"; }; f() { eval \"g\"; }; f",
+      "status": 0,
+      "stdout": "g f:bash bash:1 1\n",
+      "stderr": ""
+    },
+    {
+      "id": "source-array",
+      "code": "g() { echo \"${BASH_SOURCE[*]}\"; }; f() { g; }; f",
+      "status": 0,
+      "stdout": "bash bash\n",
+      "stderr": ""
+    },
+    {
+      "id": "nounset-top",
+      "code": "set -u; echo \"$FUNCNAME\"",
+      "status": 127,
+      "stdout": "",
+      "stderr": "bash: line 1: FUNCNAME: unbound variable\n"
+    },
+    {
+      "id": "negative-indices",
+      "code": "g() { echo \"${FUNCNAME[-1]}:${BASH_LINENO[-1]}\"; }; f() { g; }; f",
+      "status": 0,
+      "stdout": "f:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "trace-options",
+      "code": "set -T -E; set +o functrace; set -o errtrace; set +ET; echo ok; shopt -s extdebug; shopt -q extdebug; echo \"on:$?\"; shopt -u extdebug; shopt -q extdebug; echo \"off:$?\"",
+      "status": 0,
+      "stdout": "ok\non:0\noff:1\n",
+      "stderr": ""
+    }
+  ],
+  "invocation": [
+    "--noprofile",
+    "--norc",
+    "-c",
+    "<code>",
+    "bash"
+  ]
+}
