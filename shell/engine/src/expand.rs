@@ -711,6 +711,32 @@ struct Expansion<'a> {
     /// Empty array/positional elements consume work even when they emit no text.
     elements_remaining: usize,
 }
+impl<'a> Expansion<'a> {
+    fn scalar(work: &'a mut Work, cancel: &'a Cancel, max: usize) -> Self {
+        Self {
+            segments: Segments {
+                account_storage: true,
+                ..Segments::default()
+            },
+            captured: Some(Captured {
+                value: String::new(),
+                max_bytes: max,
+            }),
+            pattern: None,
+            replacement: None,
+            pattern_context: false,
+            pattern_snapshots: true,
+            admit_frames: true,
+            ifs: None,
+            ifs_changed: false,
+            work,
+            cancel,
+            max_raw: max,
+            raw_remaining: max,
+            elements_remaining: max,
+        }
+    }
+}
 impl Expansion<'_> {
     /// Only actual value reads require a binding. The target of a lazy
     /// default/replacement/error operator is tested for absence, not read;
@@ -1865,6 +1891,14 @@ impl Expansion<'_> {
                 )
                 .await
             }
+            operand::Piece::Expansion { part, protected } if is_list(&part) => {
+                self.part_frame(move |expansion| async move {
+                    expansion
+                        .elements(&part, state, quoted || protected, scalar)
+                        .await
+                })
+                .await
+            }
             operand::Piece::Expansion { part, protected } => {
                 self.part(&part, state, quoted || protected, scalar, depth)
                     .await
@@ -2399,43 +2433,30 @@ async fn plain_literal(variant: &str, work: &mut Work, cancel: &Cancel) -> Resul
     Ok(true)
 }
 
-/// Textual expansion precedes arithmetic parsing, even in skipped branches.
-/// Capture is bounded and storage-admitted, without charging its bytes as the
-/// enclosing expansion's output. Nested arithmetic shares this command's Work.
-pub(crate) async fn arithmetic_text(
+pub(crate) enum ScalarSyntax {
+    Arithmetic,
+    Prompt,
+}
+
+/// Capture textual expansion without field splitting or pathname expansion.
+/// Arithmetic keeps its pattern context and flushes the final segment.
+pub(crate) async fn scalar_text(
+    syntax: ScalarSyntax,
     source: &str,
     state: &SharedState,
     cancel: &Cancel,
     max: usize,
     work: &mut Work,
 ) -> Result<String, Error> {
-    let mut expansion = Expansion {
-        segments: Segments {
-            account_storage: true,
-            ..Segments::default()
-        },
-        captured: Some(Captured {
-            value: String::new(),
-            max_bytes: max,
-        }),
-        pattern: None,
-        replacement: None,
-        pattern_context: true,
-        pattern_snapshots: true,
-        admit_frames: true,
-        ifs: None,
-        ifs_changed: false,
-        work,
-        cancel,
-        max_raw: max,
-        raw_remaining: max,
-        elements_remaining: max,
-    };
-    let mut scanner = operand::Scanner::arithmetic(source);
-    while let Some(piece) = scanner.next(expansion.work, expansion.cancel).await? {
+    let mut expansion = Expansion::scalar(work, cancel, max);
+    expansion.pattern_context = matches!(syntax, ScalarSyntax::Arithmetic);
+    let mut scanner = operand::Scanner::scalar(source, &syntax);
+    while let Some(piece) = scanner.next(expansion.work, cancel).await? {
         expansion.operand_piece(piece, state, true, true, 0).await?;
     }
-    expansion.segment("", Protection::None, true).await?;
+    if expansion.pattern_context {
+        expansion.segment("", Protection::None, true).await?;
+    }
     Ok(expansion.captured.take().ok_or(2)?.value)
 }
 
@@ -2560,28 +2581,7 @@ pub(crate) async fn conditional_word(
     work: &mut Work,
 ) -> Result<String, Error> {
     work.checkpoint(cancel).await?;
-    let mut expansion = Expansion {
-        segments: Segments {
-            account_storage: true,
-            ..Segments::default()
-        },
-        captured: Some(Captured {
-            value: String::new(),
-            max_bytes: max,
-        }),
-        pattern: None,
-        replacement: None,
-        pattern_context: false,
-        pattern_snapshots: true,
-        admit_frames: true,
-        ifs: None,
-        ifs_changed: false,
-        work,
-        cancel,
-        max_raw: max,
-        raw_remaining: max,
-        elements_remaining: max,
-    };
+    let mut expansion = Expansion::scalar(work, cancel, max);
     let mut has_part_quotes = false;
     for &quoted in &word.part_quoted {
         expansion.work.checkpoint(cancel).await?;

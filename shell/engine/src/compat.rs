@@ -532,6 +532,7 @@ pub fn standalone(install: impl FnOnce(&InProcessHost, &MemoryFs, Rc<dyn FileSys
         let state = session.state();
         let mut state = state.borrow_mut();
         state.initialize_cli_environment(std::env::vars());
+        state.command_string = true;
         if let Some(cwd) = cwd {
             state.cwd = cwd;
         }

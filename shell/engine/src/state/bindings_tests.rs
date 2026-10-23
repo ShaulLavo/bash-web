@@ -29,13 +29,18 @@ fn builtin(state: &SharedState, assigned: &[(String, String)]) -> PrefixFrame {
         .unwrap_or_else(|_| panic!("short binding replay fits"))
 }
 
+fn assert_startup_defaults(state: &State) {
+    assert_eq!(state.bindings().len(), 5);
+    assert_eq!(state.bindings()["OPTIND"], "1");
+    assert_eq!(state.bindings()["OPTERR"], "1");
+    assert_eq!(state.bindings()["PS4"], "+ ");
+}
+
 #[test]
 fn cli_environment_adds_nonexported_shell_defaults() {
     let mut state = State::default();
     state.initialize_cli_environment([("HOME".into(), "/home/test".into())]);
-    assert_eq!(state.bindings().len(), 4);
-    assert_eq!(state.bindings()["OPTIND"], "1");
-    assert_eq!(state.bindings()["OPTERR"], "1");
+    assert_startup_defaults(&state);
     assert!(!state.bindings().contains_key("IFS"));
     assert_eq!(state.bindings()["PATH"], "/usr/bin:/bin");
     assert_eq!(
@@ -44,12 +49,19 @@ fn cli_environment_adds_nonexported_shell_defaults() {
     );
 
     let mut inherited = State::default();
-    inherited
-        .initialize_cli_environment([("PATH".into(), String::new()), ("IFS".into(), ":".into())]);
+    inherited.initialize_cli_environment([
+        ("PATH".into(), String::new()),
+        ("IFS".into(), ":".into()),
+        ("PS4".into(), "trace ".into()),
+    ]);
     assert_eq!(inherited.bindings()["PATH"], "");
     assert_eq!(
         inherited.environment(),
-        BTreeMap::from([("PATH".into(), String::new()), ("IFS".into(), ":".into())])
+        BTreeMap::from([
+            ("PATH".into(), String::new()),
+            ("IFS".into(), ":".into()),
+            ("PS4".into(), "trace ".into()),
+        ])
     );
     assert_eq!(inherited.parameter("IFS"), ":");
 }
@@ -58,9 +70,7 @@ fn cli_environment_adds_nonexported_shell_defaults() {
 fn runtime_environment_extends_defaults_exports_ifs_and_does_not_invent_path() {
     let mut state = State::default();
     state.inherit_environment([("HOME".into(), "/home/test".into())]);
-    assert_eq!(state.bindings().len(), 4);
-    assert_eq!(state.bindings()["OPTIND"], "1");
-    assert_eq!(state.bindings()["OPTERR"], "1");
+    assert_startup_defaults(&state);
     assert_eq!(state.bindings()["IFS"], " \t\n");
     assert!(!state.bindings().contains_key("PATH"));
     assert_eq!(
@@ -72,9 +82,15 @@ fn runtime_environment_extends_defaults_exports_ifs_and_does_not_invent_path() {
     );
 
     let mut inherited = State::default();
-    inherited.inherit_environment([("IFS".into(), ":".into()), ("PATH".into(), String::new())]);
+    inherited.inherit_environment([
+        ("IFS".into(), ":".into()),
+        ("PATH".into(), String::new()),
+        ("PS4".into(), "runtime ".into()),
+    ]);
     assert_eq!(inherited.bindings()["IFS"], ":");
     assert_eq!(inherited.environment()["PATH"], "");
+    assert_eq!(inherited.parameter("PS4"), "runtime ");
+    assert_eq!(inherited.environment()["PS4"], "runtime ");
 }
 
 #[test]

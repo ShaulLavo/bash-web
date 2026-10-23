@@ -337,7 +337,7 @@ fn ascii_eq_ignore_case(value: &str, expected: &str) -> bool {
 
 fn error_status(error: Error) -> i32 {
     match error {
-        Error::Status(code) => code,
+        Error::Status(code) | Error::Abort(code) => code,
         _ => 2,
     }
 }
@@ -595,6 +595,8 @@ async fn set(
             errexit: state.errexit,
             monitor: state.monitor,
             noglob: state.noglob,
+            noexec: state.noexec,
+            xtrace: state.xtrace,
         }
     };
     let mut index = 0;
@@ -622,7 +624,17 @@ async fn set(
             index += 1;
             continue;
         }
-        set_short_options(option, enabled, &mut flags, context, work).await?;
+        let named = option.ends_with('o');
+        let short = if named {
+            &option[..option.len() - 1]
+        } else {
+            option
+        };
+        set_short_options(short, enabled, &mut flags, context, work).await?;
+        if named {
+            set_option(args.get(index).ok_or(2)?, enabled, &mut flags)?;
+            index += 1;
+        }
     }
     // All options and work admission complete before any state changes.
     let mut state = state.borrow_mut();
@@ -635,6 +647,8 @@ async fn set(
     state.errexit = flags.errexit;
     state.monitor = flags.monitor;
     state.noglob = flags.noglob;
+    state.noexec = flags.noexec;
+    state.xtrace = flags.xtrace;
     Ok(Outcome::status(0))
 }
 
@@ -645,6 +659,8 @@ struct SetFlags {
     errexit: bool,
     monitor: bool,
     noglob: bool,
+    noexec: bool,
+    xtrace: bool,
 }
 
 fn set_option(option: &str, enabled: bool, flags: &mut SetFlags) -> Result<(), i32> {
@@ -654,6 +670,8 @@ fn set_option(option: &str, enabled: bool, flags: &mut SetFlags) -> Result<(), i
         "errexit" => flags.errexit = enabled,
         "monitor" => flags.monitor = enabled,
         "noglob" => flags.noglob = enabled,
+        "noexec" => flags.noexec = enabled,
+        "xtrace" => flags.xtrace = enabled,
         _ => return Err(2),
     }
     Ok(())
@@ -675,6 +693,8 @@ async fn set_short_options(
             b'e' => flags.errexit = enabled,
             b'm' => flags.monitor = enabled,
             b'f' => flags.noglob = enabled,
+            b'n' => flags.noexec = enabled,
+            b'x' => flags.xtrace = enabled,
             _ => return Err(2),
         }
     }
@@ -785,6 +805,13 @@ async fn declarations(
         } else {
             key
         };
+        if matches!(name, "export" | "readonly")
+            && let Some(value) = &value
+            && let Err(outcome) =
+                crate::interpreter::builtin_assignment(&key, value, state, fds, context).await
+        {
+            return Ok(outcome);
+        }
         let result = apply_declaration(name, &key, value, &mut state.borrow_mut());
         if result == Err(crate::exec::RESOURCE_STATUS) {
             return result.map(|()| Outcome::status(0));

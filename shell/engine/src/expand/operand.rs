@@ -39,6 +39,7 @@ fn basic_name(name: &str) -> bool {
         || name == "?"
         || name == "#"
         || name == "!"
+        || name == "-"
         || name.bytes().all(|c| c.is_ascii_digit()) && !name.is_empty()
 }
 
@@ -69,6 +70,7 @@ enum Context {
     Operand,
     /// Quote removal cannot join an arithmetic expansion's dollar to an opener.
     Arithmetic,
+    Prompt,
 }
 
 pub(super) struct Scanner<'a> {
@@ -101,10 +103,14 @@ impl<'a> Scanner<'a> {
             context: Context::Operand,
         }
     }
-    pub(super) fn arithmetic(source: &'a str) -> Self {
+    pub(super) fn scalar(source: &'a str, syntax: &super::ScalarSyntax) -> Self {
+        let (context, pattern) = match syntax {
+            super::ScalarSyntax::Arithmetic => (Context::Arithmetic, true),
+            super::ScalarSyntax::Prompt => (Context::Prompt, false),
+        };
         Self {
-            context: Context::Arithmetic,
-            ..Self::new(source, true, true, false)
+            context,
+            ..Self::new(source, true, pattern, false)
         }
     }
     pub(super) fn case_pattern(source: &'a str) -> Self {
@@ -150,7 +156,7 @@ impl<'a> Scanner<'a> {
         if ch == '\\' && self.quote != Quote::Single {
             return self.escape(value).map(Some);
         }
-        if ch == '"' && self.quote != Quote::Single {
+        if ch == '"' && self.quote != Quote::Single && self.context != Context::Prompt {
             self.quote = if self.quote == Quote::Double {
                 Quote::None
             } else {
@@ -166,7 +172,11 @@ impl<'a> Scanner<'a> {
             };
             return Ok(Some(self.text("", true)));
         }
-        if ch == '\'' && self.quote == Quote::None && self.outer_quoted {
+        if ch == '\''
+            && self.quote == Quote::None
+            && self.outer_quoted
+            && self.context != Context::Prompt
+        {
             self.literal_single = !self.literal_single;
         }
         if self.quote == Quote::Single {
@@ -200,12 +210,21 @@ impl<'a> Scanner<'a> {
         Ok(Some(self.text(value, protected)))
     }
     fn escape(&mut self, slash: &'a str) -> Result<Piece<'a>, Error> {
-        let next = self.peek().ok_or(2)?;
+        let Some(next) = self.peek() else {
+            return if self.context == Context::Prompt {
+                Ok(self.text(slash, true))
+            } else {
+                Err(2.into())
+            };
+        };
         let double = self.outer_quoted || self.quote == Quote::Double;
         if double
             && !matches!(next, '$' | '`' | '"' | '\\' | '\n')
             && !(self.outer_quoted && next == '}')
         {
+            return Ok(self.text(slash, true));
+        }
+        if self.context == Context::Prompt && next == '"' {
             return Ok(self.text(slash, true));
         }
         let value = self.take().ok_or(2)?;
@@ -251,7 +270,7 @@ impl<'a> Scanner<'a> {
             }
             Some('{') => self.braced(work, cancel).await?,
             Some(c) if c.is_ascii_alphabetic() || c == '_' => self.identifier(work, cancel).await?,
-            Some(c) if c.is_ascii_digit() || matches!(c, '?' | '#') => {
+            Some(c) if c.is_ascii_digit() || matches!(c, '?' | '#' | '-') => {
                 self.take();
             }
             Some('(') => {
@@ -270,10 +289,13 @@ impl<'a> Scanner<'a> {
                     protected: self.protected(),
                 });
             }
+            Some('@' | '*' | '$') if self.context == Context::Prompt => {
+                self.take();
+            }
             Some('!') => {
                 self.take();
             }
-            Some('\'' | '"' | '@' | '*' | '$' | '-') => return Err(2.into()),
+            Some('\'' | '"' | '@' | '*' | '$') => return Err(2.into()),
             _ => return Ok(self.text("$", self.protected())),
         }
         let token = self.token(start, joined, work, cancel).await?;
@@ -283,6 +305,21 @@ impl<'a> Scanner<'a> {
                 at: token == "${@}",
                 protected: self.protected(),
             });
+        }
+        if self.context == Context::Prompt {
+            let name = match token {
+                "$@" | "${@}" => Some("@"),
+                "$*" | "${*}" => Some("*"),
+                "$$" | "${$}" => Some("$"),
+                _ => None,
+            };
+            if let Some(name) = name {
+                work.admit_storage(std::mem::size_of::<WordPart>() + name.len())?;
+                return Ok(Piece::Expansion {
+                    part: WordPart::Variable(name.to_owned()),
+                    protected: true,
+                });
+            }
         }
         validate_token(token, work)?;
         work.admit_parse(token.len(), cancel).await?;
