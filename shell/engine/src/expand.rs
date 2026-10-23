@@ -1269,19 +1269,21 @@ impl Expansion<'_> {
                 .await;
         }
         let result = self
-            .substring(name, offset, length, state, scalar || quoted)
+            .substring(name, (offset, length), state, scalar || quoted, false)
             .await;
         self.ifs = None;
         self.ifs_changed = true;
         result
     }
+    /// `null_field` marks a quoted `[@]` reference, where an out-of-range
+    /// start yields no word, like an empty `"$@"`.
     async fn substring(
         &mut self,
         name: &str,
-        offset: &str,
-        length: Option<&str>,
+        (offset, length): (&str, Option<&str>),
         state: &SharedState,
         protected: bool,
+        null_field: bool,
     ) -> Result<(), Error> {
         if !operand::length_name(name) {
             return Err(2.into());
@@ -1333,6 +1335,11 @@ impl Expansion<'_> {
             usize::try_from(offset).ok().filter(|&n| n <= count)
         };
         let Some(start) = start else {
+            if null_field {
+                self.element_layout(ListSource::Array, true, state, true, false)
+                    .await?;
+                return Ok(());
+            }
             return self
                 .segment("", Protection::expansion(protected, state), protected)
                 .await;

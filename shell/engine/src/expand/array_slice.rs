@@ -14,8 +14,9 @@ impl Expansion<'_> {
         State::admit_scalar_access(state, name, self.cancel, self.work).await?;
         let is_scalar = matches!(state.borrow().binding(name), Some(Binding::Scalar(_)));
         if is_scalar && name != "PIPESTATUS" {
+            let null_field = at && quoted && !scalar;
             return self
-                .substring(name, bounds.0, bounds.1, state, scalar || quoted)
+                .substring(name, bounds, state, scalar || quoted, null_field)
                 .await;
         }
         self.slice_boundaries(bounds.0).await?;
@@ -54,34 +55,22 @@ impl Expansion<'_> {
         (offset, length): (&str, Option<&str>),
         state: &SharedState,
     ) -> Result<Option<(i64, usize)>, Error> {
-        let (last, count) = {
-            let state = state.borrow();
-            if name == "PIPESTATUS" {
-                let count = state.pipeline_status().len();
-                (
-                    count.checked_sub(1).and_then(|n| i64::try_from(n).ok()),
-                    count,
-                )
-            } else {
-                (
-                    state.binding(name).and_then(Binding::last_index),
-                    state.array_count(name),
-                )
-            }
-        };
-        let Some(last) = last else {
+        // Empty or unset arrays skip both expressions. Otherwise the bounds
+        // read the array as the offset arithmetic left it, and the element
+        // walk below stops at the live end rather than a stale count.
+        if last_index(name, state).is_none() {
             return Ok(None);
-        };
+        }
         let offset =
             crate::arithmetic::evaluate(offset, state, self.cancel, self.raw_remaining, self.work)
                 .await?;
         self.ifs = None;
         self.ifs_changed = true;
-        let Some(start) = slice_start(offset, last) else {
+        let Some(start) = last_index(name, state).and_then(|last| slice_start(offset, last)) else {
             return Ok(None);
         };
         let Some(length) = length else {
-            return Ok(Some((start, count)));
+            return Ok(Some((start, usize::MAX)));
         };
         let length =
             crate::arithmetic::evaluate(length, state, self.cancel, self.raw_remaining, self.work)
@@ -91,10 +80,7 @@ impl Expansion<'_> {
         if length < 0 {
             return crate::exec::fault("substring expression < 0", self.work);
         }
-        Ok(Some((
-            start,
-            count.min(usize::try_from(length).unwrap_or(usize::MAX)),
-        )))
+        Ok(Some((start, usize::try_from(length).unwrap_or(usize::MAX))))
     }
 
     fn array_slice_next(
@@ -127,6 +113,15 @@ impl Expansion<'_> {
         self.work.admit_storage(value.len())?;
         Ok(Some((index, value.to_owned())))
     }
+}
+
+fn last_index(name: &str, state: &SharedState) -> Option<i64> {
+    let state = state.borrow();
+    if name == "PIPESTATUS" {
+        let count = state.pipeline_status().len();
+        return count.checked_sub(1).and_then(|n| i64::try_from(n).ok());
+    }
+    state.binding(name).and_then(Binding::last_index)
 }
 
 fn slice_start(offset: i64, last: i64) -> Option<i64> {
