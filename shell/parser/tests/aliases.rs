@@ -156,3 +156,19 @@ fn read_unit_keeps_syntax_recovery_and_multiline_failure_lines() {
     ));
     assert!(next.is_none());
 }
+
+#[test]
+fn read_unit_keeps_multiline_alias_text_until_the_source_newline() {
+    let source = "x tail\nx later\n";
+    let (script, error, next) = Parser::new(source)
+        .with_options(options(&[("x", "echo one\necho two\necho three")]))
+        .parse_read_unit_recovering();
+    assert!(error.is_none(), "{error:?}");
+    let commands: Vec<_> = script
+        .commands
+        .iter()
+        .map(|command| command_string(command, &Cell::new(100_000), 100_000, None).unwrap())
+        .collect();
+    assert_eq!(commands, ["echo one", "echo two", "echo three tail"]);
+    assert_eq!(next.unwrap().offset, "x tail\n".len());
+}
