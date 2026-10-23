@@ -144,6 +144,8 @@ pub struct State {
     pub extglob: bool,
     /// Remove unmatched unquoted pathname patterns instead of keeping them.
     pub nullglob: bool,
+    /// `set -f`: no pathname expansion of unquoted fields.
+    pub noglob: bool,
     pub lastpipe: bool,
     pub monitor: bool,
     /// Last published synthetic async handle. Isolated shells inherit a copy.
@@ -185,6 +187,7 @@ impl Default for State {
             inherit_errexit: false,
             extglob: false,
             nullglob: false,
+            noglob: false,
             lastpipe: false,
             monitor: false,
             last_async: None,
@@ -376,6 +379,7 @@ impl State {
             inherit_errexit: state.inherit_errexit,
             extglob: state.extglob,
             nullglob: state.nullglob,
+            noglob: state.noglob,
             lastpipe: state.lastpipe,
             monitor: state.monitor,
             last_async,
