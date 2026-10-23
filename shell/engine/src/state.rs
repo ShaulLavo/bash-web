@@ -589,6 +589,30 @@ impl State {
         }
         Ok(())
     }
+    /// Size a local's ticket to its value after assignment rollback. Growth
+    /// comes from the journal's reservation for the inverses it restored: the
+    /// restored value holds only live bytes and bytes that journal retained.
+    fn restore_local_value(
+        &self,
+        name: &str,
+        bytes: usize,
+        retained: Option<&mut crate::exec::StorageAllocation>,
+    ) {
+        let Some(local) = self.locals.iter().rev().find_map(|frame| frame.get(name)) else {
+            return;
+        };
+        let Some(memory) = &local.memory else {
+            return;
+        };
+        let mut memory = memory.borrow_mut();
+        let needed = local.storage_base.saturating_add(bytes);
+        let deficit = needed.saturating_sub(memory.bytes());
+        if let Some(retained) = retained {
+            memory.take_from(retained, deficit);
+        }
+        let fits = memory.resize(needed).is_ok();
+        debug_assert!(fits, "restored {name} exceeds its journal reservation");
+    }
     fn live_star_separator(&self) -> Option<char> {
         self.scalar_parameter("IFS")
             .map_or(Some(' '), |value| value.chars().next())
@@ -1729,11 +1753,13 @@ impl Drop for AssignmentFrame {
                 state.getopts = cursor;
             }
         }
+        // Inverses were charged to this journal, not to their locals. Their
+        // charge moves back with them, so Drop never grows a ticket from the
+        // shared budget, which another owner may have exhausted meanwhile.
+        let mut retained = changes.memory.take();
         for (name, _) in &changes.undo {
             let bytes = state.variables.get(name).map_or(0, Binding::storage_bytes);
-            state
-                .reserve_local_value(name, bytes)
-                .expect("previously admitted local storage");
+            state.restore_local_value(name, bytes, retained.as_mut());
             if name == "IFS" {
                 state.refresh_star_separator();
             }
