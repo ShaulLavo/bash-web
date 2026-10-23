@@ -5,7 +5,7 @@ use crate::{expand::Printability, state::DeclarationView};
 
 struct DeclarationSnapshot {
     value: Option<String>,
-    attributes: [bool; 3],
+    attributes: [bool; 5],
 }
 
 pub(super) async fn print(
@@ -70,6 +70,7 @@ async fn snapshot(
         nameref,
         readonly,
         exported,
+        case,
     }) = state.declaration(name).map_err(|()| 2)?
     else {
         return Ok(None);
@@ -78,7 +79,13 @@ async fn snapshot(
         .map_err(error_status)?;
     Ok(Some(DeclarationSnapshot {
         value: value.map(str::to_owned),
-        attributes: [nameref, readonly, exported],
+        attributes: [
+            nameref,
+            readonly,
+            exported,
+            case == crate::state::CaseMapping::Lower,
+            case == crate::state::CaseMapping::Upper,
+        ],
     }))
 }
 
@@ -102,7 +109,7 @@ async fn missing(
 async fn render(
     name: &str,
     value: Option<&str>,
-    attributes: [bool; 3],
+    attributes: [bool; 5],
     utf8: bool,
     printability: &Printability,
     context: &Context,
@@ -113,10 +120,10 @@ async fn render(
         scan_bytes(ch.len_utf8(), context, work).await?;
         ansi |= !printable(ch, utf8, printability);
     }
-    work.admit_storage(name.len().saturating_add(14))
+    work.admit_storage(name.len().saturating_add(16))
         .map_err(error_status)?;
     let mut line = String::from("declare -");
-    for (set, flag) in attributes.into_iter().zip(['n', 'r', 'x']) {
+    for (set, flag) in attributes.into_iter().zip(['n', 'r', 'x', 'l', 'u']) {
         if set {
             line.push(flag);
         }
@@ -126,7 +133,7 @@ async fn render(
     }
     line.push(' ');
     line.push_str(name);
-    work.release_storage(name.len() + 14 - (line.len() + 1));
+    work.release_storage(name.len() + 16 - (line.len() + 1));
     if let Some(value) = value {
         quoted(&mut line, value, ansi, utf8, printability, context, work).await?;
     }

@@ -1,0 +1,224 @@
+{
+  "schema": 1,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "environment": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "PWD": "/tmp/spec",
+    "SH": "bash",
+    "LC_ALL": "C.UTF-8"
+  },
+  "cases": [
+    {
+      "name": "bashkit-suite:bashbox-declare:60",
+      "code": "declare -l x=ABC; x+=DEF; echo $x; declare -u y=abc; echo $y; read y <<< mixed; echo $y; declare -p x y\n",
+      "status": 0,
+      "stdout": "YWJjZGVmCkFCQwpNSVhFRApkZWNsYXJlIC1sIHg9ImFiY2RlZiIKZGVjbGFyZSAtdSB5PSJNSVhFRCIK",
+      "stderr": ""
+    },
+    {
+      "name": "bashkit-suite:bashbox-declare:71",
+      "code": "declare -l x=AB; declare -u x; echo $x; x=Cd; echo $x; declare -lu x; x=eF; echo $x; declare +u x; x=Gh; declare -p x\n",
+      "status": 0,
+      "stdout": "YWIKQ0QKZUYKZGVjbGFyZSAtLSB4PSJHaCIK",
+      "stderr": ""
+    },
+    {
+      "name": "bashkit-suite:declare:147",
+      "code": "declare -l x=HELLO\necho \"$x\"\n",
+      "status": 0,
+      "stdout": "aGVsbG8K",
+      "stderr": ""
+    },
+    {
+      "name": "bashkit-suite:declare:155",
+      "code": "declare -u x=hello\necho \"$x\"\n",
+      "status": 0,
+      "stdout": "SEVMTE8K",
+      "stderr": ""
+    },
+    {
+      "name": "bashkit-suite:declare:163",
+      "code": "declare -l x\nx=WORLD\necho \"$x\"\n",
+      "status": 0,
+      "stdout": "d29ybGQK",
+      "stderr": ""
+    },
+    {
+      "name": "bashkit-suite:declare:172",
+      "code": "declare -u x\nx=world\necho \"$x\"\n",
+      "status": 0,
+      "stdout": "V09STEQK",
+      "stderr": ""
+    },
+    {
+      "name": "bashkit-suite:declare:181",
+      "code": "declare -l x=HeLLo_WoRLd\necho \"$x\"\n",
+      "status": 0,
+      "stdout": "aGVsbG9fd29ybGQK",
+      "stderr": ""
+    },
+    {
+      "name": "bashkit-suite:declare:189",
+      "code": "declare -l x=Hello\necho \"$x\"\ndeclare -u x\nx=Hello\necho \"$x\"\n",
+      "status": 0,
+      "stdout": "aGVsbG8KSEVMTE8K",
+      "stderr": ""
+    },
+    {
+      "name": "bashkit-suite:declare:201",
+      "code": "toupper() {\n  declare -u result=\"$1\"\n  echo \"$result\"\n}\ntoupper \"hello world\"\n",
+      "status": 0,
+      "stdout": "SEVMTE8gV09STEQK",
+      "stderr": ""
+    },
+    {
+      "name": "case-removal",
+      "code": "declare -l x=ABC; declare +l x; x=MiXeD; declare -p x; declare -u y=abc; declare +u y; y=MiXeD; declare -p y",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB4PSJNaVhlRCIKZGVjbGFyZSAtLSB5PSJNaVhlRCIK",
+      "stderr": ""
+    },
+    {
+      "name": "attribute-only-keeps-value",
+      "code": "x=MiXeD; declare -u x; declare -p x; declare -l x; declare -p x; x=WoRd; declare -p x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtdSB4PSJNaVhlRCIKZGVjbGFyZSAtbCB4PSJNaVhlRCIKZGVjbGFyZSAtbCB4PSJ3b3JkIgo=",
+      "stderr": ""
+    },
+    {
+      "name": "local-restoration",
+      "code": "declare -u x=outer; f(){ local -l x=INNER; x+=MORE; declare -p x; g; }; g(){ x=DeEp; declare -p x; }; f; declare -p x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtbCB4PSJpbm5lcm1vcmUiCmRlY2xhcmUgLWwgeD0iZGVlcCIKZGVjbGFyZSAtdSB4PSJPVVRFUiIK",
+      "stderr": ""
+    },
+    {
+      "name": "plain-local-clears-case",
+      "code": "declare -u x=outer; f(){ local x=Mixed; x=lower; declare -p x; }; f; x=mixed; declare -p x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB4PSJsb3dlciIKZGVjbGFyZSAtdSB4PSJNSVhFRCIK",
+      "stderr": ""
+    },
+    {
+      "name": "subshell-snapshot",
+      "code": "declare -l x=OUTER; (x=INNER; declare -u x; x=ChIlD; declare -p x); x=PaReNt; declare -p x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtdSB4PSJDSElMRCIKZGVjbGFyZSAtbCB4PSJwYXJlbnQiCg==",
+      "stderr": ""
+    },
+    {
+      "name": "read-and-printf",
+      "code": "declare -u x; read -r x <<< MiXeD; declare -p x; printf -v x \"%s\" word; declare -p x; declare -l y; printf -v y \"%s\" WORD; declare -p y",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtdSB4PSJNSVhFRCIKZGVjbGFyZSAtdSB4PSJXT1JEIgpkZWNsYXJlIC1sIHk9IndvcmQiCg==",
+      "stderr": ""
+    },
+    {
+      "name": "nameref-target",
+      "code": "declare -l x=OUTER; declare -n ref=x; ref=MiXeD; printf -v ref \"%s\" WORD; declare -p x ref",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtbCB4PSJ3b3JkIgpkZWNsYXJlIC1uIHJlZj0ieCIK",
+      "stderr": ""
+    },
+    {
+      "name": "readonly-conversion",
+      "code": "declare -lr x=ABC; (x=DEF; echo bad); echo status:$?; declare -p x",
+      "status": 0,
+      "stdout": "c3RhdHVzOjEKZGVjbGFyZSAtcmwgeD0iYWJjIgo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB4OiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "name": "unset-clears-case",
+      "code": "declare -l x=ABC; unset x; x=MiXeD; declare -p x; f(){ local -u y=abc; unset y; y=MiXeD; declare -p y; }; f",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB4PSJNaVhlRCIKZGVjbGFyZSAtLSB5PSJNaVhlRCIK",
+      "stderr": ""
+    },
+    {
+      "name": "caller-local-unset-restores",
+      "code": "declare -u x=outer; f(){ local -l x=INNER; g; x=Mixed; declare -p x; }; g(){ unset x; }; f; declare -p x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtdSB4PSJNSVhFRCIKZGVjbGFyZSAtdSB4PSJNSVhFRCIK",
+      "stderr": ""
+    },
+    {
+      "name": "prefix-value",
+      "code": "declare -l x=ABC; f(){ printf \"%s\\n\" \"$x\"; }; x=MiXeD f; declare -p x",
+      "status": 0,
+      "stdout": "TWlYZUQKZGVjbGFyZSAtbCB4PSJhYmMiCg==",
+      "stderr": ""
+    },
+    {
+      "name": "ifs-case",
+      "code": "unset IFS; declare -l IFS=A; set -- x y; printf \"<%s>\\n\" \"$*\"; IFS=B; printf \"<%s>\\n\" \"$*\"; declare -p IFS",
+      "status": 0,
+      "stdout": "PHhheT4KPHhieT4KZGVjbGFyZSAtbCBJRlM9ImIiCg==",
+      "stderr": ""
+    },
+    {
+      "name": "locale-c",
+      "code": "LC_ALL=C; declare -u x='a\u00e9\u00df'; declare -l y='A\u00c9'; declare -p x y",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtdSB4PSQnQVwzMDNcMjUxXDMwM1wyMzcnCmRlY2xhcmUgLWwgeT0kJ2FcMzAzXDIxMScK",
+      "stderr": ""
+    },
+    {
+      "name": "locale-utf8",
+      "code": "LC_ALL=C.UTF-8; declare -u x='a\u00e9\u00df\u00b5\u00ff'; declare -l y='A\u00c9'; declare -p x y",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtdSB4PSJBw4nDn86cxbgiCmRlY2xhcmUgLWwgeT0iYcOpIgo=",
+      "stderr": ""
+    },
+    {
+      "name": "typeset-local",
+      "code": "f(){ typeset -u x=hello; echo \"$x\"; typeset +u x; x=Mixed; declare -p x; }; f",
+      "status": 0,
+      "stdout": "SEVMTE8KZGVjbGFyZSAtLSB4PSJNaXhlZCIK",
+      "stderr": ""
+    },
+    {
+      "name": "redeclare-keeps-case",
+      "code": "f(){ local -l x=AB; local x=CD; declare -p x; }; f",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtbCB4PSJjZCIK",
+      "stderr": ""
+    },
+    {
+      "name": "unbound-attribute",
+      "code": "declare -l x; declare -p x; declare +l x; declare -p x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtbCB4CmRlY2xhcmUgLS0geAo=",
+      "stderr": ""
+    },
+    {
+      "name": "case-option-order",
+      "code": "declare -l x=AB; declare -lu x; x=eF; declare -p x; declare -ul x; x=gH; declare -p x; declare -u +l x; x=Ij; declare -p x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSB4PSJlRiIKZGVjbGFyZSAtLSB4PSJnSCIKZGVjbGFyZSAtdSB4PSJJSiIK",
+      "stderr": ""
+    },
+    {
+      "name": "parameter-attribute-transforms",
+      "code": "declare -rxl x=ABC; printf '%s\\n' \"${x@a}\" \"${x@A}\"; declare -ru y=ab; printf '%s\\n' \"${y@a}\" \"${y@A}\"; declare -l z; printf '%s\\n' \"${z@a}\" \"${z@A}\"",
+      "status": 0,
+      "stdout": "cnhsCmRlY2xhcmUgLXJ4bCB4PSdhYmMnCnJ1CmRlY2xhcmUgLXJ1IHk9J0FCJwpsCmRlY2xhcmUgLWwgego=",
+      "stderr": ""
+    },
+    {
+      "name": "indexed-writes-preserve-case",
+      "code": "declare -l a; a=(AB CD); a[1]+=EF; printf '<%s>\\n' \"${a[@]}\"; a+=(GH); printf '<%s>\\n' \"${a[@]}\"",
+      "status": 0,
+      "stdout": "PGFiPgo8Y2RlZj4KPGFiPgo8Y2RlZj4KPGdoPgo=",
+      "stderr": ""
+    },
+    {
+      "name": "prefix-shadows-case-on-write",
+      "code": "declare -l x=ABC; f(){ declare -p x; x=MoRe; declare -p x; local x; x=LaSt; declare -p x; }; x=MiXeD f; declare -p x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAteCB4PSJNaVhlRCIKZGVjbGFyZSAteCB4PSJNb1JlIgpkZWNsYXJlIC14IHg9IkxhU3QiCmRlY2xhcmUgLWwgeD0iYWJjIgo=",
+      "stderr": ""
+    }
+  ]
+}
