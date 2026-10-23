@@ -1453,7 +1453,9 @@ impl Expansion<'_> {
         }
         if matches!(name, "@" | "*") && operand::indirect_operator(operator) {
             return self
-                .positional_parameter(name, operator, operand, colon, context)
+                .part_frame(|expansion| {
+                    expansion.positional_parameter(name, operator, operand, colon, context)
+                })
                 .await;
         }
         // These operators read their source value, unlike the four lazy

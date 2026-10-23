@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "6f8a66a7b9a75b365312c7015795d3cb1b543f4c6f756fe385fca4378e780a55",
+    "engineSourceSha256": "ca1714ffb4e47a0f6578dd47a0fd123c939604673ae9855f1b71932fe23ece34",
     "binaryBuild": null
   },
   "contract": {
@@ -886,7 +886,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 2939,
+        "line": 2941,
         "column": 21
       }
     },
