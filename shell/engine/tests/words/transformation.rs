@@ -238,6 +238,10 @@ fn transformation_array_backed_parameters_fail_closed() {
 #[test]
 fn transformation_prompt_decodes_then_expands_without_shell_quote_removal() {
     check(
+        r#"p='\000a\400b\12c\1d\0455'; args "${p@P}""#,
+        &[&[r"ab\12c\1d%5"]],
+    );
+    check(
         r#"x=value; p='"$x" a'"'"'b \[n\] $((1+2))'; args "${p@P}"; shopt -u promptvars; args "${p@P}""#,
         &[&["\"value\" a'b n 3"], &["\"$x\" a'b n $((1+2))"]],
     );

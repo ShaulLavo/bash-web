@@ -18,7 +18,6 @@ const ids = new Set([
   "brush-suite:prompt:18",
   "brush-suite:prompt:19",
   "brush-suite:prompt:20",
-  "brush-suite:prompt:21",
   "bashkit-suite:prompt-decode:4",
   "bashkit-suite:prompt-decode:20",
   "bashkit-suite:prompt-decode:27",
@@ -67,6 +66,16 @@ const oracle = recordedBash(
     return probe.stdout.toString().split("\n")[0];
   },
 );
+function observe(script: string) {
+  if (!oracle.recording) return oracle.replay(script);
+  const expected = runRecordingBash(script, env, "/tmp");
+  oracle.record(script, expected);
+  return expected;
+}
+
+const missingEuidScript: string = frozen.cases.find(
+  (entry: { id: string }) => entry.id === "brush-suite:prompt:21",
+).code;
 const injectionDirectory = "/tmp/bash-web-expansion-transform-prompt-$((2+3))";
 if (oracle.recording) assert.equal(existsSync(injectionDirectory), false);
 after(() => {
@@ -75,13 +84,20 @@ after(() => {
 });
 for (const script of cases)
   test(`production Waffle prompt: ${script}`, async () => {
-    let expected;
-    if (oracle.recording) {
-      expected = runRecordingBash(script, env, "/tmp");
-      oracle.record(script, expected);
-    } else expected = oracle.replay(script);
+    const expected = observe(script);
     const actual = await runner(script);
     assert.equal(actual.crash, undefined);
     assert.equal(actual.status, expected.status, actual.stderr.toString());
     assert.deepEqual(actual.stdout, expected.stdout);
   });
+
+test("production Waffle prompts require an EUID fact for the privilege marker", async () => {
+  const expected = observe(missingEuidScript);
+  const actual = await runner(missingEuidScript);
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.status, 2);
+  assert.equal(
+    actual.stdout.toString(),
+    expected.stdout.toString().split("\n").slice(0, 2).join("\n") + "\n",
+  );
+});

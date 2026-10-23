@@ -160,11 +160,18 @@ impl Expansion<'_> {
         chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
         out: &mut Vec<u8>,
     ) -> Result<(), Error> {
+        if chars
+            .clone()
+            .take(2)
+            .filter(|ch| matches!(ch, '0'..='7'))
+            .count()
+            != 2
+        {
+            self.prompt_text(out, "\\").await?;
+            return self.prompt_text(out, first.encode_utf8(&mut [0; 4])).await;
+        }
         let mut value = first as u32 - '0' as u32;
         for _ in 0..2 {
-            if !chars.peek().is_some_and(|ch| matches!(ch, '0'..='7')) {
-                break;
-            }
             value = value * 8 + chars.next().ok_or(2)? as u32 - '0' as u32;
         }
         let byte = value as u8;
