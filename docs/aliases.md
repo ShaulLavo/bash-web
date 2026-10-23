@@ -15,10 +15,14 @@ a new version before publishing it, so a refused update leaves the table intact.
 The last owner releases the old version's charge.
 
 A script reader retains the parser's original command offsets and read-unit
-end lines. After an alias-table or `expand_aliases` change, it re-reads only
-unexecuted source beyond the current read unit. This also replaces a deferred
-syntax error when an earlier alias definition supplies the missing grammar.
-The re-read shares the input's parser budget and preserves original source spans.
+end lines. After an alias-table or `expand_aliases` change, it reads one complete
+unit at a time beyond the current unit, not the entire remaining script.
+The parser returns the original-source continuation after multiline compounds,
+quotes and here-documents. Read-unit ASTs do not copy the source. This also
+replaces a deferred syntax error when an earlier alias definition supplies the
+missing grammar. Each parse has bounded fuel; all reads share the input's work
+and cancellation budget and preserve original source spans. Parser-limit
+failures print a diagnostic before returning status 2.
 Commands already parsed on the same line do not see the change. Functions keep
 the aliases expanded when their definitions were read. `eval` starts a new reader
 with current aliases and follows the same read-unit rules.
