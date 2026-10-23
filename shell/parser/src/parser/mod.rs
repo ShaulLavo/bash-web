@@ -3084,11 +3084,10 @@ impl<'a> Parser<'a> {
         // Bash requires the next word on the same line (`function` then a newline
         // is "unexpected token `newline'").
 
-        // Get function name
-        let name = match &self.current_token {
-            Some(tokens::Token::Word(w)) => w.clone(),
-            _ => return Err(self.error("expected function name")),
+        let Some(tokens::Token::Word(w)) = &self.current_token else {
+            return Err(self.error("expected function name"));
         };
+        let name = self.current_raw.clone().unwrap_or_else(|| w.clone());
         let body = self.parse_function_keyword_rest();
         let body = body?;
         let end_offset = self.current_command_end_offset();
@@ -3106,7 +3105,7 @@ impl<'a> Parser<'a> {
         let start_span = self.current_span;
         // Get function name
         let name = match &self.current_token {
-            Some(tokens::Token::Word(w)) => w.clone(),
+            Some(tokens::Token::Word(w)) => self.current_raw.clone().unwrap_or_else(|| w.clone()),
             _ => return Err(self.error("expected function name")),
         };
         self.advance();

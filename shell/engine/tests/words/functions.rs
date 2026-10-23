@@ -496,3 +496,57 @@ fn function_prefix_funcnest_controls_entry_and_body_changes_control_later_calls(
         assert_eq!(rig.run("printf recovered"), 0);
     }
 }
+
+#[test]
+fn invalid_function_declaration_names_fail_without_expanding_or_defining() {
+    for source in [
+        "$foo-bar() { args BAD; }",
+        "foo-$(args SIDE)() { args BAD; }",
+        "function ${x:=changed} { args BAD; }",
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 1, "{source}");
+        assert!(rig.calls.borrow().is_empty());
+        assert!(rig.shell.state().borrow().functions().is_empty());
+        assert!(!rig.shell.state().borrow().bindings().contains_key("x"));
+        assert!(
+            String::from_utf8(rig.errors.bytes())
+                .unwrap()
+                .contains("not a valid identifier")
+        );
+        assert!(!rig.shell.exit_requested());
+        assert_eq!(rig.run("echo next"), 0);
+        assert_eq!(rig.output.bytes(), b"next\n");
+    }
+}
+
+#[test]
+fn invalid_function_declarations_are_execution_errors_not_reader_errors() {
+    check_output(
+        "if false; then $foo() { :; }; fi; f() { $foo() { :; }; echo inner; }; echo defined; f; $foo() { :; } || echo recovered; echo after",
+        "defined\ninner\nrecovered\nafter\n",
+    );
+}
+
+#[test]
+fn invalid_function_declarations_obey_errexit_context() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("set -e; $foo() { :; }; echo BAD"), 1);
+    assert!(rig.output.bytes().is_empty());
+    check_output(
+        "set -e; $foo() { :; } || echo recovered; echo after",
+        "recovered\nafter\n",
+    );
+}
+
+#[test]
+fn literal_punctuation_function_names_remain_callable() {
+    for name in [
+        "foo-bar", "9foo", "a.b", "a/b", "a:b", "a@b", "a+b", "a?b", "a*b", "a[b]", "é", "~foo",
+    ] {
+        check_output(
+            &format!("{name}() {{ echo called; }}; '{name}'"),
+            "called\n",
+        );
+    }
+}
