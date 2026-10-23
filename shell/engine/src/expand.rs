@@ -11,7 +11,7 @@ use futures::FutureExt;
 use shell_parser::parser::{ParameterOp, Word, WordPart};
 
 mod braces;
-mod case;
+use crate::state::CaseLocale as Locale;
 mod case_pattern;
 mod command;
 mod glob;
@@ -778,6 +778,9 @@ impl Expansion<'_> {
         if !self.pattern_snapshots {
             return Ok(());
         }
+        self.scan_value(value).await
+    }
+    async fn scan_value(&mut self, value: &str) -> Result<(), Error> {
         for _ in value.bytes() {
             self.work.checkpoint(self.cancel).await?;
         }
@@ -1571,9 +1574,7 @@ impl Expansion<'_> {
                 .segment("", Protection::expansion(protected, state), protected)
                 .await;
         }
-        for _ in value.bytes() {
-            self.work.checkpoint(self.cancel).await?;
-        }
+        self.scan_value(&value).await?;
         let mut pattern = self.pattern_operand(source, state, depth).await?;
         let result = pattern
             .remove(&value, prefix, longest, self.work, self.cancel)
@@ -1654,11 +1655,9 @@ impl Expansion<'_> {
                 .segment("", Protection::expansion(protected, state), protected)
                 .await;
         }
-        for _ in value.bytes() {
-            self.work.checkpoint(self.cancel).await?;
-        }
+        self.scan_value(&value).await?;
         let mut pattern = self.pattern_operand(source, state, depth).await?;
-        let locale = case::Locale::from_state(state)?;
+        let locale = Locale::from_state(&state.borrow())?;
         let result = pattern
             .change_case(
                 &value,

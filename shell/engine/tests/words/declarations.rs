@@ -2,10 +2,20 @@ use super::*;
 
 #[test]
 fn named_declarations_match_recorded_bash_5_3_15() {
-    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+    check_declaration_fixture(include_str!(
         "../../../../scripts/fixtures/shell-declare-print.json"
-    ))
-    .unwrap();
+    ));
+}
+
+#[test]
+fn scalar_case_attributes_match_recorded_bash_5_3_15() {
+    check_declaration_fixture(include_str!(
+        "../../../../scripts/fixtures/shell-declare-attrs.json"
+    ));
+}
+
+fn check_declaration_fixture(source: &str) {
+    let fixture: serde_json::Value = serde_json::from_str(source).unwrap();
     assert_eq!(
         fixture["bash"],
         "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)"
@@ -94,4 +104,17 @@ fn indexed_declaration_rejection_preserves_local_and_raw_reference() {
     assert_eq!(rig.output.bytes(), b"global\n");
     assert_eq!(rig.run("declare -n r=a; declare -p r"), 0);
     assert_eq!(rig.output.bytes(), b"global\ndeclare -n r=\"a\"\n");
+}
+
+#[test]
+fn interrupted_case_declaration_preserves_previous_attributes() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("declare -l v=before"), 0);
+    let job = rig
+        .shell
+        .start(&format!("declare -u v={}", "A".repeat(12000)))
+        .unwrap();
+    rig.interrupt_after_counting_yields(job);
+    assert_eq!(rig.run("v=MIXED; printf '%s' \"$v\""), 0);
+    assert_eq!(rig.output.bytes(), b"mixed");
 }

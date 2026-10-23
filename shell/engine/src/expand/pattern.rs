@@ -2,7 +2,7 @@
 //! and glob.rs::glob_match_steps at the pinned revision in sources.lock.json.
 //! This matcher advances all basic-glob states over borrowed character slices.
 //! It allocates no candidate strings and never treats exhausted work as a miss.
-use super::{Error, Protection, Work, admit_string_growth, admit_vec_slot, case};
+use super::{Error, Protection, Work, admit_string_growth, admit_vec_slot};
 use crate::executor::Cancel;
 use std::mem::size_of;
 
@@ -479,7 +479,7 @@ impl Pattern {
         &mut self,
         value: &str,
         mode: (bool, bool),
-        locale: case::Locale,
+        locale: crate::state::CaseLocale,
         max_bytes: usize,
         work: &mut Work,
         cancel: &Cancel,
@@ -778,7 +778,14 @@ mod tests {
             let mut work = Work::new(32, storage, 2);
             let cancel = Cancel::new();
             let result = pattern
-                .change_case("a", (true, true), case::Locale::C, 8, &mut work, &cancel)
+                .change_case(
+                    "a",
+                    (true, true),
+                    crate::state::CaseLocale::C,
+                    8,
+                    &mut work,
+                    &cancel,
+                )
                 .now_or_never()
                 .expect("small mapping finishes in one turn");
             if storage == 8 {

@@ -12,6 +12,13 @@ const fixture: {
   environment: Record<string, string>;
   cases: Observation[];
 } = JSON.parse(readFileSync(new URL("fixtures/shell-declare-print.json", import.meta.url), "utf8"));
+const attributes: typeof fixture = JSON.parse(
+  readFileSync(new URL("fixtures/shell-declare-attrs.json", import.meta.url), "utf8"),
+);
+assert.equal(attributes.schema, fixture.schema);
+assert.equal(attributes.bash, fixture.bash);
+assert.deepEqual(attributes.environment, fixture.environment);
+fixture.cases = fixture.cases.concat(attributes.cases);
 assert.equal(fixture.schema, 1);
 assert.equal(fixture.bash, "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)");
 assert.equal(process.version, "v26.7.0");

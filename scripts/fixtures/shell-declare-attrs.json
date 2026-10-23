@@ -152,21 +152,21 @@
     },
     {
       "name": "ifs-case",
-      "code": "declare -l IFS=A; set -- x y; printf \"<%s>\\n\" \"$*\"; IFS=B; printf \"<%s>\\n\" \"$*\"; declare -p IFS",
+      "code": "unset IFS; declare -l IFS=A; set -- x y; printf \"<%s>\\n\" \"$*\"; IFS=B; printf \"<%s>\\n\" \"$*\"; declare -p IFS",
       "status": 0,
       "stdout": "PHhheT4KPHhieT4KZGVjbGFyZSAtbCBJRlM9ImIiCg==",
       "stderr": ""
     },
     {
       "name": "locale-c",
-      "code": "LC_ALL=C; declare -u x='aéß'; declare -l y='AÉ'; declare -p x y",
+      "code": "LC_ALL=C; declare -u x='a\u00e9\u00df'; declare -l y='A\u00c9'; declare -p x y",
       "status": 0,
       "stdout": "ZGVjbGFyZSAtdSB4PSQnQVwzMDNcMjUxXDMwM1wyMzcnCmRlY2xhcmUgLWwgeT0kJ2FcMzAzXDIxMScK",
       "stderr": ""
     },
     {
       "name": "locale-utf8",
-      "code": "LC_ALL=C.UTF-8; declare -u x='aéßµÿ'; declare -l y='AÉ'; declare -p x y",
+      "code": "LC_ALL=C.UTF-8; declare -u x='a\u00e9\u00df\u00b5\u00ff'; declare -l y='A\u00c9'; declare -p x y",
       "status": 0,
       "stdout": "ZGVjbGFyZSAtdSB4PSJBw4nDn86cxbgiCmRlY2xhcmUgLWwgeT0iYcOpIgo=",
       "stderr": ""
@@ -197,6 +197,27 @@
       "code": "declare -l x=AB; declare -lu x; x=eF; declare -p x; declare -ul x; x=gH; declare -p x; declare -u +l x; x=Ij; declare -p x",
       "status": 0,
       "stdout": "ZGVjbGFyZSAtLSB4PSJlRiIKZGVjbGFyZSAtLSB4PSJnSCIKZGVjbGFyZSAtdSB4PSJJSiIK",
+      "stderr": ""
+    },
+    {
+      "name": "parameter-attribute-transforms",
+      "code": "declare -rxl x=ABC; printf '%s\\n' \"${x@a}\" \"${x@A}\"; declare -ru y=ab; printf '%s\\n' \"${y@a}\" \"${y@A}\"; declare -l z; printf '%s\\n' \"${z@a}\" \"${z@A}\"",
+      "status": 0,
+      "stdout": "cnhsCmRlY2xhcmUgLXJ4bCB4PSdhYmMnCnJ1CmRlY2xhcmUgLXJ1IHk9J0FCJwpsCmRlY2xhcmUgLWwgego=",
+      "stderr": ""
+    },
+    {
+      "name": "indexed-writes-preserve-case",
+      "code": "declare -l a; a=(AB CD); a[1]+=EF; printf '<%s>\\n' \"${a[@]}\"; a+=(GH); printf '<%s>\\n' \"${a[@]}\"",
+      "status": 0,
+      "stdout": "PGFiPgo8Y2RlZj4KPGFiPgo8Y2RlZj4KPGdoPgo=",
+      "stderr": ""
+    },
+    {
+      "name": "prefix-shadows-case-on-write",
+      "code": "declare -l x=ABC; f(){ declare -p x; x=MoRe; declare -p x; local x; x=LaSt; declare -p x; }; x=MiXeD f; declare -p x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAteCB4PSJNaVhlRCIKZGVjbGFyZSAteCB4PSJNb1JlIgpkZWNsYXJlIC14IHg9IkxhU3QiCmRlY2xhcmUgLWwgeD0iYWJjIgo=",
       "stderr": ""
     }
   ]
