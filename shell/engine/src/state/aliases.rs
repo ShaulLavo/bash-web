@@ -116,16 +116,21 @@ impl State {
         Ok(())
     }
 
-    pub(crate) fn alias_update_work(&self, name: &str, value: Option<&str>) -> Result<usize, i32> {
+    pub(crate) fn alias_update_work(
+        &self,
+        name: &str,
+        value: Option<&str>,
+    ) -> Result<(u64, usize), i32> {
+        let revision = self.aliases.revision;
         let Some(change) = self.aliases.change(name, value)? else {
-            return Ok(0);
+            return Ok((revision, 0));
         };
         if self.aliases.unique() && !change.grow {
-            return Ok(0);
+            return Ok((revision, 0));
         }
         // Only a real snapshot copy or a table rehash visits existing entries.
         let Some(version) = &self.aliases.version else {
-            return Ok(0);
+            return Ok((revision, 0));
         };
         let buckets = version.slots / (size_of::<(String, String)>() + 1);
         let copied_text = if self.aliases.unique() {
@@ -133,7 +138,8 @@ impl State {
         } else {
             version.bytes
         };
-        buckets.checked_add(copied_text).ok_or(RESOURCE_STATUS)
+        let work = buckets.checked_add(copied_text).ok_or(RESOURCE_STATUS)?;
+        Ok((revision, work))
     }
 
     pub(crate) fn update_alias(&mut self, name: &str, value: Option<&str>) -> Result<(), i32> {
@@ -344,20 +350,34 @@ mod tests {
         let mut work = 0;
         for n in 0..32_000 {
             let name = format!("b{n}");
-            work += state.alias_update_work(&name, Some(":")).unwrap();
+            work += state.alias_update_work(&name, Some(":")).unwrap().1;
             state.update_alias(&name, Some(":")).unwrap();
         }
         assert!(work < 32_000 * 4, "unique definition work: {work}");
         let revision = state.aliases.revision();
         for n in 0..32_000 {
             let name = format!("b{n}");
-            assert_eq!(state.alias_update_work(&name, Some("new")).unwrap(), 0);
+            assert_eq!(state.alias_update_work(&name, Some("new")).unwrap().1, 0);
             state.update_alias(&name, Some("new")).unwrap();
-            assert_eq!(state.alias_update_work(&name, None).unwrap(), 0);
+            assert_eq!(state.alias_update_work(&name, None).unwrap().1, 0);
             state.update_alias(&name, None).unwrap();
         }
         assert_eq!(state.aliases.revision(), revision + 64_000);
         assert!(state.aliases.values().is_none());
+    }
+
+    #[test]
+    fn alias_work_plan_detects_new_snapshots_without_a_revision_change() {
+        let mut state = State::with_memory(StorageBudget::new(4096));
+        state.update_alias("x", Some("old")).unwrap();
+        let unique = state.alias_update_work("x", Some("new")).unwrap();
+        assert_eq!(unique.1, 0);
+        let snapshot = state.aliases();
+        let shared = state.alias_update_work("x", Some("new")).unwrap();
+        assert_eq!(unique.0, shared.0);
+        assert!(shared.1 > unique.1);
+        drop(snapshot);
+        assert_eq!(state.alias_update_work("x", Some("new")).unwrap(), unique);
     }
 
     #[test]
@@ -416,7 +436,7 @@ mod tests {
         let snapshot = state.aliases();
         let charged = memory.observation().0;
         let blocker = memory.admit(4096 - charged - 8).unwrap();
-        assert!(state.alias_update_work("x", Some("new")).unwrap() > 0);
+        assert!(state.alias_update_work("x", Some("new")).unwrap().1 > 0);
         assert_eq!(state.update_alias("x", Some("new")), Err(RESOURCE_STATUS));
         assert_eq!(state.aliases.revision(), snapshot.revision());
         drop(blocker);

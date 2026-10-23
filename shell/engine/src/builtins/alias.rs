@@ -198,16 +198,10 @@ async fn update(
     work: &mut Work,
 ) -> Result<(), i32> {
     loop {
-        let (revision, bytes) = {
-            let state = state.borrow();
-            (
-                state.aliases().revision(),
-                state.alias_update_work(name, value)?,
-            )
-        };
-        scan_bytes(bytes, context, work).await?;
+        let plan = state.borrow().alias_update_work(name, value)?;
+        scan_bytes(plan.1, context, work).await?;
         let mut state = state.borrow_mut();
-        if state.aliases().revision() != revision {
+        if state.alias_update_work(name, value)? != plan {
             continue;
         }
         return state.update_alias(name, value);
