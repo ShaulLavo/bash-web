@@ -1536,6 +1536,52 @@
       ],
       "strategy": "Keep fixed-size positional-join and IFS byte-classification state separate from live scalar values and field splitting. Prepare cached classification cooperatively before mutation or snapshot, preserve scoped reference binding and restore prefix/function state without unadmitted copies. Quoted/scalar star joins and case-pattern star consumers use the admitted separator state. Finite GNU Bash controls distinguish target writes, local shadows, explicit IFS changes, function return, arithmetic effects, empty/unset targets and ordinary alias writes. Unstable exploratory Bash mutation output is not encoded as expected behavior.",
       "verification": "Source/static controls prepared; exact-head native/WASI/browser and differential acceptance remain pending."
+    },
+    "invalidTargetStatus": {
+      "classification": "Original GNU Bash 5.3.15 semantic adapter and nonmutation, operand-continuation, local, readonly, admission and cancellation controls. No upstream implementation copied. Nine fixture scripts are adapted separately from the frozen corpus below.",
+      "implementationDestinations": ["shell/engine/src/builtins.rs::nameref_declaration"],
+      "testDestinations": [
+        "shell/engine/tests/words/nameref_invalid.rs",
+        "shell/engine/tests/words/namerefs.rs",
+        "scripts/test-own-shell-nameref-invalid.ts",
+        "scripts/fixtures/shell-nameref-invalid.json"
+      ],
+      "change": "Reject nonempty invalid plain scalar targets with status 1 before state publication, allowing the existing caller to continue later operands. Preserve status 2 for empty/unbound, bracket-bearing and PIPESTATUS references and resource failures, and status 130 for cancellation. No declaration options, state model or reference lifecycle changes.",
+      "oracle": "Local GNU Bash 5.3.15(1)-release observations in scripts/fixtures/shell-nameref-invalid.json. CI replays the recording without invoking host Bash. Production Waffle uses the frozen environment with utilities unset and checks exact stdout bytes and status. Diagnostic bytes are recorded for inspection but are not scored.",
+      "testSources": [
+        {
+          "repository": "https://github.com/oils-for-unix/oils",
+          "revision": "bdc8364c253ce921e033bbc2399ea2ce0be41825",
+          "path": "spec/nameref.test.sh",
+          "sha256": "8aa55ed6c5dbf24d414175c988819411b60ba459ae8e43f3b1e543b6c492f304",
+          "license": "Apache-2.0",
+          "caseIds": ["oils:nameref:604"]
+        },
+        {
+          "repository": "https://github.com/reubeno/brush",
+          "revision": "4cfba081f2f8bcda8150010a57203d020f14f0cc",
+          "path": "brush-shell/tests/cases/compat/nameref.yaml",
+          "sha256": "a1a8493816ec51a1b40a183bf37145a59976dd8778c5f02c0f2967045cc6addd",
+          "license": "MIT",
+          "caseIds": [
+            "brush-suite:nameref:78",
+            "brush-suite:nameref:79",
+            "brush-suite:nameref:80",
+            "brush-suite:nameref:81",
+            "brush-suite:nameref:82",
+            "brush-suite:nameref:208",
+            "brush-suite:nameref:209"
+          ]
+        },
+        {
+          "repository": "https://github.com/everruns/bashkit",
+          "revision": "491c3281f668b76d64b15210b8f5d7bf97244be0",
+          "path": "crates/bashkit/tests/spec_cases/bash/bashbox-declare.test.sh",
+          "sha256": "fdcd96c28f338796272a1928491d37dbae60a561fd624aefa19a73e8c7a2291f",
+          "license": "MIT",
+          "caseIds": ["bashkit-suite:bashbox-declare:220"]
+        }
+      ]
     }
   },
   "shellAcceptanceUtilities": {
