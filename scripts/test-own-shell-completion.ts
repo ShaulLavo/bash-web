@@ -1,27 +1,17 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { test } from "node:test";
 import { recordedBash } from "./recorded-bash.ts";
-import { createWaffleRunner } from "./waffle-compat.ts";
+import { createShellFixtureRunner } from "./shell-fixture-runner.ts";
 
 const fixturePath = new URL("fixtures/shell-completion.json", import.meta.url);
-const fixture: { cases: { script: string }[] } = JSON.parse(readFileSync(fixturePath, "utf8"));
 const oracle = recordedBash(
   fixturePath,
   undefined,
   /^GNU bash, version 5\.3\.15\(1\)-release /,
   () => "",
 );
-const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
-const runner = await createWaffleRunner({
-  modulePath: resolve(directory, "shell-runtime.wasm"),
-  fixtureDirectory: directory,
-  utilityDirectory: directory,
-  tmp: "/tmp/spec",
-  env: { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" },
-});
-for (const { script } of fixture.cases)
+const runner = await createShellFixtureRunner();
+for (const { script } of oracle.fixture.cases)
   test(`production Waffle completion: ${script}`, async () => {
     const expected = oracle.replay(script);
     const actual = await runner(script);
@@ -53,4 +43,22 @@ PATH=/usr/bin:/usr/bin compgen -c argv
     actual.stdout.toString(),
     "zz_completion_user\nzz_completion_group\nzz_completion_service\nzz_completion_host\nunregistered-status:1\nargv.py\nargv.py\nargv.py\n",
   );
+});
+
+test("completion stays in the core without utility add-ons", async () => {
+  const core = await createShellFixtureRunner({ utilities: false });
+  const actual = await core(`
+compgen -W 'completion-core' completion
+complete -W core completion-core
+compopt -o nospace completion-core
+complete -p completion-core
+cat
+`);
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.status, 127);
+  assert.equal(
+    actual.stdout.toString(),
+    "completion-core\ncomplete -o nospace -W 'core' completion-core\n",
+  );
+  assert.match(actual.stderr.toString(), /cat: command not found/);
 });

@@ -109,7 +109,7 @@ pub(crate) async fn run(
 ) -> Result<Outcome, i32> {
     match builtin {
         Builtin::Completion => {
-            return completion::run(name, &args, &state, &fds, &context, work).await;
+            return completion::run(name, &args, state, fds, context, work).await;
         }
         Builtin::Noop => {}
         Builtin::False => return Err(1),

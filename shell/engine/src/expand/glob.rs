@@ -823,6 +823,30 @@ pub(super) async fn expand_fields(
     Ok(output.values)
 }
 
+/// Completion -G uses literal glob syntax without another shell expansion pass.
+pub(crate) async fn completion_matches(
+    text: &str,
+    state: &SharedState,
+    limits: (usize, usize),
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<Vec<String>, Error> {
+    work.admit_storage(text.len().saturating_add(state.borrow().cwd.len()))?;
+    let protection = vec![false; text.len()];
+    let cwd = state.borrow().cwd.clone();
+    let fs = work.substitutions.as_ref().ok_or(2)?.filesystem();
+    matches(
+        text,
+        &protection,
+        &cwd,
+        &fs,
+        (limits.0, limits.1, limits.0),
+        work,
+        cancel,
+    )
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1162,28 +1186,4 @@ mod tests {
         cancel.cancel();
         assert!(matches!(finish(future), Err(Error::Status(130))));
     }
-}
-
-/// Completion -G uses literal glob syntax without another shell expansion pass.
-pub(crate) async fn completion_matches(
-    text: &str,
-    state: &SharedState,
-    limits: (usize, usize),
-    work: &mut Work,
-    cancel: &Cancel,
-) -> Result<Vec<String>, Error> {
-    work.admit_storage(text.len().saturating_add(state.borrow().cwd.len()))?;
-    let protection = vec![false; text.len()];
-    let cwd = state.borrow().cwd.clone();
-    let fs = work.substitutions.as_ref().ok_or(2)?.filesystem();
-    matches(
-        text,
-        &protection,
-        &cwd,
-        &fs,
-        (limits.0, limits.1, limits.0),
-        work,
-        cancel,
-    )
-    .await
 }
