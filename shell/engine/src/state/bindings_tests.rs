@@ -33,9 +33,10 @@ fn builtin(state: &SharedState, assigned: &[(String, String)]) -> PrefixFrame {
 fn cli_environment_adds_nonexported_shell_defaults() {
     let mut state = State::default();
     state.initialize_cli_environment([("HOME".into(), "/home/test".into())]);
-    assert_eq!(state.bindings().len(), 4);
+    assert_eq!(state.bindings().len(), 5);
     assert_eq!(state.bindings()["OPTIND"], "1");
     assert_eq!(state.bindings()["OPTERR"], "1");
+    assert_eq!(state.bindings()["PS4"], "+ ");
     assert!(!state.bindings().contains_key("IFS"));
     assert_eq!(state.bindings()["PATH"], "/usr/bin:/bin");
     assert_eq!(
@@ -58,9 +59,10 @@ fn cli_environment_adds_nonexported_shell_defaults() {
 fn runtime_environment_extends_defaults_exports_ifs_and_does_not_invent_path() {
     let mut state = State::default();
     state.inherit_environment([("HOME".into(), "/home/test".into())]);
-    assert_eq!(state.bindings().len(), 4);
+    assert_eq!(state.bindings().len(), 5);
     assert_eq!(state.bindings()["OPTIND"], "1");
     assert_eq!(state.bindings()["OPTERR"], "1");
+    assert_eq!(state.bindings()["PS4"], "+ ");
     assert_eq!(state.bindings()["IFS"], " \t\n");
     assert!(!state.bindings().contains_key("PATH"));
     assert_eq!(

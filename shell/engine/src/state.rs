@@ -2237,6 +2237,9 @@ mod tests {
             + snapshot_node_bytes::<String>().unwrap_or_else(|_| panic!("node fits"))
             + 6
             + snapshot_node_bytes::<String>().unwrap_or_else(|_| panic!("node fits"))
+            + "PS4".len()
+            + "+ ".len()
+            + snapshot_node_bytes::<String>().unwrap_or_else(|_| panic!("node fits"))
             + 9
             + std::mem::size_of::<i32>();
         let mut small = Work::new(100_000, bytes - 1, 0);
@@ -2253,6 +2256,29 @@ mod tests {
         assert_eq!(child.scalar_parameter("ref"), Some("child"));
         assert_eq!(state.borrow().scalar_parameter("ref"), None);
         assert_eq!(state.borrow().namerefs["ref"], "target");
+    }
+
+    #[test]
+    fn option_letters_follow_invocation_and_snapshot_state() {
+        let state = State::default().shared();
+        assert_eq!(state.borrow().parameter("-"), "hB");
+        {
+            let mut state = state.borrow_mut();
+            state.command_string = true;
+            state.errexit = true;
+            state.noglob = true;
+            state.monitor = true;
+            state.noexec = true;
+            state.nounset = true;
+            state.xtrace = true;
+        }
+        let mut work = Work::new(100_000, 64 * 1024, 0);
+        let mut child = finish_snapshot(&state, &Cancel::new(), &mut work).unwrap();
+        assert_eq!(child.parameter("-"), "efhmnuxBc");
+        child.command_string = false;
+        child.xtrace = false;
+        assert_eq!(child.parameter("-"), "efhmnuB");
+        assert_eq!(state.borrow().parameter("-"), "efhmnuxBc");
     }
 
     #[test]
