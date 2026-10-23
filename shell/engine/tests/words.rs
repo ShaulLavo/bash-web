@@ -4391,3 +4391,6 @@ mod index_names;
 
 #[path = "words/associative.rs"]
 mod associative;
+
+#[path = "words/nameref_invalid.rs"]
+mod nameref_invalid;
