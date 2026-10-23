@@ -998,7 +998,12 @@ impl<'a> Parser<'a> {
         while let Some(start) = self.next_script_command()? {
             let parsed = self.parse_command_list()?;
             self.end_script_command(commands, parsed, start)?;
-            if read_unit && matches!(self.current_token, Some(tokens::Token::Newline)) {
+            // Injected alias newlines have zero-width source spans. Keep
+            // their remaining replacement text in this parser.
+            if read_unit
+                && matches!(self.current_token, Some(tokens::Token::Newline))
+                && self.current_span.start.offset != self.current_span.end.offset
+            {
                 break;
             }
         }
