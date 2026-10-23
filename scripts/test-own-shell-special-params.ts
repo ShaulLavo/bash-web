@@ -19,3 +19,15 @@ for (const item of fixture.cases)
     assert.equal(actual.stdout.toString(), item.stdout);
     assert.equal(actual.stderr.toString().replaceAll(/: line \d+:/g, ":"), item.stderr);
   });
+
+const publication: typeof fixture = JSON.parse(
+  readFileSync(new URL("fixtures/shell-special-params-publication.json", import.meta.url), "utf8"),
+);
+assert.equal(publication.bash, fixture.bash);
+for (const item of publication.cases)
+  test(`production Waffle last-argument publication: ${item.name}`, async () => {
+    const actual = await runner(item.script);
+    assert.equal(actual.crash, undefined);
+    assert.equal(actual.status, item.status);
+    assert.equal(actual.stdout.toString(), item.stdout);
+  });

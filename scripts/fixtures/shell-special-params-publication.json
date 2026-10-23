@@ -1,0 +1,47 @@
+{
+  "bash": "5.3.15(1)-release",
+  "cases": [
+    {
+      "name": "circular underscore preserves success",
+      "script": "declare -n x=_; declare -n _=x; true; printf 'status=%s\\n' \"$?\"",
+      "status": 0,
+      "stdout": "status=0\n",
+      "stderr": "/usr/bin/bash: line 1: warning: _: circular name reference\n/usr/bin/bash: line 1: warning: _: circular name reference\n/usr/bin/bash: line 1: warning: _: circular name reference\n"
+    },
+    {
+      "name": "circular underscore does not trigger errexit",
+      "script": "declare -n x=_; declare -n _=x; set -e; : reached; printf 'ok\\n'",
+      "status": 0,
+      "stdout": "ok\n",
+      "stderr": "/usr/bin/bash: line 1: warning: _: circular name reference\n/usr/bin/bash: line 1: warning: _: circular name reference\n/usr/bin/bash: line 1: warning: _: circular name reference\n/usr/bin/bash: line 1: warning: _: circular name reference\n"
+    },
+    {
+      "name": "failed input redirect publishes argument",
+      "script": ": before; : after <missing; printf '[%s]\\n' \"$_\"",
+      "status": 0,
+      "stdout": "[after]\n",
+      "stderr": "/usr/bin/bash: line 1: missing: No such file or directory\n"
+    },
+    {
+      "name": "failed output redirect publishes empty argument",
+      "script": ": before; >missing/file; printf '[%s]\\n' \"$_\"",
+      "status": 0,
+      "stdout": "[]\n",
+      "stderr": "/usr/bin/bash: line 1: missing/file: No such file or directory\n"
+    },
+    {
+      "name": "failed assignment redirect publishes empty argument",
+      "script": ": before; a=value <missing; printf '[%s]\\n' \"$_\"",
+      "status": 0,
+      "stdout": "[]\n",
+      "stderr": "/usr/bin/bash: line 1: missing: No such file or directory\n"
+    },
+    {
+      "name": "failed redirect preserves failure status",
+      "script": ": before; : after <missing; saved=$? last=$_; printf '%s [%s]\\n' \"$saved\" \"$last\"",
+      "status": 0,
+      "stdout": "1 [after]\n",
+      "stderr": "/usr/bin/bash: line 1: missing: No such file or directory\n"
+    }
+  ]
+}
