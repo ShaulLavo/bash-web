@@ -15,7 +15,15 @@ use crate::{
     exec::{Error, StorageAllocation, Work},
     executor::Cancel,
 };
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::BTreeSet, rc::Rc};
+
+use super::binding::{kept_insertion_steps, tree_bytes};
+
+#[derive(Default)]
+struct ElementEffectCost {
+    storage: usize,
+    steps: usize,
+}
 
 /// Which binding a durable array write changes while an expansion prefix
 /// saves the target. Bash writes the variable that outlives the temporary
@@ -55,10 +63,10 @@ impl State {
         work: &mut Work,
     ) -> Result<(), Error> {
         Self::admit_scalar_access(state, name, cancel, work).await?;
-        let copy = state
+        let steps = state
             .borrow()
             .admit_element_storage(name, index, value_bytes, work)?;
-        snapshot_steps(copy, cancel, work).await
+        snapshot_steps(steps, cancel, work).await
     }
     fn admit_element_storage(
         &self,
@@ -70,17 +78,19 @@ impl State {
         let (target, destination) = self.indexed_target(name)?;
         let image = self.destination_binding(target, destination);
         let copy = Binding::shared_bytes(image);
-        let journal = self.durable_journal(destination).map_or(0, |changes| {
-            changes
-                .borrow()
-                .element_effect_bytes(target, index, value_bytes)
-        });
+        let journal =
+            self.durable_journal(destination)
+                .map_or_else(ElementEffectCost::default, |changes| {
+                    changes
+                        .borrow()
+                        .element_effect_cost(target, index, value_bytes)
+                });
         work.admit_storage(
             Binding::element_write_bytes(image, index)
-                .saturating_add(journal)
+                .saturating_add(journal.storage)
                 .saturating_add(self.indexed_key_bytes(name, target)?),
         )?;
-        Ok(copy)
+        Ok(copy.saturating_add(journal.steps))
     }
     /// Durably publish an admitted `name[index]=value` for a nonnegative,
     /// already resolved `index`. Returns 1 for a readonly or cyclic target,
@@ -104,7 +114,8 @@ impl State {
         let effect = journal.as_ref().map_or(0, |changes| {
             changes
                 .borrow()
-                .element_effect_bytes(&name, index, value.len())
+                .element_effect_cost(&name, index, value.len())
+                .storage
         });
         let mut reservation = self.admit_temporary(effect)?;
         let image = self.destination_binding(&name, destination);
@@ -218,13 +229,20 @@ impl State {
 }
 
 impl AssignmentChanges {
-    fn element_effect_bytes(&self, name: &str, index: i64, value_bytes: usize) -> usize {
-        self.undo
-            .iter()
-            .filter(|(target, _)| target == name)
-            .fold(0usize, |bytes, (_, undo)| {
-                bytes.saturating_add(undo.element_effect_bytes(index, value_bytes))
-            })
+    fn element_effect_cost(&self, name: &str, index: i64, value_bytes: usize) -> ElementEffectCost {
+        let mut cost = ElementEffectCost::default();
+        for (target, undo) in &self.undo {
+            cost.steps = cost
+                .steps
+                .saturating_add(target.len().saturating_add(name.len()).saturating_mul(3));
+            if target != name {
+                continue;
+            }
+            let effect = undo.element_effect_cost(index, value_bytes);
+            cost.storage = cost.storage.saturating_add(effect.storage);
+            cost.steps = cost.steps.saturating_add(effect.steps);
+        }
+        cost
     }
     fn element_effect(&mut self, name: &str, index: i64, value: &str) {
         for (_, undo) in self.undo.iter_mut().filter(|(target, _)| target == name) {
@@ -283,17 +301,25 @@ impl Binding {
 }
 
 impl BindingUndo {
-    /// Bytes `element_effect` allocates for a durable `[index]=value`.
-    fn element_effect_bytes(&self, index: i64, value_bytes: usize) -> usize {
+    /// Storage and work needed before a synchronous inverse update.
+    fn element_effect_cost(&self, index: i64, value_bytes: usize) -> ElementEffectCost {
         match self {
-            Self::Restore(binding) => {
-                value_bytes.saturating_add(Binding::element_write_bytes(binding.as_ref(), index))
-            }
-            Self::Element { index: slot, .. } if *slot == index => value_bytes,
+            Self::Restore(binding) => ElementEffectCost {
+                storage: value_bytes
+                    .saturating_add(Binding::element_write_bytes(binding.as_ref(), index)),
+                steps: value_bytes.saturating_add(Binding::shared_bytes(binding.as_ref())),
+            },
+            Self::Element { index: slot, .. } if *slot == index => ElementEffectCost {
+                storage: value_bytes,
+                steps: value_bytes,
+            },
             Self::Append { range, kept, .. } if index != 0 && appended(*range, index) => {
-                usize::from(kept.len() == kept.capacity()) * std::mem::size_of::<i64>()
+                ElementEffectCost {
+                    storage: kept_insertion_bytes(kept, index),
+                    steps: kept_insertion_steps(kept.len()),
+                }
             }
-            _ => 0,
+            _ => ElementEffectCost::default(),
         }
     }
     /// Make rollback keep a durable `[index]=value`. The binding stays an
@@ -339,14 +365,17 @@ fn appended(range: Option<(i64, i64)>, index: i64) -> bool {
     range.is_some_and(|(first, last)| (first..=last).contains(&index))
 }
 
-fn keep_appended(index: i64, keep_zero: &mut bool, kept: &mut Vec<i64>) {
+fn kept_insertion_bytes(kept: &BTreeSet<i64>, index: i64) -> usize {
+    if kept.contains(&index) {
+        return 0;
+    }
+    tree_bytes::<()>(kept.len() + 1).saturating_sub(tree_bytes::<()>(kept.len()))
+}
+
+fn keep_appended(index: i64, keep_zero: &mut bool, kept: &mut BTreeSet<i64>) {
     if index == 0 {
         *keep_zero = true;
         return;
     }
-    if let Err(position) = kept.binary_search(&index) {
-        // One exact slot, as element_effect_bytes priced it.
-        kept.reserve_exact(1);
-        kept.insert(position, index);
-    }
+    kept.insert(index);
 }

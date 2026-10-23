@@ -32,6 +32,8 @@ The caller has admitted the value or the staged `Indexed`; admission covers what
 
 While an expansion prefix saves the target, the write changes the variable that outlives the prefix, as in Bash: the saved value if one exists, else the temporary, which is discarded with the prefix. An enclosing journal updates its inverses so rollback keeps the durable value: a whole-array inverse gets the element, an element inverse for the same slot restores the durable value, an appended run keeps the durably written slots inside it, and a scalar-origin inverse stays an array. A durable replacement supersedes all earlier inverses for the name. Every inverse change is charged to the journal's reservation before publication, which keeps the rollback bound above. Bash 5.3.15 controls are recorded in `scripts/fixtures/shell-indexed-durable-writes.json` and replayed by `state/indexed_writes_tests.rs`.
 
+Element admission charges cooperative work for copies of shared live arrays and every shared retained inverse, plus retained value copies. Append inverses keep durable indices in a B-tree set, so descending writes do not shift a growing vector. Key-only node storage uses the node bound above. Work covers three tree paths and bounded node movement before publication. Repeated indices pay lookup work without adding storage. Cancellation or resource rejection during admission leaves the live binding, inverse and session tickets unchanged. Rollback still finishes synchronously.
+
 Callers produce Bash's diagnostics (`name: readonly variable`, `name[i]: bad array subscript`) themselves. `BASH_REMATCH` capture publication is a separate producer.
 
 ## Remaining forms

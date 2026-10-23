@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, ops::Deref, rc::Rc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::Deref,
+    rc::Rc,
+};
 
 /// Original binding model. Indexed values are ordered and sparse; a scalar
 /// assignment to an existing array replaces only element zero.
@@ -176,33 +180,21 @@ impl Indexed {
     }
     /// Remove the appended run except slots a durable write has since set.
     /// Each step is one lookup; nothing is allocated.
-    fn undo_append(&mut self, (first, last): (i64, i64), keep_zero: bool, kept: &[i64]) {
+    fn undo_append(&mut self, (first, last): (i64, i64), keep_zero: bool, kept: &BTreeSet<i64>) {
         let mut cursor = Some(first);
         while let Some(start) = cursor.filter(|start| *start <= last) {
             let Some(index) = self.values.range(start..=last).next().map(|(i, _)| *i) else {
                 return;
             };
             cursor = index.checked_add(1);
-            if (index == 0 && keep_zero) || kept.binary_search(&index).is_ok() {
+            if (index == 0 && keep_zero) || kept.contains(&index) {
                 continue;
             }
             self.remove(index);
         }
     }
     fn tree_bytes(count: usize) -> usize {
-        if count == 0 {
-            return 0;
-        }
-        // Rust 1.98.1 B-tree nodes hold 11 entries, with >=5 per nonroot.
-        // Root has >=2 children, other internal nodes >=6. See indexed docs.
-        let pointer = std::mem::size_of::<usize>();
-        let alignment = std::mem::align_of::<i64>().max(pointer);
-        let leaf =
-            (pointer + 4 + 11 * (8 + std::mem::size_of::<String>())).next_multiple_of(alignment);
-        let nodes = 1 + (count - 1) / 5;
-        nodes
-            .saturating_mul(leaf)
-            .saturating_add(((nodes + 3) / 6).saturating_mul(12 * pointer))
+        tree_bytes::<String>(count)
     }
     fn storage_bytes(&self) -> usize {
         self.bytes
@@ -308,7 +300,7 @@ pub(crate) enum BindingUndo {
         range: Option<(i64, i64)>,
         scalar: bool,
         keep_zero: bool,
-        kept: Vec<i64>,
+        kept: BTreeSet<i64>,
     },
     /// A durable replacement made this inverse obsolete; rollback keeps it.
     #[cfg_attr(
@@ -424,11 +416,37 @@ impl BindingUpdate {
                     range: first.zip(last),
                     scalar,
                     keep_zero: false,
-                    kept: Vec::new(),
+                    kept: BTreeSet::new(),
                 }
             }
             Self::Replace(_) => unreachable!(),
         };
         (binding, restore.unwrap_or(undo))
     }
+}
+
+// Rust 1.98.1 B-trees hold 11 entries per node, at least 5 per nonroot.
+// Count-based bounds include spare capacity admitted before a later split.
+fn tree_leaf_bytes<T>() -> usize {
+    let pointer = std::mem::size_of::<usize>();
+    let alignment = std::mem::align_of::<i64>().max(pointer);
+    (pointer + 4 + 11 * (8 + std::mem::size_of::<T>())).next_multiple_of(alignment)
+}
+
+pub(super) fn tree_bytes<T>(count: usize) -> usize {
+    if count == 0 {
+        return 0;
+    }
+    let nodes = 1 + (count - 1) / 5;
+    tree_leaf_bytes::<T>()
+        .saturating_mul(nodes)
+        .saturating_add(((nodes + 3) / 6).saturating_mul(12 * std::mem::size_of::<usize>()))
+}
+
+pub(super) fn kept_insertion_steps(count: usize) -> usize {
+    let path = count.checked_ilog(6).unwrap_or(0) as usize + 1;
+    let node = tree_leaf_bytes::<()>() + 12 * std::mem::size_of::<usize>();
+    // Two cost lookups and publication each visit a path. A split moves at
+    // most one node per level and can add one root, never the whole set.
+    3 * (path + 1) * node
 }
