@@ -1547,9 +1547,7 @@
     },
     "invalidTargetStatus": {
       "classification": "Original GNU Bash 5.3.15 semantic adapter and nonmutation, operand-continuation, local, readonly, admission and cancellation controls. No upstream implementation copied. Nine fixture scripts are adapted separately from the frozen corpus below.",
-      "implementationDestinations": [
-        "shell/engine/src/builtins.rs::nameref_declaration"
-      ],
+      "implementationDestinations": ["shell/engine/src/builtins.rs::nameref_declaration"],
       "testDestinations": [
         "shell/engine/tests/words/nameref_invalid.rs",
         "shell/engine/tests/words/namerefs.rs",
@@ -1565,9 +1563,7 @@
           "path": "spec/nameref.test.sh",
           "sha256": "8aa55ed6c5dbf24d414175c988819411b60ba459ae8e43f3b1e543b6c492f304",
           "license": "Apache-2.0",
-          "caseIds": [
-            "oils:nameref:604"
-          ]
+          "caseIds": ["oils:nameref:604"]
         },
         {
           "repository": "https://github.com/reubeno/brush",
@@ -1591,9 +1587,7 @@
           "path": "crates/bashkit/tests/spec_cases/bash/bashbox-declare.test.sh",
           "sha256": "fdcd96c28f338796272a1928491d37dbae60a561fd624aefa19a73e8c7a2291f",
           "license": "MIT",
-          "caseIds": [
-            "bashkit-suite:bashbox-declare:220"
-          ]
+          "caseIds": ["bashkit-suite:bashbox-declare:220"]
         }
       ]
     }
