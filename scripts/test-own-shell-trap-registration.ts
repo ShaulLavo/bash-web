@@ -8,10 +8,10 @@ type Fixture = {
   version: string;
   cases: { id: string; code: string; status: number; stdout: string; stderr: string }[];
 };
-const fixture: Fixture = JSON.parse(
-  readFileSync(new URL("fixtures/shell-trap-registration.json", import.meta.url), "utf8"),
+const fixtures: readonly Fixture[] = ["shell-trap-registration", "shell-trap-actions"].map(
+  (name) => JSON.parse(readFileSync(new URL(`fixtures/${name}.json`, import.meta.url), "utf8")),
 );
-assert.match(fixture.version, /^GNU bash, version 5\.3\.15\(/u);
+for (const fixture of fixtures) assert.match(fixture.version, /^GNU bash, version 5\.3\.15\(/u);
 const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
 const run = await createWaffleRunner({
   modulePath: resolve(directory, "shell-runtime.wasm"),
@@ -20,7 +20,7 @@ const run = await createWaffleRunner({
   tmp: "/tmp/spec",
   env: { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" },
 });
-for (const entry of fixture.cases) {
+for (const entry of fixtures.flatMap((fixture) => fixture.cases)) {
   test(`recorded Bash trap: ${entry.id}`, async () => {
     const result = await run(entry.code);
     assert.equal(result.crash, undefined);

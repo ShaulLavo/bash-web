@@ -1,0 +1,530 @@
+{
+  "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "cases": [
+    {
+      "id": "brush-suite:builtins/trap:7",
+      "code": "trap \"echo [err]\" ERR\ntrap -p ERR\n",
+      "status": 0,
+      "stdout": "trap -- 'echo [err]' ERR\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:8",
+      "code": "trap 'echo \"ERR: $?\"' ERR\nfalse\necho \"continues\"\nfalse\necho \"continues again\"\n",
+      "status": 0,
+      "stdout": "ERR: 1\ncontinues\nERR: 1\ncontinues again\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:9",
+      "code": "trap 'echo \"ERR trapped\"' ERR\nif false; then\n  echo \"then\"\nelse\n  echo \"else\"\nfi\necho \"after\"\n",
+      "status": 0,
+      "stdout": "else\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:10",
+      "code": "trap 'echo \"ERR trapped\"' ERR\nfalse && echo \"not printed\"\necho \"after\"\n",
+      "status": 0,
+      "stdout": "after\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:11",
+      "code": "trap 'echo \"ERR trapped\"' ERR\nfalse || echo \"fallback\"\necho \"after\"\n",
+      "status": 0,
+      "stdout": "fallback\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:12",
+      "code": "trap 'echo \"ERR trapped\"' ERR\n! false\necho \"after\"\n",
+      "status": 0,
+      "stdout": "after\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:13",
+      "code": "trap 'echo \"ERR\"' ERR\nwhile false; do\n  echo \"loop body\"\ndone\necho \"after while\"\n",
+      "status": 0,
+      "stdout": "after while\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:14",
+      "code": "trap 'echo \"ERR\"' ERR\ncount=0\nuntil false; do\n  ((count++))\n  if ((count > 2)); then break; fi\ndone\necho \"after until\"\n",
+      "status": 0,
+      "stdout": "ERR\nafter until\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:15",
+      "code": "trap 'echo \"ERR\"' ERR\nfalse || true || false\necho \"after\"\n",
+      "status": 0,
+      "stdout": "after\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:16",
+      "code": "trap 'echo \"ERR\"' ERR\nif ! true; then\n  echo \"then\"\nfi\n! false\necho \"after\"\n",
+      "status": 0,
+      "stdout": "after\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:17",
+      "code": "trap 'echo \"ERR trapped\"' ERR\ntrue && true\nfalse\necho \"after\"\n",
+      "status": 0,
+      "stdout": "ERR trapped\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:18",
+      "code": "trap 'echo \"ERR\"' ERR\nresult=0\nfalse || result=$?\necho \"result: $result\"\n",
+      "status": 0,
+      "stdout": "result: 1\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:19",
+      "code": "count=0\ntrap '((count++)); echo \"ERR $count\"' ERR\nfalse\nfalse\nfalse\necho \"total: $count\"\n",
+      "status": 0,
+      "stdout": "ERR 1\nERR 2\nERR 3\ntotal: 3\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:20",
+      "code": "trap 'echo \"ERR with status: $?\"' ERR\n(exit 42)\necho \"after\"\n",
+      "status": 0,
+      "stdout": "ERR with status: 42\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:21",
+      "code": "trap 'echo \"in ERR\"; exit 3' ERR\nfalse\necho \"after\"\n",
+      "status": 3,
+      "stdout": "in ERR\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:51",
+      "code": "set -E\ntrap 'echo \"[err]\"' ERR\ncoproc { trap -p ERR; false; echo \"after false\"; }\ncat <&${COPROC[0]}\nwait\n",
+      "status": 0,
+      "stdout": "trap -- 'echo \"[err]\"' ERR\n[err]\nafter false\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:52",
+      "code": "trap 'echo \"[return]\"' RETURN\nmyfunc() {\n  echo \"in func\"\n}\nmyfunc\necho \"after func\"\n",
+      "status": 0,
+      "stdout": "in func\nafter func\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:53",
+      "code": "trap 'echo \"[return: $?]\"' RETURN\nmyfunc() {\n  echo \"in func\"\n  return 42\n}\nmyfunc\necho \"after func\"\n",
+      "status": 0,
+      "stdout": "in func\nafter func\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:54",
+      "code": "trap 'echo \"[return]\"' RETURN\n. ./sourced.sh\necho \"after source\"\n",
+      "status": 0,
+      "stdout": "[return]\nafter source\n",
+      "stderr": "/usr/bin/bash: line 2: ./sourced.sh: No such file or directory\n"
+    },
+    {
+      "id": "brush-suite:builtins/trap:55",
+      "code": "set +T\ntrap 'echo \"[return]\"' RETURN\nouter() {\n  inner() {\n    echo \"in inner\"\n  }\n  inner\n  echo \"after inner\"\n}\nouter\necho \"done\"\n",
+      "status": 0,
+      "stdout": "in inner\nafter inner\ndone\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:57",
+      "code": "trap 'echo \"[return]\"' RETURN\n(\n  myfunc() { echo \"in func\"; }\n  myfunc\n)\necho \"after subshell\"\n",
+      "status": 0,
+      "stdout": "in func\nafter subshell\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:58",
+      "code": "trap 'echo \"[return]\"' RETURN\necho \"cmd1\"\necho \"cmd2\"\ntrue\necho \"done\"\n",
+      "status": 0,
+      "stdout": "cmd1\ncmd2\ndone\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/trap:59",
+      "code": "trap 'echo \"[return]\"' RETURN\n(echo \"in subshell\")\necho \"after subshell\"\n",
+      "status": 0,
+      "stdout": "in subshell\nafter subshell\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-err-trap:5",
+      "code": "trap 'echo err' ERR; f(){ false; echo in; }; f; echo out\n",
+      "status": 0,
+      "stdout": "in\nout\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-err-trap:13",
+      "code": "trap 'echo err' ERR; f(){ g; }; g(){ false; }; f; echo end\n",
+      "status": 0,
+      "stdout": "err\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-err-trap:47",
+      "code": "f(){ trap 'echo t' ERR; return 1; }; f; false; echo end\n",
+      "status": 0,
+      "stdout": "t\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-err-trap:55",
+      "code": "trap 'echo a' ERR; eval false; eval \"trap 'echo b' ERR; false\"; echo end\n",
+      "status": 0,
+      "stdout": "a\na\nb\nb\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-err-trap:66",
+      "code": "trap 'echo err' ERR; if false; then :; elif false; then :; fi; while false; do :; done; until true; do :; done; echo end\n",
+      "status": 0,
+      "stdout": "end\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-err-trap:73",
+      "code": "trap 'echo err' ERR; f(){ false; echo in; }; f || true; f && true; ! f; if f; then :; fi; echo end\n",
+      "status": 0,
+      "stdout": "in\nin\nin\nin\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-err-trap:84",
+      "code": "trap 'echo err' ERR; false && true; false || false; echo end\n",
+      "status": 0,
+      "stdout": "err\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-err-trap:92",
+      "code": "trap 'echo err' ERR; { false; }; if true; then false; fi; for i in 1; do false; done; case x in x) false;; esac; echo end\n",
+      "status": 0,
+      "stdout": "err\nerr\nerr\nerr\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-err-trap:103",
+      "code": "trap 'echo err' ERR; (false); (false; true); echo end\n",
+      "status": 0,
+      "stdout": "err\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-err-trap:111",
+      "code": "set -E; trap 'echo err' ERR; (false; true); echo end\n",
+      "status": 0,
+      "stdout": "err\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-err-trap:119",
+      "code": "trap 'echo err' ERR; x=$(false; echo in); echo \"[$x]\"; f(){ false; }; y=$(f); echo \"[$y]\"\n",
+      "status": 0,
+      "stdout": "[in]\nerr\n[]\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-err-trap:128",
+      "code": "set -E; trap 'echo err' ERR; x=$(false; echo in); echo \"[$x]\"\n",
+      "status": 0,
+      "stdout": "[err\nin]\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-err-trap:136",
+      "code": "trap 'echo err' ERR; [[ 1 = 2 ]]; (( 0 )); echo end\n",
+      "status": 0,
+      "stdout": "err\nerr\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-err-trap:165",
+      "code": "trap 'echo r' RETURN; g(){ :; }; f(){ g; }; f; echo end\n",
+      "status": 0,
+      "stdout": "end\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:trap-scope:5",
+      "code": "trap 'echo err' ERR\n{ false; echo x; }\nfor i in 1; do false; done\ncase a in a) false;; esac\nif true; then false; fi\necho end\n",
+      "status": 0,
+      "stdout": "err\nx\nerr\nerr\nerr\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:trap-scope:22",
+      "code": "trap 'echo err' ERR\n[[ a = b ]]\n((0))\ntrue | false\nfalse | true\n! false\nfalse && true\ntrue && false\necho end\n",
+      "status": 0,
+      "stdout": "err\nerr\nerr\nerr\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:trap-scope:41",
+      "code": "trap 'echo err' ERR\neval false\neval 'false; true'\necho end\n",
+      "status": 0,
+      "stdout": "err\nerr\nerr\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:trap-scope:54",
+      "code": "trap 'echo err' ERR\n{ false; echo x; } | cat\nset -E\n{ false; echo y; } | cat\n",
+      "status": 0,
+      "stdout": "x\nerr\ny\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:trap-scope:66",
+      "code": "trap 'echo err' ERR\n(trap -p ERR; false; echo in)\nx=$(trap -p ERR)\necho \"[$x]\"\n(trap 'echo sub' ERR; false; echo z)\n",
+      "status": 0,
+      "stdout": "trap -- 'echo err' ERR\nin\n[trap -- 'echo err' ERR]\nsub\nz\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:trap-scope:81",
+      "code": "trap 'echo A' ERR\nf() { trap - ERR; return 1; }\nf\ntrap -p ERR\ng() { trap 'echo B' ERR; return 1; }\ng\ntrap -p ERR\n",
+      "status": 0,
+      "stdout": "A\ntrap -- 'echo A' ERR\nB\ntrap -- 'echo B' ERR\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:trap-scope:128",
+      "code": "f() { trap 'echo \"ret $?\"' RETURN; false; }\nf\necho \"status $?\"\n",
+      "status": 0,
+      "stdout": "ret 1\nstatus 1\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-status",
+      "code": "trap 'echo err:$?; false' ERR; false; echo next:$?; (exit 42); echo last:$?",
+      "status": 0,
+      "stdout": "err:1\nnext:1\nerr:42\nlast:42\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-nonrecursive",
+      "code": "trap 'echo one; false; echo two' ERR; false; echo done",
+      "status": 0,
+      "stdout": "one\ntwo\ndone\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-function-inherits",
+      "code": "set -E; trap 'echo err:$?' ERR; f(){ false; }; f; echo end",
+      "status": 0,
+      "stdout": "err:1\nerr:1\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-function-hidden",
+      "code": "trap 'echo parent' ERR; f(){ trap -p ERR; false; echo body; }; f; trap -p ERR",
+      "status": 0,
+      "stdout": "body\ntrap -- 'echo parent' ERR\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-function-restores",
+      "code": "trap 'echo parent' ERR; f(){ trap - ERR; return 3; }; f; trap -p ERR",
+      "status": 0,
+      "stdout": "parent\ntrap -- 'echo parent' ERR\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-function-replaces",
+      "code": "trap 'echo parent' ERR; f(){ trap 'echo new' ERR; return 3; }; f; false",
+      "status": 1,
+      "stdout": "new\nnew\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-new-function-trap",
+      "code": "f(){ trap 'echo inner' ERR; return 3; }; f; false",
+      "status": 1,
+      "stdout": "inner\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-eval-new",
+      "code": "eval \"trap 'echo new' ERR; false\"; echo end",
+      "status": 0,
+      "stdout": "new\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-pipeline",
+      "code": "trap 'echo err:$?' ERR; false | true; true | false; set -o pipefail; false | true; echo end",
+      "status": 0,
+      "stdout": "err:1\nerr:1\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-condition",
+      "code": "trap 'echo err' ERR; if false; then :; fi; while false; do :; done; ! false; false && :; false || :; true && false; echo end",
+      "status": 0,
+      "stdout": "err\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-errexit",
+      "code": "set -e; trap 'echo err:$?' ERR; false; echo BAD",
+      "status": 1,
+      "stdout": "err:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-conditional-function",
+      "code": "set -Ee; trap 'echo BAD' ERR; f(){ false; echo body; }; if f; then echo after; fi",
+      "status": 0,
+      "stdout": "body\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-ignore",
+      "code": "trap '' ERR; false; echo status:$?",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-reset",
+      "code": "trap 'echo BAD' ERR; trap - ERR; false; echo status:$?",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-return-control",
+      "code": "trap 'echo err:$?' ERR; f(){ return 9; }; f; echo status:$?",
+      "status": 0,
+      "stdout": "err:9\nstatus:9\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-handler-return",
+      "code": "f(){ trap 'return 7' ERR; false; echo BAD; }; f; echo status:$?",
+      "status": 0,
+      "stdout": "status:7\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-trace-subshell",
+      "code": "set -E; trap 'echo err:$?' ERR; (false); echo status:$?",
+      "status": 0,
+      "stdout": "err:1\nerr:1\nstatus:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-trace-substitution",
+      "code": "set -E; trap 'echo err:$?' ERR; x=$(false; echo after); echo \"$x\"",
+      "status": 0,
+      "stdout": "err:1\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-disabled-inside-child",
+      "code": "trap 'echo parent' ERR; (set -E; false; echo inside); echo done",
+      "status": 0,
+      "stdout": "inside\ndone\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-trace-mutation",
+      "code": "set -E; trap 'echo err' ERR; (trap : HUP; false); echo end",
+      "status": 0,
+      "stdout": "err\nerr\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-handler-removes",
+      "code": "trap 'echo one; trap - ERR; false' ERR; false; false; echo end",
+      "status": 0,
+      "stdout": "one\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-handler-replaces",
+      "code": "trap 'echo one; trap \"echo two\" ERR; false' ERR; false; false; echo end",
+      "status": 0,
+      "stdout": "one\ntwo\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-nested-function",
+      "code": "trap 'echo once' ERR; f(){ g; }; g(){ false; }; f; echo done",
+      "status": 0,
+      "stdout": "once\ndone\n",
+      "stderr": ""
+    },
+    {
+      "id": "return-function-local",
+      "code": "f(){ local v=local; trap 'echo return:$?:$v:$1' RETURN; false; }; f arg; echo status:$?",
+      "status": 0,
+      "stdout": "return:1:local:arg\nstatus:1\n",
+      "stderr": ""
+    },
+    {
+      "id": "return-explicit",
+      "code": "f(){ trap 'echo return:$?' RETURN; return 4; }; f; echo status:$?",
+      "status": 0,
+      "stdout": "return:0\nstatus:4\n",
+      "stderr": ""
+    },
+    {
+      "id": "return-trace",
+      "code": "set -T; trap 'echo return:$?' RETURN; g(){ false; }; f(){ g; }; f; echo done",
+      "status": 0,
+      "stdout": "return:1\nreturn:1\ndone\n",
+      "stderr": ""
+    },
+    {
+      "id": "return-hidden",
+      "code": "trap 'echo BAD' RETURN; f(){ :; }; f; echo done",
+      "status": 0,
+      "stdout": "done\n",
+      "stderr": ""
+    },
+    {
+      "id": "return-nonrecursive",
+      "code": "f(){ trap 'echo return; false' RETURN; :; }; f; echo status:$?",
+      "status": 0,
+      "stdout": "return\nstatus:0\n",
+      "stderr": ""
+    },
+    {
+      "id": "return-trap-query",
+      "code": "trap 'echo root' RETURN; f(){ trap -p RETURN; :; }; f; trap -p RETURN",
+      "status": 0,
+      "stdout": "trap -- 'echo root' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-pipestatus",
+      "code": "trap 'echo status:$? pipe:${PIPESTATUS[*]}' ERR; true | false; echo after:$?:${PIPESTATUS[*]}",
+      "status": 0,
+      "stdout": "status:1 pipe:0 1\nafter:1:0 1\n",
+      "stderr": ""
+    },
+    {
+      "id": "err-handler-errexit",
+      "code": "set -e; trap 'echo one; false; echo BAD' ERR; false; echo BAD",
+      "status": 1,
+      "stdout": "one\n",
+      "stderr": ""
+    }
+  ]
+}

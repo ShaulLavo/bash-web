@@ -17,10 +17,16 @@ struct Case {
 
 #[test]
 fn pinned_bash_trap_registration() {
-    let fixture: Fixture = serde_json::from_str(include_str!(
-        "../../../scripts/fixtures/shell-trap-registration.json"
-    ))
-    .unwrap();
+    run_fixture(include_str!("../../../scripts/fixtures/shell-trap-registration.json"));
+}
+
+#[test]
+fn pinned_bash_trap_actions() {
+    run_fixture(include_str!("../../../scripts/fixtures/shell-trap-actions.json"));
+}
+
+fn run_fixture(text: &str) {
+    let fixture: Fixture = serde_json::from_str(text).unwrap();
     assert!(fixture.version.starts_with("GNU bash, version 5.3.15("));
     for case in fixture.cases {
         let output = Command::new(env!("CARGO_BIN_EXE_shell-engine"))
