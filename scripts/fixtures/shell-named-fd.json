@@ -1,0 +1,188 @@
+{
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "executableSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+  "env": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "SH": "bash",
+    "LC_ALL": "C"
+  },
+  "cases": [
+    {
+      "id": "bashkit-suite:bashbox-named-fd:13",
+      "script": "exec 10>x 11>y; exec {a}>f {b}>g; echo $a $b\n",
+      "status": 0,
+      "stdout": "MTIgMTMK",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-named-fd:29",
+      "script": "{fd}>f echo x; echo $fd\n",
+      "status": 0,
+      "stdout": "eAoxMAo=",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-named-fd:37",
+      "script": "printf 'a\\nb\\n' > f; exec {fd}<f; read x <&$fd; read y <&$fd; echo $x $y\n",
+      "status": 0,
+      "stdout": "YSBiCg==",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-named-fd:44",
+      "script": "exec {h}<<<'line'; read x <&$h; echo \"$x $h\"; exec {d}<<E\ndoc\nE\nread y <&$d; echo \"$y $d\"\n",
+      "status": 0,
+      "stdout": "bGluZSAxMApkb2MgMTEK",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-named-fd:63",
+      "script": "exec {fd}>&1; echo $fd; echo to-stdout >&$fd; exec {in}<&0; echo $in\n",
+      "status": 0,
+      "stdout": "MTAKdG8tc3Rkb3V0CjExCg==",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-named-fd:72",
+      "script": "exec {fd}>f; echo $fd; exec {fd}>&-; exec {fd}>g; echo $fd\n",
+      "status": 0,
+      "stdout": "MTAKMTAK",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-named-fd:80",
+      "script": "exec {fd}>f; exec {fd}>&-; echo hi >&$fd; echo $?\n",
+      "status": 0,
+      "stdout": "MQo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAkZmQ6IEJhZCBmaWxlIGRlc2NyaXB0b3IK"
+    },
+    {
+      "id": "bashkit-suite:bashbox-named-fd:87",
+      "script": "exec {fd}>&f; echo \"$? [$fd]\"\n",
+      "status": 0,
+      "stdout": "MSBbXQo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBmZDogYW1iaWd1b3VzIHJlZGlyZWN0Cg=="
+    },
+    {
+      "id": "bashkit-suite:bashbox-named-fd:94",
+      "script": "readonly fd=3; exec {fd}>f; echo $?\n",
+      "status": 0,
+      "stdout": "MQo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBmZDogcmVhZG9ubHkgdmFyaWFibGUKL3Vzci9iaW4vYmFzaDogbGluZSAxOiBmZDogY2Fubm90IGFzc2lnbiBmZCB0byB2YXJpYWJsZQo="
+    },
+    {
+      "id": "bashkit-suite:bashbox-named-fd:101",
+      "script": "exec {fd}>/nonexistent/x; echo \"$? [$fd]\"\n",
+      "status": 0,
+      "stdout": "MSBbXQo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAvbm9uZXhpc3RlbnQveDogTm8gc3VjaCBmaWxlIG9yIGRpcmVjdG9yeQo="
+    },
+    {
+      "id": "bashkit-suite:bashbox-named-fd:108",
+      "script": "f(){ local fd; exec {fd}>f; echo $fd; }; f; echo \"[$fd]\"\n",
+      "status": 0,
+      "stdout": "MTAKW10K",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-named-fd:116",
+      "script": "x=(1 2); exec {x[1]}>f; echo ${x[@]}; exec {x[1]}>&-; echo $?\n",
+      "status": 0,
+      "stdout": "MSAxMAowCg==",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-named-fd:139",
+      "script": "f(){ echo a {fd}>f; cat {x}<f 2>&1; read {y}<<<w; exec {z}>&-; echo {q}>&2; echo {r}>&$x; cat {h}<<E\nx\nE\n}; declare -f f\n",
+      "status": 0,
+      "stdout": "ZiAoKSAKeyAKICAgIGVjaG8gYSB7ZmR9PiBmOwogICAgY2F0IHt4fTwgZiAyPiYxOwogICAgcmVhZCB7eX08PDwgdzsKICAgIGV4ZWMge3p9PiYtOwogICAgZWNobyB7cX0+JjI7CiAgICBlY2hvIHtyfT4mJHg7CiAgICBjYXQge2h9PDxFCngKRQoKfQo=",
+      "stderr": ""
+    },
+    {
+      "id": "ordinary-command-persists",
+      "script": "{fd}>f echo hi; printf file >&$fd; cat f; echo $fd",
+      "status": 0,
+      "stdout": "aGkKZmlsZTEwCg==",
+      "stderr": ""
+    },
+    {
+      "id": "redirect-only-persists",
+      "script": "{fd}>f; printf file >&$fd; cat f; echo $fd",
+      "status": 0,
+      "stdout": "Cg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAkZmQ6IGFtYmlndW91cyByZWRpcmVjdAo="
+    },
+    {
+      "id": "compound-persists",
+      "script": "{ echo hi; } {fd}>f; printf file >&$fd; cat f; echo $fd",
+      "status": 0,
+      "stdout": "aGkKZmlsZTEwCg==",
+      "stderr": ""
+    },
+    {
+      "id": "failed-later-redirect-keeps-allocation",
+      "script": "echo hi {fd}>f </nonexistent; printf file >&$fd; cat f; echo $fd",
+      "status": 0,
+      "stdout": "ZmlsZTEwCg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAvbm9uZXhpc3RlbnQ6IE5vIHN1Y2ggZmlsZSBvciBkaXJlY3RvcnkK"
+    },
+    {
+      "id": "sequential-redirect-target",
+      "script": "exec {fd}>f 3>&$fd; printf one >&3; printf two >&$fd; cat f",
+      "status": 0,
+      "stdout": "b25ldHdv",
+      "stderr": ""
+    },
+    {
+      "id": "reassign-leaves-old-open",
+      "script": "exec {fd}>f; old=$fd; exec {fd}>g; printf old >&$old; printf new >&$fd; cat f g; echo $old:$fd",
+      "status": 0,
+      "stdout": "b2xkbmV3MTA6MTEK",
+      "stderr": ""
+    },
+    {
+      "id": "pipeline-isolates-descriptors",
+      "script": "echo hi | {fd}>f; echo ${fd-unset}; exec {new}>g; echo $new",
+      "status": 0,
+      "stdout": "dW5zZXQKMTAK",
+      "stderr": ""
+    },
+    {
+      "id": "function-local-keeps-descriptor",
+      "script": "f(){ local fd; {fd}>f; echo $fd; }; f; printf kept >&10; cat f; echo ${fd-unset}",
+      "status": 0,
+      "stdout": "CnVuc2V0Cg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAxMDogQmFkIGZpbGUgZGVzY3JpcHRvcgo="
+    },
+    {
+      "id": "named-close-retains-variable",
+      "script": "exec {fd}>f; exec {fd}>&-; echo $fd; {next}>g; echo $next",
+      "status": 0,
+      "stdout": "MTAKCg==",
+      "stderr": ""
+    },
+    {
+      "id": "subshell-isolates-bindings",
+      "script": "exec {fd}>f; (exec {x}>g; echo $x); exec {x}>h; echo $fd:$x",
+      "status": 0,
+      "stdout": "MTEKMTA6MTEK",
+      "stderr": ""
+    },
+    {
+      "id": "readonly-open-still-creates-file",
+      "script": "readonly fd=3; exec {fd}>f; echo status=$?; test -f f && echo created; exec {ok}>g; echo $ok",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEKY3JlYXRlZAoxMAo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBmZDogcmVhZG9ubHkgdmFyaWFibGUKL3Vzci9iaW4vYmFzaDogbGluZSAxOiBmZDogY2Fubm90IGFzc2lnbiBmZCB0byB2YXJpYWJsZQo="
+    },
+    {
+      "id": "named-dup-word-status",
+      "script": "{fd}>&out echo nope; echo \"$? [${fd-}]\"; test -e out && echo created",
+      "status": 1,
+      "stdout": "MSBbXQo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBmZDogYW1iaWd1b3VzIHJlZGlyZWN0Cg=="
+    }
+  ]
+}
