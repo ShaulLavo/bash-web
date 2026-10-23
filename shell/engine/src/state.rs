@@ -144,6 +144,8 @@ pub struct State {
     pub inherit_errexit: bool,
     /// Enable extended glob groups in option-sensitive pattern contexts.
     pub extglob: bool,
+    /// Expand variables and substitutions after decoding prompt escapes.
+    pub promptvars: bool,
     /// Remove unmatched unquoted pathname patterns instead of keeping them.
     pub nullglob: bool,
     /// `set -f`: no pathname expansion of unquoted fields.
@@ -189,6 +191,7 @@ impl Default for State {
             errexit: false,
             inherit_errexit: false,
             extglob: false,
+            promptvars: true,
             nullglob: false,
             noglob: false,
             lastpipe: false,
@@ -382,6 +385,7 @@ impl State {
             errexit: state.errexit,
             inherit_errexit: state.inherit_errexit,
             extglob: state.extglob,
+            promptvars: state.promptvars,
             nullglob: state.nullglob,
             noglob: state.noglob,
             lastpipe: state.lastpipe,

@@ -69,6 +69,8 @@ enum Context {
     Operand,
     /// Quote removal cannot join an arithmetic expansion's dollar to an opener.
     Arithmetic,
+    /// Prompt quote characters are data, not shell quote delimiters.
+    Prompt,
 }
 
 pub(super) struct Scanner<'a> {
@@ -99,6 +101,13 @@ impl<'a> Scanner<'a> {
             pattern_source,
             case_positionals: false,
             context: Context::Operand,
+        }
+    }
+    pub(super) fn prompt(source: &'a str) -> Self {
+        Self {
+            context: Context::Prompt,
+            case_positionals: true,
+            ..Self::new(source, true, true, false)
         }
     }
     pub(super) fn arithmetic(source: &'a str) -> Self {
@@ -150,7 +159,7 @@ impl<'a> Scanner<'a> {
         if ch == '\\' && self.quote != Quote::Single {
             return self.escape(value).map(Some);
         }
-        if ch == '"' && self.quote != Quote::Single {
+        if ch == '"' && self.quote != Quote::Single && self.context != Context::Prompt {
             self.quote = if self.quote == Quote::Double {
                 Quote::None
             } else {
@@ -166,7 +175,11 @@ impl<'a> Scanner<'a> {
             };
             return Ok(Some(self.text("", true)));
         }
-        if ch == '\'' && self.quote == Quote::None && self.outer_quoted {
+        if ch == '\''
+            && self.quote == Quote::None
+            && self.outer_quoted
+            && self.context != Context::Prompt
+        {
             self.literal_single = !self.literal_single;
         }
         if self.quote == Quote::Single {
@@ -200,7 +213,13 @@ impl<'a> Scanner<'a> {
         Ok(Some(self.text(value, protected)))
     }
     fn escape(&mut self, slash: &'a str) -> Result<Piece<'a>, Error> {
-        let next = self.peek().ok_or(2)?;
+        let Some(next) = self.peek() else {
+            return if self.context == Context::Prompt {
+                Ok(self.text(slash, true))
+            } else {
+                Err(2.into())
+            };
+        };
         let double = self.outer_quoted || self.quote == Quote::Double;
         if double
             && !matches!(next, '$' | '`' | '"' | '\\' | '\n')
@@ -272,6 +291,9 @@ impl<'a> Scanner<'a> {
             }
             Some('!') => {
                 self.take();
+            }
+            Some('\'' | '"') if self.context == Context::Prompt => {
+                return Ok(self.text("$", true));
             }
             Some('\'' | '"' | '@' | '*' | '$' | '-') => return Err(2.into()),
             _ => return Ok(self.text("$", self.protected())),
@@ -574,6 +596,9 @@ fn validate_token(token: &str, work: &mut Work) -> Result<(), Error> {
     };
     let name = &body[..name_end];
     let suffix = &body[name_end..];
+    if !indirect && basic_name(name) && suffix.starts_with('@') && suffix.len() == 2 {
+        return Ok(());
+    }
     let operator = suffix.strip_prefix(':').unwrap_or(suffix);
     let trim = suffix.starts_with(['#', '%', '/', '^', ',']);
     let substring =
@@ -589,7 +614,7 @@ fn supported(part: &WordPart) -> bool {
     match part {
         WordPart::ArithmeticExpansion(_) | WordPart::BadSubstitution(_) => true,
         WordPart::Substring { name, .. } => length_name(name) || name == "@",
-        WordPart::Variable(name) => basic_name(name),
+        WordPart::Variable(name) | WordPart::Transformation { name, .. } => basic_name(name),
         WordPart::Length(name) => length_operand_name(name),
         WordPart::IndirectExpansion { name, operator, .. } => {
             name.is_empty() && operator.is_none()

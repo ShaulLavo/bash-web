@@ -342,11 +342,18 @@ fn error_status(error: Error) -> i32 {
     }
 }
 
-const SHOPT_OPTIONS: [&str; 4] = ["extglob", "inherit_errexit", "lastpipe", "nullglob"];
+const SHOPT_OPTIONS: [&str; 5] = [
+    "extglob",
+    "inherit_errexit",
+    "lastpipe",
+    "nullglob",
+    "promptvars",
+];
 
 fn shopt_value(state: &State, option: &str) -> Option<bool> {
     match option {
         "extglob" => Some(state.extglob),
+        "promptvars" => Some(state.promptvars),
         "inherit_errexit" => Some(state.inherit_errexit),
         "nullglob" => Some(state.nullglob),
         "lastpipe" => Some(state.lastpipe),
@@ -411,7 +418,7 @@ async fn shopt(
     let options = if operands.is_empty() {
         SHOPT_OPTIONS.map(Some)
     } else {
-        [None; 4]
+        [None; 5]
     };
     let mut status = 0;
     // A fixed iterator over known names avoids allocating or copying argv.
@@ -441,6 +448,7 @@ async fn shopt(
             let mut state = state.borrow_mut();
             match option {
                 "extglob" => state.extglob = set,
+                "promptvars" => state.promptvars = set,
                 "inherit_errexit" => state.inherit_errexit = set,
                 "nullglob" => state.nullglob = set,
                 "lastpipe" => state.lastpipe = set,

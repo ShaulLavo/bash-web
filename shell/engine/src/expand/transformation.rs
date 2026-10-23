@@ -1,6 +1,6 @@
 //! Original scalar parameter transformations, `${name@op}` for Q, E, u, U,
 //! L, K, k, A and a. GNU Bash 5.3 is the behavior oracle; no upstream code is
-//! copied. Arrays, prompt expansion (@P) and indirect names stay unsupported.
+//! copied. Arrays and indirect names stay unsupported. Prompt decoding lives in prompt.rs.
 use super::{
     Error, Expansion, Printability, Protection, TransformContext, admit_string_growth,
     admit_vec_slot, bounded, case::Locale, operand, utf8_locale,
@@ -36,7 +36,9 @@ impl Expansion<'_> {
         context: TransformContext<'_>,
     ) -> Result<(), Error> {
         let TransformContext {
-            state, protected, ..
+            state,
+            protected,
+            depth,
         } = context;
         if !transformable(name) {
             return Err(2.into());
@@ -44,7 +46,12 @@ impl Expansion<'_> {
         // Bash reports an unbound name before it judges the operator.
         self.require_bound(name, state).await?;
         let subject = self.subject(name, state)?;
-        let result = self.transform(&subject, operator, state).await?;
+        let result = if operator == 'P' {
+            self.prompt(subject.value.as_deref().unwrap_or(""), state, depth)
+                .await?
+        } else {
+            self.transform(&subject, operator, state).await?
+        };
         self.admit_pattern_snapshot(&result).await?;
         self.segment(&result, Protection::expansion(protected, state), protected)
             .await

@@ -1799,7 +1799,7 @@
       "docs/parameter-transformation.md"
     ],
     "implementation": "${name@op} for Q, E, u, U, L, K, k, A and a on scalar, nameref, special and positional names. Reusable quoting picks '', single quotes or ANSI-C quoting by locale printability; @E decodes $'...' escapes, stops at NUL and rejects results that are not UTF-8. Case operators reuse the existing locale mapper. @A and @a report readonly and export attributes from existing state; @A spells current-function locals with declare through a read-only state accessor. Nounset is checked before the operator. The locale printability classifier moved unchanged from printf quoting into expand so both share it.",
-    "deferred": "Arrays (PIPESTATUS and namerefs to subscripts fail closed), locale variables that are namerefs (fail closed), ${@@op}, ${*@op}, ${#@op} (rejected as a bad substitution with status 1 when the expansion is reached), indirect ${!name@op}, prompt expansion @P, transformations nested inside other operands, attributes the state does not store (integer, case, array), and non-UTF-8 \\u escapes.",
+    "deferred": "Arrays (PIPESTATUS and namerefs to subscripts fail closed), locale variables that are namerefs (fail closed), ${@@op}, ${*@op}, ${#@op} (rejected as a bad substitution with status 1 when the expansion is reached), indirect ${!name@op}, attributes the state does not store (integer, case, array), and non-UTF-8 \\u escapes.",
     "gate": "Failing-first native Rust controls, full native suite and clippy, and one frozen 9,221-record production-Waffle replay with 18 gains and zero losses; only gained baseline memberships and derived counts change."
   },
   "shellFileSubstitution": {
@@ -2067,5 +2067,23 @@
       "PIPE trap/disposition behavior",
       "Existing closed-descriptor diagnostic and Bash diagnostic line-prefix mismatches retained as strict pending reproductions"
     ]
+  },
+  "shellPromptTransformation": {
+    "classification": "Original prompt decoder and scanner context; GNU Bash 5.3.15 is a behavior oracle. No upstream implementation copied or adapted.",
+    "baseRevision": "e6430b1554de7d2efad092f40751858292cb071d",
+    "paths": [
+      "shell/engine/src/expand/prompt.rs",
+      "shell/engine/src/expand/operand.rs",
+      "shell/engine/src/expand/transformation.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/tests/words/transformation.rs",
+      "scripts/test-own-shell-prompt.ts",
+      "scripts/fixtures/shell-prompt.json",
+      "docs/parameter-transformation.md"
+    ],
+    "implementation": "Decode scalar @P escapes into admitted UTF-8 bytes, then expand through the existing bounded substitution scanner with literal prompt quotes. State owns promptvars and inherits it into subshells. Cwd, HOME and PROMPT_DIRTRIM determine directory escapes; available USER, HOSTNAME and EUID bindings supply identity escapes without synthesized facts. Protect fact text before substitution scanning. Existing outer field rules apply to the final result. Nested scalar transformations use the operand scanner.",
+    "deferred": "Time/date formatting, history and command numbers, terminal and job facts, version escapes, missing identity bindings, invalid UTF-8, arrays and indirect transformation names. No live runtime identity or clock contract is added.",
+    "gate": "Pinned Bash 5.3.15 recordings through production Waffle, native recursion/output/cancellation/missing-fact controls, and the unchanged hosted frozen 9221-case replay."
   }
 }

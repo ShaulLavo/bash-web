@@ -22,6 +22,7 @@ mod operand;
 pub(crate) mod pattern;
 mod positional;
 mod printable;
+mod prompt;
 mod replacement;
 mod tilde;
 mod transformation;
