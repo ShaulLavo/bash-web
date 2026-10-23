@@ -24,6 +24,13 @@ impl Count {
         }
     }
 
+    fn with_maximum(self, count: usize) -> Self {
+        if self.exact() {
+            return Self::Exactly(count);
+        }
+        Self::AtMost(count)
+    }
+
     fn exact(self) -> bool {
         matches!(self, Self::Exactly(_))
     }
@@ -105,7 +112,11 @@ async fn option_value<'a>(
     work: &mut Work,
 ) -> Result<(), i32> {
     match flag {
-        b'n' => options.count = Count::AtMost(count(value, context, work).await?),
+        b'n' => {
+            options.count = options
+                .count
+                .with_maximum(count(value, context, work).await?)
+        }
         b'N' => options.count = Count::Exactly(count(value, context, work).await?),
         b'd' => options.delimiter = Some(value.bytes().next().unwrap_or(0)),
         b'p' => options.prompt = Some(value),
@@ -243,10 +254,10 @@ async fn assign(
     for (index, name) in options.names.iter().enumerate() {
         validate_name(name, fds, context, work).await?;
         let last = index + 1 == options.names.len();
-        let value = if options.count.exact() {
-            (index == 0).then_some(text).unwrap_or("")
-        } else {
-            fields.value(last, context, work).await?
+        let value = match (options.count.exact(), index) {
+            (true, 0) => text,
+            (true, _) => "",
+            (false, _) => fields.value(last, context, work).await?,
         };
         assign_value(name, value, state, context, work)
             .await

@@ -1,19 +1,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
 import { after, test } from "node:test";
 import { recordedBash, runRecordingBash } from "./recorded-bash.ts";
-import { createWaffleRunner } from "./waffle-compat.ts";
+import { releaseShellRunner } from "./release-shell-runner.ts";
 
 const env = { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" };
-const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
-const runner = await createWaffleRunner({
-  modulePath: resolve(directory, "shell-runtime.wasm"),
-  fixtureDirectory: directory,
-  utilityDirectory: directory,
-  tmp: "/tmp/spec",
-  env,
-});
+const runner = await releaseShellRunner(env);
 const cases = ["", "-r", "-n0", "-n3", "-N0", "-N3", "-n3 -N5", "-N5 -n3"]
   .flatMap((options) =>
     ["", "-d :", "-d ''"].map(

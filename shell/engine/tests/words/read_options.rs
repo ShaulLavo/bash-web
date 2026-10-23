@@ -20,6 +20,10 @@ fn exact_reads_disable_ifs_splitting_but_keep_escape_processing() {
         "0:[a b c][]\n",
     );
     check_output(
+        r#"read -N5 -n3 a b <<<'  abc'; printf '%s:[%s][%s]\n' "$?" "$a" "$b""#,
+        "0:[  a][]\n",
+    );
+    check_output(
         "read -N4 a b <<'END'\na b\nc\nEND\nprintf '%s:[%s][%s]\\n' \"$?\" \"$a\" \"$b\"",
         "0:[a b\n][]\n",
     );
