@@ -1150,6 +1150,76 @@
       "status": 0,
       "stdoutBase64": "PD4KMAo=",
       "stderrBase64": ""
+    },
+    {
+      "id": "side-effect-offset",
+      "script": "a[3]=x; a[5]=y; printf \"<%s>\" \"${a[@]:(a=7,0)}\"; echo",
+      "status": 0,
+      "stdoutBase64": "PDc+PHg+PHk+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "side-effect-length",
+      "script": "a[3]=x; a[5]=y; printf \"<%s>\" \"${a[@]:0:(a=7,3)}\"; echo",
+      "status": 0,
+      "stdoutBase64": "PDc+PHg+PHk+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "side-effect-star",
+      "script": "a[3]=x; a[5]=y; printf \"<%s>\" \"${a[*]:(a=7,0)}\"; echo",
+      "status": 0,
+      "stdoutBase64": "PDcgeCB5Pgo=",
+      "stderrBase64": ""
+    },
+    {
+      "id": "side-effect-negative-offset",
+      "script": "a[5]=five; printf \"<%s>\" \"${a[@]:(a=1,-6):3}\"; echo",
+      "status": 0,
+      "stdoutBase64": "PDE+PGZpdmU+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "scalar-at-past-end",
+      "script": "s=abc; set -- \"${s[@]:5}\"; echo $#",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "id": "scalar-at-before-start",
+      "script": "s=abc; set -- \"${s[@]: -9}\"; echo $#",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "id": "scalar-at-past-end-prefixed",
+      "script": "s=abc; set -- \"x${s[@]:5}\"; echo $#",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "id": "scalar-at-past-end-unquoted",
+      "script": "s=abc; set -- ${s[@]:5}; echo $#",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "id": "scalar-star-past-end",
+      "script": "s=abc; set -- \"${s[*]:5}\"; echo $#",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "id": "scalar-at-end",
+      "script": "s=abc; set -- \"${s[@]:3}\"; echo $#",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
     }
   ]
 }

@@ -91,3 +91,30 @@ fn array_slicing_negative_offsets_reject_an_overflowed_exclusive_upper_bound() {
         &[&[], &["last"]],
     );
 }
+
+#[test]
+fn array_slicing_bound_side_effects_select_from_the_live_array() {
+    let cases: [(&str, &[&[&str]]); 4] = [
+        (
+            "a[3]=x; a[5]=y; args \"${a[@]:(a=7,0)}\"",
+            &[&["7", "x", "y"]],
+        ),
+        (
+            "a[3]=x; a[5]=y; args \"${a[@]:0:(a=7,3)}\"",
+            &[&["7", "x", "y"]],
+        ),
+        ("a[3]=x; a[5]=y; args \"${a[*]:(a=7,0)}\"", &[&["7 x y"]]),
+        ("a[5]=five; args \"${a[@]:(a=1,-6):3}\"", &[&["1", "five"]]),
+    ];
+    for (source, expected) in cases {
+        check(source, expected);
+    }
+}
+
+#[test]
+fn array_slicing_quoted_at_scalar_out_of_range_yields_no_word() {
+    check(
+        "s=abc; args \"${s[@]:5}\"; args \"${s[@]: -9}\"; args \"x${s[@]:5}\"; args \"${s[*]:5}\"; args \"${s[@]:3}\"",
+        &[&[], &[], &["x"], &[""], &[""]],
+    );
+}
