@@ -1,4 +1,4 @@
-use super::{Binding, State};
+use super::{Binding, LocalOrigin, State};
 
 #[derive(Clone, Copy)]
 pub(crate) struct DeclarationView<'a> {
@@ -13,23 +13,21 @@ impl State {
         if !local {
             return self.scalar_parameter(name);
         }
-        let current = self
-            .locals
-            .last()
-            .is_some_and(|scope| scope.contains_key(name));
-        let prefix = self
-            .locals
-            .iter()
-            .rev()
-            .find_map(|scope| scope.get(name))
-            .is_some_and(|binding| binding.function_prefix);
-        if !current && !prefix {
+        if !self.is_current_local(name) && !self.inherits_function_prefix(name) {
             return None;
         }
         self.variables
             .get(name)
             .and_then(Binding::scalar)
             .map(String::as_str)
+    }
+
+    pub(super) fn inherits_function_prefix(&self, name: &str) -> bool {
+        self.locals
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name))
+            .is_some_and(|binding| binding.origin != LocalOrigin::Declaration)
     }
 
     /// Inspect the named declaration, not the value reached through a nameref.

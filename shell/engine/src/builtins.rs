@@ -759,6 +759,11 @@ async fn declarations(
         }
         let local = name == "local"
             || matches!(name, "declare" | "typeset") && state.borrow().in_function_scope();
+        let key = if append && local && !nameref && state.borrow().is_current_local(&key) {
+            declarations::local_append_target(key, state, context, work).await?
+        } else {
+            key
+        };
         if extended || local {
             let storage = state
                 .borrow()
@@ -788,7 +793,7 @@ async fn declarations(
             value
         };
         if let Some(value) = &value
-            && !local
+            && (!local || append && state.borrow().is_current_local(&key))
         {
             State::admit_assignment(state, &key, value.len(), &context.cancel, work)
                 .await
@@ -801,7 +806,7 @@ async fn declarations(
         } else {
             key
         };
-        let result = apply_declaration(name, &key, value, &mut state.borrow_mut());
+        let result = apply_declaration(name, &key, value, append, &mut state.borrow_mut());
         if result == Err(crate::exec::RESOURCE_STATUS) {
             return result.map(|()| Outcome::status(0));
         }
@@ -874,6 +879,7 @@ fn apply_declaration(
     name: &str,
     key: &str,
     value: Option<String>,
+    append: bool,
     state: &mut crate::state::State,
 ) -> Result<(), i32> {
     if name == "readonly" {
@@ -882,10 +888,9 @@ fn apply_declaration(
     if name == "export" {
         return state.export(key.to_owned(), value);
     }
-    if name == "local" {
-        return state.declare_local(key.to_owned(), value);
-    }
-    if matches!(name, "declare" | "typeset") && state.in_function_scope() {
+    let local =
+        name == "local" || matches!(name, "declare" | "typeset") && state.in_function_scope();
+    if local && (!append || !state.is_current_local(key)) {
         return state.declare_local(key.to_owned(), value);
     }
     if let Some(value) = value {

@@ -133,3 +133,36 @@ fn declaration_append_scanning_yields_and_cancels_before_mutation() {
     assert_eq!(rig.value("v"), Some("a".repeat(12000)));
     assert!(rig.output.bytes().is_empty());
 }
+
+#[test]
+fn local_declaration_append_limit_restores_target_and_reference() {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 256,
+        ..Limits::default()
+    });
+    rig.variable("v", &"a".repeat(256));
+    assert_eq!(rig.run("t=outer; declare -n r=t"), 0);
+    assert_eq!(
+        rig.run("f(){ local t=$v; local -n r=t; local r+=x; }; f"),
+        2
+    );
+    assert_eq!(rig.value("t"), Some("outer".into()));
+    assert_eq!(rig.run("declare -p r"), 0);
+    assert_eq!(rig.output.bytes(), b"declare -n r=\"t\"\n");
+}
+
+#[test]
+fn local_declaration_append_cancellation_restores_array_and_reference() {
+    let rig = Rig::new(Limits::default());
+    rig.variable("v", &"a".repeat(12000));
+    assert_eq!(rig.run("a=(outer keep); declare -n r=a"), 0);
+    let job = rig
+        .shell
+        .start("f(){ local a; a=(\"$v\" keep); local -n r=a; ready=yes; local r+=x; }; f")
+        .unwrap();
+    rig.drive_until_variable("ready", "yes");
+    rig.interrupt_after_counting_yields(job);
+    assert!(rig.output.bytes().is_empty());
+    assert_eq!(rig.run("declare -p r; printf '<%s>\\n' \"${a[@]}\""), 0);
+    assert_eq!(rig.output.bytes(), b"declare -n r=\"a\"\n<outer>\n<keep>\n");
+}

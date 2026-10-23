@@ -1,7 +1,29 @@
 use super::{
     Context, FdTable, Outcome, SharedState, State, Work, diagnose, error_status, scan_bytes, write,
 };
-use crate::{expand::Printability, state::DeclarationView};
+use crate::{
+    expand::Printability,
+    state::{DeclarationView, ScalarResolution},
+};
+
+pub(super) async fn local_append_target(
+    name: String,
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Result<String, i32> {
+    State::admit_scalar_access(state, &name, &context.cancel, work)
+        .await
+        .map_err(error_status)?;
+    let state = state.borrow();
+    let ScalarResolution::Target(target) = state.resolve_scalar_target(&name) else {
+        return Err(1);
+    };
+    if target != name {
+        work.admit_storage(target.len()).map_err(error_status)?;
+    }
+    state.assignment_name(name)
+}
 
 pub(super) async fn append_scalar(
     name: &str,
