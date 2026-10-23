@@ -5,7 +5,7 @@ use crate::{expand::Printability, state::DeclarationView};
 
 struct DeclarationSnapshot {
     value: Option<String>,
-    attributes: [bool; 5],
+    attributes: [bool; 6],
 }
 
 pub(super) async fn print(
@@ -71,6 +71,7 @@ async fn snapshot(
         readonly,
         exported,
         case,
+        integer,
     }) = state.declaration(name).map_err(|()| 2)?
     else {
         return Ok(None);
@@ -80,6 +81,7 @@ async fn snapshot(
     Ok(Some(DeclarationSnapshot {
         value: value.map(str::to_owned),
         attributes: [
+            integer,
             nameref,
             readonly,
             exported,
@@ -109,7 +111,7 @@ async fn missing(
 async fn render(
     name: &str,
     value: Option<&str>,
-    attributes: [bool; 5],
+    attributes: [bool; 6],
     utf8: bool,
     printability: &Printability,
     context: &Context,
@@ -123,7 +125,7 @@ async fn render(
     work.admit_storage(name.len().saturating_add(16))
         .map_err(error_status)?;
     let mut line = String::from("declare -");
-    for (set, flag) in attributes.into_iter().zip(['n', 'r', 'x', 'l', 'u']) {
+    for (set, flag) in attributes.into_iter().zip(['i', 'n', 'r', 'x', 'l', 'u']) {
         if set {
             line.push(flag);
         }

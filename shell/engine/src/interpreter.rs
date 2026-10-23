@@ -26,6 +26,7 @@ pub(crate) mod eval;
 mod file_substitution;
 mod function_names;
 mod indexed;
+pub(crate) mod integer;
 mod select;
 #[cfg(test)]
 mod trap_tests;
@@ -3486,6 +3487,11 @@ async fn assignments_body(
             work,
         )
         .await?;
+        let value = if commit {
+            integer::coerce(&assignment.name, value, state, context, work).await?
+        } else {
+            value
+        };
         *bytes = bytes
             .saturating_add(assignment.name.len())
             .saturating_add(1)
@@ -4088,6 +4094,55 @@ mod scope_tests {
         );
         assert_eq!(state.borrow().bindings()["n"], "7");
         drop(context.evaluation.admit_execution(limit).unwrap());
+    }
+
+    #[test]
+    fn scalar_integer_coercion_checks_work_storage_and_cancellation() {
+        let (state, _fds, context) = replay_context();
+        let mut declaration = expand::Work::new(100_000, 100_000, 0);
+        state
+            .borrow_mut()
+            .declare_integer("x", true, &mut declaration)
+            .unwrap();
+        for (steps, bytes, code) in [(0, 100_000, 2), (100_000, 0, 2)] {
+            let mut work = expand::Work::new(steps, bytes, 0);
+            let result =
+                integer::coerce("x", "2*3+4".into(), &state, &context, &mut work).now_or_never();
+            assert!(matches!(result, Some(Err(expand::Error::Status(actual))) if actual == code));
+            assert!(!state.borrow().bindings().contains_key("x"));
+        }
+        let mut work = expand::Work::new(1_000_000, 1_000_000, 0);
+        let mut evaluation = Box::pin(integer::coerce(
+            "x",
+            "0+".repeat(4096) + "0",
+            &state,
+            &context,
+            &mut work,
+        ));
+        assert!(evaluation.as_mut().now_or_never().is_none());
+        context.cancel.cancel();
+        assert!(matches!(
+            evaluation.as_mut().now_or_never(),
+            Some(Err(expand::Error::Status(130)))
+        ));
+        drop(evaluation);
+        assert!(!state.borrow().bindings().contains_key("x"));
+    }
+
+    #[test]
+    fn noninteger_scalar_coercion_keeps_owned_value_without_work_or_storage() {
+        let (state, _fds, context) = replay_context();
+        let value = "2*3+4".to_owned();
+        let pointer = value.as_ptr();
+        let mut work = expand::Work::new(0, 0, 0);
+        let result = integer::coerce("x", value, &state, &context, &mut work)
+            .now_or_never()
+            .unwrap()
+            .unwrap_or_else(|_| panic!("plain scalar requires no work"));
+        assert_eq!(result, "2*3+4");
+        assert_eq!(result.as_ptr(), pointer);
+        assert_eq!(work.storage_left(), 0);
+        assert_eq!(work.remaining, 0);
     }
 
     #[test]

@@ -7,6 +7,7 @@ pub(crate) struct DeclarationView<'a> {
     pub(crate) readonly: bool,
     pub(crate) exported: bool,
     pub(crate) case: super::CaseMapping,
+    pub(crate) integer: bool,
 }
 
 impl State {
@@ -26,6 +27,7 @@ impl State {
             && !readonly
             && !exported
             && !self.case_attributes.contains_key(name)
+            && !self.integers.contains(name)
         {
             return Ok(None);
         }
@@ -35,6 +37,7 @@ impl State {
             readonly,
             exported,
             case: self.case_mapping(name),
+            integer: self.integers.contains(name),
         }))
     }
 }
