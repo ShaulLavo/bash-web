@@ -111,9 +111,12 @@ fn terminal_cases() -> Vec<TerminalCase> {
     fixture.cases
 }
 
-struct FailedPrompt(IoError);
+enum PromptOutput {
+    Failure(IoError),
+    Pending(Rc<std::cell::Cell<bool>>),
+}
 
-impl HostEndpoint for FailedPrompt {
+impl HostEndpoint for PromptOutput {
     fn read<'a>(
         &'a self,
         _output: &'a mut [u8],
@@ -125,7 +128,13 @@ impl HostEndpoint for FailedPrompt {
         &'a self,
         _input: &'a [u8],
     ) -> futures::future::LocalBoxFuture<'a, Result<usize, IoError>> {
-        async { Err(self.0.clone()) }.boxed_local()
+        match self {
+            Self::Failure(error) => futures::future::ready(Err(error.clone())).boxed_local(),
+            Self::Pending(started) => {
+                started.set(true);
+                futures::future::pending().boxed_local()
+            }
+        }
     }
 }
 
@@ -143,8 +152,12 @@ fn check_terminal_case(case: &TerminalCase) {
         "capture" => Some(stderr),
         "closed" => None,
         "readonly" => Some(Endpoint::bytes(Vec::new())),
-        "full" => Some(Endpoint::host(Rc::new(FailedPrompt(IoError::Runtime(28))))),
-        "broken" => Some(Endpoint::host(Rc::new(FailedPrompt(IoError::BrokenPipe)))),
+        "full" => Some(Endpoint::host(Rc::new(PromptOutput::Failure(
+            IoError::Runtime(28),
+        )))),
+        "broken" => Some(Endpoint::host(Rc::new(PromptOutput::Failure(
+            IoError::BrokenPipe,
+        )))),
         _ => panic!("unknown stderr mode"),
     };
     if let Some(stderr) = stderr {
@@ -210,25 +223,6 @@ fn zero_terminal_reads_keep_validation_and_input_offsets() {
     }
 }
 
-struct PendingPrompt(Rc<std::cell::Cell<bool>>);
-
-impl HostEndpoint for PendingPrompt {
-    fn read<'a>(
-        &'a self,
-        _output: &'a mut [u8],
-    ) -> futures::future::LocalBoxFuture<'a, Result<usize, IoError>> {
-        async { Err(IoError::Unsupported) }.boxed_local()
-    }
-
-    fn write<'a>(
-        &'a self,
-        _input: &'a [u8],
-    ) -> futures::future::LocalBoxFuture<'a, Result<usize, IoError>> {
-        self.0.set(true);
-        futures::future::pending().boxed_local()
-    }
-}
-
 #[test]
 fn cancelling_a_pending_terminal_prompt_does_not_read_or_assign() {
     let rig = Rig::new(Limits::default());
@@ -237,7 +231,10 @@ fn cancelling_a_pending_terminal_prompt_does_not_read_or_assign() {
     let input = Endpoint::bytes(b"hello\n".to_vec());
     let mut fds = FdTable::default();
     fds.insert(0, Endpoint::host(Rc::new(TerminalInput(input.clone()))));
-    fds.insert(2, Endpoint::host(Rc::new(PendingPrompt(pending.clone()))));
+    fds.insert(
+        2,
+        Endpoint::host(Rc::new(PromptOutput::Pending(pending.clone()))),
+    );
     rig.shell.set_descriptors(fds).unwrap();
     let job = rig.shell.start("read -p 'Enter: ' value").unwrap();
     rig.ex.drive(128);
