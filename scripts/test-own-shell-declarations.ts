@@ -12,9 +12,11 @@ type Fixture = {
   environment: Record<string, string>;
   cases: Observation[];
 };
-const fixtures: Fixture[] = ["shell-declare-print.json", "shell-declaration-append.json"].map(
-  (file) => JSON.parse(readFileSync(new URL(`fixtures/${file}`, import.meta.url), "utf8")),
-);
+const fixtures: Fixture[] = [
+  "shell-declare-print.json",
+  "shell-declaration-append.json",
+  "shell-declaration-append-scope.json",
+].map((file) => JSON.parse(readFileSync(new URL(`fixtures/${file}`, import.meta.url), "utf8")));
 const fixture = fixtures[0];
 for (const recording of fixtures) {
   assert.equal(recording.schema, 1);

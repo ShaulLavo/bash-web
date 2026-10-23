@@ -1,0 +1,154 @@
+{
+  "schema": 1,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "environment": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "PWD": "/tmp/spec",
+    "SH": "bash",
+    "LC_ALL": "C.UTF-8"
+  },
+  "cases": [
+    {
+      "name": "scope append array current local",
+      "code": "f(){ local a; a=(one two); local a+=tail; printf \"<%s>\\n\" \"${a[@]}\"; }; f",
+      "status": 0,
+      "stdout": "PG9uZXRhaWw+Cjx0d28+Cg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope append array current declare",
+      "code": "f(){ local a; a=(one two); declare a+=tail; printf \"<%s>\\n\" \"${a[@]}\"; }; f",
+      "status": 0,
+      "stdout": "PG9uZXRhaWw+Cjx0d28+Cg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope append array missing zero",
+      "code": "f(){ local a; a[2]=two; local a+=tail; printf \"<%s>\\n\" \"${a[@]}\"; }; f",
+      "status": 0,
+      "stdout": "PHRhaWw+Cjx0d28+Cg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope append array shadow control",
+      "code": "a=(one two); f(){ local a+=tail; printf \"<%s>\\n\" \"${a[@]}\"; }; f; printf \"<%s>\\n\" \"${a[@]}\"",
+      "status": 0,
+      "stdout": "PHRhaWw+CjxvbmU+Cjx0d28+Cg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope append reference current target",
+      "code": "t=one; f(){ local t=base; local -n r=t; local r+=two; echo \"$r:$t\"; declare -p r; }; f; echo \"$t\"",
+      "status": 0,
+      "stdout": "YmFzZXR3bzpiYXNldHdvCmRlY2xhcmUgLW4gcj0idCIKb25lCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope append reference declare target",
+      "code": "t=one; f(){ local t=base; local -n r=t; declare r+=two; echo \"$r:$t\"; declare -p r; }; f; echo \"$t\"",
+      "status": 0,
+      "stdout": "YmFzZXR3bzpiYXNldHdvCmRlY2xhcmUgLW4gcj0idCIKb25lCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope append reference global target",
+      "code": "t=one; f(){ local -n r=t; local r+=two; echo \"$r:$t\"; declare -p r; }; f; echo \"$t\"",
+      "status": 0,
+      "stdout": "dHdvOnR3bwpkZWNsYXJlIC1uIHI9InQiCm9uZQo=",
+      "stderr": ""
+    },
+    {
+      "name": "scope append reference caller target",
+      "code": "t=one; f(){ local t=base; g; echo \"$t\"; }; g(){ local -n r=t; local r+=two; echo \"$r:$t\"; declare -p r; }; f; echo \"$t\"",
+      "status": 0,
+      "stdout": "dHdvOnR3bwpkZWNsYXJlIC1uIHI9InQiCmJhc2UKb25lCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope append reference chain",
+      "code": "t=one; f(){ local t=base; local -n r=t; local -n s=r; local s+=two; echo \"$s:$r:$t\"; declare -p r s; }; f; echo \"$t\"",
+      "status": 0,
+      "stdout": "YmFzZXR3bzpiYXNldHdvOmJhc2V0d28KZGVjbGFyZSAtbiByPSJ0IgpkZWNsYXJlIC1uIHM9InIiCm9uZQo=",
+      "stderr": ""
+    },
+    {
+      "name": "scope append reference indexed target",
+      "code": "f(){ local a; a=(one two); local -n r=a; local r+=tail; printf \"<%s>\\n\" \"${a[@]}\"; declare -p r; }; f",
+      "status": 0,
+      "stdout": "PG9uZXRhaWw+Cjx0d28+CmRlY2xhcmUgLW4gcj0iYSIK",
+      "stderr": ""
+    },
+    {
+      "name": "scope append reference readonly target",
+      "code": "f(){ local -r t=base; local -n r=t; local r+=two 2>/dev/null; echo \"$?:$r:$t\"; declare -p r; }; f",
+      "status": 0,
+      "stdout": "MTpiYXNlOmJhc2UKZGVjbGFyZSAtbiByPSJ0Igo=",
+      "stderr": ""
+    },
+    {
+      "name": "scope append reference outer alias shadow",
+      "code": "t=one; declare -n r=t; f(){ local r+=two; echo \"$r:$t\"; }; f; echo \"$r:$t\"",
+      "status": 0,
+      "stdout": "dHdvOm9uZQpvbmU6b25lCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope append prefix intervening local",
+      "code": "x=outer; f(){ local x=caller; g; echo \"$x\"; }; g(){ local x+=a; echo \"$x\"; }; x=1 f; echo \"$x\"",
+      "status": 0,
+      "stdout": "Y2FsbGVyYQpjYWxsZXIKb3V0ZXIK",
+      "stderr": ""
+    },
+    {
+      "name": "scope append prefix intervening declare",
+      "code": "x=outer; f(){ declare x=caller; g; echo \"$x\"; }; g(){ declare x+=a; echo \"$x\"; }; x=1 f; echo \"$x\"",
+      "status": 0,
+      "stdout": "Y2FsbGVyYQpjYWxsZXIKb3V0ZXIK",
+      "stderr": ""
+    },
+    {
+      "name": "scope append prefix intervening bare local",
+      "code": "x=outer; f(){ local x=caller; g; echo \"$x\"; }; g(){ local x; echo \"<$x>\"; }; x=1 f; echo \"$x\"",
+      "status": 0,
+      "stdout": "PGNhbGxlcj4KY2FsbGVyCm91dGVyCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope append prefix ordinary caller guard",
+      "code": "x=outer; f(){ local x=caller; g; echo \"$x\"; }; g(){ local x+=a; echo \"$x\"; }; f; echo \"$x\"",
+      "status": 0,
+      "stdout": "YQpjYWxsZXIKb3V0ZXIK",
+      "stderr": ""
+    },
+    {
+      "name": "scope append prefix nested twice guard",
+      "code": "x=outer; f(){ g; echo \"$x\"; }; g(){ local x+=a; h; echo \"$x\"; }; h(){ local x+=b; echo \"$x\"; }; x=1 f; echo \"$x\"",
+      "status": 0,
+      "stdout": "YgoxYQoxCm91dGVyCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope append prefix current append repeated",
+      "code": "x=outer; f(){ local x=caller; local x+=a; g; echo \"$x\"; }; g(){ local x+=b; echo \"$x\"; }; x=1 f; echo \"$x\"",
+      "status": 0,
+      "stdout": "Y2FsbGVyYWIKY2FsbGVyYQpvdXRlcgo=",
+      "stderr": ""
+    },
+    {
+      "name": "scope append prefix second nested local guard",
+      "code": "x=outer; f(){ local x=caller; g; }; g(){ local x=second; h; }; h(){ local x+=a; echo \"$x\"; }; x=1 f; echo \"$x\"",
+      "status": 0,
+      "stdout": "YQpvdXRlcgo=",
+      "stderr": ""
+    },
+    {
+      "name": "scope append prefix unset clears inheritance",
+      "code": "x=outer; f(){ local x=caller; unset x; x=again; g; }; g(){ local x+=a; echo \"$x\"; }; x=1 f; echo \"$x\"",
+      "status": 0,
+      "stdout": "YQpvdXRlcgo=",
+      "stderr": ""
+    }
+  ]
+}

@@ -14,6 +14,13 @@ fn declaration_appends_match_recorded_bash_5_3_15() {
     ));
 }
 
+#[test]
+fn declaration_scope_appends_match_recorded_bash_5_3_15() {
+    declarations_match_recording(include_str!(
+        "../../../../scripts/fixtures/shell-declaration-append-scope.json"
+    ));
+}
+
 fn declarations_match_recording(recording: &str) {
     let fixture: serde_json::Value = serde_json::from_str(recording).unwrap();
     assert_eq!(
