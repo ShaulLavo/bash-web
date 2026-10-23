@@ -1,4 +1,4 @@
-use super::Printer;
+use super::{PrintFailure, Printer};
 
 pub(super) struct Arguments<'a> {
     pub values: &'a [String],
@@ -15,7 +15,7 @@ impl<'a> Arguments<'a> {
         &mut self,
         printer: &mut Printer<'_>,
         range: NumberRange,
-    ) -> Result<u64, i32> {
+    ) -> Result<u64, PrintFailure> {
         let Some(value) = self.take() else {
             return Ok(0);
         };
@@ -42,7 +42,7 @@ impl<'a> Count<'a> {
         input: &'a [u8],
         offset: &mut usize,
         printer: &mut Printer<'_>,
-    ) -> Result<Self, i32> {
+    ) -> Result<Self, PrintFailure> {
         if input.get(*offset) == Some(&b'*') {
             printer.scan(1).await?;
             *offset += 1;
@@ -64,7 +64,7 @@ impl<'a> Count<'a> {
         self,
         args: &mut Arguments<'_>,
         printer: &mut Printer<'_>,
-    ) -> Result<Option<i64>, i32> {
+    ) -> Result<Option<i64>, PrintFailure> {
         match self {
             Self::Literal(value) => Ok(Some(i64::from(value))),
             Self::Star => Ok(Some(args.number(printer, NumberRange::Star).await? as i64)),
@@ -87,7 +87,7 @@ impl Flags {
         input: &[u8],
         offset: &mut usize,
         printer: &mut Printer<'_>,
-    ) -> Result<Self, i32> {
+    ) -> Result<Self, PrintFailure> {
         let mut flags = Self::default();
         while let Some(flag @ (b'-' | b'+' | b' ' | b'#' | b'0' | b'\'')) = input.get(*offset) {
             printer.scan(1).await?;
@@ -119,7 +119,7 @@ impl<'a> Field<'a> {
         input: &'a [u8],
         offset: &mut usize,
         printer: &mut Printer<'_>,
-    ) -> Result<Option<Self>, i32> {
+    ) -> Result<Option<Self>, PrintFailure> {
         let flags = Flags::parse(input, offset, printer).await?;
         let width = Count::parse(input, offset, printer).await?;
         let precision = if input.get(*offset) == Some(&b'.') {
@@ -152,7 +152,7 @@ impl<'a> Field<'a> {
         &self,
         args: &mut Arguments<'_>,
         printer: &mut Printer<'_>,
-    ) -> Result<Option<ResolvedField>, i32> {
+    ) -> Result<Option<ResolvedField>, PrintFailure> {
         let overflow = matches!(self.width, Count::Overflow(_))
             || matches!(self.precision, Some(Count::Overflow(_)));
         if self.conversion == b's' && overflow {
@@ -177,7 +177,7 @@ impl<'a> Field<'a> {
         self,
         args: &mut Arguments<'_>,
         printer: &mut Printer<'_>,
-    ) -> Result<bool, i32> {
+    ) -> Result<bool, PrintFailure> {
         let width = self.width.resolve(args, printer).await?.unwrap_or(0);
         let precision = match self.precision {
             Some(count) => count.resolve(args, printer).await?,
@@ -220,7 +220,7 @@ impl<'a> Field<'a> {
         field: ResolvedField,
         args: &mut Arguments<'_>,
         printer: &mut Printer<'_>,
-    ) -> Result<bool, i32> {
+    ) -> Result<bool, PrintFailure> {
         let value = args.take().unwrap_or("").as_bytes();
         // Decode diagnostics precede count warnings and padding, even at zero precision.
         let (length, _) = printer.escaped_field(value, field.precision, false).await?;
@@ -245,7 +245,7 @@ impl<'a> Field<'a> {
         self,
         args: &mut Arguments<'_>,
         printer: &mut Printer<'_>,
-    ) -> Result<bool, i32> {
+    ) -> Result<bool, PrintFailure> {
         if matches!(self.conversion, b'q' | b'Q') {
             return self.print_quoted(args, printer).await;
         }
@@ -289,7 +289,7 @@ async fn count_warning(
     count: Count<'_>,
     args: &mut Arguments<'_>,
     printer: &mut Printer<'_>,
-) -> Result<(), i32> {
+) -> Result<(), PrintFailure> {
     let Count::Overflow(value) = count else {
         return Ok(());
     };
@@ -301,7 +301,10 @@ async fn count_warning(
         .await
 }
 
-async fn field_overflow(args: &mut Arguments<'_>, printer: &mut Printer<'_>) -> Result<bool, i32> {
+async fn field_overflow(
+    args: &mut Arguments<'_>,
+    printer: &mut Printer<'_>,
+) -> Result<bool, PrintFailure> {
     printer
         .emit(
             2,
@@ -313,7 +316,11 @@ async fn field_overflow(args: &mut Arguments<'_>, printer: &mut Printer<'_>) -> 
 }
 
 impl ResolvedField {
-    async fn print_string(&self, value: &[u8], printer: &mut Printer<'_>) -> Result<(), i32> {
+    async fn print_string(
+        &self,
+        value: &[u8],
+        printer: &mut Printer<'_>,
+    ) -> Result<(), PrintFailure> {
         let length = self.precision.map_or(value.len(), |n| value.len().min(n));
         let padding = self.width.saturating_sub(length);
         if !self.left {
@@ -372,7 +379,7 @@ impl Integer {
             left: field.left,
         }
     }
-    async fn print(&self, printer: &mut Printer<'_>) -> Result<(), i32> {
+    async fn print(&self, printer: &mut Printer<'_>) -> Result<(), PrintFailure> {
         if !self.left {
             printer.padding(self.padding, b' ').await?;
         }

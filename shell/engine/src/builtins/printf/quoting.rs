@@ -1,4 +1,4 @@
-use super::Printer;
+use super::{PrintFailure, Printer};
 use crate::expand::Printability;
 
 #[derive(Clone, Copy)]
@@ -36,7 +36,7 @@ impl<'a> Quoted<'a> {
         value: &'a [u8],
         alternate: bool,
         printer: &mut Printer<'_>,
-    ) -> Result<Self, i32> {
+    ) -> Result<Self, PrintFailure> {
         let mut quoted = Self {
             value,
             style: if alternate {
@@ -103,7 +103,7 @@ impl<'a> Quoted<'a> {
         precision: Option<usize>,
         emit: bool,
         printer: &mut Printer<'_>,
-    ) -> Result<usize, i32> {
+    ) -> Result<usize, PrintFailure> {
         let mut sink = Sink {
             remaining: precision.unwrap_or(usize::MAX),
             length: 0,
@@ -127,7 +127,7 @@ struct Sink {
     emit: bool,
 }
 impl Sink {
-    async fn piece(&mut self, bytes: &[u8], printer: &mut Printer<'_>) -> Result<(), i32> {
+    async fn piece(&mut self, bytes: &[u8], printer: &mut Printer<'_>) -> Result<(), PrintFailure> {
         let bytes = &bytes[..bytes.len().min(self.remaining)];
         printer.scan(bytes.len()).await?;
         self.length = self.length.checked_add(bytes.len()).ok_or(2)?;
