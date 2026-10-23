@@ -366,6 +366,30 @@
       "status": 0,
       "stdout": "c3RhdHVzPTIK",
       "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAyOiBtaXNzaW5nOiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5Ci91c3IvYmluL2Jhc2g6IGxpbmUgMzogZXZhbDogLXg6IGludmFsaWQgb3B0aW9uCmV2YWw6IHVzYWdlOiBldmFsIFthcmcgLi4uXQo="
+    },
+    {
+      "script": "\n\neval 'eval -x; source missing'; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAzOiBldmFsOiAteDogaW52YWxpZCBvcHRpb24KZXZhbDogdXNhZ2U6IGV2YWwgW2FyZyAuLi5dCi91c3IvYmluL2Jhc2g6IGxpbmUgMzogbWlzc2luZzogTm8gc3VjaCBmaWxlIG9yIGRpcmVjdG9yeQo="
+    },
+    {
+      "script": "\n\neval '\neval -x\nsource missing'; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSA0OiBldmFsOiAteDogaW52YWxpZCBvcHRpb24KZXZhbDogdXNhZ2U6IGV2YWwgW2FyZyAuLi5dCi91c3IvYmluL2Jhc2g6IGxpbmUgNTogbWlzc2luZzogTm8gc3VjaCBmaWxlIG9yIGRpcmVjdG9yeQo="
+    },
+    {
+      "script": "echo 'f() { source missing; eval -x; }' > lib; . ./lib; f; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTIK",
+      "stderr": "Li9saWI6IGxpbmUgMTogbWlzc2luZzogTm8gc3VjaCBmaWxlIG9yIGRpcmVjdG9yeQouL2xpYjogbGluZSAxOiBldmFsOiAteDogaW52YWxpZCBvcHRpb24KZXZhbDogdXNhZ2U6IGV2YWwgW2FyZyAuLi5dCg=="
+    },
+    {
+      "script": "f() { source missing; eval -x; }; echo 'f' > lib; . ./lib; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBtaXNzaW5nOiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5Ci91c3IvYmluL2Jhc2g6IGxpbmUgMTogZXZhbDogLXg6IGludmFsaWQgb3B0aW9uCmV2YWw6IHVzYWdlOiBldmFsIFthcmcgLi4uXQo="
     }
   ]
 }

@@ -67,6 +67,10 @@ const scripts = [
   "echo 'source missing; source; eval -x; source .' > lib; . ./lib; echo status=$?",
   "printf '\\nsource missing\\neval -x\\n' > lib; . ./lib; echo status=$?",
   "f() {\nsource missing\neval -x\n}; f; echo status=$?",
+  "\n\neval 'eval -x; source missing'; echo status=$?",
+  "\n\neval '\neval -x\nsource missing'; echo status=$?",
+  "echo 'f() { source missing; eval -x; }' > lib; . ./lib; f; echo status=$?",
+  "f() { source missing; eval -x; }; echo 'f' > lib; . ./lib; echo status=$?",
 ];
 const fixturePath = new URL("fixtures/shell-source.json", import.meta.url);
 const env = { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" };
