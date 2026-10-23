@@ -288,6 +288,14 @@ mod tests {
     use super::*;
     use crate::exec::StorageBudget;
 
+    fn assert_same_version(state: &State, snapshot: &Aliases) {
+        assert!(Rc::ptr_eq(
+            snapshot.version.as_ref().unwrap(),
+            state.aliases.version.as_ref().unwrap()
+        ));
+        assert_eq!(snapshot.revision(), state.aliases.revision());
+    }
+
     #[test]
     fn alias_versions_keep_their_charge_until_the_last_reader_drops() {
         let memory = StorageBudget::new(4096);
@@ -312,20 +320,12 @@ mod tests {
         let old = state.aliases();
         let charged = memory.observation().0;
         state.update_alias("x", Some("echo old")).unwrap();
-        assert!(Rc::ptr_eq(
-            old.version.as_ref().unwrap(),
-            state.aliases.version.as_ref().unwrap()
-        ));
-        assert_eq!(old.revision(), state.aliases.revision());
+        assert_same_version(&state, &old);
         assert_eq!(
             state.update_alias("x", Some(&"a".repeat(2048))),
             Err(RESOURCE_STATUS)
         );
-        assert!(Rc::ptr_eq(
-            old.version.as_ref().unwrap(),
-            state.aliases.version.as_ref().unwrap()
-        ));
-        assert_eq!(old.revision(), state.aliases.revision());
+        assert_same_version(&state, &old);
         assert_eq!(memory.observation().0, charged);
     }
     #[test]

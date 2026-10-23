@@ -180,16 +180,25 @@ mod tests {
     use futures::FutureExt;
     use std::rc::Rc;
 
-    #[test]
-    fn alias_readers_do_not_retain_tables_between_read_units() {
+    fn session(limits: Limits) -> (Executor, Session) {
         let executor = Executor::new();
-        let host = InProcessHost::new(executor.clone());
         let shell = Session::new(
             executor.clone(),
-            Rc::new(host),
+            Rc::new(InProcessHost::new(executor.clone())),
             Rc::new(MemoryFs::new(4096)),
-            Limits::default(),
+            limits,
         );
+        (executor, shell)
+    }
+
+    fn finish(executor: &Executor, job: crate::executor::JoinHandle<i32>) {
+        executor.drive(4096);
+        assert_eq!(job.now_or_never(), Some(0));
+    }
+
+    #[test]
+    fn alias_readers_do_not_retain_tables_between_read_units() {
+        let (executor, shell) = session(Limits::default());
         shell
             .state()
             .borrow_mut()
@@ -199,8 +208,7 @@ mod tests {
         let job = shell
             .start("shopt -s expand_aliases\nalias first=:\nalias second=:\n")
             .unwrap();
-        executor.drive(4096);
-        assert_eq!(job.now_or_never(), Some(0));
+        finish(&executor, job);
         assert_eq!(
             shell.state().borrow().aliases().values().unwrap()["anchor"].as_ptr(),
             value
@@ -208,27 +216,19 @@ mod tests {
     }
     #[test]
     fn alias_update_cost_observation_does_not_create_a_snapshot() {
-        let executor = Executor::new();
-        let host = InProcessHost::new(executor.clone());
-        let shell = Session::new(
-            executor.clone(),
-            Rc::new(host),
-            Rc::new(MemoryFs::new(4096)),
-            Limits {
-                source_bytes: 1024,
-                expansion_bytes: 1024,
-                arguments: 32,
-                ..Limits::default()
-            },
-        );
+        let (executor, shell) = session(Limits {
+            source_bytes: 1024,
+            expansion_bytes: 1024,
+            arguments: 32,
+            ..Limits::default()
+        });
         shell
             .state()
             .borrow_mut()
             .update_alias("anchor", Some(&"x".repeat(5000)))
             .unwrap();
         let job = shell.start("alias next=:\n").unwrap();
-        executor.drive(4096);
-        assert_eq!(job.now_or_never(), Some(0));
+        finish(&executor, job);
         assert_eq!(
             shell.state().borrow().aliases().values().unwrap()["next"],
             ":"
@@ -237,14 +237,7 @@ mod tests {
 
     #[test]
     fn cancelling_a_real_alias_snapshot_copy_never_publishes_the_update() {
-        let executor = Executor::new();
-        let host = InProcessHost::new(executor.clone());
-        let shell = Session::new(
-            executor.clone(),
-            Rc::new(host),
-            Rc::new(MemoryFs::new(4096)),
-            Limits::default(),
-        );
+        let (executor, shell) = session(Limits::default());
         let state = shell.state();
         state
             .borrow_mut()
