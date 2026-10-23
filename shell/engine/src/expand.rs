@@ -786,6 +786,10 @@ impl Expansion<'_> {
         }
         Ok(())
     }
+    async fn empty_expansion(&mut self, protected: bool, state: &SharedState) -> Result<(), Error> {
+        self.segment("", Protection::expansion(protected, state), protected)
+            .await
+    }
     fn admit_pattern_length(&mut self, name: &str, state: &SharedState) -> Result<(), Error> {
         if !self.pattern_snapshots {
             return Ok(());
@@ -1290,9 +1294,7 @@ impl Expansion<'_> {
             }
         };
         if !present {
-            return self
-                .segment("", Protection::expansion(protected, state), protected)
-                .await;
+            return self.empty_expansion(protected, state).await;
         }
         let (value, utf8) = {
             let s = state.borrow();
@@ -1315,9 +1317,7 @@ impl Expansion<'_> {
             usize::try_from(offset).ok().filter(|&n| n <= count)
         };
         let Some(start) = start else {
-            return self
-                .segment("", Protection::expansion(protected, state), protected)
-                .await;
+            return self.empty_expansion(protected, state).await;
         };
         let end = if let Some(length) = length {
             let length = crate::arithmetic::evaluate(
@@ -1570,9 +1570,7 @@ impl Expansion<'_> {
         };
         // Bash does not evaluate a trim pattern for an unset or empty scalar.
         if value.is_empty() {
-            return self
-                .segment("", Protection::expansion(protected, state), protected)
-                .await;
+            return self.empty_expansion(protected, state).await;
         }
         self.scan_value(&value).await?;
         let mut pattern = self.pattern_operand(source, state, depth).await?;
@@ -1651,9 +1649,7 @@ impl Expansion<'_> {
             (value, present)
         };
         if !present {
-            return self
-                .segment("", Protection::expansion(protected, state), protected)
-                .await;
+            return self.empty_expansion(protected, state).await;
         }
         self.scan_value(&value).await?;
         let mut pattern = self.pattern_operand(source, state, depth).await?;
