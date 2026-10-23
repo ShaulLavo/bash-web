@@ -1097,3 +1097,50 @@ fn append_tracking_rejection_preserves_inverse_value_and_session_storage() {
     drop(function);
     assert_eq!(memory.observation().0, 0);
 }
+
+#[test]
+fn review86r5_replacement_supersession_must_consume_work() {
+    let state = State::default().shared();
+    replace(&state, "a", &["original"]).unwrap();
+    let mut snapshot_work = work();
+    let snapshot = finish(State::snapshot(&state, &Cancel::new(), &mut snapshot_work))
+        .unwrap_or_else(|_| panic!("snapshot fits"));
+    let mut completed = enter(&state);
+    for index in 0..512 {
+        journal_update(
+            &state,
+            &mut completed,
+            "a",
+            BindingUpdate::Replace(index.to_string().into()),
+        );
+    }
+    let inverse_count = completed.changes.borrow().undo.len();
+    let mut fuel = Work::new(0, 1 << 22, 0);
+    let admitted = finish(State::admit_indexed_replacement(
+        &state,
+        "a",
+        &Cancel::new(),
+        &mut fuel,
+    ));
+    let accepted = admitted.is_ok();
+    if accepted {
+        state
+            .borrow_mut()
+            .assign_indexed("a".into(), values(&["durable"]))
+            .unwrap();
+    }
+    drop(completed);
+    assert_eq!(snapshot.array_element("a", 0), Some("original"));
+    assert_eq!(
+        state.borrow().scalar_parameter("a"),
+        Some(if accepted { "durable" } else { "original" })
+    );
+    println!(
+        "replacement_inverses={inverse_count} zero_fuel_admitted={accepted} fuel_remaining={}",
+        fuel.remaining
+    );
+    assert!(
+        !accepted,
+        "zero work cannot admit scanning and superseding {inverse_count} journal inverses"
+    );
+}
