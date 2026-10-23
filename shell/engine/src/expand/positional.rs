@@ -11,10 +11,6 @@ impl Expansion<'_> {
         colon: bool,
         context: OperandContext<'_>,
     ) -> Result<(), Error> {
-        let context = OperandContext {
-            scalar: context.scalar || self.captured.is_some(),
-            ..context
-        };
         let OperandContext {
             state,
             quoted,
@@ -22,6 +18,7 @@ impl Expansion<'_> {
             depth,
         } = context;
         let absent = self.positional_absent(name == "@", colon, context).await?;
+        let scalar = scalar || self.captured.is_some();
         if absent && matches!(operator, ParameterOp::AssignDefault | ParameterOp::Error) {
             return self
                 .effect_operand(name, operator, source, colon, context, None)
@@ -59,14 +56,25 @@ impl Expansion<'_> {
         if count == 0 {
             return Ok(true);
         }
-        // In assignments Bash keeps '@' as a list, even with one null member.
-        if !colon || at && scalar {
+        if !colon {
+            return Ok(false);
+        }
+        let assignment = !quoted && (scalar || self.captured.is_some());
+        if at {
+            return Ok(!assignment && count == 1 && state.borrow().positional()[0].is_empty());
+        }
+        let separator = if assignment || count > 1 {
+            self.positional_star_separator(state).await?
+        } else {
+            None
+        };
+        if assignment && separator.is_some() {
             return Ok(false);
         }
         if count == 1 {
             return Ok(state.borrow().positional()[0].is_empty());
         }
-        if at || !quoted && !scalar || self.positional_star_separator(state).await?.is_some() {
+        if !quoted && !assignment || separator.is_some() {
             return Ok(false);
         }
         for index in 0..count {

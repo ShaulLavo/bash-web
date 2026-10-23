@@ -2989,3 +2989,25 @@ and its sibling evidence directory.
 
 Neither note is a fixed bug, an accepted Bash match or a frozen gain of this
 integration. PR59 leaves the caller and target-scan cancellation logic unchanged.
+
+## Declared-but-unset local names in prefix expansion, 2026-10-23
+
+Status: Approved follow-up. Owner: expansion family. Nonblocking PR70 review
+finding, reproduced on its pinned head `2abf0c8` in native and production Waffle.
+
+```sh
+param_a=x
+f() { local param_a; set -- "${!param_@}"; printf '%s\n' "$#"; }
+f
+```
+
+Bash `5.3.15(1)-release` prints `1\n` and exits 0. The candidate prints `0\n`
+and exits 0. `expand/prefix.rs:next_name` traverses binding and nameref keys;
+a declared-but-unset local shadow has neither key. This is declaration presence,
+not a need to resolve or copy the shadowed value. Preserve bounded name-only
+traversal, dynamic scope, IFS joining and existing work/storage/field controls.
+The same script and exact Bash stdout/status/stderr are recorded in
+`/work/reports/wave-20261022/shell/review70-takeover-r1-evidence/minimal-oracle.json`.
+The repair replay is in `expansion-params-fix-takeover-r1-evidence/minimal-red.json`
+beside that directory. No prefix implementation change belongs to the captured
+positional-operator status repair.
