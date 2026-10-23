@@ -144,4 +144,20 @@ mod tests {
         assert!(old.same(&state.aliases()));
         assert_eq!(memory.observation().0, charged);
     }
+    #[test]
+    fn unique_alias_updates_do_not_copy_existing_string_buffers() {
+        let mut state = State::with_memory(StorageBudget::new(1_000_000));
+        state.update_alias("anchor", Some("unchanged")).unwrap();
+        let value = state.aliases.values().unwrap()["anchor"].as_ptr();
+        for n in 0..1024 {
+            state.update_alias(&format!("b{n}"), Some(":" )).unwrap();
+            assert_eq!(state.aliases.values().unwrap()["anchor"].as_ptr(), value);
+        }
+        for n in 0..1024 {
+            state.update_alias(&format!("b{n}"), Some("new")).unwrap();
+            state.update_alias(&format!("b{n}"), None).unwrap();
+            assert_eq!(state.aliases.values().unwrap()["anchor"].as_ptr(), value);
+        }
+    }
+
 }

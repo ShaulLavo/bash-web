@@ -168,3 +168,23 @@ pub(super) async fn run(
     }
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{executor::Executor, interpreter::{Limits, Session}, io::MemoryFs, process::InProcessHost};
+    use futures::FutureExt;
+    use std::rc::Rc;
+
+    #[test]
+    fn alias_readers_do_not_retain_tables_between_read_units() {
+        let executor = Executor::new();
+        let host = InProcessHost::new(executor.clone());
+        let shell = Session::new(executor.clone(), Rc::new(host), Rc::new(MemoryFs::new(4096)), Limits::default());
+        shell.state().borrow_mut().update_alias("anchor", Some("unchanged")).unwrap();
+        let value = shell.state().borrow().aliases().values().unwrap()["anchor"].as_ptr();
+        let job = shell.start("shopt -s expand_aliases\nalias first=:\nalias second=:\n").unwrap();
+        executor.drive(4096);
+        assert_eq!(job.now_or_never(), Some(0));
+        assert_eq!(shell.state().borrow().aliases().values().unwrap()["anchor"].as_ptr(), value);
+    }
+}
