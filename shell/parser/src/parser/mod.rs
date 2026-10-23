@@ -968,8 +968,10 @@ impl<'a> Parser<'a> {
             command_starts.truncate(keep);
             command_starts.push(rest);
         }
+        // A heredoc's reinjected newline starts on its command line but ends
+        // after its body. Resume after the consumed delimiter, never in the body.
         let next = (err.is_none() && self.current_token.is_some())
-            .then_some(self.current_span.start);
+            .then_some(self.current_span.end);
         (
             Script {
                 commands,

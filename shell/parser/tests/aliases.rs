@@ -93,7 +93,7 @@ fn read_units_stop_after_compounds_quotes_and_heredocs_without_copying_source() 
             "read units borrow their caller's source"
         );
         let position = next.expect("next read unit");
-        assert!(position.offset < unit.len(), "{position:?}: {source}");
+        assert_eq!(position.offset, unit.len(), "{position:?}: {source}");
         let (rest, error, _) = Parser::at_position(
             &source,
             100,
@@ -131,7 +131,7 @@ fn read_unit_does_not_parse_or_charge_the_unread_suffix() {
         .parse_read_unit_recovering();
     assert!(error.is_none(), "{error:?}");
     assert_eq!(script.commands.len(), 1);
-    assert_eq!(next.unwrap().line, 1);
+    assert_eq!(next.unwrap().line, 2);
     assert!(script.source.is_none());
 }
 
