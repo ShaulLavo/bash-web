@@ -3008,3 +3008,19 @@ when integrating the shared decoder. PR #68 review evidence is under
 has no shell self-PID fact. Its existing scalar lookup returns empty for `$`.
 A later runtime identity unit must provide the real identity for ordinary and
 prompt expansion together, never a made-up numeric value.
+
+## Follow-up: nested array-list expansion in PS4, 2026-10-23
+
+PS4 special-parameter support does not yet cover nested array-list expansion.
+The GNU Bash 5.3.15 control
+`a=("two words" x); PS4='${a[@]} '; set -x; echo hi; set +x` exits 0, prints
+`hi\n`, and traces `two words x echo hi\ntwo words x set +x\n`. PR #68 at
+`6643546aa089757561234163862f0a408301ecee` instead exits 2 with empty output.
+The independent review's `prompt-nested-array` probe records both observations in
+`/work/reports/wave-20261022/shell/review68-takeover-r2-evidence/waffle-probes.json`.
+
+Handle this in the prompt-expansion unit after the shared prompt decoder lands.
+Record the array control and quoted, empty, and IFS neighbors before changing the
+scalar prompt/list boundary. Preserve `operand_piece`'s admitted `part_frame`
+boxing, depth limits, cancellation, and storage accounting. This is not part of
+the declaration fatal-error repair and has no claimed scoreboard gain.

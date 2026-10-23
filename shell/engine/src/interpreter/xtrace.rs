@@ -38,7 +38,8 @@ pub(super) fn command<'a>(
         return Either::Left(ready(Ok(())));
     }
     frame(state, context, || async move {
-        let Some(mut writer) = Writer::start(state, fds, context).await? else {
+        let Some(mut writer) = Writer::start(state, fds, context, PromptKind::Command).await?
+        else {
             return Ok(());
         };
         let mut separator: &[u8] = b"";
@@ -62,10 +63,24 @@ pub(crate) async fn builtin_assignment(
         return Ok(());
     }
     let descriptors = std::rc::Rc::new(std::cell::RefCell::new(fds.clone()));
-    match assignment(name, value, state, &descriptors, context).await {
+    match trace_assignment(
+        name,
+        AssignmentValue::Expanded(value),
+        state,
+        &descriptors,
+        context,
+        PromptKind::Declaration,
+    )
+    .await
+    {
         Ok(()) => Ok(()),
         Err(error) => Err(super::expansion_failure(error.into(), &descriptors, context).await),
     }
+}
+
+enum PromptKind {
+    Command,
+    Declaration,
 }
 
 enum AssignmentValue<'a> {
@@ -80,7 +95,14 @@ pub(super) fn assignment<'a>(
     fds: &'a Descriptors,
     context: &'a Context,
 ) -> ResultFuture<'a, ()> {
-    trace_assignment(name, AssignmentValue::Expanded(value), state, fds, context)
+    trace_assignment(
+        name,
+        AssignmentValue::Expanded(value),
+        state,
+        fds,
+        context,
+        PromptKind::Command,
+    )
 }
 
 pub(super) fn prefix_assignment<'a>(
@@ -89,7 +111,14 @@ pub(super) fn prefix_assignment<'a>(
     fds: &'a Descriptors,
     context: &'a Context,
 ) -> ResultFuture<'a, ()> {
-    trace_assignment(name, AssignmentValue::Bound, state, fds, context)
+    trace_assignment(
+        name,
+        AssignmentValue::Bound,
+        state,
+        fds,
+        context,
+        PromptKind::Command,
+    )
 }
 
 fn trace_assignment<'a>(
@@ -98,9 +127,10 @@ fn trace_assignment<'a>(
     state: &'a SharedState,
     fds: &'a Descriptors,
     context: &'a Context,
+    kind: PromptKind,
 ) -> ResultFuture<'a, ()> {
     frame(state, context, || async move {
-        let Some(mut writer) = Writer::start(state, fds, context).await? else {
+        let Some(mut writer) = Writer::start(state, fds, context, kind).await? else {
             return Ok(());
         };
         // Prompt expansion may write the temporary prefix binding itself.
@@ -127,6 +157,7 @@ async fn prompt(
     state: &SharedState,
     fds: &Descriptors,
     context: &Context,
+    kind: PromptKind,
 ) -> Result<String, expand::Error> {
     let mut prompt_context = context.clone();
     prompt_context.trace.prompt = true;
@@ -151,6 +182,9 @@ async fn prompt(
         Err(error @ (expand::Error::Status(_) | expand::Error::Abort(_))) => return Err(error),
         Err(error) => error,
     };
+    if matches!(kind, PromptKind::Declaration) && !state.borrow().errexit {
+        return Err(error);
+    }
     prompt_context.parameter_error_status = 1;
     let failure = super::expansion_failure(error.into(), fds, &prompt_context).await;
     if state.borrow().errexit && failure.flow == super::Flow::Abort {
@@ -171,9 +205,10 @@ impl<'a> Writer<'a> {
         state: &SharedState,
         fds: &Descriptors,
         context: &'a Context,
+        kind: PromptKind,
     ) -> Result<Option<Self>, expand::Error> {
         let endpoint = fds.borrow().get(2);
-        let prefix = prompt(state, fds, context).await?;
+        let prefix = prompt(state, fds, context, kind).await?;
         let Some(endpoint) = endpoint else {
             return Ok(None);
         };
