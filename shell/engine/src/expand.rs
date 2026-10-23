@@ -2675,6 +2675,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn prompt_capture_does_not_charge_output_bytes_twice() {
+        let state = State::default().shared();
+        state
+            .borrow_mut()
+            .assign_parameter("p".into(), "abcd".into())
+            .unwrap();
+        let word = shell_parser::Parser::parse_word_string_with_limits(r#""${p@P}""#, 16, 4096);
+        let cancel = Cancel::new();
+        for (bytes, accepted) in [(3, false), (4, true)] {
+            let mut work = Work::new(65536, 1024 * 1024, 1);
+            let result = fields_admitted(&word, &state, &cancel, bytes, 1, bytes, &mut work)
+                .now_or_never()
+                .expect("short prompt must not suspend");
+            if accepted {
+                assert!(matches!(result, Ok(value) if value == ["abcd"]));
+            } else {
+                assert!(matches!(result, Err(Error::Status(2))));
+            }
+        }
+    }
+
+    #[test]
     fn admitted_fields_share_segment_output_and_slot_storage_without_changing_argv() {
         let state = State::default().shared();
         let cancel = Cancel::new();
