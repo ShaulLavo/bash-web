@@ -240,6 +240,132 @@
       "status": 0,
       "stdout": "ZW1wdHk9MApkYXNoPTEyNwo=",
       "stderr": ""
+    },
+    {
+      "script": "echo ':' > inner; echo 'set -- changed; . ./inner' > lib; set -- orig; . ./lib x; echo after:$*",
+      "status": 0,
+      "stdout": "YWZ0ZXI6b3JpZwo=",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'set -- inner' > inner; echo 'set -- changed; . ./inner' > lib; set -- orig; . ./lib x; echo after:$*",
+      "status": 0,
+      "stdout": "YWZ0ZXI6aW5uZXIK",
+      "stderr": ""
+    },
+    {
+      "script": "echo ':' > inner; echo 'set -- changed; . ./inner; set -- final' > lib; set -- orig; . ./lib x; echo after:$*",
+      "status": 0,
+      "stdout": "YWZ0ZXI6ZmluYWwK",
+      "stderr": ""
+    },
+    {
+      "script": "shopt sourcepath; shopt -q sourcepath; echo default=$?; shopt -u sourcepath; shopt -p sourcepath; echo disabled=$?; shopt -s sourcepath; shopt -q sourcepath; echo enabled=$?",
+      "status": 0,
+      "stdout": "c291cmNlcGF0aCAgICAgICAgICAJb24KZGVmYXVsdD0wCnNob3B0IC11IHNvdXJjZXBhdGgKZGlzYWJsZWQ9MQplbmFibGVkPTAK",
+      "stderr": ""
+    },
+    {
+      "script": "mkdir -p dir; echo 'echo DIR' > dir/lib; echo 'echo CWD' > lib; shopt -u sourcepath; echo option=$?; PATH=$PWD/dir . lib",
+      "status": 0,
+      "stdout": "b3B0aW9uPTAKQ1dECg==",
+      "stderr": ""
+    },
+    {
+      "script": "mkdir -p dir; echo 'echo DIR' > dir/lib; shopt -u sourcepath; PATH=$PWD/dir . lib; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBsaWI6IE5vIHN1Y2ggZmlsZSBvciBkaXJlY3RvcnkK"
+    },
+    {
+      "script": "mkdir -p dir; echo 'echo DIR' > dir/lib; echo 'echo CWD' > lib; shopt -u sourcepath; (PATH=$PWD/dir . lib); shopt -s sourcepath; PATH=$PWD/dir . lib",
+      "status": 0,
+      "stdout": "Q1dECkRJUgo=",
+      "stderr": ""
+    },
+    {
+      "script": "source; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBzb3VyY2U6IGZpbGVuYW1lIGFyZ3VtZW50IHJlcXVpcmVkCnNvdXJjZTogdXNhZ2U6IHNvdXJjZSBbLXAgcGF0aF0gZmlsZW5hbWUgW2FyZ3VtZW50c10K"
+    },
+    {
+      "script": ". ; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAuOiBmaWxlbmFtZSBhcmd1bWVudCByZXF1aXJlZAouOiB1c2FnZTogLiBbLXAgcGF0aF0gZmlsZW5hbWUgW2FyZ3VtZW50c10K"
+    },
+    {
+      "script": "source missing; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBtaXNzaW5nOiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5Cg=="
+    },
+    {
+      "script": ". ./missing; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAuL21pc3Npbmc6IE5vIHN1Y2ggZmlsZSBvciBkaXJlY3RvcnkK"
+    },
+    {
+      "script": "source .; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBzb3VyY2U6IC46IGlzIGEgZGlyZWN0b3J5Cg=="
+    },
+    {
+      "script": ". .; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAuOiAuOiBpcyBhIGRpcmVjdG9yeQo="
+    },
+    {
+      "script": "source -x ./lib; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBzb3VyY2U6IC14OiBpbnZhbGlkIG9wdGlvbgpzb3VyY2U6IHVzYWdlOiBzb3VyY2UgWy1wIHBhdGhdIGZpbGVuYW1lIFthcmd1bWVudHNdCg=="
+    },
+    {
+      "script": ". -xyz ./lib; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAuOiAteDogaW52YWxpZCBvcHRpb24KLjogdXNhZ2U6IC4gWy1wIHBhdGhdIGZpbGVuYW1lIFthcmd1bWVudHNdCg=="
+    },
+    {
+      "script": "eval -x 'echo BAD'; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBldmFsOiAteDogaW52YWxpZCBvcHRpb24KZXZhbDogdXNhZ2U6IGV2YWwgW2FyZyAuLi5dCg=="
+    },
+    {
+      "script": "eval -xyz; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBldmFsOiAteDogaW52YWxpZCBvcHRpb24KZXZhbDogdXNhZ2U6IGV2YWwgW2FyZyAuLi5dCg=="
+    },
+    {
+      "script": "\n\nsource missing; source; eval -x; source .; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAzOiBtaXNzaW5nOiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5Ci91c3IvYmluL2Jhc2g6IGxpbmUgMzogc291cmNlOiBmaWxlbmFtZSBhcmd1bWVudCByZXF1aXJlZApzb3VyY2U6IHVzYWdlOiBzb3VyY2UgWy1wIHBhdGhdIGZpbGVuYW1lIFthcmd1bWVudHNdCi91c3IvYmluL2Jhc2g6IGxpbmUgMzogZXZhbDogLXg6IGludmFsaWQgb3B0aW9uCmV2YWw6IHVzYWdlOiBldmFsIFthcmcgLi4uXQovdXNyL2Jpbi9iYXNoOiBsaW5lIDM6IHNvdXJjZTogLjogaXMgYSBkaXJlY3RvcnkK"
+    },
+    {
+      "script": "echo 'source missing; source; eval -x; source .' > lib; . ./lib; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": "Li9saWI6IGxpbmUgMTogbWlzc2luZzogTm8gc3VjaCBmaWxlIG9yIGRpcmVjdG9yeQouL2xpYjogbGluZSAxOiBzb3VyY2U6IGZpbGVuYW1lIGFyZ3VtZW50IHJlcXVpcmVkCnNvdXJjZTogdXNhZ2U6IHNvdXJjZSBbLXAgcGF0aF0gZmlsZW5hbWUgW2FyZ3VtZW50c10KLi9saWI6IGxpbmUgMTogZXZhbDogLXg6IGludmFsaWQgb3B0aW9uCmV2YWw6IHVzYWdlOiBldmFsIFthcmcgLi4uXQouL2xpYjogbGluZSAxOiBzb3VyY2U6IC46IGlzIGEgZGlyZWN0b3J5Cg=="
+    },
+    {
+      "script": "printf '\\nsource missing\\neval -x\\n' > lib; . ./lib; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTIK",
+      "stderr": "Li9saWI6IGxpbmUgMjogbWlzc2luZzogTm8gc3VjaCBmaWxlIG9yIGRpcmVjdG9yeQouL2xpYjogbGluZSAzOiBldmFsOiAteDogaW52YWxpZCBvcHRpb24KZXZhbDogdXNhZ2U6IGV2YWwgW2FyZyAuLi5dCg=="
+    },
+    {
+      "script": "f() {\nsource missing\neval -x\n}; f; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAyOiBtaXNzaW5nOiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5Ci91c3IvYmluL2Jhc2g6IGxpbmUgMzogZXZhbDogLXg6IGludmFsaWQgb3B0aW9uCmV2YWw6IHVzYWdlOiBldmFsIFthcmcgLi4uXQo="
     }
   ]
 }

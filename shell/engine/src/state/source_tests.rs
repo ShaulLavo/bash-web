@@ -102,3 +102,26 @@ fn source_frame_future_drop_restores_arguments_and_refunds_storage() {
     drop(state);
     assert_eq!(memory.observation().0, 0);
 }
+
+#[test]
+fn source_frame_without_arguments_resets_an_earlier_set_marker() {
+    let state = source_state(&["outer"], None);
+    let outer = SourceFrame::enter(state.clone(), vec!["supplied".into()]).unwrap();
+    state.borrow_mut().replace_positional(vec!["changed".into()]).unwrap();
+    let inner = SourceFrame::enter(state.clone(), Vec::new()).unwrap();
+    inner.finish();
+    assert_eq!(state.borrow().positional(), &["changed"]);
+    outer.finish();
+    assert_eq!(state.borrow().positional(), &["outer"]);
+}
+
+#[test]
+fn source_frame_without_arguments_keeps_its_own_set_marker() {
+    let state = source_state(&["outer"], None);
+    let outer = SourceFrame::enter(state.clone(), vec!["supplied".into()]).unwrap();
+    let inner = SourceFrame::enter(state.clone(), Vec::new()).unwrap();
+    state.borrow_mut().replace_positional(vec!["changed".into()]).unwrap();
+    inner.finish();
+    outer.finish();
+    assert_eq!(state.borrow().positional(), &["changed"]);
+}
