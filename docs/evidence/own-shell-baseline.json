@@ -704,7 +704,7 @@
     },
     "bashkit-suite": {
       "total": 3835,
-      "passed": 1664,
+      "passed": 1666,
       "skipped": 1613,
       "categories": {
         "alias": {
@@ -1679,7 +1679,7 @@
         },
         "pipes-redirects": {
           "total": 47,
-          "passed": 10,
+          "passed": 12,
           "skipped": 34
         },
         "pr": {
@@ -10271,9 +10271,9 @@
 {"id":"bashkit-suite:pipes-redirects:313","corpus":"bashkit-suite","category":"pipes-redirects","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:pipes-redirects:324","corpus":"bashkit-suite","category":"pipes-redirects","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:pipes-redirects:335","corpus":"bashkit-suite","category":"pipes-redirects","kind":"needs-commands","outcome":"skip"},
-{"id":"bashkit-suite:pipes-redirects:345","corpus":"bashkit-suite","category":"pipes-redirects","kind":"builtins-only","outcome":"timeout","actual":{"stdout":"","stderr":"","timeout":true}},
+{"id":"bashkit-suite:pipes-redirects:345","corpus":"bashkit-suite","category":"pipes-redirects","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:pipes-redirects:355","corpus":"bashkit-suite","category":"pipes-redirects","kind":"needs-commands","outcome":"skip"},
-{"id":"bashkit-suite:pipes-redirects:365","corpus":"bashkit-suite","category":"pipes-redirects","kind":"builtins-only","outcome":"timeout","actual":{"stdout":"","stderr":"","timeout":true}},
+{"id":"bashkit-suite:pipes-redirects:365","corpus":"bashkit-suite","category":"pipes-redirects","kind":"builtins-only","outcome":"pass"},
 {"id":"bashkit-suite:pipes-redirects:375","corpus":"bashkit-suite","category":"pipes-redirects","kind":"needs-commands","outcome":"skip"},
 {"id":"bashkit-suite:pipes-redirects:384","corpus":"bashkit-suite","category":"pipes-redirects","kind":"builtins-only","outcome":"fail","actual":{"status":0,"stdout":"c3RhdHVzIDIKbm8gZmlsZQo=","stderr":""}},
 {"id":"bashkit-suite:pipes-redirects:394","corpus":"bashkit-suite","category":"pipes-redirects","kind":"needs-commands","outcome":"skip"},
