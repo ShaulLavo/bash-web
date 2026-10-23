@@ -31,6 +31,7 @@ mod select;
 mod trap_tests;
 mod type_builtin;
 mod xtrace;
+pub(crate) use xtrace::builtin_assignment;
 
 #[derive(Clone, Debug)]
 pub struct Limits {

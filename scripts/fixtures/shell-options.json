@@ -135,6 +135,20 @@
       "stderr": ""
     },
     {
+      "id": "xtrace-declarations",
+      "code": "{ set -x; export a=1 b=\"two words\"; readonly q=3; declare d=4; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "+ export a=1 'b=two words'\n+ a=1\n+ b='two words'\n+ readonly q=3\n+ q=3\n+ declare d=4\n+ set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-declaration-redirect",
+      "code": "{ set -x; export a=1 2>out; set +x; printf 'out:'; cat out; } 2>&1",
+      "status": 0,
+      "stdout": "+ export a=1\n+ set +x\nout:+ a=1\n",
+      "stderr": ""
+    },
+    {
       "id": "flags",
       "code": "echo \"$-\"; set -euxf; echo \"$-\"; set +euxf; echo \"$-\"",
       "status": 0,

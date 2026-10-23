@@ -805,6 +805,11 @@ async fn declarations(
         } else {
             key
         };
+        if matches!(name, "export" | "readonly")
+            && let Some(value) = &value
+        {
+            crate::interpreter::builtin_assignment(&key, value, state, fds, context).await?;
+        }
         let result = apply_declaration(name, &key, value, &mut state.borrow_mut());
         if result == Err(crate::exec::RESOURCE_STATUS) {
             return result.map(|()| Outcome::status(0));

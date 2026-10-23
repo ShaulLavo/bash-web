@@ -42,6 +42,22 @@ pub(super) async fn command(
     writer.finish().await
 }
 
+pub(crate) async fn builtin_assignment(
+    name: &str,
+    value: &str,
+    state: &SharedState,
+    fds: &crate::io::FdTable,
+    context: &Context,
+) -> Result<(), i32> {
+    if !state.borrow().xtrace || context.trace.prompt {
+        return Ok(());
+    }
+    let descriptors = std::rc::Rc::new(std::cell::RefCell::new(fds.clone()));
+    assignment(name, value, state, &descriptors, context)
+        .await
+        .map_err(super::admission_status)
+}
+
 pub(super) async fn assignment(
     name: &str,
     value: &str,
