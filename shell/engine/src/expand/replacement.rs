@@ -184,12 +184,21 @@ impl Expansion<'_> {
         if ifs_changed {
             self.ifs = None;
         }
-        let mut search = pattern.replacement(global, self.work, self.cancel).await?;
+        let cancel = self.cancel;
+        let mut search = self
+            .work
+            .frame(|work| pattern.replacement(global, work, cancel))
+            .await?;
         self.admit_replacement_output().await?;
         let protection = Protection::expansion(protected, state);
         let mut last = 0;
         let mut from = 0;
-        while let Some((start, end)) = search.find(&value, from, self.work, self.cancel).await? {
+        loop {
+            let found = self
+                .work
+                .frame(|work| search.find(&value, from, work, cancel))
+                .await?;
+            let Some((start, end)) = found else { break };
             self.segment(&value[last..start], protection, false).await?;
             replacement
                 .emit(&value[start..end], self, protection)

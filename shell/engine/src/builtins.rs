@@ -1,4 +1,5 @@
 //! Bash builtins. External commands are installed by the embedding runtime.
+mod completion;
 mod declarations;
 mod directories;
 mod getopts;
@@ -107,6 +108,9 @@ pub(crate) async fn run(
     work: &mut Work,
 ) -> Result<Outcome, i32> {
     match builtin {
+        Builtin::Completion => {
+            return completion::run(name, &args, state, fds, context, work).await;
+        }
         Builtin::Noop => {}
         Builtin::False => return Err(1),
         Builtin::Test => return test::run(name, &args, &state, &fds, &context, work).await,

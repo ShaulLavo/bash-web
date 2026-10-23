@@ -145,9 +145,8 @@ async fn compound(
             word,
             state,
             &context.cancel,
-            limit,
-            context.limits().arguments,
-            limit,
+            expand::FieldContext::Argv,
+            (limit, context.limits().arguments, limit),
             work,
         )
         .await?;

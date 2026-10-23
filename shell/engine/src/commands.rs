@@ -27,6 +27,7 @@ pub(crate) enum Builtin {
     Unset,
     Test,
     LoopControl,
+    Completion,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -153,6 +154,9 @@ static COMMANDS: &[Command] = &[
     regular("printf", Builtin::Printf),
     regular("read", Builtin::Read),
     regular("getopts", Builtin::Getopts),
+    regular("compgen", Builtin::Completion),
+    regular("complete", Builtin::Completion),
+    regular("compopt", Builtin::Completion),
     special("trap", Handler::Builtin(Builtin::Trap)),
     declaration("export", Class::SpecialBuiltin),
     declaration("local", Class::RegularBuiltin),
@@ -226,6 +230,10 @@ static COMMANDS: &[Command] = &[
     keyword("]]", Availability::Included),
     keyword("coproc", Availability::UnsupportedSyntax),
 ];
+
+pub(crate) fn catalogue() -> &'static [Command] {
+    COMMANDS
+}
 
 pub(crate) fn lookup(name: &str) -> Option<&'static Command> {
     COMMANDS.iter().find(|command| command.name == name)
