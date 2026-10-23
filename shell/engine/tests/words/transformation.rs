@@ -301,3 +301,16 @@ fn transformation_prompt_output_and_scanning_obey_limits_and_cancellation() {
     rig.interrupt_without_calls(job);
     assert_eq!(rig.value("v"), None);
 }
+
+#[test]
+fn transformation_prompt_capture_does_not_charge_output_bytes_twice() {
+    for (bytes, status) in [(7, 2), (8, 0)] {
+        let rig = Rig::new(Limits {
+            expansion_bytes: bytes,
+            ..Limits::default()
+        });
+        rig.variable("p", "abcd");
+        assert_eq!(rig.run(r#"args "${p@P}""#), status);
+        assert_eq!(rig.calls.borrow().len(), usize::from(status == 0));
+    }
+}

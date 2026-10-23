@@ -46,7 +46,6 @@ impl Expansion<'_> {
                 .operand_piece(piece, state, true, true, depth + 1)
                 .await?;
         }
-        self.raw_remaining -= capacity - child.raw_remaining;
         let changed = child.ifs_changed;
         let result = child.captured.take().ok_or(2)?.value;
         drop(child);
