@@ -19,8 +19,9 @@ fn metadata_query_baseline_keeps_keywords_builtins_and_standins_distinct() {
     }
     let builtins = [
         ":", "true", "false", "echo", "printf", "read", "export", "local", "readonly", "declare",
-        "typeset", "cd", "pwd", "set", "shift", "command", "builtin", "shopt", "exit", "return",
-        "jobs", "wait", "kill", "unset", "test", "[", "break", "continue", "exec", "eval", "let",
+        "typeset", "type", "cd", "pwd", "set", "shift", "command", "builtin", "shopt", "exit",
+        "return", "jobs", "wait", "kill", "unset", "test", "[", "break", "continue", "exec",
+        "eval", "let",
     ];
     for name in builtins {
         let before = rig.output.bytes().len();
@@ -31,12 +32,12 @@ fn metadata_query_baseline_keeps_keywords_builtins_and_standins_distinct() {
         );
     }
     rig.variable("PATH", "/missing");
-    for name in ["cat", "grep", "mkdir", "seq", "type"] {
+    for name in ["cat", "grep", "mkdir", "seq"] {
         let before = rig.output.bytes().len();
         assert_eq!(rig.run(&format!("command -v {name}")), 1, "{name}");
         assert_eq!(rig.output.bytes().len(), before);
     }
-    assert_eq!(rig.run("type echo"), 127, "no type builtin is introduced");
+    assert_eq!(rig.run("type -t echo"), 0);
     assert_eq!(rig.host.active_count(), 0);
     assert_eq!(rig.host.retained_count(), 0);
 }

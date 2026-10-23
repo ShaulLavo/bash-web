@@ -78,7 +78,7 @@ fn epoch_realtime_reads_the_host_clock_and_disables_only_on_unset() {
             .borrow()
             .bindings()
             .get("EPOCHREALTIME")
-            .map(String::as_str),
+            .map(|value| value.as_str()),
         Some("ordinary")
     );
     let before = state

@@ -575,8 +575,15 @@ parentheses, bracket context and quote/expansion delimiter boundaries. Malformed
 groups retain Bash's literal fallback. Negative groups, pathname extglob, and
 extglob in scalar trim or replacement remain unsupported. The
 [extglob receipt](evidence/own-shell-extglob.json) records exact production gains
-and losses. For-list pathname expansion uses quote metadata and incremental
-filesystem directory reads, including real positive matches and nullglob misses.
+and losses. Command argv, indexed compound assignment operands and for-list
+pathname expansion use quote metadata and incremental filesystem directory reads,
+including real positive matches, nullglob misses and `set -f`. Redirect targets
+and scalar assignments stay scalar. Pathname
+extglob, `dotglob`, `globstar`, `nocaseglob` and `failglob` remain unsupported.
+`cd`, `pushd`, `popd` and `dirs` check real directory metadata and search
+permission, publish `OLDPWD`/`PWD` like Bash, and keep a private directory
+stack; physical (`-P`) resolution remains unsupported. See
+[cd and the directory stack](directories.md).
 
 The new control-flow generator has its own two recorded GNU Bash 5.3.15 seed
 fixtures, each containing 1,848 structured controls plus 600 seeded cases.

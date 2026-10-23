@@ -1,5 +1,6 @@
 //! Original shell state. Open descriptors and filesystem objects live outside
 //! this value: isolated shell environments copy rules/state, never byte streams.
+pub(crate) mod traps;
 use crate::{
     exec::{Error, Work},
     executor::Cancel,
@@ -9,8 +10,16 @@ use std::{
     borrow::Cow,
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
-    rc::Rc,
+    rc::{Rc, Weak},
 };
+
+mod declarations;
+pub(crate) use declarations::DeclarationView;
+mod binding;
+pub use binding::Binding;
+use binding::BindingUndo;
+pub(crate) use binding::BindingUpdate;
+pub(crate) use binding::Indexed;
 
 pub type SharedState = Rc<RefCell<State>>;
 
@@ -53,7 +62,7 @@ impl IfsMembers {
 #[derive(Clone, Debug)]
 pub(crate) struct LocalVariable {
     getopts: Option<(GetoptsState, bool)>,
-    previous: Option<String>,
+    previous: Option<Binding>,
     nameref: Option<String>,
     exported: bool,
     readonly: bool,
@@ -116,14 +125,16 @@ pub struct StoredFunction {
 #[derive(Clone, Debug)]
 pub struct State {
     pub shell_name: String,
-    variables: BTreeMap<String, String>,
+    variables: BTreeMap<String, Binding>,
     exported: BTreeSet<String>,
     readonly: BTreeSet<String>,
     /// Scalar reference targets, distinct from ordinary variable values.
     namerefs: BTreeMap<String, String>,
     pub cwd: String,
+    directories: DirectoryStack,
     /// Function bodies are immutable. Isolated shells copy bindings, not ASTs.
     functions: BTreeMap<String, StoredFunction>,
+    pub(crate) traps: traps::Traps,
     status: i32,
     pipestatus: Vec<i32>,
     pub pipefail: bool,
@@ -135,6 +146,8 @@ pub struct State {
     pub extglob: bool,
     /// Remove unmatched unquoted pathname patterns instead of keeping them.
     pub nullglob: bool,
+    /// `set -f`: no pathname expansion of unquoted fields.
+    pub noglob: bool,
     pub lastpipe: bool,
     pub monitor: bool,
     /// Last published synthetic async handle. Isolated shells inherit a copy.
@@ -150,7 +163,8 @@ pub struct State {
     pub(crate) function_calls: usize,
     memory: Option<crate::exec::StorageBudget>,
     positional_memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
-    prefixes: Vec<BTreeMap<String, Option<String>>>,
+    prefixes: Vec<BTreeMap<String, Option<Binding>>>,
+    assignment_undo: AssignmentJournal,
 }
 impl Default for State {
     fn default() -> Self {
@@ -165,7 +179,9 @@ impl Default for State {
             readonly: BTreeSet::new(),
             namerefs: BTreeMap::new(),
             cwd: "/home/guest".into(),
+            directories: DirectoryStack::default(),
             functions: BTreeMap::new(),
+            traps: traps::Traps::default(),
             status: 0,
             pipestatus: vec![0],
             pipefail: false,
@@ -174,6 +190,7 @@ impl Default for State {
             inherit_errexit: false,
             extglob: false,
             nullglob: false,
+            noglob: false,
             lastpipe: false,
             monitor: false,
             last_async: None,
@@ -188,12 +205,13 @@ impl Default for State {
             memory: None,
             positional_memory: None,
             prefixes: Vec::new(),
+            assignment_undo: AssignmentJournal::default(),
         }
     }
 }
 impl State {
-    /// Ordinary scalar bindings, without special-parameter or nameref resolution.
-    pub fn bindings(&self) -> &BTreeMap<String, String> {
+    /// Ordinary bindings, without special-parameter or nameref resolution.
+    pub fn bindings(&self) -> &BTreeMap<String, Binding> {
         &self.variables
     }
     pub fn exported_bindings(&self) -> &BTreeSet<String> {
@@ -244,7 +262,10 @@ impl State {
         &mut self,
         environment: impl IntoIterator<Item = (String, String)>,
     ) {
-        self.variables = environment.into_iter().collect();
+        self.variables = environment
+            .into_iter()
+            .map(|(key, value)| (key, value.into()))
+            .collect();
         self.exported = self.variables.keys().cloned().collect();
         self.variables.insert("OPTIND".into(), "1".into());
         self.variables.insert("OPTERR".into(), "1".into());
@@ -257,7 +278,11 @@ impl State {
     pub fn inherit_environment(&mut self, environment: impl IntoIterator<Item = (String, String)>) {
         self.variables.remove("OPTIND");
         self.variables.remove("OPTERR");
-        self.variables.extend(environment);
+        self.variables.extend(
+            environment
+                .into_iter()
+                .map(|(key, value)| (key, value.into())),
+        );
         self.exported = self.variables.keys().cloned().collect();
         self.variables.insert("OPTIND".into(), "1".into());
         self.variables.insert("OPTERR".into(), "1".into());
@@ -305,6 +330,8 @@ impl State {
         )?;
         let shell_name = snapshot_value(source, |s| Some(&s.shell_name), cancel, work).await?;
         let cwd = snapshot_value(source, |s| Some(&s.cwd), cancel, work).await?;
+        // Shares the immutable, already charged stack version; changes copy it.
+        let directories = source.borrow().directories.clone();
         let variables = snapshot_map(source, |s| &s.variables, cancel, work).await?;
         let exported = snapshot_set(source, |s| &s.exported, cancel, work).await?;
         let readonly = snapshot_set(source, |s| &s.readonly, cancel, work).await?;
@@ -345,7 +372,9 @@ impl State {
             readonly,
             namerefs,
             cwd,
+            directories,
             functions,
+            traps: state.traps.inherited(),
             status: state.status,
             pipestatus,
             pipefail: state.pipefail,
@@ -354,6 +383,7 @@ impl State {
             inherit_errexit: state.inherit_errexit,
             extglob: state.extglob,
             nullglob: state.nullglob,
+            noglob: state.noglob,
             lastpipe: state.lastpipe,
             monitor: state.monitor,
             last_async,
@@ -368,6 +398,7 @@ impl State {
             positional_memory,
             locals,
             prefixes,
+            assignment_undo: AssignmentJournal::default(),
         })
     }
     fn epoch_realtime_shadowed(&self) -> bool {
@@ -445,7 +476,47 @@ impl State {
         if name == "PWD" {
             return Some(&self.cwd);
         }
-        self.variables.get(name).map(String::as_str)
+        self.variables
+            .get(name)
+            .and_then(Binding::scalar)
+            .map(String::as_str)
+    }
+    pub(crate) fn admit_binding_update(
+        &self,
+        name: &str,
+        update: &BindingUpdate,
+        work: &mut Work,
+    ) -> Result<(usize, usize), Error> {
+        let ScalarResolution::Target(target) = self.resolve_scalar_target(name) else {
+            return Err(1.into());
+        };
+        let old = self.variables.get(target);
+        let copy = update.copy_bytes(old);
+        let growth = update.growth_bytes(old);
+        let keys = target.len().saturating_mul(2).saturating_add(name.len());
+        work.admit_storage(copy.saturating_add(growth).saturating_add(keys))?;
+        work.admit_storage(snapshot_node_bytes::<Binding>()?)?;
+        Ok((
+            copy,
+            copy.saturating_add(growth)
+                .saturating_add(keys)
+                .saturating_add(update.staged_bytes()),
+        ))
+    }
+    pub(crate) fn binding(&self, name: &str) -> Option<&Binding> {
+        let ScalarResolution::Target(target) = self.resolve_scalar_target(name) else {
+            return None;
+        };
+        self.variables.get(target)
+    }
+    pub(crate) fn array_count(&self, name: &str) -> usize {
+        self.binding(name).map_or(0, Binding::count)
+    }
+    pub(crate) fn array_element(&self, name: &str, index: i64) -> Option<&str> {
+        self.binding(name)?.element(index)
+    }
+    pub(crate) fn array_next(&self, name: &str, previous: Option<i64>) -> Option<(i64, &str)> {
+        self.binding(name)?.next(previous)
     }
     /// Takes ownership of argv already admitted by command expansion.
     pub(crate) fn replace_positional(&mut self, args: Vec<String>) -> Result<(), i32> {
@@ -481,6 +552,19 @@ impl State {
         Ok(())
     }
 
+    fn held_local_value(&self, name: &str) -> usize {
+        self.locals
+            .iter()
+            .rev()
+            .find_map(|frame| frame.get(name))
+            .and_then(|local| {
+                local
+                    .memory
+                    .as_ref()
+                    .map(|memory| memory.borrow().bytes().saturating_sub(local.storage_base))
+            })
+            .unwrap_or(0)
+    }
     fn reserve_local_value(&self, name: &str, bytes: usize) -> Result<(), i32> {
         if let Some(local) = self.locals.iter().rev().find_map(|frame| frame.get(name))
             && let Some(memory) = &local.memory
@@ -524,10 +608,12 @@ impl State {
         if name == "PWD" {
             return Some(&self.cwd);
         }
-        self.saved_binding(name, scope).map_or_else(
-            || self.variables.get(name).map(String::as_str),
-            |local| local.previous.as_deref(),
-        )
+        self.saved_binding(name, scope)
+            .map_or_else(|| self.variables.get(name), |local| local.previous.as_ref())
+            .map(|binding| match binding {
+                Binding::Scalar(value) => value.as_str(),
+                Binding::Indexed(_) => "",
+            })
     }
     fn ifs_scope(&self) -> Option<usize> {
         match self.star_separator {
@@ -722,9 +808,11 @@ impl State {
         work: &mut Work,
     ) -> Result<(), Error> {
         Self::admit_scalar_access(state, name, cancel, work).await?;
+        let bytes = state.borrow().scalar_write_copy_bytes(name)?;
         state
             .borrow()
-            .admit_assignment_storage(name, value_bytes, work)
+            .admit_assignment_storage(name, value_bytes, work)?;
+        snapshot_steps(bytes, cancel, work).await
     }
     pub(crate) fn admit_assignment_storage(
         &self,
@@ -735,20 +823,46 @@ impl State {
         let ScalarResolution::Target(target) = self.resolve_scalar_target(name) else {
             return Err(1.into());
         };
+        work.admit_storage(self.scalar_write_copy_bytes(name)?)?;
+        if let Some(changes) = self.assignment_undo.0.upgrade() {
+            work.admit_storage(changes.borrow().scalar_effect_bytes(target, value_bytes))?;
+        }
         if target == name {
             return Ok(());
         }
         // Covers both owned target keys in PrefixFrame::set as well as the
         // variable and saved-prefix B-tree insertions, before either grows.
         work.admit_storage(target.len().saturating_mul(2))?;
-        work.admit_storage(snapshot_node_bytes::<Option<String>>()?)?;
+        work.admit_storage(snapshot_node_bytes::<Option<Binding>>()?)?;
         if !self.variables.contains_key(target) {
-            work.admit_storage(snapshot_node_bytes::<String>()?)?;
+            work.admit_storage(snapshot_node_bytes::<Binding>()?)?;
         }
         if self.prefix_saved(target) {
             work.admit_storage(value_bytes)?;
         }
         Ok(())
+    }
+    fn scalar_write_copy_bytes(&self, name: &str) -> Result<usize, i32> {
+        let ScalarResolution::Target(target) = self.resolve_scalar_target(name) else {
+            return Err(1);
+        };
+        let live = self
+            .variables
+            .get(target)
+            .filter(|value| matches!(value, Binding::Indexed(_)))
+            .map_or(0, |value| {
+                value.storage_bytes().saturating_add(Binding::node_bytes())
+            });
+        let saved = self
+            .prefixes
+            .last()
+            .and_then(|frame| frame.get(target))
+            .and_then(Option::as_ref)
+            .filter(|value| matches!(value, Binding::Indexed(_)))
+            .map_or(0, |value| {
+                value.storage_bytes().saturating_add(Binding::node_bytes())
+            });
+        Ok(live.saturating_add(saved))
     }
     pub(crate) fn prefix_saved(&self, name: &str) -> bool {
         self.prefixes
@@ -760,31 +874,68 @@ impl State {
         if self.is_readonly(&name) {
             return Err(1);
         }
-        self.reserve_local_value(&name, value.len())?;
+        let changes = self.assignment_undo.0.upgrade();
+        if let Some(changes) = &changes {
+            let mut changes = changes.borrow_mut();
+            let bytes = changes.scalar_effect_bytes(&name, value.len());
+            changes
+                .grow(bytes)
+                .map_err(|_| crate::exec::RESOURCE_STATUS)?;
+        }
+        self.reserve_local_value(
+            &name,
+            self.scalar_assignment_value_bytes(&name, value.len()),
+        )?;
+        if let Some(changes) = &changes {
+            changes.borrow_mut().scalar_effect(&name, &value);
+        }
         if let Some(saved) = self
             .prefixes
             .last_mut()
             .and_then(|frame| frame.get_mut(&name))
         {
-            *saved = Some(value.clone());
+            let mut binding = saved.clone().unwrap_or_else(|| "".into());
+            binding.set_scalar(value.clone());
+            *saved = Some(binding);
         }
         let direct_ifs = name == "IFS";
         self.assign_getopts_index(&name, &value);
-        self.variables.insert(name, value);
+        if name == "OPTIND"
+            && let Some(changes) = changes
+        {
+            changes.borrow_mut().getopts = Some(self.getopts);
+        }
+        self.variables
+            .entry(name)
+            .and_modify(|binding| binding.set_scalar(value.clone()))
+            .or_insert_with(|| value.into());
         if direct_ifs {
             self.refresh_star_separator();
         }
         Ok(())
     }
+    fn scalar_assignment_value_bytes(&self, name: &str, bytes: usize) -> usize {
+        self.variables
+            .get(name)
+            .filter(|value| matches!(value, Binding::Indexed(_)))
+            .map_or(bytes, |value| {
+                value
+                    .storage_bytes()
+                    .saturating_add(Binding::node_bytes())
+                    .saturating_add(bytes)
+            })
+    }
     fn assign_getopts_index(&mut self, name: &str, value: &str) {
         if name != "OPTIND" {
             return;
         }
-        let assigned = GetoptsState::assigned(value);
-        if assigned.index == 1 {
+        self.set_getopts_index(GetoptsState::assigned(value).index);
+    }
+    fn set_getopts_index(&mut self, index: usize) {
+        if index == 1 {
             self.getopts.offset = 0;
         }
-        self.getopts.index = assigned.index;
+        self.getopts.index = index;
     }
     pub(crate) fn clear_getopts_argument(&mut self, target: &str) -> Result<(), i32> {
         if self.is_readonly(target) {
@@ -820,25 +971,41 @@ impl State {
     pub(crate) fn getopts_numeric(&self, name: &str) -> bool {
         name == "OPTIND" && self.getopts_numeric
     }
+    #[cfg(test)]
+    pub(crate) fn getopts_publication_budget(&self) -> Option<crate::exec::StorageBudget> {
+        self.memory.clone()
+    }
     pub(crate) fn reserve_getopts_publication(
         &self,
         names: &[(&str, usize); 3],
     ) -> Result<Option<crate::exec::StorageAllocation>, i32> {
-        let mut growth = [("", 0usize); 3];
+        let mut growth = [("", 0usize, 0usize); 3];
         for (index, (name, bytes)) in names.iter().enumerate() {
             let target = self.scalar_target(name)?.ok_or(2)?;
-            let bytes = self.getopts_local_growth(target, *bytes)?;
-            if let Some(previous) = growth[..index].iter().position(|(name, _)| *name == target) {
-                growth[previous].1 = growth[previous].1.max(bytes);
-                continue;
-            }
-            growth[index] = (target, bytes);
-        }
-        self.admit_temporary(
-            growth
+            let slot = growth[..index]
                 .iter()
-                .try_fold(0usize, |sum, (_, bytes)| sum.checked_add(*bytes).ok_or(2))?,
-        )
+                .position(|(name, _, _)| *name == target)
+                .unwrap_or(index);
+            let (_, previous_growth, previous_writes) = growth[slot];
+            let requested = self
+                .scalar_assignment_value_bytes(target, *bytes)
+                .checked_add(previous_writes)
+                .ok_or(2)?;
+            let required = self.getopts_local_growth(target, requested)?;
+            let additional = if matches!(self.variables.get(target), Some(Binding::Indexed(_))) {
+                Binding::node_bytes().checked_add(*bytes).ok_or(2)?
+            } else {
+                0
+            };
+            growth[slot] = (
+                target,
+                previous_growth.max(required),
+                previous_writes.checked_add(additional).ok_or(2)?,
+            );
+        }
+        self.admit_temporary(growth.iter().try_fold(0usize, |sum, (_, bytes, _)| {
+            sum.checked_add(*bytes).ok_or(2)
+        })?)
     }
     fn getopts_local_growth(&self, name: &str, bytes: usize) -> Result<usize, i32> {
         if self.is_readonly(name) {
@@ -944,7 +1111,12 @@ impl State {
     pub(crate) fn environment(&self) -> BTreeMap<String, String> {
         self.exported
             .iter()
-            .filter_map(|name| self.variables.get(name).map(|v| (name.clone(), v.clone())))
+            .filter_map(|name| {
+                self.variables.get(name).and_then(|value| match value {
+                    Binding::Scalar(value) => Some((name.clone(), value.clone())),
+                    Binding::Indexed(_) => None,
+                })
+            })
             .collect()
     }
     /// Unset a variable. A local declared in the current function stays
@@ -966,6 +1138,17 @@ impl State {
             self.refresh_star_separator();
         }
         Ok(removed)
+    }
+    pub(crate) fn unset_nameref(&mut self, name: &str) -> Result<bool, i32> {
+        if self.is_readonly(name) {
+            return Err(1);
+        }
+        if !self.namerefs.contains_key(name) {
+            return Ok(false);
+        }
+        self.namerefs.remove(name);
+        self.unset_binding(name)?;
+        Ok(true)
     }
     fn unset_binding(&mut self, name: &str) -> Result<bool, i32> {
         if self.is_readonly(name) {
@@ -1045,11 +1228,14 @@ impl State {
             .find_map(|frame| frame.get(&name))
             .is_some_and(|binding| binding.function_prefix);
         let inherited_bytes = if !already_local && prefix && value.is_none() {
-            self.variables.get(&name).map_or(0, String::len)
+            self.variables.get(&name).map_or(0, Binding::storage_bytes)
         } else {
             0
         };
-        let bytes = value.as_ref().map_or(inherited_bytes, String::len);
+        let value = value.map(Binding::from);
+        let bytes = value
+            .as_ref()
+            .map_or(inherited_bytes, Binding::storage_bytes);
         // Validate readonly bindings before changing an existing ticket. A
         // rejected declaration must leave both its value and charge untouched.
         self.save_local(&name, bytes)?;
@@ -1091,11 +1277,11 @@ impl State {
         if !self.locals.last().unwrap().contains_key(name) {
             let storage_base = snapshot_node_bytes::<LocalVariable>()
                 .map_err(|_| 2)?
-                .checked_add(snapshot_node_bytes::<String>().map_err(|_| 2)?)
+                .checked_add(snapshot_node_bytes::<Binding>().map_err(|_| 2)?)
                 .ok_or(2)?
                 .checked_add(name.len().checked_mul(3).ok_or(2)?)
                 .ok_or(2)?
-                .checked_add(self.variables.get(name).map_or(0, String::len))
+                .checked_add(self.variables.get(name).map_or(0, Binding::storage_bytes))
                 .ok_or(2)?
                 .checked_add(self.namerefs.get(name).map_or(0, String::len))
                 .ok_or(2)?;
@@ -1159,7 +1345,7 @@ impl State {
         Ok(())
     }
     pub(crate) fn declaration_storage(&self, name: &str, local: bool) -> Result<usize, Error> {
-        let mut bytes = snapshot_node_bytes::<String>()?.saturating_add(name.len());
+        let mut bytes = snapshot_node_bytes::<Binding>()?.saturating_add(name.len());
         if !local
             || self
                 .locals
@@ -1171,7 +1357,7 @@ impl State {
         bytes = bytes
             .saturating_add(snapshot_node_bytes::<LocalVariable>()?)
             .saturating_add(name.len())
-            .saturating_add(self.variables.get(name).map_or(0, String::len))
+            .saturating_add(self.variables.get(name).map_or(0, Binding::storage_bytes))
             .saturating_add(self.namerefs.get(name).map_or(0, String::len));
         Ok(bytes)
     }
@@ -1199,6 +1385,16 @@ trait SnapshotValue: Clone {
 impl SnapshotValue for String {
     fn snapshot_bytes(&self) -> usize {
         self.len()
+    }
+}
+impl SnapshotValue for Binding {
+    fn snapshot_bytes(&self) -> usize {
+        self.storage_bytes()
+    }
+}
+impl SnapshotValue for Option<Binding> {
+    fn snapshot_bytes(&self) -> usize {
+        self.as_ref().map_or(0, Binding::storage_bytes)
     }
 }
 impl SnapshotValue for Option<String> {
@@ -1374,9 +1570,145 @@ enum PrefixBindings {
     Expansion,
     /// Execution replay restores its own saved values, not durable RHS effects.
     Builtin {
-        saved: BTreeMap<String, Option<String>>,
+        saved: BTreeMap<String, Option<Binding>>,
         restore_epoch_realtime: bool,
     },
+}
+
+/// Active undo belongs to its executing state, never to an isolated snapshot.
+#[derive(Debug, Default)]
+struct AssignmentJournal(Weak<RefCell<AssignmentChanges>>);
+impl Clone for AssignmentJournal {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+#[derive(Debug)]
+struct AssignmentChanges {
+    getopts: Option<GetoptsState>,
+    undo: Vec<(String, BindingUndo)>,
+    memory: Option<crate::exec::StorageAllocation>,
+}
+/// Resource/cancellation undo for directly committed assignment-only writes.
+/// Ordinary shell errors release this guard without reversing completed writes.
+pub(crate) struct AssignmentFrame {
+    state: SharedState,
+    changes: Rc<RefCell<AssignmentChanges>>,
+    previous: AssignmentJournal,
+    keep: bool,
+}
+impl AssignmentFrame {
+    pub(crate) fn enter(state: SharedState) -> Result<Self, Error> {
+        let memory = state
+            .borrow()
+            .admit_temporary(
+                std::mem::size_of::<RefCell<AssignmentChanges>>()
+                    + 2 * std::mem::size_of::<usize>(),
+            )
+            .map_err(Error::from)?;
+        let changes = Rc::new(RefCell::new(AssignmentChanges {
+            getopts: None,
+            undo: Vec::new(),
+            memory,
+        }));
+        let previous = std::mem::replace(
+            &mut state.borrow_mut().assignment_undo,
+            AssignmentJournal(Rc::downgrade(&changes)),
+        );
+        Ok(Self {
+            state,
+            changes,
+            previous,
+            keep: false,
+        })
+    }
+    pub(crate) fn reserve(&mut self, name: &str, retained: usize) -> Result<(), Error> {
+        let target_len = self.state.borrow().scalar_target(name)?.ok_or(2)?.len();
+        let mut changes = self.changes.borrow_mut();
+        changes.grow(target_len.saturating_add(retained))?;
+        if changes.undo.len() < changes.undo.capacity() {
+            return Ok(());
+        }
+        let old_slots = changes.undo.capacity() * std::mem::size_of::<(String, BindingUndo)>();
+        let capacity = changes.undo.capacity().max(4);
+        let slots = (changes.undo.len() + capacity) * std::mem::size_of::<(String, BindingUndo)>();
+        changes.grow(slots)?;
+        changes.undo.try_reserve_exact(capacity).map_err(|_| 2)?;
+        if let Some(memory) = &mut changes.memory {
+            memory
+                .resize(memory.bytes() - old_slots)
+                .expect("shrinking undo allocation");
+        }
+        Ok(())
+    }
+    pub(crate) fn keep(&mut self) {
+        self.keep = true;
+    }
+}
+impl AssignmentChanges {
+    fn grow(&mut self, bytes: usize) -> Result<(), Error> {
+        if let Some(memory) = &mut self.memory {
+            memory
+                .grow(bytes)
+                .map_err(|_| Error::Status(crate::exec::RESOURCE_STATUS))?;
+        }
+        Ok(())
+    }
+    fn scalar_effect_bytes(&self, name: &str, value_bytes: usize) -> usize {
+        self.undo
+            .iter()
+            .filter(|(target, _)| target == name)
+            .fold(0usize, |bytes, (_, undo)| {
+                bytes.saturating_add(undo.scalar_effect_bytes(value_bytes))
+            })
+    }
+    fn scalar_effect(&mut self, name: &str, value: &str) {
+        for (_, undo) in self.undo.iter_mut().filter(|(target, _)| target == name) {
+            undo.scalar_effect(value);
+        }
+    }
+}
+impl Drop for AssignmentFrame {
+    fn drop(&mut self) {
+        let mut state = self.state.borrow_mut();
+        let mut changes = self.changes.borrow_mut();
+        state.assignment_undo = std::mem::take(&mut self.previous);
+        if !self.keep {
+            for (name, undo) in changes.undo.iter_mut().rev() {
+                let undo = std::mem::replace(undo, BindingUndo::Restore(None));
+                state.restore_assignment(name, undo);
+            }
+            if let Some(cursor) = changes.getopts {
+                state.getopts = cursor;
+            }
+        }
+        for (name, _) in &changes.undo {
+            let bytes = state.variables.get(name).map_or(0, Binding::storage_bytes);
+            state
+                .reserve_local_value(name, bytes)
+                .expect("previously admitted local storage");
+            if name == "IFS" {
+                state.refresh_star_separator();
+            }
+        }
+    }
+}
+
+impl State {
+    fn restore_assignment(&mut self, name: &str, undo: BindingUndo) {
+        if matches!(undo, BindingUndo::Restore(None)) {
+            self.variables.remove(name);
+            return;
+        }
+        let live = self
+            .variables
+            .get_mut(name)
+            .expect("completed binding exists");
+        let current = std::mem::replace(live, String::new().into());
+        *live = undo
+            .restore(Some(current))
+            .expect("previous binding exists");
+    }
 }
 
 pub(crate) struct PrefixFrame {
@@ -1386,6 +1718,7 @@ pub(crate) struct PrefixFrame {
     star_separator: StarSeparator,
     ifs_members: Option<IfsMembers>,
     restores_ifs: std::cell::Cell<bool>,
+    getopts: std::cell::Cell<Option<GetoptsState>>,
     memory: RefCell<Option<crate::exec::StorageAllocation>>,
 }
 impl PrefixFrame {
@@ -1404,6 +1737,7 @@ impl PrefixFrame {
             star_separator,
             ifs_members,
             restores_ifs: std::cell::Cell::new(false),
+            getopts: std::cell::Cell::new(None),
             memory: RefCell::new(memory),
         }
     }
@@ -1430,6 +1764,7 @@ impl PrefixFrame {
             star_separator: state.borrow().star_separator,
             ifs_members: state.borrow().ifs_members,
             restores_ifs: std::cell::Cell::new(false),
+            getopts: std::cell::Cell::new(None),
             memory: RefCell::new(state.borrow().admit_temporary(0).map_err(Error::from)?),
         };
         let PrefixBindings::Builtin {
@@ -1446,14 +1781,14 @@ impl PrefixFrame {
                 let target = state_ref.assignment_name(name.clone()).map_err(|_| 2)?;
                 if !saved.contains_key(&target) {
                     work.admit_storage(
-                        (std::mem::size_of::<(String, Option<String>)>()
+                        (std::mem::size_of::<(String, Option<Binding>)>()
                             + std::mem::size_of::<usize>())
                         .saturating_mul(16),
                     )?;
                 }
                 if !state_ref.variables.contains_key(&target) {
                     work.admit_storage(
-                        (std::mem::size_of::<(String, String)>() + std::mem::size_of::<usize>())
+                        (std::mem::size_of::<(String, Binding)>() + std::mem::size_of::<usize>())
                             .saturating_mul(16),
                     )?;
                 }
@@ -1461,16 +1796,29 @@ impl PrefixFrame {
                 if let Some(memory) = &mut *frame.memory.borrow_mut() {
                     memory
                         .grow(
-                            (std::mem::size_of::<(String, Option<String>)>()
+                            (std::mem::size_of::<(String, Option<Binding>)>()
                                 + std::mem::size_of::<usize>())
                             .saturating_mul(16)
                             .saturating_add(target.len().saturating_mul(2))
-                            .saturating_add(value.len()),
+                            .saturating_add(value.len())
+                            .saturating_add(
+                                state_ref
+                                    .variables
+                                    .get(&target)
+                                    .filter(|value| matches!(value, Binding::Indexed(_)))
+                                    .map_or(0, Binding::storage_bytes),
+                            ),
                         )
                         .map_err(|_| Error::Status(crate::exec::RESOURCE_STATUS))?;
                 }
                 state_ref.assign_getopts_index(&target, value);
-                let previous = state_ref.variables.insert(target.clone(), value.clone());
+                let mut binding = state_ref
+                    .variables
+                    .get(&target)
+                    .cloned()
+                    .unwrap_or_else(|| "".into());
+                binding.set_scalar(value.clone());
+                let previous = state_ref.variables.insert(target.clone(), binding);
                 *restore_epoch_realtime |= state_ref.suspend_epoch_realtime(&target);
                 saved.entry(target).or_insert(previous);
             }
@@ -1479,7 +1827,7 @@ impl PrefixFrame {
     }
     pub(crate) fn reserve(&self, name: &str, value_bytes: usize) -> Result<(), i32> {
         assert!(matches!(self.bindings, PrefixBindings::Expansion));
-        let bytes = snapshot_node_bytes::<Option<String>>()
+        let bytes = snapshot_node_bytes::<Option<Binding>>()
             .map_err(|_| 2)?
             .checked_add(name.len().checked_mul(2).ok_or(2)?)
             .ok_or(2)?
@@ -1494,17 +1842,33 @@ impl PrefixFrame {
     }
     pub(crate) fn set(&self, name: String, value: String) -> Result<(), String> {
         assert!(matches!(self.bindings, PrefixBindings::Expansion));
+        let name = self
+            .state
+            .borrow()
+            .assignment_name(name)
+            .map_err(|_| String::new())?;
+        let mut binding = self
+            .state
+            .borrow()
+            .variables
+            .get(&name)
+            .cloned()
+            .unwrap_or_else(|| "".into());
+        binding.set_scalar(value);
+        self.set_binding(name, binding)
+    }
+    pub(crate) fn set_binding(&self, name: String, binding: Binding) -> Result<(), String> {
         let mut state = self.state.borrow_mut();
-        if state.scalar_target(&name).ok().flatten().is_none() {
-            return Err(name);
-        }
         let name = state.assignment_name(name).map_err(|_| String::new())?;
         if state.is_readonly(&name) {
             return Err(name);
         }
         let direct_ifs = name == "IFS";
-        state.assign_getopts_index(&name, &value);
-        let previous = state.variables.insert(name.clone(), value);
+        if name == "OPTIND" && self.getopts.get().is_none() {
+            self.getopts.set(Some(state.getopts));
+        }
+        state.assign_getopts_index(&name, binding.as_str());
+        let previous = state.variables.insert(name.clone(), binding);
         state
             .prefixes
             .last_mut()
@@ -1517,10 +1881,70 @@ impl PrefixFrame {
         }
         Ok(())
     }
-    pub(crate) fn commit(mut self) -> Result<(), i32> {
+    /// A completed assignment-only write needs no whole-binding undo. All
+    /// expansion, COW admission and cancellation checks precede this commit.
+    pub(crate) fn commit_update(
+        mut self,
+        name: String,
+        update: BindingUpdate,
+        completed: &mut AssignmentFrame,
+    ) -> Result<(), Error> {
+        let mut state = self.state.borrow_mut();
+        assert!(matches!(self.bindings, PrefixBindings::Expansion));
+        assert!(state.prefixes.last().unwrap().is_empty());
+        let name = state.assignment_name(name).map_err(Error::from)?;
+        if state.is_readonly(&name) {
+            return Err(Error::Readonly {
+                name,
+                line: None,
+                expansion: true,
+            });
+        }
+        let storage = update.storage_after(state.variables.get(&name));
+        state
+            .reserve_local_value(&name, storage.max(state.held_local_value(&name)))
+            .map_err(Error::from)?;
+        let direct_ifs = name == "IFS";
+        let undo_name = name.clone();
+        let undo = match state.variables.entry(name) {
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                let previous = std::mem::replace(entry.get_mut(), String::new().into());
+                let (binding, undo) = update.apply_with_undo(Some(previous));
+                *entry.get_mut() = binding;
+                undo
+            }
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                let (binding, undo) = update.apply_with_undo(None);
+                entry.insert(binding);
+                undo
+            }
+        };
+        if undo_name == "OPTIND" {
+            completed
+                .changes
+                .borrow_mut()
+                .getopts
+                .get_or_insert(state.getopts);
+            let index = GetoptsState::assigned(state.variables[&undo_name].as_str()).index;
+            state.set_getopts_index(index);
+        }
+        completed.changes.borrow_mut().undo.push((undo_name, undo));
+        state.prefixes.pop();
+        self.active = false;
+        if direct_ifs {
+            state.refresh_star_separator();
+        }
+        Ok(())
+    }
+    pub(crate) fn commit(mut self, completed: Option<&mut AssignmentFrame>) -> Result<(), i32> {
         assert!(matches!(self.bindings, PrefixBindings::Expansion));
         let mut state = self.state.borrow_mut();
         let saved = state.prefixes.last().unwrap();
+        if let Some(completed) = &completed
+            && let Some(cursor) = self.getopts.get()
+        {
+            completed.changes.borrow_mut().getopts.get_or_insert(cursor);
+        }
         // Prefix RHSs are temporary until the whole assignment-only command
         // commits. Reserve every owning local's positive delta together before
         // changing any ticket, so failed multi-assignment commits are atomic.
@@ -1531,7 +1955,7 @@ impl PrefixFrame {
             {
                 let bytes = local
                     .storage_base
-                    .checked_add(state.variables.get(name).map_or(0, String::len))
+                    .checked_add(state.variables.get(name).map_or(0, Binding::storage_bytes))
                     .ok_or(2)?;
                 growth = growth
                     .checked_add(bytes.saturating_sub(memory.borrow().bytes()))
@@ -1543,9 +1967,22 @@ impl PrefixFrame {
         // aggregate reservation and moving each part onto its binding ticket.
         drop(reservation);
         for name in saved.keys() {
-            state.reserve_local_value(name, state.variables.get(name).map_or(0, String::len))?;
+            let bytes = state.variables.get(name).map_or(0, Binding::storage_bytes);
+            let retained = if completed.is_some() {
+                state.held_local_value(name)
+            } else {
+                0
+            };
+            state.reserve_local_value(name, bytes.max(retained))?;
         }
-        state.prefixes.pop();
+        let saved = state.prefixes.pop().unwrap();
+        if let Some(completed) = completed {
+            completed.changes.borrow_mut().undo.extend(
+                saved
+                    .into_iter()
+                    .map(|(name, old)| (name, BindingUndo::Restore(old))),
+            );
+        }
         self.active = false;
         Ok(())
     }
@@ -1713,8 +2150,13 @@ pub fn absolute(cwd: &str, path: &str) -> String {
     format!("/{}", components.join("/"))
 }
 
+mod directory_stack;
+use directory_stack::DirectoryStack;
+
 #[cfg(test)]
 mod bindings_tests;
+#[cfg(test)]
+mod getopts_tests;
 
 #[cfg(test)]
 mod tests {
@@ -1844,6 +2286,63 @@ mod tests {
             access.as_mut().poll(&mut context),
             Poll::Ready(Err(Error::Status(130)))
         ));
+    }
+
+    fn array_state() -> SharedState {
+        let state = State::default().shared();
+        let mut values = Indexed::default();
+        values.insert(0, "old".repeat(4096));
+        values.insert(9, "kept".into());
+        state
+            .borrow_mut()
+            .variables
+            .insert("a".into(), Binding::Indexed(Rc::new(values)));
+        state
+    }
+
+    #[test]
+    fn indexed_scalar_copy_admission_fails_before_mutation_and_yields_without_borrows() {
+        let state = array_state();
+        let cancel = Cancel::new();
+        let mut small = Work::new(100_000, 1, 0);
+        assert!(matches!(
+            State::admit_assignment(&state, "a", 3, &cancel, &mut small).now_or_never(),
+            Some(Err(Error::Status(2)))
+        ));
+        let mut work = Work::new(100_000, 100_000, 0);
+        let mut admission = Box::pin(State::admit_assignment(&state, "a", 3, &cancel, &mut work));
+        let waker = noop_waker();
+        let mut context = Context::from_waker(&waker);
+        assert!(admission.as_mut().poll(&mut context).is_pending());
+        assert!(state.try_borrow_mut().is_ok());
+        cancel.cancel();
+        assert!(matches!(
+            admission.as_mut().poll(&mut context),
+            Poll::Ready(Err(Error::Status(130)))
+        ));
+        assert_eq!(state.borrow().array_element("a", 9), Some("kept"));
+    }
+
+    #[test]
+    fn indexed_snapshot_and_prefix_drop_restore_complete_binding() {
+        let state = array_state();
+        let mut work = Work::new(1_000_000, 1_000_000, 0);
+        let child = finish_snapshot(&state, &Cancel::new(), &mut work)
+            .unwrap_or_else(|_| panic!("array snapshot fits"))
+            .shared();
+        child
+            .borrow_mut()
+            .assign_parameter("a".into(), "child".into())
+            .unwrap();
+        assert_eq!(state.borrow().array_element("a", 0).unwrap().len(), 12_288);
+        assert_eq!(child.borrow().array_element("a", 9), Some("kept"));
+        let frame = PrefixFrame::enter(state.clone());
+        frame.set("a".into(), "prefix".into()).unwrap();
+        assert_eq!(state.borrow().array_element("a", 0), Some("prefix"));
+        assert_eq!(state.borrow().array_element("a", 9), Some("kept"));
+        drop(frame);
+        assert_eq!(state.borrow().array_element("a", 0).unwrap().len(), 12_288);
+        assert_eq!(state.borrow().array_element("a", 9), Some("kept"));
     }
 
     #[test]
@@ -1981,7 +2480,7 @@ mod tests {
         state
             .borrow_mut()
             .variables
-            .insert("sep".into(), ":".repeat(4096));
+            .insert("sep".into(), ":".repeat(4096).into());
         state
             .borrow_mut()
             .declare_nameref("IFS".into(), "sep".into(), false)
@@ -2045,7 +2544,7 @@ mod tests {
             state
                 .borrow_mut()
                 .variables
-                .insert("sep".into(), String::new());
+                .insert("sep".into(), String::new().into());
             state
                 .borrow_mut()
                 .declare_nameref("IFS".into(), "sep".into(), false)
@@ -2158,7 +2657,7 @@ mod tests {
         state
             .borrow_mut()
             .variables
-            .insert("hidden".into(), "x".repeat(128 * 1024));
+            .insert("hidden".into(), "x".repeat(128 * 1024).into());
         let cancel = Cancel::new();
         let mut work = Work::new(1_000_000, 64 * 1024, 0);
         assert!(matches!(
@@ -2276,7 +2775,7 @@ mod tests {
                     "v".into(),
                     LocalVariable {
                         getopts: None,
-                        previous: Some("x".repeat(128 * 1024)),
+                        previous: Some("x".repeat(128 * 1024).into()),
                         nameref: None,
                         exported: false,
                         readonly: false,
@@ -2286,10 +2785,10 @@ mod tests {
                     },
                 )]));
             } else {
-                state
-                    .borrow_mut()
-                    .prefixes
-                    .push(BTreeMap::from([("v".into(), Some("x".repeat(128 * 1024)))]));
+                state.borrow_mut().prefixes.push(BTreeMap::from([(
+                    "v".into(),
+                    Some("x".repeat(128 * 1024).into()),
+                )]));
             }
             let mut work = Work::new(1_000_000, 64 * 1024, 0);
             assert!(matches!(
@@ -2317,7 +2816,7 @@ mod tests {
         state
             .borrow_mut()
             .variables
-            .insert("retained".into(), "x".repeat(4096));
+            .insert("retained".into(), "x".repeat(4096).into());
         let cancel = Cancel::new();
         let mut work = Work::new(1_000_000, 64 * 1024, 0);
         let mut snapshot = Box::pin(State::snapshot(&state, &cancel, &mut work));
@@ -2345,7 +2844,7 @@ mod tests {
         // prints 20 09 0a, declare -- IFS=$' \t\n', <x>; printenv exits 1.
         let state = State::default();
         assert_eq!(
-            state.variables.get("IFS").map(String::as_str),
+            state.variables.get("IFS").map(Binding::as_str),
             Some(" \t\n")
         );
         assert_eq!(state.parameter("IFS"), " \t\n");
@@ -2358,7 +2857,7 @@ mod tests {
     fn subsequent_ifs_empty_change_and_removal_do_not_reinitialize_it() {
         let mut state = State::default();
 
-        state.variables.insert("IFS".into(), String::new());
+        state.variables.insert("IFS".into(), String::new().into());
         assert_eq!(state.parameter("IFS"), "");
         assert_eq!(state.scalar_parameter("IFS"), Some(""));
         assert!(!state.environment().contains_key("IFS"));
@@ -2547,7 +3046,7 @@ mod tests {
         let prefix = PrefixFrame::enter(state.clone());
         prefix.reserve("x", 100).unwrap();
         prefix.set("x".into(), "a".repeat(100)).unwrap();
-        prefix.commit().unwrap();
+        prefix.commit(None).unwrap();
         assert_eq!(memory.observation().0, before + 100 - 3);
         assert_eq!(state.borrow().parameter("x").len(), 100);
         drop(outer);
@@ -2569,7 +3068,7 @@ mod tests {
             prefix.set(name.into(), "a".repeat(100)).unwrap();
         }
         let pressure = memory.admit(16_384 - memory.observation().0 - 150).unwrap();
-        assert_eq!(prefix.commit(), Err(RESOURCE_STATUS));
+        assert_eq!(prefix.commit(None), Err(RESOURCE_STATUS));
         assert_eq!(state.borrow().parameter("x"), "old");
         assert_eq!(state.borrow().parameter("y"), "old");
         drop(pressure);

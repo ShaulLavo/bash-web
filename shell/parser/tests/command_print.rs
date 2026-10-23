@@ -51,7 +51,11 @@ unsafe impl GlobalAlloc for TrackedAllocator {
 static ALLOCATOR: TrackedAllocator = TrackedAllocator;
 
 fn command(source: &str) -> Command {
-    Parser::new(source).parse().unwrap().commands.remove(0)
+    Parser::new(source)
+        .parse()
+        .unwrap_or_else(|error| panic!("{source:?}: {error:?}"))
+        .commands
+        .remove(0)
 }
 
 fn with_argument(word: Word) -> Command {
@@ -189,6 +193,7 @@ fn bounded_function_layout_matches_existing_printer_for_all_body_shapes() {
         "f() ( echo subshell )",
         "f() { cat <<EOF\nbody\nEOF\n}",
         "f() { g() { :; }; g; }",
+        "f() { foo\\\nbar() { :; }; }",
     ] {
         let definition = command(source);
         let Command::Function(function) = definition else {
@@ -204,6 +209,44 @@ fn bounded_function_layout_matches_existing_printer_for_all_body_shapes() {
             );
         }
     }
+}
+
+#[test]
+fn unbounded_command_substitution_display_matches_bounded_printer() {
+    let Command::Simple(echo) = command("echo $(foo\\\nbar() { :; })") else {
+        unreachable!()
+    };
+    let word = &echo.args[0];
+    let WordPart::CommandSubstitution(commands) = &word.parts[0] else {
+        unreachable!()
+    };
+    let bounded = command_string(&commands[0], &Cell::new(4096), 4096, None).unwrap();
+    assert_eq!(word.to_string(), format!("$({bounded})"));
+    assert!(bounded.starts_with("function foobar ()"));
+}
+
+fn assert_nested_function_name_printer_parity(name: &str, printed: &str) {
+    let mut nested = command("function foo { :; }");
+    let Command::Function(function) = &mut nested else {
+        unreachable!()
+    };
+    function.name = name.into();
+    let fuel = Cell::new(4096);
+    let bounded = function_string_bounded("outer", &nested, &fuel, 4096, None).unwrap();
+    assert_eq!(function_string("outer", &nested), bounded);
+    assert!(bounded.contains(&format!("function {printed} ()")));
+    assert!(fuel.get() < 4096);
+    assert_function_bounded("outer", &nested, None, 1);
+}
+
+#[test]
+fn unbounded_nested_ansi_function_name_matches_bounded_printer() {
+    assert_nested_function_name_printer_parity(r"foo$'b\x61r'", "foo'bar'");
+}
+
+#[test]
+fn unbounded_nested_localized_function_name_matches_bounded_printer() {
+    assert_nested_function_name_printer_parity(r#"foo$"bar""#, r#"foo"bar""#);
 }
 
 fn assert_function_bounded(
@@ -270,4 +313,75 @@ fn bounded_function_names_and_bodies_are_admitted_before_copying() {
             .to_string()
             .contains("cancelled")
     );
+}
+
+#[test]
+fn function_declaration_spelling_survives_parse_clone_and_print() {
+    for (header, name, printed) in [
+        (r#"function foo"bar""#, r#"foo"bar""#, r#"foo"bar""#),
+        ("function foo'bar'", "foo'bar'", "foo'bar'"),
+        (r"function f\oo", r"f\oo", r"f\oo"),
+        ("function `echo $x`", "`echo $x`", "`echo $x`"),
+        ("function foo\\\nbar", "foo\\\nbar", "foobar"),
+        (r#"foo"bar"()"#, r#"foo"bar""#, r#"foo"bar""#),
+        ("foo'bar'()", "foo'bar'", "foo'bar'"),
+        ("`echo $x`()", "`echo $x`", "`echo $x`"),
+        ("foo\\\nbar()", "foo\\\nbar", "foobar"),
+        (
+            "function `echo\\\\\nhi`",
+            "`echo\\\\\nhi`",
+            "`echo\\\\\nhi`",
+        ),
+        ("`echo\\\\\nhi`()", "`echo\\\\\nhi`", "`echo\\\\\nhi`"),
+        ("function `echo 'a\\\nb'`", "`echo 'a\\\nb'`", "`echo 'ab'`"),
+    ] {
+        let source = format!("{header} {{ :; }}");
+        let parsed = command(&source);
+        let Command::Function(function) = parsed.clone() else {
+            panic!("expected function: {source}");
+        };
+        assert_eq!(function.name, name);
+        let rendered = command_string(&parsed, &Cell::new(100_000), 100_000, None).unwrap();
+        assert!(
+            rendered.starts_with(&format!("function {printed} ()")),
+            "{rendered}"
+        );
+        assert_bounded(&parsed, None, 1);
+    }
+}
+
+#[test]
+fn function_name_printer_preserves_single_quoted_continuations() {
+    let mut parsed = command("function foo { :; }");
+    let Command::Function(function) = &mut parsed else {
+        unreachable!()
+    };
+    function.name = "foo'a\\\nb'".into();
+    let rendered = command_string(&parsed, &Cell::new(100_000), 100_000, None).unwrap();
+    assert!(rendered.starts_with("function foo'a\\\nb' ()"));
+    assert_bounded(&parsed, None, 1);
+}
+
+#[test]
+fn alias_function_names_retain_the_expanded_token_not_the_alias_source() {
+    let options = shell_parser::ParseOptions {
+        aliases: Some(Arc::new(std::collections::HashMap::from([
+            ("def".into(), "function".into()),
+            ("make".into(), "function `echo $x` { :; }".into()),
+        ]))),
+        ..Default::default()
+    };
+    for source in ["def `echo $x` { :; }", "make"] {
+        let script = Parser::new(source)
+            .with_options(options.clone())
+            .parse()
+            .unwrap();
+        let Command::Function(function) = &script.commands[0] else {
+            panic!("expected alias function: {source}");
+        };
+        assert_eq!(function.name, "`echo $x`");
+        let rendered =
+            command_string(&script.commands[0], &Cell::new(100_000), 100_000, None).unwrap();
+        assert!(rendered.starts_with("function `echo $x` ()"));
+    }
 }

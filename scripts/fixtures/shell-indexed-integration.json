@@ -1,0 +1,151 @@
+{
+  "schema": 1,
+  "bash": "5.3.15(1)-release",
+  "env": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "LC_ALL": "C.UTF-8",
+    "LANG": "C.UTF-8"
+  },
+  "provenance": {
+    "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+    "recordedAt": "2026-10-22T00:20:58.656182+00:00",
+    "scope": "Custom integration controls, not scored-case IDs. Recorded local oracle only; no live CI-host Bash."
+  },
+  "cases": [
+    {
+      "id": "compound-quotes",
+      "script": "a=(\"a b\" \"\" '*' '?(a)'); printf \"<%s>\\n\" \"${a[@]}\"",
+      "status": 0,
+      "stdoutHex": "3c6120623e0a3c3e0a3c2a3e0a3c3f2861293e0a",
+      "stderrHex": ""
+    },
+    {
+      "id": "compound-split",
+      "script": "v=\"a b\"; a=($v \"$v\"); printf \"<%s>\\n\" \"${a[@]}\"",
+      "status": 0,
+      "stdoutHex": "3c613e0a3c623e0a3c6120623e0a",
+      "stderrHex": ""
+    },
+    {
+      "id": "compound-indirect-at",
+      "script": "set -- \"a b\" \"\" c; r=@; a=(\"${!r}\"); printf \"<%s>\\n\" \"${a[@]}\"",
+      "status": 0,
+      "stdoutHex": "3c6120623e0a3c3e0a3c633e0a",
+      "stderrHex": ""
+    },
+    {
+      "id": "compound-indirect-unquoted",
+      "script": "set -- \"a b\" \"\" c; r=@; a=(${!r}); printf \"<%s>\\n\" \"${a[@]}\"",
+      "status": 0,
+      "stdoutHex": "3c613e0a3c623e0a3c633e0a",
+      "stderrHex": ""
+    },
+    {
+      "id": "compound-indirect-star",
+      "script": "set -- a b; r=\"*\"; IFS=:; a=(\"${!r}\"); printf \"<%s>\\n\" \"${a[@]}\"",
+      "status": 0,
+      "stdoutHex": "3c613a623e0a",
+      "stderrHex": ""
+    },
+    {
+      "id": "scalar-transform-from-array",
+      "script": "a=(hello); s=${a[0]}; a+=(\"${s@U}\" \"${s@Q}\"); printf \"<%s>\\n\" \"${a[@]}\"",
+      "status": 0,
+      "stdoutHex": "3c68656c6c6f3e0a3c48454c4c4f3e0a3c2768656c6c6f273e0a",
+      "stderrHex": ""
+    },
+    {
+      "id": "extglob-array-case",
+      "script": "shopt -s extglob\na=(foo bar); for x in \"${a[@]}\"; do case $x in @(foo|bar)) printf \"yes:%s\\n\" \"$x\";; *) echo no;; esac; done",
+      "status": 0,
+      "stdoutHex": "7965733a666f6f0a7965733a6261720a",
+      "stderrHex": ""
+    },
+    {
+      "id": "builtin-wrapper-array",
+      "script": "a=(x y); a=temp builtin printf \"<%s>\\n\" \"$a\"; printf \"<%s>\\n\" \"${a[@]}\"",
+      "status": 0,
+      "stdoutHex": "3c783e0a3c783e0a3c793e0a",
+      "stderrHex": ""
+    },
+    {
+      "id": "builtin-wrapper-getopts",
+      "script": "getopts abc o -abc; OPTIND[0]=1; builtin getopts abc o -abc; printf \"%s:%s\\n\" \"$o\" \"$OPTIND\"",
+      "status": 0,
+      "stdoutHex": "613a310a",
+      "stderrHex": ""
+    },
+    {
+      "id": "indexed-local-getopts",
+      "script": "f() { local OPTIND=1; OPTIND[1]=saved; getopts abc o -abc; getopts abc o -abc; printf \"%s:%s:%s\\n\" \"$o\" \"$OPTIND\" \"${OPTIND[1]}\"; }; f",
+      "status": 0,
+      "stdoutHex": "623a313a73617665640a",
+      "stderrHex": ""
+    },
+    {
+      "id": "special-negative-lengths",
+      "script": "true | false; printf \"%s|%s|%s|%s\\n\" \"${#PIPESTATUS[0]}\" \"${#PIPESTATUS[1]}\" \"${#PIPESTATUS[8]}\" \"${#PIPESTATUS[-1]}\"",
+      "status": 0,
+      "stdoutHex": "317c317c307c310a",
+      "stderrHex": ""
+    },
+    {
+      "id": "selected-negative-lengths",
+      "script": "true | false; printf \"%s:%s\\n\" \"${u:-${#PIPESTATUS[-1]}}\" \"${u:-${#PIPESTATUS[-2]}}\"",
+      "status": 0,
+      "stdoutHex": "313a310a",
+      "stderrHex": ""
+    },
+    {
+      "id": "rhs-before-subscript",
+      "script": "a=(x y); i=0; a[i++]=${i}; printf \"%s:%s\\n\" \"$i\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutHex": "313a300a",
+      "stderrHex": ""
+    },
+    {
+      "id": "high-index",
+      "script": "a=(x y); a[9223372036854775807]=z; printf \"%s\\n\" \"${a[-1]}\"",
+      "status": 0,
+      "stdoutHex": "7a0a",
+      "stderrHex": ""
+    },
+    {
+      "id": "snapshot-restoration",
+      "script": "a=(x y); (a[0]=sub; a+=(sub)); printf \"<%s>\\n\" \"${a[@]}\"",
+      "status": 0,
+      "stdoutHex": "3c783e0a3c793e0a",
+      "stderrHex": ""
+    },
+    {
+      "id": "local-restoration",
+      "script": "a=(x y); f() { local a=local; a+=(inside); printf \"<%s>\\n\" \"${a[@]}\"; }; f; printf \"<%s>\\n\" \"${a[@]}\"",
+      "status": 0,
+      "stdoutHex": "3c6c6f63616c3e0a3c696e736964653e0a3c783e0a3c793e0a",
+      "stderrHex": ""
+    },
+    {
+      "id": "large-incremental",
+      "script": "for ((i=0; i<5000; i++)); do a[i]=x || break; done; printf \"%s %s %s\\n\" \"$i\" \"${#a[@]}\" \"${a[4999]}\"",
+      "status": 0,
+      "stdoutHex": "35303030203530303020780a",
+      "stderrHex": ""
+    },
+    {
+      "id": "large-append",
+      "script": "for ((i=0; i<5000; i++)); do a+=(x) || break; done; printf \"%s %s %s\\n\" \"$i\" \"${#a[@]}\" \"${a[4999]}\"",
+      "status": 0,
+      "stdoutHex": "35303030203530303020780a",
+      "stderrHex": ""
+    },
+    {
+      "id": "large-compound",
+      "script": "a=({1..10000}); printf \"%s %s %s\\n\" \"$?\" \"${#a[@]}\" \"${a[9999]}\"",
+      "status": 0,
+      "stdoutHex": "302031303030302031303030300a",
+      "stderrHex": ""
+    }
+  ]
+}
