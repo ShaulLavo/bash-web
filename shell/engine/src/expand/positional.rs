@@ -10,7 +10,7 @@ impl Expansion<'_> {
         protected: bool,
     ) -> Result<(), Error> {
         if state.borrow().is_associative(name) {
-            let value = self.associative_value(name, index, state).await?;
+            let value = self.associative_value(name, index, state, false).await?;
             return self
                 .segment(&value, Protection::expansion(protected, state), protected)
                 .await;
@@ -57,7 +57,7 @@ impl Expansion<'_> {
                 .await;
         }
         if state.borrow().is_associative(name) {
-            let value = self.associative_value(name, index, state).await?;
+            let value = self.associative_value(name, index, state, true).await?;
             let utf8 = {
                 let state = state.borrow();
                 ["LC_ALL", "LC_CTYPE", "LANG"]
@@ -139,6 +139,16 @@ impl Expansion<'_> {
         state: &SharedState,
     ) -> Result<(), Error> {
         let state = state.borrow();
+        if state.nounset
+            && let Some(crate::state::Binding::Associative(values)) = state.binding(name)
+            && !values.initialized()
+        {
+            self.work.admit_storage(name.len().saturating_add(128))?;
+            return Err(Error::ArrayUnbound {
+                name: name.to_owned(),
+                line: None,
+            });
+        }
         let present = state
             .binding(name)
             .is_some_and(crate::state::Binding::is_array)

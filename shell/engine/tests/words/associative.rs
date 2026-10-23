@@ -56,20 +56,26 @@ fn associative_snapshot_copy_yields_before_mutation() {
     let rig = Rig::new(Limits::default());
     rig.variable("VALUE", &"x".repeat(12000));
     assert_eq!(rig.run("declare -A h=([key]=$VALUE)"), 0);
+    let snapshot = rig.shell.state().borrow().bindings()["h"].clone();
     let job = rig.shell.start("h[next]=new").unwrap();
     rig.interrupt_after_counting_yields(job);
     assert_eq!(rig.run("args \"${#h[key]}\" \"${#h[@]}\""), 0);
     assert_indexed_calls(&rig, &["12000", "1"]);
+    assert_eq!(snapshot.scalar(), None);
 }
 
 #[test]
 fn associative_scalar_effect_survives_assignment_journal_rollback() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("declare -A h=([key]=saved)"), 0);
-    cancel_indexed_assignment(
-        &rig,
+    let job = rig.start_until_value(
         "h[key]=new x=${h:=durable} b=$(while true; do :; done)",
+        1000,
+        "x",
+        "durable",
     );
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
     assert_eq!(rig.run("args \"${h[key]}\" \"$h\""), 0);
     assert_indexed_calls(&rig, &["saved", "durable"]);
 }
@@ -94,7 +100,10 @@ fn associative_rejects_empty_keys_without_mutating_existing_entries() {
 #[test]
 fn associative_r2_incremental_stress() {
     let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run("declare -A h; for ((i=0;i<2000;i++)); do h[k$i]=$i; done; args ${#h[@]}"), 0);
+    assert_eq!(
+        rig.run("declare -A h; for ((i=0;i<2000;i++)); do h[k$i]=$i; done; args ${#h[@]}"),
+        0
+    );
     assert_indexed_calls(&rig, &["2000"]);
 }
 
@@ -102,28 +111,90 @@ fn associative_r2_incremental_stress() {
 fn associative_r2_hash_order_and_space_keys() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run(r#"declare -A h=([a]=A [b]=B [c]=C); args "${!h[@]}" "${h[@]}"; h[a b]=space; args "${h[a b]}"; unset 'h[a b]'; args ${#h[@]}"#), 0);
-    assert_eq!(*rig.calls.borrow(), vec![vec!["c", "b", "a", "C", "B", "A"], vec!["space"], vec!["3"]]);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["c", "b", "a", "C", "B", "A"], vec!["space"], vec!["3"]]
+    );
 }
 
 #[test]
 fn associative_r2_partial_declaration() {
     let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run(r#"declare -A h=([a]=A plain tail [b]=B)
-args $? "${h[a]}" ${#h[@]}"#), 0);
+    assert_eq!(
+        rig.run(
+            r#"declare -A h=([a]=A plain tail [b]=B)
+args $? "${h[a]}" ${#h[@]}"#
+        ),
+        0
+    );
     assert_indexed_calls(&rig, &["1", "A", "1"]);
 }
 
 #[test]
 fn associative_r2_empty_read_continues() {
     let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run(r#"declare -A h=([a]=1); k=; x=${h[$k]}; args "$?" "$x"; args next"#), 0);
+    assert_eq!(
+        rig.run(r#"declare -A h=([a]=1); k=; x=${h[$k]}; args "$?" "$x"; args next"#),
+        0
+    );
     assert_eq!(*rig.calls.borrow(), vec![vec!["0", ""], vec!["next"]]);
 }
 
 #[test]
 fn associative_r2_nounset_lengths() {
     let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run(r#"set -u; declare -A h=([a]=A); args "${#h[missing]}"; args next"#), 0);
+    assert_eq!(
+        rig.run(r#"set -u; declare -A h=([a]=A); args "${#h[missing]}"; args next"#),
+        0
+    );
     assert_eq!(*rig.calls.borrow(), vec![vec!["0"], vec!["next"]]);
-    assert_eq!(rig.run("declare -A uninitialized; args ${#uninitialized[@]}"), 1);
+    assert_eq!(
+        rig.run("declare -A uninitialized; args ${#uninitialized[@]}"),
+        1
+    );
+}
+
+#[test]
+fn associative_r2_recorded_bash_controls() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../scripts/fixtures/shell-associative.json"
+    ))
+    .unwrap();
+    for case in fixture["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["id"].as_str().unwrap().starts_with("r2-"))
+    {
+        let rig = Rig::new(Limits::default());
+        rig.variable("LC_ALL", "C.UTF-8");
+        let source = case["script"].as_str().unwrap();
+        assert_eq!(
+            rig.run(source),
+            case["status"].as_i64().unwrap() as i32,
+            "{}",
+            case["id"]
+        );
+        let stdout: String = rig
+            .output
+            .bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        assert_eq!(
+            stdout,
+            case["stdoutHex"].as_str().unwrap(),
+            "{}",
+            case["id"]
+        );
+        if let Some(expected) = case["stderrHex"].as_str() {
+            let stderr: String = rig
+                .errors
+                .bytes()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect();
+            assert_eq!(stderr, expected, "{}", case["id"]);
+        }
+    }
 }

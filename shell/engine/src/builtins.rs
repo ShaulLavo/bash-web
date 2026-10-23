@@ -731,7 +731,11 @@ pub(crate) async fn declarations(
         return Err(2);
     }
     let mut status = 0;
+    let mut flow = Flow::Normal;
     for (ordinal, arg) in args {
+        if flow != Flow::Normal {
+            break;
+        }
         let compound = compounds
             .next_if(|(index, _)| *index == ordinal)
             .map(|(_, assignment)| assignment);
@@ -749,6 +753,17 @@ pub(crate) async fn declarations(
         if extended {
             work.admit_storage(arg.len()).map_err(error_status)?;
         }
+        let local = name == "local"
+            || matches!(name, "declare" | "typeset") && state.borrow().in_function_scope();
+        if associative {
+            let result = associative_operand(
+                arg, compound, local, exported, readonly, state, fds, context, work,
+            )
+            .await?;
+            status |= result.code;
+            flow = result.flow;
+            continue;
+        }
         let (key, value) = arg
             .split_once('=')
             .map(|(key, value)| (key.to_owned(), Some(value.to_owned())))
@@ -763,29 +778,12 @@ pub(crate) async fn declarations(
             }
             return Err(2);
         }
-        let local = name == "local"
-            || matches!(name, "declare" | "typeset") && state.borrow().in_function_scope();
         if extended || local {
             let storage = state
                 .borrow()
                 .declaration_storage(&key, local)
                 .map_err(error_status)?;
             work.admit_storage(storage).map_err(error_status)?;
-        }
-        if associative {
-            let result =
-                associative_declaration(&key, value, compound, local, state, context, work).await;
-            if result.is_ok() && exported {
-                state.borrow_mut().export(key.clone(), None)?;
-            }
-            if result.is_ok() && readonly {
-                state.borrow_mut().readonly(key.clone(), None)?;
-            }
-            status |= i32::from(result.is_err());
-            if let Err(code @ (2 | crate::exec::RESOURCE_STATUS)) = result {
-                return Err(code);
-            }
-            continue;
         }
         if compound.is_some() {
             return Err(2);
@@ -832,7 +830,7 @@ pub(crate) async fn declarations(
             readonly_diagnostic(name, &key, fds, context).await?;
         }
     }
-    Ok(Outcome::status(status))
+    Ok(Outcome { code: status, flow })
 }
 
 async fn nameref_declaration(
@@ -883,47 +881,67 @@ async fn nameref_declaration(
         .declare_nameref(key.to_owned(), target, local)
 }
 
-async fn associative_declaration(
-    key: &str,
-    value: Option<String>,
+async fn associative_operand(
+    arg: String,
     compound: Option<shell_parser::parser::Assignment>,
     local: bool,
+    exported: bool,
+    readonly: bool,
     state: &SharedState,
+    fds: &FdTable,
     context: &Context,
     work: &mut Work,
-) -> Result<(), i32> {
-    let bytes = state
-        .borrow()
-        .binding(key)
-        .map_or(0, |binding| binding.storage_bytes());
-    work.admit_storage(
-        bytes
-            .saturating_add(crate::state::Associative::node_bytes())
-            .saturating_add(128),
-    )
-    .map_err(error_status)?;
-    for _ in 0..bytes {
-        work.checkpoint(&context.cancel)
-            .await
-            .map_err(error_status)?;
+) -> Result<Outcome, i32> {
+    let (lhs, value) = arg
+        .split_once('=')
+        .map_or((arg.as_str(), None), |(lhs, value)| (lhs, Some(value)));
+    let append = lhs.ends_with('+');
+    let lhs = lhs.strip_suffix('+').unwrap_or(lhs);
+    let (key, index) = lhs
+        .split_once('[')
+        .map_or((lhs, None), |(key, index)| (key, index.strip_suffix(']')));
+    let key = compound
+        .as_ref()
+        .map_or_else(|| key.to_owned(), |a| a.name.clone());
+    if !valid_name(&key) {
+        return Ok(Outcome::status(1));
     }
+    let storage = state
+        .borrow()
+        .declaration_storage(&key, local)
+        .map_err(error_status)?;
+    work.admit_storage(storage + crate::state::Associative::default_storage_bytes())
+        .map_err(error_status)?;
     state
         .borrow_mut()
         .declare_associative(key.to_owned(), local)?;
     let assignment = compound.or_else(|| {
         value.map(|value| shell_parser::parser::Assignment {
             name: key.to_owned(),
-            index: None,
-            append: false,
+            index: index.map(str::to_owned),
+            append,
             value: shell_parser::parser::AssignmentValue::Scalar(Word::quoted_literal(value)),
         })
     });
-    let Some(assignment) = assignment else {
-        return Ok(());
+    let result = match assignment {
+        Some(assignment) => {
+            crate::interpreter::associative::declare(&assignment, state, context, work).await
+        }
+        None => Ok(()),
     };
-    crate::interpreter::associative::declare(&assignment, state, context, work)
-        .await
-        .map_err(error_status)
+    if let Err(error) = result {
+        return Ok(crate::interpreter::associative::declaration_failure(
+            error, fds, context, work.line,
+        )
+        .await);
+    }
+    if exported {
+        state.borrow_mut().export(key.to_owned(), None)?;
+    }
+    if readonly {
+        state.borrow_mut().readonly(key.to_owned(), None)?;
+    }
+    Ok(Outcome::status(0))
 }
 
 fn apply_declaration(
@@ -996,20 +1014,10 @@ async fn unset(
     let mut budget = Budget::default();
     for name in names {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-        if !functions
-            && !namerefs
-            && let Some((array, subscript)) = name.split_once('[').and_then(|(array, rest)| {
-                rest.strip_suffix(']').map(|subscript| (array, subscript))
-            })
-            && state.borrow().is_associative(array)
+        if let Some(result) =
+            associative_unset(name, functions || namerefs, state, context, work).await
         {
-            let result =
-                crate::interpreter::associative::unset(array, subscript, state, context, work)
-                    .await;
-            code |= i32::from(result.is_err());
-            if let Err(error @ Error::Status(2 | 130 | crate::exec::RESOURCE_STATUS)) = result {
-                return Err(error_status(error));
-            }
+            code |= result?;
             continue;
         }
         if !valid_name(name) {
@@ -1090,4 +1098,32 @@ async fn scan_bytes(bytes: usize, context: &Context, work: &mut Work) -> Result<
             .map_err(error_status)?;
     }
     Ok(())
+}
+
+async fn associative_unset(
+    name: &str,
+    excluded: bool,
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Option<Result<i32, i32>> {
+    if excluded {
+        return None;
+    }
+    let (array, rest) = name.split_once('[')?;
+    let subscript = rest.strip_suffix(']')?;
+    if !state.borrow().is_associative(array) {
+        return None;
+    }
+    if subscript.contains(']') {
+        return Some(Ok(0));
+    }
+    let result =
+        crate::interpreter::associative::unset(array, subscript, state, context, work).await;
+    match result {
+        Err(error @ Error::Status(2 | 130 | crate::exec::RESOURCE_STATUS)) => {
+            Some(Err(error_status(error)))
+        }
+        other => Some(Ok(i32::from(other.is_err()))),
+    }
 }

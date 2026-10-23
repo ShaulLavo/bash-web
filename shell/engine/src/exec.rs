@@ -363,6 +363,15 @@ pub(crate) enum Error {
         name: String,
         line: Option<usize>,
     },
+    ArrayUnbound {
+        name: String,
+        line: Option<usize>,
+    },
+    AssociativeAssignment {
+        name: String,
+        word: String,
+        line: Option<usize>,
+    },
     BadArraySubscript {
         name: String,
         line: Option<usize>,
@@ -424,6 +433,10 @@ impl Error {
     pub(crate) fn at_line(self, line: Option<usize>) -> Self {
         match self {
             Self::SpecialAssignment { name, .. } => Self::SpecialAssignment { name, line },
+            Self::ArrayUnbound { name, .. } => Self::ArrayUnbound { name, line },
+            Self::AssociativeAssignment { name, word, .. } => {
+                Self::AssociativeAssignment { name, word, line }
+            }
             Self::BadArraySubscript { name, .. } => Self::BadArraySubscript { name, line },
             Self::Readonly {
                 name, expansion, ..

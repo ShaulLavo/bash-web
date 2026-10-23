@@ -1,9 +1,10 @@
-//! Associative subscripts are shell words, never arithmetic expressions.
+//! Associative subscripts are scalar shell words, never arithmetic expressions.
 use super::{Error, Work};
 use crate::{executor::Cancel, parse, state::SharedState};
 
-pub(crate) async fn subscript(
+pub(crate) async fn scalar_word(
     source: &str,
+    subscript: bool,
     state: &SharedState,
     cancel: &Cancel,
     limit: usize,
@@ -12,17 +13,29 @@ pub(crate) async fn subscript(
     if source.len() > limit {
         return Err(2.into());
     }
+    let before = work.storage_left();
     super::admit_generated_word(source, cancel, work).await?;
-    let word = parse::generated_word(source).map_err(|_| Error::Status(2))?;
-    let key = super::word(&word, state, cancel, limit, limit, work).await?;
-    if key.is_empty() {
-        work.admit_storage(source.len().saturating_add(128))?;
-        return Err(Error::BadArraySubscript {
-            name: source.to_owned(),
-            line: None,
-        });
-    }
-    Ok(key)
+    let temporary = before - work.storage_left();
+    let parsed = if subscript {
+        parse::associative_subscript(source)
+    } else {
+        parse::generated_word(source)
+    };
+    let word = parsed.map_err(|_| Error::Status(2))?;
+    let result = super::word(&word, state, cancel, limit, limit, work).await;
+    drop(word);
+    work.release_storage(temporary);
+    result
+}
+
+pub(crate) async fn subscript(
+    source: &str,
+    state: &SharedState,
+    cancel: &Cancel,
+    limit: usize,
+    work: &mut Work,
+) -> Result<String, Error> {
+    scalar_word(source, true, state, cancel, limit, work).await
 }
 
 impl super::Expansion<'_> {
@@ -31,6 +44,7 @@ impl super::Expansion<'_> {
         name: &'a str,
         index: &'a str,
         state: &'a SharedState,
+        length: bool,
     ) -> crate::exec::ResultFuture<'a, String> {
         self.part_frame(|expansion| async move {
             crate::state::State::admit_scalar_access(state, name, expansion.cancel, expansion.work)
@@ -45,9 +59,12 @@ impl super::Expansion<'_> {
             .await?;
             expansion.ifs = None;
             expansion.ifs_changed = true;
+            if key.is_empty() {
+                return expansion.empty_associative_key(name, index, length).await;
+            }
             let state = state.borrow();
             let value = state.associative_element(name, &key);
-            if value.is_none() && state.nounset {
+            if value.is_none() && state.nounset && !length {
                 expansion
                     .work
                     .admit_storage(name.len().saturating_add(index.len()).saturating_add(128))?;
@@ -58,5 +75,28 @@ impl super::Expansion<'_> {
             }
             expansion.array_snapshot(value)
         })
+    }
+    async fn empty_associative_key(
+        &mut self,
+        name: &str,
+        index: &str,
+        length: bool,
+    ) -> Result<String, Error> {
+        self.work
+            .admit_storage(name.len().saturating_add(index.len()).saturating_add(128))?;
+        if length {
+            return Err(Error::BadArraySubscript {
+                name: format!("[{index}]"),
+                line: None,
+            });
+        }
+        if let Some(runner) = self.work.substitutions.clone() {
+            let diagnostic = match self.work.line {
+                Some(line) => format!("/usr/bin/bash: line {line}: {name}: bad array subscript\n"),
+                None => format!("/usr/bin/bash: {name}: bad array subscript\n"),
+            };
+            runner.diagnose(&diagnostic).await?;
+        }
+        Ok(String::new())
     }
 }

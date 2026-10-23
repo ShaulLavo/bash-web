@@ -7,7 +7,7 @@ import { createWaffleRunner } from "./waffle-compat.ts";
 const fixture: {
   bash: string;
   env: Record<string, string>;
-  cases: { id: string; script: string; status: number; stdoutHex: string }[];
+  cases: { id: string; script: string; status: number; stdoutHex: string; stderrHex?: string }[];
 } = JSON.parse(readFileSync(new URL("fixtures/shell-associative.json", import.meta.url), "utf8"));
 assert.equal(fixture.bash, "5.3.15(1)-release");
 const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
@@ -23,4 +23,5 @@ for (const item of fixture.cases)
     assert.equal(actual.crash, undefined);
     assert.equal(actual.status, item.status);
     assert.equal(actual.stdout.toString("hex"), item.stdoutHex);
+    if (item.stderrHex !== undefined) assert.equal(actual.stderr.toString("hex"), item.stderrHex);
   });

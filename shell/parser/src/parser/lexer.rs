@@ -126,6 +126,7 @@ pub struct Lexer<'a> {
     /// reserved word or an assignment): `a[1 + 2]=x` keeps the blanks
     /// inside its subscript.
     spaced_subscript: bool,
+    pub(super) single_word: bool,
     /// Alias expansion is on: word tokens record whether they are plain.
     track_plain: bool,
     /// How many characters at the front of `reinject_buf` are alias text.
@@ -188,6 +189,7 @@ impl<'a> Lexer<'a> {
             capture_raw: false,
             raw_buf: String::new(),
             spaced_subscript: true,
+            single_word: false,
             track_plain: false,
             alias_front: 0,
             alias_stack: Vec::new(),
@@ -1410,14 +1412,14 @@ impl<'a> Lexer<'a> {
                 }
                 word.push(ch);
                 self.advance();
-            } else if matches!(ch, ' ' | '\t' | '&' | '|' | '<' | '>' | '(' | ')')
+            } else if self.single_word || (matches!(ch, ' ' | '\t' | '&' | '|' | '<' | '>' | '(' | ')')
                 && self.spaced_subscript
                 && (if spaced_ok {
                     Self::open_subscript_depth(&word) > 0
                 } else {
                     spaced_ok = self.spaced_subscript_continues(&word);
                     spaced_ok
-                })
+                }))
             {
                 word.push(ch);
                 self.advance();

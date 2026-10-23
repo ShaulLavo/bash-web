@@ -17,13 +17,13 @@ values. A replacement clears earlier entries; `+=` retains them. An unmatched
 last key receives an empty value. A scalar assignment addresses key `0`.
 Functions can use `local -A` bindings, and subshell writes stay isolated.
 
-The state layer stores an associative binding as an immutable shared string map.
-An assignment stages a complete admitted copy before publication. The existing
-assignment journal handles cancellation and resource rollback. This first
-implementation copies on each element update; it makes no performance claim.
+The state layer stores Bash's FNV-1 hash buckets and collision chains. Only
+occupied buckets allocate storage. Element writes admit the changed key and value,
+with single-key undo for cancellation and resource rollback. Shared maps copy on
+write; compound assignments stage one replacement.
 
-The map currently enumerates keys in lexical order, not Bash's hash-table order.
-Key and value iteration use the same order. Declaration printing, arithmetic
+Keys and values enumerate in Bash 5.3's hash order, including table growth and
+unset/re-insert behavior. Declaration printing, arithmetic
 array access, associative declaration through a nameref, `-v`, and whole-array
 transformations remain outside this change.
 

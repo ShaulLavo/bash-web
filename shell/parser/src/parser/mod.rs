@@ -376,6 +376,15 @@ impl<'a> Parser<'a> {
         max_depth: usize,
         max_fuel: usize,
     ) -> Result<Word> {
+        Self::expanded_word(input, max_depth, max_fuel, false)
+    }
+
+    /// A scalar subscript keeps literal whitespace and operators in one word.
+    pub fn parse_subscript_with_limits(input: &str, max_depth: usize, max_fuel: usize) -> Result<Word> {
+        Self::expanded_word(input, max_depth, max_fuel, true)
+    }
+
+    fn expanded_word(input: &str, max_depth: usize, max_fuel: usize, single_word: bool) -> Result<Word> {
         // First read an inert word to leave lexical assignment position:
         // a generated `[` is a literal, not an unterminated array subscript.
         // A second inert prefix forces word context for empty text, reserved
@@ -404,6 +413,7 @@ impl<'a> Parser<'a> {
         let mut parser = Parser::with_limits(&prefixed, max_depth, max_fuel)
             .with_execution_budget(budget.clone());
         parser.tick_units(size)?;
+        parser.lexer.single_word = single_word;
         parser.advance();
         parser.check_error_token()?;
         let (text, quoted, glob) = match &parser.current_token {
@@ -3305,6 +3315,7 @@ impl<'a> Parser<'a> {
         let mut in_single_quote = false;
         let mut in_double_quote = false;
         let mut escaped = false;
+        let mut protected = false;
 
         for (pos, c) in word.char_indices() {
             if escaped {
@@ -3312,6 +3323,17 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
+            if c == '\u{1e}' {
+                protected = true;
+                continue;
+            }
+            if c == '\u{1f}' {
+                protected = false;
+                continue;
+            }
+            if protected {
+                continue;
+            }
             if bracket_depth > 0 && c == '\\' {
                 escaped = true;
                 continue;

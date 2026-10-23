@@ -232,6 +232,7 @@ pub(crate) enum BindingUpdate {
     Replace(Binding),
     Element { index: i64, value: String },
     Append(Indexed),
+    AssociativeElement { key: String, value: Option<String> },
 }
 impl BindingUpdate {
     pub(crate) fn value_bytes(&self) -> usize {
@@ -239,6 +240,7 @@ impl BindingUpdate {
             Self::Replace(value) => value.value_bytes(),
             Self::Element { value, .. } => value.len(),
             Self::Append(values) => values.value_bytes,
+            Self::AssociativeElement { value, .. } => value.as_ref().map_or(0, String::len),
         }
     }
     pub(crate) fn staged_bytes(&self) -> usize {
@@ -246,6 +248,9 @@ impl BindingUpdate {
             Self::Replace(value) => value.storage_bytes(),
             Self::Element { value, .. } => value.capacity(),
             Self::Append(values) => values.storage_bytes() + Binding::indexed_header_bytes(),
+            Self::AssociativeElement { key, value } => {
+                key.capacity() + value.as_ref().map_or(0, String::capacity)
+            }
         }
     }
     pub(crate) fn copy_bytes(&self, old: Option<&Binding>) -> usize {
@@ -254,6 +259,9 @@ impl BindingUpdate {
         }
         match old {
             Some(binding @ Binding::Indexed(values)) if Rc::strong_count(values) > 1 => {
+                binding.storage_bytes()
+            }
+            Some(binding @ Binding::Associative(values)) if Rc::strong_count(values) > 1 => {
                 binding.storage_bytes()
             }
             _ => 0,
@@ -268,6 +276,12 @@ impl BindingUpdate {
         }
     }
     pub(crate) fn storage_after(&self, old: Option<&Binding>) -> usize {
+        if let Self::AssociativeElement { key, value } = self {
+            let Some(Binding::Associative(values)) = old else {
+                unreachable!()
+            };
+            return values.storage_after(key, value.as_ref());
+        }
         let (mut count, mut bytes) = Self::dimensions(old);
         match self {
             Self::Replace(value) => return value.storage_bytes(),
@@ -278,6 +292,7 @@ impl BindingUpdate {
                     .saturating_sub(prior.map_or(0, String::capacity))
                     .saturating_add(value.capacity());
             }
+            Self::AssociativeElement { .. } => unreachable!(),
             Self::Append(values) => {
                 count += values.values.len();
                 bytes = bytes.saturating_add(values.bytes);
@@ -289,13 +304,19 @@ impl BindingUpdate {
         if matches!(self, Self::Replace(_)) {
             return 0;
         }
+        if let Self::AssociativeElement { key, value } = self {
+            let Some(Binding::Associative(values)) = old else {
+                unreachable!()
+            };
+            return value.as_ref().map_or(0, |_| values.growth_bytes(key));
+        }
         let (count, _) = Self::dimensions(old);
         let next_count = match self {
             Self::Element { index, .. } => {
                 count + usize::from(old.and_then(|v| v.element(*index)).is_none())
             }
             Self::Append(values) => count + values.values.len(),
-            Self::Replace(_) => unreachable!(),
+            Self::Replace(_) | Self::AssociativeElement { .. } => unreachable!(),
         };
         let prior_tree = if matches!(old, Some(Binding::Indexed(_))) {
             Indexed::tree_bytes(count)
@@ -312,6 +333,7 @@ impl BindingUpdate {
 #[derive(Debug)]
 pub(crate) enum BindingUndo {
     Restore(Option<Binding>),
+    Associative(super::associative::AssociativeUndo),
     Element {
         index: i64,
         old: Option<String>,
@@ -330,6 +352,7 @@ impl BindingUndo {
                 value_bytes.saturating_add(binding.scalar_copy_bytes())
             }
             Self::Restore(_) | Self::Element { index: 0, .. } => value_bytes,
+            Self::Associative(undo) => undo.scalar_effect_bytes(value_bytes),
             _ => 0,
         }
     }
@@ -340,12 +363,20 @@ impl BindingUndo {
                 .set_scalar(value.to_owned()),
             Self::Element { index: 0, old, .. } => *old = Some(value.to_owned()),
             Self::Append { keep_zero, .. } => *keep_zero = true,
+            Self::Associative(undo) => undo.scalar_effect(value),
             _ => {}
         }
     }
     pub(crate) fn restore(self, live: Option<Binding>) -> Option<Binding> {
         if let Self::Restore(old) = self {
             return old;
+        }
+        if let Self::Associative(undo) = self {
+            let Some(Binding::Associative(mut values)) = live else {
+                unreachable!()
+            };
+            Rc::make_mut(&mut values).restore(undo);
+            return Some(Binding::Associative(values));
         }
         let Binding::Indexed(mut values) = live.expect("committed array exists") else {
             unreachable!()
@@ -369,7 +400,7 @@ impl BindingUndo {
                 values_mut.undo_append(first, keep_zero);
                 scalar
             }
-            Self::Restore(_) => unreachable!(),
+            Self::Restore(_) | Self::Associative(_) => unreachable!(),
         };
         if scalar {
             return values_mut.remove(0).map(Binding::Scalar);
@@ -378,11 +409,31 @@ impl BindingUndo {
     }
 }
 impl BindingUpdate {
+    fn apply_associative(
+        key: String,
+        value: Option<String>,
+        old: Option<Binding>,
+    ) -> (Binding, BindingUndo) {
+        let Some(Binding::Associative(mut values)) = old else {
+            unreachable!()
+        };
+        let restore = (Rc::strong_count(&values) > 1)
+            .then(|| BindingUndo::Restore(Some(Binding::Associative(values.clone()))));
+        let undo = Rc::make_mut(&mut values).change(key, value);
+        (
+            Binding::Associative(values),
+            restore.unwrap_or(BindingUndo::Associative(undo)),
+        )
+    }
     pub(crate) fn undo_bytes(&self, old: Option<&Binding>) -> usize {
         if matches!(self, Self::Replace(_)) || self.copy_bytes(old) > 0 {
             return old.map_or(0, Binding::storage_bytes);
         }
         match self {
+            Self::AssociativeElement { key, value } => match old {
+                Some(Binding::Associative(values)) => values.undo_bytes(key, value.is_some()),
+                _ => 0,
+            },
             Self::Element { index, .. } => {
                 old.and_then(|v| v.slot(*index)).map_or(0, String::capacity)
             }
@@ -392,6 +443,9 @@ impl BindingUpdate {
     pub(crate) fn apply_with_undo(self, old: Option<Binding>) -> (Binding, BindingUndo) {
         if let Self::Replace(value) = self {
             return (value, BindingUndo::Restore(old));
+        }
+        if let Self::AssociativeElement { key, value } = self {
+            return Self::apply_associative(key, value, old);
         }
         let restore = match &old {
             None => Some(BindingUndo::Restore(None)),
@@ -426,7 +480,7 @@ impl BindingUpdate {
                     keep_zero: false,
                 }
             }
-            Self::Replace(_) => unreachable!(),
+            Self::Replace(_) | Self::AssociativeElement { .. } => unreachable!(),
         };
         (binding, restore.unwrap_or(undo))
     }

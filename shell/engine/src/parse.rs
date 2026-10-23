@@ -102,6 +102,14 @@ pub(crate) fn generated_word(source: &str) -> shell_parser::Result<Word> {
     )
 }
 
+pub(crate) fn associative_subscript(source: &str) -> shell_parser::Result<Word> {
+    Parser::parse_subscript_with_limits(
+        source,
+        ExecutionLimits::default().max_ast_depth,
+        source.len().saturating_add(3).saturating_mul(16),
+    )
+}
+
 /// An active, boundary-scanned ${...} token. Quote/pattern context belongs to
 /// the operand scanner; nested operands remain raw and lazy in the parser AST.
 pub(crate) fn lazy_parameter(

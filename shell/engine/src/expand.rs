@@ -62,6 +62,7 @@ pub(crate) struct Work {
     pub(crate) substitutions: Option<crate::interpreter::Substitutions>,
     /// Status of the last command substitution this command ran.
     pub(crate) substitution_status: Option<i32>,
+    pub(crate) line: Option<usize>,
 }
 impl std::ops::Deref for Work {
     type Target = crate::exec::Work;
@@ -83,6 +84,7 @@ impl Work {
             arithmetic_writes: 0,
             substitutions: None,
             substitution_status: None,
+            line: None,
         }
     }
     pub(crate) fn enter_arithmetic(&mut self) -> Result<(), Error> {
@@ -1960,7 +1962,7 @@ impl Expansion<'_> {
         }
         let protection = Protection::expansion(quoted || scalar, state);
         let mut array_index = None;
-        let mut associative_key = None;
+        let mut associative_key = (0, 0);
         for index in 0..count {
             self.element_boundary(index, list, separator, quoted || scalar)
                 .await?;
@@ -2121,7 +2123,7 @@ fn list_value(
     state: &SharedState,
     index: usize,
     array_index: &mut Option<i64>,
-    associative_key: &mut Option<String>,
+    associative_key: &mut (usize, usize),
     max: usize,
     work: &mut Work,
 ) -> Result<String, Error> {
@@ -2129,9 +2131,7 @@ fn list_value(
     if let WordPart::ArrayAccess { name, .. } | WordPart::ArrayIndices { name, .. } = part
         && s.is_associative(name)
     {
-        let (key, value) = s
-            .associative_next(name, associative_key.as_deref())
-            .ok_or(2)?;
+        let (key, value) = s.associative_next(name, associative_key).ok_or(2)?;
         let value = if matches!(part, WordPart::ArrayIndices { .. }) {
             key
         } else {
@@ -2141,7 +2141,6 @@ fn list_value(
             return Err(2.into());
         }
         work.admit_storage(key.len().saturating_add(value.len()))?;
-        *associative_key = Some(key.to_owned());
         return Ok(value.to_owned());
     }
     let value = match part {

@@ -1914,6 +1914,7 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
         error,
         expand::Error::AssignmentDepth
             | expand::Error::BadArraySubscript { .. }
+            | expand::Error::AssociativeAssignment { .. }
             | expand::Error::Arithmetic { .. }
             | expand::Error::Readonly { .. }
             | expand::Error::ShellBoundary {
@@ -1933,6 +1934,15 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
         expand::Error::SpecialAssignment { name, line } => {
             (name, "cannot assign in this way".to_owned(), line, 1)
         }
+        expand::Error::ArrayUnbound { name, line } => {
+            (name, "unbound variable".to_owned(), line, 1)
+        }
+        expand::Error::AssociativeAssignment { name, word, line } => (
+            name,
+            format!("'{word}': must use subscript when assigning associative array"),
+            line,
+            1,
+        ),
         expand::Error::BadArraySubscript { name, line } => {
             (name, "bad array subscript".to_owned(), line, 1)
         }
@@ -2373,6 +2383,16 @@ pub(crate) struct Substitutions {
     process_fds: Option<Rc<ProcessSubstitutionFds>>,
 }
 impl Substitutions {
+    pub(crate) async fn diagnose(&self, message: &str) -> Result<(), expand::Error> {
+        if let Some(stderr) = self.stderr() {
+            let _ = stderr.write_all(message.as_bytes(), self.cancel()).await;
+        }
+        if self.cancel().is_cancelled() {
+            return Err(130.into());
+        }
+        Ok(())
+    }
+
     pub(crate) fn filesystem(&self) -> Rc<dyn FileSystem> {
         self.context.core.fs.clone()
     }
@@ -2786,6 +2806,7 @@ async fn prepare_simple_command_body(
     // Process substitutions open descriptors for this command only.
     let fds = Rc::new(RefCell::new(fds.borrow().clone()));
     let mut work = substitution_work(context, &fds);
+    work.line = line;
     let mut argv = expand::fields(
         &simple.name,
         state,
@@ -2810,36 +2831,14 @@ async fn prepare_simple_command_body(
         let fields = if declaration
             && matches!(word.parts.as_slice(), [WordPart::CompoundAssignment { .. }])
         {
-            if remaining_words == 0 {
-                return Err(2.into());
-            }
-            let slot = std::mem::size_of::<(usize, Assignment)>();
-            work.admit_storage(slot)?;
-            compounds.try_reserve_exact(1).map_err(|_| 2)?;
-            let [part]: [WordPart; 1] = word.parts.try_into().map_err(|_| 2)?;
-            let WordPart::CompoundAssignment {
-                name,
-                append,
-                elements,
-            } = part
-            else {
-                unreachable!()
-            };
-            let assignment = Assignment {
-                name,
-                index: None,
-                append,
-                value: AssignmentValue::Array(elements),
-            };
-            work.admit_storage(assignment.name.len())?;
-            let raw = word.raw.unwrap_or_else(|| assignment.name.clone());
-            if raw.len() > remaining_bytes {
-                return Err(2.into());
-            }
-            work.consume_scalar_field();
-            work.admit_storage(std::mem::size_of::<String>())?;
-            compounds.push((argv.len() - 1, assignment));
-            vec![raw]
+            stage_compound(
+                word,
+                remaining_words,
+                remaining_bytes,
+                argv.len() - 1,
+                &mut compounds,
+                &mut work,
+            )?
         } else if declaration && builtins::assignment_operand(&word) {
             if remaining_words == 0 {
                 return Err(2.into());
@@ -5208,4 +5207,44 @@ mod function_measurements {
             }
         }
     }
+}
+
+fn stage_compound(
+    word: Word,
+    remaining_words: usize,
+    remaining_bytes: usize,
+    ordinal: usize,
+    compounds: &mut Vec<(usize, Assignment)>,
+    work: &mut expand::Work,
+) -> Result<Vec<String>, expand::Error> {
+    if remaining_words == 0 {
+        return Err(2.into());
+    }
+    let slot = std::mem::size_of::<(usize, Assignment)>();
+    work.admit_storage(slot)?;
+    compounds.try_reserve_exact(1).map_err(|_| 2)?;
+    let [part]: [WordPart; 1] = word.parts.try_into().map_err(|_| 2)?;
+    let WordPart::CompoundAssignment {
+        name,
+        append,
+        elements,
+    } = part
+    else {
+        unreachable!()
+    };
+    let assignment = Assignment {
+        name,
+        index: None,
+        append,
+        value: AssignmentValue::Array(elements),
+    };
+    work.admit_storage(assignment.name.len())?;
+    let raw = word.raw.unwrap_or_else(|| assignment.name.clone());
+    if raw.len() > remaining_bytes {
+        return Err(2.into());
+    }
+    work.consume_scalar_field();
+    work.admit_storage(std::mem::size_of::<String>())?;
+    compounds.push((ordinal, assignment));
+    Ok(vec![raw])
 }
