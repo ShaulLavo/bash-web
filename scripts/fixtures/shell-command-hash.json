@@ -1,0 +1,119 @@
+{
+  "schema": 1,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "source": "Frozen own-shell-oracle.json, sha256 90c9ddafface903c3af1eee3039c949d6cb5062cf2ee17f64010b6431b772b06",
+  "cases": [
+    {
+      "id": "brush-suite:builtins/hash:1",
+      "script": "hash non-existent-program\necho \"Result: $?\"\n",
+      "status": 0,
+      "stdout": "Result: 1\n",
+      "stderr": "/usr/bin/bash: line 1: hash: non-existent-program: not found\n"
+    },
+    {
+      "id": "brush-suite:builtins/hash:2",
+      "script": "hash -p /some/path non-existent-program\nhash -t non-existent-program && echo \"1. Result: $?\"\nhash non-existent-program && echo \"2. Result: $?\"\nhash -t non-existent-program && echo \"3. Result: $?\"\n",
+      "status": 1,
+      "stdout": "/some/path\n1. Result: 0\n",
+      "stderr": "/usr/bin/bash: line 3: hash: non-existent-program: not found\n/usr/bin/bash: line 4: hash: non-existent-program: not found\n"
+    },
+    {
+      "id": "brush-suite:builtins/hash:5",
+      "script": "hash -p /some/path somecmd && echo \"1. Result: $?\"\nhash -t somecmd && echo \"2. Result: $?\"\n",
+      "status": 0,
+      "stdout": "1. Result: 0\n/some/path\n2. Result: 0\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/hash:6",
+      "script": "hash -p /some/path somecmd1 && echo \"1. Result: $?\"\nhash -p /some/path somecmd2 && echo \"2. Result: $?\"\nhash -t somecmd1 somecmd2 && echo \"3. Result: $?\"\n",
+      "status": 0,
+      "stdout": "1. Result: 0\n2. Result: 0\nsomecmd1\t/some/path\nsomecmd2\t/some/path\n3. Result: 0\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/hash:7",
+      "script": "hash -p \"/some/spaces path\" somecmd && echo \"1. Result: $?\"\nhash -t somecmd && echo \"2. Result: $?\"\nhash -t -l somecmd && echo \"3. Result: $?\"\n",
+      "status": 0,
+      "stdout": "1. Result: 0\n/some/spaces path\n2. Result: 0\nbuiltin hash -p /some/spaces path somecmd\n3. Result: 0\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/hash:8",
+      "script": "hash -p /some/path somecmd && echo \"1. Result: $?\"\nhash -t somecmd && echo \"2. Result: $?\"\nhash -d somecmd && echo \"3. Result: $?\"\nhash -t somecmd && echo \"4. Result: $?\"\n",
+      "status": 1,
+      "stdout": "1. Result: 0\n/some/path\n2. Result: 0\n3. Result: 0\n",
+      "stderr": "/usr/bin/bash: line 4: hash: somecmd: not found\n"
+    },
+    {
+      "id": "brush-suite:builtins/hash:9",
+      "script": "hash -p /some/path somecmd1 && echo \"1. Result: $?\"\nhash -p /some/path somecmd2 && echo \"2. Result: $?\"\nhash -r && echo \"3. Result: $?\"\nhash -t somecmd1 && echo \"4. Result: $?\"\nhash -t somecmd2 && echo \"5. Result: $?\"\n",
+      "status": 1,
+      "stdout": "1. Result: 0\n2. Result: 0\n3. Result: 0\n",
+      "stderr": "/usr/bin/bash: line 4: hash: somecmd1: not found\n/usr/bin/bash: line 5: hash: somecmd2: not found\n"
+    },
+    {
+      "id": "brush-suite:builtins/hash:10",
+      "script": "hash /dev/null && echo \"1. Result: $?\"\nhash /dev/nulll && echo \"2. Result: $?\"\n",
+      "status": 0,
+      "stdout": "1. Result: 0\n2. Result: 0\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/hash:12",
+      "script": "echo \"[empty]\"\nhash; echo \"rc=$?\"\n\necho \"[populated, in insertion order]\"\nhash -p /some/path sc1\nhash -p /other/path sc2\nhash; echo \"rc=$?\"\n\necho \"[emptied again]\"\nhash -r\nhash; echo \"rc=$?\"\n",
+      "status": 0,
+      "stdout": "[empty]\nhash: hash table empty\nrc=0\n[populated, in insertion order]\nhits\tcommand\n   0\t/some/path\n   0\t/other/path\nrc=0\n[emptied again]\nhash: hash table empty\nrc=0\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/hash:13",
+      "script": "hash -p /some/path sc1\nhash -p \"/some/spaces path\" sc2\n\nhash -l; echo \"rc=$?\"\n",
+      "status": 0,
+      "stdout": "builtin hash -p /some/path sc1\nbuiltin hash -p '/some/spaces path' sc2\nrc=0\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/command:35",
+      "script": "hash -p /nonexistent/cat cat\ncommand -v cat; echo \"rc=$?\"\ncommand -p -v cat; echo \"rc=$?\"\ncommand -p -V cat; echo \"rc=$?\"\n",
+      "status": 0,
+      "stdout": "/nonexistent/cat\nrc=0\n/nonexistent/cat\nrc=0\ncat is hashed (/nonexistent/cat)\nrc=0\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/type:18",
+      "script": "hash -p /some/ls ls\ntype ls\n",
+      "status": 0,
+      "stdout": "ls is hashed (/some/ls)\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/type:20",
+      "script": "hash -p /some/ls ls\ntype -P ls\n",
+      "status": 0,
+      "stdout": "/some/ls\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-interpreter-core:779",
+      "script": "hash; hash -r; : a b; echo $?\n",
+      "status": 0,
+      "stdout": "hash: hash table empty\n0\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:redirect-and-shell-builtins:244",
+      "script": "hash -p /old tool other\nhash -p /new tool\n(hash -p /child tool; hash -t tool)\nhash -t tool other\nhash -d tool\nhash -t tool 2>/dev/null; echo status=$?\nhash -r\nhash\n",
+      "status": 0,
+      "stdout": "/child\ntool\t/new\nother\t/old\nstatus=1\nhash: hash table empty\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:type:125",
+      "script": "hash\necho \"ok\"\n",
+      "status": 0,
+      "stdout": "hash: hash table empty\nok\n",
+      "stderr": ""
+    }
+  ]
+}

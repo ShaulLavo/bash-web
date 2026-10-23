@@ -4394,3 +4394,6 @@ mod read_options;
 
 #[path = "words/nameref_invalid.rs"]
 mod nameref_invalid;
+
+#[path = "words/command_hash.rs"]
+mod command_hash;
