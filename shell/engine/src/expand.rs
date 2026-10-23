@@ -736,7 +736,8 @@ impl<'a> Expansion<'a> {
             elements_remaining: max,
         }
     }
-
+}
+impl Expansion<'_> {
     /// Only actual value reads require a binding. The target of a lazy
     /// default/replacement/error operator is tested for absence, not read;
     /// ordinary expansions in its selected operand still pass through here.
