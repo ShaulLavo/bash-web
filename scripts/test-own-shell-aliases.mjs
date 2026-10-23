@@ -7,7 +7,7 @@ import { createWaffleRunner } from "./waffle-compat.ts";
 const fixture = JSON.parse(
   readFileSync(new URL("fixtures/shell-aliases.json", import.meta.url), "utf8"),
 );
-assert.equal(fixture.bash, "5.3.15(1)-release");
+assert.equal(fixture.bash, "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)");
 const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
 const run = await createWaffleRunner({
   modulePath: resolve(directory, "shell-runtime.wasm"),

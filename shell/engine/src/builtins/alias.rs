@@ -23,8 +23,17 @@ pub(super) async fn run(
     let (index, flag) = match options(name, args) {
         Ok(options) => options,
         Err(ch) => {
-            let usage = if name == "alias" { ALIAS_USAGE } else { UNALIAS_USAGE };
-            diagnose(fds, &format!("{name}: -{ch}: invalid option\n{usage}"), context).await?;
+            let usage = if name == "alias" {
+                ALIAS_USAGE
+            } else {
+                UNALIAS_USAGE
+            };
+            diagnose(
+                fds,
+                &format!("{name}: -{ch}: invalid option\n{usage}"),
+                context,
+            )
+            .await?;
             return Err(2);
         }
     };

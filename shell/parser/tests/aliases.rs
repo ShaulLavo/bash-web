@@ -66,7 +66,9 @@ fn suffix_reader_keeps_original_source_offsets_and_lines() {
     .unwrap();
     assert_eq!(script.command_starts, [(11, 2)]);
     assert_eq!(script.source.as_deref(), Some(source));
-    let Command::Simple(simple) = &script.commands[0] else { panic!("simple alias command") };
+    let Command::Simple(simple) = &script.commands[0] else {
+        panic!("simple alias command")
+    };
     assert_eq!(simple.span.start.offset, 12);
     assert_eq!(simple.span.start.line, 2);
 }
