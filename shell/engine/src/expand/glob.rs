@@ -517,17 +517,29 @@ impl Survivors<'_> {
     }
 }
 
+struct MatchOptions {
+    limits: (usize, usize, usize),
+    extglob: bool,
+}
+impl MatchOptions {
+    fn basic(limits: (usize, usize, usize)) -> Self {
+        Self {
+            limits,
+            extglob: false,
+        }
+    }
+}
 async fn matches(
     text: &str,
     protection: &[bool],
     cwd: &str,
     fs: &Rc<dyn FileSystem>,
-    limits: (usize, usize, usize),
+    options: MatchOptions,
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<Vec<String>, Error> {
-    let (max_bytes, max_fields, raw) = limits;
-    if unmatchable(text, protection, work, cancel).await? {
+    let (max_bytes, max_fields, raw) = options.limits;
+    if !options.extglob && unmatchable(text, protection, work, cancel).await? {
         return Ok(Vec::new());
     }
     let mut prefixes = Vec::new();
@@ -557,9 +569,10 @@ async fn matches(
         };
         let protection = &protection[start..start + part.len()];
         start += component.len();
-        let wildcard = magic(part, protection, work, cancel).await?;
+        let wildcard = options.extglob && extglob_group(part, protection, work, cancel).await?
+            || magic(part, protection, work, cancel).await?;
         let pattern_storage = work.storage_left();
-        let mut pattern = Pattern::default();
+        let mut pattern = Pattern::with_options(false, options.extglob);
         let literal = if wildcard {
             for (index, ch) in part.char_indices() {
                 work.checkpoint(cancel).await?;
@@ -787,11 +800,11 @@ pub(super) async fn expand_fields(
             &protection,
             &cwd,
             &fs,
-            (
+            MatchOptions::basic((
                 max_bytes.saturating_sub(output.bytes),
                 max_fields.saturating_sub(output.values.len()),
                 *raw_remaining,
-            ),
+            )),
             work,
             cancel,
         )
@@ -835,12 +848,16 @@ pub(crate) async fn completion_matches(
     let protection = vec![false; text.len()];
     let cwd = state.borrow().cwd.clone();
     let fs = work.substitutions.as_ref().ok_or(2)?.filesystem();
+    let extglob = state.borrow().extglob;
     matches(
         text,
         &protection,
         &cwd,
         &fs,
-        (limits.0, limits.1, limits.0),
+        MatchOptions {
+            limits: (limits.0, limits.1, limits.0),
+            extglob,
+        },
         work,
         cancel,
     )
@@ -977,7 +994,7 @@ mod tests {
                 &protection,
                 cwd,
                 &fs,
-                limits,
+                MatchOptions::basic(limits),
                 &mut work,
                 &cancel,
             ));
@@ -1009,7 +1026,7 @@ mod tests {
                 &protection,
                 "/",
                 &fs,
-                (1 << 20, 16, 1 << 20),
+                MatchOptions::basic((1 << 20, 16, 1 << 20)),
                 &mut work,
                 &cancel,
             ));
@@ -1046,7 +1063,7 @@ mod tests {
                     &[false; 5],
                     "/",
                     &fs,
-                    (bytes, fields, raw),
+                    MatchOptions::basic((bytes, fields, raw)),
                     &mut work,
                     &cancel
                 )),
@@ -1060,7 +1077,7 @@ mod tests {
                 &[false; 5],
                 "/",
                 &fs,
-                (1024, 16, 1024),
+                MatchOptions::basic((1024, 16, 1024)),
                 &mut work,
                 &cancel
             ))
@@ -1143,7 +1160,7 @@ mod tests {
             &[false],
             "/",
             &fs,
-            (1024, 16, 1024),
+            MatchOptions::basic((1024, 16, 1024)),
             &mut work,
             &cancel,
         ));
@@ -1177,7 +1194,7 @@ mod tests {
             &[false; 5],
             "/",
             &fs,
-            (65536, 1024, 65536),
+            MatchOptions::basic((65536, 1024, 65536)),
             &mut work,
             &cancel,
         ));

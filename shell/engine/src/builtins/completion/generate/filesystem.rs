@@ -13,6 +13,7 @@ pub(super) enum Mode {
     Files,
     Directories,
     Executables,
+    CommandPath,
 }
 struct Query<'a> {
     directory: &'a str,
@@ -64,11 +65,7 @@ pub(super) async fn paths(
         (&prefix[..=index], &prefix[index + 1..])
     });
     let cwd = copy(&state.borrow().cwd, work)?;
-    let directory = if spelling.starts_with('/') {
-        copy(spelling, work)?
-    } else {
-        join(&cwd, spelling, work)?
-    };
+    let directory = lookup_directory(spelling, &cwd, state, work)?;
     let mut generated = Candidates::new(context);
     scan(
         Query {
@@ -88,6 +85,28 @@ pub(super) async fn paths(
     }
     Ok(())
 }
+fn lookup_directory(
+    spelling: &str,
+    cwd: &str,
+    state: &SharedState,
+    work: &mut Work,
+) -> Result<String, i32> {
+    if spelling.starts_with('/') {
+        return copy(spelling, work);
+    }
+    let Some(suffix) = spelling.strip_prefix("~/") else {
+        return join(cwd, spelling, work);
+    };
+    let state = state.borrow();
+    let Some(home) = state.scalar_parameter("HOME") else {
+        return join(cwd, spelling, work);
+    };
+    if home.starts_with('/') {
+        return join(home, suffix, work);
+    }
+    let home = join(cwd, home, work)?;
+    join(&home, suffix, work)
+}
 pub(super) async fn commands(
     prefix: &str,
     state: &SharedState,
@@ -96,7 +115,7 @@ pub(super) async fn commands(
     work: &mut Work,
 ) -> Result<(), i32> {
     if prefix.contains('/') {
-        return paths(prefix, Mode::Executables, state, output, context, work).await;
+        return paths(prefix, Mode::CommandPath, state, output, context, work).await;
     }
     let (cwd, path) = {
         let state = state.borrow();
@@ -256,7 +275,7 @@ async fn accepts(
         return Ok(metadata.kind == FileKind::Directory);
     }
     if metadata.kind == FileKind::Directory {
-        return Ok(false);
+        return Ok(matches!(query.mode, Mode::CommandPath));
     }
     let cwd = copy(cwd, work)?;
     context.executable_path(path, cwd).await
@@ -264,22 +283,31 @@ async fn accepts(
 pub(super) async fn database(
     action: &str,
     prefix: &str,
+    state: &SharedState,
     output: &mut Candidates,
     context: &Context,
     work: &mut Work,
 ) -> Result<(), i32> {
-    let path = match action {
-        "user" => "/etc/passwd",
-        "group" => "/etc/group",
-        "service" => "/etc/services",
-        _ => "/etc/hosts",
-    };
-    let text = read(path, context, work).await?;
+    let path = database_path(action, state, work)?;
+    let text = read(&path, context, work).await?;
     for line in text.lines() {
         scan_bytes(line.len(), context, work).await?;
         database_line(action, line, prefix, output, work)?;
     }
     Ok(())
+}
+fn database_path(action: &str, state: &SharedState, work: &mut Work) -> Result<String, i32> {
+    let state = state.borrow();
+    let path = match action {
+        "user" => "/etc/passwd",
+        "group" => "/etc/group",
+        "service" => "/etc/services",
+        _ => state.scalar_parameter("HOSTFILE").unwrap_or("/etc/hosts"),
+    };
+    if path.starts_with('/') {
+        return copy(path, work);
+    }
+    join(&state.cwd, path, work)
 }
 fn database_line(
     action: &str,

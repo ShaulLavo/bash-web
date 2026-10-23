@@ -143,6 +143,7 @@ pub(super) async fn run(
         work,
     )
     .await?;
+    let primary_count = candidates.values.len();
     let plusdirs = options::option(args.spec, "plusdirs");
     if plusdirs || candidates.values.is_empty() && options::option(args.spec, "dirnames") {
         filesystem::paths(
@@ -167,23 +168,27 @@ pub(super) async fn run(
         .await?;
     }
     let status = i32::from(candidates.values.is_empty());
-    for value in candidates.values {
+    for (index, value) in candidates.values.into_iter().enumerate() {
         work.checkpoint(&context.cancel)
             .await
             .map_err(error_status)?;
-        write(
-            fds,
-            args.spec.text[2].unwrap_or_default().as_bytes(),
-            context,
-        )
-        .await?;
+        if index < primary_count {
+            write(
+                fds,
+                args.spec.text[2].unwrap_or_default().as_bytes(),
+                context,
+            )
+            .await?;
+        }
         write(fds, value.as_bytes(), context).await?;
-        write(
-            fds,
-            args.spec.text[3].unwrap_or_default().as_bytes(),
-            context,
-        )
-        .await?;
+        if index < primary_count {
+            write(
+                fds,
+                args.spec.text[3].unwrap_or_default().as_bytes(),
+                context,
+            )
+            .await?;
+        }
         write(fds, b"\n", context).await?;
     }
     Ok(Outcome::status(status))
@@ -237,7 +242,7 @@ async fn action_candidates(
             .await;
         }
         "user" | "group" | "hostname" | "service" => {
-            filesystem::database(action, prefix, &mut generated, context, work).await?
+            return filesystem::database(action, prefix, state, output, context, work).await;
         }
         "shopt" => {
             for name in super::super::SHOPT_OPTIONS {
@@ -350,8 +355,7 @@ async fn filter(
     let inverse = filter.starts_with('!');
     let filter = if inverse { &filter[1..] } else { filter };
     let text = filter_pattern(filter, prefix, context, work).await?;
-    let extglob = state.borrow().extglob;
-    let mut pattern = Pattern::literal(&text, extglob, work, &context.cancel)
+    let mut pattern = Pattern::literal(&text, state, work, &context.cancel)
         .await
         .map_err(error_status)?;
     let mut kept = 0;

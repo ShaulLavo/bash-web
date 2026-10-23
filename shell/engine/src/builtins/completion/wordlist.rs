@@ -6,6 +6,8 @@ use crate::{
     state::SharedState,
 };
 
+use shell_parser::parser::{CommandBoundaryScanner, CommandBoundaryStep};
+
 #[derive(Clone, Copy, Default)]
 struct Frame {
     end: char,
@@ -16,6 +18,7 @@ struct Scanner {
     depth: usize,
     escaped: bool,
     dollar: bool,
+    command: Option<CommandBoundaryScanner>,
 }
 impl Scanner {
     fn new() -> Self {
@@ -24,13 +27,18 @@ impl Scanner {
             depth: 0,
             escaped: false,
             dollar: false,
+            command: None,
         }
     }
     fn quote(&self) -> Option<char> {
         self.frames[self.depth].quote
     }
     fn separator(&self, ch: char, ifs: &Ifs) -> bool {
-        self.depth == 0 && self.quote().is_none() && !self.escaped && ifs.contains(ch)
+        self.command.is_none()
+            && self.depth == 0
+            && self.quote().is_none()
+            && !self.escaped
+            && ifs.contains(ch)
     }
     fn push(&mut self, end: char) -> Result<(), Error> {
         self.depth += 1;
@@ -41,7 +49,15 @@ impl Scanner {
         Ok(())
     }
     /// Return whether this character needs lexer protection in a word context.
-    fn character(&mut self, ch: char) -> Result<bool, Error> {
+    fn character(&mut self, ch: char, work: &mut Work) -> Result<bool, Error> {
+        if let Some(command) = &mut self.command {
+            let structural = ch.is_whitespace() || matches!(ch, '$' | '(' | ')' | '<' | '>');
+            work.admit_storage(16 + usize::from(structural) * 512)?;
+            if command.feed(ch) == CommandBoundaryStep::Close {
+                self.command = None;
+            }
+            return Ok(false);
+        }
         if self.escaped {
             self.escaped = false;
             self.dollar = false;
@@ -60,7 +76,12 @@ impl Scanner {
         }
         if self.dollar && matches!(ch, '(' | '{') {
             self.dollar = false;
-            self.push(if ch == '(' { ')' } else { '}' })?;
+            if ch == '{' {
+                self.push('}')?;
+                return Ok(false);
+            }
+            work.admit_storage(std::mem::size_of::<CommandBoundaryScanner>() + 512)?;
+            self.command = Some(CommandBoundaryScanner::new());
             return Ok(false);
         }
         self.dollar = ch == '$';
@@ -116,7 +137,7 @@ async fn split<'a>(
     for (index, ch) in source.char_indices() {
         work.checkpoint(cancel).await?;
         if !scan.separator(ch, ifs) {
-            scan.character(ch)?;
+            scan.character(ch, work)?;
             continue;
         }
         if start != index {
@@ -164,7 +185,17 @@ async fn spelling(word: &Slice<'_>, work: &mut Work, cancel: &Cancel) -> Result<
     let mut scan = Scanner::new();
     for ch in word.raw.chars() {
         work.checkpoint(cancel).await?;
-        if scan.character(ch)? {
+        // Completion reparses quotes, but not the ANSI-C/localized dollar prefix.
+        // Command bodies remain shell source and retain their normal quoting.
+        if scan.command.is_none()
+            && scan.quote() != Some('`')
+            && scan.dollar
+            && matches!(ch, '\'' | '"')
+        {
+            text.pop();
+            text.push_str("\\$");
+        }
+        if scan.character(ch, work)? {
             text.push('\\');
         }
         text.push(ch);
