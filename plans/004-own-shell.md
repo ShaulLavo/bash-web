@@ -353,6 +353,7 @@ fallback.
       - Scalar replacement on ordinary names (`${v/p/r}`, `${v//p/r}`, `${v/#p/r}`, `${v/%p/r}`) (#25): Oils 350→379, Brush-suite 335→338, Bashkit-suite 548→584. Leftmost-longest basic-pattern search, lazy operands, typed ampersand protection, final-IFS behavior and shared raw/storage/work/field bounds are preserved; arrays, namerefs, options, locale collation and unsupported pattern forms remain deferred.
       - Scalar arithmetic, positional/scalar slices, readonly writes and read-unit error recovery (#28): Oils 380→481, Brush-suite 340→384, Bashkit-suite 595→754, with no lost cases. Boxed arithmetic futures and explicit scalar depth bounds retain native/WASI stack safety; staged shell-boundary checks preserve Bash error status before lazy evaluation.
       - Brace lists and numeric/ASCII-letter ranges (#29): Oils 481→525, Brush-suite 384→394, Bashkit-suite 754→785, with no lost cases; brace generator seeds 1/42 match Bash on 5,318 cases each. Fused `$((`/`<((` spans end by raw parenthesis matching and are classified by `chk_arithsub`; other substitution bodies (also inside `${…}` operands and raw `$((` text) are parsed with the script and fail with status 127, strictly separated. Nested parses run after each word's scan loop (debug stack per nesting level ~21 KB→~7 KB). Brace temporaries are charged by peak storage; the default argument count is 65,536. Follow-ups owned by later units: running `UnparsedCommandSubstitution` (a non-arithmetic `$((` whose text fails to parse) at expansion with status 2 belongs to command substitution; prefix assignments on function calls (`TEMP=x f`) remain unsupported and belong to functions/locals.
+      - Ordinary argv pathname expansion, `nullglob` and `set -f` (#54, historical replay at `43f1f7d`): Oils 1099→1101, Brush-suite 1080→1087, Bashkit-suite 1469→1476, with no lost cases. Only fields with an unquoted `*`, `?` or `[` keep a quote mask, and components needing more characters than any path, or paths over 4096 bytes (a trailing slash aside), match nothing; scalar assignments and redirects stay scalar. Normal main integration adds five recorded indexed compound caller controls, including `a=(*)`, long no-match operands and the exact directory boundary. The current-head frozen replay and gain membership update remain pending. Receipt: [own-shell-pathname.json](../docs/evidence/own-shell-pathname.json).
       - Remaining parameter operators, pathname, tilde and brace expansion follow before command substitution. After scalar arithmetic, the next focused word unit is bounded brace lists and numeric/ASCII-letter ranges, preserving quoted punctuation and opaque expansion parts; tilde stays separate. The pinned reference is Bashkit's `crates/bashkit/src/interpreter/brace_expansion.rs`, but resource exhaustion must fail explicitly rather than silently return a literal or partial result.
    2. Command substitution and arithmetic. Scalar arithmetic is the next foundation rather than a constant-only substring implementation: offsets and lengths are arithmetic expressions, so the same bounded evaluator serves `$((...))`, `((...))`, `let` and scalar slices. Command substitution follows separately and must use bounded captures without changing streaming command execution.
    3. Control flow: `if`, `for`, `while`, `until`, `case`, `[[ ]]`, `test`, `&&`/`||`, `!`, `set -e` and its exceptions.
@@ -1092,6 +1093,88 @@ recovery under native/WASI plus the exact no-loss ratchet. Keep spelling scans
 cooperative and allocations admitted. Runtime diagnostics for correctly
 preserved targets are implemented in this control-flow unit; this lexer/parser
 representation work belongs to the redirect unit, with its provenance record.
+
+## Follow-up: 700,000-byte scalars fail with a silent status 2
+
+Status: Approved. Pre-existing and unrelated to pathname expansion (found during
+#54's CI repair, 2026-10-22). Bash 5.3.15 assigns all three; Waffle prints no
+message, returns status 2 and leaves the old value:
+
+- `x=0000000000; x=$x$x$x$x$x$x$x$x$x$x` three more times (100,000 bytes), then
+  `x=$x$x$x$x$x$x$x; echo status=$? length=${#x}` gives `status=2 length=100000`.
+  Six copies (600,000 bytes) still work.
+- `printf -v x '%0700000d' 0` and `x=$(printf '%0700000d' 0)` give `status=2 length=0`.
+
+The 1 MiB per-command expansion budget (`expansion_bytes` in
+`shell/engine/src/interpreter.rs`) is the likely ceiling: a value over half of it
+seems to be charged twice while it is copied into storage. Measure where the
+second charge happens before changing it. Either fix the double charge or report
+the limit with a diagnostic like other budget failures. Do not raise the budget.
+Reproducer: `/work/reports/bash-web/hill-climb/expansion/pathname/ci-fix-opus-r1/scalar700k.ts`.
+
+## Follow-up: long glob candidate fields exhaust the work budget
+
+Status: Approved. Found by #54's second narrow review (2026-10-22,
+`/work/reports/bash-web/hill-climb/expansion/pathname/review-r2/`, N7). Bash keeps
+these argv words literal; Waffle stops with status 2 (`echo $? $# ${#1}` prints
+`2 0 0`). The error is honest, never a wrong match or a silent miss, but it is not
+Bash parity. `x` below is 100,000 `a`s built by concatenation
+(`x=aaaaaaaaaa; x=$x$x$x$x$x$x$x$x$x$x` four times):
+
+| Word (`set -- …; echo $? $# ${#1}`) | Bytes | Bash | Waffle at #54 `fc7368f` |
+|---|---|---|---|
+| `$x$x$x*` | 300,001 | `0 1 300001` | same |
+| `$x$x$x${x:0:30000}*` | 330,001 | `0 1 330001` | `2 0 0` |
+| `$x$x$x${x:0:50000}*` | 350,001 | `0 1 350001` | `2 0 0` |
+| `[$x$x${x:0:50000}` (unclosed bracket) | 250,001 | `0 1 250001` | same |
+| `[$x$x$x${x:0:50000}` | 350,001 | `0 1 350001` | `2 0 0` |
+| `$x$x$x$x[` (trailing bracket) | 400,001 | `0 1 400001` | same |
+| unquoted minified JSON: `j='[{"k":[1,2]}'; while [ ${#j} -lt 400000 ]; do j=$j,$j; done; j=$j']'; set -- $j` | 425,984 | `0 1 425984` | `2 0 0` |
+| plain `$x$x$x$x$x$x` | 600,000 | `0 1 600000` | same |
+
+Mechanism: every scanned character costs one checkpoint step from the command's
+work budget (`source_bytes + expansion_bytes + arguments`, about 1.376M steps;
+`shell/engine/src/interpreter.rs`). Building a field costs about 2.2 steps per
+byte (fit to the thresholds above, not instrumented). A long component with
+magic is then read twice: `expand_fields` → `magic()` → `long_shape` → `shape`,
+and again in `matches()` → `unmatchable()` → `shape`
+(`shell/engine/src/expand/glob.rs`). A long unclosed `[` is read twice in one
+pass: `bracket()` walks to the end, then `shape` walks the same characters.
+
+Work: compute each long component's shape once per field (for example, `magic()`
+also reports that the field is unmatchable, so `expand_fields` skips `matches()`),
+and don't rescan after an unclosed bracket. The review estimates this moves `*`
+fields to about 430k bytes. Plain-field parity is out of reach while each scanned
+character costs a step, so measure and record the remaining ceiling. Don't raise
+budgets or stop charging steps. Reproducers: `review-r2/probe.ts` cases A1-A10
+and T1-T10, with results in `probe.jsonl` and `budget.jsonl`.
+
+## Follow-up: repeated-slash pathname result spelling
+
+Status: Approved. PR54 correction review found this pre-existing spelling
+mismatch at `0c6dd6c691a1273b8c8139fef53f500f8ef31835`. Source:
+`shell/engine/src/expand/glob.rs:278-300`, `joined()` copies the prefix and appends
+its separator and trailing directory slash without normalizing repeated slashes.
+The current-main integration preserves that approved production file byte for
+byte; no spelling fix is part of PR54.
+
+Reproduce in an empty directory with GNU Bash `5.3.15(1)-release` and the
+production Waffle runner, using each runtime's own `$TMP`:
+
+```bash
+cd "$TMP"; mkdir -p d/x d/y; printf '<%s>\n' d*//*/
+cd "$TMP"; mkdir -p d/x d/y; printf '<%s>\n' ./*//
+```
+
+The first script prints `<d/x/>` and `<d/y/>` in Bash, but `<d//x/>` and
+`<d//y/>` in Waffle. The second prints `<./d/>` in Bash and `<./d//>` in
+Waffle. Review evidence and exact scripts are in
+`/work/reports/wave-20261022/shell/review54-r1-evidence/attempt2-probes.jsonl`.
+The integration report records a fresh Bash control and current-source guest
+check. Fix result spelling without changing directory selection, quoted-slash
+handling, path-length admission or storage/work/cancellation charges. Add pinned
+recordings first, then prove the corrected bytes on a fresh Waffle runtime and
+preserve the frozen ruler's existing passing cases.
 
 ## Approved extraction: public `ShaulLavo/bash-web`, with history
 
@@ -2356,6 +2439,29 @@ Evidence: `/work/reports/bash-web/hill-climb/expansion/indirect-special-review-r
 (rows `direct:00:` through `indirect:9999…:set -u; `). No frozen scored case
 has been checked against this; claim no gain unless a replay proves one.
 
+## Follow-up: command substitution loses a 700,000-byte capture, 2026-10-22
+
+Status: Approved. Bounded to the command-substitution capture path, which
+the control track owns (`shell/engine/src/expand/command.rs`). Do not fix it
+from the tilde or pathname units.
+
+The pathname unit's budget probe compared GNU Bash 5.3.15 with the release
+Waffle guest built from main `77b3963` (shell tree `2f38c80d`, sha256
+`4329f221…`), locale C.utf8, inside an empty `$TMP`:
+
+| Script | Bash | Waffle |
+| --- | --- | --- |
+| `x=$(printf '%0700000d' 0); echo ${#x}` | `700000`, status 0 | `0`, status 0 |
+| `x=$(printf '%0300000d' 0); echo ${#x}` | `300000`, status 0 | `300000`, status 0 |
+
+The large capture comes back empty with status 0. It neither fails at an
+explicit limit (status 2) nor keeps the bytes. Find which capture or
+assignment ceiling discards the value, then make it either keep the value
+or fail explicitly the way other limits do. Evidence:
+`/work/reports/bash-web/hill-climb/expansion/pathname/budget-probe2.log`
+(rows `capture-700k` and `capture-300k`). No frozen scored case is tied to
+it yet; claim no gain unless a replay proves one.
+
 ## word fields carry bytes, not UTF-8 String
 
 Status: Approved, 2026-10-21. Follow-up to indexed arrays in PR41. Keep this as
@@ -2559,6 +2665,74 @@ Before changing this behavior, reproduce direct case and ordinary argument
 patterns with extglob unset, enabled on the same read unit and enabled on a
 previous read unit. Coordinate with the parser/options and expansion owners;
 do not broaden indexed storage or alter the frozen ruler.
+
+## Leading tilde-colon parameter literal handling
+
+Status: Approved follow-up in the expansion family, outside PR57's reviewed
+assignment-looking brace repair and call-only main integration.
+
+Minimal relevant form from the independent narrow review:
+
+```sh
+HOME=/one; set -- {~,:~}:$HOME; printf '<%s>\n' "$@"
+```
+
+The leading `~:$HOME` result is `</one:$HOME>\n` in GNU Bash
+`5.3.15(1)-release` but `</one:/one>\n` in the reviewed Waffle guest.
+Status is 0 and stderr is empty. The old Word and repaired Generated contexts
+both leave this leading path unchanged. Reproduce and isolate Bash's literal
+parameter handling after the leading tilde-colon before changing it. Preserve
+HOME side-effect order, quote protection, budgets and cancellation.
+
+Exact full control and expected/actual base64 bytes are in
+`/work/reports/bash-web/hill-climb/expansion/tilde/review-r2/classified-results.json`,
+`nonRepairDifferences` entry `context-order-3`, reviewed at
+`19bcd7ffe407d1c3d6c73940fb464d41fc8b4f37`. No fresh integrated-source result or
+frozen gain is claimed for this follow-up.
+
+## Missing redirect diagnostic in tilde fixture 25
+
+Status: Approved follow-up in the redirect/diagnostic family, not a PR57 tilde
+repair. Preserve the actual redirect failure and final command status.
+
+```sh
+HOME=.; printf data >'x=~'; IFS= read -r v <x=~; printf '<%s>\n' "$v"
+```
+
+Both GNU Bash `5.3.15(1)-release` and the reviewed guest return status 0 with
+stdout `<>\n`. Bash stderr is
+`/usr/bin/bash: line 1: x=.: No such file or directory\n`; guest stderr is empty.
+The earlier review incorrectly labelled identical recorded bytes `match=true`
+because it did not compare nonempty expected stderr. This is an existing
+diagnostic difference, not an exact Bash match or a repair regression.
+
+Reproduce through real Waffle and trace the failed input redirection's diagnostic
+publication. Exact evidence is `nonRepairDifferences` entry `fixture-25` in the
+same `review-r2/classified-results.json`; the older bytes are also retained as
+`recorded-25` in `review-r1/observations.json`. Do not weaken status/stdout checks
+or change the frozen diagnostic payloads to hide it.
+
+## Tilde plus brace-generated pathname expansion
+
+Status: Approved follow-up owned by expansion/pathname. Retest after PR54's
+actual normal-main integration before deciding whether further work is needed.
+No pathname source change belongs in PR57.
+
+```sh
+HOME=.; printf data >present; set -- ~/{*,x}; printf '<%s>\n' "$@"
+```
+
+The reviewed guest leaves `./*` literal, while Bash matches `./present`; the
+other result is `./x`. Both return status 0 with empty stderr. Leading tilde
+eligibility is unchanged by the assignment-looking repair. The full recorded
+control also includes unchanged ordinary and assignment-looking brace forms.
+Its exact expected/actual bytes are in `nonRepairDifferences` entry
+`context-order-4` in the same `review-r2/classified-results.json`.
+
+All three follow-ups come from the narrow review's 152 observations: 146 exact
+Bash matches, three declared boundary matches and these three differences.
+The append boundary was still declared at that reviewed pin; PR41 integration
+now compares it directly with its unchanged genuine Bash recording.
 
 ### Approved: special-variable unset follow-ups from declaration review
 

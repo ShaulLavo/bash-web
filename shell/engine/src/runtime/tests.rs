@@ -2625,6 +2625,27 @@ fn runtime_for_globs_stream_names_and_close_directory_descriptors() {
 }
 
 #[test]
+fn runtime_argv_globs_sort_names_and_keep_protected_or_noglob_words() {
+    let (executor, fake, runtime) = setup();
+    let session = runtime_session(&executor, &runtime);
+    fake.fs.mkdir("/tmp/runtime-argv-glob", true).unwrap();
+    let source = concat!(
+        "cd /tmp/runtime-argv-glob; : >b; : >ab; : >a; : >.a\n",
+        "echo a* '?' \\[ab] z*; v='* b'; echo $v \"$v\"\n",
+        "shopt -s nullglob; echo start z* [q] end; shopt -u nullglob\n",
+        "set -f; echo a* $v; set +f; echo [ab]",
+    );
+    let job = session.start(source).unwrap();
+    assert_eq!(finish(&executor, &runtime, job), 0);
+    assert_eq!(
+        String::from_utf8_lossy(&fake.output.bytes()),
+        "a ab ? [ab] z*\na ab b b * b\nstart end\na* * b\na b\n"
+    );
+    shutdown_session(&executor, &runtime, &fake, session);
+    assert!(fake.directories.borrow().is_empty());
+}
+
+#[test]
 fn natural_foreground_completion_does_not_wait_for_inherited_members() {
     let (executor, fake, runtime) = setup();
     let session = runtime_session(&executor, &runtime);
