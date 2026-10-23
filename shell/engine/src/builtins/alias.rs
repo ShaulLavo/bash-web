@@ -89,9 +89,7 @@ async fn operand(
             .await?;
             return Ok(1);
         }
-        let bytes = state.borrow().alias_update_work(name, Some(value))?;
-        scan_bytes(bytes, context, work).await?;
-        state.borrow_mut().update_alias(name, Some(value))?;
+        update(name, Some(value), state, context, work).await?;
         return Ok(0);
     }
     let aliases = state.borrow().aliases();
@@ -177,19 +175,41 @@ async fn remove(
     }
     let mut status = 0;
     for arg in args {
-        let bytes = state.borrow().alias_update_work(arg, None)?;
-        scan_bytes(bytes, context, work).await?;
         let present = state
             .borrow()
             .aliases()
             .values()
             .is_some_and(|values| values.contains_key(arg));
         if present {
-            state.borrow_mut().update_alias(arg, None)?;
+            update(arg, None, state, context, work).await?;
             continue;
         }
         diagnose(fds, &format!("unalias: {arg}: not found\n"), context).await?;
         status = 1;
     }
     Ok(status)
+}
+
+async fn update(
+    name: &str,
+    value: Option<&str>,
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    loop {
+        let (revision, bytes) = {
+            let state = state.borrow();
+            (
+                state.aliases().revision(),
+                state.alias_update_work(name, value)?,
+            )
+        };
+        scan_bytes(bytes, context, work).await?;
+        let mut state = state.borrow_mut();
+        if state.aliases().revision() != revision {
+            continue;
+        }
+        return state.update_alias(name, value);
+    }
 }

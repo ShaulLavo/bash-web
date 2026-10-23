@@ -119,10 +119,16 @@ impl State {
             return Ok(0);
         }
         // Only a real snapshot copy or a table rehash visits existing entries.
-        self.aliases
-            .bytes()
-            .checked_add(self.aliases.version.as_ref().map_or(0, |v| v.slots))
-            .ok_or(RESOURCE_STATUS)
+        let Some(version) = &self.aliases.version else {
+            return Ok(0);
+        };
+        let buckets = version.slots / (size_of::<(String, String)>() + 1);
+        let copied_text = if self.aliases.unique() {
+            0
+        } else {
+            version.bytes
+        };
+        buckets.checked_add(copied_text).ok_or(RESOURCE_STATUS)
     }
 
     pub(crate) fn update_alias(&mut self, name: &str, value: Option<&str>) -> Result<(), i32> {
@@ -332,7 +338,7 @@ mod tests {
             work += state.alias_update_work(&name, Some(":")).unwrap();
             state.update_alias(&name, Some(":")).unwrap();
         }
-        assert!(work < 32_000 * 256, "unique definition work: {work}");
+        assert!(work < 32_000 * 4, "unique definition work: {work}");
         let revision = state.aliases.revision();
         for n in 0..32_000 {
             let name = format!("b{n}");
