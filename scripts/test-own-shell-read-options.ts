@@ -41,6 +41,7 @@ const cases = ["", "-r", "-n0", "-n3", "-N0", "-N3", "-n3 -N5", "-N5 -n3"]
     `read -N -1 a <<< 'x'; printf '%s\\n' "$?"`,
     `read -N nope a <<< 'x'; printf '%s\\n' "$?"`,
     `printf 'ab\\xc3\\xa9c\\n' | { read -r -d é x; printf '[%s]\\n' "$x"; }`,
+    `printf 'a\\\\\\0 b\\0' | { read -d '' a b; printf '%s:[%s][%s]\\n' "$?" "$a" "$b"; }`,
     `read -d; printf '%s\\n' "$?"`,
     `read -p; printf '%s\\n' "$?"`,
   ]);

@@ -213,6 +213,11 @@
       "stdoutBase64": "W2FiXQo="
     },
     {
+      "script": "printf 'a\\\\\\0 b\\0' | { read -d '' a b; printf '%s:[%s][%s]\\n' \"$?\" \"$a\" \"$b\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bYl0K"
+    },
+    {
       "script": "read -d; printf '%s\\n' \"$?\"",
       "status": 0,
       "stdoutBase64": "Mgo="
