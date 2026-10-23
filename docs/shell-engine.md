@@ -264,6 +264,14 @@ target metadata: scalar reads, presence checks and supported writes follow later
 target changes, while `${!ref}` returns the target name. Resolution is bounded
 and cycle-aware; unset targets remain unset under nounset. Local reference
 bindings and admitted isolated snapshots preserve restoration and isolation.
+Nonempty invalid plain scalar nameref targets return status 1 without changing the
+binding or target, and later valid operands still run. Empty or unbound reference
+declarations, bracket-bearing targets, and PIPESTATUS references remain unsupported
+status 2. Admission failures remain status 2 and cancellation remains status 130.
+The original adapter and separately adapted corpus scripts are classified under
+`shellScalarState.invalidTargetStatus` in `sources.lock.json`. The focused production
+Waffle test replays local GNU Bash 5.3.15 observations with the frozen environment
+and no utility directory. It compares stdout bytes and status, not diagnostic text.
 Arrays, indexed references and general declaration options remain unsupported.
 Other parameter operators, dotglob/globstar/failglob, arrays, traps,
 aliases, `lastpipe` and full utility option coverage are not implemented. Whole-script parsing retains the original separator policy. Captured

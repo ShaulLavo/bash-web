@@ -4391,3 +4391,6 @@ mod index_names;
 
 #[path = "words/read_options.rs"]
 mod read_options;
+
+#[path = "words/nameref_invalid.rs"]
+mod nameref_invalid;
