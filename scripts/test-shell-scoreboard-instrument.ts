@@ -6,10 +6,12 @@ import { test } from "node:test";
 import {
   assertInstrumentChanges,
   authorizedInstrumentTransition,
+  authorizedRuntimeTransition,
   baselinePath,
   instrumentMigrationEvidence,
   instrumentReceiptPath,
   oraclePath,
+  runtimeReceiptPath,
   targetBranchBaseline,
 } from "./shell-scoreboard-base.mjs";
 import { sealOracle } from "./shell-scoreboard.mjs";
@@ -17,7 +19,13 @@ import { sealOracle } from "./shell-scoreboard.mjs";
 const root = resolve(import.meta.dirname, "..");
 const target = authorizedInstrumentTransition.target;
 const read = (path: string) => JSON.parse(readFileSync(resolve(root, path), "utf8"));
-const candidate = () => read(oraclePath);
+const candidate = () =>
+  JSON.parse(
+    execFileSync("git", ["show", `38c229271c851543ce564976e7b09f2971c5e0f8:${oraclePath}`], {
+      cwd: root,
+      maxBuffer: 1 << 26,
+    }).toString(),
+  );
 const receipt = () => read(instrumentReceiptPath);
 const committedBaseline = (revision: string) =>
   JSON.parse(
@@ -171,4 +179,27 @@ test("the authorized receipt rejects nonexistent and unrelated plan items", () =
       /authorized receipt/,
     );
   }
+});
+
+
+test("the runtime update preserves every target outcome and all Bash observations", () => {
+  const oracle = read(oraclePath);
+  const { baseline } = instrumentMigrationEvidence(root, authorizedRuntimeTransition.target, oracle);
+  assert.equal(oracle.environment.nodeVersion, "v26.12.1");
+  assert.equal(oracle.environment.runner, "waffle-node");
+  assertInstrumentChanges(baseline, read(baselinePath), read(runtimeReceiptPath));
+});
+
+test("the runtime receipt rejects any new loss or changed host environment", () => {
+  const oracle = read(oraclePath);
+  const changed = read(baselinePath);
+  const index = changed.cases.findIndex((item: { outcome: string }) => item.outcome === "pass");
+  changed.cases[index] = { ...changed.cases[index], outcome: "fail" };
+  const { baseline } = instrumentMigrationEvidence(root, authorizedRuntimeTransition.target, oracle);
+  assert.throws(() => assertInstrumentChanges(baseline, changed, read(runtimeReceiptPath)));
+  oracle.environment.nodeVersion = "v26.12.2";
+  assert.throws(
+    () => instrumentMigrationEvidence(root, authorizedRuntimeTransition.target, sealOracle(oracle)),
+    /candidate environment/,
+  );
 });

@@ -97,7 +97,7 @@ writeFileSync(process.env.BASH_COMPAT_OUT, JSON.stringify({
   })),
 }));
 `;
-function makeOracle(environment = { nodeVersion: "v26.7.0", stdin: "empty", timeoutMs: 10000 }) {
+function makeOracle(environment = { nodeVersion: "v26.12.1", stdin: "empty", timeoutMs: 10000 }) {
   return sealOracle({
     schema: 1,
     oracle: { capture: "old" },
@@ -254,7 +254,7 @@ async function fixture(
       entrypoint
         ? JSON.parse(readFileSync(new URL(`../${oraclePath}`, import.meta.url))).environment
         : targetRunner
-          ? { nodeVersion: "v26.7.0", stdin: "empty", timeoutMs: 10000, runner: targetRunner }
+          ? { nodeVersion: "v26.12.1", stdin: "empty", timeoutMs: 10000, runner: targetRunner }
           : undefined,
     );
     const sourcePins = {
