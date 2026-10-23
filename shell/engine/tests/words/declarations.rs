@@ -140,13 +140,17 @@ fn local_declaration_append_limit_restores_target_and_reference() {
         expansion_bytes: 8192,
         ..Limits::default()
     });
-    rig.variable("v", &"a".repeat(3000));
+    rig.variable("v", &"b".repeat(3000));
     assert_eq!(rig.run("t=outer; declare -n r=t"), 0);
-    assert_eq!(
-        rig.run("f(){ local t=$v; local -n r=t; ready=yes; local r+=$v; }; f"),
-        2
+    let job = rig.start_until_value(
+        "f(){ local t=base; local -n r=t; ready=yes; local r+=$v; }; f",
+        1000,
+        "ready",
+        "yes",
     );
-    assert_eq!(rig.value("ready"), Some("yes".into()));
+    assert_eq!(rig.value("t"), Some("base".into()));
+    rig.variable("t", &"a".repeat(8192));
+    assert_eq!(rig.finish(job), 2);
     assert_eq!(rig.value("t"), Some("outer".into()));
     assert_eq!(rig.run("declare -p r"), 0);
     assert_eq!(rig.output.bytes(), b"declare -n r=\"t\"\n");
