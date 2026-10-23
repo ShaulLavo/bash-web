@@ -324,7 +324,6 @@ fn slice_start(offset: i64, count: usize) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::{executor::Cancel, state::State};
     use futures::FutureExt;
 
