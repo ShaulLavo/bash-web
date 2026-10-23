@@ -397,7 +397,7 @@ pub(crate) fn shell_option(state: &State, name: &str) -> bool {
     }
 }
 
-async fn unary(
+pub(crate) async fn unary(
     operator: &str,
     operand: &str,
     state: &SharedState,
