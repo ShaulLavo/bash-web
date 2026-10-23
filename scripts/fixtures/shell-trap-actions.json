@@ -560,6 +560,34 @@
       "stdout": "err\ny\n",
       "stderr": "",
       "status": 0
+    },
+    {
+      "id": "err-cached-arithmetic-loop",
+      "code": "trap 'echo err:$?' ERR; for i in 1 2; do ((0)); done; echo done",
+      "stdout": "err:1\nerr:1\ndone\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "id": "err-cached-arithmetic-condition",
+      "code": "trap 'echo BAD' ERR; i=0; while ((i++ < 2)); do :; done; echo done",
+      "stdout": "done\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "id": "err-pipeline-subshell-boundaries",
+      "code": "trap 'echo err' ERR; (false) | true; (false) | (false); echo done",
+      "stdout": "err\nerr\ndone\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "id": "err-traced-pipeline-subshell",
+      "code": "set -E; trap 'echo err' ERR; (false) | (false); echo done",
+      "stdout": "err\nerr\nerr\ndone\n",
+      "stderr": "",
+      "status": 0
     }
   ]
 }

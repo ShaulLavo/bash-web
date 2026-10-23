@@ -1,4 +1,4 @@
-//! Session-level trap registration storage. No event runs a registered action.
+//! Session trap registration, action cancellation and retained storage.
 use super::{Limits, Session};
 use crate::{
     executor::{Executor, JoinHandle},
@@ -66,4 +66,65 @@ fn interrupted_submission_keeps_retained_action_until_reset_refunds_it() {
         0
     );
     assert_eq!(output.bytes(), b"recovered\n");
+}
+
+#[test]
+fn interrupted_error_action_is_not_left_running_and_reset_refunds_storage() {
+    let (shell, executor, output) = session();
+    let before = shell.core.execution_storage.observation().0;
+    let job = shell
+        .start("trap 'echo entered; while :; do :; done' ERR; false")
+        .unwrap();
+    for _ in 0..1000 {
+        executor.drive(128);
+        if output.bytes() == b"entered\n" {
+            break;
+        }
+    }
+    assert_eq!(output.bytes(), b"entered\n");
+    shell.interrupt();
+    assert_eq!(complete(&executor, job), 130);
+    assert!(
+        shell
+            .state
+            .borrow()
+            .traps
+            .action(crate::state::traps::Event::Error)
+            .is_some()
+    );
+    let job = shell.start("trap 'echo recovered' ERR; false").unwrap();
+    assert_eq!(complete(&executor, job), 1);
+    assert_eq!(output.bytes(), b"entered\nrecovered\n");
+    assert_eq!(complete(&executor, shell.start("trap - ERR").unwrap()), 0);
+    executor.drive(256);
+    assert_eq!(shell.core.execution_storage.observation().0, before);
+}
+
+#[test]
+fn interrupted_return_action_restores_function_bindings_and_running_guard() {
+    let (shell, executor, output) = session();
+    let job = shell.start("set -- outer; x=outer; f(){ local x=inner; trap 'echo entered; while :; do :; done' RETURN; :; }; f inner").unwrap();
+    for _ in 0..1000 {
+        executor.drive(128);
+        if output.bytes() == b"entered\n" {
+            break;
+        }
+    }
+    assert_eq!(output.bytes(), b"entered\n");
+    shell.interrupt();
+    assert_eq!(complete(&executor, job), 130);
+    assert_eq!(shell.state.borrow().function_calls, 0);
+    assert!(
+        shell
+            .state
+            .borrow()
+            .traps
+            .action(crate::state::traps::Event::Return)
+            .is_some()
+    );
+    let job = shell
+        .start("trap - RETURN; echo $x:$1; f(){ trap 'echo returned' RETURN; :; }; f")
+        .unwrap();
+    assert_eq!(complete(&executor, job), 0);
+    assert_eq!(output.bytes(), b"entered\nouter:outer\nreturned\n");
 }

@@ -1,10 +1,25 @@
-//! Original retained trap bindings. Inherited handlers are query-only until mutation.
-//! Bindings are registration state only: no event runs a stored action.
+//! Retained trap bindings, trace inheritance and action re-entry suppression.
 use crate::exec::StorageAllocation;
 use std::rc::Rc;
 
 pub(crate) const SLOTS: usize = 68;
 const SIGNAL_SLOTS: usize = 65;
+#[derive(Clone, Copy)]
+pub(crate) enum Event {
+    Error,
+    Return,
+}
+impl Event {
+    fn index(self) -> usize {
+        match self {
+            Self::Error => 0,
+            Self::Return => 1,
+        }
+    }
+    fn signal(self) -> usize {
+        66 + self.index()
+    }
+}
 #[derive(Debug)]
 pub(crate) struct Action {
     pub(crate) text: String,
@@ -21,6 +36,8 @@ pub(crate) struct Traps {
     inherited: bool,
     exit_inherited: bool,
     implicit_ignores: [bool; 2],
+    traced: [bool; 2],
+    running: [bool; 2],
 }
 impl Default for Traps {
     fn default() -> Self {
@@ -29,16 +46,55 @@ impl Default for Traps {
             inherited: false,
             exit_inherited: false,
             implicit_ignores: [false; 2],
+            traced: [false; 2],
+            running: [false; 2],
         }
     }
 }
 impl Traps {
+    #[cfg(test)]
     pub(crate) fn inherited(&self) -> Self {
+        self.inherited_traced(false, false)
+    }
+    pub(crate) fn inherited_traced(&self, errtrace: bool, functrace: bool) -> Self {
         let mut traps = self.clone();
         traps.inherited = true;
+        traps.traced = [errtrace, functrace];
         traps.exit_inherited = traps.bindings[0].is_some();
         traps.implicit_ignores = [false; 2];
         traps
+    }
+    pub(crate) fn pipeline_subshell(&mut self) {
+        // The pipeline's last subshell has an ERR boundary outside its child body.
+        self.traced[Event::Error.index()] = true;
+    }
+    pub(crate) fn action(&self, event: Event) -> Option<Rc<Action>> {
+        if self.running[event.index()] || self.inherited && !self.traced[event.index()] {
+            return None;
+        }
+        match self.get(event.signal()) {
+            Some(Binding::Handler(action)) => Some(action.clone()),
+            _ => None,
+        }
+    }
+    pub(crate) fn begin(&mut self, event: Event) -> Option<Rc<Action>> {
+        let action = self.action(event)?;
+        self.running[event.index()] = true;
+        Some(action)
+    }
+    pub(crate) fn end(&mut self, event: Event) {
+        self.running[event.index()] = false;
+    }
+    pub(crate) fn suspend(&mut self, event: Event) -> Option<Binding> {
+        if !matches!(self.get(event.signal()), Some(Binding::Handler(_))) {
+            return None;
+        }
+        self.bindings[event.signal()].take()
+    }
+    pub(crate) fn restore(&mut self, event: Event, binding: Option<Binding>) {
+        if self.get(event.signal()).is_none() {
+            self.bindings[event.signal()] = binding;
+        }
     }
     pub(crate) fn get(&self, signal: usize) -> Option<&Binding> {
         self.bindings[signal].as_ref()
@@ -89,7 +145,12 @@ impl Traps {
     }
     fn clear_handlers(&mut self) {
         self.clear_signal_handlers();
-        self.bindings[SIGNAL_SLOTS..].fill(None);
+        self.bindings[65] = None;
+        for event in [Event::Error, Event::Return] {
+            if !self.traced[event.index()] {
+                self.bindings[event.signal()] = None;
+            }
+        }
     }
     fn clear_signal_handlers(&mut self) {
         for binding in &mut self.bindings[..SIGNAL_SLOTS] {

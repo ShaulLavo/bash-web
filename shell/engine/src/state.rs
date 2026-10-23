@@ -140,6 +140,8 @@ pub struct State {
     pub pipefail: bool,
     pub nounset: bool,
     pub errexit: bool,
+    pub errtrace: bool,
+    pub functrace: bool,
     /// Keep errexit in command-substitution children instead of clearing it.
     pub inherit_errexit: bool,
     /// Enable extended glob groups in option-sensitive pattern contexts.
@@ -187,6 +189,8 @@ impl Default for State {
             pipefail: false,
             nounset: false,
             errexit: false,
+            errtrace: false,
+            functrace: false,
             inherit_errexit: false,
             extglob: false,
             nullglob: false,
@@ -374,12 +378,16 @@ impl State {
             cwd,
             directories,
             functions,
-            traps: state.traps.inherited(),
+            traps: state
+                .traps
+                .inherited_traced(state.errtrace, state.functrace),
             status: state.status,
             pipestatus,
             pipefail: state.pipefail,
             nounset: state.nounset,
             errexit: state.errexit,
+            errtrace: state.errtrace,
+            functrace: state.functrace,
             inherit_errexit: state.inherit_errexit,
             extglob: state.extglob,
             nullglob: state.nullglob,
@@ -2038,6 +2046,7 @@ pub(crate) struct FunctionFrame {
     state: SharedState,
     positional: Vec<String>,
     prefix: bool,
+    saved_traps: [Option<traps::Binding>; 2],
     positional_memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
 }
 impl FunctionFrame {
@@ -2061,6 +2070,13 @@ impl FunctionFrame {
         let positional = std::mem::replace(&mut s.positional, args);
         s.locals.push(BTreeMap::new());
         s.function_calls += 1;
+        let error = (!s.errtrace)
+            .then(|| s.traps.suspend(traps::Event::Error))
+            .flatten();
+        let returned = (!s.functrace)
+            .then(|| s.traps.suspend(traps::Event::Return))
+            .flatten();
+        let saved_traps = [error, returned];
         #[cfg(test)]
         crate::executor::observation::measure_calls(s.function_calls);
         drop(s);
@@ -2068,6 +2084,7 @@ impl FunctionFrame {
             state,
             positional,
             prefix: false,
+            saved_traps,
             positional_memory,
         })
     }
@@ -2106,6 +2123,10 @@ impl Drop for FunctionFrame {
         s.positional = std::mem::take(&mut self.positional);
         s.positional_memory = self.positional_memory.take();
         s.function_calls -= 1;
+        s.traps
+            .restore(traps::Event::Error, self.saved_traps[0].take());
+        s.traps
+            .restore(traps::Event::Return, self.saved_traps[1].take());
         for _ in 0..if self.prefix { 2 } else { 1 } {
             let Some(locals) = s.locals.pop() else { break };
             for (name, local) in locals {

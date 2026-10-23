@@ -167,6 +167,7 @@ impl Rig {
             parameter_error_status: 127,
             loop_depth: 0,
             ignore_errexit: false,
+            command_boundary: super::super::CommandBoundary::Ordinary,
             compound_child: false,
             core,
         };

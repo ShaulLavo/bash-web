@@ -593,6 +593,8 @@ async fn set(
             nounset: state.nounset,
             pipefail: state.pipefail,
             errexit: state.errexit,
+            errtrace: state.errtrace,
+            functrace: state.functrace,
             monitor: state.monitor,
             noglob: state.noglob,
         }
@@ -633,6 +635,8 @@ async fn set(
     state.nounset = flags.nounset;
     state.pipefail = flags.pipefail;
     state.errexit = flags.errexit;
+    state.errtrace = flags.errtrace;
+    state.functrace = flags.functrace;
     state.monitor = flags.monitor;
     state.noglob = flags.noglob;
     Ok(Outcome::status(0))
@@ -643,6 +647,8 @@ struct SetFlags {
     nounset: bool,
     pipefail: bool,
     errexit: bool,
+    errtrace: bool,
+    functrace: bool,
     monitor: bool,
     noglob: bool,
 }
@@ -652,6 +658,8 @@ fn set_option(option: &str, enabled: bool, flags: &mut SetFlags) -> Result<(), i
         "nounset" => flags.nounset = enabled,
         "pipefail" => flags.pipefail = enabled,
         "errexit" => flags.errexit = enabled,
+        "errtrace" => flags.errtrace = enabled,
+        "functrace" => flags.functrace = enabled,
         "monitor" => flags.monitor = enabled,
         "noglob" => flags.noglob = enabled,
         _ => return Err(2),
@@ -673,6 +681,8 @@ async fn set_short_options(
         match flag {
             b'u' => flags.nounset = enabled,
             b'e' => flags.errexit = enabled,
+            b'E' => flags.errtrace = enabled,
+            b'T' => flags.functrace = enabled,
             b'm' => flags.monitor = enabled,
             b'f' => flags.noglob = enabled,
             _ => return Err(2),

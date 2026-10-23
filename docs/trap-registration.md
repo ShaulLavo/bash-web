@@ -7,7 +7,8 @@ isolated state snapshots. The reservation is refunded when the final action
 reference is released, including references held by snapshots.
 
 Inherited child handlers remain query-visible until a mutating trap invocation.
-Mutation clears inherited handlers and ignored DEBUG, ERR and RETURN bindings.
+Mutation clears inherited handlers and ignored DEBUG, ERR and RETURN bindings,
+unless ERR or RETURN was inherited with its trace option enabled.
 It preserves ignored EXIT and signal bindings. Subshells, pipeline stages,
 background commands and command substitutions use this deferred reset.
 
@@ -28,11 +29,10 @@ later explicit ignore is printed. Root explicit ignores remain visible. An
 ordinary child clears implicit-ignore provenance; nested process substitutions
 retain it. A parent with its ordinary-child reset still deferred allows its
 first explicit ignore to be printed. These rules affect registration only, not
-signal delivery. Errtrace and functrace are not supported.
+signal delivery. See [trap actions](trap-actions.md) for ERR and RETURN execution.
 
-No event runs a stored action. EXIT, ERR, DEBUG, RETURN and signal execution are
-not implemented. Registering them records and prints the binding only; a shell
-that ends with an EXIT handler does not run it. EXIT execution is approved for a
+EXIT, DEBUG and signal execution are not implemented. Registering them records
+and prints the binding only. A shell that ends with an EXIT handler does not run it. EXIT execution is approved for a
 later, separately designed family. Diagnostic source-line parity and
 trap-specific syntax-error reporting are also deferred.
 

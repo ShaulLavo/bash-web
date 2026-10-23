@@ -27,6 +27,7 @@ mod file_substitution;
 mod function_names;
 mod indexed;
 mod select;
+mod trap;
 #[cfg(test)]
 mod trap_tests;
 mod type_builtin;
@@ -265,6 +266,13 @@ struct Core {
     foreground: RefCell<Option<Job>>,
     exit_requested: Cell<bool>,
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CommandBoundary {
+    Ordinary,
+    PipelineStage,
+    PipelineSubshell,
+}
+
 #[derive(Clone)]
 pub(crate) struct Context {
     core: Rc<Core>,
@@ -281,6 +289,7 @@ pub(crate) struct Context {
     evaluation: crate::exec::Scope,
     loop_depth: usize,
     ignore_errexit: bool,
+    command_boundary: CommandBoundary,
 }
 impl Context {
     fn stop_signal(&self) -> i32 {
@@ -761,6 +770,7 @@ impl Session {
             compound_child: false,
             loop_depth: 0,
             ignore_errexit: false,
+            command_boundary: CommandBoundary::Ordinary,
             evaluation,
         };
         let state = self.state.clone();
@@ -1147,6 +1157,7 @@ fn execute(
             }
             let preserve = matches!(command, Command::Pipeline(_) | Command::List(_));
             let check_errexit = !context.ignore_errexit
+                && context.command_boundary != CommandBoundary::PipelineStage
                 && matches!(
                     &command,
                     Command::Simple(_)
@@ -1158,7 +1169,30 @@ fn execute(
                             _
                         )
                 );
-            let mut result = command_body(command, state.clone(), fds, context).await;
+            let error_trap = check_errexit
+                && context.command_boundary != CommandBoundary::PipelineStage
+                && state
+                    .borrow()
+                    .traps
+                    .action(crate::state::traps::Event::Error)
+                    .is_some();
+            let context = Context {
+                command_boundary: CommandBoundary::Ordinary,
+                ..context
+            };
+            let mut result =
+                command_body(command, state.clone(), fds.clone(), context.clone()).await;
+            if error_trap && result.flow == Flow::Normal && result.code != 0 {
+                finish_command(&state, result, preserve);
+                result = trap::run(
+                    crate::state::traps::Event::Error,
+                    result,
+                    state.clone(),
+                    fds,
+                    context,
+                )
+                .await;
+            }
             if check_errexit
                 && result.flow == Flow::Normal
                 && result.code != 0
@@ -1173,6 +1207,10 @@ fn execute(
 }
 
 fn finish_command(state: &SharedState, result: Outcome, preserve_pipeline: bool) -> Outcome {
+    // RETURN observes the status preceding the explicit return operand.
+    if result.flow == Flow::Return {
+        return result;
+    }
     let mut state = state.borrow_mut();
     state.publish_status(result.code);
     if !preserve_pipeline {
@@ -1290,7 +1328,7 @@ async fn pipeline_command(
             }
         } else {
             let child = context.isolated_command(&command);
-            if index + 1 < count || pipeline.negated {
+            if pipeline.negated {
                 child.condition()
             } else {
                 child
@@ -1302,11 +1340,24 @@ async fn pipeline_command(
             Rc::new(RefCell::new(stage_fds))
         };
         let parent_scope = context.scope.clone();
+        let command_boundary = match (count, index + 1 == count, &command) {
+            (1, _, _) => CommandBoundary::Ordinary,
+            (_, true, Command::Compound(CompoundCommand::Subshell(_), _)) => {
+                CommandBoundary::PipelineSubshell
+            }
+            _ => CommandBoundary::PipelineStage,
+        };
+        if command_boundary == CommandBoundary::PipelineSubshell {
+            child.borrow_mut().traps.pipeline_subshell();
+        }
         tasks.push(context.core.executor.spawn(pipeline_stage(
             command,
             child,
             stage_fds,
-            stage_context,
+            Context {
+                command_boundary,
+                ..stage_context
+            },
             parent_scope,
             !shared_stage,
         )));
@@ -1687,6 +1738,12 @@ fn loop_arithmetic<'a>(
             let table = fds.borrow().clone();
             let fds = Rc::new(RefCell::new(table));
             let mut work = substitution_work(&context, &fds);
+            let error_trap = !context.ignore_errexit
+                && state
+                    .borrow()
+                    .traps
+                    .action(crate::state::traps::Event::Error)
+                    .is_some();
             let result = match cache {
                 Some(cache) => {
                     arithmetic_command_program(&cache.program, state, &fds, &context, &mut work)
@@ -1695,6 +1752,16 @@ fn loop_arithmetic<'a>(
                 None => arithmetic_command(source, state, &fds, &context, &mut work).await,
             };
             let mut result = finish_command(state, result, false);
+            if error_trap && result.flow == Flow::Normal && result.code != 0 {
+                result = trap::run(
+                    crate::state::traps::Event::Error,
+                    result,
+                    state.clone(),
+                    fds.clone(),
+                    context.clone(),
+                )
+                .await;
+            }
             if result.flow == Flow::Normal
                 && result.code != 0
                 && state.borrow().errexit
@@ -2244,6 +2311,7 @@ async fn launch_background(
         evaluation: context.evaluation.new_task(),
         loop_depth: 0,
         ignore_errexit: context.ignore_errexit,
+        command_boundary: CommandBoundary::Ordinary,
     };
     let fds = Rc::new(RefCell::new(fds.borrow().clone()));
     let parent_scope = context.scope.clone();
@@ -3088,7 +3156,14 @@ async fn dispatch_simple_command_body(
                 let _frame = frame;
                 let _call_storage = call_storage;
                 let _allocation = allocation;
-                execute(body.body.as_ref().clone(), state, fds, context).await
+                let result = execute(
+                    body.body.as_ref().clone(),
+                    state.clone(),
+                    fds.clone(),
+                    context.clone(),
+                )
+                .await;
+                trap::function_return(result, state, fds, context).await
             },
             Outcome::status,
         );
@@ -3812,6 +3887,7 @@ mod scope_tests {
             compound_child: false,
             loop_depth: 0,
             ignore_errexit: false,
+            command_boundary: CommandBoundary::Ordinary,
         };
         (session.state(), session.core.descriptors.clone(), context)
     }
@@ -4329,6 +4405,7 @@ mod residual_review_tests {
                 compound_child: false,
                 loop_depth: 0,
                 ignore_errexit: false,
+                command_boundary: CommandBoundary::Ordinary,
             }
         }
         fn shutdown(mut self) {

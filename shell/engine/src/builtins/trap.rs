@@ -1,4 +1,4 @@
-//! Original Bash-compatible registration and query. No event or signal runs an action.
+//! Original Bash-compatible trap registration and query.
 use super::{diagnose, error_status, scan_bytes, write};
 use crate::{
     expand::Work,
