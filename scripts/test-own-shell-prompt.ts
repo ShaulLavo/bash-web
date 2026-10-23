@@ -14,7 +14,7 @@ const ids = new Set([
   "brush-suite:prompt:1",
   "brush-suite:prompt:3",
   "brush-suite:prompt:8",
-  "brush-suite:prompt:17",
+  "brush-suite:prompt:21",
   "brush-suite:prompt:18",
   "brush-suite:prompt:19",
   "brush-suite:prompt:20",
@@ -74,7 +74,7 @@ function observe(script: string) {
 }
 
 const missingEuidScript: string = frozen.cases.find(
-  (entry: { id: string }) => entry.id === "brush-suite:prompt:21",
+  (entry: { id: string }) => entry.id === "brush-suite:prompt:17",
 ).code;
 const injectionDirectory = "/tmp/bash-web-expansion-transform-prompt-$((2+3))";
 if (oracle.recording) assert.equal(existsSync(injectionDirectory), false);
