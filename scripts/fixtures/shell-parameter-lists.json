@@ -8,6 +8,11 @@
       "bash": "5.3.15(1)-release",
       "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
       "controls": 177
+    },
+    "assignmentOrderingRepair": {
+      "bash": "5.3.15(1)-release",
+      "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+      "controls": 16
     }
   },
   "env": {
@@ -1907,6 +1912,118 @@
       "status": 1,
       "stdout": "",
       "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-@-null-error",
+      "script": "set -- \"\"; printf \"<%s>\\n\" \"${u:=${@:=\"${y:?nested}\"}}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-@-null-side-effect",
+      "script": "set -- \"\"; ( printf \"<%s>\\n\" \"${u:=${@:=\"$(printf evaluated >&3)\"}}\" ) 3>&1; echo \"status=$?\"",
+      "status": 0,
+      "stdout": "status=1\n",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-@-unset-error",
+      "script": "set --; printf \"<%s>\\n\" \"${u:=${@=\"${y:?nested}\"}}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-@-unset-side-effect",
+      "script": "set --; ( printf \"<%s>\\n\" \"${u:=${@=\"$(printf evaluated >&3)\"}}\" ) 3>&1; echo \"status=$?\"",
+      "status": 0,
+      "stdout": "status=1\n",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-@-selected-error-error",
+      "script": "set -- \"\"; printf \"<%s>\\n\" \"${u:=${@:?\"${y:?nested}\"}}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: y: nested\n"
+    },
+    {
+      "id": "assignment-order-@-selected-error-side-effect",
+      "script": "set -- \"\"; ( printf \"<%s>\\n\" \"${u:=${@:?\"$(printf evaluated >&3)missing\"}}\" ) 3>&1; echo \"status=$?\"",
+      "status": 0,
+      "stdout": "evaluatedstatus=1\n",
+      "stderr": "/usr/bin/bash: line 1: @: missing\n"
+    },
+    {
+      "id": "assignment-order-@-unselected-error",
+      "script": "set -- present; printf \"<%s>\\n\" \"${u:=${@:=\"${y:?nested}\"}}\"; echo after",
+      "status": 0,
+      "stdout": "<present>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "assignment-order-@-unselected-side-effect",
+      "script": "set -- present; ( printf \"<%s>\\n\" \"${u:=${@:=\"$(printf evaluated >&3)\"}}\" ) 3>&1; echo \"status=$?\"",
+      "status": 0,
+      "stdout": "<present>\nstatus=0\n",
+      "stderr": ""
+    },
+    {
+      "id": "assignment-order-*-null-error",
+      "script": "set -- \"\"; printf \"<%s>\\n\" \"${u:=${*:=\"${y:?nested}\"}}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-*-null-side-effect",
+      "script": "set -- \"\"; ( printf \"<%s>\\n\" \"${u:=${*:=\"$(printf evaluated >&3)\"}}\" ) 3>&1; echo \"status=$?\"",
+      "status": 0,
+      "stdout": "status=1\n",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-*-unset-error",
+      "script": "set --; printf \"<%s>\\n\" \"${u:=${*=\"${y:?nested}\"}}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-*-unset-side-effect",
+      "script": "set --; ( printf \"<%s>\\n\" \"${u:=${*=\"$(printf evaluated >&3)\"}}\" ) 3>&1; echo \"status=$?\"",
+      "status": 0,
+      "stdout": "status=1\n",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-*-selected-error-error",
+      "script": "set -- \"\"; printf \"<%s>\\n\" \"${u:=${*:?\"${y:?nested}\"}}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: y: nested\n"
+    },
+    {
+      "id": "assignment-order-*-selected-error-side-effect",
+      "script": "set -- \"\"; ( printf \"<%s>\\n\" \"${u:=${*:?\"$(printf evaluated >&3)missing\"}}\" ) 3>&1; echo \"status=$?\"",
+      "status": 0,
+      "stdout": "evaluatedstatus=1\n",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "assignment-order-*-unselected-error",
+      "script": "set -- present; printf \"<%s>\\n\" \"${u:=${*:=\"${y:?nested}\"}}\"; echo after",
+      "status": 0,
+      "stdout": "<present>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "assignment-order-*-unselected-side-effect",
+      "script": "set -- present; ( printf \"<%s>\\n\" \"${u:=${*:=\"$(printf evaluated >&3)\"}}\" ) 3>&1; echo \"status=$?\"",
+      "status": 0,
+      "stdout": "<present>\nstatus=0\n",
+      "stderr": ""
     }
   ]
 }

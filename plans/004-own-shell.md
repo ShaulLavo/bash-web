@@ -3011,3 +3011,51 @@ The same script and exact Bash stdout/status/stderr are recorded in
 The repair replay is in `expansion-params-fix-takeover-r1-evidence/minimal-red.json`
 beside that directory. No prefix implementation change belongs to the captured
 positional-operator status repair.
+
+## Unquoted outer defaults flatten nested lists, 2026-10-23
+
+Status: Approved follow-up. Owner: expansion family. Nonblocking PR70 round-two
+findings at `39e43223396093659720492237b291d42f83c199`. Do not fold these into the
+selected-assignment ordering repair.
+
+```sh
+param_a=1 param_b=2; IFS=:; set -- ${u:-${!param_@}}; printf '<%s>\n' "$@"
+set -- a b; IFS=:; set -- ${u:-${@-fallback}}; printf '<%s>\n' "$@"
+```
+
+Run each line in a fresh shell. Bash `5.3.15(1)-release` prints
+`<param_a param_b>\n` for the first and `<a b>\n` for the second. Production
+Waffle prints `<param_a>\n<param_b>\n` and `<a>\n<b>\n`. Both exit 0 with empty
+stderr. `expand/prefix.rs` and `expand/positional.rs` retain list boundaries
+where the unquoted scalar-default operand must join `@` with spaces before
+outer IFS splitting. These are new-feature corners, not measured main losses.
+
+Preserve the distinct quoted and `*` controls. Quoting the first outer default
+or replacing `param_@` with `param_*` prints `<param_a>\n<param_b>\n` in Bash.
+Keep the existing positional quoting, `@`/`*`, capture, IFS, field/storage/work
+and cancellation controls. Evidence and exact scripts are in
+`/work/reports/wave-20261022/shell/review70-takeover-r2-evidence/extra-oracle.json`
+and `production-results.json`, rows `prefix-default-unquoted`,
+`positional-default-unquoted`, `prefix-default-quoted`, and `prefix-default-star`.
+
+## Numeric and indirect assignment targets, 2026-10-24
+
+Status: Approved follow-up. Owner: expansion family. Found while repairing the
+PR70 selected-assignment ordering at `39e43223396093659720492237b291d42f83c199`.
+The repair rejects a direct `@` or `*` assignment target before its operand
+expands. These neighbouring targets do not reach that path yet.
+
+```sh
+set --; printf '<%s>\n' "${u:=${1="${y:?nested}"}}"; echo after
+set --; ( printf '<%s>\n' "${u:=${1:="$(printf evaluated >&3)"}}" ) 3>&1; echo "status=$?"
+r=@; set -- ""; ( : "${!r:="$(printf evaluated >&3)"}" ) 3>&1; echo "status=$?"
+```
+
+Run each line in a fresh shell. Bash `5.3.15(1)-release` exits 1 with
+`$1: cannot assign in this way` for the first. It prints `status=1` with the same
+diagnostic for the second, and `status=0` for the third, without evaluating
+either operand. The native head engine prints `after` and exits 0 for the
+first, and prints `status=2` for the other two. Bash validates an indirect
+target only after expanding its operand: `r=1; set --; : ${!r:=$(echo E >&2)}`
+prints `E`, then `1: invalid variable name`. Keep that order for indirect
+targets. Do not move it into the direct-target rejection.
