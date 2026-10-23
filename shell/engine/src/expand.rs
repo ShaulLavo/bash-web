@@ -2425,10 +2425,15 @@ async fn plain_literal(variant: &str, work: &mut Work, cancel: &Cancel) -> Resul
     Ok(true)
 }
 
-/// Textual expansion precedes arithmetic parsing, even in skipped branches.
-/// Capture is bounded and storage-admitted, without charging its bytes as the
-/// enclosing expansion's output. Nested arithmetic shares this command's Work.
-pub(crate) async fn arithmetic_text(
+pub(crate) enum ScalarSyntax {
+    Arithmetic,
+    Prompt,
+}
+
+/// Capture textual expansion without field splitting or pathname expansion.
+/// Arithmetic keeps its pattern context and flushes the final segment.
+pub(crate) async fn scalar_text(
+    syntax: ScalarSyntax,
     source: &str,
     state: &SharedState,
     cancel: &Cancel,
@@ -2436,12 +2441,17 @@ pub(crate) async fn arithmetic_text(
     work: &mut Work,
 ) -> Result<String, Error> {
     let mut expansion = Expansion::scalar(work, cancel, max);
-    expansion.pattern_context = true;
-    let mut scanner = operand::Scanner::arithmetic(source);
-    while let Some(piece) = scanner.next(expansion.work, expansion.cancel).await? {
+    expansion.pattern_context = matches!(syntax, ScalarSyntax::Arithmetic);
+    let mut scanner = match syntax {
+        ScalarSyntax::Arithmetic => operand::Scanner::arithmetic(source),
+        ScalarSyntax::Prompt => operand::Scanner::prompt(source),
+    };
+    while let Some(piece) = scanner.next(expansion.work, cancel).await? {
         expansion.operand_piece(piece, state, true, true, 0).await?;
     }
-    expansion.segment("", Protection::None, true).await?;
+    if expansion.pattern_context {
+        expansion.segment("", Protection::None, true).await?;
+    }
     Ok(expansion.captured.take().ok_or(2)?.value)
 }
 
@@ -2582,21 +2592,6 @@ pub(crate) async fn conditional_word(
         } else {
             expansion.part(part, state, quoted, true, 0).await?;
         }
-    }
-    Ok(expansion.captured.take().ok_or(2)?.value)
-}
-
-pub(crate) async fn prompt(
-    source: &str,
-    state: &SharedState,
-    cancel: &Cancel,
-    max: usize,
-    work: &mut Work,
-) -> Result<String, Error> {
-    let mut expansion = Expansion::scalar(work, cancel, max);
-    let mut scanner = operand::Scanner::prompt(source);
-    while let Some(piece) = scanner.next(expansion.work, cancel).await? {
-        expansion.operand_piece(piece, state, true, true, 0).await?;
     }
     Ok(expansion.captured.take().ok_or(2)?.value)
 }

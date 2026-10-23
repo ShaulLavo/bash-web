@@ -274,8 +274,7 @@ impl State {
             .map(|(key, value)| (key, value.into()))
             .collect();
         self.exported = self.variables.keys().cloned().collect();
-        self.variables.insert("OPTIND".into(), "1".into());
-        self.variables.insert("OPTERR".into(), "1".into());
+        self.initialize_shell_defaults();
         self.variables
             .entry("PATH".into())
             .or_insert_with(|| "/usr/bin:/bin".into());
@@ -285,14 +284,21 @@ impl State {
     pub fn inherit_environment(&mut self, environment: impl IntoIterator<Item = (String, String)>) {
         self.variables.remove("OPTIND");
         self.variables.remove("OPTERR");
+        self.variables.remove("PS4");
         self.variables.extend(
             environment
                 .into_iter()
                 .map(|(key, value)| (key, value.into())),
         );
         self.exported = self.variables.keys().cloned().collect();
+        self.initialize_shell_defaults();
+    }
+    fn initialize_shell_defaults(&mut self) {
         self.variables.insert("OPTIND".into(), "1".into());
         self.variables.insert("OPTERR".into(), "1".into());
+        self.variables
+            .entry("PS4".into())
+            .or_insert_with(|| "+ ".into());
     }
     pub(crate) fn with_memory(memory: crate::exec::StorageBudget) -> Self {
         Self {

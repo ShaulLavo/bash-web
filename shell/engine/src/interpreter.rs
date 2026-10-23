@@ -310,9 +310,23 @@ impl Context {
             evaluation,
         }
     }
-    fn descend(mut self) -> Result<Self, i32> {
-        self.evaluation = self.evaluation.descend()?;
-        Ok(self)
+    fn frame<'a, F: std::future::Future<Output = Outcome> + 'a>(
+        mut self,
+        run: impl FnOnce(Self) -> F,
+    ) -> eval::Frame<'a> {
+        if self.cancel.is_cancelled() {
+            return futures::future::Either::Left(futures::future::ready(Outcome::status(130)));
+        }
+        self.evaluation = match self.evaluation.descend() {
+            Ok(evaluation) => evaluation,
+            Err(code) => {
+                return futures::future::Either::Left(futures::future::ready(Outcome::status(
+                    code,
+                )));
+            }
+        };
+        let evaluation = self.evaluation.clone();
+        evaluation.frame(run(self), Outcome::status)
     }
     fn substitution(&self, cancel: Cancel, signal: Rc<Cell<Option<i32>>>, group: GroupId) -> Self {
         Self {
@@ -1165,44 +1179,34 @@ fn execute(
     if state.borrow().noexec {
         return futures::future::Either::Left(futures::future::ready(Outcome::status(0)));
     }
-    let context = match context.descend() {
-        Ok(context) => context,
-        Err(code) => {
-            return futures::future::Either::Left(futures::future::ready(Outcome::status(code)));
+    context.frame(|context| async move {
+        yield_now().await;
+        if context.cancel.is_cancelled() {
+            return Outcome::status(130);
         }
-    };
-    let evaluation = context.evaluation.clone();
-    evaluation.frame(
-        async move {
-            yield_now().await;
-            if context.cancel.is_cancelled() {
-                return Outcome::status(130);
-            }
-            let preserve = matches!(command, Command::Pipeline(_) | Command::List(_));
-            let check_errexit = !context.ignore_errexit
-                && matches!(
-                    &command,
-                    Command::Simple(_)
-                        | Command::Pipeline(Pipeline { negated: false, .. })
-                        | Command::Compound(
-                            CompoundCommand::Arithmetic(_)
-                                | CompoundCommand::Test(_)
-                                | CompoundCommand::Subshell(_),
-                            _
-                        )
-                );
-            let mut result = command_body(command, state.clone(), fds, context).await;
-            if check_errexit
-                && result.flow == Flow::Normal
-                && result.code != 0
-                && state.borrow().errexit
-            {
-                result.flow = Flow::Abort;
-            }
-            finish_command(&state, result, preserve)
-        },
-        Outcome::status,
-    )
+        let preserve = matches!(command, Command::Pipeline(_) | Command::List(_));
+        let check_errexit = !context.ignore_errexit
+            && matches!(
+                &command,
+                Command::Simple(_)
+                    | Command::Pipeline(Pipeline { negated: false, .. })
+                    | Command::Compound(
+                        CompoundCommand::Arithmetic(_)
+                            | CompoundCommand::Test(_)
+                            | CompoundCommand::Subshell(_),
+                        _
+                    )
+            );
+        let mut result = command_body(command, state.clone(), fds, context).await;
+        if check_errexit
+            && result.flow == Flow::Normal
+            && result.code != 0
+            && state.borrow().errexit
+        {
+            result.flow = Flow::Abort;
+        }
+        finish_command(&state, result, preserve)
+    })
 }
 
 fn finish_command(state: &SharedState, result: Outcome, preserve_pipeline: bool) -> Outcome {
@@ -1696,49 +1700,34 @@ fn loop_arithmetic<'a>(
     context: &Context,
     cache: Option<&'a CachedArithmetic<'a>>,
 ) -> eval::Frame<'a> {
-    if context.cancel.is_cancelled() {
-        return futures::future::Either::Left(futures::future::ready(Outcome::status(130)));
-    }
-    let context = match context.compound_body().descend() {
-        Ok(context) => context,
-        Err(code) => {
-            return futures::future::Either::Left(futures::future::ready(Outcome::status(code)));
+    // The retained loop owns this source. Each replay gets fresh Work and fds.
+    context.compound_body().frame(|context| async move {
+        yield_now().await;
+        if context.cancel.is_cancelled() {
+            return Outcome::status(130);
         }
-    };
-    let evaluation = context.evaluation.clone();
-    // The retained loop already owns this typed source. Replay borrows it;
-    // every evaluation still owns fresh Work and command-local descriptors.
-    evaluation.frame(
-        async move {
-            yield_now().await;
-            if context.cancel.is_cancelled() {
-                return Outcome::status(130);
+        let table = fds.borrow().clone();
+        let fds = Rc::new(RefCell::new(table));
+        let mut work = substitution_work(&context, &fds);
+        let result = match cache {
+            Some(cache) => {
+                arithmetic_command_program(&cache.program, state, &fds, &context, &mut work).await
             }
-            let table = fds.borrow().clone();
-            let fds = Rc::new(RefCell::new(table));
-            let mut work = substitution_work(&context, &fds);
-            let result = match cache {
-                Some(cache) => {
-                    arithmetic_command_program(&cache.program, state, &fds, &context, &mut work)
-                        .await
-                }
-                None => arithmetic_command(source, state, &fds, &context, &mut work).await,
-            };
-            let mut result = finish_command(state, result, false);
-            if result.flow == Flow::Normal
-                && result.code != 0
-                && state.borrow().errexit
-                && !context.ignore_errexit
-            {
-                result.flow = Flow::Abort;
-            }
-            if context.cancel.is_cancelled() {
-                return Outcome::status(130);
-            }
-            result
-        },
-        Outcome::status,
-    )
+            None => arithmetic_command(source, state, &fds, &context, &mut work).await,
+        };
+        let mut result = finish_command(state, result, false);
+        if result.flow == Flow::Normal
+            && result.code != 0
+            && state.borrow().errexit
+            && !context.ignore_errexit
+        {
+            result.flow = Flow::Abort;
+        }
+        if context.cancel.is_cancelled() {
+            return Outcome::status(130);
+        }
+        result
+    })
 }
 
 async fn loop_checkpoint(budget: &mut Budget, context: &Context) -> Result<(), Outcome> {

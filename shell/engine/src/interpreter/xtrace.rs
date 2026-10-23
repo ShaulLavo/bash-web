@@ -101,7 +101,8 @@ impl<'a> Writer<'a> {
             work.admit_storage(value.len())?;
             value.into_owned()
         };
-        let prefix = match expand::prompt(
+        let prefix = match expand::scalar_text(
+            expand::ScalarSyntax::Prompt,
             &raw,
             state,
             &context.cancel,
