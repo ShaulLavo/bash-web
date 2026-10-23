@@ -341,43 +341,8 @@ mod tests {
         let result = super::super::fields_admitted(&word, &state, &cancel, 16, 1, 16, &mut work)
             .now_or_never()
             .unwrap()
-            .unwrap();
+            .unwrap_or_else(|_| panic!("small expansion succeeds"));
         assert_eq!(result, ["small"]);
         assert_eq!(state.borrow().positional()[0].len(), 128 * 1024);
-    }
-
-    #[test]
-    fn lazy_lists_honor_work_storage_fields_raw_and_cancellation() {
-        let mut state = State::default();
-        state
-            .replace_positional(vec!["a".into(), "b".into()])
-            .unwrap();
-        let state = state.shared();
-        let word = shell_parser::Parser::parse_word_string("${@:-unused}");
-        let cancel = Cancel::new();
-        for (steps, storage, fields, raw) in [
-            (0, 65536, 8, 64),
-            (4096, 0, 8, 64),
-            (4096, 65536, 0, 64),
-            (4096, 65536, 8, 0),
-        ] {
-            let mut work = super::super::Work::new(steps, storage, fields);
-            let result =
-                super::super::fields_admitted(&word, &state, &cancel, 64, fields, raw, &mut work)
-                    .now_or_never()
-                    .unwrap();
-            assert!(matches!(result, Err(Error::Status(2))));
-        }
-        let mut work = super::super::Work::new(4096, 65536, 8);
-        let result = super::super::fields_admitted(&word, &state, &cancel, 64, 8, 64, &mut work)
-            .now_or_never()
-            .unwrap()
-            .unwrap();
-        assert_eq!(result, ["a", "b"]);
-        cancel.cancel();
-        let result = super::super::fields_admitted(&word, &state, &cancel, 64, 8, 64, &mut work)
-            .now_or_never()
-            .unwrap();
-        assert!(matches!(result, Err(Error::Status(130))));
     }
 }

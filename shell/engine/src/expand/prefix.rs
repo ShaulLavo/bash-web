@@ -1,4 +1,3 @@
-//! Prefix-name enumeration reads binding keys, never their values or targets.
 use super::{Error, Expansion, Protection, Work};
 use crate::state::SharedState;
 use std::ops::Bound::{Excluded, Included, Unbounded};
@@ -80,8 +79,7 @@ fn next_name(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{executor::Cancel, state::State};
-    use futures::FutureExt;
+    use crate::state::State;
 
     #[test]
     fn names_never_copy_payloads() {
@@ -92,55 +90,20 @@ mod tests {
         state.assign_parameter("param_a".into(), "".into()).unwrap();
         let state = state.shared();
         let mut work = Work::new(16, 7, 1);
-        assert_eq!(
-            next_name(&state, "param_", None, 7, &mut work).unwrap(),
-            Some("param_a".into())
-        );
+        assert!(matches!(
+            next_name(&state, "param_", None, 7, &mut work),
+            Ok(Some(name)) if name == "param_a"
+        ));
         assert_eq!(work.storage_remaining, 0);
         let mut work = Work::new(16, 7, 1);
-        assert_eq!(
-            next_name(&state, "param_", Some("param_a"), 7, &mut work).unwrap(),
-            Some("param_b".into())
-        );
-        assert_eq!(
-            next_name(&state, "param_", Some("param_b"), 7, &mut work).unwrap(),
-            None
-        );
+        assert!(matches!(
+            next_name(&state, "param_", Some("param_a"), 7, &mut work),
+            Ok(Some(name)) if name == "param_b"
+        ));
+        assert!(matches!(
+            next_name(&state, "param_", Some("param_b"), 7, &mut work),
+            Ok(None)
+        ));
         assert!(next_name(&state, "param_", None, 6, &mut work).is_err());
-    }
-
-    #[test]
-    fn prefix_names_honor_work_storage_fields_raw_and_cancellation() {
-        let mut state = State::default();
-        state
-            .assign_parameter("param_a".into(), "value".into())
-            .unwrap();
-        let state = state.shared();
-        let word = shell_parser::Parser::parse_word_string("${!param_@}");
-        let cancel = Cancel::new();
-        for (steps, storage, fields, raw) in [
-            (0, 65536, 8, 64),
-            (4096, 0, 8, 64),
-            (4096, 65536, 0, 64),
-            (4096, 65536, 8, 0),
-        ] {
-            let mut work = Work::new(steps, storage, fields);
-            let result =
-                super::super::fields_admitted(&word, &state, &cancel, 64, fields, raw, &mut work)
-                    .now_or_never()
-                    .unwrap();
-            assert!(matches!(result, Err(Error::Status(2))));
-        }
-        let mut work = Work::new(4096, 65536, 8);
-        let result = super::super::fields_admitted(&word, &state, &cancel, 64, 8, 64, &mut work)
-            .now_or_never()
-            .unwrap()
-            .unwrap();
-        assert_eq!(result, ["param_a"]);
-        cancel.cancel();
-        let result = super::super::fields_admitted(&word, &state, &cancel, 64, 8, 64, &mut work)
-            .now_or_never()
-            .unwrap();
-        assert!(matches!(result, Err(Error::Status(130))));
     }
 }

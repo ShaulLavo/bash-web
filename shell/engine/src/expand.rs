@@ -2693,6 +2693,58 @@ fn indexed_name(name: &str) -> Option<(&str, &str)> {
 mod tests {
     use super::*;
 
+    fn assert_list_budgets(source: &str, state: &SharedState, expected: &[&str]) {
+        let token = shell_parser::Parser::parse_word_string(source);
+        for (steps, bytes, fields, raw, canceled, status) in [
+            (0, 65536, 8, 64, false, 2),
+            (4096, 0, 8, 64, false, 2),
+            (4096, 65536, 0, 64, false, 2),
+            (4096, 65536, 8, 0, false, 2),
+            (4096, 65536, 8, 64, true, 130),
+            (4096, 65536, 8, 64, false, 0),
+        ] {
+            let cancel = Cancel::new();
+            if canceled {
+                cancel.cancel();
+            }
+            let mut budget = Work::new(steps, bytes, fields);
+            let expanded = fields_admitted(&token, state, &cancel, 64, fields, raw, &mut budget)
+                .now_or_never()
+                .expect("bounded list expansion must not suspend");
+            assert_list_result(expanded, expected, status, source);
+        }
+    }
+
+    fn assert_list_result(
+        result: Result<Vec<String>, Error>,
+        expected: &[&str],
+        status: i32,
+        source: &str,
+    ) {
+        match result {
+            Ok(values) => {
+                assert_eq!(status, 0, "{source}");
+                assert_eq!(values, expected, "{source}");
+            }
+            Err(Error::Status(actual)) => assert_eq!(actual, status, "{source}"),
+            Err(_) => panic!("unexpected expansion fault: {source}"),
+        }
+    }
+
+    #[test]
+    fn list_names_and_lazy_positionals_share_admission_and_cancellation() {
+        let mut state = State::default();
+        state
+            .replace_positional(vec!["a".into(), "b".into()])
+            .unwrap();
+        state
+            .assign_parameter("param_a".into(), "value".into())
+            .unwrap();
+        let state = state.shared();
+        assert_list_budgets("${!param_@}", &state, &["param_a"]);
+        assert_list_budgets("${@:-unused}", &state, &["a", "b"]);
+    }
+
     #[test]
     fn admitted_fields_share_segment_output_and_slot_storage_without_changing_argv() {
         let state = State::default().shared();
