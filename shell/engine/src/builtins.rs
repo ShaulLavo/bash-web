@@ -759,11 +759,16 @@ async fn declarations(
         }
         let local = name == "local"
             || matches!(name, "declare" | "typeset") && state.borrow().in_function_scope();
-        let key = if append && local && !nameref && state.borrow().is_current_local(&key) {
-            declarations::local_append_target(key, state, context, work).await?
+        let target = if append && local && !nameref && state.borrow().is_current_local(&key) {
+            declarations::local_append_target(key, state, context, work).await
         } else {
-            key
+            Ok(key)
         };
+        if target == Err(1) {
+            status = 1;
+            continue;
+        }
+        let key = target?;
         if extended || local {
             let storage = state
                 .borrow()

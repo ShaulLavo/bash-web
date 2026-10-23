@@ -2998,3 +2998,42 @@ and its sibling evidence directory.
 
 Neither note is a fixed bug, an accepted Bash match or a frozen gain of this
 integration. PR59 leaves the caller and target-scan cancellation logic unchanged.
+
+## Local append scope-chain follow-ups from PR71 review
+
+Status: Approved. Owner: VARIABLES assignment/scope family. Keep these separate
+from the ordinary failed-operand continuation repair. Independent review at
+`1bf847b7e21afcc3a260dd42244621ec9603cefe` recorded the complete streams in
+`/work/reports/wave-20261022/shell/review71-takeover-r2-evidence/observations.json`
+and `bare-local-observations.json`.
+
+### Mixed-scope reference chains
+
+```sh
+t=one; declare -n s=t; f(){ local t=base; local -n r=s; local r+=two; echo "$r:$s:$t"; declare -p r s; }; f; echo "$t"
+```
+
+Recorded Bash 5.3.15 prints `:base:base`, raw `r="stwo"`, raw `s="t"`, then
+`one`. The reviewed candidate prints `basetwo:basetwo:basetwo`, raw `r="s"`,
+raw `s="t"`, then `one`. Both exit 0. The same mismatch occurs with `declare`
+and `typeset`. This was not a passing original-base case. Trace
+`shell/engine/src/builtins/declarations.rs:local_append_target` and the owning
+scope's reference lookup. Resolve the scope chain without over-resolving an
+alias from another scope. Keep current-only chains, indexed target writes,
+readonly rejection, first-local shadowing, and fatal bounds covered.
+
+### Caller-local unset with a function prefix
+
+```sh
+x=outer; f(){ local x=caller; g; h; echo "$x"; }; g(){ unset x; x=again; }; h(){ local x+=a; echo "$x"; }; x=prefix f; echo "$x"
+```
+
+Recorded Bash 5.3.15 prints `a\nagain\nagain\n`. The reviewed candidate prints
+`againa\nagain\nouter\n`; original base prints `again\nagain\nouter\n`.
+All exit 0. Caller-local record removal predates PR71. Trace
+`shell/engine/src/state.rs:unset` and function-prefix restoration around lines
+1176-1201 at the reviewed pin. Reproduce on the eventual integrated main, then
+fix caller-unset ownership without making a callee's new local propagate prefix
+origin. Pair local/unset/reassignment with normal return, subshell, and
+cancellation controls. Neither follow-up is implemented or claimed as a gain by
+the continuation repair.

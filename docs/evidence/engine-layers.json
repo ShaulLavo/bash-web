@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "f2c06d36471a46f742291ae19165cfb064840fc0571c4148b5340f5c1693ac07",
+    "engineSourceSha256": "ea3e1d1f7aa79f497e9093e5d93a6ddb238e96e6551a52cb002e35c616cb4fd8",
     "binaryBuild": null
   },
   "contract": {
@@ -405,7 +405,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 781,
+        "line": 786,
         "column": 39
       }
     },
