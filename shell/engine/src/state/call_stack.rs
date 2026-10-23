@@ -71,16 +71,25 @@ impl CallStack {
         frame: bool,
         arguments: bool,
     ) -> Result<(), i32> {
-        let frames = self.frames.len().checked_add(usize::from(frame)).ok_or(2)?;
-        let args = self
-            .arguments
-            .len()
-            .checked_add(usize::from(arguments))
+        let frames = slot_capacity(self.frames.len(), self.frames.capacity(), frame)?;
+        let args = slot_capacity(self.arguments.len(), self.arguments.capacity(), arguments)?;
+        self.charge_slots(memory, frames.checked_add(args).ok_or(2)?)?;
+        let reserved = self
+            .frames
+            .try_reserve_exact(frames - self.frames.len())
+            .and_then(|()| {
+                self.arguments
+                    .try_reserve_exact(args - self.arguments.len())
+            });
+        let retained = self
+            .frames
+            .capacity()
+            .checked_add(self.arguments.capacity())
             .ok_or(2)?;
-        let count = frames
-            .max(self.frames.capacity())
-            .checked_add(args.max(self.arguments.capacity()))
-            .ok_or(2)?;
+        self.charge_slots(memory, retained)?;
+        reserved.map_err(|_| 2)
+    }
+    fn charge_slots(&mut self, memory: Option<&StorageBudget>, count: usize) -> Result<(), i32> {
         let bytes = count.checked_mul(std::mem::size_of::<usize>()).ok_or(2)?;
         if let Some(slots) = &self.slots {
             slots
@@ -93,12 +102,6 @@ impl CallStack {
                     .admit(bytes)
                     .map_err(|_| crate::exec::RESOURCE_STATUS)?,
             )));
-        }
-        if frame {
-            self.frames.try_reserve_exact(1).map_err(|_| 2)?;
-        }
-        if arguments {
-            self.arguments.try_reserve_exact(1).map_err(|_| 2)?;
         }
         Ok(())
     }
@@ -151,12 +154,23 @@ impl CallStack {
     }
 }
 
+fn slot_capacity(len: usize, capacity: usize, append: bool) -> Result<usize, i32> {
+    let needed = len.checked_add(usize::from(append)).ok_or(2)?;
+    if needed <= capacity {
+        return Ok(capacity);
+    }
+    capacity.checked_mul(2).map(|next| next.max(4)).ok_or(2)
+}
+
 impl State {
+    pub(super) fn special_stack_array(&self, name: &str) -> bool {
+        CallStack::special(name) && (name != "FUNCNAME" || self.funcname_special)
+    }
     pub(crate) fn stack_array(&self, name: &str) -> bool {
         self.scalar_target(name)
             .ok()
             .flatten()
-            .is_some_and(CallStack::special)
+            .is_some_and(|name| self.special_stack_array(name))
     }
     pub(crate) fn caller(&self, index: usize, named: bool) -> Option<(&str, Option<&str>, &str)> {
         let offset = self
@@ -486,6 +500,45 @@ mod tests {
         assert_eq!((stack.frames.len(), stack.arguments.len()), (4, 4));
         assert_eq!(memory.observation().0, 8 * slot);
         drop(stack);
+        assert_eq!(memory.observation().0, 0);
+    }
+
+    #[test]
+    fn snapshot_slots_have_independent_capacity_admission_and_refunds() {
+        let memory = StorageBudget::new(32_768);
+        let state = State::with_memory(memory.clone()).shared();
+        state.borrow_mut().extdebug = true;
+        let outer = enter(&state, "outer", vec!["a".into()], 1);
+        let middle = enter(&state, "middle", vec!["b".into()], 2);
+        let inner = enter(&state, "inner", vec!["c".into()], 3);
+        let used = memory.observation().0;
+        let mut child = finish(State::snapshot(&state, &Cancel::new(), &mut work()))
+            .unwrap_or_else(|_| panic!("snapshot fits"));
+        let slot = std::mem::size_of::<usize>();
+        assert_eq!(
+            child.call_stack.slots.as_ref().unwrap().borrow().bytes(),
+            6 * slot
+        );
+        let copied = memory.observation().0;
+        child.call_stack.reserve(Some(&memory), true, true).unwrap();
+        assert_eq!(
+            (
+                child.call_stack.frames.capacity(),
+                child.call_stack.arguments.capacity()
+            ),
+            (6, 6)
+        );
+        assert_eq!(memory.observation().0, copied + 6 * slot);
+        assert_eq!(
+            (
+                state.borrow().call_stack.frames.capacity(),
+                state.borrow().call_stack.arguments.capacity()
+            ),
+            (4, 4)
+        );
+        drop(child);
+        assert_eq!(memory.observation().0, used);
+        drop((inner, middle, outer, state));
         assert_eq!(memory.observation().0, 0);
     }
 }

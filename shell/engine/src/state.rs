@@ -161,6 +161,8 @@ pub struct State {
     last_async: Option<String>,
     /// Unsetting EPOCHREALTIME permanently removes its dynamic-variable hook.
     epoch_realtime: bool,
+    /// Unsetting FUNCNAME permanently removes its call-stack projection.
+    funcname_special: bool,
     pub(crate) star_separator: StarSeparator,
     ifs_members: Option<IfsMembers>,
     positional: Vec<String>,
@@ -206,6 +208,7 @@ impl Default for State {
             monitor: false,
             last_async: None,
             epoch_realtime: true,
+            funcname_special: true,
             star_separator: StarSeparator::Live,
             ifs_members: None,
             positional: Vec::new(),
@@ -404,6 +407,7 @@ impl State {
             monitor: state.monitor,
             last_async,
             epoch_realtime: state.epoch_realtime,
+            funcname_special: state.funcname_special,
             star_separator: state.star_separator,
             ifs_members: state.ifs_members,
             positional,
@@ -493,7 +497,7 @@ impl State {
         if name == "PWD" {
             return Some(&self.cwd);
         }
-        if CallStack::special(name) {
+        if self.special_stack_array(name) {
             return self.call_stack.element(name, 0);
         }
         self.variables
@@ -534,7 +538,7 @@ impl State {
             .scalar_target(name)
             .ok()
             .flatten()
-            .filter(|name| CallStack::special(name))
+            .filter(|name| self.special_stack_array(name))
         {
             return self.call_stack.count(name);
         }
@@ -545,7 +549,7 @@ impl State {
             .scalar_target(name)
             .ok()
             .flatten()
-            .filter(|name| CallStack::special(name))
+            .filter(|name| self.special_stack_array(name))
         {
             return self.call_stack.element(name, index);
         }
@@ -1205,6 +1209,9 @@ impl State {
         if name == "OPTIND" {
             self.getopts = GetoptsState::default();
             self.getopts_numeric = false;
+        }
+        if name == "FUNCNAME" {
+            self.funcname_special = false;
         }
         let was_dynamic =
             name == "EPOCHREALTIME" && self.epoch_realtime && !self.epoch_realtime_shadowed();

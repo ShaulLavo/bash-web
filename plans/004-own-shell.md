@@ -2958,3 +2958,62 @@ are retained in the function-name report's `verify6.log` and `aliases-pending.lo
 This is a separate builtin prerequisite, not permission to add alias, shopt or
 function-name grammar in the literal-name validation change. Keep parser alias
 coverage and reuse its raw-token provenance when runtime aliases are implemented.
+
+
+## Call-stack introspection follow-ups from PR85 review, 2026-10-23
+
+Status: Approved. Owner: BUILTINS, separate from the bounded FUNCNAME lifecycle
+and slot-growth repair. Reviewed source is
+`48b03b89dc7de89a78bcb983bd4e64eef1a4fb20`. These were not passing base
+controls and are not charged to the repair as new regressions.
+
+Reproduce through `releaseShellRunner` after the pinned toolchain setup and
+`npm run build:shell && npm run build:node-harness`. Exact Bash 5.3.15
+recordings and production-Waffle observations, including stderr and exit status,
+are retained under `/work/reports/wave-20261022/shell/review85-takeover-r1-evidence/`
+in `bash-recordings.json` and `waffle-probes.json`. The following commands each
+reproduced once in independent review. Expected and observed stdout use JSON
+escaping. Final numbers are Bash/Waffle exit statuses.
+
+```bash
+g(){ :; }; f(){ :; }; declare -F
+```
+Expected `"declare -f f\ndeclare -f g\n"`; observed `""`; statuses 0/0.
+
+```bash
+g(){ :; }; f(){ :; }; declare -Fp f g
+```
+Expected `"declare -f f\ndeclare -f g\n"`; observed `"f\ng\n"`; statuses 0/0.
+
+```bash
+set -- root; f(){ shopt -s extdebug; g x; }; g(){ echo "${BASH_ARGC[*]}:${BASH_ARGV[*]}"; }; f a b; echo "${BASH_ARGC[*]}:${BASH_ARGV[*]}"
+```
+Expected `"1 2:x b a\n2:b a\n"`; observed `"1:x\n1:root\n"`; statuses 0/0.
+
+```bash
+shopt -s extdebug; f(){ echo "$((BASH_ARGC[0])):$((BASH_LINENO[0]))"; }; f a b
+```
+Expected `"2:1\n"`; observed `""`; statuses 0/2.
+
+```bash
+set -TE; echo "$-"; set +TE; echo "$-"
+```
+Expected `"hBETc\nhBc\n"`; observed `"\n\n"`; statuses 0/0.
+
+```bash
+g(){ caller " 0"; echo s:$?; caller "0 "; echo s:$?; }; f(){ g; }; f
+```
+Expected `"1 f bash\ns:0\n1 f bash\ns:0\n"`; observed `"s:2\ns:2\n"`; statuses 0/0.
+
+```bash
+f(){ caller >&-; echo status:$?; }; f
+```
+Expected `"status:0\n"`; observed `"status:1\n"`; statuses 0/0.
+
+Inspect `builtins/declarations.rs::function_names` for listing and `-Fp`
+formatting, `state/call_stack.rs::initialize_arguments` for extdebug enabled
+inside an active call, arithmetic's indexed-binding reader, option flag
+expansion, and `builtins/caller.rs` for whitespace and closed-output status.
+Do not repair these by inventing runtime facts or changing frozen membership.
+The inherited ordinary local-array mismatch is also outside this repair; its
+exact `normal-array-assignment` record stays in the same evidence.
