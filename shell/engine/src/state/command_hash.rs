@@ -95,7 +95,33 @@ impl Node {
     }
 }
 fn sort_listing(entries: &mut [Rc<Entry>], mut compare: impl FnMut(&Entry, &Entry) -> Ordering) {
-    entries.sort_unstable_by(|a, b| compare(a, b));
+    for root in (0..entries.len() / 2).rev() {
+        sift_listing(entries, root, &mut compare);
+    }
+    for end in (1..entries.len()).rev() {
+        entries.swap(0, end);
+        sift_listing(&mut entries[..end], 0, &mut compare);
+    }
+}
+fn sift_listing(
+    entries: &mut [Rc<Entry>],
+    mut root: usize,
+    compare: &mut impl FnMut(&Entry, &Entry) -> Ordering,
+) {
+    while root < entries.len() / 2 {
+        let left = 2 * root + 1;
+        let right = left + 1;
+        let child = if right < entries.len() && compare(&entries[left], &entries[right]).is_lt() {
+            right
+        } else {
+            left
+        };
+        if !compare(&entries[root], &entries[child]).is_lt() {
+            return;
+        }
+        entries.swap(root, child);
+        root = child;
+    }
 }
 impl Listing {
     pub(crate) fn entries(&self) -> &[Rc<Entry>] {
@@ -156,9 +182,10 @@ impl CommandHash {
                 .grow(excess * size_of::<Rc<Entry>>())
                 .map_err(|_| Error::Status(RESOURCE_STATUS))?;
         }
-        // Reserve the traversal and comparison sort before their synchronous run.
-        let comparisons = count.saturating_mul(count.checked_ilog2().unwrap_or(0) as usize + 2);
-        for _ in 0..comparisons {
+        // Collect visits N nodes. Heap construction uses fewer than 2N comparisons,
+        // and each of N removals uses at most 2 floor(log2 N) comparisons.
+        let steps = count.saturating_mul(2 * count.checked_ilog2().unwrap_or(0) as usize + 3);
+        for _ in 0..steps {
             work.checkpoint(cancel).await?;
         }
         self.ordered(&mut listing.entries);
