@@ -336,6 +336,13 @@
       "status": 1,
       "stdout": "",
       "stderr": ""
+    },
+    {
+      "id": "prefix-fatal-before-redirect",
+      "code": "{ ( a=${missing:?oops} echo hi 2>errors ); } 2>/dev/null; if test -e errors; then echo created; else echo absent; fi",
+      "status": 0,
+      "stdout": "absent\n",
+      "stderr": ""
     }
   ]
 }
