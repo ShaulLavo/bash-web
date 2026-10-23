@@ -129,6 +129,7 @@ fn early_exit_sigpipe_and_guest_handled_epipe_keep_distinct_statuses() {
 #[test]
 fn pipeline_inherits_function_unexported_state_cwd_and_redirect() {
     let r = Rig::new();
+    r.fs.mkdir("/home/guest/nested", false).unwrap();
     assert_eq!(r.run("cd nested; secret=retained; f() { printf '%s\\n' \"$secret:$PWD:$1\"; }; f value | cat > result; cat result"),0);
     assert_eq!(r.text(), "retained:/home/guest/nested:value\n");
 }
@@ -196,6 +197,7 @@ fn ordinary_function_shares_state_but_pipeline_subshell_and_background_do_not() 
 #[test]
 fn arbitrary_inherited_fds_share_open_offset_and_environment() {
     let r = Rig::new();
+    r.fs.mkdir("/home/guest/nested", false).unwrap();
     assert_eq!(r.run("printf 'fd data' > file; exec 4<file; fdcat 3>&1; secret=private; export EXPORTED=value; cd nested; environment"),0);
     assert_eq!(r.text(), "fd datavalue:false:/home/guest/nested\n");
     assert_eq!(r.run("fdcat 3>&1"), 0);

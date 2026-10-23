@@ -33,6 +33,16 @@ GNU bash executable code is not included. Keep these notices and licenses with
 copies of the fixture. The new CLI's fixture helpers and replay/comparison scripts
 are original code; no additional upstream implementation is ported.
 
+The `type` option modes and classification order in
+`shell/engine/src/interpreter/type_builtin.rs` are adapted from Bashkit's
+`crates/bashkit/src/builtins/introspect.rs` at the same pinned MIT revision.
+The focused type examples adapt `tests/spec_cases/bash/type.test.sh`. The retained
+Bashkit license above covers both. Catalogue registration, streaming descriptor
+writes, bounded resumable PATH lookup and shared canonical AST rendering are
+original local adapters over the existing shell. Alias/hash state, upstream PATH
+helpers, a second builtin registry and function-text reparsing are not included.
+`sources.lock.json` records source hashes and destinations.
+
 The typed command catalogue in `shell/engine/src/commands.rs` and its
 `commands/tests.rs` and `tests/words/command_metadata.rs` controls are original
 local ownership adapters over bash-web `92ab384516abcf91da811e11ac871b73f6722ba0`.

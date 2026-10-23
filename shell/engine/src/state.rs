@@ -1,5 +1,6 @@
 //! Original shell state. Open descriptors and filesystem objects live outside
 //! this value: isolated shell environments copy rules/state, never byte streams.
+pub(crate) mod traps;
 use crate::{
     exec::{Error, Work},
     executor::Cancel,
@@ -12,6 +13,8 @@ use std::{
     rc::{Rc, Weak},
 };
 
+mod declarations;
+pub(crate) use declarations::DeclarationView;
 mod binding;
 mod rematch;
 pub use binding::Binding;
@@ -130,8 +133,10 @@ pub struct State {
     /// Scalar reference targets, distinct from ordinary variable values.
     namerefs: BTreeMap<String, String>,
     pub cwd: String,
+    directories: DirectoryStack,
     /// Function bodies are immutable. Isolated shells copy bindings, not ASTs.
     functions: BTreeMap<String, StoredFunction>,
+    pub(crate) traps: traps::Traps,
     status: i32,
     pipestatus: Vec<i32>,
     pub pipefail: bool,
@@ -143,6 +148,8 @@ pub struct State {
     pub extglob: bool,
     /// Remove unmatched unquoted pathname patterns instead of keeping them.
     pub nullglob: bool,
+    /// `set -f`: no pathname expansion of unquoted fields.
+    pub noglob: bool,
     pub lastpipe: bool,
     pub monitor: bool,
     /// Last published synthetic async handle. Isolated shells inherit a copy.
@@ -174,7 +181,9 @@ impl Default for State {
             readonly: BTreeSet::new(),
             namerefs: BTreeMap::new(),
             cwd: "/home/guest".into(),
+            directories: DirectoryStack::default(),
             functions: BTreeMap::new(),
+            traps: traps::Traps::default(),
             status: 0,
             pipestatus: vec![0],
             pipefail: false,
@@ -183,6 +192,7 @@ impl Default for State {
             inherit_errexit: false,
             extglob: false,
             nullglob: false,
+            noglob: false,
             lastpipe: false,
             monitor: false,
             last_async: None,
@@ -322,6 +332,8 @@ impl State {
         )?;
         let shell_name = snapshot_value(source, |s| Some(&s.shell_name), cancel, work).await?;
         let cwd = snapshot_value(source, |s| Some(&s.cwd), cancel, work).await?;
+        // Shares the immutable, already charged stack version; changes copy it.
+        let directories = source.borrow().directories.clone();
         let variables = snapshot_map(source, |s| &s.variables, cancel, work).await?;
         let exported = snapshot_set(source, |s| &s.exported, cancel, work).await?;
         let readonly = snapshot_set(source, |s| &s.readonly, cancel, work).await?;
@@ -362,7 +374,9 @@ impl State {
             readonly,
             namerefs,
             cwd,
+            directories,
             functions,
+            traps: state.traps.inherited(),
             status: state.status,
             pipestatus,
             pipefail: state.pipefail,
@@ -371,6 +385,7 @@ impl State {
             inherit_errexit: state.inherit_errexit,
             extglob: state.extglob,
             nullglob: state.nullglob,
+            noglob: state.noglob,
             lastpipe: state.lastpipe,
             monitor: state.monitor,
             last_async,
@@ -1125,6 +1140,17 @@ impl State {
             self.refresh_star_separator();
         }
         Ok(removed)
+    }
+    pub(crate) fn unset_nameref(&mut self, name: &str) -> Result<bool, i32> {
+        if self.is_readonly(name) {
+            return Err(1);
+        }
+        if !self.namerefs.contains_key(name) {
+            return Ok(false);
+        }
+        self.namerefs.remove(name);
+        self.unset_binding(name)?;
+        Ok(true)
     }
     fn unset_binding(&mut self, name: &str) -> Result<bool, i32> {
         if self.is_readonly(name) {
@@ -2125,6 +2151,9 @@ pub fn absolute(cwd: &str, path: &str) -> String {
     }
     format!("/{}", components.join("/"))
 }
+
+mod directory_stack;
+use directory_stack::DirectoryStack;
 
 #[cfg(test)]
 mod bindings_tests;

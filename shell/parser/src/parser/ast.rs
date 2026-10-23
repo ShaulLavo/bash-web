@@ -299,6 +299,8 @@ pub struct CaseItem {
 /// Function definition.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FunctionDef {
+    /// Literal declaration-token spelling. The interpreter validates it and
+    /// removes line continuations only when the declaration executes.
     pub name: String,
     pub body: Box<Command>,
     /// Original source text for this function when available.

@@ -517,7 +517,18 @@ impl Abi for Fake {
             })
     }
     fn open(&self, path: &str, options: &OpenOptions) -> Result<u32, i32> {
-        Ok(self.fd(self.fs.open(path, options).map_err(|_| 44)?))
+        let Some(fd) = io::descriptor_number(path) else {
+            return Ok(self.fd(self.fs.open(path, options).map_err(|_| 44)?));
+        };
+        let mut fds = FdTable::default();
+        fds.insert(fd, self.fds.borrow().get(&fd).cloned().ok_or(44)?);
+        let endpoint = io::open_path(path, &fds, options)
+            .map_err(|_| 44)?
+            .open(&self.fs, options)
+            .now_or_never()
+            .unwrap()
+            .map_err(|_| 44)?;
+        Ok(self.fd(endpoint))
     }
     fn read(&self, fd: u32, output: &mut [u8]) -> Result<usize, i32> {
         let endpoint = self.fds.borrow().get(&fd).cloned().ok_or(8)?;
@@ -2212,7 +2223,9 @@ fn substitution_descriptors_cross_the_actual_runtime_spawn_boundary() {
         .find(|binding| binding.child == 0)
         .unwrap()
         .parent;
-    assert_eq!(
+    // Reopening a pipe creates a new physical binding to the same stream.
+    // The streamed output above and cleanup below verify shared ownership.
+    assert_ne!(
         consumer
             .fds
             .iter()
@@ -2606,6 +2619,27 @@ fn runtime_for_globs_stream_names_and_close_directory_descriptors() {
     assert!(
         fake.closed.borrow().len() >= 4,
         "both redirect and directory descriptors close"
+    );
+    shutdown_session(&executor, &runtime, &fake, session);
+    assert!(fake.directories.borrow().is_empty());
+}
+
+#[test]
+fn runtime_argv_globs_sort_names_and_keep_protected_or_noglob_words() {
+    let (executor, fake, runtime) = setup();
+    let session = runtime_session(&executor, &runtime);
+    fake.fs.mkdir("/tmp/runtime-argv-glob", true).unwrap();
+    let source = concat!(
+        "cd /tmp/runtime-argv-glob; : >b; : >ab; : >a; : >.a\n",
+        "echo a* '?' \\[ab] z*; v='* b'; echo $v \"$v\"\n",
+        "shopt -s nullglob; echo start z* [q] end; shopt -u nullglob\n",
+        "set -f; echo a* $v; set +f; echo [ab]",
+    );
+    let job = session.start(source).unwrap();
+    assert_eq!(finish(&executor, &runtime, job), 0);
+    assert_eq!(
+        String::from_utf8_lossy(&fake.output.bytes()),
+        "a ab ? [ab] z*\na ab b b * b\nstart end\na* * b\na b\n"
     );
     shutdown_session(&executor, &runtime, &fake, session);
     assert!(fake.directories.borrow().is_empty());

@@ -115,9 +115,14 @@ descriptors. They do not establish real Bun/browser acceptance: that gate awaits
 waffle's inherited job lookup and the corresponding Bun process-service integration.
 
 File predicates use real virtual-filesystem metadata, with unavailable
-capabilities explicitly unsupported. For-list pathname expansion supports
-quote-aware basic patterns, incremental directory enumeration and `nullglob`;
-ordinary command argv pathname expansion remains deferred. `shopt` stores and
+capabilities explicitly unsupported. Command argv, indexed compound assignment
+operands and for-list pathname expansion support quote-aware basic patterns,
+incremental directory enumeration,
+`nullglob` and `set -f`; only fields with an unquoted `*`, `?` or `[` keep a
+quote mask. A component that needs more characters than any path can hold
+matches nothing and is read without building its pattern; star-heavy long
+components can still match short names. Candidate paths over 4096 bytes, not
+counting a directory's trailing slash, are absent. `shopt` stores and
 reports `nullglob`, `inherit_errexit` and `extglob`, without claiming extended
 pattern matching. `[[ =~ ]]` has a bounded cooperative no-capture ERE subset;
 ASCII patterns and input in C/POSIX/C.UTF-8/C.utf8 locales are supported.
@@ -127,8 +132,8 @@ Dynamic `EPOCHREALTIME` supports scalar reads and unset behavior. Generic
 function prefixes remain unsupported, as before this unit.
 The first word area adds quote-aware fields for literals,
 ordinary variables, positional parameters and `PIPESTATUS`, including IFS splitting,
-quoted `@` boundaries, `*` joins and command-name field promotion. Assignment and
-`export`/`local` assignment operands retain scalar expansion. Scalar default and
+quoted `@` boundaries, `*` joins and command-name field promotion. Scalar
+assignments and `export`/`local` assignment operands retain scalar expansion. Scalar default and
 alternative operators (`-`, `:-`, `+`, `:+`) lazily expand selected operands with
 quote protection and shared work limits. Scalar assignment operators (`=`, `:=`)
 store selected, quote-removed values without field splitting; their completed
@@ -259,8 +264,16 @@ target metadata: scalar reads, presence checks and supported writes follow later
 target changes, while `${!ref}` returns the target name. Resolution is bounded
 and cycle-aware; unset targets remain unset under nounset. Local reference
 bindings and admitted isolated snapshots preserve restoration and isolation.
+Nonempty invalid plain scalar nameref targets return status 1 without changing the
+binding or target, and later valid operands still run. Empty or unbound reference
+declarations, bracket-bearing targets, and PIPESTATUS references remain unsupported
+status 2. Admission failures remain status 2 and cancellation remains status 130.
+The original adapter and separately adapted corpus scripts are classified under
+`shellScalarState.invalidTargetStatus` in `sources.lock.json`. The focused production
+Waffle test replays local GNU Bash 5.3.15 observations with the frozen environment
+and no utility directory. It compares stdout bytes and status, not diagnostic text.
 Arrays, indexed references and general declaration options remain unsupported.
-Other parameter operators, ordinary argv pathname globbing, arrays, traps,
+Other parameter operators, dotglob/globstar/failglob, arrays, traps,
 aliases, `lastpipe` and full utility option coverage are not implemented. Whole-script parsing retains the original separator policy. Captured
 shell bodies used by substring boundary validation explicitly request
 `Parser::with_strict_command_separators`; nested parsers inherit that policy.

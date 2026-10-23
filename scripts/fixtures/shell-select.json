@@ -1,0 +1,401 @@
+{
+  "bash": "5.3.15(1)-release",
+  "cases": [
+    {
+      "script": "printf '\\061\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PGE+fDwxPgo=",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\062\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PGI+fDwyPgo=",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\060\\061\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PGE+fDwwMT4K",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\053\\061\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PGE+fDwrMT4K",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\055\\061\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PD58PC0xPgo=",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\040\\061\\040\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PGE+fDwgMSA+Cg==",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\011\\062\\011\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PGI+fDwJMgk+Cg==",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\060\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PD58PDA+Cg==",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\063\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PD58PDM+Cg==",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\061\\053\\060\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PD58PDErMD4K",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\060\\170\\061\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PD58PDB4MT4K",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\061\\141\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PD58PDFhPgo=",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\071\\071\\071\\071\\071\\071\\071\\071\\071\\071\\071\\071\\071\\071\\071\\071\\071\\071\\071\\071\\071\\071\\071\\071\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PD58PDk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OT4K",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\134\\061\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PGE+fDwxPgo=",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\061\\134\\012\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PGE+fDwxPgo=",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\000\\061\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PGE+fDwxPgo=",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\061\\000\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PGE+fDwxPgo=",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\061\\015\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PGE+fDwxDT4K",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\061\\134\\170\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PD58PDF4Pgo=",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 1,
+      "stdout": "Cg==",
+      "stderr": "MSkgYQoyKSBiCiM/IDEpIGEKMikgYgojPyA="
+    },
+    {
+      "script": "printf '\\040\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PD58PCA+Cg==",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf '\\013\\061\\014\\n' | select x in a b; do printf \"<%s>|<%s>\\n\" \"$x\" \"$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "PGE+fDwLMQw+Cg==",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "echo 1 | select opt in a b c; do echo \"selected: $opt\"; break; done; echo 'after select'",
+      "status": 0,
+      "stdout": "c2VsZWN0ZWQ6IGEKYWZ0ZXIgc2VsZWN0Cg==",
+      "stderr": "MSkgYQoyKSBiCjMpIGMKIz8g"
+    },
+    {
+      "script": "echo 2 | select item in alpha beta gamma; do echo \"got: $item\"; break; done",
+      "status": 0,
+      "stdout": "Z290OiBiZXRhCg==",
+      "stderr": "MSkgYWxwaGEKMikgYmV0YQozKSBnYW1tYQojPyA="
+    },
+    {
+      "script": "echo 1 | select x in one two three; do echo \"REPLY=$REPLY x=$x\"; break; done",
+      "status": 0,
+      "stdout": "UkVQTFk9MSB4PW9uZQo=",
+      "stderr": "MSkgb25lCjIpIHR3bwozKSB0aHJlZQojPyA="
+    },
+    {
+      "script": "echo 9 | select x in a b c; do echo \"x='$x' REPLY=$REPLY\"; break; done",
+      "status": 0,
+      "stdout": "eD0nJyBSRVBMWT05Cg==",
+      "stderr": "MSkgYQoyKSBiCjMpIGMKIz8g"
+    },
+    {
+      "script": "printf \"1\\n2\\n3\\n\" | select x in a b c; do echo \"$x\"; if [ \"$REPLY\" = 3 ]; then break; fi; done",
+      "status": 0,
+      "stdout": "YQpiCmMK",
+      "stderr": "MSkgYQoyKSBiCjMpIGMKIz8gIz8gIz8g"
+    },
+    {
+      "script": "echo 1 | select x in a b; do echo \"$x\"; done",
+      "status": 1,
+      "stdout": "YQoK",
+      "stderr": "MSkgYQoyKSBiCiM/ICM/IA=="
+    },
+    {
+      "script": "x=old; REPLY=old; select x in a b; do echo BAD; done; printf \"s=%s reply=<%s> x=<%s>\\n\" \"$?\" \"$REPLY\" \"$x\"",
+      "status": 0,
+      "stdout": "CnM9MSByZXBseT08PiB4PTxvbGQ+Cg==",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf 2 | select x in a b; do echo BAD; done",
+      "status": 1,
+      "stdout": "Cg==",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf \"1\\n\" | { readonly x; select x in a; do echo BAD; break; done; echo s=$?; }",
+      "status": 0,
+      "stdout": "cz0xCg==",
+      "stderr": "MSkgYQojPyAvdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IHg6IHJlYWRvbmx5IHZhcmlhYmxlCg=="
+    },
+    {
+      "script": "printf \"1\\n\" | { readonly REPLY=old; select x in a; do echo BAD; break; done; echo s=$?; }",
+      "status": 0,
+      "stdout": "CnM9MQo=",
+      "stderr": "MSkgYQojPyAvdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IFJFUExZOiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "script": "printf \"1\\n\" | select x in a; do echo OK; break; done 2>&-; echo s=$?",
+      "status": 0,
+      "stdout": "T0sKcz0wCg==",
+      "stderr": ""
+    },
+    {
+      "script": "REPLY=kept; set -- a b; select x in; do echo BAD; done; echo \"$?:$REPLY\"",
+      "status": 0,
+      "stdout": "MDprZXB0Cg==",
+      "stderr": ""
+    },
+    {
+      "script": "set --; select x; do echo BAD; done; echo s=$?",
+      "status": 0,
+      "stdout": "cz0wCg==",
+      "stderr": ""
+    },
+    {
+      "script": "printf \"2\\n\" | { set -- \"a b\" c; select x; do printf \"<%s>\" \"$x\"; break; done; }",
+      "status": 0,
+      "stdout": "PGM+",
+      "stderr": "MSkgYSBiCjIpIGMKIz8g"
+    },
+    {
+      "script": "printf \"\\n2\\n\" | select x in a b; do echo \"$x\"; break; done",
+      "status": 0,
+      "stdout": "Ygo=",
+      "stderr": "MSkgYQoyKSBiCiM/IDEpIGEKMikgYgojPyA="
+    },
+    {
+      "script": "printf \"1\\n2\\n\" | select x in a b; do echo \"$x\"; REPLY=; done",
+      "status": 1,
+      "stdout": "YQpiCgo=",
+      "stderr": "MSkgYQoyKSBiCiM/IDEpIGEKMikgYgojPyAxKSBhCjIpIGIKIz8g"
+    },
+    {
+      "script": "printf \"1\\n2\\n\" | select x in \"\" \"a b\"; do printf \"<%s>\\n\" \"$x\"; done",
+      "status": 1,
+      "stdout": "PD4KPGEgYj4KCg==",
+      "stderr": "MSkgCjIpIGEgYgojPyAjPyAjPyA="
+    },
+    {
+      "script": "printf \"1\\n\" | { IFS=1; select x in a b; do printf \"<%s>:<%s>\" \"$x\" \"$REPLY\"; break; done; }",
+      "status": 0,
+      "stdout": "PGE+OjwxPg==",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf \"1\\n\" | { PS3='$(echo BAD)$x'; select x in a b; do break; done; }",
+      "status": 0,
+      "stdout": "",
+      "stderr": "MSkgYQoyKSBiCiQoZWNobyBCQUQpJHg="
+    },
+    {
+      "script": "printf \"1\\n2\\n\" | { PS3=\"pick> \"; select x in a b; do echo \"$x\"; PS3=\"next> \"; done; }",
+      "status": 1,
+      "stdout": "YQpiCgo=",
+      "stderr": "MSkgYQoyKSBiCnBpY2s+IG5leHQ+IG5leHQ+IA=="
+    },
+    {
+      "script": "printf \"1\\n\" | { PS3=; select x in a; do break; done; }",
+      "status": 0,
+      "stdout": "",
+      "stderr": "MSkgYQo="
+    },
+    {
+      "script": "printf \"1\\n\" | select x in a b c d e f g h i j k; do break; done",
+      "status": 0,
+      "stdout": "",
+      "stderr": "IDEpIGEKIDIpIGIKIDMpIGMKIDQpIGQKIDUpIGUKIDYpIGYKIDcpIGcKIDgpIGgKIDkpIGkKMTApIGoKMTEpIGsKIz8g"
+    },
+    {
+      "script": "printf \"1\\n2\\n\" | { select x in a b; do echo \"$x\"; continue; echo BAD; done; }",
+      "status": 1,
+      "stdout": "YQpiCgo=",
+      "stderr": "MSkgYQoyKSBiCiM/ICM/ICM/IA=="
+    },
+    {
+      "script": "printf \"1\\n2\\n\" | { for i in A B; do select x in a b; do echo \"$i:$x\"; continue 2; done; echo BAD; done; }",
+      "status": 0,
+      "stdout": "QTphCkI6Ygo=",
+      "stderr": "MSkgYQoyKSBiCiM/IDEpIGEKMikgYgojPyA="
+    },
+    {
+      "script": "printf \"1\\n\" | { for i in A B; do select x in a b; do echo \"$i:$x\"; break 2; done; echo BAD; done; echo done; }",
+      "status": 0,
+      "stdout": "QTphCmRvbmUK",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf \"1\\n2\\n\" | { select x in a b; do for y in c d; do echo \"$x:$y\"; continue 2; done; done; }",
+      "status": 1,
+      "stdout": "YTpjCmI6YwoK",
+      "stderr": "MSkgYQoyKSBiCiM/ICM/ICM/IA=="
+    },
+    {
+      "script": "printf \"1\\n2\\n\" | { select x in a b; do select y in c d; do echo \"$x:$y\"; break 2; done; done; }",
+      "status": 0,
+      "stdout": "YTpkCg==",
+      "stderr": "MSkgYQoyKSBiCiM/IDEpIGMKMikgZAojPyA="
+    },
+    {
+      "script": "printf \"1\\nTAIL\\n\" | { select x in a b; do break; done; read -r tail; echo \"$tail\"; }",
+      "status": 0,
+      "stdout": "VEFJTAo=",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf \"1\\n\" | { v=\"a b\"; select x in $v; do v=changed; echo \"$x\"; break; done; }",
+      "status": 0,
+      "stdout": "YQo=",
+      "stderr": "MSkgYQoyKSBiCiM/IA=="
+    },
+    {
+      "script": "printf \"1\\n\" | { select x in \"$(printf first)\" second; do echo \"$x\"; break; done; }",
+      "status": 0,
+      "stdout": "Zmlyc3QK",
+      "stderr": "MSkgZmlyc3QKMikgc2Vjb25kCiM/IA=="
+    },
+    {
+      "script": "printf \"1\\n\" | select x in a; do false; break; done; echo s=$?",
+      "status": 0,
+      "stdout": "cz0wCg==",
+      "stderr": "MSkgYQojPyA="
+    },
+    {
+      "script": "set -e; printf \"1\\n\" | select x in a; do false; done; echo BAD",
+      "status": 1,
+      "stdout": "",
+      "stderr": "MSkgYQojPyA="
+    },
+    {
+      "script": "printf \"1\\n\" | { select x in a; do exit 7; done; }",
+      "status": 7,
+      "stdout": "",
+      "stderr": "MSkgYQojPyA="
+    },
+    {
+      "script": "printf \"1\\n\" | { f() { select x in a; do return 7; done; }; f; echo s=$?; }",
+      "status": 0,
+      "stdout": "cz03Cg==",
+      "stderr": "MSkgYQojPyA="
+    },
+    {
+      "script": "REPLY=old; x=old; select x in a; do echo BAD; done <&-; printf \"s=%s reply=%s x=%s\\n\" \"$?\" \"$REPLY\" \"$x\"",
+      "status": 0,
+      "stdout": "CnM9MSByZXBseT1vbGQgeD1vbGQK",
+      "stderr": "MSkgYQojPyAvdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IDA6IHJlYWQgZXJyb3I6IEJhZCBmaWxlIGRlc2NyaXB0b3IK"
+    },
+    {
+      "script": "REPLY=old; x=old; select x in a; do echo BAD; break; done 0>f; printf \"s=%s reply=<%s> x=<%s>\\n\" \"$?\" \"$REPLY\" \"$x\"",
+      "status": 0,
+      "stdout": "CnM9MSByZXBseT08b2xkPiB4PTxvbGQ+Cg==",
+      "stderr": "MSkgYQojPyAvdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IDA6IHJlYWQgZXJyb3I6IEJhZCBmaWxlIGRlc2NyaXB0b3IK"
+    },
+    {
+      "script": "set -e; select x in a; do echo BAD; break; done 0>f",
+      "status": 1,
+      "stdout": "Cg==",
+      "stderr": "MSkgYQojPyAvdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IDA6IHJlYWQgZXJyb3I6IEJhZCBmaWxlIGRlc2NyaXB0b3IK"
+    },
+    {
+      "script": "REPLY=old; x=old; select x in a; do echo BAD; break; done 0<.; printf \"s=%s reply=<%s> x=<%s>\\n\" \"$?\" \"$REPLY\" \"$x\"",
+      "status": 0,
+      "stdout": "CnM9MSByZXBseT08b2xkPiB4PTxvbGQ+Cg==",
+      "stderr": "MSkgYQojPyAvdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IDA6IHJlYWQgZXJyb3I6IElzIGEgZGlyZWN0b3J5Cg=="
+    },
+    {
+      "script": "set -e; readonly REPLY=old; select x in a; do break; done <<EOF\n1\nEOF",
+      "status": 1,
+      "stdout": "",
+      "stderr": "MSkgYQojPyAvdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IFJFUExZOiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "script": "set -e; readonly REPLY=old; if select x in a; do echo BAD; break; done <<EOF\n1\nEOF\nthen echo yes; else echo no; fi; echo alive",
+      "status": 1,
+      "stdout": "",
+      "stderr": "MSkgYQojPyAvdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IFJFUExZOiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "script": "readonly REPLY=old; select x in a; do break; done <<EOF\n1\nEOF\necho status=$?",
+      "status": 0,
+      "stdout": "CnN0YXR1cz0xCg==",
+      "stderr": "MSkgYQojPyAvdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IFJFUExZOiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "script": "select 1 in; do :; done; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgMSc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+    },
+    {
+      "script": "select 1 in a; do echo BAD; done; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgMSc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+    },
+    {
+      "script": "i=0; select 1 in $((i+=1)); do :; done; echo \"$?:$i\"",
+      "status": 0,
+      "stdout": "MTowCg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgMSc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+    }
+  ]
+}

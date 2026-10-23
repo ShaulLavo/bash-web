@@ -1,0 +1,98 @@
+{
+  "status": "review-ready local qualification; parent hosted CI and landing pending",
+  "date": "2026-10-22",
+  "measuredHead": "d7009e1afbdc06cd29ebb52dc78c97a2326154e3",
+  "integratedMain": "4bf6a474ef6bb32dd5de44c1b6d30a300a079d93",
+  "waffle": "c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289",
+  "node": "26.7.0",
+  "jobs": 1,
+  "record": false,
+  "records": 9221,
+  "identity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "comparison": {
+    "ok": true,
+    "corpora": {
+      "oils": {
+        "before": 1154,
+        "after": 1154,
+        "gained": [],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "brush-suite": {
+        "before": 1120,
+        "after": 1120,
+        "gained": [],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "bashkit-suite": {
+        "before": 1554,
+        "after": 1554,
+        "gained": [],
+        "lost": [],
+        "newlyFailing": []
+      }
+    }
+  },
+  "outcomeChanges": [],
+  "counts": {
+    "oils": {
+      "total": 2492,
+      "passed": 1154,
+      "skipped": 810
+    },
+    "brush-suite": {
+      "total": 2894,
+      "passed": 1120,
+      "skipped": 1006
+    },
+    "bashkit-suite": {
+      "total": 3835,
+      "passed": 1554,
+      "skipped": 1613
+    }
+  },
+  "artifact": {
+    "path": "/work/reports/bash-web/hill-climb/control/waffle-reopen/final-slot/frozen.json",
+    "sha256": "2bc477a122fec8fd3430e885f5454feca35c07075c1150e6c46f56527315bf43"
+  },
+  "baselineChanged": false,
+  "verification": {
+    "productionControls": 154,
+    "nativeTests": 1438,
+    "wasiTests": 1418,
+    "ciTests": 105,
+    "productionLayerEdges": 42,
+    "testLayerEdges": 30,
+    "productionLayerViolations": 0,
+    "testLayerViolations": 0,
+    "shellRuntimeSha256": "b992c73e194049505cace932e3b36b69a0d860f69c22bd9a977444bebda693a3",
+    "grepSha256": "9c9969d364703edaf02e7de866649b3da5df8c061cb0d60b8c6503a77f54d248",
+    "scoreboardTests": 710,
+    "guestBuildTests": 18,
+    "runtimeTests": 145,
+    "browserPassed": 234,
+    "browserSkipped": 16,
+    "layerTests": 34,
+    "browserReceipt": "/work/reports/bash-web/hill-climb/control/waffle-reopen/final-slot/post-replay-gates.log",
+    "bufferControls": 8,
+    "bufferReceipt": "/work/reports/bash-web/hill-climb/control/waffle-reopen/final-slot/buffer-controls.json",
+    "rustChecks": "fmt, native/WASI clippy, machete and guest size checks passed",
+    "jsChecks": "builds, quality, typechecks, capability and layer checks passed",
+    "browserTeardown": "actual PC checked: no owned consumers, port4493 absent; browser report/results removed",
+    "cleanupReceipt": "/work/reports/bash-web/hill-climb/control/waffle-reopen/final-slot/cleanup.json"
+  },
+  "measurementPurpose": "final current-main production-Waffle adoption qualification; no scored gain",
+  "landing": {
+    "hold": "superseded by explicit root CONTROL48-then49 slot",
+    "integrationDelta": "parent accepted at d7009e1; no manual production conflict resolution",
+    "remaining": "Normal push of docs-only evidence head; parent owns hosted CI and landing."
+  }
+}

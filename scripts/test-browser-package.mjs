@@ -39,6 +39,13 @@ test("browser entry uses one required immutable Waffle peer and matching develop
   assert.ok(pkg.files.includes("src"));
 });
 
+test("the installed Waffle package declares the accepted source and export paths", async () => {
+  const installed = await readJson("node_modules/waffle/package.json");
+  assert.equal(installed.version, sources.waffle.version);
+  assert.equal(installed.exports["."].browser, "./index.ts");
+  assert.equal(installed.exports["."].node, "./dist/index.js");
+});
+
 test("shipped shell source contains no vendored runtime or Bun program implementation", async () => {
   for (const path of ["third-party/bun-wasm", "src/browser/bun", "public/programs/bun.wasm"]) {
     await assert.rejects(stat(resolve(root, path)), { code: "ENOENT" });

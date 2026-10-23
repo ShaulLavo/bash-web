@@ -54,7 +54,7 @@ async fn scalar(
     work: &mut expand::Work,
 ) -> Result<BindingUpdate, expand::Error> {
     let limit = context.limits().expansion_bytes;
-    let value = expand::word(word, state, &context.cancel, limit, limit, work).await?;
+    let value = expand::assignment(word, state, &context.cancel, limit, limit, work).await?;
     let index = match &assignment.index {
         Some(index) => {
             crate::arithmetic::evaluate(index, state, &context.cancel, limit, work).await?

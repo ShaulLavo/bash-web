@@ -349,10 +349,11 @@ fallback.
       - Scalar length for ordinary names, positive positions, status and positional count (#20): Oils 314→322, Brush-suite 328→332, Bashkit-suite 492→505. UTF-8 locales count Unicode scalar values; C/POSIX and unrecognized locales count bytes. Input snapshots, decimal output and counting share the existing bounds and cancellation budget.
       - Scalar prefix/suffix pattern removal with bounded cooperative matching (#21): Oils 322→340, Brush-suite 332→333, Bashkit-suite 505→528. Shortest/longest scalar trims preserve inner pattern quotes, outer result protection and final-IFS effects; matcher exhaustion fails explicitly without partial results or candidate-string allocation.
       - Scalar case modification with ordinary identifiers and `^`, `^^`, `,`, `,,` (#23): Oils 340→345, Brush-suite 333→334, Bashkit-suite 528→539. C/POSIX ASCII and C.UTF-8/C.utf8 Latin-1 input mappings reuse bounded single-character pattern matching; full Unicode and locale collation remain deferred. Matcher and mapping capacities are admitted before allocation, with shared work bounds and cancellation.
-      - Scalar one-level indirection on ordinary names (`${!v}` and the eight scalar conditional operators) (#24): Oils 345→350, Brush-suite 334→335, Bashkit-suite 539→548. Pointer and target snapshots are bounded before copying; invalid pointers fail with fatal status 1, while valid unset targets remain distinct. Arrays, namerefs, special names and generic indirect suffixes remain deferred.
+      - Scalar one-level indirection on ordinary names (`${!v}` and the eight scalar conditional operators) (#24): Oils 345→350, Brush-suite 334→335, Bashkit-suite 539→548. Pointer and target snapshots are bounded before copying; invalid pointers fail with fatal status 1, while valid unset targets remain distinct. Arrays, namerefs, special names and generic indirect suffixes remain deferred. Bare `${!p}` to positional and special targets (`1`, `10`, `#`, `?`, `$`, `!`, `-`, `@`, `*`) reuses the direct-read and positional-list adapters; operators, nested operands, patterns and array targets on those targets stay unsupported.
       - Scalar replacement on ordinary names (`${v/p/r}`, `${v//p/r}`, `${v/#p/r}`, `${v/%p/r}`) (#25): Oils 350→379, Brush-suite 335→338, Bashkit-suite 548→584. Leftmost-longest basic-pattern search, lazy operands, typed ampersand protection, final-IFS behavior and shared raw/storage/work/field bounds are preserved; arrays, namerefs, options, locale collation and unsupported pattern forms remain deferred.
       - Scalar arithmetic, positional/scalar slices, readonly writes and read-unit error recovery (#28): Oils 380→481, Brush-suite 340→384, Bashkit-suite 595→754, with no lost cases. Boxed arithmetic futures and explicit scalar depth bounds retain native/WASI stack safety; staged shell-boundary checks preserve Bash error status before lazy evaluation.
       - Brace lists and numeric/ASCII-letter ranges (#29): Oils 481→525, Brush-suite 384→394, Bashkit-suite 754→785, with no lost cases; brace generator seeds 1/42 match Bash on 5,318 cases each. Fused `$((`/`<((` spans end by raw parenthesis matching and are classified by `chk_arithsub`; other substitution bodies (also inside `${…}` operands and raw `$((` text) are parsed with the script and fail with status 127, strictly separated. Nested parses run after each word's scan loop (debug stack per nesting level ~21 KB→~7 KB). Brace temporaries are charged by peak storage; the default argument count is 65,536. Follow-ups owned by later units: running `UnparsedCommandSubstitution` (a non-arithmetic `$((` whose text fails to parse) at expansion with status 2 belongs to command substitution; prefix assignments on function calls (`TEMP=x f`) remain unsupported and belong to functions/locals.
+      - Ordinary argv pathname expansion, `nullglob` and `set -f` (#54, historical replay at `43f1f7d`): Oils 1099→1101, Brush-suite 1080→1087, Bashkit-suite 1469→1476, with no lost cases. Only fields with an unquoted `*`, `?` or `[` keep a quote mask, and components needing more characters than any path, or paths over 4096 bytes (a trailing slash aside), match nothing; scalar assignments and redirects stay scalar. Normal main integration adds five recorded indexed compound caller controls, including `a=(*)`, long no-match operands and the exact directory boundary. The current-head frozen replay and gain membership update remain pending. Receipt: [own-shell-pathname.json](../docs/evidence/own-shell-pathname.json).
       - Remaining parameter operators, pathname, tilde and brace expansion follow before command substitution. After scalar arithmetic, the next focused word unit is bounded brace lists and numeric/ASCII-letter ranges, preserving quoted punctuation and opaque expansion parts; tilde stays separate. The pinned reference is Bashkit's `crates/bashkit/src/interpreter/brace_expansion.rs`, but resource exhaustion must fail explicitly rather than silently return a literal or partial result.
    2. Command substitution and arithmetic. Scalar arithmetic is the next foundation rather than a constant-only substring implementation: offsets and lengths are arithmetic expressions, so the same bounded evaluator serves `$((...))`, `((...))`, `let` and scalar slices. Command substitution follows separately and must use bounded captures without changing streaming command execution.
    3. Control flow: `if`, `for`, `while`, `until`, `case`, `[[ ]]`, `test`, `&&`/`||`, `!`, `set -e` and its exceptions.
@@ -1092,6 +1093,88 @@ recovery under native/WASI plus the exact no-loss ratchet. Keep spelling scans
 cooperative and allocations admitted. Runtime diagnostics for correctly
 preserved targets are implemented in this control-flow unit; this lexer/parser
 representation work belongs to the redirect unit, with its provenance record.
+
+## Follow-up: 700,000-byte scalars fail with a silent status 2
+
+Status: Approved. Pre-existing and unrelated to pathname expansion (found during
+#54's CI repair, 2026-10-22). Bash 5.3.15 assigns all three; Waffle prints no
+message, returns status 2 and leaves the old value:
+
+- `x=0000000000; x=$x$x$x$x$x$x$x$x$x$x` three more times (100,000 bytes), then
+  `x=$x$x$x$x$x$x$x; echo status=$? length=${#x}` gives `status=2 length=100000`.
+  Six copies (600,000 bytes) still work.
+- `printf -v x '%0700000d' 0` and `x=$(printf '%0700000d' 0)` give `status=2 length=0`.
+
+The 1 MiB per-command expansion budget (`expansion_bytes` in
+`shell/engine/src/interpreter.rs`) is the likely ceiling: a value over half of it
+seems to be charged twice while it is copied into storage. Measure where the
+second charge happens before changing it. Either fix the double charge or report
+the limit with a diagnostic like other budget failures. Do not raise the budget.
+Reproducer: `/work/reports/bash-web/hill-climb/expansion/pathname/ci-fix-opus-r1/scalar700k.ts`.
+
+## Follow-up: long glob candidate fields exhaust the work budget
+
+Status: Approved. Found by #54's second narrow review (2026-10-22,
+`/work/reports/bash-web/hill-climb/expansion/pathname/review-r2/`, N7). Bash keeps
+these argv words literal; Waffle stops with status 2 (`echo $? $# ${#1}` prints
+`2 0 0`). The error is honest, never a wrong match or a silent miss, but it is not
+Bash parity. `x` below is 100,000 `a`s built by concatenation
+(`x=aaaaaaaaaa; x=$x$x$x$x$x$x$x$x$x$x` four times):
+
+| Word (`set -- …; echo $? $# ${#1}`) | Bytes | Bash | Waffle at #54 `fc7368f` |
+|---|---|---|---|
+| `$x$x$x*` | 300,001 | `0 1 300001` | same |
+| `$x$x$x${x:0:30000}*` | 330,001 | `0 1 330001` | `2 0 0` |
+| `$x$x$x${x:0:50000}*` | 350,001 | `0 1 350001` | `2 0 0` |
+| `[$x$x${x:0:50000}` (unclosed bracket) | 250,001 | `0 1 250001` | same |
+| `[$x$x$x${x:0:50000}` | 350,001 | `0 1 350001` | `2 0 0` |
+| `$x$x$x$x[` (trailing bracket) | 400,001 | `0 1 400001` | same |
+| unquoted minified JSON: `j='[{"k":[1,2]}'; while [ ${#j} -lt 400000 ]; do j=$j,$j; done; j=$j']'; set -- $j` | 425,984 | `0 1 425984` | `2 0 0` |
+| plain `$x$x$x$x$x$x` | 600,000 | `0 1 600000` | same |
+
+Mechanism: every scanned character costs one checkpoint step from the command's
+work budget (`source_bytes + expansion_bytes + arguments`, about 1.376M steps;
+`shell/engine/src/interpreter.rs`). Building a field costs about 2.2 steps per
+byte (fit to the thresholds above, not instrumented). A long component with
+magic is then read twice: `expand_fields` → `magic()` → `long_shape` → `shape`,
+and again in `matches()` → `unmatchable()` → `shape`
+(`shell/engine/src/expand/glob.rs`). A long unclosed `[` is read twice in one
+pass: `bracket()` walks to the end, then `shape` walks the same characters.
+
+Work: compute each long component's shape once per field (for example, `magic()`
+also reports that the field is unmatchable, so `expand_fields` skips `matches()`),
+and don't rescan after an unclosed bracket. The review estimates this moves `*`
+fields to about 430k bytes. Plain-field parity is out of reach while each scanned
+character costs a step, so measure and record the remaining ceiling. Don't raise
+budgets or stop charging steps. Reproducers: `review-r2/probe.ts` cases A1-A10
+and T1-T10, with results in `probe.jsonl` and `budget.jsonl`.
+
+## Follow-up: repeated-slash pathname result spelling
+
+Status: Approved. PR54 correction review found this pre-existing spelling
+mismatch at `0c6dd6c691a1273b8c8139fef53f500f8ef31835`. Source:
+`shell/engine/src/expand/glob.rs:278-300`, `joined()` copies the prefix and appends
+its separator and trailing directory slash without normalizing repeated slashes.
+The current-main integration preserves that approved production file byte for
+byte; no spelling fix is part of PR54.
+
+Reproduce in an empty directory with GNU Bash `5.3.15(1)-release` and the
+production Waffle runner, using each runtime's own `$TMP`:
+
+```bash
+cd "$TMP"; mkdir -p d/x d/y; printf '<%s>\n' d*//*/
+cd "$TMP"; mkdir -p d/x d/y; printf '<%s>\n' ./*//
+```
+
+The first script prints `<d/x/>` and `<d/y/>` in Bash, but `<d//x/>` and
+`<d//y/>` in Waffle. The second prints `<./d/>` in Bash and `<./d//>` in
+Waffle. Review evidence and exact scripts are in
+`/work/reports/wave-20261022/shell/review54-r1-evidence/attempt2-probes.jsonl`.
+The integration report records a fresh Bash control and current-source guest
+check. Fix result spelling without changing directory selection, quoted-slash
+handling, path-length admission or storage/work/cancellation charges. Add pinned
+recordings first, then prove the corrected bytes on a fresh Waffle runtime and
+preserve the frozen ruler's existing passing cases.
 
 ## Approved extraction: public `ShaulLavo/bash-web`, with history
 
@@ -2178,25 +2261,124 @@ verification remain required.
 
 ### Separate follow-up: independently reopen regular-file descriptor aliases
 
+Historical finding, addressed by the bounded adoption below. Its local-buffer
+exception remains an Approved follow-up, not full alias-removal parity.
+
 Approved separate CONTROL family after the Waffle owner supplies an actual
 merged independent-reopen contract. Do not block the bounded shorthand family
 on it, change the shared I/O helper here, add path blacklists or restore offsets
 by guessing. Preserve pipe/terminal sharing and all current frozen passes.
 
 Exact reproduction: `printf 'one\ntwo\n' >f; exec 3<f; x=$(</dev/fd/3); IFS= read -r y <&3; printf 'x=<%s> y=<%s>\n' "$x" "$y"`.
-GNU Bash 5.3.15 prints `y=<one>`; both the native candidate and production Waffle
-print `y=<>`, all status 0. Replacing the shorthand with
+GNU Bash 5.3.15 prints `y=<one>`; before adoption, both the native candidate and
+production Waffle printed `y=<>`, all status 0. Replacing the shorthand with
 `$(cat </dev/fd/3)` reproduces the same production mismatch. Observed once per
 form in the bounded probe; the source behavior is deterministic.
-`io.rs::device_endpoint` returns the identical endpoint, so reads consume the
-inherited regular file offset. Neither `FileSystem` nor `HostEndpoint` currently
-exposes independent reopening. This rules out the new capture decoder as the
+The old `io.rs::device_endpoint` returned the identical endpoint, so reads consumed
+the inherited regular file offset. At that pin neither `FileSystem` nor
+`HostEndpoint` exposed independent reopening. This rules out the new capture decoder as the
 cause. Evidence and exact script are retained in
 `/work/reports/bash-web/hill-climb/control/file-substitution/fd-observation.json`;
 no worker, route or container is retained. Root accepted this boundary and routed
-the runtime contract to Waffle. The future family must first reproduce both
-forms, test fresh regular-file offsets versus shared pipes/terminals, preserve
-cancellation and lifetime ownership, then replay the unchanged frozen ruler.
+the runtime contract to Waffle. The bounded adoption below first reproduces both
+forms, tests fresh regular-file offsets versus shared pipes/terminals, preserves
+cancellation and lifetime ownership, then replays the unchanged frozen ruler.
+
+## Waffle descriptor paths and retained here-input boundary, 2026-10-21
+
+Approved adoption of exact Waffle 0.0.63 pin
+`c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289`, from actual main's 0.0.58 pin
+`fc58a532f0d7a617e631ea4b7580a190915d4ed6`. Translate logical shell fds through
+`Endpoint::runtime_fd`, then use real `path_open`; do not clone regular host
+endpoints. Native MemoryFs reopens use the same inode with a new description in
+its owning I/O implementation. This adoption adds no generic I/O trait, export
+pump, producer/session owner or compatibility fallback.
+
+### Approved follow-up: remove the remaining local buffer alias boundary
+
+The follow-up is not implemented in this bounded adoption. The source boundary is
+`io.rs::Open::Bytes`, `buffered_source`, `export_buffer` and `reopen_descriptor`,
+plus the existing runtime child-export machinery. Unexported buffers share their
+cursor; exported buffers use an actual host pipe. Native local pipes deliberately
+duplicate their shared description, capture/null fixtures remain local, and opaque
+Host endpoints without `runtime_fd` return Unsupported. Native regular endpoints
+are no longer aliases. No copied data, fabricated offsets or metadata stand in for
+an independent regular-file reopen.
+
+Exact Bash 5.3.15 versus production Waffle reproducer, with N=3 and N=65536 and
+both a here-document and the equivalent `<<<"$payload"` here-string:
+
+```python
+# Generate the exact guest script. Use N=3 or N=65536.
+N = 65536
+body = '{ IFS= read -r x </dev/stdin; IFS= read -r y; printf "%s:%s\\n" "${#x}" "${#y}"; }'
+payload = "x" * N
+print(body + " <<'END'\n" + payload + "\nlast\nEND")
+# Here-string alternative: print(body + " <<<'" + payload + "\nlast'")
+```
+
+For an exact generated script without relying on shell interpolation, the retained
+`/work/reports/bash-web/hill-climb/control/waffle-reopen/buffer-controls.ts` builds
+`{ IFS= read -r x </dev/stdin; IFS= read -r y; printf '%s:%s\n' "${#x}" "${#y}"; }`
+followed by `<<'END'`, N literal `x` bytes, `last`, `END`, each on its own line.
+Its here-string form appends `<<<'` plus N literal `x` bytes, newline, `last'`.
+The report's JSON contains all eight Bash/production observations.
+
+After export, replace that body with
+`{ cat /dev/stdin >copy; if IFS= read -r x </dev/stdin; then printf 'next=%s\n' "${#x}"; else printf 'EOF\n'; fi; IFS= read -r y <copy; printf 'copy=%s\n' "${#y}"; }`.
+Short input gives `EOF` then `copy=3` on both. Large input gives `next=65536`
+then `copy=65536` on Bash, but `EOF` then `copy=65536` on production Waffle.
+This proves actual post-export pipe sharing, not large here-input parity.
+The committed production controls retain both sizes and both here-input forms.
+
+Removal condition: a separately authorized bounded design must give buffered
+here-inputs Bash's actual reopen identity, offset and lifetime behavior before and
+after export, without copied snapshots or invented metadata. It must preserve
+actual pipe sharing, process/session cleanup and every frozen individual pass.
+Until then, only production host-backed regular-file paths are the gain claim.
+See [descriptor contracts and consumer audit](../docs/descriptor-reopening.md).
+
+
+### Adoption measurement and landing gate
+
+Status: Approved, final integrated replay qualified on 2026-10-22. Parent owns
+hosted CI and landing; this is not merged completion. Root's explicit
+CONTROL48-then49 grant supersedes all older PR50 holds.
+
+Measured production source `d7009e1afbdc06cd29ebb52dc78c97a2326154e3` normally
+merges exact main `4bf6a474ef6bb32dd5de44c1b6d30a300a079d93`, including PR41.
+No Rust semantic conflict required manual resolution. Patch versions, the exact
+combined scoreboard recipe, derived layer receipt and plan text were resolved;
+parent independently accepted the integration delta.
+
+Both ordinary redirects and `interpreter/file_substitution.rs` use the same
+logical-to-physical helper. Independent R2 review found one omitted consumer:
+grep operands opened directly against the utility's physical WASI table.
+`printf 'secret-stdin\n' | grep secret /dev/fd/4` printed private stdin data
+and returned 0, while Bash 5.3.15 returned 2 without stdout. Grep now uses the
+existing typed opener and returns 2 without leaking data. Its operand error,
+quiet-success and cancellation policies remain intact. No generic API changed.
+R3 independently approved that repair at `e9740d8`; adoption code is unchanged.
+
+The final production-Waffle replay preserves all 9,221 records and every outcome
+against immutable integrated main. Oils/Brush/Bashkit stay 1154/1120/1554;
+gained=[], lost=[] and newlyFailing=[] in every corpus. Official validation and
+membership comparison pass. Baseline bytes and historical failure payloads are
+unchanged. The oracle includes 16 descriptor-path cases, with 10 passes preserved,
+four frozen skips and two unrelated failures. See the
+[measurement receipt](../docs/evidence/waffle-descriptor-reopening.json).
+
+Native/WASI suites pass 1,438/1,418 tests, production controls pass 154, the exact
+combined scoreboard recipe passes 710, CI tests pass 105 and runtime controls
+pass 145. Chromium/Firefox pass 234 browser cases with 16 unchanged skips.
+Foreign-format errors survive Restart without wiping the sentinel; SAFE never
+falls back. Both ordinary redirects and the file-substitution shortcut pass
+host-fd translation controls. All eight short/large here-input observations are
+unchanged. Rust, JS quality, typecheck, capability, guest and layer gates pass,
+with zero violations and 42 production/30 test-only edges. Only documentation and
+evidence change after the measured source. The Approved local-buffer follow-up
+above remains required before full alias removal. No new runtime/export contract
+was added, and no skipped case is counted as a gain.
 
 ## Scalar parameter transformations, 2026-10-21
 
@@ -2228,6 +2410,585 @@ or case attributes, `@P` or indirect names. See
 [the behavior notes](../docs/parameter-transformation.md) and
 [the receipt](../docs/evidence/parameter-transformation.json).
 
+## Follow-up: all-zero and overflowing digit parameters, 2026-10-22
+
+Status: Approved. Fix this in the direct parameter adapter, not in indirection.
+Bare `${!p}` reaches digit targets through the same direct read, so one fix
+covers both spellings.
+
+The review of the indirect special-target unit (PR #46) compared GNU Bash
+5.3.15 with the release Waffle guest (sha256 `e0aa18e3…`) after
+`set -- a b c d e f g h i j`:
+
+| Form | Bash | Waffle |
+| --- | --- | --- |
+| `"${00}"`, `"${000}"`, `r=00; "${!r}"` | `$0` (`/usr/bin/bash`) | empty |
+| `"${18446744073709551616}"` and its `${!r}` form | `a` | empty |
+| `"${9999999999999999999999999999999999999999}"` and its `${!r}` form | `i` | empty |
+| the two overflowing forms under `set -u` | `a` / `i`, status 0 | fatal `unbound variable`, status 127 |
+
+`r=01` and `r=0010` already match Bash. Suspected cause:
+`State::parameter` (`shell/engine/src/state.rs:343`) matches `$0` only on
+the literal `"0"`, so `00` parses to 0, fails `checked_sub(1)` and reads as
+empty. Overflowing digit strings fail `parse::<usize>()` and also read as
+empty. `require_bound` (`shell/engine/src/expand.rs:668`) treats the failed
+parse as unset under nounset. Bash converts the digits with wrapping
+arithmetic and selects the resulting positional. Derive the exact wrap rule
+from Bash's source and check it against controls before changing the code.
+Evidence: `/work/reports/bash-web/hill-climb/expansion/indirect-special-review-r2/controls.json`
+(rows `direct:00:` through `indirect:9999…:set -u; `). No frozen scored case
+has been checked against this; claim no gain unless a replay proves one.
+
+## Follow-up: command substitution loses a 700,000-byte capture, 2026-10-22
+
+Status: Approved. Bounded to the command-substitution capture path, which
+the control track owns (`shell/engine/src/expand/command.rs`). Do not fix it
+from the tilde or pathname units.
+
+The pathname unit's budget probe compared GNU Bash 5.3.15 with the release
+Waffle guest built from main `77b3963` (shell tree `2f38c80d`, sha256
+`4329f221…`), locale C.utf8, inside an empty `$TMP`:
+
+| Script | Bash | Waffle |
+| --- | --- | --- |
+| `x=$(printf '%0700000d' 0); echo ${#x}` | `700000`, status 0 | `0`, status 0 |
+| `x=$(printf '%0300000d' 0); echo ${#x}` | `300000`, status 0 | `300000`, status 0 |
+
+The large capture comes back empty with status 0. It neither fails at an
+explicit limit (status 2) nor keeps the bytes. Find which capture or
+assignment ceiling discards the value, then make it either keep the value
+or fail explicitly the way other limits do. Evidence:
+`/work/reports/bash-web/hill-climb/expansion/pathname/budget-probe2.log`
+(rows `capture-700k` and `capture-300k`). No frozen scored case is tied to
+it yet; claim no gain unless a replay proves one.
+
+## word fields carry bytes, not UTF-8 String
+
+Status: Approved, 2026-10-21. Follow-up to indexed arrays in PR41. Keep this as
+one shared item for variables, expansion and control, with exact scored IDs
+added only when byte-level observations establish this boundary.
+
+The engine's word fields, bindings and command-substitution captures currently
+use Rust `String`. That cannot represent a lone `0xff` byte. In
+`expand/command.rs`, invalid-UTF8 capture is rejected before a later case match
+can receive the bytes. Do not replace invalid bytes with Unicode replacement
+characters, emulate allocator-dependent bytes, or change the frozen ruler.
+
+Confirmed scored cases:
+
+- `bashkit-suite:bashbox-declare:301`, "declare -p quotes control characters
+  and bytes that aren't UTF-8". The script sets `z=$'\xff'`; its escaped
+  declaration must be `declare -- z=$'\377'`, not the distinct UTF-8 spelling
+  for U+00FF. The lexer currently converts invalid escape bytes into Unicode
+  scalars in `flush_escape_bytes`. This is a raw-byte prerequisite in a mixed
+  declaration case. Missing declaration formatting is another blocker, so
+  changing word storage alone does not promise this gain. The validated raw
+  native observations and frozen mapping are retained in
+  `/work/reports/bash-web/hill-climb/variables/byte-field-blocked-ids.md`
+  and `.json`.
+- `oils:var-op-slice:107` and `oils:var-op-slice:124`. Both construct
+  `s=$(echo -e "\\xFF")bcdef` then run `echo -${s:1:3}-`, expecting `-bcd-`.
+  The leading raw `0xff` must survive command substitution and word storage.
+- `oils:case_:147`, "matching the byte 0xff against empty string". It captures
+  `c=$(printf \\377)`, then matches both `case $c` and `case "$c"`. Both paths
+  must preserve the captured byte. Control identified invalid-UTF8 rejection in
+  `expand/command.rs` as the current boundary.
+
+Separate custom observations are not scored IDs. Native Bash observations of
+array-valued IFS include a raw `0xff` separator for `IFS=(); ... "${a[*]}"`.
+PR41 fixes the independently reproducible field-splitting and local-restoration
+bugs, but does not claim raw-byte star-join compatibility. The native binary
+identity, environment, status and raw base64/hex streams are retained in
+`/work/reports/bash-web/hill-climb/variables/indexed/review-probes.ts` and
+`review-probes.jsonl`. Cases are not blocked by this item just because they mention arrays
+or IFS. In particular, `oils:var-op-patsub:245` is not in this raw-byte list:
+it exercises locale-C matching of valid UTF-8, which is not itself a String
+representation failure.
+
+Change the word-field representation and its bindings, captures, splitting,
+patterns, argv and output consumers together so arbitrary non-NUL shell bytes
+survive end to end. Keep byte offsets distinct from locale-aware character
+operations. Add failing-first byte-level tests for each confirmed ID and for
+valid UTF-8, ASCII, empty fields, quotes and NUL handling. Preserve bounded
+storage, work admission, cancellation and scope restoration. Qualify through
+production Waffle with the same frozen identities, exact gained/lost IDs and
+zero lost passes. No gate, oracle, environment, exclusion or threshold changes.
+
+
+## Effective IFS publication provenance
+
+Status: Approved, 2026-10-22. Owner: VARIABLES. This is the next VARIABLES
+family after PR41 lands, ahead of explicit-name declaration printing. This
+future plan item does not expand PR41's implementation.
+
+CONTROL's BASH_REMATCH adapter can publish an indexed value through a nameref
+into IFS. Bash uses that value's element zero for field splitting while
+retaining the prior quoted-star separator. Ordinary `IFS=(...)` instead
+disables splitting. The current `field_ifs` returns an empty string for every
+indexed binding. `Ifs::new` enumerates that string, and `IfsMembers` only filters
+its characters. A new cache plus `StarSeparator::Snapshot` cannot supply the
+missing delimiter. Do not use that workaround.
+
+First, have CONTROL retain a distinguishing multi-argument quoted-star control
+and an ordinary indexed-IFS control in its GNU Bash 5.3.15 observations. The
+existing single-argument star print does not distinguish separators. Then
+re-inventory scored failures against merged PR41 and record exact IDs. Separate
+direct IFS gains from cases enabled for CONTROL. No direct scored IFS gain is
+established yet. CONTROL's capture assignment has 18 scored candidates, but none
+mentions IFS. Do not count all captures as gains of this prerequisite.
+
+Define a state-owned effective-IFS source or publication-provenance contract.
+Preserve the distinction between rematch-published indexed IFS and ordinary
+indexed IFS. Cover direct and resolved targets, subsequent assignment, unset,
+nameref changes, no-match publication, local restoration, prefix restoration,
+and isolated state snapshots. Stage and admit fallible work before atomic
+publication. Resource rejection and cancellation must preserve prior state and
+refund storage. Keep ordinary OPTIND assignment separate from rematch
+publication, which must not reset the hidden getopts cursor.
+
+Publish the exact API agreement to CONTROL before implementation. Keep the
+existing `State::publish_rematch` signature and typed publication outcomes
+unless evidence requires a coordinated change. The adapter must consume the
+state contract without manipulating cache bits or restoration records. CONTROL
+keeps its matcher and ordinary publication work disjoint until this prerequisite
+lands, then integrates its actual merge normally before final acceptance.
+
+Use a separate VARIABLES worktree and PR after PR41. Add failing-first native
+and production-Waffle controls, independent exact-source review, unchanged
+blocking gates, and a frozen replay with zero lost cases. Preserve all ruler
+identities, exclusions, and limits. This unit is not the raw-byte field rewrite.
+Detailed source proof and evidence limits are in
+`/work/reports/bash-web/hill-climb/variables/rematch-ifs-prerequisite.md`.
+
+### Inherited nameref IFS joining control from PR60 review
+
+Status: Approved, VARIABLES IFS-family ownership. This is evidence for the
+existing effective-IFS contract above, not extra scope for index enumeration.
+
+At source `728ac9c0c3426bf935789df73df9cd4ae5af50f1`, run with GNU Bash
+`5.3.15(1)-release` or the native shell CLI using `-c`:
+
+```sh
+a=(x y); sep=:; declare -n IFS=sep; sep=; printf '<%s>\n' "${!a[@]}"
+a=(x y); sep=:; declare -n IFS=sep; sep=1; printf '<%s>\n' "${!a[@]}"
+a=(x y); sep=:; declare -n IFS=sep; sep=; printf '<%s>\n' "${a[@]}"
+a=(x y); sep=:; declare -n IFS=sep; sep=1; printf '<%s>\n' "${a[@]}"
+```
+
+Bash stdout is `<0 1>\n`, `<0:1>\n`, `<x y>\n`, `<x:y>\n` respectively.
+Native and fresh production Waffle instead print `<0>\n<1>\n`, `<011>\n`,
+`<x>\n<y>\n`, `<x1y>\n`. All statuses are 0. The first two are retained
+in `review60-r1-minimal-repros.json` and `review60-r1-waffle-repros.json` under
+`/work/reports/wave-20261022/shell/`; the full review records the value controls.
+The 452-probe sweep in `review60-r1-probes.log` reports nine mismatches when a
+nameref IFS target changes, apart from three index-star adjacency failures.
+No crash or nondeterministic output was reported for these controls.
+
+Inspect `Expansion::elements` in `shell/engine/src/expand.rs:1869-1887` and its
+existing `positional_star_separator` and `field_ifs` adapters. The unchanged
+ArrayAccess value path reproduces the same IFS joining policy limitation,
+so fixing inserted index-star separator protection alone cannot resolve it.
+Do not change the frozen oracle or treat the inherited mismatch as an accepted
+semantic match. Resolve the effective-IFS ownership contract in its own family.
+
+## Indexed array index-name expansion
+
+Status: Approved follow-up in the VARIABLES array-expansion family. Do not add
+this implementation to PR41 or CONTROL's capture adapter.
+
+CONTROL's production-Waffle capture checkpoint exposes two exact scored
+prerequisites: `brush-suite:extended_tests:29` and
+`brush-suite:extended_tests:30` iterate `${!BASH_REMATCH[@]}`. Capture contents
+match, but index enumeration still returns status 2. Evidence is retained in
+`/work/reports/bash-web/hill-climb/control/regex-captures/focused.log`,
+`after.json`, and `assigned-cases.json`. These are pending gains, not accepted
+baseline memberships.
+
+Implement index-name expansion over the existing state-owned sparse traversal
+in a separate bounded family. Verify sparse order, empty arrays, quoted and
+unquoted forms, nameref targets, scalar and positional boundaries, budgets, and
+cancellation against Bash. Re-inventory other scored candidates after PR41
+rather than treating historical array failures as new gains.
+
+## Compound local array declarations
+
+Status: Approved follow-up in the VARIABLES declaration and scope family. Keep
+CONTROL's rematch adapter and PR41 unchanged.
+
+CONTROL's custom production-Waffle control sets `BASH_REMATCH=(global)`, then
+calls a function containing `local BASH_REMATCH=(local spare)` and a regex
+capture. Bash restores the global array after return. The current declaration
+path does not establish that compound local, so the capture remains global.
+The exact script and byte output are retained in CONTROL's
+`regex-captures/focused.log` and `scripts/fixtures/shell-regex-captures.json` in
+its worktree. This custom control is not a scored ID.
+
+Start by reproducing the declaration without regex on merged PR41. Separately
+check scalar locals and existing indexed-local restoration to isolate the
+compound declaration path. Candidate scored rows include
+`bashkit-suite:arrays:213`, `bashkit-suite:arrays:226`,
+`bashkit-suite:arrays:237`, and `bashkit-suite:arrays:250`. Their status must be
+recomputed after PR41. Implement through the typed declaration path and state
+ownership, with no ad hoc BASH_REMATCH scope logic. Preserve local admission,
+readonly and nameref behavior, nested restoration, and resource or cancellation
+rollback. Qualify independently with the unchanged frozen zero-loss gate.
+
+
+## Automatic numeric special-scalar presence and values
+
+Status: Approved prerequisite, scheduled by scored gain and concrete dependency after the indexed-array family. No indexed-array implementation expansion. The existing Approved process-identity unit remains canonical for BASHPID.
+
+PR52 independent review at48634c07141a47fa3569adcd5ef3e96d624189ad demonstrates five deterministic ordinary-control regressions when new arithmetic nounset enforcement treats unsupported automatic scalars as absent. `set -u; printf '%s\n' "$((BASHPID-BASHPID))"` and the corresponding `0*BASHPID`, `0*UID`, `0*EUID` and `0*LINENO` controls print `0\n` with empty stderr/status0 on exact Bash5.3.15 and unchanged production base, but the candidate returns fatal Unbound/status127. These are not claimed frozen-corpus losses. Exact observations and runnable driver are in `/work/reports/bash-web/hill-climb/control/review-52-r1/special-probes.json` and `special-probes.ts`.
+
+VARIABLES owns coherent actual presence/value lookup and its host/session or execution-source inputs. CONTROL owns arithmetic consumers. BASHPID must use real process identity under the existing same-process task decision. UID/EUID need verified runtime identity semantics, and LINENO needs actual execution source position with observed assignment/unset behavior. Preserve local/prefix restoration, snapshots and resource/cancellation guarantees. No special-name whitelist, fabricated values, build-host identity in a browser guest or present-without-value marker. Inspect current runtime capabilities before claiming an external prerequisite is absent. A bounded arithmetic correction can proceed independently if it preserves these controls honestly; otherwise defer the conflicting fatal-absent change until the prerequisite. Scope and ownership receipt: `/work/reports/bash-web/hill-climb/variables/special-scalar-prerequisites.md`.
+
+## Indexed array storage and reads, 2026-10-22
+
+Status: Approved. Current-source local qualification is complete for PR41;
+parent owns independent integration acceptance, hosted CI, merge and exact-main
+verification. This is not a merged-family completion claim.
+
+Source `c94275f4d56767cf0a45f2e448c205c1365285f1` includes a normal merge of exact main
+`93fdf762f2a694427440d07156c7a8c458ecc995`. One authoritative real-Waffle
+replay retains all 9,221 records, 5,792 scored cases, 3,429 skips and the five-field
+frozen identity. Oils gains 55, 1099 to 1154; Brush gains 40, 1080 to 1120;
+Bashkit gains 85, 1469 to 1554. Every corpus loses zero passes. The saved
+finalizer reconstructs membership from immutable main plus those 180 proven
+gains, preserving every nongained historical row and passing the unchanged
+strict comparator. The earlier ad190 replay predates the scalar-transformation boundary correction and is historical, not final proof. Earlier source657 measurements remain historical pre50
+observations, not current-source proof.
+
+State owns unique in-place sparse writes and admitted shared copy-on-write.
+An admitted inverse journal retains completed assignments on ordinary semantic
+errors but reverses them on resource rejection or cancellation, without losing
+durable RHS effects. Local/prefix restoration and getopts cursor state retain
+their existing owners. Indexed-local getopts aggregate preflight admits the same
+publication growth as the synchronous writer, including repeated resolved aliases.
+
+Full native/WASI suites pass 1434/1414 tests. Unchanged Rust, JS quality, layer,
+duplicate and scoreboard checks pass; the scoreboard selection passes 670 tests.
+Nineteen recorded local Bash 5.3.15 controls match native and production Waffle,
+including 5,000 individual writes, 5,000 appends and a 10,000-element compound
+assignment under unchanged default limits. No skipped case is counted as a gain.
+
+See [the behavior and remaining forms](../docs/indexed-arrays.md) and
+[exact source/artifact/result evidence](../docs/evidence/indexed-arrays.json).
+Explicit-name declaration printing, index enumeration, compound-local forms,
+effective IFS provenance and raw-byte fields remain separately scoped. The
+single Approved byte-fields item above remains canonical for its four proven
+scored prerequisites. No pathname/noglob, tilde or rematch branch was copied.
+
+The sole integration-review P2 is repaired by rejecting resolved indexed bindings before scalar transformation projection. Nounset ordering and local scalar behavior are unchanged. Seventeen recorded unsupported-family/nounset controls pass on fresh native and Waffle artifacts; these are not scored gains. The initial replay and scoreboard attempts hit the host light queue's cgroup memory ceiling. Their failed logs remain separate from the completed suite-class final evidence, with no guest limit or gate changes.
+
+### Inherited extglob parse-option timing
+
+Status: Approved follow-up in the parser/options family, not PR41 storage scope.
+A custom scalar-only control on source `ad190b8` runs
+`shopt -s extglob; case foo in @(foo|bar)) printf "yes\n";; esac`.
+Local GNU Bash 5.3.15 rejects the same-line unit with syntax status 2; the native
+shell prints `yes\n` with status 0. Splitting after `shopt` with a newline makes
+the recorded integration control agree. This needs no indexed assignment.
+Parser/grammar source is identical to integrated main `93fdf762`; PR41 does not
+change parser option timing. No frozen scored mapping or lost pass is claimed.
+Exact bytes and binary identities are in
+`/work/reports/bash-web/hill-climb/variables/indexed/post93f-inherited-extglob-timing.json`.
+Before changing this behavior, reproduce direct case and ordinary argument
+patterns with extglob unset, enabled on the same read unit and enabled on a
+previous read unit. Coordinate with the parser/options and expansion owners;
+do not broaden indexed storage or alter the frozen ruler.
+
+## Leading tilde-colon parameter literal handling
+
+Status: Approved follow-up in the expansion family, outside PR57's reviewed
+assignment-looking brace repair and call-only main integration.
+
+Minimal relevant form from the independent narrow review:
+
+```sh
+HOME=/one; set -- {~,:~}:$HOME; printf '<%s>\n' "$@"
+```
+
+The leading `~:$HOME` result is `</one:$HOME>\n` in GNU Bash
+`5.3.15(1)-release` but `</one:/one>\n` in the reviewed Waffle guest.
+Status is 0 and stderr is empty. The old Word and repaired Generated contexts
+both leave this leading path unchanged. Reproduce and isolate Bash's literal
+parameter handling after the leading tilde-colon before changing it. Preserve
+HOME side-effect order, quote protection, budgets and cancellation.
+
+Exact full control and expected/actual base64 bytes are in
+`/work/reports/bash-web/hill-climb/expansion/tilde/review-r2/classified-results.json`,
+`nonRepairDifferences` entry `context-order-3`, reviewed at
+`19bcd7ffe407d1c3d6c73940fb464d41fc8b4f37`. No fresh integrated-source result or
+frozen gain is claimed for this follow-up.
+
+## Missing redirect diagnostic in tilde fixture 25
+
+Status: Approved follow-up in the redirect/diagnostic family, not a PR57 tilde
+repair. Preserve the actual redirect failure and final command status.
+
+```sh
+HOME=.; printf data >'x=~'; IFS= read -r v <x=~; printf '<%s>\n' "$v"
+```
+
+Both GNU Bash `5.3.15(1)-release` and the reviewed guest return status 0 with
+stdout `<>\n`. Bash stderr is
+`/usr/bin/bash: line 1: x=.: No such file or directory\n`; guest stderr is empty.
+The earlier review incorrectly labelled identical recorded bytes `match=true`
+because it did not compare nonempty expected stderr. This is an existing
+diagnostic difference, not an exact Bash match or a repair regression.
+
+Reproduce through real Waffle and trace the failed input redirection's diagnostic
+publication. Exact evidence is `nonRepairDifferences` entry `fixture-25` in the
+same `review-r2/classified-results.json`; the older bytes are also retained as
+`recorded-25` in `review-r1/observations.json`. Do not weaken status/stdout checks
+or change the frozen diagnostic payloads to hide it.
+
+## Tilde plus brace-generated pathname expansion
+
+Status: Approved follow-up owned by expansion/pathname. Retest after PR54's
+actual normal-main integration before deciding whether further work is needed.
+No pathname source change belongs in PR57.
+
+```sh
+HOME=.; printf data >present; set -- ~/{*,x}; printf '<%s>\n' "$@"
+```
+
+The reviewed guest leaves `./*` literal, while Bash matches `./present`; the
+other result is `./x`. Both return status 0 with empty stderr. Leading tilde
+eligibility is unchanged by the assignment-looking repair. The full recorded
+control also includes unchanged ordinary and assignment-looking brace forms.
+Its exact expected/actual bytes are in `nonRepairDifferences` entry
+`context-order-4` in the same `review-r2/classified-results.json`.
+
+All three follow-ups come from the narrow review's 152 observations: 146 exact
+Bash matches, three declared boundary matches and these three differences.
+The append boundary was still declared at that reviewed pin; PR41 integration
+now compares it directly with its unchanged genuine Bash recording.
+
+### Approved: special-variable unset follow-ups from declaration review
+
+Owner: VARIABLES, after the bounded declaration-printing landing. Source
+`71eebbd4ff480aeffb68ec4df502d3613f49f3e4`; independent review
+`/work/reports/wave-20261022/shell/review55-opus-r1.md` contains Bash 5.3.15
+observations. These are not claimed frozen-score gains or losses.
+
+- Effective IFS cache: `sep=:; declare -n mid=sep; declare -n IFS=mid;
+  v="a:b c"; printf "<%s>" $v; echo; unset -n mid; printf "<%s>" $v; echo`
+  prints `<a><b c>` twice in Bash, but the second expansion is `<a:b c>`
+  in this engine. Ordinary `unset mid` has the same older mismatch.
+  Diagnose live chain lookup versus Bash's cached effective IFS, preserving
+  the separately planned effective-IFS provenance contract. Direct
+  `unset -n IFS` already matches Bash.
+- OPTIND operand hooks: `set -- -ab; getopts ab o; echo "$o $OPTIND";
+  unset -n OPTIND; getopts ab o; echo "$o $OPTIND"` prints `a 1` twice
+  in Bash, but `a 1` then `b 2` here. The direct non-nameref no-op bypasses
+  `unset_binding`'s hook. Preserve ordinary variable values while applying
+  verified operand-specific hooks. No frozen unset-n case covers this.
+- Ordinary readonly-target diagnostic: `readonly t=x; declare -n r=t;
+  unset r` names `r` here, but Bash names `t`. The pre-existing builtin
+  diagnostic uses the operand instead of its resolved target. Cover both
+  ordinary and reference-only modes with recorded Bash observations.
+
+Reproduce through production Waffle before repair. Keep recorded fixtures,
+local/prefix restoration and cancellation/storage controls; do not invent
+special-variable values or widen the current declaration PR's semantics.
+
+### Inherited declaration-function brace expansion
+
+Status: Approved bounded follow-up. Owner: VARIABLES declaration/dispatch.
+PR57 integration review recorded this inherited behavior, not a PR60 regression
+or an accepted Bash match. Reproduce before repair:
+
+```bash
+HOME=/one; declare() { printf '<%s>\n' "$@"; }; declare x={~,~/tail} {~,~/tail}
+```
+
+Bash 5.3.15 prints `<x=~>\n<x=~/tail>\n</one>\n</one/tail>\n`.
+The reviewed PR57 source `0d4cd315` prints
+`<x={~,~/tail}>\n</one>\n</one/tail>\n` in native and production Waffle.
+PR60 source `67462b95`, which integrates main241 without PR57, prints
+`<x={~,~/tail}>\n<~>\n<~/tail>\n` in both engines.
+All return status 0 with empty stderr. The old `a03e3a1` native minimal
+control and current PR57 runtime agree on the mismatch. The first old-source
+eight-case probe is invalid because it requires later declaration printing;
+do not use that failed probe as preservation evidence.
+
+At `shell/engine/src/interpreter.rs:2804-2828`, spelled declaration syntax
+selects scalar operand expansion before function lookup at `2996-3001`.
+The interpreter is unchanged by PR60. Exact byte evidence, source attribution,
+and rerunnable controls are in
+`/work/reports/wave-20261022/shell/review57-main3fd-integration-r3.md`,
+its sibling `classification.json`, and the author's `shadow-prior.json` and
+`shadow-current.json`. Those recorded controls, not a full replay, own the
+observation. Distinguish real declaration operands from function argv without
+weakening real declaration expansion, storage admission, or cancellation.
+Do not fold the repair into index-name integration or count this as a pass.
+
+
+### Inherited declaration invalid-operand diagnostic
+
+Status: Approved bounded follow-up. Owner: VARIABLES declaration/builtin
+diagnostics. Independent PR60 integration review reproduced both controls once
+in native and production Waffle at `67462b958932322deace9332962080eee7b12702`:
+
+```bash
+v="2 20"; builtin declare k=$v; declare -p k
+```
+
+```bash
+a[20]=twenty; a[2]=two; builtin declare k="${!a[@]}"; declare -p k
+```
+
+Bash 5.3.15 and both engines print `declare -- k="2"` followed by a newline
+and finish with status 0. Bash also diagnoses invalid identifier `20` on stderr;
+both engines omit that diagnostic. Neither control is an exact Bash match.
+The scalar control does not use index-name expansion. The suspected error return
+at `shell/engine/src/builtins.rs:738-743` is byte-identical to main241.
+No exact-main binary was run, so the source proof and scalar isolation, not a
+claimed main execution, establish the inherited boundary.
+
+Reproduce on current main through production Waffle before repair. Record
+Bash all-stream/status observations locally and preserve later-operand behavior,
+status propagation, storage admission and cancellation. Implement the general
+declaration diagnostic in its owning builtin, not in array expansion. Do not
+claim a frozen gain without a qualified replay. Exact scripts, bytes and setup
+failures are retained in
+`/work/reports/wave-20261022/shell/review60-main241-integration-r3/non-blocking-observations.md`
+and sibling `observations.json` / `small-observations.json`.
+
+## Native `-c` missing-parent redirection, 2026-10-22
+
+Status: Approved follow-up. Owner: BUILTINS coordinator, outside the trap
+registration family. Fix the native fixture filesystem before using native
+controls to judge missing-parent redirection failures.
+
+At source `6609e3cb0b8b5ababcca7ba0ee0269f09492d337`, run:
+
+```sh
+/work/tmp/bash-web-builtins-trap-exit-review-6609e3c/native/shell-engine -c ': > /nonexistent/dir/x; echo $?'
+/usr/bin/bash -c ': > /nonexistent/dir/x; echo $?'
+```
+
+Both processes exit 0. Native stdout is `0\n` with empty stderr. GNU Bash
+5.3.15 stdout is `1\n`, with a missing-directory diagnostic. The same script
+through production Waffle prints `1\n`. Reproduced in the independent trap
+review and again in the correction lane, without any trap command, so this is
+not evidence of trap registration behavior.
+
+Pinned native SHA-256 is
+`915e44c2c92591245ef33a62f3d8c46650f4765074ee112af421fe1d0878ee4e`.
+Production Waffle uses `shell-runtime.wasm` SHA-256
+`eb435393f9ff7a0b6d596497f6a7fd10080c94d4195a1c50efbf5513bfc40aaa`
+and the unchanged launch Node bundles. Bash's full version is
+`GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)`.
+Its binary SHA-256 is
+`575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5`.
+
+Suspected cause: `compat.rs:492` installs `MemoryFs` for native `-c`, and
+`io.rs:733` creates a missing file without checking its parent directory.
+`ReadOnlyMount::open` delegates to that method. This rules out trap dispatch
+and action execution. Add a missing-parent fixture and preserve successful
+opens, directory errors, permissions and the production-Waffle control when
+repairing it. Do not change frozen oracle identities or scoring to hide it.
+
+Reproducer and exact observations are in
+`/work/reports/wave-20261022/shell/trap-repair-r1-evidence/redirect-control.ts`
+and `redirect-before.json`. This lane leaves `main.rs`, `compat.rs` and `io.rs` unchanged. The coordinator owns the follow-up and retained evidence until it
+is repaired and verified.
+
+## Re-ignored inherited EXIT registration, 2026-10-22
+
+Status: Approved follow-up. Owner: BUILTINS coordinator. Separate from the
+nested-parent trap correction, with no trap action execution needed. At
+`535197097ea359ee15b2e73bdf0a944b41df0c82`, local GNU Bash 5.3.15
+and the guest differ on these exact registration controls:
+
+```bash
+trap '' EXIT; while read -r l; do echo "got:$l"; done < <(trap '' EXIT; trap -p EXIT); trap - EXIT
+trap '' EXIT; (trap : HUP; trap - EXIT; trap '' EXIT; trap -p EXIT); trap - EXIT
+```
+
+Both Bash scripts exit0 with no stdout. The guest prints
+`got:trap -- '' EXIT\n` for the first and `trap -- '' EXIT\n` for the
+second. The review found three such quirk rows. Setting a handler before the
+new ignore, or using a nested ordinary child, already matches. The suspected
+state belongs to ignored EXIT provenance after the inherited binding is cleared,
+not action execution or general process-substitution inheritance.
+
+Independent native and production-Waffle observations and exact scripts are
+retained in `/work/reports/wave-20261022/shell/review63-trap-opus-r1-evidence/`
+under `probe1.json`, `probe2.json`, `probe3.json` and `probe-categories.json`.
+The nested-parent correction deliberately does not encode this extra state.
+Record a narrow failing-first fixture before fixing it and preserve the173
+registration controls. Do not claim that any new ignored EXIT always stays
+visible in a process substitution. No frozen exclusion or scoring change.
+
+## Function-name grammar prerequisite, 2026-10-22
+
+Status: Approved. Owner: CONTROL follow-up after literal declaration-name validation.
+
+The current parser rejects `f\oo() { :; }`, `'foo'() { :; }` and `"foo"() { :; }`
+with syntax status 2 before producing `Command::Function`. GNU Bash 5.3.15 instead
+executes these declarations as failures with status 1 and an identifier diagnostic.
+For the escaped POSIX form, `parser/mod.rs::command_start` requires
+`current_escapes.is_empty()` before considering `FunctionPosix`; fully quoted
+names do not enter the `Token::Word` branch. `function f\oo { :; }` already reaches
+the function parser and now correctly fails at execution. This PR intentionally
+changes neither grammar nor token admission.
+
+Reproduce strictly after the toolchain setup in `docs/development.md`, with
+`npm run build:shell` then `npm run test:shell:function-names:pending`. The explicit pending recipe must
+fail until its recorded Bash comparisons pass. It is separate from the ordinary
+blocking scoreboard recipe, with no skipped or relaxed assertions. Expected bytes
+and exact Bash version are in `scripts/fixtures/shell-function-names-pending.json`.
+Before/after evidence, including the original escaped-POSIX failure, is retained in
+`/work/reports/bash-web/hill-climb/control/function-names/{before,after,pending}.log`.
+The follow-up must admit these names in the owning grammar, keep dead definitions
+inert, and reuse the execution-time validator rather than adding a parse-time
+identifier rejection. No new frozen case, exclusion or oracle change is authorized.
+
+### Alias runtime prerequisite
+
+Status: Approved. The parser's injected-alias function-name and print controls pass,
+but this base has no `alias` builtin and rejects `shopt -s expand_aliases`. End-to-end
+alias declaration controls therefore remain strict pending comparisons under
+`npm run test:shell:function-names:aliases-pending`, using
+`scripts/fixtures/shell-function-names-aliases-pending.json`. Their exact failures
+are retained in the function-name report's `verify6.log` and `aliases-pending.log`.
+This is a separate builtin prerequisite, not permission to add alias, shopt or
+function-name grammar in the literal-name validation change. Keep parser alias
+coverage and reuse its raw-token provenance when runtime aliases are implemented.
+
+## Invalid nameref target review follow-ups, 2026-10-23
+
+Status: Approved. Owner: VARIABLES declaration/builtin family. These inherited
+notes are outside PR59's bounded invalid ordinary-target status correction.
+Independent review approved source `6bc405d677b24d3b3d961ebda559874d7158f76b`.
+The exact review and recorded controls are retained in
+`/work/reports/bash-web/hill-climb/variables/nameref-invalid-review-opus-r1.md.result`
+and its sibling evidence directory.
+
+- Caller cancellation classification: `nameref_declaration` maps its own
+  per-target checkpoint cancellation to `Err(130)`. The declaration caller
+  aborts only on status 2 or `RESOURCE_STATUS`; other errors become status 1
+  and processing continues. The existing large-value cancellation regression
+  interrupts the caller's earlier operand scan, not this target scan. The
+  reviewer found this in source and did not execute it. Reproduce cancellation
+  specifically inside the target scan on current native and production Waffle,
+  inspect the interpreter's final status handling, then repair in the owning
+  declaration path with a deterministic cancellation control. Preserve
+  nonmutation, ordinary status-1 continuation, resource rejection and refunds.
+- Invalid-target diagnostics: Bash diagnoses `declare -n ref='a b'` as an
+  invalid variable name for a name reference; the engine emits no diagnostic.
+  The recorded fixture keeps the Bash stderr bytes, but its strict frozen
+  comparison scores stdout and status only. Reproduce all streams on current
+  production Waffle before repair. Keep ordinary invalid targets distinct from
+  unsupported empty/unbound, bracket-bearing and PIPESTATUS references. Route
+  this with the inherited declaration invalid-operand diagnostic above, not
+  through an IFS, array-writer or durable-state change.
+
+Neither note is a fixed bug, an accepted Bash match or a frozen gain of this
+integration. PR59 leaves the caller and target-scan cancellation logic unchanged.
 
 ## Conditional regex parity follow-up
 

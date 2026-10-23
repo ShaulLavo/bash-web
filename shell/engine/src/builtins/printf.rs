@@ -1,14 +1,30 @@
 mod fields;
 mod quoting;
-use super::{endpoint, error_status, write};
+use super::error_status;
 use crate::{
     executor::Budget,
     expand::Work,
     interpreter::Context,
-    io::FdTable,
+    io::{FdTable, IoError},
     state::{SharedState, State},
 };
 use fields::{Arguments, Field};
+
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum PrintFailure {
+    Status(i32),
+    Io(IoError),
+}
+impl From<i32> for PrintFailure {
+    fn from(status: i32) -> Self {
+        Self::Status(status)
+    }
+}
+impl From<IoError> for PrintFailure {
+    fn from(error: IoError) -> Self {
+        Self::Io(error)
+    }
+}
 
 pub(super) async fn run(
     args: &[String],
@@ -16,7 +32,7 @@ pub(super) async fn run(
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
-) -> Result<(), i32> {
+) -> Result<(), PrintFailure> {
     let invocation = Invocation::parse(args, context, work).await?;
     let utf8 = character_locale(state, context, work).await?;
     let mut printer = Printer::new(fds, context, work, utf8);
@@ -27,7 +43,11 @@ pub(super) async fn run(
     printer.work = None;
     let status = invocation.print(&mut printer).await?;
     printer.flush_output().await?;
-    if status == 0 { Ok(()) } else { Err(status) }
+    if status == 0 {
+        Ok(())
+    } else {
+        Err(status.into())
+    }
 }
 
 const USAGE: &[u8] = b"printf: usage: printf [-v var] format [arguments]\n";
@@ -93,7 +113,7 @@ impl<'a> Invocation<'a> {
         Self::InvalidOption(first.as_bytes()[1])
     }
 
-    async fn print(self, printer: &mut Printer<'_>) -> Result<i32, i32> {
+    async fn print(self, printer: &mut Printer<'_>) -> Result<i32, PrintFailure> {
         printer.scan(1).await?;
         match self {
             Self::Format(args) | Self::Assign(_, args) => return format(args, printer).await,
@@ -122,7 +142,7 @@ async fn assign(
     invocation: Invocation<'_>,
     state: &SharedState,
     printer: &mut Printer<'_>,
-) -> Result<(), i32> {
+) -> Result<(), PrintFailure> {
     let bytes = printer.stdout_bytes;
     let work = printer.work.as_deref_mut().ok_or(2)?;
     State::admit_assignment(state, name, bytes, &printer.context.cancel, work)
@@ -151,7 +171,7 @@ async fn assign(
     let status = invocation.print(printer).await?;
     if readonly {
         printer.readonly_diagnostic(&target).await?;
-        return Err(1);
+        return Err(1.into());
     }
     let mut output = printer.capture.take().ok_or(2)?;
     printer.scan(output.len()).await?;
@@ -160,10 +180,14 @@ async fn assign(
     }
     let value = String::from_utf8(output.into_boxed_slice().into_vec()).map_err(|_| 2)?;
     state.borrow_mut().assign_parameter(target, value)?;
-    if status == 0 { Ok(()) } else { Err(status) }
+    if status == 0 {
+        Ok(())
+    } else {
+        Err(status.into())
+    }
 }
 
-async fn invalid_option(byte: u8, printer: &mut Printer<'_>) -> Result<(), i32> {
+async fn invalid_option(byte: u8, printer: &mut Printer<'_>) -> Result<(), PrintFailure> {
     printer
         .usage_diagnostic(b"/usr/bin/bash: printf: -")
         .await?;
@@ -209,7 +233,7 @@ pub(super) async fn echo(
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
-) -> Result<(), i32> {
+) -> Result<(), PrintFailure> {
     let utf8 = character_locale(state, context, work).await?;
     let mut printer = Printer::new(fds, context, work, utf8);
     echo_output(args, &mut printer).await?;
@@ -225,7 +249,7 @@ struct EchoOptions {
     escapes: bool,
 }
 impl EchoOptions {
-    async fn parse(args: &[String], printer: &mut Printer<'_>) -> Result<Self, i32> {
+    async fn parse(args: &[String], printer: &mut Printer<'_>) -> Result<Self, PrintFailure> {
         let mut options = Self::default();
         for arg in args {
             printer.scan(1).await?;
@@ -239,7 +263,11 @@ impl EchoOptions {
         }
         Ok(options)
     }
-    async fn option(&self, arg: &[u8], printer: &mut Printer<'_>) -> Result<Option<Self>, i32> {
+    async fn option(
+        &self,
+        arg: &[u8],
+        printer: &mut Printer<'_>,
+    ) -> Result<Option<Self>, PrintFailure> {
         let mut next = Self {
             operands: self.operands + 1,
             ..*self
@@ -256,7 +284,7 @@ impl EchoOptions {
         Ok(Some(next))
     }
 }
-async fn echo_output(args: &[String], printer: &mut Printer<'_>) -> Result<(), i32> {
+async fn echo_output(args: &[String], printer: &mut Printer<'_>) -> Result<(), PrintFailure> {
     let options = EchoOptions::parse(args, printer).await?;
     let mode = options.escapes.then_some(Mode::Echo);
     for (index, arg) in args[options.operands..].iter().enumerate() {
@@ -302,7 +330,7 @@ impl<'a> Printer<'a> {
             capture: None,
         }
     }
-    async fn scan(&mut self, bytes: usize) -> Result<(), i32> {
+    async fn scan(&mut self, bytes: usize) -> Result<(), PrintFailure> {
         for _ in 0..bytes {
             if let Some(work) = &mut self.work {
                 work.checkpoint(&self.context.cancel)
@@ -317,15 +345,17 @@ impl<'a> Printer<'a> {
         }
         Ok(())
     }
-    async fn flush_output(&mut self) -> Result<(), i32> {
+    async fn flush_output(&mut self) -> Result<(), PrintFailure> {
         if self.output_len == 0 {
             return Ok(());
         }
-        let result = write(self.fds, &self.output[..self.output_len], self.context).await;
+        let result = self
+            .write_endpoint(1, &self.output[..self.output_len])
+            .await;
         self.output_len = 0;
         result
     }
-    async fn append_output(&mut self, mut bytes: &[u8]) -> Result<(), i32> {
+    async fn append_output(&mut self, mut bytes: &[u8]) -> Result<(), PrintFailure> {
         while !bytes.is_empty() {
             if self.output_len == WRITE_CHUNK {
                 self.flush_output().await?;
@@ -337,7 +367,7 @@ impl<'a> Printer<'a> {
         }
         Ok(())
     }
-    async fn emit(&mut self, fd: u32, bytes: &[u8]) -> Result<(), i32> {
+    async fn emit(&mut self, fd: u32, bytes: &[u8]) -> Result<(), PrintFailure> {
         if self.work.is_some() {
             self.remaining = self.remaining.checked_sub(bytes.len()).ok_or(2)?;
             if fd == 1 {
@@ -352,7 +382,9 @@ impl<'a> Printer<'a> {
             let result = self.write_diagnostic(fd, bytes).await;
             match result {
                 Ok(()) => Ok(()),
-                Err(status) if status == 130 => Err(status),
+                Err(error @ (PrintFailure::Io(IoError::Cancelled) | PrintFailure::Status(130))) => {
+                    Err(error)
+                }
                 Err(status) => {
                     self.flush_output().await?;
                     Err(status)
@@ -360,44 +392,54 @@ impl<'a> Printer<'a> {
             }
         }
     }
-    async fn emit_output(&mut self, bytes: &[u8]) -> Result<(), i32> {
+    async fn emit_output(&mut self, bytes: &[u8]) -> Result<(), PrintFailure> {
         if let Some(output) = &mut self.capture {
             output.extend_from_slice(bytes);
             return Ok(());
         }
         self.append_output(bytes).await
     }
-    async fn readonly_diagnostic(&mut self, name: &str) -> Result<(), i32> {
+    async fn readonly_diagnostic(&mut self, name: &str) -> Result<(), PrintFailure> {
         self.numeric_warning(b"/usr/bin/bash: ").await?;
         self.numeric_warning(name.as_bytes()).await?;
         self.numeric_warning(b": readonly variable\n").await
     }
-    async fn write_diagnostic(&self, fd: u32, bytes: &[u8]) -> Result<(), i32> {
-        endpoint(self.fds, fd)?
+    async fn write_endpoint(&self, fd: u32, bytes: &[u8]) -> Result<(), PrintFailure> {
+        self.fds
+            .get(fd)
+            .ok_or(IoError::BadDescriptor)?
             .write_all(bytes, &self.context.cancel)
             .await
-            .map_err(|error| error.status())
+            .map_err(PrintFailure::Io)
     }
-    async fn usage_diagnostic(&mut self, bytes: &[u8]) -> Result<(), i32> {
+    async fn write_diagnostic(&self, fd: u32, bytes: &[u8]) -> Result<(), PrintFailure> {
+        self.write_endpoint(fd, bytes).await
+    }
+    async fn usage_diagnostic(&mut self, bytes: &[u8]) -> Result<(), PrintFailure> {
         if self.work.is_some() {
             return self.emit(2, bytes).await;
         }
         match self.write_diagnostic(2, bytes).await {
-            Err(status @ (130 | 141)) => Err(status),
+            Err(
+                error @ (PrintFailure::Io(IoError::Cancelled | IoError::BrokenPipe)
+                | PrintFailure::Status(130 | 141)),
+            ) => Err(error),
             _ => Ok(()),
         }
     }
-    async fn numeric_warning(&mut self, bytes: &[u8]) -> Result<(), i32> {
+    async fn numeric_warning(&mut self, bytes: &[u8]) -> Result<(), PrintFailure> {
         if self.work.is_some() {
             return self.emit(2, bytes).await;
         }
         let result = self.write_diagnostic(2, bytes).await;
         match result {
-            Err(130) => Err(130),
+            Err(error @ (PrintFailure::Io(IoError::Cancelled) | PrintFailure::Status(130))) => {
+                Err(error)
+            }
             _ => Ok(()),
         }
     }
-    async fn padding(&mut self, mut count: usize, byte: u8) -> Result<(), i32> {
+    async fn padding(&mut self, mut count: usize, byte: u8) -> Result<(), PrintFailure> {
         if self.work.is_some() {
             self.remaining = self.remaining.checked_sub(count).ok_or(2)?;
             self.stdout_bytes += count;
@@ -414,7 +456,7 @@ impl<'a> Printer<'a> {
         }
         Ok(())
     }
-    async fn escape(&mut self, input: &[u8], mode: Mode) -> Result<Escape, i32> {
+    async fn escape(&mut self, input: &[u8], mode: Mode) -> Result<Escape, PrintFailure> {
         let escape = decode(input, mode, self.utf8);
         self.scan(escape.consumed).await?;
         if let Some(diagnostic) = escape.diagnostic {
@@ -432,7 +474,7 @@ impl<'a> Printer<'a> {
         input: &[u8],
         precision: Option<usize>,
         emit: bool,
-    ) -> Result<(usize, bool), i32> {
+    ) -> Result<(usize, bool), PrintFailure> {
         let limit = precision.unwrap_or(usize::MAX);
         let mut output = OperandOutput {
             remaining: limit,
@@ -464,11 +506,15 @@ impl<'a> Printer<'a> {
         }
         Ok((limit - output.remaining, false))
     }
-    async fn operand(&mut self, input: &[u8], escaped: bool) -> Result<bool, i32> {
+    async fn operand(&mut self, input: &[u8], escaped: bool) -> Result<bool, PrintFailure> {
         self.operand_mode(input, escaped.then_some(Mode::Operand))
             .await
     }
-    async fn operand_mode(&mut self, input: &[u8], mode: Option<Mode>) -> Result<bool, i32> {
+    async fn operand_mode(
+        &mut self,
+        input: &[u8],
+        mode: Option<Mode>,
+    ) -> Result<bool, PrintFailure> {
         let mut offset = 0;
         while offset < input.len() {
             if let Some(mode) = mode.filter(|_| input[offset] == b'\\') {
@@ -498,7 +544,7 @@ struct OperandOutput {
     emit: bool,
 }
 impl OperandOutput {
-    async fn piece(&mut self, bytes: &[u8], printer: &mut Printer<'_>) -> Result<(), i32> {
+    async fn piece(&mut self, bytes: &[u8], printer: &mut Printer<'_>) -> Result<(), PrintFailure> {
         let bytes = &bytes[..bytes.len().min(self.remaining)];
         self.remaining -= bytes.len();
         if self.emit {
@@ -508,7 +554,7 @@ impl OperandOutput {
     }
 }
 
-async fn format(args: &[String], printer: &mut Printer<'_>) -> Result<i32, i32> {
+async fn format(args: &[String], printer: &mut Printer<'_>) -> Result<i32, PrintFailure> {
     let input = args[0].as_bytes();
     let mut arguments = Arguments {
         values: args,
@@ -531,7 +577,7 @@ async fn format_pass(
     input: &[u8],
     args: &mut Arguments<'_>,
     printer: &mut Printer<'_>,
-) -> Result<bool, i32> {
+) -> Result<bool, PrintFailure> {
     let mut offset = 0;
     while offset < input.len() {
         if format_piece(input, &mut offset, args, printer).await? {
@@ -546,7 +592,7 @@ async fn format_piece(
     offset: &mut usize,
     args: &mut Arguments<'_>,
     printer: &mut Printer<'_>,
-) -> Result<bool, i32> {
+) -> Result<bool, PrintFailure> {
     match input[*offset] {
         b'\\' => {
             let escape = printer.escape(&input[*offset..], Mode::Format).await?;
@@ -566,7 +612,7 @@ async fn format_literal(
     input: &[u8],
     offset: &mut usize,
     printer: &mut Printer<'_>,
-) -> Result<(), i32> {
+) -> Result<(), PrintFailure> {
     let start = *offset;
     while *offset < input.len()
         && *offset - start < WRITE_CHUNK
@@ -583,7 +629,7 @@ async fn conversion(
     offset: &mut usize,
     args: &mut Arguments<'_>,
     printer: &mut Printer<'_>,
-) -> Result<bool, i32> {
+) -> Result<bool, PrintFailure> {
     if input.get(*offset) == Some(&b'%') {
         printer.scan(1).await?;
         *offset += 1;
@@ -774,6 +820,100 @@ mod tests {
     use futures::FutureExt;
     use std::rc::Rc;
 
+    #[test]
+    fn output_boundary_only_aborts_typed_broken_pipe() {
+        use super::super::output_outcome;
+        use crate::interpreter::Flow;
+        let success = output_outcome(Ok(())).unwrap();
+        assert_eq!(success.code, 0);
+        assert!(matches!(success.flow, Flow::Normal));
+        let broken = output_outcome(Err(PrintFailure::Io(IoError::BrokenPipe))).unwrap();
+        assert_eq!(broken.code, 141);
+        assert!(matches!(broken.flow, Flow::Abort));
+        for status in [0, 1, 2, 23, 130, 141, crate::exec::RESOURCE_STATUS] {
+            assert_eq!(
+                output_outcome(Err(PrintFailure::Status(status))).unwrap_err(),
+                status
+            );
+        }
+        for error in [
+            IoError::BadDescriptor,
+            IoError::Cancelled,
+            IoError::LimitExceeded,
+            IoError::NotFound,
+            IoError::AlreadyExists,
+            IoError::NotDirectory,
+            IoError::Unsupported,
+            IoError::InvalidPath,
+            IoError::WriteZero,
+            IoError::Runtime(32),
+            IoError::Runtime(141),
+        ] {
+            let status = error.status();
+            assert_eq!(
+                output_outcome(Err(PrintFailure::Io(error))).unwrap_err(),
+                status
+            );
+        }
+    }
+
+    fn printer_descriptors(output: Endpoint, diagnostic: Endpoint) -> FdTable {
+        let mut fds = FdTable::default();
+        fds.insert(0, Endpoint::null());
+        fds.insert(1, output);
+        fds.insert(2, diagnostic);
+        fds
+    }
+
+    fn broken_diagnostic(source: &str, expected_status: i32, expected_output: &[u8]) {
+        let limit = 1024 * 1024;
+        let (ex, shell) = budget_session(limit);
+        let (out, output) = capture(4096);
+        let (reader, broken) = pipe();
+        drop(reader);
+        shell
+            .set_descriptors(printer_descriptors(out, broken))
+            .unwrap();
+        assert_eq!(
+            finish(&ex, shell.start(source).unwrap()),
+            expected_status,
+            "{source}"
+        );
+        assert_eq!(output.bytes(), expected_output, "{source}");
+        drop(shell.state().borrow().admit_temporary(limit).unwrap());
+    }
+
+    #[test]
+    fn typed_diagnostics_preserve_usage_warning_readonly_and_flush_policies() {
+        broken_diagnostic("printf; echo BAD", 141, b"");
+        broken_diagnostic("printf '%d' bad; echo survived", 0, b"0survived\n");
+        broken_diagnostic(
+            "readonly locked=old; printf -v locked %s new; echo survived:$?:$locked",
+            0,
+            b"survived:1:old\n",
+        );
+        broken_diagnostic(r"printf 'prefix\xZ'; echo BAD", 141, b"prefix");
+    }
+
+    #[test]
+    fn broken_stdout_unwinds_only_current_execution_and_refunds_print_storage() {
+        let limit = 1024 * 1024;
+        for source in ["echo lost", "printf '%9000s' lost", "printf '%q' 'a b'"] {
+            let (ex, shell) = budget_session(limit);
+            let (reader, writer) = pipe();
+            drop(reader);
+            shell
+                .set_descriptors(printer_descriptors(writer, Endpoint::null()))
+                .unwrap();
+            assert_eq!(
+                finish(&ex, shell.start(&format!("{source}; exit 23")).unwrap()),
+                141
+            );
+            drop(shell.state().borrow().admit_temporary(limit).unwrap());
+            assert_eq!(finish(&ex, shell.start("true").unwrap()), 0);
+        }
+    }
+
     fn finish(executor: &Executor, job: JoinHandle<i32>) -> i32 {
         for _ in 0..100_000 {
             if job.is_finished() {
@@ -830,11 +970,9 @@ mod tests {
         let (reader, writer) = pipe();
         let filler = vec![b'!'; crate::io::PIPE_CAPACITY];
         assert_eq!(writer.write(&filler).now_or_never(), Some(Ok(filler.len())));
-        let mut fds = FdTable::default();
-        fds.insert(0, Endpoint::null());
-        fds.insert(1, writer);
-        fds.insert(2, Endpoint::null());
-        shell.set_descriptors(fds).unwrap();
+        shell
+            .set_descriptors(printer_descriptors(writer, Endpoint::null()))
+            .unwrap();
         let job = shell.start(&format!("{command} buffered")).unwrap();
         let mut parked = false;
         for _ in 0..100_000 {

@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.79",
+  "version": "0.0.98",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -29,7 +29,7 @@
     "build:shell": "node scripts/build-shell.ts",
     "check:capabilities": "node scripts/check-shell-capabilities.ts",
     "test:shell:wasi": "node scripts/test-shell-wasi.ts",
-    "test:shell:scoreboard": "npm run build:node-harness && node --test scripts/test-shell-scoreboard*.mjs scripts/test-shell-scoreboard-instrument.ts scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-own-shell-root.ts scripts/test-own-shell-permissions.ts scripts/test-own-shell-printf-assignment.ts scripts/test-own-shell-regex-groups.ts scripts/test-own-shell-regex-captures.ts scripts/test-own-shell-file-substitution.ts scripts/test-bash-compat*.mjs",
+    "test:shell:scoreboard": "npm run build:node-harness && node --test scripts/test-shell-scoreboard*.mjs scripts/test-shell-scoreboard-instrument.ts scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-own-shell-root.ts scripts/test-own-shell-permissions.ts scripts/test-own-shell-descriptors.ts scripts/test-own-shell-printf-assignment.ts scripts/test-own-shell-extglob.ts scripts/test-own-shell-pathname.ts scripts/test-own-shell-tilde.ts scripts/test-own-shell-regex-groups.ts scripts/test-own-shell-regex-captures.ts scripts/test-own-shell-file-substitution.ts scripts/test-own-shell-read-scalar.ts scripts/test-own-shell-indirect-special.ts scripts/test-own-shell-select.ts scripts/test-own-shell-declarations.ts scripts/test-own-shell-index-names.ts scripts/test-own-shell-function-names.ts scripts/test-own-shell-trap-registration.ts scripts/test-own-shell-pipeline-broken-pipe.ts scripts/test-own-shell-nameref-invalid.ts scripts/test-bash-compat*.mjs",
     "compat:shell": "npm run build:node-harness && npm run compat:shell:prebuilt",
     "prepare:shell-corpus": "node scripts/prepare-shell-corpus.mjs",
     "fuzz:shell-braces": "node scripts/fuzz-shell-braces.mjs",
@@ -67,6 +67,7 @@
     "notices:browser": "npm run notices:shell && node scripts/browser-notices.mjs",
     "serve": "node dist/serve.mjs",
     "verify:browser": "npm run test:browser:package && npm run build:browser && npm run typecheck:browser && npm run test:runtime:terminal && npm run test:browser",
+    "test:installed-waffle": "node --test scripts/test-installed-waffle.mjs",
     "test:browser:package": "node --test scripts/test-browser-package.mjs scripts/test-utility-packaging.ts",
     "build:worker": "node scripts/build-worker.mjs",
     "prepare": "npm run build:worker",
@@ -102,7 +103,10 @@
     "notices:browser:ci": "node scripts/ci-artifacts.ts notices .build/ci-native && node scripts/browser-notices.mjs",
     "bundle:browser:assets": "vite build && node scripts/finish-build.mjs",
     "build:browser:assets:ci": "npm run notices:browser:ci && npm run bundle:browser:assets",
-    "test:file-substitution": "npm run build:node-harness && node --test scripts/test-own-shell-file-substitution.ts"
+    "test:file-substitution": "npm run build:node-harness && node --test scripts/test-own-shell-file-substitution.ts",
+    "test:select": "npm run build:node-harness && node --test scripts/test-own-shell-select.ts",
+    "test:shell:function-names:pending": "npm run build:node-harness && BASH_FUNCTION_NAMES_PENDING=1 node --test scripts/test-own-shell-function-names.ts",
+    "test:shell:function-names:aliases-pending": "npm run build:node-harness && BASH_FUNCTION_NAMES_PENDING=aliases node --test scripts/test-own-shell-function-names.ts"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",
@@ -117,11 +121,11 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.3",
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#fc58a532f0d7a617e631ea4b7580a190915d4ed6",
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#b20fad173ebaa225cb87c51776f35edaaafd4a40",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#fc58a532f0d7a617e631ea4b7580a190915d4ed6"
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#b20fad173ebaa225cb87c51776f35edaaafd4a40"
   },
   "overrides": {
     "esbuild": "0.28.2"
@@ -131,7 +135,7 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "waffle@0.0.58": true
+    "waffle@0.0.67": true
   },
   "trustedDependencies": [
     "waffle",
