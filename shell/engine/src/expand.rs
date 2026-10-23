@@ -101,10 +101,10 @@ impl Work {
         if let Some(scope) = self.frame_scope.clone() {
             return scope.frame(build(self), |code| Err(code.into()));
         }
-        if let Err(error) = self.admit_storage(std::mem::size_of::<F>()) {
-            return futures::future::Either::Left(futures::future::ready(Err(error)));
+        match self.admit_storage(std::mem::size_of::<F>()) {
+            Ok(()) => futures::future::Either::Right(build(self).boxed_local()),
+            Err(error) => futures::future::Either::Left(futures::future::ready(Err(error))),
         }
-        futures::future::Either::Right(build(self).boxed_local())
     }
     pub(crate) fn enter_arithmetic(&mut self) -> Result<(), Error> {
         if self.arithmetic_depth >= operand::MAX_DEPTH {
