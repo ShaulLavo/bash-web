@@ -1,5 +1,5 @@
 use super::{Error, Expansion, ListSource, Protection};
-use crate::state::{Binding, SharedState, State};
+use crate::state::{SharedState, State};
 
 impl Expansion<'_> {
     pub(super) async fn array_substring(
@@ -12,8 +12,8 @@ impl Expansion<'_> {
         scalar: bool,
     ) -> Result<(), Error> {
         State::admit_scalar_access(state, name, self.cancel, self.work).await?;
-        let is_scalar = matches!(state.borrow().binding(name), Some(Binding::Scalar(_)));
-        if is_scalar && name != "PIPESTATUS" {
+        let is_scalar = state.borrow().array_is_scalar(name);
+        if is_scalar {
             let null_field = at && quoted && !scalar;
             return self
                 .substring(name, bounds, state, scalar || quoted, null_field)
@@ -58,7 +58,7 @@ impl Expansion<'_> {
         // Empty or unset arrays skip both expressions. Otherwise the bounds
         // read the array as the offset arithmetic left it, and the element
         // walk below stops at the live end rather than a stale count.
-        if last_index(name, state).is_none() {
+        if state.borrow().array_last_index(name).is_none() {
             return Ok(None);
         }
         let offset =
@@ -66,7 +66,11 @@ impl Expansion<'_> {
                 .await?;
         self.ifs = None;
         self.ifs_changed = true;
-        let Some(start) = last_index(name, state).and_then(|last| slice_start(offset, last)) else {
+        let Some(start) = state
+            .borrow()
+            .array_last_index(name)
+            .and_then(|last| slice_start(offset, last))
+        else {
             return Ok(None);
         };
         let Some(length) = length else {
@@ -113,15 +117,6 @@ impl Expansion<'_> {
         self.work.admit_storage(value.len())?;
         Ok(Some((index, value.to_owned())))
     }
-}
-
-fn last_index(name: &str, state: &SharedState) -> Option<i64> {
-    let state = state.borrow();
-    if name == "PIPESTATUS" {
-        let count = state.pipeline_status().len();
-        return count.checked_sub(1).and_then(|n| i64::try_from(n).ok());
-    }
-    state.binding(name).and_then(Binding::last_index)
 }
 
 fn slice_start(offset: i64, last: i64) -> Option<i64> {

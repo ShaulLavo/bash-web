@@ -13,12 +13,14 @@ use std::{
     rc::{Rc, Weak},
 };
 
+mod call_stack;
 mod case;
 mod case_attributes;
 pub(crate) mod completion;
 pub(crate) use case::Locale as CaseLocale;
 pub(crate) use case_attributes::{CaseMapping, CaseOptions};
 mod declarations;
+use call_stack::CallStack;
 pub(crate) use declarations::DeclarationView;
 mod binding;
 pub use binding::Binding;
@@ -125,6 +127,8 @@ pub(crate) fn getopts_number(value: &str) -> i32 {
 #[derive(Clone, Debug)]
 pub struct StoredFunction {
     pub body: Rc<Command>,
+    pub(crate) source: crate::exec::Source,
+    pub(crate) line: usize,
     pub(crate) storage: Option<crate::exec::RetainedStorage>,
 }
 
@@ -150,6 +154,9 @@ pub struct State {
     pub errexit: bool,
     /// Keep errexit in command-substitution children instead of clearing it.
     pub inherit_errexit: bool,
+    pub functrace: bool,
+    pub errtrace: bool,
+    pub extdebug: bool,
     /// Enable extended glob groups in option-sensitive pattern contexts.
     pub extglob: bool,
     /// Remove unmatched unquoted pathname patterns instead of keeping them.
@@ -162,6 +169,8 @@ pub struct State {
     last_async: Option<String>,
     /// Unsetting EPOCHREALTIME permanently removes its dynamic-variable hook.
     epoch_realtime: bool,
+    /// Unsetting FUNCNAME permanently removes its call-stack projection.
+    funcname_special: bool,
     pub(crate) star_separator: StarSeparator,
     ifs_members: Option<IfsMembers>,
     positional: Vec<String>,
@@ -169,6 +178,7 @@ pub struct State {
     getopts_numeric: bool,
     locals: Vec<BTreeMap<String, LocalVariable>>,
     pub(crate) function_calls: usize,
+    call_stack: CallStack,
     memory: Option<crate::exec::StorageBudget>,
     positional_memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
     prefixes: Vec<BTreeMap<String, Option<Binding>>>,
@@ -198,6 +208,9 @@ impl Default for State {
             nounset: false,
             errexit: false,
             inherit_errexit: false,
+            functrace: false,
+            errtrace: false,
+            extdebug: false,
             extglob: false,
             nullglob: false,
             noglob: false,
@@ -205,6 +218,7 @@ impl Default for State {
             monitor: false,
             last_async: None,
             epoch_realtime: true,
+            funcname_special: true,
             star_separator: StarSeparator::Live,
             ifs_members: None,
             positional: Vec::new(),
@@ -212,6 +226,7 @@ impl Default for State {
             getopts_numeric: true,
             locals: Vec::new(),
             function_calls: 0,
+            call_stack: CallStack::default(),
             memory: None,
             positional_memory: None,
             prefixes: Vec::new(),
@@ -348,6 +363,7 @@ impl State {
         let namerefs = snapshot_map(source, |s| &s.namerefs, cancel, work).await?;
         let case_attributes = snapshot_map(source, |s| &s.case_attributes, cancel, work).await?;
         let functions = snapshot_map(source, |s| &s.functions, cancel, work).await?;
+        let call_stack = CallStack::snapshot(source, cancel, work).await?;
         let pipestatus = snapshot_vec(source, |s| &s.pipestatus, cancel, work).await?;
         let positional_memory = source
             .borrow()
@@ -394,6 +410,9 @@ impl State {
             nounset: state.nounset,
             errexit: state.errexit,
             inherit_errexit: state.inherit_errexit,
+            functrace: state.functrace,
+            errtrace: state.errtrace,
+            extdebug: state.extdebug,
             extglob: state.extglob,
             nullglob: state.nullglob,
             noglob: state.noglob,
@@ -401,12 +420,14 @@ impl State {
             monitor: state.monitor,
             last_async,
             epoch_realtime: state.epoch_realtime,
+            funcname_special: state.funcname_special,
             star_separator: state.star_separator,
             ifs_members: state.ifs_members,
             positional,
             getopts: state.getopts,
             getopts_numeric: state.getopts_numeric,
             function_calls: state.function_calls,
+            call_stack,
             memory: state.memory.clone(),
             positional_memory,
             locals,
@@ -489,6 +510,9 @@ impl State {
         if name == "PWD" {
             return Some(&self.cwd);
         }
+        if self.special_stack_array(name) {
+            return self.call_stack.element(name, 0);
+        }
         self.variables
             .get(name)
             .and_then(Binding::scalar)
@@ -522,13 +546,54 @@ impl State {
         };
         self.variables.get(target)
     }
+    pub(crate) fn array_is_scalar(&self, name: &str) -> bool {
+        name != "PIPESTATUS"
+            && !self.stack_array(name)
+            && matches!(self.binding(name), Some(Binding::Scalar(_)))
+    }
+    pub(crate) fn array_last_index(&self, name: &str) -> Option<i64> {
+        if name == "PIPESTATUS" {
+            return self
+                .pipeline_status()
+                .len()
+                .checked_sub(1)
+                .and_then(|n| i64::try_from(n).ok());
+        }
+        if self.stack_array(name) {
+            return self
+                .array_count(name)
+                .checked_sub(1)
+                .and_then(|n| i64::try_from(n).ok());
+        }
+        self.binding(name).and_then(Binding::last_index)
+    }
     pub(crate) fn array_count(&self, name: &str) -> usize {
+        if let Some(name) = self
+            .scalar_target(name)
+            .ok()
+            .flatten()
+            .filter(|name| self.special_stack_array(name))
+        {
+            return self.call_stack.count(name);
+        }
         self.binding(name).map_or(0, Binding::count)
     }
     pub(crate) fn array_element(&self, name: &str, index: i64) -> Option<&str> {
+        if let Some(name) = self
+            .scalar_target(name)
+            .ok()
+            .flatten()
+            .filter(|name| self.special_stack_array(name))
+        {
+            return self.call_stack.element(name, index);
+        }
         self.binding(name)?.element(index)
     }
     pub(crate) fn array_next(&self, name: &str, previous: Option<i64>) -> Option<(i64, &str)> {
+        if self.stack_array(name) {
+            let index = previous.map_or(Some(0), |index| index.checked_add(1))?;
+            return self.array_element(name, index).map(|value| (index, value));
+        }
         self.binding(name)?.next(previous)
     }
     /// Takes ownership of argv already admitted by command expansion.
@@ -806,7 +871,15 @@ impl State {
             Self::admit_ifs_members(state, cancel, work).await?;
         }
         let bytes = state.borrow().reference_work(name)?;
-        snapshot_steps(bytes, cancel, work).await
+        snapshot_steps(bytes, cancel, work).await?;
+        let arguments = matches!(
+            state.borrow().scalar_target(name).ok().flatten(),
+            Some("BASH_ARGC" | "BASH_ARGV")
+        );
+        if arguments {
+            Self::initialize_arguments(state, cancel, work).await?;
+        }
+        Ok(())
     }
     fn reference_work(&self, name: &str) -> Result<usize, i32> {
         self.reference_work_at(name, None)
@@ -1195,6 +1268,9 @@ impl State {
         if name == "OPTIND" {
             self.getopts = GetoptsState::default();
             self.getopts_numeric = false;
+        }
+        if name == "FUNCNAME" {
+            self.funcname_special = false;
         }
         let was_dynamic =
             name == "EPOCHREALTIME" && self.epoch_realtime && !self.epoch_realtime_shadowed();
@@ -2111,6 +2187,7 @@ pub(crate) struct FunctionFrame {
     state: SharedState,
     positional: Vec<String>,
     prefix: bool,
+    traced: bool,
     positional_memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
 }
 impl FunctionFrame {
@@ -2141,6 +2218,7 @@ impl FunctionFrame {
             state,
             positional,
             prefix: false,
+            traced: false,
             positional_memory,
         })
     }
@@ -2179,6 +2257,9 @@ impl Drop for FunctionFrame {
         s.positional = std::mem::take(&mut self.positional);
         s.positional_memory = self.positional_memory.take();
         s.function_calls -= 1;
+        if self.traced {
+            s.call_stack.pop();
+        }
         for _ in 0..if self.prefix { 2 } else { 1 } {
             let Some(locals) = s.locals.pop() else { break };
             s.restore_locals(locals);
@@ -2741,6 +2822,8 @@ mod tests {
             source.functions.insert(
                 "f".into(),
                 StoredFunction {
+                    source: crate::exec::Source::root(""),
+                    line: 1,
                     body: body.clone(),
                     storage: None,
                 },

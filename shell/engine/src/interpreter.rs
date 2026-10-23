@@ -3087,8 +3087,18 @@ async fn dispatch_simple_command_body(
                 .await);
             }
         };
+        let trace_bytes = context
+            .limits()
+            .source_bytes
+            .saturating_add(context.limits().expansion_bytes);
+        let mut trace_work = expand::Work::new(trace_bytes, trace_bytes, 0);
+        frame
+            .trace(name, line.unwrap_or(1), &context.cancel, &mut trace_work)
+            .await
+            .map_err(admission_status)?;
         frame.prefixes(assigned)?;
         let context = Context {
+            source: body.source.clone(),
             loop_depth: 0,
             evaluation: context
                 .evaluation
@@ -4872,14 +4882,14 @@ mod function_measurements {
         assert_eq!(
             finish(
                 session
-                    .start("small() { local x=small; :; }; small")
+                    .start("small() { local x=small; :; }; small; unset -f small")
                     .unwrap()
             ),
             0
         );
         assert_eq!(session.core.execution_storage.observation().0, held);
         release.cancel();
-        assert_eq!(finish(session.start("wait").unwrap()), 0);
+        assert_eq!(finish(session.start("wait; unset -f hold").unwrap()), 0);
         assert_eq!(ex.drive(64).pending, 0);
         assert_eq!(host.active_count(), 0);
         assert_eq!(host.retained_count(), 0);
@@ -4982,12 +4992,22 @@ mod function_measurements {
         assert_eq!(finish_review(&ex, session.start("seen=0; g() { local x=$payload; seen=$((seen+1)); }; f() { shift; g; }; f \"$payload\"").unwrap()), 0);
         assert_eq!(session.state.borrow().bindings()["seen"], "1");
         assert!(session.state.borrow().positional().is_empty());
-        assert_eq!(session.core.execution_storage.observation().0, 0);
+        let source_bytes = session.state.borrow().functions()["f"]
+            .source
+            .retained()
+            .unwrap()
+            .bytes();
+        assert_eq!(session.core.execution_storage.observation().0, source_bytes);
         assert_eq!(
             finish_review(&ex, session.start("f \"$payload\"").unwrap()),
             0
         );
         assert_eq!(session.state.borrow().bindings()["seen"], "2");
+        assert_eq!(session.core.execution_storage.observation().0, source_bytes);
+        assert_eq!(
+            finish_review(&ex, session.start("unset -f f g").unwrap()),
+            0
+        );
         assert_eq!(session.core.execution_storage.observation().0, 0);
         assert_eq!(ex.drive(64).pending, 0);
     }
@@ -5126,7 +5146,7 @@ mod function_measurements {
             assert!(!session.state.borrow().bindings().contains_key("continued"));
             pressure.borrow_mut().take();
             assert_eq!(
-                finish_review(&ex, session.start("recovered=yes").unwrap()),
+                finish_review(&ex, session.start("recovered=yes; unset -f f").unwrap()),
                 0
             );
             assert!(!session.state.borrow().bindings().contains_key("saved"));
@@ -5170,7 +5190,14 @@ mod function_measurements {
                 assert!(state.positional().is_empty());
                 let sample = crate::executor::observation::stack_observation();
                 let (live, peak) = session.core.execution_storage.observation();
-                assert_eq!(live, 0, "all call/frame payload tickets refunded");
+                let reader_bytes = state.functions()["f"].source.retained().unwrap().bytes();
+                assert_eq!(
+                    live, reader_bytes,
+                    "only the stored definition's reader survives"
+                );
+                drop(state);
+                assert_eq!(finish_review(&ex, session.start("unset -f f").unwrap()), 0);
+                assert_eq!(session.core.execution_storage.observation().0, 0);
                 assert_eq!(sample.calls, goal);
                 assert!(sample.poll_bytes > 0 && sample.drop_bytes > 0);
                 println!(

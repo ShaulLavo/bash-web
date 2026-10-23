@@ -118,3 +118,51 @@ fn array_slicing_quoted_at_scalar_out_of_range_yields_no_word() {
         &[&[], &[], &["x"], &[""], &[""]],
     );
 }
+
+#[test]
+fn array_slicing_virtual_funcname_offsets_and_lengths() {
+    check(
+        "g(){ args \"${FUNCNAME[@]:1}\" \"${FUNCNAME[*]:0:1}\" \"${FUNCNAME[@]: -1}\" \"${FUNCNAME[*]: -2:2}\"; args \"${FUNCNAME[@]:0:0}\" \"${FUNCNAME[*]:0:0}\" \"${FUNCNAME[@]:2}\" \"${FUNCNAME[@]: -9}\" \"${FUNCNAME[@]:0:9}\"; }; f(){ g; }; f",
+        &[&["f", "g", "f", "g f"], &["", "g", "f"]],
+    );
+}
+
+#[test]
+fn array_slicing_virtual_source_lines_and_debug_arguments() {
+    check(
+        "shopt -s extdebug; g(){ set -- changed; args \"${BASH_SOURCE[@]:1}\" \"${BASH_LINENO[*]: -1:1}\" \"${BASH_ARGV[@]:0:2}\" \"${BASH_ARGV[*]: -2:2}\" \"${BASH_ARGC[@]:0:2}\" \"${BASH_ARGC[*]: -1}\"; }; f(){ g inner; }; f outer tail",
+        &[&["bash", "1", "inner", "tail", "tail outer", "1", "2", "0"]],
+    );
+}
+
+#[test]
+fn array_slicing_virtual_prefix_snapshot_and_scalar_overrides() {
+    check(
+        "FUNCNAME=ignored; BASH_SOURCE=ignored; BASH_LINENO=ignored; x=outer; g(){ args \"$x\" \"${FUNCNAME[*]:0:1}\" \"${BASH_SOURCE[@]:0:1}\" \"${BASH_LINENO[@]:0:1}\"; (args \"${FUNCNAME[@]: -1}\"); }; x=prefix g; args \"$x\" \"${#FUNCNAME[@]}\"",
+        &[&["prefix", "g", "bash", "1"], &["g"], &["outer", "0"]],
+    );
+}
+
+#[test]
+fn array_slicing_virtual_empty_bounds_and_negative_length() {
+    check(
+        "i=0; args \"${FUNCNAME[@]:i++:++i}\" \"$i\"; f(){ args \"${FUNCNAME[@]:9:i++}\" \"$i\"; }; f",
+        &[&["0"], &["0"]],
+    );
+    for code in [
+        "f(){ args \"${FUNCNAME[@]:0:-1}\"; }; f",
+        "f(){ args \"${FUNCNAME[*]:0:-1}\"; }; f",
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(code), 1);
+        assert!(rig.calls.borrow().is_empty());
+    }
+}
+
+#[test]
+fn array_slicing_virtual_unset_keeps_ordinary_binding_behavior() {
+    check(
+        "unset FUNCNAME; FUNCNAME=(a b c); f(){ args \"${FUNCNAME[@]:1:2}\" \"${FUNCNAME[*]: -1}\"; }; f",
+        &[&["b", "c", "c"]],
+    );
+}
