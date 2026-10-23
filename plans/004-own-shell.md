@@ -2967,3 +2967,34 @@ Status: Approved follow-up, observed 2026-10-23 in the assignment/scope lane.
 - Bash 5.3.15 runs `x=outer; x=temp export x+=suffix; echo "$x"` with stdout `suffix\n` and status 0. The unchanged production Waffle guest at `e6430b1554de7d2efad092f40751858292cb071d` prints `outer\n` and status 0. Reproduced once in the local declaration-append probe.
 - `state::PrefixFrame::builtin` saves bindings outside `State::prefixes`, and its drop path restores the saved binding after the declaration. Trace `shell/engine/src/state.rs` around `PrefixBindings::Builtin` and `Drop for PrefixFrame`, plus `interpreter.rs` builtin dispatch. A fix must distinguish a declaration write from an ordinary temporary environment; comparing final values is insufficient when the declaration assigns the same value.
 - Keep regular builtin prefixes temporary and function-prefix locals inherited. Add recorded Bash controls for plain assignment and append through export, readonly, declare, local and eval. Pair them with the frozen temp-binding cases. This is separate from scalar declaration += recognition and scope lookup.
+
+## Invalid nameref target review follow-ups, 2026-10-23
+
+Status: Approved. Owner: VARIABLES declaration/builtin family. These inherited
+notes are outside PR59's bounded invalid ordinary-target status correction.
+Independent review approved source `6bc405d677b24d3b3d961ebda559874d7158f76b`.
+The exact review and recorded controls are retained in
+`/work/reports/bash-web/hill-climb/variables/nameref-invalid-review-opus-r1.md.result`
+and its sibling evidence directory.
+
+- Caller cancellation classification: `nameref_declaration` maps its own
+  per-target checkpoint cancellation to `Err(130)`. The declaration caller
+  aborts only on status 2 or `RESOURCE_STATUS`; other errors become status 1
+  and processing continues. The existing large-value cancellation regression
+  interrupts the caller's earlier operand scan, not this target scan. The
+  reviewer found this in source and did not execute it. Reproduce cancellation
+  specifically inside the target scan on current native and production Waffle,
+  inspect the interpreter's final status handling, then repair in the owning
+  declaration path with a deterministic cancellation control. Preserve
+  nonmutation, ordinary status-1 continuation, resource rejection and refunds.
+- Invalid-target diagnostics: Bash diagnoses `declare -n ref='a b'` as an
+  invalid variable name for a name reference; the engine emits no diagnostic.
+  The recorded fixture keeps the Bash stderr bytes, but its strict frozen
+  comparison scores stdout and status only. Reproduce all streams on current
+  production Waffle before repair. Keep ordinary invalid targets distinct from
+  unsupported empty/unbound, bracket-bearing and PIPESTATUS references. Route
+  this with the inherited declaration invalid-operand diagnostic above, not
+  through an IFS, array-writer or durable-state change.
+
+Neither note is a fixed bug, an accepted Bash match or a frozen gain of this
+integration. PR59 leaves the caller and target-scan cancellation logic unchanged.
