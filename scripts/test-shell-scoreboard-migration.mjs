@@ -753,14 +753,19 @@ test("waffle target migration installs target-pinned dependencies in target scra
   );
 });
 
+function linkRepositoryHistory(put) {
+  const root = resolve(import.meta.dirname, "..");
+  const common = execFileSync("git", ["rev-parse", "--git-common-dir"], {
+    cwd: root,
+    encoding: "utf8",
+  }).trim();
+  put(".git/objects/info/alternates", `${resolve(root, common, "objects")}\n`);
+  return root;
+}
+
 test("instrument migration prepares a cold patched sysroot before its first cargo build", async () => {
   await fixture(async ({ repo, runner, put, update }) => {
-    const root = resolve(import.meta.dirname, "..");
-    const common = execFileSync("git", ["rev-parse", "--git-common-dir"], {
-      cwd: root,
-      encoding: "utf8",
-    }).trim();
-    put(".git/objects/info/alternates", `${resolve(root, common, "objects")}\n`);
+    const root = linkRepositoryHistory(put);
     const candidate = JSON.parse(
       execFileSync("git", ["show", `38c229271c851543ce564976e7b09f2971c5e0f8:${oraclePath}`], {
         cwd: root,
@@ -796,12 +801,7 @@ process.exit(21);
 
 test("runtime migration builds and supplies immutable target utility guests", async () => {
   await fixture(async ({ repo, runner, put, update }) => {
-    const root = resolve(import.meta.dirname, "..");
-    const common = execFileSync("git", ["rev-parse", "--git-common-dir"], {
-      cwd: root,
-      encoding: "utf8",
-    }).trim();
-    put(".git/objects/info/alternates", `${resolve(root, common, "objects")}\n`);
+    const root = linkRepositoryHistory(put);
     const candidate = JSON.parse(readFileSync(resolve(root, oraclePath), "utf8"));
     update(candidate);
     put(runtimeReceiptPath, readFileSync(resolve(root, runtimeReceiptPath)));
