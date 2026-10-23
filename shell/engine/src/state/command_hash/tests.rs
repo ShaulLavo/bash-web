@@ -407,3 +407,57 @@ fn balanced_height(link: &Link) -> u8 {
     assert_eq!(node.height, 1 + left.max(right));
     node.height
 }
+
+#[test]
+fn command_hash_listing_reserves_traversal_and_sort_comparisons() {
+    let target = slot("q00000");
+    let names: Vec<_> = (0..)
+        .map(|i| format!("c{i:06}"))
+        .filter(|name| slot(name) == target)
+        .take(2048)
+        .collect();
+    for count in [20, 0, 1, 2, 10, 16, 21, 32, 64, 128, 256, 512, 1024, 2048] {
+        let (state, budget) = state(2_000_000);
+        for name in &names[..count] {
+            put(&state, name, "/kept");
+        }
+        let table = state.borrow().command_hash.clone();
+        let before = budget.observation().0;
+        let mut entries = Vec::new();
+        if let Some(root) = &table.root {
+            root.collect(&mut entries);
+        }
+        let mut comparisons = 0;
+        sort_listing(&mut entries, |a, b| {
+            comparisons += 1;
+            a.bucket.cmp(&b.bucket).then(b.serial.cmp(&a.serial))
+        });
+        let mut fuel = work();
+        let listing = block_on(table.listed(&state, &Cancel::new(), &mut fuel))
+            .ok()
+            .expect("admitted listing");
+        assert!(
+            listing
+                .entries()
+                .iter()
+                .zip(&entries)
+                .all(|(a, b)| Rc::ptr_eq(a, b))
+        );
+        assert!(
+            listing
+                .entries()
+                .iter()
+                .map(|entry| &entry.name)
+                .eq(names[..count].iter().rev())
+        );
+        let charged = 1_000_000 - fuel.remaining;
+        let actual = count + comparisons;
+        eprintln!("HASH_LISTING n={count} charged={charged} visits_plus_comparisons={actual}");
+        assert!(
+            charged >= actual,
+            "listing charged {charged}, synchronous visits and comparisons {actual}"
+        );
+        drop(listing);
+        assert_eq!(budget.observation().0, before);
+    }
+}

@@ -94,6 +94,9 @@ impl Node {
         }
     }
 }
+fn sort_listing(entries: &mut [Rc<Entry>], mut compare: impl FnMut(&Entry, &Entry) -> Ordering) {
+    entries.sort_unstable_by(|a, b| compare(a, b));
+}
 impl Listing {
     pub(crate) fn entries(&self) -> &[Rc<Entry>] {
         &self.entries
@@ -117,7 +120,9 @@ impl CommandHash {
         if let Some(root) = &self.root {
             root.collect(entries);
         }
-        entries.sort_unstable_by(|a, b| a.bucket.cmp(&b.bucket).then(b.serial.cmp(&a.serial)));
+        sort_listing(entries, |a, b| {
+            a.bucket.cmp(&b.bucket).then(b.serial.cmp(&a.serial))
+        });
     }
     pub(crate) async fn cleared(&self, cancel: &Cancel, work: &mut Work) -> Result<Self, Error> {
         work.checkpoint(cancel).await?;
