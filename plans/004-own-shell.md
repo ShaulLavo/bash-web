@@ -3018,6 +3018,71 @@ Do not repair these by inventing runtime facts or changing frozen membership.
 The inherited ordinary local-array mismatch is also outside this repair; its
 exact `normal-array-assignment` record stays in the same evidence.
 
+### Four additional inherited reproducers from approved PR85 review
+
+Status: Approved follow-up, not implemented in PR85. Owner: BUILTINS for
+function-name dispatch and special-array unset; VARIABLES for local unbind and
+ordinary sparse-array behavior. Independent Opus review approved
+`a4be47129e830634ee9da2fd19c94a69c84083d3`, production `7bfe246`, after the
+provider safety refusal. Each case also fails on main `750fb65`; none is a new
+integration regression. Keep every earlier follow-up above.
+
+Evidence: [approved review](file:///work/reports/wave-20261022/shell/review85-opus-refusal-r3.md),
+[exact Bash recordings](file:///work/reports/wave-20261022/shell/review85-takeover-r2-evidence/bash-recordings.json),
+and [native head/main observations](file:///work/reports/wave-20261022/shell/review85-opus-refusal-r3-evidence/native-control.json).
+Bash is 5.3.15, binary SHA-256
+`575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5`.
+Run the exact script through `releaseShellRunner` as above for production Waffle.
+Observed and expected stdout below use JSON escaping; statuses are final shell
+exit statuses, not the status printed by the script. Native control evidence
+compares stdout/status only and does not establish diagnostic parity.
+The current Node 26.12.1/Bun 1.4.4 integration reproduced all four approved-head
+outputs and statuses, with empty observed stderr for each. Exact current Waffle
+observations are in [the integration probes](file:///work/reports/wave-20261022/shell/pr85-integrate-current-runtime-after-review-evidence/waffle-probes.json).
+
+#### `function-F-plus-case`
+
+```bash
+f(){ :; }; declare -Fu f; declare -F f; x=a; declare -u x; x=b; echo "$x"
+```
+Expected stdout "f\nB\n"; status 0.
+Observed approved-head stdout "f\nf\nB\n"; status 0.
+Observed main `750fb65` stdout "B\n"; status 0.
+Expected stderr "".
+
+#### `unset-FUNCNAME-index`
+
+```bash
+f(){ unset "FUNCNAME[0]"; echo "s:$?:${FUNCNAME[*]}"; }; f; g(){ echo "${FUNCNAME[*]}"; }; g
+```
+Expected stdout "s:0:\ng\n"; status 0.
+Observed approved-head stdout "s:0:f\ng\n"; status 0.
+Observed main `750fb65` stdout "s:0:\n\n"; status 0.
+Expected stderr "".
+
+#### `unset-local-active`
+
+```bash
+f(){ local FUNCNAME=local; unset FUNCNAME; FUNCNAME=ordinary; echo "$FUNCNAME"; }; f; g(){ echo "later:${FUNCNAME[*]}"; }; g; echo "root:$FUNCNAME"
+```
+Expected stdout "ordinary\nlater:ordinary\nroot:ordinary\n"; status 0.
+Observed approved-head stdout "ordinary\nlater:\nroot:\n"; status 0.
+Observed main `750fb65` stdout "ordinary\nlater:\nroot:\n"; status 0.
+Expected stderr "bash: line 1: local: FUNCNAME: variable may not be assigned value\n".
+
+#### `negative-sparse-ordinary`
+
+```bash
+unset FUNCNAME; FUNCNAME=(a b); f(){ echo "${FUNCNAME[-1]}:${#FUNCNAME[@]}:${!FUNCNAME[@]}"; }; f
+```
+Expected stdout "b:3:0 1 2\n"; status 0.
+Observed approved-head stdout "b:2:0 1\n"; status 0.
+Observed main `750fb65` stdout "b:2:0 1\n"; status 0.
+Expected stderr "".
+
+Do not implement these rare cases in this integration or change the oracle,
+recordings, scored membership, skips, environment, or limits to make them pass.
+
 ## Invalid nameref target review follow-ups, 2026-10-23
 
 Status: Approved. Owner: VARIABLES declaration/builtin family. These inherited
