@@ -180,6 +180,66 @@
       "status": 0,
       "stdout": "c291cmNlLXN0YXR1cz01CmZ1bmN0aW9uLXN0YXR1cz0wCg==",
       "stderr": ""
+    },
+    {
+      "script": "echo 'echo dash' > ./-z; source -- -z",
+      "status": 0,
+      "stdout": "ZGFzaAo=",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'set --' > lib; set -- outer; . ./lib inner; echo count=$#",
+      "status": 0,
+      "stdout": "Y291bnQ9MAo=",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'set -- changed' > lib; f() { set -- outer; . ./lib inner; echo after:$1; }; f",
+      "status": 0,
+      "stdout": "YWZ0ZXI6b3V0ZXIK",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'set -- deep deeper' > inner; echo '. ./inner nested; echo body:$*' > outer; set -- original; . ./outer supplied; echo after:$*",
+      "status": 0,
+      "stdout": "Ym9keTpkZWVwIGRlZXBlcgphZnRlcjpvcmlnaW5hbAo=",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'set -- deep deeper' > inner; echo '. ./inner; echo body:$*' > outer; set -- original; . ./outer supplied; echo after:$*",
+      "status": 0,
+      "stdout": "Ym9keTpkZWVwIGRlZXBlcgphZnRlcjpkZWVwIGRlZXBlcgo=",
+      "stderr": ""
+    },
+    {
+      "script": "echo 'set -- changed; g() { :; }; g' > lib; set -- original; . ./lib supplied; echo after:$*",
+      "status": 0,
+      "stdout": "YWZ0ZXI6b3JpZ2luYWwK",
+      "stderr": ""
+    },
+    {
+      "script": "mkdir -p first/lib second; echo 'echo second' > second/lib; PATH=$PWD/first:$PWD/second . lib",
+      "status": 0,
+      "stdout": "c2Vjb25kCg==",
+      "stderr": ""
+    },
+    {
+      "script": "eval -- 'echo option'; echo status=$?",
+      "status": 0,
+      "stdout": "b3B0aW9uCnN0YXR1cz0wCg==",
+      "stderr": ""
+    },
+    {
+      "script": "eval -z 'echo BAD' 2>/dev/null; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTIK",
+      "stderr": ""
+    },
+    {
+      "script": "eval --; echo empty=$?; eval -; echo dash=$?",
+      "status": 0,
+      "stdout": "ZW1wdHk9MApkYXNoPTEyNwo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAtOiBjb21tYW5kIG5vdCBmb3VuZAo="
     }
   ]
 }
