@@ -207,6 +207,35 @@ mod tests {
         );
     }
     #[test]
+    fn alias_update_cost_observation_does_not_create_a_snapshot() {
+        let executor = Executor::new();
+        let host = InProcessHost::new(executor.clone());
+        let shell = Session::new(
+            executor.clone(),
+            Rc::new(host),
+            Rc::new(MemoryFs::new(4096)),
+            Limits {
+                source_bytes: 1024,
+                expansion_bytes: 1024,
+                arguments: 32,
+                ..Limits::default()
+            },
+        );
+        shell
+            .state()
+            .borrow_mut()
+            .update_alias("anchor", Some(&"x".repeat(5000)))
+            .unwrap();
+        let job = shell.start("alias next=:\n").unwrap();
+        executor.drive(4096);
+        assert_eq!(job.now_or_never(), Some(0));
+        assert_eq!(
+            shell.state().borrow().aliases().values().unwrap()["next"],
+            ":"
+        );
+    }
+
+    #[test]
     fn cancelling_a_real_alias_snapshot_copy_never_publishes_the_update() {
         let executor = Executor::new();
         let host = InProcessHost::new(executor.clone());
