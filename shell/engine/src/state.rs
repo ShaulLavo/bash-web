@@ -280,11 +280,7 @@ impl State {
             .map(|(key, value)| (key, value.into()))
             .collect();
         self.exported = self.variables.keys().cloned().collect();
-        self.variables
-            .entry("_".into())
-            .or_insert_with(|| self.shell_name.clone().into());
-        self.variables.insert("OPTIND".into(), "1".into());
-        self.variables.insert("OPTERR".into(), "1".into());
+        self.initialize_shell_defaults();
         self.variables
             .entry("PATH".into())
             .or_insert_with(|| "/usr/bin:/bin".into());
@@ -301,6 +297,9 @@ impl State {
                 .map(|(key, value)| (key, value.into())),
         );
         self.exported = self.variables.keys().cloned().collect();
+        self.initialize_shell_defaults();
+    }
+    fn initialize_shell_defaults(&mut self) {
         self.variables
             .entry("_".into())
             .or_insert_with(|| self.shell_name.clone().into());
