@@ -2,27 +2,14 @@
 use super::*;
 use crate::state::{Associative, Binding, BindingUpdate};
 
-pub(super) async fn value(
+pub(super) async fn scalar(
     assignment: &Assignment,
-    state: &SharedState,
-    context: &Context,
-    work: &mut expand::Work,
-) -> Result<BindingUpdate, expand::Error> {
-    match &assignment.value {
-        AssignmentValue::Scalar(word) => scalar(assignment, word, state, context, work).await,
-        AssignmentValue::Array(words) => compound(assignment, words, state, context, work).await,
-    }
-}
-
-async fn scalar(
-    assignment: &Assignment,
-    word: &Word,
+    value: String,
     state: &SharedState,
     context: &Context,
     work: &mut expand::Work,
 ) -> Result<BindingUpdate, expand::Error> {
     let limit = context.limits().expansion_bytes;
-    let value = expand::assignment(word, state, &context.cancel, limit, limit, work).await?;
     let key = expand::associative::subscript(
         assignment.index.as_deref().unwrap_or("0"),
         state,
@@ -49,20 +36,18 @@ async fn scalar(
     })
 }
 
-async fn compound(
-    assignment: &Assignment,
+pub(super) async fn compound(
+    name: &str,
+    append: bool,
     words: &[Word],
     state: &SharedState,
     context: &Context,
     work: &mut expand::Work,
 ) -> Result<BindingUpdate, expand::Error> {
-    if assignment.index.is_some() {
-        return Err(2.into());
-    }
-    let mut values = if assignment.append {
-        Associative::snapshot(state, &assignment.name, &context.cancel, work).await?
+    let mut values = if append {
+        Associative::snapshot(state, name, &context.cancel, work).await?
     } else {
-        let values = match state.borrow().binding(&assignment.name) {
+        let values = match state.borrow().binding(name) {
             Some(Binding::Associative(values)) => values.empty_replacement(),
             _ => Associative::default().empty_replacement(),
         };
@@ -70,13 +55,13 @@ async fn compound(
         values
     };
     values.initialize();
-    let result = elements(&mut values, assignment, words, state, context, work).await;
+    let result = elements(&mut values, name, words, state, context, work).await;
     let update = BindingUpdate::Replace(Binding::Associative(Rc::new(values)));
     if matches!(
         result,
         Err(expand::Error::BadArraySubscript { .. } | expand::Error::AssociativeAssignment { .. })
     ) {
-        commit(&assignment.name, update, state, context, work).await?;
+        commit(name, update, state, context, work).await?;
         return result.map(|()| unreachable!());
     }
     result?;
@@ -85,7 +70,7 @@ async fn compound(
 
 async fn elements(
     values: &mut Associative,
-    assignment: &Assignment,
+    name: &str,
     words: &[Word],
     state: &SharedState,
     context: &Context,
@@ -98,7 +83,7 @@ async fn elements(
     for word in words {
         work.checkpoint(&context.cancel).await?;
         if keyed {
-            keyed_element(values, &assignment.name, word, state, context, work).await?;
+            keyed_element(values, name, word, state, context, work).await?;
             continue;
         }
         let limit = context.limits().expansion_bytes;

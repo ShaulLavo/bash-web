@@ -95,15 +95,21 @@ fn reader(
 /// One already-admitted brace variant: word context, not command grammar.
 /// Its depth cap must not inherit the smaller lazy-operand evaluation cap.
 pub(crate) fn generated_word(source: &str) -> shell_parser::Result<Word> {
-    Parser::parse_expanded_word_with_limits(
-        source,
-        ExecutionLimits::default().max_ast_depth,
-        source.len().saturating_add(3).saturating_mul(16),
-    )
+    expanded_token(source, Parser::parse_expanded_word_with_limits)
 }
 
-pub(crate) fn associative_subscript(source: &str) -> shell_parser::Result<Word> {
-    Parser::parse_subscript_with_limits(
+pub(crate) fn scalar_word(source: &str, subscript: bool) -> shell_parser::Result<Word> {
+    if subscript {
+        return expanded_token(source, Parser::parse_subscript_with_limits);
+    }
+    generated_word(source)
+}
+
+fn expanded_token<T>(
+    source: &str,
+    parse: impl FnOnce(&str, usize, usize) -> shell_parser::Result<T>,
+) -> shell_parser::Result<T> {
+    parse(
         source,
         ExecutionLimits::default().max_ast_depth,
         source.len().saturating_add(3).saturating_mul(16),
@@ -136,22 +142,14 @@ pub(crate) fn lazy_variable(token: &str) -> Word {
 // retain their admission, checkpoint ordering and context-specific error mapping.
 #[inline(never)]
 pub(crate) fn substitution_token(token: &str) -> shell_parser::Result<WordPart> {
-    Parser::parse_substitution_token_with_limits(
-        token,
-        ExecutionLimits::default().max_ast_depth,
-        token.len().saturating_add(3).saturating_mul(16),
-    )
+    expanded_token(token, Parser::parse_substitution_token_with_limits)
 }
 
 /// Backslashes have already been processed. Syntax failures remain unparsed
 /// substitutions for the child to report, rather than immediate reader errors.
 #[inline(never)]
 pub(crate) fn backtick_body(body: &str) -> shell_parser::Result<WordPart> {
-    Parser::parse_backtick_body_with_limits(
-        body,
-        ExecutionLimits::default().max_ast_depth,
-        body.len().saturating_add(3).saturating_mul(16),
-    )
+    expanded_token(body, Parser::parse_backtick_body_with_limits)
 }
 
 /// Validate an admitted lazy command body without executing it. This is the

@@ -16,12 +16,7 @@ pub(crate) async fn scalar_word(
     let before = work.storage_left();
     super::admit_generated_word(source, cancel, work).await?;
     let temporary = before - work.storage_left();
-    let parsed = if subscript {
-        parse::associative_subscript(source)
-    } else {
-        parse::generated_word(source)
-    };
-    let word = parsed.map_err(|_| Error::Status(2))?;
+    let word = parse::scalar_word(source, subscript).map_err(|_| Error::Status(2))?;
     let result = super::word(&word, state, cancel, limit, limit, work).await;
     drop(word);
     work.release_storage(temporary);
@@ -95,7 +90,7 @@ impl super::Expansion<'_> {
                 Some(line) => format!("/usr/bin/bash: line {line}: {name}: bad array subscript\n"),
                 None => format!("/usr/bin/bash: {name}: bad array subscript\n"),
             };
-            runner.diagnose(&diagnostic).await?;
+            runner.diagnose(&[&diagnostic]).await?;
         }
         Ok(String::new())
     }

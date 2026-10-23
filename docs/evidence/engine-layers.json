@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "8ee671865509e1bf303f0b32076cd4734112d53b652d648c3e9db0f75dd14c11",
+    "engineSourceSha256": "4be0caf30e15df12897ed3c3a24adda06075650507da3ccca78d13fd43c82c59",
     "binaryBuild": null
   },
   "contract": {
@@ -408,8 +408,8 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 785,
-        "column": 36
+        "line": 801,
+        "column": 39
       }
     },
     {
@@ -478,7 +478,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 1008,
+        "line": 1010,
         "column": 29
       }
     },
@@ -488,7 +488,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 982,
+        "line": 984,
         "column": 17
       }
     },
@@ -538,7 +538,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 1255,
+        "line": 1257,
         "column": 15
       }
     },
@@ -888,7 +888,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 2907,
+        "line": 2906,
         "column": 21
       }
     },
@@ -908,7 +908,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3858,
+        "line": 3859,
         "column": 25
       }
     },
@@ -918,7 +918,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 5171,
+        "line": 5172,
         "column": 17
       }
     },
@@ -938,7 +938,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3844,
+        "line": 3845,
         "column": 17
       }
     },
@@ -948,7 +948,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3844,
+        "line": 3845,
         "column": 31
       }
     },

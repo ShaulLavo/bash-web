@@ -44,15 +44,8 @@ impl Substitutions {
         target: &str,
         message: &str,
     ) -> Result<(), expand::Error> {
-        if let Some(stderr) = self.stderr() {
-            for part in ["/usr/bin/bash: ", target, ": ", message, "\n"] {
-                let _ = stderr.write_all(part.as_bytes(), self.cancel()).await;
-            }
-        }
-        if self.cancel().is_cancelled() {
-            return Err(130.into());
-        }
-        Ok(())
+        self.diagnose(&["/usr/bin/bash: ", target, ": ", message, "\n"])
+            .await
     }
 }
 

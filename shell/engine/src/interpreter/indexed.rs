@@ -40,11 +40,20 @@ async fn value(
     work: &mut expand::Work,
 ) -> Result<BindingUpdate, expand::Error> {
     State::admit_scalar_access(state, &assignment.name, &context.cancel, work).await?;
-    if state.borrow().is_associative(&assignment.name) {
-        return super::associative::value(assignment, state, context, work).await;
-    }
     match &assignment.value {
         AssignmentValue::Scalar(word) => scalar(assignment, word, state, context, work).await,
+        AssignmentValue::Array(_) if assignment.index.is_some() => Err(2.into()),
+        AssignmentValue::Array(words) if state.borrow().is_associative(&assignment.name) => {
+            super::associative::compound(
+                &assignment.name,
+                assignment.append,
+                words,
+                state,
+                context,
+                work,
+            )
+            .await
+        }
         AssignmentValue::Array(words) => compound(assignment, words, state, context, work).await,
     }
 }
@@ -58,6 +67,9 @@ async fn scalar(
 ) -> Result<BindingUpdate, expand::Error> {
     let limit = context.limits().expansion_bytes;
     let value = expand::assignment(word, state, &context.cancel, limit, limit, work).await?;
+    if state.borrow().is_associative(&assignment.name) {
+        return super::associative::scalar(assignment, value, state, context, work).await;
+    }
     let index = match &assignment.index {
         Some(index) => {
             crate::arithmetic::evaluate(index, state, &context.cancel, limit, work).await?
@@ -119,9 +131,6 @@ async fn compound(
     context: &Context,
     work: &mut expand::Work,
 ) -> Result<BindingUpdate, expand::Error> {
-    if assignment.index.is_some() {
-        return Err(2.into());
-    }
     let mut index = if assignment.append {
         state
             .borrow()

@@ -2383,9 +2383,11 @@ pub(crate) struct Substitutions {
     process_fds: Option<Rc<ProcessSubstitutionFds>>,
 }
 impl Substitutions {
-    pub(crate) async fn diagnose(&self, message: &str) -> Result<(), expand::Error> {
+    pub(crate) async fn diagnose(&self, parts: &[&str]) -> Result<(), expand::Error> {
         if let Some(stderr) = self.stderr() {
-            let _ = stderr.write_all(message.as_bytes(), self.cancel()).await;
+            for part in parts {
+                let _ = stderr.write_all(part.as_bytes(), self.cancel()).await;
+            }
         }
         if self.cancel().is_cancelled() {
             return Err(130.into());
