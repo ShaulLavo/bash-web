@@ -722,6 +722,13 @@
       "status": 0,
       "stdout": "YWZ0ZXIK",
       "stderr": ""
+    },
+    {
+      "id": "review75:heredoc-read-unit",
+      "code": "shopt -s expand_aliases\nalias x='echo ALIAS'\nread -r line <<EOF\nbody\nEOF\nx after\nprintf '%s\\n' \"$line\"\n",
+      "status": 0,
+      "stdout": "QUxJQVMgYWZ0ZXIKYm9keQo=",
+      "stderr": ""
     }
   ]
 }
