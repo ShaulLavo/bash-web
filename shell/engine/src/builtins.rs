@@ -1,15 +1,18 @@
 //! Bash builtins. External commands are installed by the embedding runtime.
+mod declarations;
+mod directories;
 mod getopts;
 mod printf;
 mod read;
 pub(crate) mod test;
+mod trap;
 use crate::{
     commands::{self, Builtin, Declaration},
     executor::Budget,
     expand::{Error, Work},
     interpreter::{Context, Flow, JobSelector, Outcome},
     io::{Endpoint, FdTable},
-    state::{SharedState, State, absolute},
+    state::{SharedState, State},
 };
 use shell_parser::parser::{Word, WordPart};
 
@@ -96,6 +99,7 @@ pub(crate) async fn run(
         Builtin::Noop => {}
         Builtin::False => return Err(1),
         Builtin::Test => return test::run(name, &args, &state, &fds, &context, work).await,
+        Builtin::Trap => return trap::run(&args, &state, &fds, &context, work).await,
         Builtin::Getopts => return getopts::run(&args, &state, &fds, &context, work).await,
         Builtin::Shopt => return shopt(&args, &state, &fds, &context, work).await,
         Builtin::LoopControl => {
@@ -148,13 +152,10 @@ pub(crate) async fn run(
             return declarations(name, args, &state, &fds, &context, work).await;
         }
         Builtin::Unset => return unset(args, &state, &fds, &context, work).await,
-        Builtin::Cd => {
-            if args.len() != 1 {
-                return Err(2);
-            }
-            let cwd = absolute(&state.borrow().cwd, &args[0]);
-            state.borrow_mut().cwd = cwd;
-        }
+        Builtin::Cd => return directories::cd(&args, &state, &fds, &context, work).await,
+        Builtin::Pushd => return directories::pushd(&args, &state, &fds, &context, work).await,
+        Builtin::Popd => return directories::popd(&args, &state, &fds, &context, work).await,
+        Builtin::Dirs => return directories::dirs(&args, &state, &fds, &context, work).await,
         Builtin::Pwd => {
             let cwd = state.borrow().cwd.clone();
             write(&fds, format!("{cwd}\n").as_bytes(), &context).await?;
@@ -571,9 +572,15 @@ async fn set(
     if args.is_empty() {
         return Err(2); // Variable/option listing remains unsupported.
     }
-    let (mut nounset, mut pipefail, mut errexit, mut monitor) = {
+    let mut flags = {
         let state = state.borrow();
-        (state.nounset, state.pipefail, state.errexit, state.monitor)
+        SetFlags {
+            nounset: state.nounset,
+            pipefail: state.pipefail,
+            errexit: state.errexit,
+            monitor: state.monitor,
+            noglob: state.noglob,
+        }
     };
     let mut index = 0;
     let mut explicit = false;
@@ -596,27 +603,11 @@ async fn set(
         let enabled = option.starts_with('-');
         index += 1;
         if matches!(option.as_str(), "-o" | "+o") {
-            set_option(
-                args.get(index).ok_or(2)?,
-                enabled,
-                &mut nounset,
-                &mut pipefail,
-                &mut errexit,
-                &mut monitor,
-            )?;
+            set_option(args.get(index).ok_or(2)?, enabled, &mut flags)?;
             index += 1;
             continue;
         }
-        set_short_options(
-            option,
-            enabled,
-            &mut nounset,
-            &mut errexit,
-            &mut monitor,
-            context,
-            work,
-        )
-        .await?;
+        set_short_options(option, enabled, &mut flags, context, work).await?;
     }
     // All options and work admission complete before any state changes.
     let mut state = state.borrow_mut();
@@ -624,26 +615,30 @@ async fn set(
         args.drain(..index);
         state.replace_positional(args)?;
     }
-    state.nounset = nounset;
-    state.pipefail = pipefail;
-    state.errexit = errexit;
-    state.monitor = monitor;
+    state.nounset = flags.nounset;
+    state.pipefail = flags.pipefail;
+    state.errexit = flags.errexit;
+    state.monitor = flags.monitor;
+    state.noglob = flags.noglob;
     Ok(Outcome::status(0))
 }
 
-fn set_option(
-    option: &str,
-    enabled: bool,
-    nounset: &mut bool,
-    pipefail: &mut bool,
-    errexit: &mut bool,
-    monitor: &mut bool,
-) -> Result<(), i32> {
+/// `set` options staged until every argument has been validated.
+struct SetFlags {
+    nounset: bool,
+    pipefail: bool,
+    errexit: bool,
+    monitor: bool,
+    noglob: bool,
+}
+
+fn set_option(option: &str, enabled: bool, flags: &mut SetFlags) -> Result<(), i32> {
     match option {
-        "nounset" => *nounset = enabled,
-        "pipefail" => *pipefail = enabled,
-        "errexit" => *errexit = enabled,
-        "monitor" => *monitor = enabled,
+        "nounset" => flags.nounset = enabled,
+        "pipefail" => flags.pipefail = enabled,
+        "errexit" => flags.errexit = enabled,
+        "monitor" => flags.monitor = enabled,
+        "noglob" => flags.noglob = enabled,
         _ => return Err(2),
     }
     Ok(())
@@ -652,9 +647,7 @@ fn set_option(
 async fn set_short_options(
     option: &str,
     enabled: bool,
-    nounset: &mut bool,
-    errexit: &mut bool,
-    monitor: &mut bool,
+    flags: &mut SetFlags,
     context: &Context,
     work: &mut Work,
 ) -> Result<(), i32> {
@@ -663,9 +656,10 @@ async fn set_short_options(
             .await
             .map_err(error_status)?;
         match flag {
-            b'u' => *nounset = enabled,
-            b'e' => *errexit = enabled,
-            b'm' => *monitor = enabled,
+            b'u' => flags.nounset = enabled,
+            b'e' => flags.errexit = enabled,
+            b'm' => flags.monitor = enabled,
+            b'f' => flags.noglob = enabled,
             _ => return Err(2),
         }
     }
@@ -681,6 +675,7 @@ async fn declarations(
     work: &mut Work,
 ) -> Result<Outcome, i32> {
     let mut args = args.into_iter().peekable();
+    let mut print = false;
     let mut nameref = false;
     let mut readonly = false;
     let mut exported = false;
@@ -697,6 +692,7 @@ async fn declarations(
                     .await
                     .map_err(error_status)?;
                 match flag {
+                    b'p' if matches!(name, "declare" | "typeset") => print = true,
                     b'n' => nameref = true,
                     b'r' => readonly = true,
                     b'x' => exported = true,
@@ -704,6 +700,9 @@ async fn declarations(
                 }
             }
         }
+    }
+    if print {
+        return declarations::print(name, args, state, fds, context, work).await;
     }
     if nameref && (readonly || exported) {
         return Err(2);
@@ -807,7 +806,12 @@ async fn nameref_declaration(
             let target = state
                 .namerefs()
                 .get(key)
-                .or_else(|| state.bindings().get(key))
+                .or_else(|| {
+                    state
+                        .bindings()
+                        .get(key)
+                        .and_then(crate::state::Binding::scalar)
+                })
                 .ok_or(2)?;
             work.admit_storage(target.len()).map_err(error_status)?;
             target.clone()
@@ -861,7 +865,7 @@ fn apply_declaration(
 
 /// `unset [-f] [-v] [-n] [--] name...`. Bash 5.3 ignores names that are not
 /// identifiers. Without `-v` a name with no variable unsets a function.
-/// `-n` (namerefs) is not implemented and fails closed.
+/// `-n` removes the reference itself without following its target.
 async fn unset(
     args: Vec<String>,
     state: &SharedState,
@@ -871,6 +875,7 @@ async fn unset(
 ) -> Result<Outcome, i32> {
     let mut functions = false;
     let mut variables = false;
+    let mut namerefs = false;
     let mut names = args.iter().peekable();
     while let Some(option) = names.next_if(|arg| arg.starts_with('-') && arg.len() > 1) {
         if option == "--" {
@@ -880,7 +885,7 @@ async fn unset(
             match flag {
                 'f' => functions = true,
                 'v' => variables = true,
-                'n' => return Err(2),
+                'n' => namerefs = true,
                 _ => {
                     let diagnostic = format!(
                         "/usr/bin/bash: unset: -{flag}: invalid option\nunset: usage: unset [-f] [-v] [-n] [name ...]\n"
@@ -911,21 +916,12 @@ async fn unset(
             state.borrow_mut().unset_function(name);
             continue;
         }
-        State::admit_scalar_access(state, name, &context.cancel, work)
-            .await
-            .map_err(error_status)?;
-        let target_bytes = {
-            let state = state.borrow();
-            state
-                .namerefs()
-                .contains_key(name)
-                .then(|| state.scalar_target(name))
-                .transpose()?
-                .flatten()
-                .map_or(0, str::len)
+        let removed = if namerefs {
+            state.borrow_mut().unset_nameref(name)
+        } else {
+            admit_unset_target(name, state, context, work).await?;
+            state.borrow_mut().unset_variable(name)
         };
-        work.admit_storage(target_bytes).map_err(error_status)?;
-        let removed = state.borrow_mut().unset_variable(name);
         match removed {
             Err(_) => {
                 let diagnostic =
@@ -933,13 +929,35 @@ async fn unset(
                 diagnose(fds, &diagnostic, context).await?;
                 code = 1;
             }
-            Ok(false) if !variables => {
+            Ok(false) if !variables && !namerefs => {
                 state.borrow_mut().unset_function(name);
             }
             Ok(_) => {}
         }
     }
     Ok(Outcome::status(code))
+}
+
+async fn admit_unset_target(
+    name: &str,
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    State::admit_scalar_access(state, name, &context.cancel, work)
+        .await
+        .map_err(error_status)?;
+    let target_bytes = {
+        let state = state.borrow();
+        state
+            .namerefs()
+            .contains_key(name)
+            .then(|| state.scalar_target(name))
+            .transpose()?
+            .flatten()
+            .map_or(0, str::len)
+    };
+    work.admit_storage(target_bytes).map_err(error_status)
 }
 
 async fn diagnose(fds: &FdTable, diagnostic: &str, context: &Context) -> Result<(), i32> {

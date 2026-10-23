@@ -160,7 +160,11 @@ mod tests {
         let mut pattern = finish(pattern(&word, &state, &cancel, 1024, &mut work))
             .unwrap_or_else(|_| panic!("suffix assignment must expand"));
         assert_eq!(
-            state.borrow().bindings().get("side").map(String::as_str),
+            state
+                .borrow()
+                .bindings()
+                .get("side")
+                .map(|value| value.as_str()),
             Some("written")
         );
         assert!(

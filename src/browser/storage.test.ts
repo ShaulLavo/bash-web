@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import {
   createRuntime,
+  VfsError,
   type Runtime,
   type SharedFilesystemOptions,
   type SharedFilesystemState,
@@ -11,6 +12,7 @@ import { FilesystemService } from "waffle/fs/service";
 import { withVfsImplementation } from "../../node_modules/waffle/fs/vfs-internal.ts";
 import { MemoryBackend } from "waffle/fs/backend";
 import { BrowserSession } from "./session";
+import { acquireBrowserRuntime, type BrowserHostOptions } from "./runtime";
 import { createStartupDiagnostics } from "../runtime/startup-diagnostics";
 import { createStorageStartup, STORAGE_READY_TIMEOUT_MS, waitForStorage } from "./storage";
 
@@ -89,6 +91,15 @@ function storageWorker(context: TestContext) {
     }
   });
   return {
+    workerCount: () => workers.length,
+    acquire(options: BrowserHostOptions = {}, search = "") {
+      const lease = acquireBrowserRuntime(options, {
+        workerURL: "https://example.test/fs-worker.js",
+        search,
+      });
+      runtime = lease.runtime;
+      return { runtime, lease, worker: workers.at(-1)! };
+    },
     expectDisposalFailure(error: RegExp) {
       disposalFailure = error;
     },
@@ -586,4 +597,98 @@ test("a borrowed session bounds acquired recovery without disposing its runtime"
   assert.equal(runtime.disposed, false);
   assert.equal(runtime.filesystem.onStateChange, undefined);
   assert.equal(worker.disposalRequested, false);
+});
+
+test("SAFE selection preserves its typed error before allocating a worker", (context) => {
+  storageWorker(context);
+  assert.throws(
+    () => createRuntime({ filesystem: { mode: "safe" } }),
+    (error: unknown) =>
+      error instanceof VfsError && error.code === "UNSUPPORTED_VFS" && error.vfs === "safe",
+  );
+});
+
+test("foreign workspace startup preserves INVALID_VFS_FORMAT through readiness", async (context) => {
+  const fixture = storageWorker(context);
+  fixture.expectDisposalFailure(/Foreign workspace must not be replaced/);
+  const { runtime, worker } = fixture.create();
+  const opening = waitForStorage(runtime, new AbortController().signal);
+  const rejected = assert.rejects(
+    opening,
+    (error: unknown) =>
+      error instanceof VfsError && error.code === "INVALID_VFS_FORMAT" && error.vfs === "indexeddb",
+  );
+  worker.dispatchEvent(
+    new MessageEvent("message", {
+      data: {
+        type: "filesystem-error",
+        name: "VfsError",
+        code: "INVALID_VFS_FORMAT",
+        vfs: "indexeddb",
+        message: "Foreign workspace must not be replaced",
+      },
+    }),
+  );
+  await rejected;
+  assert.equal(runtime.filesystem.state.status, "failed");
+});
+
+for (const mode of ["fast", "memory"] as const) {
+  test(`standalone owns the selected ${mode} runtime and awaits its close`, async (context) => {
+    const fixture = storageWorker(context);
+    const { runtime, lease, worker } = fixture.acquire({ mode });
+    assert.equal(runtime.filesystem.vfs.mode, mode);
+    assert.equal(worker.initialization?.mode, mode);
+    worker.state("ready");
+    await waitForStorage(runtime, new AbortController().signal);
+    worker.holdDisposal = true;
+    const disposing = lease.dispose();
+    const repeated = lease.dispose();
+    assert.equal(repeated, disposing);
+    assert.equal(runtime.disposed, true);
+    await turn();
+    if (mode === "fast") {
+      assert.equal(worker.disposalRequested, true);
+      assert.equal(worker.terminated, false);
+      worker.finishDisposal();
+    }
+    await disposing;
+    assert.equal(worker.disposalRequested, mode === "fast");
+    assert.equal(worker.terminated, true);
+  });
+
+  test(`standalone query selects ${mode} only when no explicit mode is provided`, async (context) => {
+    const fixture = storageWorker(context);
+    const { runtime, lease } = fixture.acquire({}, `?mode=${mode}`);
+    assert.equal(runtime.filesystem.vfs.mode, mode);
+    await lease.dispose();
+  });
+}
+
+test("standalone explicit memory overrides the query without opening persistent storage", async (context) => {
+  const fixture = storageWorker(context);
+  const { runtime, lease, worker } = fixture.acquire({ mode: "memory" }, "?mode=safe");
+  assert.equal(runtime.filesystem.vfs.implementation, "memory");
+  assert.equal(worker.initialization?.implementation, "memory");
+  await lease.dispose();
+});
+
+for (const mode of ["safe", "unknown", "FAST", ""]) {
+  test(`standalone rejects query mode ${JSON.stringify(mode)} before creating an owner`, (context) => {
+    const fixture = storageWorker(context);
+    assert.throws(
+      () => fixture.acquire({}, `?mode=${mode}`),
+      (error: unknown) => error instanceof VfsError && error.code === "UNSUPPORTED_VFS",
+    );
+    assert.equal(fixture.workerCount(), 0);
+  });
+}
+
+test("standalone rejects an untyped mode option before creating an owner", (context) => {
+  const fixture = storageWorker(context);
+  assert.throws(
+    () => Reflect.apply(fixture.acquire, undefined, [{ mode: "safe" }]),
+    (error: unknown) => error instanceof VfsError && error.code === "UNSUPPORTED_VFS",
+  );
+  assert.equal(fixture.workerCount(), 0);
 });

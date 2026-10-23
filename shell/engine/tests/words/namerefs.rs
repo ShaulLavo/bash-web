@@ -171,7 +171,7 @@ fn rejected_isolated_state_copies_keep_the_last_async_identity_and_caller_state(
             ..Limits::default()
         });
         assert_eq!(rig.run(r#"true & saved=$!; wait "$saved""#), 0);
-        let saved = rig.shell.state().borrow().bindings()["saved"].clone();
+        let saved = rig.shell.state().borrow().bindings()["saved"].to_string();
         rig.variable("large", &"x".repeat(64 * 1024));
         assert_eq!(rig.run(source), 2, "{source}");
         assert!(rig.calls.borrow().is_empty(), "{source}");
@@ -191,7 +191,7 @@ fn cancelling_isolated_state_admission_launches_no_child_and_restores_the_caller
     ] {
         let rig = Rig::new(Limits::default());
         assert_eq!(rig.run(r#"true & saved=$!; wait "$saved""#), 0);
-        let saved = rig.shell.state().borrow().bindings()["saved"].clone();
+        let saved = rig.shell.state().borrow().bindings()["saved"].to_string();
         rig.variable("large", &"x".repeat(300_000));
         let job = rig.shell.start(source).unwrap();
         for _ in 0..32 {

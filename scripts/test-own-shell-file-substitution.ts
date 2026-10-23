@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { after, test } from "node:test";
 import { createShellRunner } from "./bash-compat-runner.mjs";
+import { recordedBash } from "./recorded-bash.ts";
 import { createWaffleRunner } from "./waffle-compat.ts";
 
 const scratchRoot = process.env.RUNNER_TEMP ?? (existsSync("/work/tmp") ? "/work/tmp" : tmpdir());
@@ -31,16 +32,12 @@ const observations: object[] = [];
 // Bash 5.2 (hosted Ubuntu 24.04) also captures `0<f` in backquotes and `! <f`, so a live host
 // shell is not the oracle. BASH_FILE_SUBSTITUTION_RECORD re-records from /usr/bin/bash 5.3.15.
 type Expected = { status: number; stdout: Buffer };
-type Recorded = { script: string; status: number; stdoutBase64: string };
-const bashVersion = "5.3.15(1)-release";
-const fixturePath = new URL("fixtures/shell-file-substitution.json", import.meta.url);
-const recordPath = process.env.BASH_FILE_SUBSTITUTION_RECORD;
-const recorded: Recorded[] = [];
-const fixture: { bash: string; cases: Recorded[] } = recordPath
-  ? { bash: liveBashVersion(), cases: [] }
-  : JSON.parse(readFileSync(fixturePath, "utf8"));
-assert.equal(fixture.bash, bashVersion);
-const fixtureCases = new Map(fixture.cases.map((entry) => [entry.script, entry]));
+const oracle = recordedBash(
+  new URL("fixtures/shell-file-substitution.json", import.meta.url),
+  process.env.BASH_FILE_SUBSTITUTION_RECORD,
+  /^5\.3\.15\(1\)-release$/,
+  liveBashVersion,
+);
 after(async () => {
   try {
     assert.equal(activeChildren.size, 0);
@@ -49,11 +46,7 @@ after(async () => {
         process.env.BASH_FILE_SUBSTITUTION_OUT,
         JSON.stringify(observations, null, 2) + "\n",
       );
-    if (recordPath)
-      await writeFile(
-        recordPath,
-        JSON.stringify({ schema: 1, bash: fixture.bash, cases: recorded }, null, 2) + "\n",
-      );
+    oracle.save();
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
@@ -66,15 +59,11 @@ function liveBashVersion() {
 }
 
 async function expectation(script: string): Promise<Expected> {
-  if (!recordPath) {
-    const entry = fixtureCases.get(script);
-    assert.ok(entry, `missing recorded Bash observation: ${script}`);
-    return { status: entry.status, stdout: Buffer.from(entry.stdoutBase64, "base64") };
-  }
+  if (!oracle.recording) return oracle.replay(script);
   const live = await bash("/usr/bin/bash", script, "/usr/bin:/bin", true);
   assert.equal(live.timeout, false);
   assert.equal(live.outputLimit, false);
-  recorded.push({ script, status: live.status, stdoutBase64: live.stdout.toString("base64") });
+  oracle.record(script, live);
   return live;
 }
 
@@ -157,12 +146,16 @@ const scripts = bodies
   ]);
 
 const boundaryScript = "printf '\\377' >f; printf %s \"$(<f)\"";
-test("recorded Bash observations cover exactly the control scripts", { skip: !!recordPath }, () => {
-  assert.deepEqual(
-    fixture.cases.map((entry) => entry.script),
-    scripts.concat([boundaryScript]),
-  );
-});
+test(
+  "recorded Bash observations cover exactly the control scripts",
+  { skip: oracle.recording },
+  () => {
+    assert.deepEqual(
+      oracle.fixture.cases.map((entry) => entry.script),
+      scripts.concat([boundaryScript]),
+    );
+  },
+);
 
 for (const script of scripts)
   test(`production Waffle input-only substitution: ${script}`, async () => {

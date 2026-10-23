@@ -140,7 +140,6 @@ fn indirect_selected_syntax_fails_closed_and_skipped_operands_stay_lazy() {
         "${!p*}",
         "${!p@}",
         "${!a[0]}",
-        "${!a[@]}",
         "${!PIPESTATUS}",
         "${!1}",
         "${!#}",

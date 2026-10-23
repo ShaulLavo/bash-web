@@ -2,7 +2,7 @@
 use super::{Context, Utility, endpoint, grep, write};
 use shell_engine::{
     executor::Budget,
-    io::{Endpoint, FdTable, OpenOptions},
+    io::{Endpoint, FdTable, OpenOptions, open_path},
     state::absolute,
 };
 use std::fmt::Write as _;
@@ -54,17 +54,15 @@ pub(crate) async fn cat(
     Ok(())
 }
 async fn cat_path(path: &str, cwd: &str, fds: &FdTable, context: &Context) -> Result<(), i32> {
-    if let Some(input) = super::device_endpoint(path, fds) {
-        return copy(input?, fds, context).await;
-    }
     let path = absolute(cwd, path);
     let options = OpenOptions::default();
+    let opening = open_path(&path, fds, &options).map_err(|error| error.status())?;
     let input = context
         .cancel
-        .run(context.fs().open(&path, &options))
+        .run(opening.open(context.fs(), &options))
         .await
         .map_err(|_| 130)?
-        .map_err(|e| e.status())?;
+        .map_err(|error| error.status())?;
     copy(input, fds, context).await
 }
 pub(crate) async fn mkdir(
