@@ -1,23 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, rmdirSync } from "node:fs";
-import { resolve } from "node:path";
 import { after, test } from "node:test";
-import { recordedBash } from "./recorded-bash.ts";
-import { createWaffleRunner } from "./waffle-compat.ts";
+import { recordedBash, runRecordingBash } from "./recorded-bash.ts";
+import { releaseShellRunner } from "./release-shell-runner.ts";
 
 const env = { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" };
-const directory = resolve(
-  process.env.SHELL_PROMPT_GUEST_DIR ?? process.env.CARGO_TARGET_DIR ?? ".build/shell",
-  process.env.SHELL_PROMPT_GUEST_DIR ? "" : "wasm32-wasip1/release",
-);
-const runner = await createWaffleRunner({
-  modulePath: resolve(directory, "shell-runtime.wasm"),
-  fixtureDirectory: directory,
-  utilityDirectory: directory,
-  tmp: env.TMP,
-  env,
-});
+const runner = await releaseShellRunner(env);
 const frozen = JSON.parse(
   readFileSync(new URL("../docs/evidence/own-shell-oracle.json", import.meta.url), "utf8"),
 );
@@ -88,14 +77,7 @@ for (const script of cases)
   test(`production Waffle prompt: ${script}`, async () => {
     let expected;
     if (oracle.recording) {
-      const bash = spawnSync("/usr/bin/bash", ["--noprofile", "--norc", "-c", script], {
-        env,
-        cwd: "/tmp",
-        timeout: 5000,
-      });
-      assert.equal(bash.error, undefined);
-      assert.equal(bash.signal, null);
-      expected = { status: bash.status ?? -1, stdout: bash.stdout };
+      expected = runRecordingBash(script, env, "/tmp");
       oracle.record(script, expected);
     } else expected = oracle.replay(script);
     const actual = await runner(script);

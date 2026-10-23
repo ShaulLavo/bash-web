@@ -100,11 +100,7 @@ impl Expansion<'_> {
             }
             'D' if chars.peek() == Some(&'{') => self.prompt_date_literal(chars, out).await,
             's' => {
-                let s = state.borrow();
-                let name = s.shell_name.rsplit('/').next().unwrap_or(&s.shell_name);
-                self.work.admit_storage(name.len())?;
-                let name = name.to_owned();
-                drop(s);
+                let name = self.prompt_shell_name(state)?;
                 self.prompt_literal(out, &name, expand).await
             }
             'u' | 'h' | 'H' | '$' => self.prompt_identity(code, state, expand, out).await,
@@ -114,6 +110,17 @@ impl Expansion<'_> {
                 self.prompt_text(out, code.encode_utf8(&mut [0; 4])).await
             }
         }
+    }
+
+    fn prompt_shell_name(&mut self, state: &SharedState) -> Result<String, Error> {
+        let state = state.borrow();
+        let name = state
+            .shell_name
+            .rsplit('/')
+            .next()
+            .unwrap_or(&state.shell_name);
+        self.work.admit_storage(name.len())?;
+        Ok(name.to_owned())
     }
 
     async fn prompt_literal(
@@ -202,20 +209,21 @@ impl Expansion<'_> {
             _ => "EUID",
         };
         State::admit_scalar_access(state, name, self.cancel, self.work).await?;
-        let s = state.borrow();
-        let value = s
-            .scalar_parameter(name)
-            .filter(|value| !value.is_empty())
-            .ok_or(2)?;
-        let value = match code {
-            'h' => value.split('.').next().unwrap_or(value),
-            '$' if value.parse::<u32>().map_err(|_| 2)? == 0 => "#",
-            '$' => "$",
-            _ => value,
+        let value = {
+            let s = state.borrow();
+            let value = s
+                .scalar_parameter(name)
+                .filter(|value| !value.is_empty())
+                .ok_or(2)?;
+            let value = match code {
+                'h' => value.split('.').next().unwrap_or(value),
+                '$' if value.parse::<u32>().map_err(|_| 2)? == 0 => "#",
+                '$' => "$",
+                _ => value,
+            };
+            self.work.admit_storage(value.len())?;
+            value.to_owned()
         };
-        self.work.admit_storage(value.len())?;
-        let value = value.to_owned();
-        drop(s);
         self.prompt_literal(out, &value, expand).await
     }
 
