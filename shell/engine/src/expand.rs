@@ -2681,17 +2681,22 @@ mod tests {
             .borrow_mut()
             .assign_parameter("p".into(), "abcd".into())
             .unwrap();
-        let word = shell_parser::Parser::parse_word_string_with_limits(r#""${p@P}""#, 16, 4096);
+        let word =
+            crate::parse::generated_word(r#""${p@P}""#).expect("prompt test word must parse");
+        assert!(word.quoted);
+        assert_eq!(word.parts.len(), 1);
         let cancel = Cancel::new();
         for (bytes, accepted) in [(3, false), (4, true)] {
             let mut work = Work::new(65536, 1024 * 1024, 1);
             let result = fields_admitted(&word, &state, &cancel, bytes, 1, bytes, &mut work)
                 .now_or_never()
                 .expect("short prompt must not suspend");
-            if accepted {
-                assert!(matches!(result, Ok(value) if value == ["abcd"]));
-            } else {
-                assert!(matches!(result, Err(Error::Status(2))));
+            match (accepted, result) {
+                (true, Ok(value)) => assert_eq!(value, ["abcd"]),
+                (false, Err(Error::Status(2))) => (),
+                (_, Ok(value)) => panic!("{bytes}-byte limit returned {value:?}"),
+                (_, Err(Error::Status(status))) => panic!("{bytes}-byte limit returned {status}"),
+                (_, Err(_)) => panic!("{bytes}-byte limit returned a non-status error"),
             }
         }
     }
