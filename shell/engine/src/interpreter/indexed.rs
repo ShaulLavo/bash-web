@@ -11,26 +11,90 @@ pub(super) async fn assign(
     bytes: &mut usize,
     completed: &mut crate::state::AssignmentFrame,
 ) -> Result<(), expand::Error> {
-    let update = value(assignment, state, context, work).await?;
-    let (copy, storage) = state
-        .borrow()
-        .admit_binding_update(&assignment.name, &update, work)?;
-    let undo_bytes = update.undo_bytes(state.borrow().binding(&assignment.name));
-    completed.reserve(&assignment.name, undo_bytes)?;
-    frame
-        .reserve(&assignment.name, storage)
-        .map_err(expand::Error::from)?;
-    for _ in 0..copy {
-        work.checkpoint(&context.cancel).await?;
+    let mut writer = AssignmentWriter::new(
+        &assignment.name,
+        state,
+        context,
+        work,
+        frame,
+        bytes,
+        completed,
+    );
+    if let AssignmentValue::Array(words) = &assignment.value
+        && assignment.index.is_none()
+        && assignment.append
+        && state.borrow().is_associative(&assignment.name)
+    {
+        return super::associative::compound_append(words, writer).await;
     }
-    work.checkpoint(&context.cancel).await?;
-    *bytes = bytes
-        .saturating_add(assignment.name.len() + 1)
-        .saturating_add(update.value_bytes());
-    if *bytes > context.limits().expansion_bytes {
-        return Err(2.into());
+    let update = value(assignment, state, context, writer.work).await?;
+    writer.commit_update(update).await
+}
+
+pub(super) struct AssignmentWriter<'a> {
+    pub(super) name: &'a str,
+    pub(super) state: &'a SharedState,
+    pub(super) context: &'a Context,
+    pub(super) work: &'a mut expand::Work,
+    frame: Option<PrefixFrame>,
+    bytes: &'a mut usize,
+    completed: &'a mut crate::state::AssignmentFrame,
+}
+
+impl<'a> AssignmentWriter<'a> {
+    pub(super) fn new(
+        name: &'a str,
+        state: &'a SharedState,
+        context: &'a Context,
+        work: &'a mut expand::Work,
+        frame: PrefixFrame,
+        bytes: &'a mut usize,
+        completed: &'a mut crate::state::AssignmentFrame,
+    ) -> Self {
+        Self {
+            name,
+            state,
+            context,
+            work,
+            frame: Some(frame),
+            bytes,
+            completed,
+        }
     }
-    frame.commit_update(assignment.name.clone(), update, completed)
+
+    pub(super) async fn commit_update(
+        &mut self,
+        update: BindingUpdate,
+    ) -> Result<(), expand::Error> {
+        let frame = self.frame.take().expect("append frame remains active");
+        let (copy, storage) = self
+            .state
+            .borrow()
+            .admit_binding_update(self.name, &update, self.work)?;
+        self.completed.reserve(
+            self.name,
+            update.undo_bytes(self.state.borrow().binding(self.name)),
+        )?;
+        frame
+            .reserve(self.name, storage)
+            .map_err(expand::Error::from)?;
+        let steps =
+            copy.saturating_add(update.mutation_steps(self.state.borrow().binding(self.name)));
+        for _ in 0..steps {
+            self.work.checkpoint(&self.context.cancel).await?;
+        }
+        self.work.checkpoint(&self.context.cancel).await?;
+        *self.bytes = self
+            .bytes
+            .saturating_add(self.name.len() + 1)
+            .saturating_add(update.value_bytes());
+        if *self.bytes > self.context.limits().expansion_bytes {
+            return Err(2.into());
+        }
+        frame.commit_update(self.name.to_owned(), update, self.completed)?;
+        self.frame = Some(PrefixFrame::enter(self.state.clone()));
+        Ok(())
+    }
 }
 
 async fn value(
@@ -44,15 +108,7 @@ async fn value(
         AssignmentValue::Scalar(word) => scalar(assignment, word, state, context, work).await,
         AssignmentValue::Array(_) if assignment.index.is_some() => Err(2.into()),
         AssignmentValue::Array(words) if state.borrow().is_associative(&assignment.name) => {
-            super::associative::compound(
-                &assignment.name,
-                assignment.append,
-                words,
-                state,
-                context,
-                work,
-            )
-            .await
+            super::associative::compound(&assignment.name, words, state, context, work).await
         }
         AssignmentValue::Array(words) => compound(assignment, words, state, context, work).await,
     }

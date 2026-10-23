@@ -1962,7 +1962,7 @@ impl Expansion<'_> {
         }
         let protection = Protection::expansion(quoted || scalar, state);
         let mut array_index = None;
-        let mut associative_key = (0, 0);
+        let mut associative_key = None;
         for index in 0..count {
             self.element_boundary(index, list, separator, quoted || scalar)
                 .await?;
@@ -2123,7 +2123,7 @@ fn list_value(
     state: &SharedState,
     index: usize,
     array_index: &mut Option<i64>,
-    associative_key: &mut (usize, usize),
+    associative_key: &mut crate::state::AssociativeCursor,
     max: usize,
     work: &mut Work,
 ) -> Result<String, Error> {

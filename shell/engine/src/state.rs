@@ -16,7 +16,7 @@ use std::{
 mod declarations;
 pub(crate) use declarations::DeclarationView;
 mod associative;
-pub(crate) use associative::Associative;
+pub(crate) use associative::{Associative, AssociativeCursor};
 mod binding;
 pub use binding::Binding;
 use binding::BindingUndo;
@@ -568,6 +568,7 @@ impl State {
             .unwrap_or(0)
     }
     fn reserve_local_value(&self, name: &str, bytes: usize) -> Result<(), i32> {
+        let bytes = if self.is_associative(name) { 0 } else { bytes };
         if let Some(local) = self.locals.iter().rev().find_map(|frame| frame.get(name))
             && let Some(memory) = &local.memory
         {
@@ -880,21 +881,41 @@ impl State {
                 .grow(bytes)
                 .map_err(|_| crate::exec::RESOURCE_STATUS)?;
         }
+        let live = self
+            .variables
+            .get(&name)
+            .map(|binding| binding.prepare_scalar(&value))
+            .transpose()?
+            .flatten();
+        let saved = self
+            .prefixes
+            .last()
+            .and_then(|frame| frame.get(&name))
+            .map(|binding| {
+                let mut binding = binding.clone().unwrap_or_else(|| "".into());
+                binding.set_scalar(value.clone())?;
+                Ok::<_, i32>(binding)
+            })
+            .transpose()?;
+        let slots = changes
+            .as_ref()
+            .map_or(0, |changes| changes.borrow().undo.len());
+        let _temporary = self.admit_temporary(slots * std::mem::size_of::<Option<Binding>>())?;
+        let prepared = changes
+            .as_ref()
+            .map(|changes| changes.borrow().prepare_scalar_effects(&name, &value))
+            .transpose()?;
         self.reserve_local_value(
             &name,
             self.scalar_assignment_value_bytes(&name, value.len()),
         )?;
         if let Some(changes) = &changes {
-            changes.borrow_mut().scalar_effect(&name, &value);
+            changes
+                .borrow_mut()
+                .scalar_effect(&name, &value, prepared.unwrap());
         }
-        if let Some(saved) = self
-            .prefixes
-            .last_mut()
-            .and_then(|frame| frame.get_mut(&name))
-        {
-            let mut binding = saved.clone().unwrap_or_else(|| "".into());
-            binding.set_scalar(value.clone());
-            *saved = Some(binding);
+        if let Some(saved) = saved {
+            *self.prefixes.last_mut().unwrap().get_mut(&name).unwrap() = Some(saved);
         }
         let direct_ifs = name == "IFS";
         self.assign_getopts_index(&name, &value);
@@ -903,12 +924,29 @@ impl State {
         {
             changes.borrow_mut().getopts = Some(self.getopts);
         }
-        self.variables
-            .entry(name)
-            .and_modify(|binding| binding.set_scalar(value.clone()))
-            .or_insert_with(|| value.into());
+        self.commit_scalar_parameter(name, value, live)?;
         if direct_ifs {
             self.refresh_star_separator();
+        }
+        Ok(())
+    }
+    fn commit_scalar_parameter(
+        &mut self,
+        name: String,
+        value: String,
+        prepared: Option<Binding>,
+    ) -> Result<(), i32> {
+        if let Some(binding) = prepared {
+            self.variables.insert(name, binding);
+            return Ok(());
+        }
+        match self.variables.entry(name) {
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                entry.get_mut().set_scalar(value)?;
+            }
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(value.into());
+            }
         }
         Ok(())
     }
@@ -1209,6 +1247,13 @@ impl State {
     pub(crate) fn local(&mut self, name: String, value: String) -> Result<(), i32> {
         self.declare_local(name, Some(value))
     }
+    fn function_prefix(&self, name: &str) -> bool {
+        self.locals
+            .iter()
+            .rev()
+            .find_map(|frame| frame.get(name))
+            .is_some_and(|binding| binding.function_prefix)
+    }
     pub(crate) fn declare_local(&mut self, name: String, value: Option<String>) -> Result<(), i32> {
         let already_local = self
             .locals
@@ -1216,21 +1261,18 @@ impl State {
             .is_some_and(|frame| frame.contains_key(&name));
         // Temporary environments of function calls are inherited by a bare
         // local declaration, unlike ordinary dynamically visible bindings.
-        let prefix = self
-            .locals
-            .iter()
-            .rev()
-            .find_map(|frame| frame.get(&name))
-            .is_some_and(|binding| binding.function_prefix);
+        let prefix = self.function_prefix(&name);
         let inherited_bytes = if !already_local && prefix && value.is_none() {
-            self.variables.get(&name).map_or(0, Binding::storage_bytes)
+            self.variables
+                .get(&name)
+                .map_or(0, Binding::local_storage_bytes)
         } else {
             0
         };
         let value = value.map(Binding::from);
         let bytes = value
             .as_ref()
-            .map_or(inherited_bytes, Binding::storage_bytes);
+            .map_or(inherited_bytes, Binding::local_storage_bytes);
         // Validate readonly bindings before changing an existing ticket. A
         // rejected declaration must leave both its value and charge untouched.
         self.save_local(&name, bytes)?;
@@ -1276,7 +1318,11 @@ impl State {
                 .ok_or(2)?
                 .checked_add(name.len().checked_mul(3).ok_or(2)?)
                 .ok_or(2)?
-                .checked_add(self.variables.get(name).map_or(0, Binding::storage_bytes))
+                .checked_add(
+                    self.variables
+                        .get(name)
+                        .map_or(0, Binding::local_storage_bytes),
+                )
                 .ok_or(2)?
                 .checked_add(self.namerefs.get(name).map_or(0, String::len))
                 .ok_or(2)?;
@@ -1352,7 +1398,11 @@ impl State {
         bytes = bytes
             .saturating_add(snapshot_node_bytes::<LocalVariable>()?)
             .saturating_add(name.len())
-            .saturating_add(self.variables.get(name).map_or(0, Binding::storage_bytes))
+            .saturating_add(
+                self.variables
+                    .get(name)
+                    .map_or(0, Binding::local_storage_bytes),
+            )
             .saturating_add(self.namerefs.get(name).map_or(0, String::len));
         Ok(bytes)
     }
@@ -1384,12 +1434,12 @@ impl SnapshotValue for String {
 }
 impl SnapshotValue for Binding {
     fn snapshot_bytes(&self) -> usize {
-        self.storage_bytes()
+        self.local_storage_bytes()
     }
 }
 impl SnapshotValue for Option<Binding> {
     fn snapshot_bytes(&self) -> usize {
-        self.as_ref().map_or(0, Binding::storage_bytes)
+        self.as_ref().map_or(0, Binding::local_storage_bytes)
     }
 }
 impl SnapshotValue for Option<String> {
@@ -1657,9 +1707,24 @@ impl AssignmentChanges {
                 bytes.saturating_add(undo.scalar_effect_bytes(value_bytes))
             })
     }
-    fn scalar_effect(&mut self, name: &str, value: &str) {
-        for (_, undo) in self.undo.iter_mut().filter(|(target, _)| target == name) {
-            undo.scalar_effect(value);
+    fn prepare_scalar_effects(&self, name: &str, value: &str) -> Result<Vec<Option<Binding>>, i32> {
+        let mut prepared = Vec::new();
+        prepared
+            .try_reserve_exact(self.undo.len())
+            .map_err(|_| crate::exec::RESOURCE_STATUS)?;
+        for (_, undo) in self.undo.iter().filter(|(target, _)| target == name) {
+            prepared.push(undo.prepare_scalar_effect(value)?);
+        }
+        Ok(prepared)
+    }
+    fn scalar_effect(&mut self, name: &str, value: &str, prepared: Vec<Option<Binding>>) {
+        for ((_, undo), prepared) in self
+            .undo
+            .iter_mut()
+            .filter(|(target, _)| target == name)
+            .zip(prepared)
+        {
+            undo.scalar_effect(value, prepared);
         }
     }
 }
@@ -1812,7 +1877,7 @@ impl PrefixFrame {
                     .get(&target)
                     .cloned()
                     .unwrap_or_else(|| "".into());
-                binding.set_scalar(value.clone());
+                binding.set_scalar(value.clone())?;
                 let previous = state_ref.variables.insert(target.clone(), binding);
                 *restore_epoch_realtime |= state_ref.suspend_epoch_realtime(&target);
                 saved.entry(target).or_insert(previous);
@@ -1849,7 +1914,7 @@ impl PrefixFrame {
             .get(&name)
             .cloned()
             .unwrap_or_else(|| "".into());
-        binding.set_scalar(value);
+        binding.set_scalar(value).map_err(|_| String::new())?;
         self.set_binding(name, binding)
     }
     pub(crate) fn set_binding(&self, name: String, binding: Binding) -> Result<(), String> {
@@ -1876,8 +1941,8 @@ impl PrefixFrame {
         }
         Ok(())
     }
-    /// A completed assignment-only write needs no whole-binding undo. All
-    /// expansion, COW admission and cancellation checks precede this commit.
+    /// Admission and cancellation checks precede publication. Associative
+    /// undo retains a shared root; indexed undo retains the changed elements.
     pub(crate) fn commit_update(
         mut self,
         name: String,
@@ -1899,17 +1964,18 @@ impl PrefixFrame {
         state
             .reserve_local_value(&name, storage.max(state.held_local_value(&name)))
             .map_err(Error::from)?;
+        let prepared = update.prepare_associative(state.variables.get_mut(&name))?;
         let direct_ifs = name == "IFS";
         let undo_name = name.clone();
         let undo = match state.variables.entry(name) {
             std::collections::btree_map::Entry::Occupied(mut entry) => {
                 let previous = std::mem::replace(entry.get_mut(), String::new().into());
-                let (binding, undo) = update.apply_with_undo(Some(previous));
+                let (binding, undo) = update.apply_prepared(Some(previous), prepared);
                 *entry.get_mut() = binding;
                 undo
             }
             std::collections::btree_map::Entry::Vacant(entry) => {
-                let (binding, undo) = update.apply_with_undo(None);
+                let (binding, undo) = update.apply_prepared(None, prepared);
                 entry.insert(binding);
                 undo
             }
@@ -1950,7 +2016,12 @@ impl PrefixFrame {
             {
                 let bytes = local
                     .storage_base
-                    .checked_add(state.variables.get(name).map_or(0, Binding::storage_bytes))
+                    .checked_add(
+                        state
+                            .variables
+                            .get(name)
+                            .map_or(0, Binding::local_storage_bytes),
+                    )
                     .ok_or(2)?;
                 growth = growth
                     .checked_add(bytes.saturating_sub(memory.borrow().bytes()))

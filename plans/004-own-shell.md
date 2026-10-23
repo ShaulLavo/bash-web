@@ -2989,3 +2989,33 @@ and its sibling evidence directory.
 
 Neither note is a fixed bug, an accepted Bash match or a frozen gain of this
 integration. PR59 leaves the caller and target-scan cancellation logic unchanged.
+
+### Associative storage repair and remaining forms, 2026-10-24
+
+PR81 r5 uses shared balanced nodes with allocation-owned memory tickets. Element
+writes and `h+=(...)` stage a search path, not a whole map. Rehash shares string
+payloads and admits its temporary index and new nodes against live execution
+memory. Rollback restores an old root without allocation, including when a
+post-write snapshot survives. Deleting collision keys releases their nodes and
+payloads; no per-bucket vector capacity remains. Append RHS expansion observes
+earlier committed elements. These are implementation claims pending the
+parent's independent review, not a new frozen scoreboard result.
+
+Separate semantic follow-ups remain at the recorded PR81 review head. Reproduce
+on the eventual integrated head against the saved Bash 5.3.15 observations in
+`review81-opus-refusal-r4-evidence/dissect.log` and `bash-recorded.json`:
+
+- `declare -A h; h['x]y']=b; echo $? "${h['x]y']}"`: Bash prints `0 b`;
+  reviewed head ends with status 2. Inspect assignment-bracket parsing.
+- `declare -A h=([a]=A); unset 'h[]'; echo $?`: Bash prints `0`; reviewed
+  head prints `1`. Inspect associative unset's empty-subscript handling.
+- `declare -A h; h[a]=2 true; echo $?`: Bash diagnoses an invalid identifier,
+  runs `true`, and prints `0`; reviewed head returns 2. This also fails on the
+  integrated base. Inspect command-prefix assignment validation.
+- `declare -A h; echo "${h[zz]:-d}"`: Bash prints `d`; reviewed head returns
+  2, also inherited from the base. Inspect parameter default operators.
+- `declare -A h=([a]=A); declare -p h`: Bash prints its declaration; reviewed
+  head silently returns 2. Printing remains deferred in `docs/associative-arrays.md`.
+
+No new issue, oracle change, baseline edit or broader parser repair belongs to
+this storage fix. The parent owns integration, final scoring and merge.

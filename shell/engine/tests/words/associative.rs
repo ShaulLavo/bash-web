@@ -160,12 +160,9 @@ fn associative_r2_recorded_bash_controls() {
         "../../../../scripts/fixtures/shell-associative.json"
     ))
     .unwrap();
-    for case in fixture["cases"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|c| c["id"].as_str().unwrap().starts_with("r2-"))
-    {
+    for case in fixture["cases"].as_array().unwrap().iter().filter(|c| {
+        c["id"].as_str().unwrap().starts_with("r2-") || c["id"].as_str().unwrap().starts_with("r5-")
+    }) {
         let rig = Rig::new(Limits::default());
         rig.variable("LC_ALL", "C.UTF-8");
         let source = case["script"].as_str().unwrap();
@@ -197,4 +194,69 @@ fn associative_r2_recorded_bash_controls() {
             assert_eq!(stderr, expected, "{}", case["id"]);
         }
     }
+}
+
+#[test]
+fn associative_r5_growth_crosses_three_bash_thresholds() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("declare -A h; for ((i=0;i<33000;i++)); do h[k$i]=$i; done; h[last]=1; args $? ${#h[@]} ${h[k32999]}"), 0);
+    assert_indexed_calls(&rig, &["0", "33001", "32999"]);
+}
+
+#[test]
+fn associative_r5_large_map_compound_append_is_incremental() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("declare -A h; for ((i=0;i<4500;i++)); do h[k$i]=$i; done; h+=([new]=1); args $? ${#h[@]}"), 0);
+    assert_indexed_calls(&rig, &["0", "4501"]);
+}
+
+#[test]
+fn associative_r5_compound_values_observe_prior_elements() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run(r#"declare -A h=([a]=A); h+=([a]=new [b]="${h[a]}"); args "${h[a]}" "${h[b]}""#),
+        0
+    );
+    assert_indexed_calls(&rig, &["new", "new"]);
+}
+
+#[test]
+fn associative_r5_growth_rollback_restores_order_after_commit() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run(r#"declare -A h; for ((i=0;i<2048;i++)); do h[k$i]=$i; done; before="${!h[@]}""#),
+        0
+    );
+    let job = rig.start_until_value(
+        "h[growth]=new marker=ready b=$(while true; do :; done)",
+        10000,
+        "marker",
+        "ready",
+    );
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    assert_eq!(rig.run(r#"args "$before" "${!h[*]}" "${#h[@]}""#), 0);
+    let calls = rig.calls.borrow();
+    assert_eq!(calls[0][0], calls[0][1]);
+    assert_eq!(calls[0][2], "2048");
+}
+
+#[test]
+fn associative_r5_append_declaration_preserves_semantic_partial_effects() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run(
+            r#"declare -A h=([a]=A); declare -A h+=([a]=new plain tail)
+args $? "${h[a]}" "${#h[@]}""#
+        ),
+        0
+    );
+    assert_indexed_calls(&rig, &["1", "new", "1"]);
+}
+
+#[test]
+fn associative_r5_empty_append_initializes_without_an_entry() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("set -u; declare -A h; h+=(); args ${#h[@]}"), 0);
+    assert_indexed_calls(&rig, &["0"]);
 }
