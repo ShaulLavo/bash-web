@@ -36,6 +36,12 @@ fn run_fixture(text: &str) {
     for case in fixture.cases {
         let output = Command::new(env!("CARGO_BIN_EXE_shell-engine"))
             .args(["-c", &case.code])
+            .env_clear()
+            .envs([
+                ("PATH", "/usr/bin:/bin"),
+                ("HOME", "/home/user"),
+                ("LC_ALL", "C.UTF-8"),
+            ])
             .output()
             .unwrap();
         let pass = output.status.code() == Some(case.status)

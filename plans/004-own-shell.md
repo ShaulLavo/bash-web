@@ -2989,3 +2989,32 @@ and its sibling evidence directory.
 
 Neither note is a fixed bug, an accepted Bash match or a frozen gain of this
 integration. PR59 leaves the caller and target-scan cancellation logic unchanged.
+
+### Large inherited environments can abort a short pipeline
+
+Status: Approved follow-up, outside the trap-action implementation.
+
+At trap-action head `818812c7e44dfd9c39fb11d9fdb7bd59922f9a06`,
+run the native CLI with 220 synthetic exported variables:
+
+```python
+import subprocess
+env = {"PATH": "/usr/bin:/bin", "HOME": "/home/user", "LC_ALL": "C.UTF-8"}
+env.update({f"TRAP_PROBE_{i}": "x" * 20 for i in range(220)})
+code = "(echo one) | (echo two) | (echo three) | (echo four); echo status:$?:${PIPESTATUS[*]}"
+print(subprocess.run([".build/native/debug/shell-engine", "-c", code],
+                     env=env, capture_output=True, text=True).stdout)
+```
+
+Observed repeatedly: `status:2:2`, with no pipeline output or stderr.
+The same binary with only the first three environment entries prints `four`
+and `status:0:0 0 0 0`. No trap is registered in this reproduction.
+The inherited 220-variable agent environment produces the same failure, so
+this is not specific to an environment variable's private value.
+Inspect `State::snapshot` in `shell/engine/src/state.rs:324` and
+`snapshot_map` at line 1507. Snapshot copies share command work and storage
+budgets. Budget exhaustion is a hypothesis, not yet a confirmed cause.
+Do not raise limits without measuring admission and retained ownership.
+Evidence: `/work/reports/wave-20261022/shell/trap-actions-evidence/environment-probe.json`.
+The native trap fixtures now use their recorded oracle environment instead of
+inheriting unrelated host variables. The frozen real-Waffle runner is unchanged.
