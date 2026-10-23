@@ -517,6 +517,19 @@ impl Survivors<'_> {
     }
 }
 
+async fn component_matches(
+    pattern: &mut Pattern,
+    name: &str,
+    extglob: bool,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<bool, Error> {
+    if extglob {
+        return pattern.matches_full(name, work, cancel).await;
+    }
+    pattern.matches_pathname(name, work, cancel).await
+}
+
 struct MatchOptions {
     limits: (usize, usize, usize),
     extglob: bool,
@@ -657,10 +670,11 @@ async fn matches(
                 if name == "." || name == ".." || (name.starts_with('.') && !explicit_dot) {
                     continue;
                 }
-                // matches_pathname's compiler/state buffers are temporary. Return
+                // The component matcher's compiler/state buffers are temporary. Return
                 // their exact charge only after the future has dropped them.
                 let storage = work.storage_left();
-                let matched = pattern.matches_pathname(name, work, cancel).await?;
+                let matched =
+                    component_matches(&mut pattern, name, options.extglob, work, cancel).await?;
                 let released = storage.saturating_sub(work.storage_left());
                 work.release_storage(released);
                 if !matched {

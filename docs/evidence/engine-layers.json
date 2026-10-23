@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "ffc30954365f3f9eb781d8da412a288c1bd3110e616fae90d088422559a58f9c",
+    "engineSourceSha256": "12ba39bb0cc6aea025903e4e7c818df6dbfb172ea1112ec34ce20dd1df0e955e",
     "binaryBuild": null
   },
   "contract": {
@@ -232,6 +232,7 @@
         "shell/engine/src/expand/indirect.rs",
         "shell/engine/src/expand/operand.rs",
         "shell/engine/src/expand/pattern.rs",
+        "shell/engine/src/expand/pattern/classes.rs",
         "shell/engine/src/expand/pattern/extglob.rs",
         "shell/engine/src/expand/positional.rs",
         "shell/engine/src/expand/printable.rs",
@@ -462,7 +463,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins/completion/wordlist.rs",
-        "line": 206,
+        "line": 237,
         "column": 20
       }
     },
@@ -942,7 +943,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter/conditional/regex.rs",
-        "line": 808,
+        "line": 766,
         "column": 37
       }
     },
@@ -972,7 +973,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter/conditional/regex.rs",
-        "line": 808,
+        "line": 766,
         "column": 45
       }
     },

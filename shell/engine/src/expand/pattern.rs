@@ -358,16 +358,13 @@ impl Pattern {
         extglob::matches(self, value, work, cancel).await
     }
 
-    /// Ordinary argv globbing keeps its basic compiler; completion opts into extglob.
+    /// Keep pathname expansion on the basic-glob compiler.
     pub(super) async fn matches_pathname(
         &mut self,
         value: &str,
         work: &mut Work,
         cancel: &Cancel,
     ) -> Result<bool, Error> {
-        if self.extglob {
-            return self.matches_full(value, work, cancel).await;
-        }
         let atoms = self.compile_pathname(work, cancel).await?;
         let count = atoms.len().checked_add(1).ok_or(2)?;
         work.admit_storage(count)?;
