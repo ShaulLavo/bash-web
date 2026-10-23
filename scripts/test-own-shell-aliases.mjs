@@ -26,3 +26,25 @@ for (const entry of fixture.cases) {
     if (entry.stderr === "") assert.equal(result.stderr.toString(), "");
   });
 }
+
+test("alias refresh parser limits print a diagnostic", async () => {
+  const result = await run(
+    `shopt -s expand_aliases\nalias x=': ${"a".repeat(60_000)}'\necho before\nx; x\necho BAD\n`,
+  );
+  assert.equal(result.crash, undefined);
+  assert.equal(result.outputLimit, undefined);
+  assert.equal(result.status, 2);
+  assert.equal(result.stdout.toString(), "before\n");
+  assert.match(result.stderr.toString(), /parser fuel exhausted/);
+});
+
+test("eval parser limits print a diagnostic and return to the caller", async () => {
+  const result = await run(
+    `shopt -s expand_aliases\nalias x=': ${"a".repeat(60_000)}'\neval 'x; x'\necho after\n`,
+  );
+  assert.equal(result.crash, undefined);
+  assert.equal(result.outputLimit, undefined);
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout.toString(), "after\n");
+  assert.match(result.stderr.toString(), /parser fuel exhausted/);
+});
