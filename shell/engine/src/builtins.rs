@@ -839,8 +839,15 @@ async fn nameref_declaration(
     }
     // Array targets, unbound reference declarations and broad attributes are
     // explicit prerequisites for later units, never target-string parsing.
-    if !valid_name(&target) || target == "PIPESTATUS" || key == "PIPESTATUS" {
+    if target.is_empty()
+        || target.contains(['[', ']'])
+        || target == "PIPESTATUS"
+        || key == "PIPESTATUS"
+    {
         return Err(2);
+    }
+    if !valid_name(&target) {
+        return Err(1);
     }
     state
         .borrow_mut()
