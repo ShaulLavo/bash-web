@@ -1386,6 +1386,14 @@ mod tests {
             ("((a*|b){3,4})*", "bbb", vec!["bbb", "b", "b"]),
             ("((a?|b){2,3})*", "bb", vec!["bb", "b", "b"]),
             ("((a?|b){2,3})*", "bbb", vec!["bbb", "b", "b"]),
+            ("(((a*|b){2,3})*b)*", "bb", vec!["bb", "bb", "b", ""]),
+            ("(((a*|b){2,3})*b)*", "bbb", vec!["bbb", "bbb", "bb", ""]),
+            ("((((a*)|b){2,3})*b)*", "bb", vec!["bb", "bb", "b", "", ""]),
+            ("((((a*)|b){2,3})*b)*", "bbb", vec!["bbb", "bbb", "bb", "", ""]),
+            ("(((a*|b){3,4})*b)*", "bb", vec!["bb", "bb", "b", ""]),
+            ("(((a*|b){3,4})*b)*", "bbb", vec!["bbb", "bbb", "bb", ""]),
+            ("(((a?|b){2,3})*b)*", "bb", vec!["bb", "bb", "b", ""]),
+            ("(((a?|b){2,3})*b)*", "bbb", vec!["bbb", "bbb", "bb", ""]),
         ] {
             let pattern = self::pattern(source);
             let mut work = Work::new(10_000_000, 10_000_000, 16);
