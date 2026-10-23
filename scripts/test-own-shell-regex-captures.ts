@@ -57,3 +57,16 @@ for (const expected of cases)
       assert.equal(actual.stderr.toString(), recorded.replaceAll(/: line \d+: /g, ": "));
     }
   });
+
+if (!process.env.BASH_REGEX_CAPTURES_FIXTURE)
+  for (const expected of recording(
+    new URL("fixtures/shell-regex-capture-unsupported.json", import.meta.url),
+  ))
+    test(`production Waffle rejects unsupported capture shape: ${expected.name}`, async () => {
+      const actual = await runner(`BASH_REMATCH=sentinel; ${expected.script}`);
+      assert.equal(actual.crash, undefined);
+      assert.equal(actual.outputLimit, undefined);
+      assert.equal(actual.status, 0);
+      assert.equal(actual.stdout.toString(), "s=2 n=1<sentinel>");
+      assert.equal(actual.stderr.length, 0);
+    });

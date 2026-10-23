@@ -1,0 +1,302 @@
+{
+  "bash": "5.3.15(1)-release",
+  "reason": "Repeated nullable counted captures with a consuming suffix inside another repetition are deliberately unsupported. These are unchanged Bash controls, not expected production capture values.",
+  "cases": [
+    {
+      "name": "isolated (((a*|b){2,3})*b)* on bb",
+      "script": "p='(((a*|b){2,3})*b)*'; [[ bb =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYj48YmI+PGI+PD4=",
+      "stderrBase64": "",
+      "diagnostic": true
+    },
+    {
+      "name": "isolated (((a*|b){2,3})*b)* on bbb",
+      "script": "p='(((a*|b){2,3})*b)*'; [[ bbb =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYmI+PGJiYj48YmI+PD4=",
+      "stderrBase64": "",
+      "diagnostic": true
+    },
+    {
+      "name": "isolated ((((a*)|b){2,3})*b)* on bb",
+      "script": "p='((((a*)|b){2,3})*b)*'; [[ bb =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NTxiYj48YmI+PGI+PD48Pg==",
+      "stderrBase64": "",
+      "diagnostic": true
+    },
+    {
+      "name": "isolated ((((a*)|b){2,3})*b)* on bbb",
+      "script": "p='((((a*)|b){2,3})*b)*'; [[ bbb =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NTxiYmI+PGJiYj48YmI+PD48Pg==",
+      "stderrBase64": "",
+      "diagnostic": true
+    },
+    {
+      "name": "isolated (((a*|b){3,4})*b)* on bb",
+      "script": "p='(((a*|b){3,4})*b)*'; [[ bb =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYj48YmI+PGI+PD4=",
+      "stderrBase64": "",
+      "diagnostic": true
+    },
+    {
+      "name": "isolated (((a*|b){3,4})*b)* on bbb",
+      "script": "p='(((a*|b){3,4})*b)*'; [[ bbb =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYmI+PGJiYj48YmI+PD4=",
+      "stderrBase64": "",
+      "diagnostic": true
+    },
+    {
+      "name": "isolated (((a?|b){2,3})*b)* on bb",
+      "script": "p='(((a?|b){2,3})*b)*'; [[ bb =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYj48YmI+PGI+PD4=",
+      "stderrBase64": "",
+      "diagnostic": true
+    },
+    {
+      "name": "isolated (((a?|b){2,3})*b)* on bbb",
+      "script": "p='(((a?|b){2,3})*b)*'; [[ bbb =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYmI+PGJiYj48YmI+PD4=",
+      "stderrBase64": "",
+      "diagnostic": true
+    },
+    {
+      "name": "reviewer restoration 101",
+      "script": "p='(((a*|b){2,3})*b)*'; v=bb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYj48YmI+PGI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 102",
+      "script": "p='(((a*|b){2,3})*b)*'; v=bbb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYmI+PGJiYj48YmI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 103",
+      "script": "p='(((a*|b){2,3})*b)*'; v=bbbb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYmJiPjxiYmJiPjxiYmI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 105",
+      "script": "p='(((a*|b){2,3})*b)*'; v=bba; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYj48YmI+PGI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 110",
+      "script": "p='(((a*|b){2,3})*b)*'; v=bbc; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYj48YmI+PGI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 111",
+      "script": "p='(((a*|b){2,3})*b)*'; v=bbd; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYj48YmI+PGI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 241",
+      "script": "p='((((a*)|b){2,3})*b)*'; v=bb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NTxiYj48YmI+PGI+PD48Pg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 242",
+      "script": "p='((((a*)|b){2,3})*b)*'; v=bbb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NTxiYmI+PGJiYj48YmI+PD48Pg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 243",
+      "script": "p='((((a*)|b){2,3})*b)*'; v=bbbb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NTxiYmJiPjxiYmJiPjxiYmI+PD48Pg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 245",
+      "script": "p='((((a*)|b){2,3})*b)*'; v=bba; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NTxiYj48YmI+PGI+PD48Pg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 250",
+      "script": "p='((((a*)|b){2,3})*b)*'; v=bbc; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NTxiYj48YmI+PGI+PD48Pg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 251",
+      "script": "p='((((a*)|b){2,3})*b)*'; v=bbd; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NTxiYj48YmI+PGI+PD48Pg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 381",
+      "script": "p='(((a*|b){3,4})*b)*'; v=bb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYj48YmI+PGI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 382",
+      "script": "p='(((a*|b){3,4})*b)*'; v=bbb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYmI+PGJiYj48YmI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 383",
+      "script": "p='(((a*|b){3,4})*b)*'; v=bbbb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYmJiPjxiYmJiPjxiYmI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 385",
+      "script": "p='(((a*|b){3,4})*b)*'; v=bba; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYj48YmI+PGI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 390",
+      "script": "p='(((a*|b){3,4})*b)*'; v=bbc; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYj48YmI+PGI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 391",
+      "script": "p='(((a*|b){3,4})*b)*'; v=bbd; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYj48YmI+PGI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 521",
+      "script": "p='(((a?|b){2,3})*b)*'; v=bb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYj48YmI+PGI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 522",
+      "script": "p='(((a?|b){2,3})*b)*'; v=bbb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYmI+PGJiYj48YmI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 523",
+      "script": "p='(((a?|b){2,3})*b)*'; v=bbbb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYmJiPjxiYmJiPjxiYmI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 525",
+      "script": "p='(((a?|b){2,3})*b)*'; v=bba; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYj48YmI+PGI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 530",
+      "script": "p='(((a?|b){2,3})*b)*'; v=bbc; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYj48YmI+PGI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "reviewer restoration 531",
+      "script": "p='(((a?|b){2,3})*b)*'; v=bbd; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYj48YmI+PGI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "structural suffix 0",
+      "script": "p='(((a*|b){2,3})*[ab])+'; v=bbbb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYmJiPjxiPjw+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "structural suffix 1",
+      "script": "p='(((a*|b){2,3})*(b)){1,3}'; v=bbbb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NTxiYmJiPjxiYj48Pjw+PGI+",
+      "stderrBase64": ""
+    },
+    {
+      "name": "structural suffix 2",
+      "script": "p='(((a*|b){2,3})*(a?)b)*'; v=bbbb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NTxiYmJiPjxiYmJiPjxiYmI+PD48Pg==",
+      "stderrBase64": ""
+    },
+    {
+      "name": "structural suffix 3",
+      "script": "p='(((a*|b){2,3})*b|c)*'; v=bbbb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYmJiPjxiYmJiPjxiYmI+PD4=",
+      "stderrBase64": ""
+    },
+    {
+      "name": "structural suffix 4",
+      "script": "p='^(((a*|b){2,3})*b)*$'; v=bbbb; [[ $v =~ $p ]]; printf 's=%s n=%s' \"$?\" \"${#BASH_REMATCH[@]}\"; printf '<%s>' \"${BASH_REMATCH[@]}\"",
+      "diagnostic": true,
+      "status": 0,
+      "stdoutBase64": "cz0wIG49NDxiYmJiPjxiYmJiPjxiYmI+PD4=",
+      "stderrBase64": ""
+    }
+  ]
+}

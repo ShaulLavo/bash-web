@@ -522,6 +522,86 @@ async fn parse(
     Ok((expressions, root, count))
 }
 
+// GNU register restoration and this arena's epsilon undo do not agree for a
+// repeated nullable count, followed by consumption, inside another repetition.
+// Reject that syntax before matching instead of publishing guessed captures.
+#[derive(Clone, Copy, Default)]
+struct CaptureShape {
+    nullable: bool,
+    consuming: bool,
+    nullable_count: bool,
+    counted_loop: bool,
+    suffix: bool,
+    unsupported: bool,
+}
+impl CaptureShape {
+    fn sequence(self, right: Self) -> Self {
+        Self {
+            nullable: self.nullable && right.nullable,
+            consuming: self.consuming || right.consuming,
+            nullable_count: self.nullable_count || right.nullable_count,
+            counted_loop: self.counted_loop || right.counted_loop,
+            suffix: self.suffix || right.suffix || self.counted_loop && right.consuming,
+            unsupported: self.unsupported || right.unsupported,
+        }
+    }
+    fn alternative(self, right: Self) -> Self {
+        Self {
+            nullable: self.nullable || right.nullable,
+            suffix: self.suffix || right.suffix,
+            ..self.sequence(right)
+        }
+    }
+    fn repeated(self, min: usize, max: Option<usize>) -> Self {
+        if max == Some(0) {
+            return Self {
+                nullable: true,
+                ..Self::default()
+            };
+        }
+        Self {
+            nullable: min == 0 || self.nullable,
+            nullable_count: self.nullable_count || self.nullable && min > 1 && max != Some(min),
+            counted_loop: self.counted_loop || max.is_none() && self.nullable_count,
+            unsupported: self.unsupported || self.suffix && max != Some(1),
+            ..self
+        }
+    }
+}
+fn capture_shape(expression: Expression, shapes: &[CaptureShape]) -> CaptureShape {
+    match expression {
+        Expression::Empty | Expression::Atom(Atom::Start | Atom::End) => CaptureShape {
+            nullable: true,
+            ..CaptureShape::default()
+        },
+        Expression::Atom(_) => CaptureShape {
+            consuming: true,
+            ..CaptureShape::default()
+        },
+        Expression::Group(child, _) => shapes[child],
+        Expression::Sequence(left, right) => shapes[left].sequence(shapes[right]),
+        Expression::Alternative(left, right) => shapes[left].alternative(shapes[right]),
+        Expression::Repeat { child, min, max } => shapes[child].repeated(min, max),
+    }
+}
+async fn supported_captures(
+    expressions: &[Expression],
+    root: usize,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<(), Error> {
+    let mut shapes = Vec::new();
+    for expression in expressions {
+        work.checkpoint(cancel).await?;
+        let shape = capture_shape(*expression, &shapes);
+        push(&mut shapes, shape, work)?;
+    }
+    if shapes[root].unsupported {
+        return Err(2.into());
+    }
+    Ok(())
+}
+
 // Copying an expanded subtree resets its optional-group markers. A newly
 // optional wrapper can then mark its own root group without marking descendants.
 #[derive(Clone, Copy, Default)]
@@ -787,6 +867,9 @@ async fn compile(
     cancel: &Cancel,
 ) -> Result<(Vec<Node>, usize, usize), Error> {
     let (expressions, root, count) = parse(pattern, work, cancel).await?;
+    if count > 0 {
+        supported_captures(&expressions, root, work, cancel).await?;
+    }
     let mut nodes = Vec::new();
     push(&mut nodes, Node::Accept, work)?;
     let mut tasks = Vec::new();
@@ -1386,14 +1469,6 @@ mod tests {
             ("((a*|b){3,4})*", "bbb", vec!["bbb", "b", "b"]),
             ("((a?|b){2,3})*", "bb", vec!["bb", "b", "b"]),
             ("((a?|b){2,3})*", "bbb", vec!["bbb", "b", "b"]),
-            ("(((a*|b){2,3})*b)*", "bb", vec!["bb", "bb", "b", ""]),
-            ("(((a*|b){2,3})*b)*", "bbb", vec!["bbb", "bbb", "bb", ""]),
-            ("((((a*)|b){2,3})*b)*", "bb", vec!["bb", "bb", "b", "", ""]),
-            ("((((a*)|b){2,3})*b)*", "bbb", vec!["bbb", "bbb", "bb", "", ""]),
-            ("(((a*|b){3,4})*b)*", "bb", vec!["bb", "bb", "b", ""]),
-            ("(((a*|b){3,4})*b)*", "bbb", vec!["bbb", "bbb", "bb", ""]),
-            ("(((a?|b){2,3})*b)*", "bb", vec!["bb", "bb", "b", ""]),
-            ("(((a?|b){2,3})*b)*", "bbb", vec!["bbb", "bbb", "bb", ""]),
         ] {
             let pattern = self::pattern(source);
             let mut work = Work::new(10_000_000, 10_000_000, 16);
@@ -1405,6 +1480,42 @@ mod tests {
                 .map(|range| range.map_or("", |(start, end)| &value[start..end]))
                 .collect();
             assert_eq!(actual, expected, "{source:?} on {value:?}");
+        }
+    }
+    #[test]
+    fn consuming_suffix_inside_repeated_nullable_count_fails_closed() {
+        for source in [
+            "(((a*|b){2,3})*b)*",
+            "((((a*)|b){2,3})*b)*",
+            "(((a*|b){3,4})*b)*",
+            "(((a?|b){2,3})*b)*",
+            "(((a*|b){2,3})*[ab])+",
+            "(((a*|b){2,3})*(b)){1,3}",
+        ] {
+            let pattern = self::pattern(source);
+            let mut work = Work::new(10_000_000, 10_000_000, 16);
+            assert!(
+                matches!(
+                    finish(matches(&pattern, "bbbb", &mut work, &Cancel::new())),
+                    Err(Error::Status(2))
+                ),
+                "{source}"
+            );
+        }
+    }
+    #[test]
+    fn alternatives_do_not_create_consuming_suffixes() {
+        for source in [
+            "(((a*|b){2,3})*|b)*",
+            "((((a*|b){2,3})*b){0})*",
+            "(((a*|b){2,3})*b){1}",
+        ] {
+            let pattern = self::pattern(source);
+            let mut work = Work::new(10_000_000, 10_000_000, 16);
+            assert!(
+                finish(compile(&pattern, &mut work, &Cancel::new())).is_ok(),
+                "{source}"
+            );
         }
     }
     #[test]

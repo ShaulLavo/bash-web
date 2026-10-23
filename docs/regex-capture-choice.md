@@ -66,11 +66,36 @@ accepting-node order. No upstream source was copied or translated. The local
 terminal-provenance reachability algorithm avoids importing libc's DFA, node
 cloning machinery or backtracking matcher.
 
-This correction changes no publication/state API or supported input domain.
+This correction changes no publication/state API. The unsupported shape below narrows the admitted pattern domain.
 Direct/resolved IFS, compound-local restoration, array enumeration, declaration
 printing and Oils611 operand quoting retain their separately owned prerequisites.
 No full frozen-score gain, current-main integration or final publication
 acceptance is implied by these focused controls.
+
+## Unsupported enclosing restoration
+
+GNU libc snapshots all registers after a nonempty group close. An empty optional
+close can restore that entire snapshot, including an open ancestor's start.
+The local matcher protects open capture pairs because its epsilon-choice undo
+and repeat-progress traversal differ from GNU libc's sifted path traversal.
+Removing that protection fixes the suffix cases but breaks the eight no-suffix
+controls. Snapshot-only and traversal variants did not satisfy both sets.
+
+The compiler therefore rejects a nullable expandable count with minimum greater
+than one, nested in an unbounded repetition, followed by a consuming suffix,
+with that sequence inside another repetition. This includes
+`(((a*|b){2,3})*b)*`. Alternatives and groups propagate shape information;
+a branch does not create a sequence across alternatives. Zero-count subtrees
+have no effect. This conservative syntax check applies before input matching,
+including inputs that would miss. It returns status 2 without publishing captures.
+
+`scripts/fixtures/shell-regex-capture-unsupported.json` retains the eight new
+Bash observations unchanged, records all 24 reviewer regressions, and adds five
+structural variants. Those 37 records describe Bash's successful behavior.
+Production tests separately assert rejection and preservation of a sentinel
+`BASH_REMATCH`, not parity. All 238 earlier choice records and 244 ordinary
+records still require exact Bash agreement. This is a bounded support limit,
+not a claim that capture restoration now matches GNU libc in general.
 
 ## Known Bash differences
 

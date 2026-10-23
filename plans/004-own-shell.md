@@ -2256,3 +2256,20 @@ Reproduce through the production Waffle runner with a new exact Bash recording,
 keep admission, cancellation and capture undo bounded, and retain every PR53
 control. These are explicit limitations, not accepted frozen-score gains or new
 exclusions. PR53's current repair does not claim to resolve them.
+
+
+### PR53 consuming-suffix support limit, 2026-10-23
+
+Status: Approved CONTROL follow-up. The bounded matcher rejects nullable
+expandable counts inside an unbounded repeat, followed by consumption, inside
+another repeat. It returns status 2 and preserves BASH_REMATCH. The 37 explicit
+unsupported records include all 24 independent-review regressions. See
+`docs/regex-capture-choice.md` and `scripts/fixtures/shell-regex-capture-unsupported.json`.
+
+To admit that family later, reproduce both `((a*|b){2,3})*` and
+`(((a*|b){2,3})*b)*` on `bb` through production Waffle. GNU libc's whole-register
+snapshot restoration must agree with epsilon-path selection, rather than add
+another open-register exception. Preserve all 482 earlier records, resource
+admission, cooperative undo, and cancellation. The local experiment evidence is
+`/work/reports/wave-20261022/shell/pr53-regex-repair-r4/`. No frozen exclusion,
+score membership, oracle, or baseline changes are authorized by this limit.
