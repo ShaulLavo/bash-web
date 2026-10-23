@@ -103,16 +103,14 @@ impl<'a> Scanner<'a> {
             context: Context::Operand,
         }
     }
-    pub(super) fn prompt(source: &'a str) -> Self {
+    pub(super) fn scalar(source: &'a str, syntax: &super::ScalarSyntax) -> Self {
+        let (context, pattern) = match syntax {
+            super::ScalarSyntax::Arithmetic => (Context::Arithmetic, true),
+            super::ScalarSyntax::Prompt => (Context::Prompt, false),
+        };
         Self {
-            context: Context::Prompt,
-            ..Self::new(source, true, false, false)
-        }
-    }
-    pub(super) fn arithmetic(source: &'a str) -> Self {
-        Self {
-            context: Context::Arithmetic,
-            ..Self::new(source, true, true, false)
+            context,
+            ..Self::new(source, true, pattern, false)
         }
     }
     pub(super) fn case_pattern(source: &'a str) -> Self {

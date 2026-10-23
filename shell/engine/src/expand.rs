@@ -2442,10 +2442,7 @@ pub(crate) async fn scalar_text(
 ) -> Result<String, Error> {
     let mut expansion = Expansion::scalar(work, cancel, max);
     expansion.pattern_context = matches!(syntax, ScalarSyntax::Arithmetic);
-    let mut scanner = match syntax {
-        ScalarSyntax::Arithmetic => operand::Scanner::arithmetic(source),
-        ScalarSyntax::Prompt => operand::Scanner::prompt(source),
-    };
+    let mut scanner = operand::Scanner::scalar(source, &syntax);
     while let Some(piece) = scanner.next(expansion.work, cancel).await? {
         expansion.operand_piece(piece, state, true, true, 0).await?;
     }
