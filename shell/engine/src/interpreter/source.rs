@@ -12,21 +12,9 @@ pub(super) fn run(
     fds: Descriptors,
     context: Context,
 ) -> eval::Frame<'static> {
-    let evaluation = match context.evaluation.enter() {
-        Ok(scope) => scope,
-        Err(code) => {
-            return futures::future::Either::Left(futures::future::ready(Outcome::status(code)));
-        }
-    };
-    evaluation.frame(
-        run_body(
-            name.to_owned(),
-            args,
-            state,
-            fds,
-            context,
-            evaluation.clone(),
-        ),
+    let evaluation = context.evaluation.clone();
+    evaluation.reader_frame(
+        |scope| run_body(name.to_owned(), args, state, fds, context, scope),
         Outcome::status,
     )
 }

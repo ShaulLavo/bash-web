@@ -2,13 +2,16 @@ use super::*;
 use crate::exec::{RESOURCE_STATUS, StorageBudget};
 use futures::FutureExt;
 
+fn source_state(args: &[&str], memory: Option<StorageBudget>) -> SharedState {
+    let mut state = memory.map(State::with_memory).unwrap_or_default();
+    let args = args.iter().map(|arg| (*arg).to_owned()).collect();
+    state.replace_positional(args).unwrap();
+    state.shared()
+}
+
 #[test]
 fn source_frame_shares_positionals_when_no_arguments_are_supplied() {
-    let state = State::default().shared();
-    state
-        .borrow_mut()
-        .replace_positional(vec!["outer".into(), "tail".into()])
-        .unwrap();
+    let state = source_state(&["outer", "tail"], None);
     let frame = SourceFrame::enter(state.clone(), Vec::new()).unwrap();
     state.borrow_mut().shift_positional(1).unwrap();
     frame.finish();
@@ -18,11 +21,7 @@ fn source_frame_shares_positionals_when_no_arguments_are_supplied() {
 
 #[test]
 fn source_frame_restores_shifted_arguments_without_creating_a_local_scope() {
-    let state = State::default().shared();
-    state
-        .borrow_mut()
-        .replace_positional(vec!["outer".into()])
-        .unwrap();
+    let state = source_state(&["outer"], None);
     let frame = SourceFrame::enter(state.clone(), vec!["inner".into()]).unwrap();
     assert_eq!(state.borrow().source_calls, 1);
     assert_eq!(state.borrow().function_calls, 0);
@@ -34,11 +33,7 @@ fn source_frame_restores_shifted_arguments_without_creating_a_local_scope() {
 
 #[test]
 fn source_frame_keeps_top_level_set_but_a_nested_argument_frame_consumes_it() {
-    let state = State::default().shared();
-    state
-        .borrow_mut()
-        .replace_positional(vec!["outer".into()])
-        .unwrap();
+    let state = source_state(&["outer"], None);
     let frame = SourceFrame::enter(state.clone(), vec!["inner".into()]).unwrap();
     state
         .borrow_mut()
@@ -76,11 +71,7 @@ fn source_frame_inside_a_function_restores_even_explicit_set() {
 #[test]
 fn source_frame_failed_admission_leaves_state_and_storage_unchanged() {
     let memory = StorageBudget::new(256);
-    let state = State::with_memory(memory.clone()).shared();
-    state
-        .borrow_mut()
-        .replace_positional(vec!["outer".into()])
-        .unwrap();
+    let state = source_state(&["outer"], Some(memory.clone()));
     let before = memory.observation().0;
     assert!(matches!(
         SourceFrame::enter(state.clone(), vec!["x".repeat(256)]),
@@ -94,11 +85,7 @@ fn source_frame_failed_admission_leaves_state_and_storage_unchanged() {
 #[test]
 fn source_frame_future_drop_restores_arguments_and_refunds_storage() {
     let memory = StorageBudget::new(1024);
-    let state = State::with_memory(memory.clone()).shared();
-    state
-        .borrow_mut()
-        .replace_positional(vec!["outer".into()])
-        .unwrap();
+    let state = source_state(&["outer"], Some(memory.clone()));
     let before = memory.observation().0;
     let frame = SourceFrame::enter(state.clone(), vec!["inner".into()]).unwrap();
     let future = async move {

@@ -132,13 +132,9 @@ pub(super) fn run(
     if args.is_empty() || args.len() == 1 && args[0].is_empty() {
         return Either::Left(ready(Outcome::status(0)));
     }
-    let evaluation = match context.evaluation.enter() {
-        Ok(scope) => scope,
-        Err(code) => return Either::Left(ready(Outcome::status(code))),
-    };
-
-    evaluation.frame(
-        run_body(args, state, fds, context, evaluation.clone()),
+    let evaluation = context.evaluation.clone();
+    evaluation.reader_frame(
+        |scope| run_body(args, state, fds, context, scope),
         Outcome::status,
     )
 }

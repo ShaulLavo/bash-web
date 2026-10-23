@@ -524,6 +524,21 @@ impl State {
     pub(crate) fn array_next(&self, name: &str, previous: Option<i64>) -> Option<(i64, &str)> {
         self.binding(name)?.next(previous)
     }
+    fn admit_positionals(
+        &self,
+        args: &Vec<String>,
+    ) -> Result<Option<Rc<RefCell<crate::exec::StorageAllocation>>>, i32> {
+        self.memory
+            .as_ref()
+            .map(|memory| {
+                memory
+                    .admit(positional_bytes(args)?)
+                    .map_err(|_| crate::exec::RESOURCE_STATUS)
+            })
+            .transpose()
+            .map(|ticket| ticket.map(|ticket| Rc::new(RefCell::new(ticket))))
+    }
+
     /// Takes ownership of argv already admitted by command expansion.
     pub(crate) fn replace_positional(&mut self, args: Vec<String>) -> Result<(), i32> {
         let bytes = positional_bytes(&args)?;
@@ -2070,16 +2085,7 @@ impl SourceFrame {
     }
 
     fn replace(shell: &mut State, args: Vec<String>) -> Result<SourcePositionals, i32> {
-        let memory = shell
-            .memory
-            .as_ref()
-            .map(|memory| {
-                memory
-                    .admit(positional_bytes(&args)?)
-                    .map_err(|_| crate::exec::RESOURCE_STATUS)
-            })
-            .transpose()?
-            .map(|ticket| Rc::new(RefCell::new(ticket)));
+        let memory = shell.admit_positionals(&args)?;
         shell.positional_set = false;
         Ok(SourcePositionals {
             args: std::mem::replace(&mut shell.positional, args),
@@ -2115,16 +2121,7 @@ impl FunctionFrame {
         if s.function_calls >= limit {
             return Err(2);
         }
-        let memory = s
-            .memory
-            .as_ref()
-            .map(|memory| {
-                memory
-                    .admit(positional_bytes(&args)?)
-                    .map_err(|_| crate::exec::RESOURCE_STATUS)
-            })
-            .transpose()?
-            .map(|ticket| Rc::new(RefCell::new(ticket)));
+        let memory = s.admit_positionals(&args)?;
         s.locals.try_reserve(2).map_err(|_| 2)?;
         let positional_memory = std::mem::replace(&mut s.positional_memory, memory);
         let positional = std::mem::replace(&mut s.positional, args);
