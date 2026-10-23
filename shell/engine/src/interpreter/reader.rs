@@ -121,9 +121,13 @@ pub(super) async fn run(
             if context.cancel.probe_now() {
                 return Outcome::status(130);
             }
-            return abort_diagnostic(&fds, &context, error.as_bytes(), 2).await;
+            let outcome = abort_diagnostic(&fds, &context, error.as_bytes(), 2).await;
+            return Outcome::status(outcome.code);
         }
         let Some(command) = reader.commands.next() else {
+            if reader.next_position.is_some() {
+                continue;
+            }
             break;
         };
         let end_line = reader.ends.next().unwrap_or(previous_line);

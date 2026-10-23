@@ -715,6 +715,13 @@
       "status": 0,
       "stdout": "YWxpYXMgZz0nZ3JlcCAnXCcnZm9vJ1wnJycK",
       "stderr": ""
+    },
+    {
+      "id": "review75:empty-read-unit",
+      "code": "shopt -s expand_aliases\nalias empty=\nempty\necho after\n",
+      "status": 0,
+      "stdout": "YWZ0ZXIK",
+      "stderr": ""
     }
   ]
 }

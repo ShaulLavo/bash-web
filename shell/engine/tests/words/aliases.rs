@@ -26,7 +26,8 @@ fn eval_reports_its_initial_parser_limit() {
         "a".repeat(60_000)
     );
     assert_eq!(rig.run(&setup), 0);
-    assert_eq!(rig.run("eval 'x; x'\necho after"), 2);
+    assert_eq!(rig.run("eval 'x; x'\necho after"), 0);
+    assert_eq!(rig.output.bytes(), b"after\n");
     assert!(
         String::from_utf8(rig.errors.bytes())
             .unwrap()
