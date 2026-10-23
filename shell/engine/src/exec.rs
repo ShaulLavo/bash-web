@@ -135,6 +135,14 @@ impl StorageAllocation {
     pub(crate) fn fork(&self) -> Result<Self, i32> {
         self.budget.admit(self.bytes)
     }
+    /// Move up to `bytes` of `source`'s existing reservation to this ticket.
+    /// The shared budget is unchanged, so this cannot fail.
+    pub(crate) fn take_from(&mut self, source: &mut Self, bytes: usize) {
+        debug_assert!(Rc::ptr_eq(&self.budget.0, &source.budget.0));
+        let moved = bytes.min(source.bytes);
+        source.bytes -= moved;
+        self.bytes += moved;
+    }
 }
 
 impl Drop for StorageAllocation {

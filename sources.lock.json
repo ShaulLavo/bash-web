@@ -2181,5 +2181,19 @@
       "declare -g",
       "export -n and attribute removal other than +l/+u"
     ]
+  },
+  "shellIndexedSlices": {
+    "classification": "Original local sparse indexed slice adapter and recorded GNU Bash 5.3.15 observations. No external implementation copied or adapted.",
+    "baseRevision": "e6430b1554de7d2efad092f40751858292cb071d",
+    "implementationDestinations": [
+      "shell/engine/src/expand/array_slice.rs",
+      "shell/engine/src/expand.rs"
+    ],
+    "testDestinations": [
+      "shell/engine/tests/words/array_slicing.rs",
+      "scripts/test-own-shell-array-slicing.ts",
+      "scripts/fixtures/shell-array-slicing.json"
+    ],
+    "implementation": "Sparse numeric offsets seek through the existing borrowed state reader. Length counts present entries, not holes. Empty sources and out-of-range offsets skip bound arithmetic. Selected strings are admitted before copying and emitted through shared quote/list/IFS logic with cooperative cancellation and command-wide limits. Scalar bindings keep existing text slicing. PIPESTATUS reads its existing producer. No indexed state mutation or durable producer publication API changes."
   }
 }
