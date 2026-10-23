@@ -1,0 +1,138 @@
+{
+  "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "cases": [
+    {
+      "id": "noexec",
+      "code": "echo a; set -n; echo b; set +n; echo c",
+      "status": 0,
+      "stdout": "a\n",
+      "stderr": ""
+    },
+    {
+      "id": "noexec-long",
+      "code": "echo a; set -o noexec; echo b",
+      "status": 0,
+      "stdout": "a\n",
+      "stderr": ""
+    },
+    {
+      "id": "noexec-function",
+      "code": "f() { echo a; set -n; echo b; }; f; echo c",
+      "status": 0,
+      "stdout": "a\n",
+      "stderr": ""
+    },
+    {
+      "id": "noexec-parse",
+      "code": "set -n\nif then\n",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: -c: line 2: syntax error near unexpected token `then'\n/usr/bin/bash: -c: line 2: `if then'\n"
+    },
+    {
+      "id": "noexec-redirection",
+      "code": "set -n; : >out; echo b",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-simple",
+      "code": "{ set -x; echo 'a b' '' \"it's\" '*' a# '#a' '~x' x~ \"'\" $'\\001' 'a=~b'; set +x; } 2>&1 >/dev/null",
+      "status": 0,
+      "stdout": "+ echo 'a b' '' 'it'\\''s' '*' a# '#a' '~x' x~ \\' $'\\001' 'a=~b'\n+ set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-empty-ps4",
+      "code": "{ PS4=''; set -x; echo quiet >/dev/null; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "echo quiet\nset +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-prefix",
+      "code": "{ set -x; V=1 echo hi 2>/dev/null; set +x; } 2>&1 >/dev/null",
+      "status": 0,
+      "stdout": "+ V=1\n+ echo hi\n+ set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-assignment",
+      "code": "{ set -x; a=1; b=\"x y\"; c=; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "+ a=1\n+ b='x y'\n+ c=\n+ set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-parameter",
+      "code": "{ p=trace; PS4='$p '; set -x; echo hi; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "trace echo hi\nhi\ntrace set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-arithmetic",
+      "code": "{ PS4='+$((1+1)) '; set -x; echo hi; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "+2 echo hi\nhi\n+2 set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-quote",
+      "code": "{ PS4='\"hello\" '; set -x; echo hi; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "\"hello\" echo hi\nhi\n\"hello\" set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-substitution",
+      "code": "{ PS4='$(printf prefix) '; set -x; echo hi; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "prefix echo hi\nhi\nprefix set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-substitution",
+      "code": "{ set -x; x=$(echo sub); echo \"$x\"; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "++ echo sub\n+ x=sub\n+ echo sub\nsub\n+ set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-eval",
+      "code": "{ set -x; eval 'echo hi'; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "+ eval 'echo hi'\n++ echo hi\nhi\n+ set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-redirect",
+      "code": "{ set -x; echo hi 2>/dev/null; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "+ echo hi\nhi\n+ set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-disable",
+      "code": "{ set -x; echo hi; set +x; echo bye; } 2>&1",
+      "status": 0,
+      "stdout": "+ echo hi\nhi\n+ set +x\nbye\n",
+      "stderr": ""
+    },
+    {
+      "id": "flags",
+      "code": "echo \"$-\"; set -euxf; echo \"$-\"; set +euxf; echo \"$-\"",
+      "status": 0,
+      "stdout": "hBc\nefhuxBc\nhBc\n",
+      "stderr": "+ echo efhuxBc\n+ set +euxf\n"
+    },
+    {
+      "id": "combined-pipefail",
+      "code": "set -euo pipefail; echo \"$-\"; false | true; echo bad",
+      "status": 1,
+      "stdout": "ehuBc\n",
+      "stderr": ""
+    }
+  ]
+}
