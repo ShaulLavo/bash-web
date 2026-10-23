@@ -92,7 +92,7 @@ fn binding_views_and_environment_do_not_resolve_aliases_or_special_parameters() 
     assert_eq!(state.parameter("alias"), "resolved");
     assert!(!state.bindings().contains_key("alias"));
     assert_eq!(state.namerefs()["alias"], "target");
-    assert!(!state.environment().contains_key("alias"));
+    assert_eq!(state.environment()["alias"], "target");
     assert_eq!(state.environment()["PWD"], "/raw");
     assert_eq!(state.parameter("PWD"), "/home/guest");
     assert_eq!(state.environment()["EPOCHREALTIME"], "raw-clock");

@@ -328,7 +328,6 @@ fn unsupported_reference_shapes_do_not_create_a_binding_or_target() {
         "ref=PIPESTATUS",
         "ref=not-a-name",
         "-a ref=target",
-        "-nx ref=target",
     ] {
         let rig = Rig::new(Limits::default());
         assert_eq!(rig.run(&format!("declare -n {operand}")), 2, "{operand}");

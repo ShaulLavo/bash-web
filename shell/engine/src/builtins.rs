@@ -691,16 +691,20 @@ async fn declarations(
 ) -> Result<Outcome, i32> {
     let mut args = args.into_iter().peekable();
     let mut print = false;
-    let mut nameref = false;
+    let mut nameref = None;
     let mut readonly = false;
     let mut exported = false;
     if name == "local" && state.borrow().function_calls == 0 {
         return Err(1);
     }
     if matches!(name, "local" | "declare" | "typeset") {
-        while let Some(option) = args.next_if(|arg| arg.starts_with('-')) {
+        while let Some(option) = args.next_if(|arg| arg.starts_with(['-', '+'])) {
             if option == "--" {
                 break;
+            }
+            let enable = option.starts_with('-');
+            if !enable && option != "+n" {
+                return Err(2);
             }
             for flag in option[1..].bytes() {
                 work.checkpoint(&context.cancel)
@@ -708,7 +712,7 @@ async fn declarations(
                     .map_err(error_status)?;
                 match flag {
                     b'p' if matches!(name, "declare" | "typeset") => print = true,
-                    b'n' => nameref = true,
+                    b'n' => nameref = Some(enable),
                     b'r' => readonly = true,
                     b'x' => exported = true,
                     _ => return Err(2),
@@ -719,10 +723,10 @@ async fn declarations(
     if print {
         return declarations::print(name, args, state, fds, context, work).await;
     }
-    if nameref && (readonly || exported) {
+    if nameref == Some(false) && (readonly || exported) {
         return Err(2);
     }
-    if args.peek().is_none() && (nameref || matches!(name, "declare" | "typeset")) {
+    if args.peek().is_none() && (nameref.is_some() || matches!(name, "declare" | "typeset")) {
         return Err(2);
     }
     let mut status = 0;
@@ -737,7 +741,7 @@ async fn declarations(
                 .await
                 .map_err(error_status)?;
         }
-        let extended = nameref || matches!(name, "declare" | "typeset");
+        let extended = nameref.is_some() || matches!(name, "declare" | "typeset");
         if extended {
             work.admit_storage(arg.len()).map_err(error_status)?;
         }
@@ -761,11 +765,20 @@ async fn declarations(
                 .map_err(error_status)?;
             work.admit_storage(storage).map_err(error_status)?;
         }
-        if nameref {
-            let result = nameref_declaration(&key, value, local, state, context, work).await;
+        if let Some(enable) = nameref {
+            let result = declare_reference(
+                &key,
+                value,
+                local,
+                [enable, readonly, exported],
+                state,
+                context,
+                work,
+            )
+            .await;
             status |= i32::from(result.is_err());
             if let Err(code) = result
-                && matches!(code, 2 | crate::exec::RESOURCE_STATUS)
+                && matches!(code, 2 | 130 | crate::exec::RESOURCE_STATUS)
             {
                 return Err(code);
             }
@@ -804,6 +817,30 @@ async fn declarations(
         }
     }
     Ok(Outcome::status(status))
+}
+
+async fn declare_reference(
+    key: &str,
+    value: Option<String>,
+    local: bool,
+    attributes: [bool; 3],
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    let [enable, readonly, exported] = attributes;
+    if !enable {
+        return State::disable_nameref(state, key.to_owned(), value, local, &context.cancel, work)
+            .await
+            .map_err(error_status);
+    }
+    let bytes = State::nameref_attribute_storage(key, readonly, exported).map_err(error_status)?;
+    work.admit_storage(bytes).map_err(error_status)?;
+    nameref_declaration(key, value, local, state, context, work).await?;
+    state
+        .borrow_mut()
+        .set_nameref_attributes(key, readonly, exported);
+    Ok(())
 }
 
 async fn nameref_declaration(

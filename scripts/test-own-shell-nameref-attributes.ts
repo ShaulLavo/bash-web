@@ -12,7 +12,9 @@ const fixture: {
   bash: string;
   environment: Record<string, string>;
   cases: Observation[];
-} = JSON.parse(readFileSync(new URL("fixtures/shell-nameref-attributes.json", import.meta.url), "utf8"));
+} = JSON.parse(
+  readFileSync(new URL("fixtures/shell-nameref-attributes.json", import.meta.url), "utf8"),
+);
 assert.equal(fixture.schema, 1);
 assert.equal(fixture.bash, "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)");
 assert.equal(process.version, "v26.7.0");

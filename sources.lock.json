@@ -2067,5 +2067,17 @@
       "PIPE trap/disposition behavior",
       "Existing closed-descriptor diagnostic and Bash diagnostic line-prefix mismatches retained as strict pending reproductions"
     ]
+  },
+  "shellNamerefAttributes": {
+    "classification": "Original Rust bound-nameref attribute operations. GNU Bash 5.3.15 is the behavior oracle; no upstream implementation copied or adapted.",
+    "files": [
+      "shell/engine/src/state/nameref_attributes.rs",
+      "shell/engine/src/state/nameref_attributes_tests.rs",
+      "scripts/test-own-shell-nameref-attributes.ts",
+      "scripts/fixtures/shell-nameref-attributes.json"
+    ],
+    "implementation": "Keep existing bound scalar-reference and scoped binding storage. Last -n/+n wins. Global +n removes the last reference in a bounded chain after any through-reference RHS assignment; local +n directly detaches or shadows the named local. Keep readonly/export attributes on the reference, not its referent. Export raw immediate target text to child processes. Admit work and storage before mutation; preserve special-variable caches on attribute-only removal.",
+    "deferred": "Bare/unbound references, array-element targets, associative bindings, loop retargeting, integer attributes, -g and +n combined with other attributes. Invalid scalar-target statuses remain the separate PR59 work.",
+    "gate": "Replay recorded local GNU Bash 5.3.15(1)-release controls through actual Waffle without live CI Bash. Native state checks cover raw attributes, environment, storage and cancellation. Frozen 9221-case hosted scoreboard must lose no prior passes."
   }
 }

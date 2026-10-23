@@ -14,6 +14,7 @@ use std::{
 };
 
 mod declarations;
+mod nameref_attributes;
 pub(crate) use declarations::DeclarationView;
 mod binding;
 pub use binding::Binding;
@@ -1111,12 +1112,14 @@ impl State {
     pub(crate) fn environment(&self) -> BTreeMap<String, String> {
         self.exported
             .iter()
-            .filter_map(|name| {
-                self.variables.get(name).and_then(|value| match value {
-                    Binding::Scalar(value) => Some((name.clone(), value.clone())),
-                    Binding::Indexed(_) => None,
-                })
-            })
+            .filter_map(
+                |name| match (self.namerefs.get(name), self.variables.get(name)) {
+                    (Some(value), _) | (_, Some(Binding::Scalar(value))) => {
+                        Some((name.clone(), value.clone()))
+                    }
+                    _ => None,
+                },
+            )
             .collect()
     }
     /// Unset a variable. A local declared in the current function stays
@@ -3107,3 +3110,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod nameref_attributes_tests;
