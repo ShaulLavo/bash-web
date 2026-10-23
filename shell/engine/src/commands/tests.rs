@@ -20,10 +20,10 @@ fn baseline(names: &[&'static str]) -> Vec<&'static str> {
 }
 
 const BUILTINS: &[&str] = &[
-    ":", "[", "break", "builtin", "cd", "command", "continue", "declare", "dirs", "echo", "eval",
-    "exec", "exit", "export", "false", "getopts", "caller", "jobs", "kill", "let", "local", "popd",
-    "printf", "pushd", "pwd", "read", "readonly", "return", "set", "shift", "shopt", "test",
-    "trap", "true", "type", "typeset", "unset", "wait",
+    ":", "[", "break", "builtin", "cd", "command", "compgen", "complete", "compopt", "continue",
+    "declare", "dirs", "echo", "eval", "exec", "exit", "export", "false", "getopts", "caller",
+    "jobs", "kill", "let", "local", "popd", "printf", "pushd", "pwd", "read", "readonly", "return",
+    "set", "shift", "shopt", "test", "trap", "true", "type", "typeset", "unset", "wait",
 ];
 
 #[test]
@@ -62,7 +62,7 @@ fn builtin_dispatch_covers_the_current_builtin_arms_not_the_old_is_builtin_set()
             ":", "true", "false", "echo", "printf", "read", "getopts", "caller", "trap", "export",
             "local", "readonly", "declare", "typeset", "cd", "pwd", "pushd", "popd", "dirs", "set",
             "shift", "shopt", "exit", "return", "jobs", "wait", "kill", "unset", "test", "[",
-            "break", "continue"
+            "break", "continue", "compgen", "complete", "compopt"
         ])
     );
     // `command` was recognized by is_builtin but never had a builtins::run arm.

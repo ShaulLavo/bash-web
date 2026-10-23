@@ -3114,6 +3114,35 @@ and its sibling evidence directory.
 Neither note is a fixed bug, an accepted Bash match or a frozen gain of this
 integration. PR59 leaves the caller and target-scan cancellation logic unchanged.
 
+## Completion negative-extglob follow-up, 2026-10-23
+
+Status: Approved. Owner: BUILTINS completion family after PR #79.
+The nine round-one review reproducers are repaired. The broader control below
+still differs because `expand/pattern/extglob.rs::Compiler::open` rejects `!`.
+Positive `@`, `?`, `*` and `+` operators now use the existing bounded matcher
+for completion `-G`; ordinary argv globbing keeps its prior behavior.
+
+```bash
+shopt -s extglob
+printf x >zz_one; printf x >zz_two; printf x >zz_other
+compgen -G 'zz_!(other)'
+```
+
+GNU Bash 5.3.15 prints `zz_one\nzz_two\n` and exits 0. Production Waffle at
+`3e52e60c655f4159312dad81fbdb797e422cbf35` prints nothing for that command and
+returns 2. The complete failing control remains unchanged in
+`scripts/fixtures/shell-completion-pending.json`. After the normal WASI build,
+run `npm run test:shell:completion:pending`. It is a strict failing recipe,
+not an ignored assertion or a relaxed expected result. Its two unrelated runtime
+controls remain included. The ordinary recipe retains every earlier passing
+completion control and records positive operators separately.
+
+Evidence is in `/work/reports/wave-20261022/shell/builtins-completion-fix-r2-evidence`
+and `/work/reports/machine-fleet/remote-gate/completion-r2-final-20261023T082914Z-tp5_5kgk`.
+Implement bounded complement groups without recursive backtracking, preserve
+work/storage admission and cancellation, and add nested and suffix controls.
+That matcher change is larger than passing an option through completion's glob
+lookup. No frozen case, oracle, exclusion or baseline change is authorized.
 ## Case-attribute review follow-ups, 2026-10-23
 
 Status: Approved. Owner: VARIABLES declaration family. PR77's independent review
@@ -3182,3 +3211,56 @@ directory and `/work/reports/wave-20261022/shell/review72-r1/neighbors.json`.
 The terminal controls are in `scripts/fixtures/shell-read-terminal.json` and
 `shell/engine/tests/words/read_options.rs`. Do not relax their assertions or
 claim a frozen gain without a qualified unchanged-ruler replay.
+
+## Completion nonblocking review follow-ups, 2026-10-23
+
+Status: Approved, deferred beyond PR #79's bounded integration after read #72.
+Independent review `review79-takeover-r2.md` approves completion source
+`f13a5c310bf082da56e00401b43d4a1c2b0dd28b` and records these three remaining
+corners. These are not demonstrated regressions against main. Preserve the
+reviewer's recordings and ordinary argv behavior when implementing them.
+Evidence is in `/work/reports/wave-20261022/shell/review79-takeover-r2-evidence/`.
+
+### Preserve word-list newlines when IFS excludes newline
+
+Owner: completion word-list parsing, `builtins/completion/wordlist.rs`.
+
+```bash
+IFS=:; compgen -W $'a\nb:c'; echo status:$?
+```
+
+The generated word list contains a literal newline, not a backslash followed by
+`n`. GNU Bash 5.3.15 prints `a\nb\nc\nstatus:0\n`. Reviewed source prints
+`ab\nc\nstatus:0\n`. Preserve that newline instead of encoding it as a removed
+line continuation. The review's retained recording uses this equivalent input:
+
+```bash
+IFS=:; compgen -W 'a
+b:c'; echo status:$?
+```
+
+### Enable POSIX classes for completion pathname patterns
+
+Owner: completion pathname matching, `expand/glob.rs`.
+
+```bash
+printf x >zz_a; compgen -G 'zz_[[:alpha:]]'; echo status:$?
+```
+
+GNU Bash 5.3.15 prints `zz_a\nstatus:0\n`. Reviewed source prints `status:2\n`.
+The difference occurs both with extglob off and after `shopt -s extglob`.
+Apply the supported named-class policy to `-G` without changing argv globbing.
+
+### Recognize explicitly dotted positive-extglob alternatives
+
+Owner: completion pathname matching, `expand/glob.rs`.
+
+```bash
+shopt -s extglob; printf x >.zz_a; printf x >zz_a
+compgen -G '@(.zz_a|zz_a)'; echo status:$?
+```
+
+GNU Bash 5.3.15 prints `.zz_a\nzz_a\nstatus:0\n`. Reviewed source prints
+`zz_a\nstatus:0\n`. Treat explicitly dotted alternatives as eligible when
+excluding hidden entries. Keep implicit hidden-name exclusion and ordinary
+argv matching unchanged. Add nested and suffix controls before the fix.

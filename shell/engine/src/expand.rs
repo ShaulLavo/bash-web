@@ -15,6 +15,7 @@ use crate::state::CaseLocale as Locale;
 mod case_pattern;
 mod command;
 mod glob;
+pub(crate) use glob::{completion_matches, sort as sort_candidates};
 mod ifs;
 mod indices;
 mod indirect;
@@ -54,6 +55,7 @@ pub(crate) async fn admit_assignment(
 /// Keep feature state inline and preserve its lifetime through the whole command.
 pub(crate) struct Work {
     execution: crate::exec::Work,
+    frame_scope: Option<crate::exec::Scope>,
     arithmetic_depth: usize,
     arithmetic_names: Vec<(String, u64)>,
     pub(crate) arithmetic_writes: u64,
@@ -77,11 +79,31 @@ impl Work {
     pub(crate) fn new(steps: usize, storage: usize, fields: usize) -> Self {
         Self {
             execution: crate::exec::Work::new(steps, storage, fields),
+            frame_scope: None,
             arithmetic_depth: 0,
             arithmetic_names: Vec::new(),
             arithmetic_writes: 0,
             substitutions: None,
             substitution_status: None,
+        }
+    }
+    pub(crate) fn with_frame_scope(mut self, scope: crate::exec::Scope) -> Self {
+        self.frame_scope = Some(scope);
+        self
+    }
+    fn frame<'a, T: 'a, F>(
+        &'a mut self,
+        build: impl FnOnce(&'a mut Self) -> F,
+    ) -> crate::exec::ResultFuture<'a, T>
+    where
+        F: std::future::Future<Output = Result<T, Error>> + 'a,
+    {
+        if let Some(scope) = self.frame_scope.clone() {
+            return scope.frame(build(self), |code| Err(code.into()));
+        }
+        match self.admit_storage(std::mem::size_of::<F>()) {
+            Ok(()) => futures::future::Either::Right(build(self).boxed_local()),
+            Err(error) => futures::future::Either::Left(futures::future::ready(Err(error))),
         }
     }
     pub(crate) fn enter_arithmetic(&mut self) -> Result<(), Error> {
@@ -687,6 +709,7 @@ struct ExpansionOptions {
     max_fields: usize,
     max_raw: usize,
     scalar: bool,
+    pathname: bool,
     admitted: bool,
     tilde: tilde::Context,
 }
@@ -2167,6 +2190,7 @@ async fn expand_one(
         max_fields,
         max_raw,
         scalar,
+        pathname,
         admitted,
         tilde,
     } = options;
@@ -2215,7 +2239,8 @@ async fn expand_one(
     *raw_remaining = expansion.raw_remaining;
     expansion.current_ifs(state).await?;
     let ifs = expansion.ifs.take().ok_or(2)?;
-    let pathname = !scalar && expansion.work.substitutions.is_some() && !state.borrow().noglob;
+    let pathname =
+        pathname && !scalar && expansion.work.substitutions.is_some() && !state.borrow().noglob;
     let mut fields = Fields::new(max_bytes, max_fields);
     fields.pathname = pathname;
     fields.extglob_groups = pathname && admitted && state.borrow().extglob;
@@ -2434,64 +2459,46 @@ pub(crate) async fn arithmetic_text(
     Ok(expansion.captured.take().ok_or(2)?.value)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FieldContext {
+    Argv,
+    ForList,
+    Completion,
+}
+
 pub(crate) async fn fields(
     word: &Word,
     state: &SharedState,
     cancel: &Cancel,
-    max_bytes: usize,
-    max_fields: usize,
-    max_raw: usize,
+    context: FieldContext,
+    limits: (usize, usize, usize),
     work: &mut Work,
 ) -> Result<Vec<String>, Error> {
-    work.fields_remaining = work.fields_remaining.min(max_fields);
+    if context == FieldContext::ForList {
+        work.checkpoint(cancel).await?;
+    }
+    if context != FieldContext::Completion {
+        work.fields_remaining = work.fields_remaining.min(limits.1);
+    }
     let values = expand(
         word,
         state,
         cancel,
         ExpansionOptions {
-            max_bytes,
-            max_fields,
-            max_raw,
+            max_bytes: limits.0,
+            max_fields: limits.1,
+            max_raw: limits.2,
             scalar: false,
-            admitted: false,
+            pathname: context != FieldContext::Completion,
+            admitted: context != FieldContext::Argv,
             tilde: tilde::Context::Word,
         },
         work,
     )
     .await?;
-    work.fields_remaining = work.fields_remaining.saturating_sub(values.len());
-    Ok(values)
-}
-
-/// For-list fields retain ordinary argv semantics while admitting snapshots,
-/// intermediate segments, output buffers and recursive futures before growth.
-pub(crate) async fn fields_admitted(
-    word: &Word,
-    state: &SharedState,
-    cancel: &Cancel,
-    max_bytes: usize,
-    max_fields: usize,
-    max_raw: usize,
-    work: &mut Work,
-) -> Result<Vec<String>, Error> {
-    work.checkpoint(cancel).await?;
-    work.fields_remaining = work.fields_remaining.min(max_fields);
-    let values = expand(
-        word,
-        state,
-        cancel,
-        ExpansionOptions {
-            max_bytes,
-            max_fields,
-            max_raw,
-            scalar: false,
-            admitted: true,
-            tilde: tilde::Context::Word,
-        },
-        work,
-    )
-    .await?;
-    work.fields_remaining = work.fields_remaining.saturating_sub(values.len());
+    if context != FieldContext::Completion {
+        work.fields_remaining = work.fields_remaining.saturating_sub(values.len());
+    }
     Ok(values)
 }
 
@@ -2535,6 +2542,7 @@ async fn scalar_word(
             max_fields: 1,
             max_raw,
             scalar: true,
+            pathname: false,
             admitted: false,
             tilde,
         },
@@ -2665,8 +2673,61 @@ fn indexed_name(name: &str) -> Option<(&str, &str)> {
 }
 
 #[cfg(test)]
+fn poll_argv(
+    word: &Word,
+    state: &SharedState,
+    cancel: &Cancel,
+    limits: (usize, usize, usize),
+    work: &mut Work,
+) -> Option<Result<Vec<String>, Error>> {
+    fields(word, state, cancel, FieldContext::Argv, limits, work).now_or_never()
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pattern_frames_admit_actual_bytes_before_construction() {
+        let bytes = std::mem::size_of::<std::future::Ready<Result<usize, Error>>>();
+        let mut work = Work::new(8, bytes - 1, 1);
+        let called = std::cell::Cell::new(false);
+        let rejected = work.frame(|_| {
+            called.set(true);
+            std::future::ready(Ok(7usize))
+        });
+        assert!(matches!(
+            rejected.now_or_never(),
+            Some(Err(Error::Status(2)))
+        ));
+        assert!(!called.get());
+        assert_eq!(work.storage_left(), bytes - 1);
+        let mut work = Work::new(8, bytes, 1);
+        assert!(matches!(
+            work.frame(|_| std::future::ready(Ok(7usize)))
+                .now_or_never(),
+            Some(Ok(7))
+        ));
+        assert_eq!(work.storage_left(), 0);
+    }
+
+    #[test]
+    fn pattern_frames_share_and_refund_live_execution_admission() {
+        let execution = crate::exec::StorageBudget::new(4096);
+        let scope =
+            crate::exec::Scope::new(128, crate::exec::StorageBudget::new(128), execution.clone());
+        let mut work = Work::new(8, 0, 1).with_frame_scope(scope.clone());
+        let frame = work.frame(|_| std::future::pending::<Result<(), Error>>());
+        assert!(scope.execution_available() < 4096);
+        drop(frame);
+        assert_eq!(scope.execution_available(), 4096);
+        assert!(matches!(
+            work.frame(|_| std::future::ready(Ok(7))).now_or_never(),
+            Some(Ok(7))
+        ));
+        assert_eq!(scope.execution_available(), 4096);
+        assert_eq!(work.storage_left(), 0);
+    }
 
     #[test]
     fn admitted_fields_share_segment_output_and_slot_storage_without_changing_argv() {
@@ -2676,9 +2737,16 @@ mod tests {
         let storage = std::mem::size_of::<Segment>() + 8 + 8 + std::mem::size_of::<String>();
         for (bytes, accepted) in [(storage - 1, false), (storage, true)] {
             let mut work = Work::new(128, bytes, 1);
-            let result = fields_admitted(&word, &state, &cancel, 16, 1, 16, &mut work)
-                .now_or_never()
-                .expect("short literal must not suspend");
+            let result = fields(
+                &word,
+                &state,
+                &cancel,
+                FieldContext::ForList,
+                (16, 1, 16),
+                &mut work,
+            )
+            .now_or_never()
+            .expect("short literal must not suspend");
             if accepted {
                 assert!(matches!(result, Ok(value) if value == ["abc"]));
                 assert_eq!(work.storage_remaining, 0);
@@ -2689,8 +2757,7 @@ mod tests {
         // Ordinary argv keeps its existing separate allocation accounting.
         let mut work = Work::new(128, 0, 1);
         assert!(
-            matches!(fields(&word, &state, &cancel, 16, 1, 16, &mut work)
-            .now_or_never(), Some(Ok(value)) if value == ["abc"])
+            matches!(poll_argv(&word, &state, &cancel, (16, 1, 16), &mut work), Some(Ok(value)) if value == ["abc"])
         );
     }
 
@@ -2705,15 +2772,21 @@ mod tests {
         for source in ["$v", "\"$v\"", "{a,b}$v", "{a,b}\"$v\""] {
             let word = shell_parser::Parser::parse_word_string_with_limits(source, 16, 4096);
             let mut legacy = Work::new(65536, 1024 * 1024, 16);
-            let expected = fields(&word, &state, &cancel, 4096, 16, 4096, &mut legacy)
-                .now_or_never()
+            let expected = poll_argv(&word, &state, &cancel, (4096, 16, 4096), &mut legacy)
                 .expect("short fixture must not suspend")
                 .unwrap_or_else(|_| panic!("legacy fixture must expand: {source}"));
             let mut admitted = Work::new(65536, 1024 * 1024, 16);
-            let actual = fields_admitted(&word, &state, &cancel, 4096, 16, 4096, &mut admitted)
-                .now_or_never()
-                .expect("short fixture must not suspend")
-                .unwrap_or_else(|_| panic!("admitted fixture must expand: {source}"));
+            let actual = fields(
+                &word,
+                &state,
+                &cancel,
+                FieldContext::ForList,
+                (4096, 16, 4096),
+                &mut admitted,
+            )
+            .now_or_never()
+            .expect("short fixture must not suspend")
+            .unwrap_or_else(|_| panic!("admitted fixture must expand: {source}"));
             assert_eq!(actual, expected, "{source}");
             assert!(
                 admitted.storage_remaining < legacy.storage_remaining,
@@ -2723,8 +2796,15 @@ mod tests {
         cancel.cancel();
         let mut work = Work::new(128, 0, 1);
         assert!(matches!(
-            fields_admitted(&Word::literal("abc"), &state, &cancel, 16, 1, 16, &mut work)
-                .now_or_never(),
+            fields(
+                &Word::literal("abc"),
+                &state,
+                &cancel,
+                FieldContext::ForList,
+                (16, 1, 16),
+                &mut work
+            )
+            .now_or_never(),
             Some(Err(Error::Status(130)))
         ));
     }
@@ -2866,12 +2946,12 @@ mod tests {
         let cancel = Cancel::new();
         let mut work = Work::new(64, storage - 1, 1);
         assert!(matches!(
-            fields(&token, &state, &cancel, 64, 1, 64, &mut work).now_or_never(),
+            poll_argv(&token, &state, &cancel, (64, 1, 64), &mut work),
             Some(Err(Error::Status(2))),
         ));
         let mut work = Work::new(64, storage, 1);
         assert!(matches!(
-            fields(&token, &state, &cancel, 64, 1, 64, &mut work).now_or_never(),
+            poll_argv(&token, &state, &cancel, (64, 1, 64), &mut work),
             Some(Err(Error::Unbound { name, line: None })) if name == "missing",
         ));
         assert_eq!(work.storage_remaining, 0);
@@ -2885,7 +2965,14 @@ mod tests {
         let token = shell_parser::Parser::parse_word_string_with_limits(&source, 10, 16384);
         let cancel = Cancel::new();
         let mut work = Work::new(8192, 4096, 1);
-        let mut expansion = Box::pin(fields(&token, &state, &cancel, 4096, 1, 4096, &mut work));
+        let mut expansion = Box::pin(fields(
+            &token,
+            &state,
+            &cancel,
+            FieldContext::Argv,
+            (4096, 1, 4096),
+            &mut work,
+        ));
         assert!(expansion.as_mut().now_or_never().is_none());
         cancel.cancel();
         assert!(matches!(
