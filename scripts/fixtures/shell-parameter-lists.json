@@ -1,0 +1,509 @@
+{
+  "bash": "5.3.15(1)-release",
+  "env": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "LC_ALL": "C",
+    "LANG": "C"
+  },
+  "cases": [
+    {
+      "id": "list-0",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show ${@-DEFAULT}; value=${@-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-1",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show \"${@-DEFAULT}\"; value=${@-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-2",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show ${@:-DEFAULT}; value=${@:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-3",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show \"${@:-DEFAULT}\"; value=${@:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-4",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show ${@+DEFAULT}; value=${@+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-5",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show \"${@+DEFAULT}\"; value=${@+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-6",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show ${@:+DEFAULT}; value=${@:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-7",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show \"${@:+DEFAULT}\"; value=${@:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-8",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show ${*-DEFAULT}; value=${*-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-9",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show \"${*-DEFAULT}\"; value=${*-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-10",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show ${*:-DEFAULT}; value=${*:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-11",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show \"${*:-DEFAULT}\"; value=${*:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-12",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show ${*+DEFAULT}; value=${*+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-13",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show \"${*+DEFAULT}\"; value=${*+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-14",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show ${*:+DEFAULT}; value=${*:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-15",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show \"${*:+DEFAULT}\"; value=${*:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-16",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show ${@-DEFAULT}; value=${@-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-17",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show \"${@-DEFAULT}\"; value=${@-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-18",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show ${@:-DEFAULT}; value=${@:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-19",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show \"${@:-DEFAULT}\"; value=${@:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-20",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show ${@+DEFAULT}; value=${@+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-21",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show \"${@+DEFAULT}\"; value=${@+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-22",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show ${@:+DEFAULT}; value=${@:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-23",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show \"${@:+DEFAULT}\"; value=${@:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-24",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show ${*-DEFAULT}; value=${*-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-25",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show \"${*-DEFAULT}\"; value=${*-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-26",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show ${*:-DEFAULT}; value=${*:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-27",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show \"${*:-DEFAULT}\"; value=${*:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-28",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show ${*+DEFAULT}; value=${*+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-29",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show \"${*+DEFAULT}\"; value=${*+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-30",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show ${*:+DEFAULT}; value=${*:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-31",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show \"${*:+DEFAULT}\"; value=${*:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-32",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show ${@-DEFAULT}; value=${@-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=< >\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-33",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show \"${@-DEFAULT}\"; value=${@-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=2 <> <>\nassigned=< >\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-34",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show ${@:-DEFAULT}; value=${@:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=< >\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-35",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show \"${@:-DEFAULT}\"; value=${@:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=2 <> <>\nassigned=< >\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-36",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show ${@+DEFAULT}; value=${@+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-37",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show \"${@+DEFAULT}\"; value=${@+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-38",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show ${@:+DEFAULT}; value=${@:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-39",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show \"${@:+DEFAULT}\"; value=${@:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-40",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show ${*-DEFAULT}; value=${*-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-41",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show \"${*-DEFAULT}\"; value=${*-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-42",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show ${*:-DEFAULT}; value=${*:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-43",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show \"${*:-DEFAULT}\"; value=${*:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-44",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show ${*+DEFAULT}; value=${*+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-45",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show \"${*+DEFAULT}\"; value=${*+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-46",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show ${*:+DEFAULT}; value=${*:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-47",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show \"${*:+DEFAULT}\"; value=${*:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-48",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show ${@-DEFAULT}; value=${@-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=2 <a b> <c>\nassigned=<a b  c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-49",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show \"${@-DEFAULT}\"; value=${@-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=3 <a b> <> <c>\nassigned=<a b  c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-50",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show ${@:-DEFAULT}; value=${@:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=2 <a b> <c>\nassigned=<a b  c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-51",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show \"${@:-DEFAULT}\"; value=${@:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=3 <a b> <> <c>\nassigned=<a b  c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-52",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show ${@+DEFAULT}; value=${@+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-53",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show \"${@+DEFAULT}\"; value=${@+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-54",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show ${@:+DEFAULT}; value=${@:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-55",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show \"${@:+DEFAULT}\"; value=${@:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-56",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show ${*-DEFAULT}; value=${*-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=2 <a b> <c>\nassigned=<a bc>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-57",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show \"${*-DEFAULT}\"; value=${*-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <a bc>\nassigned=<a bc>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-58",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show ${*:-DEFAULT}; value=${*:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=2 <a b> <c>\nassigned=<a bc>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-59",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show \"${*:-DEFAULT}\"; value=${*:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <a bc>\nassigned=<a bc>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-60",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show ${*+DEFAULT}; value=${*+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-61",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show \"${*+DEFAULT}\"; value=${*+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-62",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show ${*:+DEFAULT}; value=${*:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-63",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show \"${*:+DEFAULT}\"; value=${*:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "lazy-list-nested",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- x \"y z\"; show \"${u:-${@}}\" \"${u:+${@:bad}}\"; echo \"${@:-${unbound:?bad}}\"",
+      "status": 0,
+      "stdout": "argc=3 <x> <y z> <>\nx y z\n",
+      "stderr": ""
+    },
+    {
+      "id": "lazy-list-side-effects",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- x; show \"${@:-${unused:=no}}\" \"${@:+${selected:=yes}}\" \"$unused\" \"$selected\"",
+      "status": 0,
+      "stdout": "argc=4 <x> <yes> <> <yes>\n",
+      "stderr": ""
+    },
+    {
+      "id": "lazy-list-empty-alternates",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; show \"${@+}\" \"${@:+}\"; set -- \"\"; show \"${@:+x}\" \"${@+}\"; set -- a b; show \"${@+}\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nargc=2 <> <>\nargc=1 <>\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-fields",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; param_b=2 param_a=1; show \"${!param_@}\" \"${!param_*}\" ${!param_@} ${!param_*}; IFS=:; show \"${!param_@}\" \"${!param_*}\" ${!param_@} ${!param_*}",
+      "status": 0,
+      "stdout": "argc=7 <param_a> <param_b> <param_a param_b> <param_a> <param_b> <param_a> <param_b>\nargc=7 <param_a> <param_b> <param_a:param_b> <param_a> <param_b> <param_a> <param_b>\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-empty",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; show \"${!param_missing_@}\" \"${!param_missing_*}\"; param_empty=(); param_sparse=([5]=x); declare param_unset; param_null=; show \"${!param_@}\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nargc=3 <param_empty> <param_null> <param_sparse>\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-dynamic",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; param_a=1 param_b=2; (local=1; unset param_a; show \"${!param_@}\"); show \"${!param_@}\"; unset param_b; show \"${!param_@}\"",
+      "status": 0,
+      "stdout": "argc=1 <param_b>\nargc=2 <param_a> <param_b>\nargc=1 <param_a>\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-nested",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; param_a=1 param_b=2; show \"${u:-${!param_@}}\"; IFS=; a=${!param_@}; b=${!param_*}; show \"$a\" \"$b\"",
+      "status": 0,
+      "stdout": "argc=2 <param_a> <param_b>\nargc=2 <param_a param_b> <param_aparam_b>\n",
+      "stderr": ""
+    }
+  ]
+}
