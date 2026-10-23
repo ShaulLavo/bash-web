@@ -2989,3 +2989,33 @@ and its sibling evidence directory.
 
 Neither note is a fixed bug, an accepted Bash match or a frozen gain of this
 integration. PR59 leaves the caller and target-scan cancellation logic unchanged.
+
+## Case-attribute review follow-ups, 2026-10-23
+
+Status: Approved. Owner: VARIABLES declaration family. PR77's independent review
+approved source `7d9f73ee295d47c0f360b7bbb63379963719f851`. These are newly added
+feature corners, not demonstrated losses against main. Record failing-first
+Bash 5.3.15 controls before the next bounded correction.
+
+- Reapplying uppercase conversion rejects its own Unicode output. Run
+  `declare -u x=µ; x+=a; echo ok:$?; declare -p x`. Bash prints `ok:0` and
+  `declare -u x="ΜA"`; the engine prints `ok:2` and `declare -u x="Μ"`.
+  `ÿ` converting to `Ÿ` has the same problem. Check the mapper's output range
+  in `state/case_attributes.rs` and its append caller in `interpreter/indexed.rs`.
+- Adding an attribute through an existing local nameref destroys the reference.
+  Run `x=OUT; f(){ local -n r=x; local -l r=AB; r=CD; declare -p x r; }; f; declare -p x`.
+  Bash prints local `declare -l x="cd"`, `declare -n r="x"`, then restores
+  `declare -- x="OUT"`. The engine leaves x unchanged and prints scalar r.
+  Preserve reference ownership and target/local restoration in `case_attributes.rs`.
+- Combined `declare -nl r=x` loses the reference. Run
+  `x=old; declare -nl r=x; r=ABC; declare -p x r`. Bash prints x as `ABC` and
+  r as `declare -nl r="x"`; the engine prints x as `old` and scalar r as `ABC`.
+  Handle the declaration flags together in the owning builtin path.
+- Bare `+` is consumed as an empty option. Run
+  `declare + x=ok; echo status:$?; declare -p x`. Bash diagnoses the invalid
+  identifier and prints `status:1`, keeping x set. The engine prints `status:0`.
+  Correct operand admission without losing the later valid assignment.
+
+Exact Bash/native observations, file locations and the review reproducer are in
+`/work/reports/wave-20261022/shell/review77-r1.md` and `review77-r1-evidence/`.
+Keep frozen observations, exclusions and blocking gates unchanged.
