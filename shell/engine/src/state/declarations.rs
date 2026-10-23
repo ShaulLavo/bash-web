@@ -9,6 +9,29 @@ pub(crate) struct DeclarationView<'a> {
 }
 
 impl State {
+    pub(crate) fn declaration_append_base(&self, name: &str, local: bool) -> Option<&str> {
+        if !local {
+            return self.scalar_parameter(name);
+        }
+        let current = self
+            .locals
+            .last()
+            .is_some_and(|scope| scope.contains_key(name));
+        let prefix = self
+            .locals
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name))
+            .is_some_and(|binding| binding.function_prefix);
+        if !current && !prefix {
+            return None;
+        }
+        self.variables
+            .get(name)
+            .and_then(Binding::scalar)
+            .map(String::as_str)
+    }
+
     /// Inspect the named declaration, not the value reached through a nameref.
     pub(crate) fn declaration(&self, name: &str) -> Result<Option<DeclarationView<'_>>, ()> {
         let reference = self.namerefs.get(name);

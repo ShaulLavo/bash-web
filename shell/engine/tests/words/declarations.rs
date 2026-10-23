@@ -105,3 +105,24 @@ fn indexed_declaration_rejection_preserves_local_and_raw_reference() {
     assert_eq!(rig.run("declare -n r=a; declare -p r"), 0);
     assert_eq!(rig.output.bytes(), b"global\ndeclare -n r=\"a\"\n");
 }
+
+#[test]
+fn declaration_append_limits_reject_before_mutating_the_binding() {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 256,
+        ..Limits::default()
+    });
+    rig.variable("v", &"a".repeat(256));
+    assert_eq!(rig.run("export v+=x"), 2);
+    assert_eq!(rig.value("v"), Some("a".repeat(256)));
+}
+
+#[test]
+fn declaration_append_scanning_yields_and_cancels_before_mutation() {
+    let rig = Rig::new(Limits::default());
+    rig.variable("v", &"a".repeat(12000));
+    let job = rig.shell.start("export v+=x").unwrap();
+    rig.interrupt_after_counting_yields(job);
+    assert_eq!(rig.value("v"), Some("a".repeat(12000)));
+    assert!(rig.output.bytes().is_empty());
+}

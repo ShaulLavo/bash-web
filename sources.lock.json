@@ -2010,6 +2010,21 @@
     "documentation": "docs/declaration-printing.md",
     "qualification": "Targeted production-Waffle evidence only at this checkpoint. Parent owns independent review, serialized main integration, full frozen replay and baseline recomputation."
   },
+  "shellDeclarationAppend": {
+    "classification": "Original Rust scalar declaration append adapter and scope-aware state view. GNU Bash is a behavior oracle; no upstream implementation copied or adapted.",
+    "oracle": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "implementationDestinations": [
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/declarations.rs",
+      "shell/engine/src/state/declarations.rs"
+    ],
+    "testDestinations": [
+      "shell/engine/tests/words/declarations.rs",
+      "scripts/test-own-shell-declarations.ts",
+      "scripts/fixtures/shell-declaration-append.json"
+    ],
+    "strategy": "Recognize scalar += declaration words without splitting their RHS. Read only the current local or inherited function-prefix value for a local append; ordinary declarations read the visible scalar target. Admit and cooperatively scan the append before the existing state-owned declaration operation. Compound arrays and nameref-target declarations remain separate work."
+  },
   "shellTilde": {
     "classification": "Original HOME-only tilde adapter and controls. GNU Bash 5.3.15 is a behavior oracle; no upstream implementation copied or adapted.",
     "baseRevision": "93fdf762f2a694427440d07156c7a8c458ecc995",

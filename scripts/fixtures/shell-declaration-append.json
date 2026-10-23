@@ -102,10 +102,10 @@
       "stderr": ""
     },
     {
-      "name": "prefix builtin value restores",
-      "code": "x=outer; x=temp export x+=suffix; echo \"$x\"",
+      "name": "temporary ordinary builtin restores",
+      "code": "x=outer; x=temp true; echo \"$x\"",
       "status": 0,
-      "stdout": "c3VmZml4Cg==",
+      "stdout": "b3V0ZXIK",
       "stderr": ""
     },
     {

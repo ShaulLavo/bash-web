@@ -2958,3 +2958,12 @@ are retained in the function-name report's `verify6.log` and `aliases-pending.lo
 This is a separate builtin prerequisite, not permission to add alias, shopt or
 function-name grammar in the literal-name validation change. Keep parser alias
 coverage and reuse its raw-token provenance when runtime aliases are implemented.
+
+
+## Temporary prefix declaration writes
+
+Status: Approved follow-up, observed 2026-10-23 in the assignment/scope lane.
+
+- Bash 5.3.15 runs `x=outer; x=temp export x+=suffix; echo "$x"` with stdout `suffix\n` and status 0. The unchanged production Waffle guest at `e6430b1554de7d2efad092f40751858292cb071d` prints `outer\n` and status 0. Reproduced once in the local declaration-append probe.
+- `state::PrefixFrame::builtin` saves bindings outside `State::prefixes`, and its drop path restores the saved binding after the declaration. Trace `shell/engine/src/state.rs` around `PrefixBindings::Builtin` and `Drop for PrefixFrame`, plus `interpreter.rs` builtin dispatch. A fix must distinguish a declaration write from an ordinary temporary environment; comparing final values is insufficient when the declaration assigns the same value.
+- Keep regular builtin prefixes temporary and function-prefix locals inherited. Add recorded Bash controls for plain assignment and append through export, readonly, declare, local and eval. Pair them with the frozen temp-binding cases. This is separate from scalar declaration += recognition and scope lookup.

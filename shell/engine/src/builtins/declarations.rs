@@ -1,7 +1,38 @@
 use super::{
-    Context, FdTable, Outcome, SharedState, Work, diagnose, error_status, scan_bytes, write,
+    Context, FdTable, Outcome, SharedState, State, Work, diagnose, error_status, scan_bytes, write,
 };
 use crate::{expand::Printability, state::DeclarationView};
+
+pub(super) async fn append_scalar(
+    name: &str,
+    value: String,
+    local: bool,
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Result<String, i32> {
+    if !local {
+        State::admit_scalar_access(state, name, &context.cancel, work)
+            .await
+            .map_err(error_status)?;
+    }
+    let bytes = state
+        .borrow()
+        .declaration_append_base(name, local)
+        .map_or(0, str::len);
+    scan_bytes(bytes, context, work).await?;
+    let state = state.borrow();
+    let old = state.declaration_append_base(name, local).unwrap_or("");
+    let bytes = old.len().checked_add(value.len()).ok_or(2)?;
+    if bytes > context.limits().expansion_bytes {
+        return Err(2);
+    }
+    work.admit_storage(bytes).map_err(error_status)?;
+    let mut joined = String::with_capacity(bytes);
+    joined.push_str(old);
+    joined.push_str(&value);
+    Ok(joined)
+}
 
 struct DeclarationSnapshot {
     value: Option<String>,

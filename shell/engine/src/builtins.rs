@@ -64,6 +64,7 @@ pub(crate) fn assignment_operand(word: &Word) -> bool {
     }) {
         return false;
     }
+    let name = name.strip_suffix('+').unwrap_or(name);
     let mut bytes = name.bytes();
     bytes
         .next()
@@ -741,10 +742,14 @@ async fn declarations(
         if extended {
             work.admit_storage(arg.len()).map_err(error_status)?;
         }
-        let (key, value) = arg
-            .split_once('=')
-            .map(|(key, value)| (key.to_owned(), Some(value.to_owned())))
-            .unwrap_or((arg, None));
+        let (key, value, append) = match arg.split_once('=') {
+            Some((key, value)) => (
+                key.strip_suffix('+').unwrap_or(key).to_owned(),
+                Some(value.to_owned()),
+                key.ends_with('+'),
+            ),
+            None => (arg, None, false),
+        };
         if !valid_name(&key) {
             if name == "local" {
                 status = 1;
@@ -761,6 +766,9 @@ async fn declarations(
                 .map_err(error_status)?;
             work.admit_storage(storage).map_err(error_status)?;
         }
+        if nameref && append {
+            return Err(2);
+        }
         if nameref {
             let result = nameref_declaration(&key, value, local, state, context, work).await;
             status |= i32::from(result.is_err());
@@ -771,6 +779,14 @@ async fn declarations(
             }
             continue;
         }
+        let value = if append {
+            Some(
+                declarations::append_scalar(&key, value.ok_or(2)?, local, state, context, work)
+                    .await?,
+            )
+        } else {
+            value
+        };
         if let Some(value) = &value
             && !local
         {
