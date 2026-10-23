@@ -36,6 +36,7 @@ pub(crate) enum Handler {
     Command,
     BuiltinWrapper,
     Type,
+    Hash,
     Exec,
     Eval,
     Let,
@@ -147,6 +148,12 @@ const fn keyword(name: &'static str, availability: Availability) -> Command {
 /// reserved-word and compound-array declaration grammar is a separate authority;
 /// it is not replaced by expanded-name command metadata.
 static COMMANDS: &[Command] = &[
+    core(
+        "hash",
+        Class::RegularBuiltin,
+        Declaration::Ordinary,
+        Handler::Hash,
+    ),
     special(":", Handler::Builtin(Builtin::Noop)),
     regular("true", Builtin::Noop),
     regular("false", Builtin::False),

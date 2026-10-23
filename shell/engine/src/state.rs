@@ -15,6 +15,7 @@ use std::{
 
 mod case;
 mod case_attributes;
+pub(crate) mod command_hash;
 pub(crate) mod completion;
 pub(crate) use case::Locale as CaseLocale;
 pub(crate) use case_attributes::{CaseMapping, CaseOptions};
@@ -140,6 +141,7 @@ pub struct State {
     pub cwd: String,
     directories: DirectoryStack,
     pub(crate) completions: completion::CompletionTable,
+    pub(crate) command_hash: command_hash::CommandHash,
     /// Function bodies are immutable. Isolated shells copy bindings, not ASTs.
     functions: BTreeMap<String, StoredFunction>,
     pub(crate) traps: traps::Traps,
@@ -190,6 +192,7 @@ impl Default for State {
             cwd: "/home/guest".into(),
             directories: DirectoryStack::default(),
             completions: completion::CompletionTable::default(),
+            command_hash: command_hash::CommandHash::default(),
             functions: BTreeMap::new(),
             traps: traps::Traps::default(),
             status: 0,
@@ -386,6 +389,7 @@ impl State {
             cwd,
             directories,
             completions: state.completions.clone(),
+            command_hash: state.command_hash.clone(),
             functions,
             traps: state.traps.inherited(),
             status: state.status,

@@ -12,3 +12,43 @@ for (const entry of fixture.cases)
     assert.equal(actual.status, entry.status);
     assert.equal(actual.stdout.toString(), entry.stdout);
   });
+
+test("hash queries use real registrations, not ordinary files or literal entries", async () => {
+  const actual = await runner(`
+printf 'not executable' >/usr/bin/hash_ordinary_file
+hash argv.py
+hash -t argv.py
+hash hash_ordinary_file; echo missing=$?
+hash -p /literal argv.py
+command -v argv.py
+type -aP argv.py
+hash -p /literal hash_ordinary_file
+hash hash_ordinary_file; echo removed=$?
+hash -t hash_ordinary_file; echo missing=$?
+`);
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.status, 0);
+  assert.equal(
+    actual.stdout.toString(),
+    "/usr/bin/argv.py\nmissing=1\n/literal\n/usr/bin/argv.py\nremoved=1\nmissing=1\n",
+  );
+});
+
+test("hash remains a core builtin without utility add-ons or automatic execution caching", async () => {
+  const core = await createShellFixtureRunner({ utilities: false });
+  const actual = await core(`
+hash -p /unregistered cat
+command -v cat
+cat; echo status=$?
+hash -t cat
+hash -r
+argv.py ran
+hash
+`);
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.status, 0);
+  assert.equal(
+    actual.stdout.toString(),
+    "/unregistered\nstatus=127\n/unregistered\n['ran']\nhash: hash table empty\n",
+  );
+});

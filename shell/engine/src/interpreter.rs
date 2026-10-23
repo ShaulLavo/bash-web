@@ -25,6 +25,7 @@ mod control;
 pub(crate) mod eval;
 mod file_substitution;
 mod function_names;
+mod hash_builtin;
 mod indexed;
 mod select;
 #[cfg(test)]
@@ -3135,6 +3136,14 @@ async fn dispatch_simple_command_body(
             return Err(2);
         }
         return Ok(eval::run(args, state, fds, context).await);
+    }
+    if handler == Some(commands::Handler::Hash) {
+        let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
+            .await
+            .map_err(admission_status)?;
+        return hash_builtin::run(&args, &state, &fds, &context, &mut work)
+            .await
+            .map(Outcome::status);
     }
     if handler == Some(commands::Handler::Type) {
         let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
