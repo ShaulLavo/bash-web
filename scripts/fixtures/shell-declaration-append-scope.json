@@ -149,6 +149,153 @@
       "status": 0,
       "stdout": "YQpvdXRlcgo=",
       "stderr": ""
+    },
+    {
+      "name": "scope continuation local cycle =",
+      "code": "f(){ local -n r=s; local -n s=r; local r=bad after=yes 2>/dev/null; printf \"%s\\n\" \"${after-no}\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation local cycle +=",
+      "code": "f(){ local -n r=s; local -n s=r; local r+=bad after=yes 2>/dev/null; printf \"%s\\n\" \"${after-no}\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation local self =",
+      "code": "f(){ local -n r=r; local r=bad after=yes 2>/dev/null; printf \"%s\\n\" \"${after-no}\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation local self +=",
+      "code": "f(){ local -n r=r; local r+=bad after=yes 2>/dev/null; printf \"%s\\n\" \"${after-no}\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation local valid append",
+      "code": "f(){ local t=base; local -n r=t; local r+=tail after=yes; printf \"%s:%s\\n\" \"$t\" \"${after-no}\"; }; f",
+      "status": 0,
+      "stdout": "YmFzZXRhaWw6eWVzCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation local readonly",
+      "code": "f(){ local -r r=before; local r+=bad after=yes 2>/dev/null; printf \"%s:%s\\n\" \"${after-no}\" \"$r\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzOmJlZm9yZQo=",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation local readonly reference",
+      "code": "f(){ local -r t=before; local -n r=t; local r+=bad after=yes 2>/dev/null; printf \"%s:%s\\n\" \"${after-no}\" \"$r\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzOmJlZm9yZQo=",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation declare cycle =",
+      "code": "f(){ local -n r=s; local -n s=r; declare r=bad after=yes 2>/dev/null; printf \"%s\\n\" \"${after-no}\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation declare cycle +=",
+      "code": "f(){ local -n r=s; local -n s=r; declare r+=bad after=yes 2>/dev/null; printf \"%s\\n\" \"${after-no}\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation declare self =",
+      "code": "f(){ local -n r=r; declare r=bad after=yes 2>/dev/null; printf \"%s\\n\" \"${after-no}\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation declare self +=",
+      "code": "f(){ local -n r=r; declare r+=bad after=yes 2>/dev/null; printf \"%s\\n\" \"${after-no}\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation declare valid append",
+      "code": "f(){ local t=base; local -n r=t; declare r+=tail after=yes; printf \"%s:%s\\n\" \"$t\" \"${after-no}\"; }; f",
+      "status": 0,
+      "stdout": "YmFzZXRhaWw6eWVzCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation declare readonly",
+      "code": "f(){ local -r r=before; declare r+=bad after=yes 2>/dev/null; printf \"%s:%s\\n\" \"${after-no}\" \"$r\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzOmJlZm9yZQo=",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation declare readonly reference",
+      "code": "f(){ local -r t=before; local -n r=t; declare r+=bad after=yes 2>/dev/null; printf \"%s:%s\\n\" \"${after-no}\" \"$r\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzOmJlZm9yZQo=",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation typeset cycle =",
+      "code": "f(){ local -n r=s; local -n s=r; typeset r=bad after=yes 2>/dev/null; printf \"%s\\n\" \"${after-no}\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation typeset cycle +=",
+      "code": "f(){ local -n r=s; local -n s=r; typeset r+=bad after=yes 2>/dev/null; printf \"%s\\n\" \"${after-no}\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation typeset self =",
+      "code": "f(){ local -n r=r; typeset r=bad after=yes 2>/dev/null; printf \"%s\\n\" \"${after-no}\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation typeset self +=",
+      "code": "f(){ local -n r=r; typeset r+=bad after=yes 2>/dev/null; printf \"%s\\n\" \"${after-no}\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation typeset valid append",
+      "code": "f(){ local t=base; local -n r=t; typeset r+=tail after=yes; printf \"%s:%s\\n\" \"$t\" \"${after-no}\"; }; f",
+      "status": 0,
+      "stdout": "YmFzZXRhaWw6eWVzCg==",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation typeset readonly",
+      "code": "f(){ local -r r=before; typeset r+=bad after=yes 2>/dev/null; printf \"%s:%s\\n\" \"${after-no}\" \"$r\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzOmJlZm9yZQo=",
+      "stderr": ""
+    },
+    {
+      "name": "scope continuation typeset readonly reference",
+      "code": "f(){ local -r t=before; local -n r=t; typeset r+=bad after=yes 2>/dev/null; printf \"%s:%s\\n\" \"${after-no}\" \"$r\"; }; f 2>/dev/null",
+      "status": 0,
+      "stdout": "eWVzOmJlZm9yZQo=",
+      "stderr": ""
     }
   ]
 }

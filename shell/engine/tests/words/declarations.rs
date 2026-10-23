@@ -21,6 +21,21 @@ fn declaration_scope_appends_match_recorded_bash_5_3_15() {
     ));
 }
 
+#[test]
+fn local_append_resolution_failure_continues_with_status_one() {
+    for builtin in ["local", "declare", "typeset"] {
+        for setup in ["local -n r=s; local -n s=r", "local -n r=r"] {
+            let rig = Rig::new(Limits::default());
+            let source = format!(
+                "f(){{ {setup}; {builtin} r+=bad after=yes; printf '%s:%s\\n' \"$?\" \"${{after-no}}\"; }}; f 2>/dev/null"
+            );
+            assert_eq!(rig.run(&source), 0, "{source}");
+            assert_eq!(rig.output.bytes(), b"1:yes\n", "{source}");
+            assert!(rig.errors.bytes().is_empty(), "{source}");
+        }
+    }
+}
+
 fn declarations_match_recording(recording: &str) {
     let fixture: serde_json::Value = serde_json::from_str(recording).unwrap();
     assert_eq!(
@@ -143,7 +158,7 @@ fn local_declaration_append_limit_restores_target_and_reference() {
     rig.variable("v", &"b".repeat(3000));
     assert_eq!(rig.run("t=outer; declare -n r=t"), 0);
     let job = rig.start_until_value(
-        "f(){ local t=base; local -n r=t; ready=yes; local r+=$v; }; f",
+        "f(){ local t=base; local -n r=t; ready=yes; local r+=$v after=yes; }; f",
         1000,
         "ready",
         "yes",
@@ -162,7 +177,7 @@ fn local_declaration_append_cancellation_restores_array_and_reference() {
     rig.variable("v", &"a".repeat(12000));
     assert_eq!(rig.run("a=(outer keep); declare -n r=a"), 0);
     let job = rig.start_until_value(
-        "f(){ local a; a=(\"$v\" keep); local -n r=a; ready=yes; local r+=x; }; f",
+        "f(){ local a; a=(\"$v\" keep); local -n r=a; ready=yes; local r+=x after=yes; }; f",
         10_000,
         "ready",
         "yes",
