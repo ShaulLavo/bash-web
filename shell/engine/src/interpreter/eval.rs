@@ -167,7 +167,9 @@ async fn run_body(
         .reader
         .line_offset
         .saturating_add(line.unwrap_or(1).saturating_sub(1));
-    read(source, evaluation, "eval", state, fds, context).await
+    read(source, evaluation, "eval", state, fds, context)
+        .await
+        .unwrap_or_else(|_| Outcome::status(2))
 }
 
 pub(super) struct Diagnostic<'a> {
@@ -257,7 +259,7 @@ pub(super) async fn read(
     state: SharedState,
     fds: Descriptors,
     context: Context,
-) -> Outcome {
+) -> Result<Outcome, String> {
     let parser = context.parser_budget();
     let (script, failure) = match parse::eval(source.text(), context.limits().source_bytes, &parser)
     {
@@ -269,12 +271,12 @@ pub(super) async fn read(
             ) =>
         {
             context.cancel.cancel();
-            return Outcome::status(130);
+            return Ok(Outcome::status(130));
         }
-        Err(_) => return Outcome::status(2),
+        Err(message) => return Err(message),
     };
     if context.cancel.is_cancelled() {
-        return Outcome::status(130);
+        return Ok(Outcome::status(130));
     }
     let source = source.retain();
     let context = Context {
@@ -284,7 +286,7 @@ pub(super) async fn read(
     };
     // A joined reader task breaks the recursive poll/drop chain. Keep the
     // caller's shell and evaluation scopes, including both depth counters.
-    // Shape already admitted this reader's fixed executor/queue metadata.
+    // The source owner already admitted this reader's fixed executor/queue metadata.
     let mut result = context
         .core
         .executor
@@ -309,7 +311,7 @@ pub(super) async fn read(
             result.flow = Flow::Normal;
         }
     }
-    result
+    Ok(result)
 }
 
 #[cfg(test)]

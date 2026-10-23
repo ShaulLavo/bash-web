@@ -1,6 +1,6 @@
 use super::{Context, Descriptors, Flow, Outcome, eval};
 use crate::{
-    exec::Scope,
+    exec::{JoinedSource, Scope, StorageAllocation},
     io::{self, Endpoint, IoError, OpenOptions},
     state::{SharedState, SourceFrame, absolute},
 };
@@ -47,11 +47,14 @@ async fn run_body(
     };
     let reader = match crate::exec::ReaderLocation::file(file.name, &evaluation) {
         Ok(reader) => reader,
-        Err(code) => return Outcome::status(code),
+        Err(code) => {
+            return diagnostic
+                .failure(&[&name, filename], STORAGE_LIMIT, code)
+                .await;
+        }
     };
-    let (text, storage) = match read(file.endpoint, &evaluation, &context).await {
+    let source = match read(file.endpoint, &evaluation, &context).await {
         Ok(text) => text,
-        Err(ReadError::Status(code)) => return Outcome::status(code),
         Err(ReadError::Io(IoError::Cancelled)) => return Outcome::status(130),
         Err(ReadError::Io(error)) => {
             let code = error.status();
@@ -59,34 +62,55 @@ async fn run_body(
                 .failure(&[&name, filename], &io_message(error), code)
                 .await;
         }
+        Err(ReadError::Refused(message)) => {
+            return diagnostic.failure(&[&name, filename], message, 2).await;
+        }
     };
-    let source = match eval::join(vec![text], &evaluation, &context).await {
-        Ok(source) => source,
-        Err(code) => return Outcome::status(code),
-    };
-    drop(storage);
     let filename = args.remove(0);
-    let context = Context { reader, ..context };
+    let reader_context = Context {
+        reader,
+        ..context.clone()
+    };
     let frame = match SourceFrame::enter(state.clone(), args) {
         Ok(frame) => frame,
-        Err(code) => return Outcome::status(code),
+        Err(code) => {
+            return diagnostic
+                .failure(&[&name, &filename], STORAGE_LIMIT, code)
+                .await;
+        }
     };
-    let mut result = eval::read(source, evaluation, &filename, state, fds, context).await;
+    let result = eval::read(
+        source,
+        evaluation,
+        &filename,
+        state,
+        fds.clone(),
+        reader_context,
+    )
+    .await;
     frame.finish();
+    let mut result = match result {
+        Ok(result) => result,
+        Err(message) => return diagnostic.failure(&[&name, &filename], &message, 2).await,
+    };
     if result.flow == Flow::Return {
         result.flow = Flow::Normal;
     }
     result
 }
 
+const STORAGE_LIMIT: &str = "shell source storage limit exceeded";
+const SOURCE_LIMIT: &str = "shell source limit exceeded";
+
+#[derive(Debug)]
 enum ReadError {
-    Status(i32),
+    Refused(&'static str),
     Io(IoError),
 }
 
 impl From<i32> for ReadError {
-    fn from(status: i32) -> Self {
-        Self::Status(status)
+    fn from(_: i32) -> Self {
+        Self::Refused(STORAGE_LIMIT)
     }
 }
 
@@ -197,31 +221,102 @@ fn source_file(file: OpenedSource) -> Result<Option<OpenedSource>, IoError> {
     Ok((!directory).then_some(file))
 }
 
+const READ_CHUNK_BYTES: usize = 4096;
+const READER_METADATA_BYTES: usize = 4096;
+
+fn source_storage(capacity: usize) -> Result<usize, ReadError> {
+    // The buffer and later Rc<str> copy overlap. Keep both copies, their
+    // reference-count headers and reader task metadata admitted until reaping.
+    capacity
+        .checked_mul(2)
+        .and_then(|bytes| bytes.checked_add(READ_CHUNK_BYTES + READER_METADATA_BYTES))
+        .and_then(|bytes| {
+            bytes.checked_add(4 * size_of::<usize>() + size_of::<StorageAllocation>())
+        })
+        .ok_or(ReadError::Refused(STORAGE_LIMIT))
+}
+
+fn reserve(
+    bytes: &mut Vec<u8>,
+    size: usize,
+    storage: &mut StorageAllocation,
+) -> Result<(), ReadError> {
+    if size <= bytes.capacity() {
+        return Ok(());
+    }
+    let capacity = bytes
+        .capacity()
+        .checked_mul(2)
+        .ok_or(ReadError::Refused(STORAGE_LIMIT))?
+        .max(size)
+        .max(8);
+    storage.resize(source_storage(capacity)?)?;
+    bytes
+        .try_reserve(size - bytes.len())
+        .map_err(|_| ReadError::Refused(STORAGE_LIMIT))?;
+    storage.resize(source_storage(bytes.capacity())?)?;
+    Ok(())
+}
+
 async fn read(
     endpoint: Endpoint,
     scope: &Scope,
     context: &Context,
-) -> Result<(String, crate::exec::StorageAllocation), ReadError> {
-    let mut storage = scope.admit_storage(4096)?;
+) -> Result<JoinedSource, ReadError> {
+    let mut storage = scope.admit_storage(source_storage(0)?)?;
     let mut bytes = Vec::new();
-    let mut chunk = [0; 4096];
+    let mut chunk = [0; READ_CHUNK_BYTES];
     loop {
         let count = endpoint
             .read_cancelled(&mut chunk, &context.cancel)
             .await
             .map_err(ReadError::Io)?;
         if count == 0 {
-            return String::from_utf8(bytes)
-                .map(|text| (text, storage))
-                .map_err(|_| ReadError::Status(2));
+            let text = String::from_utf8(bytes)
+                .map_err(|_| ReadError::Refused("invalid UTF-8 in shell source"))?;
+            return Ok(JoinedSource::new(text, storage));
         }
-        let size = bytes.len().checked_add(count).ok_or(2)?;
+        let size = bytes
+            .len()
+            .checked_add(count)
+            .ok_or(ReadError::Refused(SOURCE_LIMIT))?;
         if size > context.limits().source_bytes {
-            return Err(ReadError::Status(2));
+            return Err(ReadError::Refused(SOURCE_LIMIT));
         }
-        storage.resize(4096usize.checked_add(size).ok_or(2)?)?;
-        bytes.try_reserve_exact(count).map_err(|_| 2)?;
+        reserve(&mut bytes, size, &mut storage)?;
         bytes.extend_from_slice(&chunk[..count]);
         crate::executor::yield_now().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{exec::StorageBudget, interpreter::Limits};
+
+    #[test]
+    fn source_buffer_growth_is_amortized_and_charged_through_retention() {
+        let budget = StorageBudget::new(1024 * 1024);
+        let mut storage = budget.admit(source_storage(0).unwrap()).unwrap();
+        let mut bytes = Vec::new();
+        let mut growths = 0;
+        for _ in 0..64 {
+            let capacity = bytes.capacity();
+            let size = bytes.len() + READ_CHUNK_BYTES;
+            reserve(&mut bytes, size, &mut storage).unwrap();
+            growths += usize::from(bytes.capacity() != capacity);
+            assert_eq!(storage.bytes(), source_storage(bytes.capacity()).unwrap());
+            bytes.resize(size, b' ');
+        }
+        assert_eq!(bytes.len(), Limits::default().source_bytes);
+        assert_eq!(growths, 7);
+        let charged = storage.bytes();
+        let text = String::from_utf8(bytes).unwrap();
+        let source = JoinedSource::new(text, storage).retain();
+        let child = source.clone();
+        drop(source);
+        assert_eq!(budget.observation().0, charged);
+        drop(child);
+        assert_eq!(budget.observation().0, 0);
     }
 }

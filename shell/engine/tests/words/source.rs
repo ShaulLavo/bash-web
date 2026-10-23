@@ -37,7 +37,7 @@ fn source_library_byte_refusal_reports_and_preserves_the_caller() {
 #[test]
 fn source_library_storage_refusal_reports_and_refunds_read_admission() {
     let rig = Rig::new(Limits {
-        expansion_bytes: 8192,
+        expansion_bytes: 16 * 1024,
         ..Limits::default()
     });
     rig.fs
@@ -82,4 +82,51 @@ fn source_chain(rig: &Rig, levels: usize) {
             .write_file(&format!("/home/guest/level{index}"), text.as_bytes())
             .unwrap();
     }
+}
+
+#[test]
+fn source_library_interrupt_restores_arguments_and_releases_storage() {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 64 * 1024,
+        ..Limits::default()
+    });
+    let text = "x=1\n".repeat(800) + "ready=yes; while :; do :; done\n";
+    rig.fs
+        .write_file("/home/guest/lib", text.as_bytes())
+        .unwrap();
+    rig.fs
+        .write_file("/home/guest/small", b"recovered=yes\n")
+        .unwrap();
+    assert_eq!(rig.run("set -- original"), 0);
+    let job = rig.start_until_value(". ./lib temporary", 100_000, "ready", "yes");
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    assert_eq!(rig.run("args \"$@\""), 0);
+    assert_eq!(*rig.calls.borrow(), [vec!["original"]]);
+    assert_eq!(rig.run("return 9"), 2);
+    assert_eq!(rig.run(". ./small"), 0);
+    assert_eq!(rig.value("recovered").as_deref(), Some("yes"));
+    assert_eq!(rig.ex.drive(64).pending, 0);
+}
+
+#[test]
+fn source_library_functions_and_snapshots_keep_their_storage_until_reaped() {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 64 * 1024,
+        ..Limits::default()
+    });
+    let release = command::register_status_gate(&rig, "status_gate", 9);
+    let text = "x=1\n".repeat(3000) + "kept() { echo retained; }\n";
+    rig.fs
+        .write_file("/home/guest/lib", text.as_bytes())
+        .unwrap();
+    assert_eq!(rig.run(". ./lib"), 0);
+    assert_eq!(rig.run("status_gate & background=$!; unset -f kept"), 0);
+    assert_eq!(rig.run(". ./lib"), 2);
+    release.cancel();
+    assert_eq!(rig.run("wait \"$background\""), 9);
+    assert_eq!(rig.run("wait"), 0);
+    assert_eq!(rig.run(". ./lib; kept; unset -f kept"), 0);
+    assert_eq!(rig.output.bytes(), b"retained\n");
+    command::shutdown_and_check(&rig);
 }

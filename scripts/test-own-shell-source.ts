@@ -74,7 +74,7 @@ const scripts = [
   "mkdir -p dir; echo 'source missing; eval -x' > dir/lib; PATH=dir . lib; echo status=$?",
   "i=0; : > lib; while (( i < 200 )); do echo 'x=1' >> lib; i=$((i+1)); done; . ./lib; echo src=$? x=$x",
   "i=0; : > lib; while (( i < 800 )); do echo 'x=$((x+1))' >> lib; i=$((i+1)); done; x=0; . ./lib; echo src=$? x=$x",
-  "i=0; : > lib; while (( i < 300 )); do echo \"f$i() { value=$i; }\" >> lib; i=$((i+1)); done; . ./lib; status=$?; f299; echo src=$status value=$value",
+  'i=0; : > lib; while (( i < 300 )); do echo "f$i() { value=$i; }" >> lib; i=$((i+1)); done; . ./lib; status=$?; f299; echo src=$status value=$value',
 ];
 const fixturePath = new URL("fixtures/shell-source.json", import.meta.url);
 const env = { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" };
