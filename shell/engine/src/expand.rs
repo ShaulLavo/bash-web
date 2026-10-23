@@ -12,7 +12,7 @@ use shell_parser::parser::{ParameterOp, Word, WordPart};
 
 mod array_slice;
 mod braces;
-mod case;
+use crate::state::CaseLocale as Locale;
 mod case_pattern;
 mod command;
 mod glob;
@@ -779,10 +779,17 @@ impl Expansion<'_> {
         if !self.pattern_snapshots {
             return Ok(());
         }
+        self.scan_value(value).await
+    }
+    async fn scan_value(&mut self, value: &str) -> Result<(), Error> {
         for _ in value.bytes() {
             self.work.checkpoint(self.cancel).await?;
         }
         Ok(())
+    }
+    async fn empty_expansion(&mut self, protected: bool, state: &SharedState) -> Result<(), Error> {
+        self.segment("", Protection::expansion(protected, state), protected)
+            .await
     }
     fn admit_pattern_length(&mut self, name: &str, state: &SharedState) -> Result<(), Error> {
         if !self.pattern_snapshots {
@@ -1310,9 +1317,7 @@ impl Expansion<'_> {
             }
         };
         if !present {
-            return self
-                .segment("", Protection::expansion(protected, state), protected)
-                .await;
+            return self.empty_expansion(protected, state).await;
         }
         let (value, utf8) = {
             let s = state.borrow();
@@ -1340,9 +1345,7 @@ impl Expansion<'_> {
                     .await?;
                 return Ok(());
             }
-            return self
-                .segment("", Protection::expansion(protected, state), protected)
-                .await;
+            return self.empty_expansion(protected, state).await;
         };
         let end = if let Some(length) = length {
             let length = crate::arithmetic::evaluate(
@@ -1595,13 +1598,9 @@ impl Expansion<'_> {
         };
         // Bash does not evaluate a trim pattern for an unset or empty scalar.
         if value.is_empty() {
-            return self
-                .segment("", Protection::expansion(protected, state), protected)
-                .await;
+            return self.empty_expansion(protected, state).await;
         }
-        for _ in value.bytes() {
-            self.work.checkpoint(self.cancel).await?;
-        }
+        self.scan_value(&value).await?;
         let mut pattern = self.pattern_operand(source, state, depth).await?;
         let result = pattern
             .remove(&value, prefix, longest, self.work, self.cancel)
@@ -1678,15 +1677,11 @@ impl Expansion<'_> {
             (value, present)
         };
         if !present {
-            return self
-                .segment("", Protection::expansion(protected, state), protected)
-                .await;
+            return self.empty_expansion(protected, state).await;
         }
-        for _ in value.bytes() {
-            self.work.checkpoint(self.cancel).await?;
-        }
+        self.scan_value(&value).await?;
         let mut pattern = self.pattern_operand(source, state, depth).await?;
-        let locale = case::Locale::from_state(state)?;
+        let locale = Locale::from_state(&state.borrow())?;
         let result = pattern
             .change_case(
                 &value,

@@ -729,7 +729,7 @@
   "shellScoreboard": {
     "oracleFile": "docs/evidence/own-shell-oracle.json",
     "baselineFile": "docs/evidence/own-shell-baseline.json",
-    "oracleSha256": "bb13fdf4319ae0af179457ff4b3e3c0db57002902f07eb37fde02ff7a6636eaa",
+    "oracleSha256": "90c9ddafface903c3af1eee3039c949d6cb5062cf2ee17f64010b6431b772b06",
     "format": "Schema 1, exact base64 stdout/stderr and numeric exit status; original classifications retained; source files SHA-256 in oracle fixture.",
     "corpora": {
       "oils": {
@@ -2112,6 +2112,34 @@
       "Other builtin-output boundaries, generic interpreter/pipeline/session/runtime/state and PIPESTATUS changes",
       "PIPE trap/disposition behavior",
       "Existing closed-descriptor diagnostic and Bash diagnostic line-prefix mismatches retained as strict pending reproductions"
+    ]
+  },
+  "shellCaseAttributes": {
+    "classification": "Original scalar case-attribute metadata and write adapters, observed against GNU Bash 5.3.15. No upstream implementation copied or adapted.",
+    "oracle": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "implementationDestinations": [
+      "shell/engine/src/state/case.rs",
+      "shell/engine/src/state/case_attributes.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/declarations.rs",
+      "shell/engine/src/state/declarations.rs",
+      "shell/engine/src/interpreter.rs",
+      "shell/engine/src/interpreter/indexed.rs",
+      "shell/engine/src/expand/transformation.rs"
+    ],
+    "strategy": "Keep lower/upper metadata in state, save and restore it with locals, admit it in snapshots, and map owned scalar values before assignment publication. Reuse the existing bounded locale mapper moved unchanged below expansion. Preserve attribute-only values and expose case metadata through named declaration and parameter-transform rendering.",
+    "fixture": {
+      "path": "scripts/fixtures/shell-declare-attrs.json",
+      "sha256": "5c6274e5112f7086be86557ba114429de1133860e96de500564648b550dd7868"
+    },
+    "documentation": "docs/declaration-printing.md",
+    "deferred": [
+      "integer attributes",
+      "array declaration and printing",
+      "global declaration enumeration",
+      "declare -g",
+      "export -n and attribute removal other than +l/+u"
     ]
   },
   "shellIndexedSlices": {

@@ -6,6 +6,7 @@ pub(crate) struct DeclarationView<'a> {
     pub(crate) nameref: bool,
     pub(crate) readonly: bool,
     pub(crate) exported: bool,
+    pub(crate) case: super::CaseMapping,
 }
 
 impl State {
@@ -20,7 +21,12 @@ impl State {
         let local = self.locals.iter().rev().find_map(|scope| scope.get(name));
         let readonly = local.map_or_else(|| self.readonly.contains(name), |local| local.readonly);
         let exported = self.exported.contains(name);
-        if value.is_none() && local.is_none() && !readonly && !exported {
+        if value.is_none()
+            && local.is_none()
+            && !readonly
+            && !exported
+            && !self.case_attributes.contains_key(name)
+        {
             return Ok(None);
         }
         Ok(Some(DeclarationView {
@@ -28,6 +34,7 @@ impl State {
             nameref: reference.is_some(),
             readonly,
             exported,
+            case: self.case_mapping(name),
         }))
     }
 }

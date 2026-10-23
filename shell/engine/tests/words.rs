@@ -4389,7 +4389,11 @@ mod tilde;
 #[path = "words/index_names.rs"]
 mod index_names;
 
-#[path = "words/array_slicing.rs"]
-mod array_slicing;
+#[path = "words/read_options.rs"]
+mod read_options;
+
 #[path = "words/nameref_invalid.rs"]
 mod nameref_invalid;
+
+#[path = "words/array_slicing.rs"]
+mod array_slicing;
