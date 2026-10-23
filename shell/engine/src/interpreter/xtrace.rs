@@ -106,7 +106,7 @@ impl<'a> Writer<'a> {
                 .map_err(super::admission_status)?;
             value.into_owned()
         };
-        let prefix = expand::prompt(
+        let prefix = match expand::prompt(
             &raw,
             state,
             &context.cancel,
@@ -114,7 +114,14 @@ impl<'a> Writer<'a> {
             &mut work,
         )
         .await
-        .map_err(super::admission_status)?;
+        {
+            Ok(prefix) => prefix,
+            Err(expand::Error::Status(code)) => return Err(code),
+            Err(error) => {
+                super::expansion_failure(error.into(), fds, context).await;
+                raw
+            }
+        };
         let mut writer = Self {
             endpoint,
             context,
@@ -149,12 +156,15 @@ impl<'a> Writer<'a> {
         Ok(())
     }
     async fn flush(&mut self) -> Result<(), i32> {
-        self.endpoint
+        let result = self
+            .endpoint
             .write_all(&self.buffer[..self.used], &self.context.cancel)
-            .await
-            .map_err(|error| error.status())?;
+            .await;
         self.used = 0;
-        Ok(())
+        match result {
+            Err(crate::io::IoError::Cancelled) => Err(130),
+            _ => Ok(()),
+        }
     }
     async fn finish(mut self) -> Result<(), i32> {
         self.write(b"\n").await?;
