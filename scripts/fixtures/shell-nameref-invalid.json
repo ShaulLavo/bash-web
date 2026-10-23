@@ -1,0 +1,189 @@
+{
+  "bash": "5.3.15(1)-release",
+  "executableSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+  "env": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "PWD": "/tmp/spec",
+    "SH": "bash",
+    "LC_ALL": "C.UTF-8"
+  },
+  "cases": [
+    {
+      "id": "oils:nameref:604",
+      "script": "set -- A B\ntypeset -n ref='@'  # bash gives an error here\necho status=$?\n\necho ref=$ref  # bash doesn't give an error here\necho status=$?\n",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEKcmVmPQpzdGF0dXM9MAo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAyOiB0eXBlc2V0OiBgQCc6IGludmFsaWQgdmFyaWFibGUgbmFtZSBmb3IgbmFtZSByZWZlcmVuY2UK"
+    },
+    {
+      "id": "brush-suite:nameref:78",
+      "script": "declare -n ref=123\necho \"exit: $?\"\necho \"ref: '${ref}'\"\necho \"done\"\n",
+      "status": 0,
+      "stdout": "ZXhpdDogMQpyZWY6ICcnCmRvbmUK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBgMTIzJzogaW52YWxpZCB2YXJpYWJsZSBuYW1lIGZvciBuYW1lIHJlZmVyZW5jZQo="
+    },
+    {
+      "id": "brush-suite:nameref:79",
+      "script": "declare -n ref=\"a-b\"\necho \"exit1: $?\"\ndeclare -n ref2=\"a.b\"\necho \"exit2: $?\"\ndeclare -n ref3=\"a+b\"\necho \"exit3: $?\"\necho \"done\"\n",
+      "status": 0,
+      "stdout": "ZXhpdDE6IDEKZXhpdDI6IDEKZXhpdDM6IDEKZG9uZQo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBgYS1iJzogaW52YWxpZCB2YXJpYWJsZSBuYW1lIGZvciBuYW1lIHJlZmVyZW5jZQovdXNyL2Jpbi9iYXNoOiBsaW5lIDM6IGRlY2xhcmU6IGBhLmInOiBpbnZhbGlkIHZhcmlhYmxlIG5hbWUgZm9yIG5hbWUgcmVmZXJlbmNlCi91c3IvYmluL2Jhc2g6IGxpbmUgNTogZGVjbGFyZTogYGErYic6IGludmFsaWQgdmFyaWFibGUgbmFtZSBmb3IgbmFtZSByZWZlcmVuY2UK"
+    },
+    {
+      "id": "brush-suite:nameref:80",
+      "script": "declare -n ref=\"a b\"\necho \"exit: $?\"\necho \"done\"\n",
+      "status": 0,
+      "stdout": "ZXhpdDogMQpkb25lCg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBgYSBiJzogaW52YWxpZCB2YXJpYWJsZSBuYW1lIGZvciBuYW1lIHJlZmVyZW5jZQo="
+    },
+    {
+      "id": "brush-suite:nameref:81",
+      "script": "declare -n ref=1\necho \"exit: $?\"\necho \"done\"\n",
+      "status": 0,
+      "stdout": "ZXhpdDogMQpkb25lCg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBgMSc6IGludmFsaWQgdmFyaWFibGUgbmFtZSBmb3IgbmFtZSByZWZlcmVuY2UK"
+    },
+    {
+      "id": "brush-suite:nameref:82",
+      "script": "declare -n ref1=\"@\"\necho \"exit1: $?\"\ndeclare -n ref2=\"*\"\necho \"exit2: $?\"\necho \"done\"\n",
+      "status": 0,
+      "stdout": "ZXhpdDE6IDEKZXhpdDI6IDEKZG9uZQo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBgQCc6IGludmFsaWQgdmFyaWFibGUgbmFtZSBmb3IgbmFtZSByZWZlcmVuY2UKL3Vzci9iaW4vYmFzaDogbGluZSAzOiBkZWNsYXJlOiBgKic6IGludmFsaWQgdmFyaWFibGUgbmFtZSBmb3IgbmFtZSByZWZlcmVuY2UK"
+    },
+    {
+      "id": "brush-suite:nameref:208",
+      "script": "declare -n ref='a b' 2>/dev/null\necho \"exit: $?\"\ndeclare -n ref2='hello world' 2>/dev/null\necho \"exit: $?\"\necho \"done\"\n",
+      "status": 0,
+      "stdout": "ZXhpdDogMQpleGl0OiAxCmRvbmUK",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:nameref:209",
+      "script": "declare -n ref='a+b' 2>/dev/null\necho \"exit: $?\"\ndeclare -n ref2='a.b' 2>/dev/null\necho \"exit: $?\"\necho \"done\"\n",
+      "status": 0,
+      "stdout": "ZXhpdDogMQpleGl0OiAxCmRvbmUK",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-declare:220",
+      "script": "declare -n r='1x'; echo $?; declare -n r=@; echo $?; f() { local -n r='a b'; }; f; echo $?\n",
+      "status": 0,
+      "stdout": "MQoxCjEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBgMXgnOiBpbnZhbGlkIHZhcmlhYmxlIG5hbWUgZm9yIG5hbWUgcmVmZXJlbmNlCi91c3IvYmluL2Jhc2g6IGxpbmUgMTogZGVjbGFyZTogYEAnOiBpbnZhbGlkIHZhcmlhYmxlIG5hbWUgZm9yIG5hbWUgcmVmZXJlbmNlCi91c3IvYmluL2Jhc2g6IGxpbmUgMTogbG9jYWw6IGBhIGInOiBpbnZhbGlkIHZhcmlhYmxlIG5hbWUgZm9yIG5hbWUgcmVmZXJlbmNlCg=="
+    },
+    {
+      "id": "invalid final status",
+      "script": "declare -n ref='a b'",
+      "status": 1,
+      "stdout": "",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBgYSBiJzogaW52YWxpZCB2YXJpYWJsZSBuYW1lIGZvciBuYW1lIHJlZmVyZW5jZQo="
+    },
+    {
+      "id": "scalar unchanged",
+      "script": "ref=kept; declare -n ref='a b'; echo \"$?:$ref\"; ref=ordinary; echo \"$ref\"",
+      "status": 0,
+      "stdout": "MTprZXB0Cm9yZGluYXJ5Cg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBgYSBiJzogaW52YWxpZCB2YXJpYWJsZSBuYW1lIGZvciBuYW1lIHJlZmVyZW5jZQo="
+    },
+    {
+      "id": "existing scalar as target",
+      "script": "ref='a b'; declare -n ref; echo \"$?:$ref\"; ref=ordinary; echo \"$ref\"",
+      "status": 0,
+      "stdout": "MTphIGIKb3JkaW5hcnkK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBgYSBiJzogaW52YWxpZCB2YXJpYWJsZSBuYW1lIGZvciBuYW1lIHJlZmVyZW5jZQo="
+    },
+    {
+      "id": "existing reference unchanged",
+      "script": "target=kept; declare -n ref=target; declare -n ref='a b'; echo \"$?:$ref:${!ref}\"; ref=written; echo \"$target\"",
+      "status": 0,
+      "stdout": "MTprZXB0OnRhcmdldAp3cml0dGVuCg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBgYSBiJzogaW52YWxpZCB2YXJpYWJsZSBuYW1lIGZvciBuYW1lIHJlZmVyZW5jZQo="
+    },
+    {
+      "id": "invalid fresh reference stays absent",
+      "script": "declare -n ref='a b'; echo \"$?:${ref+set}\"; ref=ordinary; echo \"$ref\"",
+      "status": 0,
+      "stdout": "MToKb3JkaW5hcnkK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBgYSBiJzogaW52YWxpZCB2YXJpYWJsZSBuYW1lIGZvciBuYW1lIHJlZmVyZW5jZQo="
+    },
+    {
+      "id": "multiple operands continue",
+      "script": "target=kept; declare -n bad='a b' good=target other='1x' last=target; echo \"$?:${bad+set}:$good:${other+set}:$last\"; last=written; echo \"$target\"",
+      "status": 0,
+      "stdout": "MTo6a2VwdDo6a2VwdAp3cml0dGVuCg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBgYSBiJzogaW52YWxpZCB2YXJpYWJsZSBuYW1lIGZvciBuYW1lIHJlZmVyZW5jZQovdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IGRlY2xhcmU6IGAxeCc6IGludmFsaWQgdmFyaWFibGUgbmFtZSBmb3IgbmFtZSByZWZlcmVuY2UK"
+    },
+    {
+      "id": "valid first operand survives",
+      "script": "target=kept; declare -n good=target bad='a.b'; echo \"$?:$good:${bad+set}\"",
+      "status": 0,
+      "stdout": "MTprZXB0Ogo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBgYS5iJzogaW52YWxpZCB2YXJpYWJsZSBuYW1lIGZvciBuYW1lIHJlZmVyZW5jZQo="
+    },
+    {
+      "id": "readonly scalar unchanged",
+      "script": "readonly ref=kept; declare -n ref='a b'; echo \"$?:$ref\"",
+      "status": 0,
+      "stdout": "MTprZXB0Cg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBgYSBiJzogaW52YWxpZCB2YXJpYWJsZSBuYW1lIGZvciBuYW1lIHJlZmVyZW5jZQo="
+    },
+    {
+      "id": "readonly target reference unchanged",
+      "script": "readonly target=kept; declare -n ref=target; declare -n ref='a b'; echo \"$?:$ref:${!ref}\"; ref=written\necho \"$?:$target\"",
+      "status": 0,
+      "stdout": "MTprZXB0OnRhcmdldAoxOmtlcHQK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBgYSBiJzogaW52YWxpZCB2YXJpYWJsZSBuYW1lIGZvciBuYW1lIHJlZmVyZW5jZQovdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IHRhcmdldDogcmVhZG9ubHkgdmFyaWFibGUK"
+    },
+    {
+      "id": "local invalid leaves outer scalar",
+      "script": "ref=outer; f() { local -n ref='a b'; echo \"$?:$ref\"; }; f; echo \"$ref\"",
+      "status": 0,
+      "stdout": "MTpvdXRlcgpvdXRlcgo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBsb2NhbDogYGEgYic6IGludmFsaWQgdmFyaWFibGUgbmFtZSBmb3IgbmFtZSByZWZlcmVuY2UK"
+    },
+    {
+      "id": "local invalid leaves outer reference",
+      "script": "target=outer; declare -n ref=target; f() { local -n ref='a b'; echo \"$?:$ref:${!ref}\"; }; f; echo \"$ref:${!ref}\"",
+      "status": 0,
+      "stdout": "MTpvdXRlcjp0YXJnZXQKb3V0ZXI6dGFyZ2V0Cg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBsb2NhbDogYGEgYic6IGludmFsaWQgdmFyaWFibGUgbmFtZSBmb3IgbmFtZSByZWZlcmVuY2UK"
+    },
+    {
+      "id": "implicit local invalid leaves outer scalar",
+      "script": "ref=outer; f() { declare -n ref='a b'; echo \"$?:$ref\"; }; f; echo \"$ref\"",
+      "status": 0,
+      "stdout": "MTpvdXRlcgpvdXRlcgo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBgYSBiJzogaW52YWxpZCB2YXJpYWJsZSBuYW1lIGZvciBuYW1lIHJlZmVyZW5jZQo="
+    },
+    {
+      "id": "local multiple operands continue",
+      "script": "target=kept; f() { local -n bad='a b' good=target; echo \"$?:${bad+set}:$good\"; good=written; }; f; echo \"$target:${good+set}\"",
+      "status": 0,
+      "stdout": "MTo6a2VwdAp3cml0dGVuOgo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBsb2NhbDogYGEgYic6IGludmFsaWQgdmFyaWFibGUgbmFtZSBmb3IgbmFtZSByZWZlcmVuY2UK"
+    },
+    {
+      "id": "local invalid final status",
+      "script": "f() { local -n ref='a b'; }; f",
+      "status": 1,
+      "stdout": "",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBsb2NhbDogYGEgYic6IGludmFsaWQgdmFyaWFibGUgbmFtZSBmb3IgbmFtZSByZWZlcmVuY2UK"
+    },
+    {
+      "id": "valid unset target",
+      "script": "declare -n ref=target; echo \"$?:${ref+set}:${target+set}\"; ref=written; echo \"$target\"",
+      "status": 0,
+      "stdout": "MDo6CndyaXR0ZW4K",
+      "stderr": ""
+    },
+    {
+      "id": "valid set empty target",
+      "script": "target=; declare -n ref=target; echo \"$?:${ref+set}:<$ref>\"",
+      "status": 0,
+      "stdout": "MDpzZXQ6PD4K",
+      "stderr": ""
+    }
+  ]
+}
