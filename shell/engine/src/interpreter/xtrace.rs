@@ -1,5 +1,6 @@
 use super::{Context, Descriptors, substitution_work};
-use crate::{executor::Budget, expand, io::Endpoint, state::SharedState};
+use crate::{exec::ResultFuture, executor::Budget, expand, io::Endpoint, state::SharedState};
+use futures::future::{Either, ready};
 
 #[derive(Clone, Copy, Default)]
 pub(super) struct Trace {
@@ -15,29 +16,42 @@ impl Trace {
     }
 }
 
-pub(super) async fn command(
-    argv: &[String],
-    assigned: &[(String, String)],
+fn frame<'a, F: std::future::Future<Output = Result<(), expand::Error>> + 'a>(
     state: &SharedState,
-    fds: &Descriptors,
     context: &Context,
-) -> Result<(), expand::Error> {
-    if !state.borrow().xtrace || context.trace.prompt || argv.is_empty() {
-        return Ok(());
+    run: impl FnOnce() -> F,
+) -> ResultFuture<'a, ()> {
+    if !state.borrow().xtrace || context.trace.prompt {
+        return Either::Left(ready(Ok(())));
     }
-    for (name, value) in assigned {
-        assignment(name, value, state, fds, context).await?;
+    context.evaluation.frame(run(), |code| Err(code.into()))
+}
+
+pub(super) fn command<'a>(
+    argv: &'a [String],
+    assigned: &'a [(String, String)],
+    state: &'a SharedState,
+    fds: &'a Descriptors,
+    context: &'a Context,
+) -> ResultFuture<'a, ()> {
+    if argv.is_empty() {
+        return Either::Left(ready(Ok(())));
     }
-    let Some(mut writer) = Writer::start(state, fds, context).await? else {
-        return Ok(());
-    };
-    for (index, arg) in argv.iter().enumerate() {
-        if index != 0 {
-            writer.write(b" ").await?;
+    frame(state, context, || async move {
+        for (name, value) in assigned {
+            assignment(name, value, state, fds, context).await?;
         }
-        writer.word(arg).await?;
-    }
-    writer.finish().await.map_err(Into::into)
+        let Some(mut writer) = Writer::start(state, fds, context).await? else {
+            return Ok(());
+        };
+        for (index, arg) in argv.iter().enumerate() {
+            if index != 0 {
+                writer.write(b" ").await?;
+            }
+            writer.word(arg).await?;
+        }
+        writer.finish().await.map_err(Into::into)
+    })
 }
 
 pub(crate) async fn builtin_assignment(
@@ -56,26 +70,25 @@ pub(crate) async fn builtin_assignment(
         .map_err(super::admission_status)
 }
 
-pub(super) async fn assignment(
-    name: &str,
-    value: &str,
-    state: &SharedState,
-    fds: &Descriptors,
-    context: &Context,
-) -> Result<(), expand::Error> {
-    if !state.borrow().xtrace || context.trace.prompt {
-        return Ok(());
-    }
-    let Some(mut writer) = Writer::start(state, fds, context).await? else {
-        return Ok(());
-    };
-    writer.write(name.as_bytes()).await?;
-    writer.write(b"=").await?;
-    if !value.is_empty() {
-        writer.word(value).await?;
-    }
-    writer.finish().await?;
-    Ok(())
+pub(super) fn assignment<'a>(
+    name: &'a str,
+    value: &'a str,
+    state: &'a SharedState,
+    fds: &'a Descriptors,
+    context: &'a Context,
+) -> ResultFuture<'a, ()> {
+    frame(state, context, || async move {
+        let Some(mut writer) = Writer::start(state, fds, context).await? else {
+            return Ok(());
+        };
+        writer.write(name.as_bytes()).await?;
+        writer.write(b"=").await?;
+        if !value.is_empty() {
+            writer.word(value).await?;
+        }
+        writer.finish().await?;
+        Ok(())
+    })
 }
 
 struct Writer<'a> {
