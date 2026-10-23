@@ -121,6 +121,20 @@
       "stderr": ""
     },
     {
+      "id": "xtrace-closed-stderr",
+      "code": "{ set -x; echo hi; set +x; } 2>&-",
+      "status": 0,
+      "stdout": "hi\n",
+      "stderr": ""
+    },
+    {
+      "id": "flags-lazy",
+      "code": "set -uf; echo \"${missing-$-}\" \"${-}\"",
+      "status": 0,
+      "stdout": "fhuBc fhuBc\n",
+      "stderr": ""
+    },
+    {
       "id": "flags",
       "code": "echo \"$-\"; set -euxf; echo \"$-\"; set +euxf; echo \"$-\"",
       "status": 0,

@@ -140,6 +140,9 @@ pub struct State {
     pub pipefail: bool,
     pub nounset: bool,
     pub errexit: bool,
+    pub noexec: bool,
+    pub command_string: bool,
+    pub xtrace: bool,
     /// Keep errexit in command-substitution children instead of clearing it.
     pub inherit_errexit: bool,
     /// Enable extended glob groups in option-sensitive pattern contexts.
@@ -174,6 +177,7 @@ impl Default for State {
                 ("IFS".into(), " \t\n".into()),
                 ("OPTIND".into(), "1".into()),
                 ("OPTERR".into(), "1".into()),
+                ("PS4".into(), "+ ".into()),
             ]),
             exported: BTreeSet::new(),
             readonly: BTreeSet::new(),
@@ -187,6 +191,9 @@ impl Default for State {
             pipefail: false,
             nounset: false,
             errexit: false,
+            noexec: false,
+            command_string: false,
+            xtrace: false,
             inherit_errexit: false,
             extglob: false,
             nullglob: false,
@@ -380,6 +387,9 @@ impl State {
             pipefail: state.pipefail,
             nounset: state.nounset,
             errexit: state.errexit,
+            noexec: state.noexec,
+            command_string: state.command_string,
+            xtrace: state.xtrace,
             inherit_errexit: state.inherit_errexit,
             extglob: state.extglob,
             nullglob: state.nullglob,
@@ -433,6 +443,25 @@ impl State {
     /// Maximum preallocation for the host clock's signed seconds and six
     /// fractional digits. Callers admit this before parameter() formats it.
     pub(crate) const DYNAMIC_PARAMETER_BYTES: usize = 32;
+    fn option_letters(&self) -> String {
+        let mut letters = String::with_capacity(10);
+        for (flag, enabled) in [
+            ('e', self.errexit),
+            ('f', self.noglob),
+            ('h', true),
+            ('m', self.monitor),
+            ('n', self.noexec),
+            ('u', self.nounset),
+            ('x', self.xtrace),
+            ('B', true),
+            ('c', self.command_string),
+        ] {
+            if enabled {
+                letters.push(flag);
+            }
+        }
+        letters
+    }
     pub(crate) fn parameter(&self, name: &str) -> Cow<'_, str> {
         if self.dynamic_parameter(name) {
             use std::{
@@ -452,6 +481,7 @@ impl State {
         match name {
             "0" => Cow::Borrowed(&self.shell_name),
             "?" => Cow::Owned(self.status.to_string()),
+            "-" => Cow::Owned(self.option_letters()),
             "PWD" => Cow::Borrowed(&self.cwd),
             "#" => Cow::Owned(self.positional.len().to_string()),
             "!" => Cow::Borrowed(self.last_async.as_deref().unwrap_or("")),

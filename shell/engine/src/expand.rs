@@ -2601,6 +2601,42 @@ pub(crate) async fn conditional_word(
     Ok(expansion.captured.take().ok_or(2)?.value)
 }
 
+pub(crate) async fn prompt(
+    source: &str,
+    state: &SharedState,
+    cancel: &Cancel,
+    max: usize,
+    work: &mut Work,
+) -> Result<String, Error> {
+    let mut expansion = Expansion {
+        segments: Segments {
+            account_storage: true,
+            ..Segments::default()
+        },
+        captured: Some(Captured {
+            value: String::new(),
+            max_bytes: max,
+        }),
+        pattern: None,
+        replacement: None,
+        pattern_context: false,
+        pattern_snapshots: true,
+        admit_frames: true,
+        ifs: None,
+        ifs_changed: false,
+        work,
+        cancel,
+        max_raw: max,
+        raw_remaining: max,
+        elements_remaining: max,
+    };
+    let mut scanner = operand::Scanner::prompt(source);
+    while let Some(piece) = scanner.next(expansion.work, cancel).await? {
+        expansion.operand_piece(piece, state, true, true, 0).await?;
+    }
+    Ok(expansion.captured.take().ok_or(2)?.value)
+}
+
 /// Expand one case-pattern word while retaining the quote protection that the
 /// bounded glob matcher needs. Raw parser spelling is required: Display cannot
 /// reconstruct the quote protection of a synthetic AST.

@@ -30,6 +30,7 @@ mod select;
 #[cfg(test)]
 mod trap_tests;
 mod type_builtin;
+mod xtrace;
 
 #[derive(Clone, Debug)]
 pub struct Limits {
@@ -281,6 +282,7 @@ pub(crate) struct Context {
     evaluation: crate::exec::Scope,
     loop_depth: usize,
     ignore_errexit: bool,
+    trace: xtrace::Trace,
 }
 impl Context {
     fn stop_signal(&self) -> i32 {
@@ -761,6 +763,7 @@ impl Session {
             compound_child: false,
             loop_depth: 0,
             ignore_errexit: false,
+            trace: xtrace::Trace::default(),
             evaluation,
         };
         let state = self.state.clone();
@@ -1127,6 +1130,9 @@ fn execute(
 ) -> eval::Frame<'static, Outcome> {
     if context.cancel.is_cancelled() {
         return futures::future::Either::Left(futures::future::ready(Outcome::status(130)));
+    }
+    if state.borrow().noexec {
+        return futures::future::Either::Left(futures::future::ready(Outcome::status(0)));
     }
     let evaluation = match context.evaluation.descend() {
         Ok(scope) => scope,
@@ -2244,6 +2250,7 @@ async fn launch_background(
         evaluation: context.evaluation.new_task(),
         loop_depth: 0,
         ignore_errexit: context.ignore_errexit,
+        trace: context.trace,
     };
     let fds = Rc::new(RefCell::new(fds.borrow().clone()));
     let parent_scope = context.scope.clone();
@@ -2416,6 +2423,7 @@ impl Substitutions {
             group,
             parameter_error_status: 1,
             compound_child: false,
+            trace: self.context.trace.nested(),
             ..self.context.isolated()
         };
         let link = cancel.clone();
@@ -2560,6 +2568,7 @@ impl Substitutions {
             group,
             parameter_error_status: 1,
             compound_child: false,
+            trace: self.context.trace.nested(),
             ..self.context.isolated()
         };
         let parent = self.context.cancel.clone();
@@ -2747,6 +2756,17 @@ async fn simple_command(
         Some(stderr) => WeakStderr::Open(stderr.downgrade()),
         None => WeakStderr::Closed,
     };
+    if let Err(error) = xtrace::command(
+        &prepared.argv,
+        &prepared.assigned,
+        &state,
+        &original_fds,
+        &context,
+    )
+    .await
+    {
+        return Outcome::status(error);
+    }
     drop(original_fds);
     dispatch_simple_command(prepared, state, context, parent_stderr)
         .await
@@ -2843,8 +2863,11 @@ async fn prepare_simple_command_body(
             context,
             &mut bytes,
             &mut work,
-            true,
-            None,
+            AssignmentMode {
+                commit: true,
+                diagnostics: None,
+                fds: &fds,
+            },
         )
         .await?;
         let fds = redirects(&simple.redirects, state, fds, context, &mut work, Some(1)).await?;
@@ -2877,8 +2900,11 @@ async fn prepare_simple_command_body(
         context,
         &mut bytes,
         &mut work,
-        false,
-        function_prefix.then_some(&fds),
+        AssignmentMode {
+            commit: false,
+            diagnostics: function_prefix.then_some(&fds),
+            fds: &fds,
+        },
     )
     .await?;
     work.substitutions = None;
@@ -3373,14 +3399,20 @@ async fn literal_arithmetic_failure(
     result
 }
 
+#[derive(Clone, Copy)]
+struct AssignmentMode<'a> {
+    commit: bool,
+    diagnostics: Option<&'a Descriptors>,
+    fds: &'a Descriptors,
+}
+
 async fn assignments(
     assignments: Vec<Assignment>,
     state: &SharedState,
     context: &Context,
     bytes: &mut usize,
     work: &mut expand::Work,
-    commit: bool,
-    function_diagnostics: Option<&Descriptors>,
+    mode: AssignmentMode<'_>,
 ) -> Result<Vec<(String, String)>, expand::Error> {
     if assignments.is_empty() {
         return Ok(Vec::new());
@@ -3392,7 +3424,7 @@ async fn assignments(
         context,
         bytes,
         work,
-        (commit, function_diagnostics),
+        mode,
         &mut completed,
     )
     .await;
@@ -3413,10 +3445,14 @@ async fn assignments_body(
     context: &Context,
     bytes: &mut usize,
     work: &mut expand::Work,
-    mode: (bool, Option<&Descriptors>),
+    mode: AssignmentMode<'_>,
     completed: &mut crate::state::AssignmentFrame,
 ) -> Result<Vec<(String, String)>, expand::Error> {
-    let (commit, function_diagnostics) = mode;
+    let AssignmentMode {
+        commit,
+        diagnostics: function_diagnostics,
+        fds,
+    } = mode;
     if assignments.is_empty() {
         return Ok(Vec::new());
     }
@@ -3485,6 +3521,9 @@ async fn assignments_body(
             .map_or(0, crate::state::Binding::storage_bytes);
         if commit {
             completed.reserve(&assignment.name, retained)?;
+        }
+        if commit {
+            xtrace::assignment(&assignment.name, &value, state, fds, context).await?;
         }
         let assignment_name = assignment.name.clone();
         if let Err(name) = frame.set(assignment.name, value) {
@@ -3812,6 +3851,7 @@ mod scope_tests {
             compound_child: false,
             loop_depth: 0,
             ignore_errexit: false,
+            trace: xtrace::Trace::default(),
         };
         (session.state(), session.core.descriptors.clone(), context)
     }
@@ -4329,6 +4369,7 @@ mod residual_review_tests {
                 compound_child: false,
                 loop_depth: 0,
                 ignore_errexit: false,
+                trace: xtrace::Trace::default(),
             }
         }
         fn shutdown(mut self) {

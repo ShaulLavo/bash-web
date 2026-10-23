@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "a46c61419e1a5b757cdac117ee5c9271f9376237f4bae118a9b6a1c40d69a525",
+    "engineSourceSha256": "aece286fdd7230ddd28f0c6159d733982eb401827f0164667b33f948406eef1b",
     "binaryBuild": null
   },
   "contract": {
@@ -14,65 +14,17 @@
   },
   "graph": {
     "executor": [],
-    "io": [
-      "executor"
-    ],
-    "process": [
-      "executor",
-      "io"
-    ],
-    "runtime": [
-      "executor",
-      "io",
-      "process"
-    ],
-    "exec": [
-      "executor"
-    ],
-    "state": [
-      "executor",
-      "exec"
-    ],
-    "parse": [
-      "executor",
-      "exec"
-    ],
-    "commands": [
-      "parse",
-      "exec"
-    ],
-    "ast_copy": [
-      "executor",
-      "exec",
-      "parse"
-    ],
-    "arithmetic": [
-      "executor",
-      "exec",
-      "state",
-      "expand",
-      "parse"
-    ],
-    "expand": [
-      "executor",
-      "exec",
-      "state",
-      "parse",
-      "arithmetic",
-      "ast_copy",
-      "io",
-      "interpreter"
-    ],
-    "builtins": [
-      "executor",
-      "exec",
-      "state",
-      "parse",
-      "commands",
-      "expand",
-      "interpreter",
-      "io"
-    ],
+    "io": ["executor"],
+    "process": ["executor", "io"],
+    "runtime": ["executor", "io", "process"],
+    "exec": ["executor"],
+    "state": ["executor", "exec"],
+    "parse": ["executor", "exec"],
+    "commands": ["parse", "exec"],
+    "ast_copy": ["executor", "exec", "parse"],
+    "arithmetic": ["executor", "exec", "state", "expand", "parse"],
+    "expand": ["executor", "exec", "state", "parse", "arithmetic", "ast_copy", "io", "interpreter"],
+    "builtins": ["executor", "exec", "state", "parse", "commands", "expand", "interpreter", "io"],
     "interpreter": [
       "executor",
       "exec",
@@ -88,18 +40,10 @@
     ]
   },
   "testFixtureEdges": {
-    "builtins": [
-      "process"
-    ],
-    "expand": [
-      "process"
-    ],
-    "process": [
-      "interpreter"
-    ],
-    "runtime": [
-      "interpreter"
-    ]
+    "builtins": ["process"],
+    "expand": ["process"],
+    "process": ["interpreter"],
+    "runtime": ["interpreter"]
   },
   "compositionRoots": {
     "lib": [
@@ -117,33 +61,13 @@
       "parse",
       "commands"
     ],
-    "main": [
-      "compat",
-      "executor",
-      "interpreter",
-      "io",
-      "process",
-      "state"
-    ],
-    "runtime_main": [
-      "terminal",
-      "executor",
-      "interpreter",
-      "io",
-      "runtime",
-      "state"
-    ],
-    "compat": [
-      "executor",
-      "io",
-      "process"
-    ],
+    "main": ["compat", "executor", "interpreter", "io", "process", "state"],
+    "runtime_main": ["terminal", "executor", "interpreter", "io", "runtime", "state"],
+    "compat": ["executor", "io", "process"],
     "terminal": []
   },
   "rootInlineModules": {
-    "runtime_main": [
-      "guest"
-    ]
+    "runtime_main": ["guest"]
   },
   "rootReexports": {
     "Limits": "interpreter",
@@ -153,16 +77,12 @@
     {
       "name": "arithmetic",
       "kind": "layer",
-      "files": [
-        "shell/engine/src/arithmetic.rs"
-      ]
+      "files": ["shell/engine/src/arithmetic.rs"]
     },
     {
       "name": "ast_copy",
       "kind": "layer",
-      "files": [
-        "shell/engine/src/ast_copy.rs"
-      ]
+      "files": ["shell/engine/src/ast_copy.rs"]
     },
     {
       "name": "builtins",
@@ -186,31 +106,22 @@
     {
       "name": "commands",
       "kind": "layer",
-      "files": [
-        "shell/engine/src/commands.rs",
-        "shell/engine/src/commands/tests.rs"
-      ]
+      "files": ["shell/engine/src/commands.rs", "shell/engine/src/commands/tests.rs"]
     },
     {
       "name": "compat",
       "kind": "composition-root",
-      "files": [
-        "shell/engine/src/compat.rs"
-      ]
+      "files": ["shell/engine/src/compat.rs"]
     },
     {
       "name": "exec",
       "kind": "layer",
-      "files": [
-        "shell/engine/src/exec.rs"
-      ]
+      "files": ["shell/engine/src/exec.rs"]
     },
     {
       "name": "executor",
       "kind": "layer",
-      "files": [
-        "shell/engine/src/executor.rs"
-      ]
+      "files": ["shell/engine/src/executor.rs"]
     },
     {
       "name": "expand",
@@ -252,44 +163,34 @@
         "shell/engine/src/interpreter/indexed.rs",
         "shell/engine/src/interpreter/select.rs",
         "shell/engine/src/interpreter/trap_tests.rs",
-        "shell/engine/src/interpreter/type_builtin.rs"
+        "shell/engine/src/interpreter/type_builtin.rs",
+        "shell/engine/src/interpreter/xtrace.rs"
       ]
     },
     {
       "name": "io",
       "kind": "layer",
-      "files": [
-        "shell/engine/src/io.rs"
-      ]
+      "files": ["shell/engine/src/io.rs"]
     },
     {
       "name": "lib",
       "kind": "composition-root",
-      "files": [
-        "shell/engine/src/lib.rs"
-      ]
+      "files": ["shell/engine/src/lib.rs"]
     },
     {
       "name": "main",
       "kind": "composition-root",
-      "files": [
-        "shell/engine/src/main.rs"
-      ]
+      "files": ["shell/engine/src/main.rs"]
     },
     {
       "name": "parse",
       "kind": "layer",
-      "files": [
-        "shell/engine/src/parse.rs",
-        "shell/engine/src/parse/tests.rs"
-      ]
+      "files": ["shell/engine/src/parse.rs", "shell/engine/src/parse/tests.rs"]
     },
     {
       "name": "process",
       "kind": "layer",
-      "files": [
-        "shell/engine/src/process.rs"
-      ]
+      "files": ["shell/engine/src/process.rs"]
     },
     {
       "name": "runtime",
@@ -303,9 +204,7 @@
     {
       "name": "runtime_main",
       "kind": "composition-root",
-      "files": [
-        "shell/engine/src/runtime_main.rs"
-      ]
+      "files": ["shell/engine/src/runtime_main.rs"]
     },
     {
       "name": "state",
@@ -323,9 +222,7 @@
     {
       "name": "terminal",
       "kind": "composition-root",
-      "files": [
-        "shell/engine/src/terminal.rs"
-      ]
+      "files": ["shell/engine/src/terminal.rs"]
     }
   ],
   "edges": [
@@ -405,7 +302,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 768,
+        "line": 788,
         "column": 39
       }
     },
@@ -565,7 +462,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 1614,
+        "line": 1620,
         "column": 33
       }
     },
@@ -595,7 +492,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 91,
+        "line": 92,
         "column": 30
       }
     },
@@ -885,7 +782,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 2867,
+        "line": 2903,
         "column": 21
       }
     },
@@ -905,7 +802,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3798,
+        "line": 3837,
         "column": 25
       }
     },
@@ -915,7 +812,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 5111,
+        "line": 5152,
         "column": 17
       }
     },
@@ -935,7 +832,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3784,
+        "line": 3823,
         "column": 17
       }
     },
@@ -945,7 +842,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3784,
+        "line": 3823,
         "column": 31
       }
     },
@@ -1045,7 +942,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 975,
+        "line": 1005,
         "column": 63
       }
     },
@@ -1055,7 +952,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 2065,
+        "line": 2095,
         "column": 9
       }
     }
