@@ -6145,7 +6145,11 @@ fn finish_word(
             .iter()
             .zip(&part_quoted)
             .any(|(p, q)| !*q && matches!(p, WordPart::Literal(t) if t.contains('{')));
-        if !unquoted_expansion && !quoted_at && !brace_candidate {
+        let tilde_candidate = parts
+            .iter()
+            .zip(&part_quoted)
+            .any(|(p, q)| !*q && matches!(p, WordPart::Literal(t) if t.contains('~')));
+        if !unquoted_expansion && !quoted_at && !brace_candidate && !tilde_candidate {
             let mut kept_parts = Vec::with_capacity(parts.len());
             let mut kept_quoted = Vec::with_capacity(parts.len());
             for (p, q) in parts.into_iter().zip(part_quoted) {

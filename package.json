@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.90",
+  "version": "0.0.93",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -29,7 +29,7 @@
     "build:shell": "node scripts/build-shell.ts",
     "check:capabilities": "node scripts/check-shell-capabilities.ts",
     "test:shell:wasi": "node scripts/test-shell-wasi.ts",
-    "test:shell:scoreboard": "npm run build:node-harness && node --test scripts/test-shell-scoreboard*.mjs scripts/test-shell-scoreboard-instrument.ts scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-own-shell-root.ts scripts/test-own-shell-permissions.ts scripts/test-own-shell-descriptors.ts scripts/test-own-shell-printf-assignment.ts scripts/test-own-shell-extglob.ts scripts/test-own-shell-regex-groups.ts scripts/test-own-shell-file-substitution.ts scripts/test-own-shell-read-scalar.ts scripts/test-own-shell-indirect-special.ts scripts/test-own-shell-select.ts scripts/test-own-shell-declarations.ts scripts/test-own-shell-index-names.ts scripts/test-bash-compat*.mjs",
+    "test:shell:scoreboard": "npm run build:node-harness && node --test scripts/test-shell-scoreboard*.mjs scripts/test-shell-scoreboard-instrument.ts scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-own-shell-root.ts scripts/test-own-shell-permissions.ts scripts/test-own-shell-descriptors.ts scripts/test-own-shell-printf-assignment.ts scripts/test-own-shell-extglob.ts scripts/test-own-shell-pathname.ts scripts/test-own-shell-tilde.ts scripts/test-own-shell-regex-groups.ts scripts/test-own-shell-file-substitution.ts scripts/test-own-shell-read-scalar.ts scripts/test-own-shell-indirect-special.ts scripts/test-own-shell-select.ts scripts/test-own-shell-declarations.ts scripts/test-own-shell-index-names.ts scripts/test-bash-compat*.mjs",
     "compat:shell": "npm run build:node-harness && npm run compat:shell:prebuilt",
     "prepare:shell-corpus": "node scripts/prepare-shell-corpus.mjs",
     "fuzz:shell-braces": "node scripts/fuzz-shell-braces.mjs",
@@ -67,6 +67,7 @@
     "notices:browser": "npm run notices:shell && node scripts/browser-notices.mjs",
     "serve": "node dist/serve.mjs",
     "verify:browser": "npm run test:browser:package && npm run build:browser && npm run typecheck:browser && npm run test:runtime:terminal && npm run test:browser",
+    "test:installed-waffle": "node --test scripts/test-installed-waffle.mjs",
     "test:browser:package": "node --test scripts/test-browser-package.mjs scripts/test-utility-packaging.ts",
     "build:worker": "node scripts/build-worker.mjs",
     "prepare": "npm run build:worker",
@@ -118,11 +119,11 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.3",
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289",
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#b20fad173ebaa225cb87c51776f35edaaafd4a40",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289"
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#b20fad173ebaa225cb87c51776f35edaaafd4a40"
   },
   "overrides": {
     "esbuild": "0.28.2"
@@ -132,7 +133,7 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "waffle@0.0.63": true
+    "waffle@0.0.67": true
   },
   "trustedDependencies": [
     "waffle",

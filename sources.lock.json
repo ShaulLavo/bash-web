@@ -70,10 +70,10 @@
   },
   "waffle": {
     "repository": "https://github.com/ShaulLavo/waffle",
-    "revision": "c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289",
+    "revision": "b20fad173ebaa225cb87c51776f35edaaafd4a40",
     "package": "waffle",
-    "version": "0.0.63",
-    "specifier": "git+https://github.com/ShaulLavo/waffle.git#c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289",
+    "version": "0.0.67",
+    "specifier": "git+https://github.com/ShaulLavo/waffle.git#b20fad173ebaa225cb87c51776f35edaaafd4a40",
     "license": "MIT",
     "descriptorAdapter": "Original local Rust logical-to-physical fd translation and WASI path_open flags/rights adapter, from docs/host-abi.md at the selected revision. No copied runtime implementation. Native MemoryFs uses its own same-node/new-description operation; unexported buffers retain their explicit boundary. See docs/descriptor-reopening.md and plan 004.",
     "permissionAdapter": "Original local Rust adapter from runtime_fs.path_permissions_get documentation at the selected revision. No copied upstream implementation. Preserve the four-word supported-mode/access contract; query metadata without opening payloads. Test-only storage conformance imports fs/vfs-internal.ts from the same pinned source module as SharedFilesystem; product composition stays default FAST and the frozen runner stays public memory.",
@@ -1998,5 +1998,40 @@
     "strategy": "Borrow only the visible named declaration, with raw immediate nameref target and local-unset metadata; admit a single scalar snapshot and bounded cooperative declaration escaping before descriptor output. No binding mutation or whole-map/array snapshot.",
     "documentation": "docs/declaration-printing.md",
     "qualification": "Targeted production-Waffle evidence only at this checkpoint. Parent owns independent review, serialized main integration, full frozen replay and baseline recomputation."
+  },
+  "shellTilde": {
+    "classification": "Original HOME-only tilde adapter and controls. GNU Bash 5.3.15 is a behavior oracle; no upstream implementation copied or adapted.",
+    "baseRevision": "93fdf762f2a694427440d07156c7a8c458ecc995",
+    "paths": [
+      "shell/engine/src/expand/tilde.rs",
+      "shell/engine/src/expand.rs",
+      "shell/engine/src/interpreter.rs",
+      "shell/engine/src/interpreter/indexed.rs",
+      "shell/engine/tests/words/tilde.rs",
+      "scripts/test-own-shell-tilde.ts",
+      "scripts/recorded-bash.ts",
+      "scripts/fixtures/shell-tilde.json",
+      "shell/parser/src/parser/mod.rs",
+      "shell/parser/tests/api.rs"
+    ],
+    "implementation": "Recognize unquoted HOME tilde prefixes from existing literal parts after brace expansion. Words changed by brace expansion keep only a leading prefix, because Bash gives them fresh flags without assignment eligibility. Snapshot the actual scalar binding at each eligible literal execution segment, following preceding parameter side effects. Protect only substituted home bytes from splitting and pathname expansion. Scalar assignments allow prefixes after literal colons; ordinary words allow this only after an unquoted valid identifier and equals or plus-equals. Declarations and redirect scalar words retain ordinary assignment-looking recognition; only actual scalar RHSs use assignment mode. Admit the retained snapshot before copying and charge each emitted copy to existing raw, field, work and storage budgets. Words without an unquoted literal tilde spend no tilde work; assignment-name scans, tilde candidates and emitted values yield and check cancellation. Normal PR41 integration routes actual scalar-form RHS values, including scalar += and scalar writes through indexed bindings, through the same assignment expansion context without changing subscript evaluation, append, binding storage or compound/list expansion.",
+    "deferred": "Named-user homes and HOME-unset account fallback require an authentic runtime account lookup; preserve those prefixes literally. PWD/OLDPWD, directory-stack forms, parameter operands, compound/list array assignments and non-UTF-8 fields remain outside this slice. Only the separately recorded empty-quote retention changes parser behavior. No AST, state storage, FileSubstitution or pathname traversal changes.",
+    "gate": "Record actual local Bash 5.3.15(1)-release controls once and replay CI without live Bash. The tilde and extglob recorders share the original scripts/recorded-bash.ts runner. Native/WASI resource and cancellation controls plus actual Waffle controls and the unchanged full serial 9221-row frozen scored-only replay. Preserve all former passes, identities, ordered membership, skips and historical diagnostic payloads."
+  },
+  "shellPathname": {
+    "classification": "Original argv pathname admission, sparse quote masks, noglob option and Waffle controls. GNU Bash 5.3.15 is a behavior oracle, not copied implementation. Directory streaming and the basic-only pathname compiler reuse the existing original glob.rs and the local adaptation recorded in shellParameterTrim.",
+    "oracle": "GNU Bash 5.3.15(1)-release",
+    "paths": [
+      "shell/engine/src/expand.rs",
+      "shell/engine/src/expand/glob.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/runtime/tests.rs",
+      "scripts/test-own-shell-pathname.ts",
+      "scripts/fixtures/shell-pathname.json"
+    ],
+    "implementation": "Unquoted non-scalar fields that can run substitutions expand pathnames for command names, arguments, indexed compound assignment operands, for-lists and file-substitution targets unless set -f or set -o noglob is active. Fields track quote protection as (bytes, protected) runs, charged only for admitted words like their other buffers, and expand them into an admitted byte mask only when an unprotected *, ? or [ occurs, so plain argv keeps its exact budgets and is returned unchanged. Admitted words with extglob on also send @(, +( and !( groups to the existing explicit rejection. The glob step knows whether its fields were storage-admitted: unadmitted argv slots are not charged, discarded text is not released and matched names are released, while admitted for-list and file-substitution accounting is unchanged. Matches are sorted bytewise, dot files need an explicit leading dot and nullglob removes only unquoted unmatched patterns. A component needing more characters than any path matches nothing and is read without building its pattern; candidate paths longer than any path, not counting a directory's trailing slash, are absent, while budget and storage failures stay errors. Scalar assignment and redirect words stay scalar.",
+    "deferred": "Pathname extglob, dotglob, globstar, nocaseglob, failglob, GLOBIGNORE and set -o listing remain unsupported. With extglob on, argv fields containing extglob groups stay literal as before, while admitted for-list and file-substitution words keep the explicit unsupported status 2.",
+    "gate": "Forty-one independent Bash-versus-production-Waffle controls, a native runtime control and the unchanged frozen 9221-case per-ID production replay. Only proven gained baseline outcomes and derived counts change; historical diagnostic payloads remain intact."
   }
 }

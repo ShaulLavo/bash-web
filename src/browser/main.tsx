@@ -15,8 +15,10 @@ import {
   type StartupObserver,
   type StartupSnapshot,
 } from "../runtime/startup-diagnostics";
-import { createRuntime, VfsError, type Runtime, type SharedFilesystemState } from "waffle";
-import { createStorageStartup, waitForStorage, type StorageStartup } from "./storage";
+import { VfsError, type Runtime, type SharedFilesystemState } from "waffle";
+import { createStorageStartup, waitForStorage } from "./storage";
+import { acquireBrowserRuntime, type BrowserHostOptions } from "./runtime";
+export type { BrowserHostOptions, BrowserRuntimeLease } from "./runtime";
 import filesystemWorkerUrl from "../../.build/browser/fs-worker.js?url";
 import { TerminalNewlines } from "../index";
 import "./style.css";
@@ -125,19 +127,6 @@ async function openTerminal(host: HTMLElement): Promise<Terminal> {
     return fallback;
   }
 }
-
-export type BrowserRuntimeLease = {
-  runtime: Runtime;
-  ready: Promise<void>;
-  dispose(): Promise<void>;
-};
-export type BrowserHostOptions =
-  | { runtime: Runtime; acquireRuntime?: never; storageStartup?: StorageStartup }
-  | {
-      runtime?: never;
-      storageStartup?: never;
-      acquireRuntime?: (onStartupStage?: StartupObserver) => BrowserRuntimeLease;
-    };
 
 /** An app-supplied runtime is borrowed; a factory lease keeps cleanup with its owner. */
 export function mountBrowser(options: BrowserHostOptions = {}): void {
@@ -310,18 +299,11 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         if (current.textarea) current.textarea.disabled = true;
         wireTerminal(current, expectedGeneration);
         markStartup(onStartupStage, "runtime-lease-requested");
-        let lease: BrowserRuntimeLease;
-        if (options.runtime) {
-          lease = { runtime: options.runtime, ready: Promise.resolve(), dispose: async () => {} };
-        } else if (options.acquireRuntime) {
-          lease = options.acquireRuntime(onStartupStage);
-        } else {
-          const owned = createRuntime({
-            filesystem: { mode: "fast", workerURL: filesystemWorkerUrl },
-            onStartupStage,
-          });
-          lease = { runtime: owned, ready: Promise.resolve(), dispose: () => owned.dispose() };
-        }
+        const lease = acquireBrowserRuntime(options, {
+          workerURL: filesystemWorkerUrl,
+          search: location.search,
+          onStartupStage,
+        });
         // The owner must make lease disposal idempotent, including during preparation.
         disposeRuntime = () => lease.dispose();
         const controller = new AbortController();
