@@ -157,7 +157,7 @@
     },
     {
       "id": "control-11",
-      "script": "set -n; while true; do echo BAD; done",
+      "script": "set -n; i=0; while [ \"$i\" -lt 1 ]; do echo BAD; i=1; done",
       "bash": {
         "status": 0,
         "stdout": "",
@@ -220,7 +220,7 @@
     },
     {
       "id": "control-18",
-      "script": "until false; do echo before; set -n; done; echo BAD",
+      "script": "i=0; until [ \"$i\" = 1 ]; do echo before; i=1; set -n; done; echo BAD",
       "bash": {
         "status": 0,
         "stdout": "YmVmb3JlCg==",

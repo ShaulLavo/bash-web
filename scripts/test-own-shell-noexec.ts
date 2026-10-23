@@ -30,7 +30,8 @@ const runner = await createWaffleRunner({
 after(stopNodeWorkers);
 
 for (const entry of fixture.cases)
-  test(`production Waffle noexec: ${entry.id}`, async () => {
+  test(`production Waffle noexec: ${entry.id}`, { timeout: 10000 }, async (context) => {
+    context.signal.addEventListener("abort", () => void stopNodeWorkers(), { once: true });
     const actual = await runner(entry.script);
     assert.equal(actual.crash, undefined, entry.script);
     assert.equal(actual.outputLimit, undefined, entry.script);
