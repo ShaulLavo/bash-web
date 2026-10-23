@@ -4415,7 +4415,7 @@ fn named_descriptors_have_a_session_policy_and_release_capacity() {
 #[test]
 fn named_descriptors_escape_temporary_command_tables_but_not_subshells() {
     let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run("f() { local fd; exec {fd}>f; printf first >&$fd; }; f >ignored; { exec {other}>g; printf second >&$other; } >ignored; printf third >&10; cat f g; (exec {sub}>h); echo ${sub-unset}"), 0);
+    assert_eq!(rig.run("f() { local fd; exec {fd}>f; kept=$fd; printf first >&$fd; }; f >ignored; { exec {other}>g; printf second >&$other; } >ignored; printf third >&$kept; cat f g; (exec {sub}>h); echo ${sub-unset}"), 0);
     assert_eq!(rig.output.bytes(), b"firstthirdsecondunset\n");
 }
 

@@ -186,10 +186,10 @@
     },
     {
       "id": "nested-temporary-scopes",
-      "script": "f() { local fd; exec {fd}>f; printf first >&$fd; }; f >ignored; { exec {other}>g; printf second >&$other; } >ignored; printf third >&10; cat f g; echo ${fd-unset}",
+      "script": "f() { local fd; exec {fd}>f; kept=$fd; printf first >&$fd; }; f >ignored; { exec {other}>g; printf second >&$other; } >ignored; printf third >&$kept; cat f g; echo ${fd-unset}",
       "status": 0,
-      "stdout": "Zmlyc3RzZWNvbmR1bnNldAo=",
-      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAxMDogQmFkIGZpbGUgZGVzY3JpcHRvcgo="
+      "stdout": "Zmlyc3R0aGlyZHNlY29uZHVuc2V0Cg==",
+      "stderr": ""
     },
     {
       "id": "ordinary-close-persists",
@@ -224,6 +224,20 @@
       "script": "exec {fd}>f; echo hi 2>err >&$fd </no/such/path; cat err; echo $fd",
       "status": 0,
       "stdout": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAvbm8vc3VjaC9wYXRoOiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5CjEwCg==",
+      "stderr": ""
+    },
+    {
+      "id": "exec-close-through-function",
+      "script": "exec {fd}>f; fun() { exec {fd}>&-; }; fun >ignored; printf hi >&$fd; echo status=$?; exec {x}>g; echo $x",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEKMTAK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAkZmQ6IEJhZCBmaWxlIGRlc2NyaXB0b3IK"
+    },
+    {
+      "id": "temporary-numeric-close-does-not-replace-named",
+      "script": "exec {a}>f; : 10>&- {b}>g; printf one >&$a; printf two >&$b; echo $a:$b; cat f g",
+      "status": 0,
+      "stdout": "MTA6MTAKb25ldHdv",
       "stderr": ""
     }
   ]

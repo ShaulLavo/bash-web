@@ -1464,7 +1464,17 @@ fn command_redirects<'a>(
     context.evaluation.frame(
         async move {
             let original_fds = fds.clone();
-            match redirects(redirs, state, fds, context, work, None).await {
+            match redirects(
+                redirs,
+                state,
+                fds,
+                context,
+                work,
+                None,
+                redirect::Mode::Command,
+            )
+            .await
+            {
                 Ok(fds) => Ok(fds),
                 Err(error) => {
                     let mut outcome = expansion_failure(error, &original_fds, context).await;
@@ -2858,7 +2868,16 @@ async fn prepare_simple_command_body(
         } else {
             fds
         };
-        let fds = redirects(&simple.redirects, &reader, fds, context, &mut work, Some(1)).await?;
+        let fds = redirects(
+            &simple.redirects,
+            &reader,
+            fds,
+            context,
+            &mut work,
+            Some(1),
+            redirect::Mode::Command,
+        )
+        .await?;
         work.substitutions = None;
         return Ok(PreparedCommand {
             line,
@@ -2872,6 +2891,11 @@ async fn prepare_simple_command_body(
     let shell_command = state.borrow().functions().contains_key(name)
         || commands::lookup(name).is_some_and(commands::Command::shell_heredoc_errors);
     let heredoc_status = (!shell_command).then_some(context.parameter_error_status);
+    let mode = if commands::handler(name) == Some(commands::Handler::Exec) {
+        redirect::Mode::Exec
+    } else {
+        redirect::Mode::Command
+    };
     let fds = redirects(
         &simple.redirects,
         state,
@@ -2879,6 +2903,7 @@ async fn prepare_simple_command_body(
         context,
         &mut work,
         heredoc_status,
+        mode,
     )
     .await?;
     let function_prefix = state.borrow().functions().contains_key(name);
@@ -3679,6 +3704,7 @@ async fn redirects(
     context: &Context,
     work: &mut expand::Work,
     heredoc_status: Option<i32>,
+    mode: redirect::Mode,
 ) -> Result<Descriptors, CommandError> {
     if redirs.is_empty() {
         return Ok(fds);
@@ -3733,7 +3759,7 @@ async fn redirects(
                     reader_status,
                 )
             })?;
-        redirect::apply(redirect, target, state, &fds, context, work).await?;
+        redirect::apply(redirect, mode, target, state, &fds, context, work).await?;
     }
     Ok(fds)
 }

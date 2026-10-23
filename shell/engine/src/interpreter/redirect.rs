@@ -82,6 +82,12 @@ fn replace(table: &mut FdTable, fd: u32, endpoint: Option<io::Endpoint>) {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Mode {
+    Command,
+    Exec,
+}
+
 pub(super) async fn allocate(
     fds: &Descriptors,
     context: &Context,
@@ -94,15 +100,33 @@ pub(super) async fn allocate(
     loop {
         work.checkpoint(&context.cancel).await?;
         if fds.borrow().get(fd).is_none() {
+            admit_publication(fd, fds, context, work).await?;
             return Ok(fd);
         }
         fd = fd.checked_add(1).ok_or(crate::exec::RESOURCE_STATUS)?;
     }
 }
 
+async fn admit_publication(
+    fd: u32,
+    fds: &Descriptors,
+    context: &Context,
+    work: &mut expand::Work,
+) -> Result<(), expand::Error> {
+    for parent in fds.parents.iter().filter_map(Weak::upgrade) {
+        work.checkpoint(&context.cancel).await?;
+        let table = parent.borrow();
+        if table.get(fd).is_none() && table.iter().count() >= context.limits().descriptors {
+            return Err(crate::exec::RESOURCE_STATUS.into());
+        }
+    }
+    Ok(())
+}
+
 #[inline(never)]
 pub(super) fn apply<'a>(
     redirect: &'a Redirect,
+    mode: Mode,
     target: String,
     state: &'a SharedState,
     fds: &'a Descriptors,
@@ -110,13 +134,14 @@ pub(super) fn apply<'a>(
     work: &'a mut expand::Work,
 ) -> eval::Frame<'a, Result<(), CommandError>> {
     context.evaluation.frame(
-        apply_body(redirect, target, state, fds, context, work),
+        apply_body(redirect, mode, target, state, fds, context, work),
         |code| Err(code.into()),
     )
 }
 
 async fn apply_body(
     redirect: &Redirect,
+    mode: Mode,
     target: String,
     state: &SharedState,
     fds: &Descriptors,
@@ -134,7 +159,7 @@ async fn apply_body(
         } else {
             number(redirect)?
         };
-        if named {
+        if named && mode == Mode::Exec {
             fds.publish(fd, None, context, work).await?;
         }
         fds.borrow_mut().remove(fd);
@@ -319,7 +344,7 @@ pub(super) async fn bind(
     let assignment = Assignment {
         name: name.into(),
         index: index.map(str::to_owned),
-        value: AssignmentValue::Scalar(Word::literal(&fd.to_string())),
+        value: AssignmentValue::Scalar(Word::literal(fd.to_string())),
         append: false,
     };
     let result = assignments(vec![assignment], state, context, &mut 0, work, true, None).await;
