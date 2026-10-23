@@ -292,6 +292,7 @@ impl State {
     /// The browser process adapter keeps the engine's default IFS if absent
     /// from the inherited environment, and exports the resulting startup keys.
     pub fn inherit_environment(&mut self, environment: impl IntoIterator<Item = (String, String)>) {
+        self.variables.remove("_");
         self.variables.remove("OPTIND");
         self.variables.remove("OPTERR");
         self.variables.extend(
@@ -300,6 +301,9 @@ impl State {
                 .map(|(key, value)| (key, value.into())),
         );
         self.exported = self.variables.keys().cloned().collect();
+        self.variables
+            .entry("_".into())
+            .or_insert_with(|| self.shell_name.clone().into());
         self.variables.insert("OPTIND".into(), "1".into());
         self.variables.insert("OPTERR".into(), "1".into());
     }
