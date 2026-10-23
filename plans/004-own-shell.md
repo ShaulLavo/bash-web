@@ -3083,6 +3083,36 @@ Expected stderr "".
 Do not implement these rare cases in this integration or change the oracle,
 recordings, scored membership, skips, environment, or limits to make them pass.
 
+### Additional observations in the existing ordinary-array follow-ups
+
+Status: Approved follow-up, not implemented by the PR85 call-stack slice repair.
+Owner: VARIABLES. The signed Arch Bash 5.3.15 binary has SHA-256
+`575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5`.
+The following controls differ from that frozen oracle identically on parent
+`54a553db5b61051f9c30e93c2fd325d7d3c6a033` and the r7 repair source.
+They extend the ordinary sparse/deactivated and local-array follow-ups above,
+not the active computed-array slice fix.
+
+```bash
+unset FUNCNAME; FUNCNAME=(a b c); f(){ printf "<%s>\n" "${FUNCNAME[@]:1:2}" "${FUNCNAME[*]: -1}"; }; f
+```
+
+Expected stdout "<a>\n<b>\n<c>\n"; observed "<b>\n<c>\n<c>\n".
+Both statuses are 0 and both stderr streams are empty. Do not substitute the
+reviewer's installed Bash 5.3.20 observation for the frozen 5.3.15 result.
+
+```bash
+f(){ local -a s=(a b c); printf "<%s>\n" "${s[@]:1}"; }; f
+```
+
+Expected stdout "<b>\n<c>\n"; observed "<>\n". Both statuses are 0 and both
+stderr streams are empty. Inspect the existing local-array declaration path,
+not the computed-array slice bounds.
+
+Evidence: [signed-oracle controls](file:///work/reports/wave-20261022/shell/pr85-callstack-slice-composition-fix-r7-evidence/oracle-controls.json),
+[exact parent/native controls](file:///work/reports/wave-20261022/shell/pr85-callstack-slice-composition-fix-r7-evidence/parent-controls.json),
+and [production Waffle observations](file:///work/reports/wave-20261022/shell/pr85-callstack-slice-composition-fix-r7-evidence/new-waffle-controls.json).
+
 ## Invalid nameref target review follow-ups, 2026-10-23
 
 Status: Approved. Owner: VARIABLES declaration/builtin family. These inherited

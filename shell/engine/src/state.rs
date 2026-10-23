@@ -546,6 +546,27 @@ impl State {
         };
         self.variables.get(target)
     }
+    pub(crate) fn array_is_scalar(&self, name: &str) -> bool {
+        name != "PIPESTATUS"
+            && !self.stack_array(name)
+            && matches!(self.binding(name), Some(Binding::Scalar(_)))
+    }
+    pub(crate) fn array_last_index(&self, name: &str) -> Option<i64> {
+        if name == "PIPESTATUS" {
+            return self
+                .pipeline_status()
+                .len()
+                .checked_sub(1)
+                .and_then(|n| i64::try_from(n).ok());
+        }
+        if self.stack_array(name) {
+            return self
+                .array_count(name)
+                .checked_sub(1)
+                .and_then(|n| i64::try_from(n).ok());
+        }
+        self.binding(name).and_then(Binding::last_index)
+    }
     pub(crate) fn array_count(&self, name: &str) -> usize {
         if let Some(name) = self
             .scalar_target(name)

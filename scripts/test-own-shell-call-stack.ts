@@ -6,3 +6,8 @@ await recordedBashTests(
   "call stack unset",
   new URL("fixtures/shell-call-stack-unset.json", import.meta.url),
 );
+
+await recordedBashTests(
+  "call stack slices",
+  new URL("fixtures/shell-call-stack-slices.json", import.meta.url),
+);

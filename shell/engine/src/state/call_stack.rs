@@ -355,6 +355,61 @@ mod tests {
     }
 
     #[test]
+    fn stack_slice_views_borrow_facts_without_storage_or_frame_growth() {
+        let memory = StorageBudget::new(32_768);
+        let state = State::with_memory(memory.clone()).shared();
+        state.borrow_mut().extdebug = true;
+        finish(State::initialize_arguments(
+            &state,
+            &Cancel::new(),
+            &mut work(),
+        ))
+        .unwrap_or_else(|_| panic!("stack operation failed"));
+        state
+            .borrow_mut()
+            .assign_parameter("FUNCNAME".into(), "ignored".into())
+            .unwrap_or_else(|_| panic!("stack operation failed"));
+        let outer = enter(&state, "outer", vec!["a".into(), "b".into()], 7);
+        let inner = enter(&state, "inner", vec!["x".into()], 3);
+        let child = finish(State::snapshot(&state, &Cancel::new(), &mut work()))
+            .unwrap_or_else(|_| panic!("stack operation failed"));
+        let used = memory.observation();
+        let state_ref = state.borrow();
+        for _ in 0..1024 {
+            for name in [
+                "FUNCNAME",
+                "BASH_SOURCE",
+                "BASH_LINENO",
+                "BASH_ARGV",
+                "BASH_ARGC",
+            ] {
+                assert!(!state_ref.array_is_scalar(name));
+                let last = i64::try_from(state_ref.array_count(name) - 1).unwrap();
+                assert_eq!(state_ref.array_last_index(name), Some(last));
+                assert_eq!(
+                    state_ref.array_next(name, Some(last - 1)),
+                    state_ref.array_element(name, last).map(|v| (last, v))
+                );
+                assert_eq!(child.array_last_index(name), Some(last));
+            }
+        }
+        assert_eq!(memory.observation(), used);
+        assert_eq!(
+            (
+                state_ref.call_stack.frames.len(),
+                state_ref.call_stack.arguments.len()
+            ),
+            (2, 3)
+        );
+        drop(state_ref);
+        drop((inner, outer));
+        assert_eq!(state.borrow().array_last_index("FUNCNAME"), None);
+        assert_eq!(child.array_last_index("FUNCNAME"), Some(1));
+        drop((state, child));
+        assert_eq!(memory.observation().0, 0);
+    }
+
+    #[test]
     fn cancelled_and_failed_admission_publish_no_trace_and_drop_restores_positionals() {
         let state = State::default().shared();
         state
