@@ -1,0 +1,203 @@
+{
+  "schema": 1,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "environment": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "PWD": "/tmp/spec",
+    "SH": "bash",
+    "LC_ALL": "C.UTF-8"
+  },
+  "cases": [
+    {
+      "id": "oils:nameref:56",
+      "script": "x=foo\n\nref=x\n\necho ref=$ref\n\ntypeset -n ref\necho ref=$ref\n\nx=bar\necho ref=$ref\n\ntypeset +n ref\necho ref=$ref\n\n",
+      "status": 0,
+      "stdout": "cmVmPXgKcmVmPWZvbwpyZWY9YmFyCnJlZj14Cg==",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:extended_tests:46",
+      "script": "target=\"value\"\ndeclare -n ref=target\n[[ -R ref ]] && echo \"ref is a nameref\"\n[[ -R target ]] && echo \"target is a nameref\" || echo \"target is not a nameref\"\ndeclare +n ref\n[[ -R ref ]] && echo \"still nameref\" || echo \"no longer a nameref\"\n",
+      "status": 0,
+      "stdout": "cmVmIGlzIGEgbmFtZXJlZgp0YXJnZXQgaXMgbm90IGEgbmFtZXJlZgpubyBsb25nZXIgYSBuYW1lcmVmCg==",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:nameref:48",
+      "script": "target=\"value\"\ndeclare -n ref=target\necho \"before: $ref\"\ndeclare +n ref\necho \"after: $ref\"\ndeclare -p ref\n",
+      "status": 0,
+      "stdout": "YmVmb3JlOiB2YWx1ZQphZnRlcjogdGFyZ2V0CmRlY2xhcmUgLS0gcmVmPSJ0YXJnZXQiCg==",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:nameref:92",
+      "script": "declare -nx ref=MYVAR\nref=\"exported_value\"\necho \"MYVAR: $MYVAR\"\ndeclare -p ref\ndeclare -p MYVAR 2>/dev/null\n",
+      "status": 0,
+      "stdout": "TVlWQVI6IGV4cG9ydGVkX3ZhbHVlCmRlY2xhcmUgLW54IHJlZj0iTVlWQVIiCmRlY2xhcmUgLS0gTVlWQVI9ImV4cG9ydGVkX3ZhbHVlIgo=",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:nameref:95",
+      "script": "target=\"val\"\ndeclare -rn ref=target\necho \"ref: $ref\"\ndeclare -n ref=other 2>/dev/null\necho \"retarget exit: $?\"\nunset -n ref 2>/dev/null\necho \"unset -n exit: $?\"\ndeclare -p ref\n",
+      "status": 0,
+      "stdout": "cmVmOiB2YWwKcmV0YXJnZXQgZXhpdDogMQp1bnNldCAtbiBleGl0OiAxCmRlY2xhcmUgLW5yIHJlZj0idGFyZ2V0Igo=",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:nameref:164",
+      "script": "target=\"value\"\ntypeset -n ref=target\necho \"before: $ref\"\ntypeset +n ref\necho \"after: $ref\"\ndeclare -p ref\n",
+      "status": 0,
+      "stdout": "YmVmb3JlOiB2YWx1ZQphZnRlcjogdGFyZ2V0CmRlY2xhcmUgLS0gcmVmPSJ0YXJnZXQiCg==",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:bashbox-declare:189",
+      "script": "declare -n r=x; declare +n r; declare -p r\n",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSByPSJ4Igo=",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:nameref:62",
+      "script": "x=foo\nref=x\necho ref=$ref\ntypeset -n ref\necho ref=$ref\nx=bar\necho ref=$ref\ntypeset +n ref\necho ref=$ref\n",
+      "status": 0,
+      "stdout": "cmVmPXgKcmVmPWZvbwpyZWY9YmFyCnJlZj14Cg==",
+      "stderr": ""
+    },
+    {
+      "id": "chain-removes-last-reference",
+      "script": "x=value; declare -n a=x b=a c=b; declare +n c; declare -p a b c x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSBhPSJ4IgpkZWNsYXJlIC1uIGI9ImEiCmRlY2xhcmUgLW4gYz0iYiIKZGVjbGFyZSAtLSB4PSJ2YWx1ZSIK",
+      "stderr": ""
+    },
+    {
+      "id": "chain-repeated-removal",
+      "script": "x=value; declare -n a=x b=a; declare +n b; declare +n b; b=own; declare -p a b x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSBhPSJ4IgpkZWNsYXJlIC0tIGI9Im93biIKZGVjbGFyZSAtLSB4PSJ2YWx1ZSIK",
+      "stderr": ""
+    },
+    {
+      "id": "global-assignment-before-removal",
+      "script": "x=old; y=new; declare -n r=x; declare +n r=y; declare -p r x y",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSByPSJ4IgpkZWNsYXJlIC0tIHg9InkiCmRlY2xhcmUgLS0geT0ibmV3Igo=",
+      "stderr": ""
+    },
+    {
+      "id": "local-shadows-reference",
+      "script": "x=old; declare -n r=x; f(){ local +n r; declare -p r x; r=own; }; f; declare -p r x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSByCmRlY2xhcmUgLS0geD0ib2xkIgpkZWNsYXJlIC1uIHI9IngiCmRlY2xhcmUgLS0geD0ib2xkIgo=",
+      "stderr": ""
+    },
+    {
+      "id": "local-removes-direct-reference",
+      "script": "x=old; f(){ local -n a=x b=a; declare +n b; declare -p a b x; }; f",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtbiBhPSJ4IgpkZWNsYXJlIC0tIGI9ImEiCmRlY2xhcmUgLS0geD0ib2xkIgo=",
+      "stderr": ""
+    },
+    {
+      "id": "local-assignment-replaces-reference",
+      "script": "x=old; f(){ local -n r=x; local +n r=own; declare -p r x; }; f; declare -p x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSByPSJvd24iCmRlY2xhcmUgLS0geD0ib2xkIgpkZWNsYXJlIC0tIHg9Im9sZCIK",
+      "stderr": ""
+    },
+    {
+      "id": "local-removal-retains-target",
+      "script": "x=old; f(){ local -n r=x; typeset +n r; declare -p r x; }; f",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSByPSJ4IgpkZWNsYXJlIC0tIHg9Im9sZCIK",
+      "stderr": ""
+    },
+    {
+      "id": "local-restores-outer-reference",
+      "script": "x=old; declare -n r=x; f(){ local -n r=x; declare +n r; r=own; declare -p r x; }; f; declare -p r x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSByPSJvd24iCmRlY2xhcmUgLS0geD0ib2xkIgpkZWNsYXJlIC1uIHI9IngiCmRlY2xhcmUgLS0geD0ib2xkIgo=",
+      "stderr": ""
+    },
+    {
+      "id": "readonly-referent-can-remove",
+      "script": "x=old; readonly x; declare -n r=x; declare +n r; echo status=$?; declare -p r x",
+      "status": 0,
+      "stdout": "c3RhdHVzPTAKZGVjbGFyZSAtLSByPSJ4IgpkZWNsYXJlIC1yIHg9Im9sZCIK",
+      "stderr": ""
+    },
+    {
+      "id": "readonly-referent-rejects-assignment",
+      "script": "x=old; readonly x; declare -n r=x; declare +n r=bad; echo status=$?; declare -p r x",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEKZGVjbGFyZSAtbiByPSJ4IgpkZWNsYXJlIC1yIHg9Im9sZCIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiByOiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "id": "readonly-reference-rejects-removal",
+      "script": "x=old; declare -rn r=x; declare +n r; echo status=$?; declare -p r x",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEKZGVjbGFyZSAtbnIgcj0ieCIKZGVjbGFyZSAtLSB4PSJvbGQiCg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiByOiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "id": "readonly-chain-rejects-removal",
+      "script": "x=old; declare -rn a=x; declare -n b=a; declare +n b; echo status=$?; declare -p a b x",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEKZGVjbGFyZSAtbnIgYT0ieCIKZGVjbGFyZSAtbiBiPSJhIgpkZWNsYXJlIC0tIHg9Im9sZCIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBiOiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "id": "combined-local-attributes",
+      "script": "x=old; f(){ local -nx a=x; local -rn b=x; a=new; b=later; declare -p a b x; unset -n b; echo status=$?; }; f; declare -p x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtbnggYT0ieCIKZGVjbGFyZSAtbnIgYj0ieCIKZGVjbGFyZSAtLSB4PSJsYXRlciIKc3RhdHVzPTEKZGVjbGFyZSAtLSB4PSJsYXRlciIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB1bnNldDogYjogY2Fubm90IHVuc2V0OiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "id": "combined-reference-not-referent",
+      "script": "x=old; declare -nrx r=x; r=new; declare -p r x; declare -n r=y; echo retarget=$?; unset -n r; echo unset=$?; declare -p r x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtbnJ4IHI9IngiCmRlY2xhcmUgLS0geD0ibmV3IgpyZXRhcmdldD0xCnVuc2V0PTEKZGVjbGFyZSAtbnJ4IHI9IngiCmRlY2xhcmUgLS0geD0ibmV3Igo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiByOiByZWFkb25seSB2YXJpYWJsZQovdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IHVuc2V0OiByOiBjYW5ub3QgdW5zZXQ6IHJlYWRvbmx5IHZhcmlhYmxlCg=="
+    },
+    {
+      "id": "cycle-clear-is-noop",
+      "script": "declare -n a=b b=a; declare +n a; echo status=$?; declare -p a b",
+      "status": 0,
+      "stdout": "c3RhdHVzPTAKZGVjbGFyZSAtbiBhPSJiIgpkZWNsYXJlIC1uIGI9ImEiCg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiB3YXJuaW5nOiBhOiBjaXJjdWxhciBuYW1lIHJlZmVyZW5jZQovdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IHdhcm5pbmc6IGE6IGNpcmN1bGFyIG5hbWUgcmVmZXJlbmNlCg=="
+    },
+    {
+      "id": "ifs-removal-refreshes-splitting",
+      "script": "x=:; declare -n IFS=x; set -- a b; printf \"<%s>\\n\" \"$*\"; declare +n IFS; set -- a b; printf \"<%s>\\n\" \"$*\"; declare -p IFS x",
+      "status": 0,
+      "stdout": "PGE6Yj4KPGE6Yj4KZGVjbGFyZSAtLSBJRlM9IngiCmRlY2xhcmUgLS0geD0iOiIK",
+      "stderr": ""
+    },
+    {
+      "id": "subshell-removal-is-isolated",
+      "script": "x=old; declare -n r=x; (declare +n r; r=own; declare -p r x); declare -p r x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSByPSJvd24iCmRlY2xhcmUgLS0geD0ib2xkIgpkZWNsYXJlIC1uIHI9IngiCmRlY2xhcmUgLS0geD0ib2xkIgo=",
+      "stderr": ""
+    },
+    {
+      "id": "failed-operand-continues",
+      "script": "x=old; declare -rn a=x; declare -n b=x; declare +n a b; echo status=$?; declare -p a b x",
+      "status": 0,
+      "stdout": "c3RhdHVzPTEKZGVjbGFyZSAtbnIgYT0ieCIKZGVjbGFyZSAtLSBiPSJ4IgpkZWNsYXJlIC0tIHg9Im9sZCIK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBkZWNsYXJlOiBhOiByZWFkb25seSB2YXJpYWJsZQo="
+    },
+    {
+      "id": "last-option-wins",
+      "script": "x=old; declare -n r=x; declare -n +n r; declare -p r x",
+      "status": 0,
+      "stdout": "ZGVjbGFyZSAtLSByPSJ4IgpkZWNsYXJlIC0tIHg9Im9sZCIK",
+      "stderr": ""
+    }
+  ]
+}
