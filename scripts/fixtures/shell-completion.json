@@ -428,9 +428,9 @@
       "stdoutBase64": "MQphCmIKOgphCjEK"
     },
     {
-      "script": "printf x >zz_one; printf x >zz_two; printf x >zz_other; compgen -G 'zz_@(one|two)'; echo status:$?; shopt -s extglob; compgen -G 'zz_!(other)'; compgen -G 'zz_+(one|two)'",
+      "script": "printf x >zz_one; printf x >zz_two; printf x >zz_other; compgen -G 'zz_@(one|two)'; echo status:$?; shopt -s extglob; compgen -G 'zz_+(one|two)'; compgen -G 'zz_?(one|two)'; compgen -G 'zz_*(one|two)'",
       "status": 0,
-      "stdoutBase64": "c3RhdHVzOjEKenpfb25lCnp6X3R3bwp6el9vbmUKenpfdHdvCg=="
+      "stdoutBase64": "c3RhdHVzOjEKenpfb25lCnp6X3R3bwp6el9vbmUKenpfdHdvCnp6X29uZQp6el90d28K"
     },
     {
       "script": "shopt -s extglob; mkdir -p zz_dir1 zz_dir2; printf x >zz_dir1/one; printf x >zz_dir2/two; compgen -G 'zz_dir@(1|2)/@(one|two)'; compgen -G 'zz_@(absent)'; echo status:$?",

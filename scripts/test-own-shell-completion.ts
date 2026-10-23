@@ -3,7 +3,8 @@ import { test } from "node:test";
 import { recordedBash } from "./recorded-bash.ts";
 import { createShellFixtureRunner } from "./shell-fixture-runner.ts";
 
-const fixturePath = new URL("fixtures/shell-completion.json", import.meta.url);
+const suffix = process.env.BASH_COMPLETION_PENDING ? "-pending" : "";
+const fixturePath = new URL(`fixtures/shell-completion${suffix}.json`, import.meta.url);
 const oracle = recordedBash(
   fixturePath,
   undefined,

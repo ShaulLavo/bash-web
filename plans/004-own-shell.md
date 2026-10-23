@@ -2989,3 +2989,33 @@ and its sibling evidence directory.
 
 Neither note is a fixed bug, an accepted Bash match or a frozen gain of this
 integration. PR59 leaves the caller and target-scan cancellation logic unchanged.
+
+## Completion negative-extglob follow-up, 2026-10-23
+
+Status: Approved. Owner: BUILTINS completion family after PR #79.
+The nine round-one review reproducers are repaired. The broader control below
+still differs because `expand/pattern/extglob.rs::Compiler::open` rejects `!`.
+Positive `@`, `?`, `*` and `+` operators now use the existing bounded matcher
+for completion `-G`; ordinary argv globbing keeps its prior behavior.
+
+```bash
+shopt -s extglob
+printf x >zz_one; printf x >zz_two; printf x >zz_other
+compgen -G 'zz_!(other)'
+```
+
+GNU Bash 5.3.15 prints `zz_one\nzz_two\n` and exits 0. Production Waffle at
+`3e52e60c655f4159312dad81fbdb797e422cbf35` prints nothing for that command and
+returns 2. The complete failing control remains unchanged in
+`scripts/fixtures/shell-completion-pending.json`. After the normal WASI build,
+run `npm run test:shell:completion:pending`. It is a strict failing recipe,
+not an ignored assertion or a relaxed expected result. Its two unrelated runtime
+controls remain included. The ordinary recipe retains every earlier passing
+completion control and records positive operators separately.
+
+Evidence is in `/work/reports/wave-20261022/shell/builtins-completion-fix-r2-evidence`
+and `/work/reports/machine-fleet/remote-gate/completion-r2-final-20261023T082914Z-tp5_5kgk`.
+Implement bounded complement groups without recursive backtracking, preserve
+work/storage admission and cancellation, and add nested and suffix controls.
+That matcher change is larger than passing an option through completion's glob
+lookup. No frozen case, oracle, exclusion or baseline change is authorized.
