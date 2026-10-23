@@ -627,3 +627,171 @@ fn rollback_after_durable_element_write_under_exhausted_budget_refunds_exactly()
     drop(function);
     assert_eq!(memory.observation().0, 0);
 }
+#[test]
+fn review86_shared_journal_copy_must_consume_work() {
+    let state = State::default().shared();
+    let large = "x".repeat(131_072);
+    replace(&state, "a", &[&large, "old"]).unwrap();
+    let mut snapshot_work = work();
+    let snapshot = finish(State::snapshot(&state, &Cancel::new(), &mut snapshot_work))
+        .unwrap_or_else(|_| panic!("snapshot fits"));
+    let mut completed = enter(&state);
+    journal_update(&state, &mut completed, "a", BindingUpdate::Replace("temporary".into()));
+    let mut fuel = Work::new(0, 1 << 22, 0);
+    let admitted = finish(State::admit_indexed_element(
+        &state, "a", 1, 1, &Cancel::new(), &mut fuel,
+    ));
+    let accepted = admitted.is_ok();
+    println!("shared_journal_old_value_bytes={} zero_fuel_admitted={} fuel_remaining={} storage_charged={}",
+        snapshot.binding("a").unwrap().value_bytes(), accepted, fuel.remaining,
+        (1 << 22) - fuel.storage_left());
+    if accepted {
+        state.borrow_mut().assign_indexed_element("a".into(), 1, "z".into()).unwrap();
+    }
+    drop(completed);
+    assert_eq!(snapshot.array_element("a", 1), Some("old"));
+    assert_eq!(state.borrow().array_element("a", 1), if accepted { Some("z") } else { Some("old") });
+    assert!(!accepted, "zero work cannot admit copying 131072 retained bytes");
+}
+
+#[test]
+fn review86_append_keep_vector_growth_is_not_per_element() {
+    let state = State::default().shared();
+    replace(&state, "a", &["original"]).unwrap();
+    let mut completed = enter(&state);
+    let fields = vec!["x"; 2048];
+    journal_update(&state, &mut completed, "a", BindingUpdate::Append(run(1, &fields)));
+    let changes = completed.changes.clone();
+    let mut growths = 0usize;
+    let mut summed_new_capacity_bytes = 0usize;
+    let mut last_capacity = 0usize;
+    let mut fuel = work();
+    let before_storage = fuel.storage_left();
+    let before_steps = fuel.remaining;
+    for index in (1..=2048).rev() {
+        finish(State::admit_indexed_element(&state, "a", index, 1, &Cancel::new(), &mut fuel))
+            .unwrap_or_else(|_| panic!("admission fits"));
+        state.borrow_mut().assign_indexed_element("a".into(), index, "d".into()).unwrap();
+        let changes = changes.borrow();
+        let BindingUndo::Append { kept, .. } = &changes.undo[0].1 else { panic!("append inverse") };
+        if kept.capacity() != last_capacity {
+            growths += 1;
+            last_capacity = kept.capacity();
+            summed_new_capacity_bytes += last_capacity * std::mem::size_of::<i64>();
+        }
+    }
+    println!("append_durable_writes=2048 vector_growths={} summed_new_capacity_bytes={} admitted_bytes={} charged_steps={} descending_insert_shift_bytes={}",
+        growths, summed_new_capacity_bytes, before_storage - fuel.storage_left(),
+        before_steps - fuel.remaining, 2048 * 2047 / 2 * std::mem::size_of::<i64>());
+    drop(changes);
+    drop(completed);
+    assert_eq!(state.borrow().array_count("a"), 2049);
+    assert!(growths <= 32, "kept indexes reallocate on every durable write");
+}
+
+fn review86_action(state: &SharedState, completed: &mut AssignmentFrame, action: usize) {
+    match action {
+        0 => journal_update(state, completed, "a", BindingUpdate::Element { index: 0, value: "n0".into() }),
+        1 => journal_update(state, completed, "a", BindingUpdate::Element { index: 3, value: "n3".into() }),
+        2 => {
+            let first = state.borrow().binding("a").unwrap().last_index().map_or(0, |i| i + 1);
+            journal_update(state, completed, "a", BindingUpdate::Append(run(first, &["x", "y"])));
+        }
+        3 => journal_update(state, completed, "a", BindingUpdate::Replace("normal".into())),
+        4 => element(state, "a", 1, "d1").unwrap(),
+        5 => replace(state, "a", &["d0", "d1"]).unwrap(),
+        6 => scalar(state, "a", "scalar"),
+        _ => unreachable!(),
+    }
+}
+
+fn review86_check_inverse_sequence(seed_array: bool, sequence: usize) {
+    let state = State::default().shared();
+    let model = State::default().shared();
+    for seed in [&state, &model] {
+        if seed_array { replace(seed, "a", &["base", "one"]).unwrap(); }
+        else { scalar(seed, "a", "base"); }
+    }
+    let mut completed = enter(&state);
+    let mut unused_model_journal = enter(&model);
+    let mut code = sequence;
+    for _ in 0..4 {
+        let action = code % 7;
+        code /= 7;
+        review86_action(&state, &mut completed, action);
+        if action >= 4 { review86_action(&model, &mut unused_model_journal, action); }
+    }
+    unused_model_journal.keep();
+    drop(unused_model_journal);
+    drop(completed);
+    assert_eq!(state.borrow().binding("a"), model.borrow().binding("a"), "seed_array={seed_array} sequence={sequence}");
+}
+
+#[test]
+fn review86_inverse_sequences_keep_only_durable_effects() {
+    let mut checked = 0usize;
+    for seed_array in [false, true] {
+        for sequence in 0usize..7usize.pow(4) {
+            review86_check_inverse_sequence(seed_array, sequence);
+            checked += 1;
+        }
+    }
+    println!("inverse_sequences_checked={checked}");
+}
+
+#[test]
+fn review86_cancelled_shared_write_and_replacement_leave_state_and_tickets() {
+    let memory = StorageBudget::new(1 << 22);
+    let state = State::with_memory(memory.clone()).shared();
+    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    state.borrow_mut().declare_local("a".into(), None).unwrap();
+    replace(&state, "a", &[&"x".repeat(131_072)]).unwrap();
+    let mut snapshot_work = work();
+    let child = finish(State::snapshot(&state, &Cancel::new(), &mut snapshot_work))
+        .unwrap_or_else(|_| panic!("snapshot fits"));
+    let before = state.borrow().binding("a").cloned();
+    let held = state.borrow().held_local_value("a");
+    let observed = memory.observation().0;
+    let cancel = Cancel::new();
+    let mut fuel = work();
+    let mut admission = Box::pin(State::admit_indexed_element(&state, "a", 1, 1, &cancel, &mut fuel));
+    let waker = noop_waker();
+    let mut context = Context::from_waker(&waker);
+    assert!(admission.as_mut().poll(&mut context).is_pending());
+    assert!(state.try_borrow_mut().is_ok());
+    cancel.cancel();
+    assert!(matches!(admission.as_mut().poll(&mut context), std::task::Poll::Ready(Err(Error::Status(130)))));
+    drop(admission);
+    assert!(matches!(finish(State::admit_indexed_replacement(&state, "a", &cancel, &mut fuel)), Err(Error::Status(130))));
+    assert_eq!(state.borrow().binding("a").cloned(), before);
+    assert_eq!(state.borrow().held_local_value("a"), held);
+    assert_eq!(memory.observation().0, observed);
+    drop(before);
+    drop(child);
+    drop(snapshot_work);
+    drop(function);
+    assert_eq!(memory.observation().0, 0);
+}
+
+#[test]
+fn review86_saved_prefix_local_and_boundary_indexes_refund_exactly() {
+    let memory = StorageBudget::new(1 << 22);
+    let state = State::with_memory(memory.clone()).shared();
+    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    state.borrow_mut().local("a".into(), "scalar".into()).unwrap();
+    let frame = PrefixFrame::enter(state.clone());
+    frame.reserve("a", 1024).unwrap();
+    frame.set("a".into(), "tmp".into()).unwrap();
+    element(&state, "a", i64::MAX, "max").unwrap();
+    assert_eq!(state.borrow().indexed_write_index("a", -1), Some(i64::MAX));
+    assert_eq!(state.borrow().indexed_write_index("a", i64::MIN), Some(0));
+    assert_eq!(state.borrow().scalar_parameter("a"), Some("tmp"));
+    let filler = memory.admit((1 << 22) - memory.observation().0).unwrap();
+    drop(frame);
+    assert_eq!(state.borrow().array_element("a", i64::MAX), Some("max"));
+    assert_eq!(state.borrow().array_element("a", 0), Some("scalar"));
+    assert_eq!(state.borrow().held_local_value("a"), state.borrow().binding("a").unwrap().storage_bytes());
+    drop(filler);
+    drop(function);
+    assert_eq!(memory.observation().0, 0);
+}
