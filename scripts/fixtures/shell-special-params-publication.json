@@ -63,6 +63,13 @@
       "status": 0,
       "stdout": "_=ref\n",
       "stderr": ""
+    },
+    {
+      "name": "nameref publication keeps numeric OPTIND binding",
+      "script": "set -- -a -b; getopts ab opt; declare -n _=OPTIND; : 1; getopts ab opt; printf \"%s:%s\\n\" \"$opt\" \"$OPTIND\"",
+      "status": 0,
+      "stdout": "b:0\n",
+      "stderr": ""
     }
   ]
 }

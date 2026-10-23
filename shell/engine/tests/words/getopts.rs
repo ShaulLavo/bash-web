@@ -72,6 +72,14 @@ fn getopts_last_argument_publication_preserves_hidden_cursor() {
 }
 
 #[test]
+fn getopts_last_argument_publication_keeps_numeric_binding() {
+    check(
+        r#"set -- -a -b; getopts ab opt; declare -n _=OPTIND; : 1; getopts ab opt; printf "%s:%s\n" "$opt" "$OPTIND""#,
+        "b:0\n",
+    );
+}
+
+#[test]
 fn getopts_readonly_specials_keep_hidden_progress() {
     check(
         r#"readonly OPTIND=1 OPTARG=old; getopts ab o -ab; echo "$?:$o:$OPTIND:$OPTARG"; getopts ab o -ab; echo "$?:$o:$OPTIND:$OPTARG"; getopts ab o -ab; echo "$?:$o:$OPTIND:$OPTARG""#,
