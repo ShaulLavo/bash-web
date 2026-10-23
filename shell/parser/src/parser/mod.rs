@@ -206,7 +206,22 @@ impl<'a> Parser<'a> {
         timeout: Option<Duration>,
         options: ParseOptions,
     ) -> Self {
+        Self::at_position(input, max_depth, max_fuel, timeout, options, Position::new())
+    }
+
+    /// Re-read a source suffix without rebasing AST spans or diagnostic lines.
+    /// The position must identify a UTF-8 boundary in the original input.
+    pub fn at_position(
+        input: &'a str,
+        max_depth: usize,
+        max_fuel: usize,
+        timeout: Option<Duration>,
+        options: ParseOptions,
+        position: Position,
+    ) -> Self {
         let mut lexer = Lexer::with_max_subst_depth(input, max_depth.min(HARD_MAX_AST_DEPTH));
+        lexer.start_at(position);
+        lexer.set_track_plain(options.aliases.is_some());
         lexer.set_extglob_bang(options.extglob);
         lexer.set_capture_raw(true);
         let spanned = lexer.next_spanned_token();
@@ -244,10 +259,10 @@ impl<'a> Parser<'a> {
             current_plain,
             current_after_blank: false,
             prev_token_end: usize::MAX,
-            last_token_line: 1,
+            last_token_line: position.line,
             top_level_list: false,
             top_starts: Vec::new(),
-            failed_command_start: (0, 1),
+            failed_command_start: (position.offset, position.line),
         };
         parser.charge_literal_escapes();
         parser

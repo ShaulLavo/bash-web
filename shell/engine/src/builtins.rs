@@ -1,4 +1,5 @@
 //! Bash builtins. External commands are installed by the embedding runtime.
+mod alias;
 mod declarations;
 mod directories;
 mod getopts;
@@ -112,6 +113,7 @@ pub(crate) async fn run(
         Builtin::Test => return test::run(name, &args, &state, &fds, &context, work).await,
         Builtin::Trap => return trap::run(&args, &state, &fds, &context, work).await,
         Builtin::Getopts => return getopts::run(&args, &state, &fds, &context, work).await,
+        Builtin::Alias => return alias::run(name, &args, &state, &fds, &context, work).await,
         Builtin::Shopt => return shopt(&args, &state, &fds, &context, work).await,
         Builtin::LoopControl => {
             return loop_control(name, &args, &fds, &context, work).await;
@@ -342,10 +344,17 @@ fn error_status(error: Error) -> i32 {
     }
 }
 
-const SHOPT_OPTIONS: [&str; 4] = ["extglob", "inherit_errexit", "lastpipe", "nullglob"];
+const SHOPT_OPTIONS: [&str; 5] = [
+    "expand_aliases",
+    "extglob",
+    "inherit_errexit",
+    "lastpipe",
+    "nullglob",
+];
 
 fn shopt_value(state: &State, option: &str) -> Option<bool> {
     match option {
+        "expand_aliases" => Some(state.expand_aliases),
         "extglob" => Some(state.extglob),
         "inherit_errexit" => Some(state.inherit_errexit),
         "nullglob" => Some(state.nullglob),
@@ -411,7 +420,7 @@ async fn shopt(
     let options = if operands.is_empty() {
         SHOPT_OPTIONS.map(Some)
     } else {
-        [None; 4]
+        [None; 5]
     };
     let mut status = 0;
     // A fixed iterator over known names avoids allocating or copying argv.
@@ -440,6 +449,7 @@ async fn shopt(
         if !operands.is_empty() && (set || unset) {
             let mut state = state.borrow_mut();
             match option {
+                "expand_aliases" => state.expand_aliases = set,
                 "extglob" => state.extglob = set,
                 "inherit_errexit" => state.inherit_errexit = set,
                 "nullglob" => state.nullglob = set,

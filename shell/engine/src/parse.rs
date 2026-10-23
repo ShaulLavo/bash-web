@@ -1,14 +1,14 @@
-//! Original internal context adapters over the unchanged shell parser.
+//! Internal context adapters over the shell parser.
 //!
 //! Entry points encode today's grammar/options and resource policy, not new
-//! capabilities. No shell options or capability filters are added here: readers
+//! capabilities. Callers supply lexical options without exposing shell state: readers
 //! stay lenient at top level and strict in substitution bodies. Expansion callers
 //! still admit work/storage and choose when lazy text becomes active; this layer
 //! neither pre-parses inactive operands nor translates expansion errors.
 use shell_parser::{
     Parser,
     limits::{ExecutionBudget, ExecutionLimits},
-    parser::{Command, Lexer, ParseOptions, SpannedToken, Word, WordPart},
+    parser::{Command, Lexer, ParseOptions, Position, SpannedToken, Word, WordPart},
 };
 
 // Scalar operands are reparsed inside nested expansion futures, unlike scripts
@@ -21,8 +21,9 @@ pub(crate) fn script(
     source: &str,
     source_bytes: usize,
     budget: &ExecutionBudget,
+    options: ParseOptions,
 ) -> Result<(ParsedScript, Option<ParseFailure>), String> {
-    reader(source, source_bytes, budget)
+    reader(source, source_bytes, budget, options, Position::new())
 }
 
 /// Joined eval arguments, admitted and retained by the eval reader. Keep this
@@ -31,8 +32,9 @@ pub(crate) fn eval(
     source: &str,
     source_bytes: usize,
     budget: &ExecutionBudget,
+    options: ParseOptions,
 ) -> Result<(ParsedScript, Option<ParseFailure>), String> {
-    reader(source, source_bytes, budget)
+    reader(source, source_bytes, budget, options, Position::new())
 }
 
 /// Where parsing stopped. Bash reads and runs a script one complete line at
@@ -47,14 +49,17 @@ pub(crate) enum ParseFailure {
 pub(crate) struct ParsedScript {
     pub(crate) commands: Vec<Command>,
     pub(crate) command_end_lines: Vec<usize>,
+    pub(crate) command_starts: Vec<(usize, usize)>,
 }
 
 /// Parse shell source the way the script reader and `eval` do. Resource
 /// limits are errors; a syntax error keeps the complete lines before it.
-fn reader(
+pub(crate) fn reader(
     source: &str,
     source_bytes: usize,
     budget: &shell_parser::limits::ExecutionBudget,
+    options: ParseOptions,
+    position: Position,
 ) -> Result<(ParsedScript, Option<ParseFailure>), String> {
     if source.len() > source_bytes {
         return Err("shell source limit exceeded".into());
@@ -63,11 +68,13 @@ fn reader(
         max_input_bytes: source_bytes,
         ..Default::default()
     };
-    let (script, error) = Parser::with_limits_and_timeout(
+    let (script, error) = Parser::at_position(
         source,
         parser_limits.max_ast_depth,
         parser_limits.max_parser_operations,
         Some(parser_limits.parser_timeout),
+        options,
+        position,
     )
     .with_execution_budget(budget.clone())
     // The whole script is parsed before aliases it defines exist, so the
@@ -87,6 +94,7 @@ fn reader(
         ParsedScript {
             commands: script.commands,
             command_end_lines: script.command_end_lines,
+            command_starts: script.command_starts,
         },
         failure,
     ))
