@@ -10,6 +10,7 @@ use crate::{
 use futures::FutureExt;
 use shell_parser::parser::{ParameterOp, Word, WordPart};
 
+pub(crate) mod associative;
 mod braces;
 mod case;
 mod case_pattern;
@@ -1103,12 +1104,12 @@ impl Expansion<'_> {
         })
     }
 
-    fn part_frame<'a, F>(
+    fn part_frame<'a, F, T>(
         &'a mut self,
         build: impl FnOnce(&'a mut Self) -> F,
-    ) -> crate::exec::ResultFuture<'a, ()>
+    ) -> crate::exec::ResultFuture<'a, T>
     where
-        F: std::future::Future<Output = Result<(), Error>> + 'a,
+        F: std::future::Future<Output = Result<T, Error>> + 'a,
     {
         // Admitted scalar/pattern contexts must charge the actual recursive
         // future before boxing it. Legacy argv retains its separate accounting.
@@ -1118,6 +1119,15 @@ impl Expansion<'_> {
             return futures::future::Either::Left(futures::future::ready(Err(error)));
         }
         futures::future::Either::Right(build(self).boxed_local())
+    }
+
+    fn array_snapshot(&mut self, value: Option<&str>) -> Result<String, Error> {
+        let value = value.unwrap_or("");
+        if value.len() > self.raw_remaining {
+            return Err(2.into());
+        }
+        self.work.admit_storage(value.len())?;
+        Ok(value.to_owned())
     }
 
     async fn variable(
@@ -1950,6 +1960,7 @@ impl Expansion<'_> {
         }
         let protection = Protection::expansion(quoted || scalar, state);
         let mut array_index = None;
+        let mut associative_key = None;
         for index in 0..count {
             self.element_boundary(index, list, separator, quoted || scalar)
                 .await?;
@@ -1961,6 +1972,7 @@ impl Expansion<'_> {
                 state,
                 index,
                 &mut array_index,
+                &mut associative_key,
                 self.raw_remaining,
                 self.work,
             )?;
@@ -2109,10 +2121,29 @@ fn list_value(
     state: &SharedState,
     index: usize,
     array_index: &mut Option<i64>,
+    associative_key: &mut Option<String>,
     max: usize,
     work: &mut Work,
 ) -> Result<String, Error> {
     let s = state.borrow();
+    if let WordPart::ArrayAccess { name, .. } | WordPart::ArrayIndices { name, .. } = part
+        && s.is_associative(name)
+    {
+        let (key, value) = s
+            .associative_next(name, associative_key.as_deref())
+            .ok_or(2)?;
+        let value = if matches!(part, WordPart::ArrayIndices { .. }) {
+            key
+        } else {
+            value
+        };
+        if value.len() > max {
+            return Err(2.into());
+        }
+        work.admit_storage(key.len().saturating_add(value.len()))?;
+        *associative_key = Some(key.to_owned());
+        return Ok(value.to_owned());
+    }
     let value = match part {
         WordPart::Variable(_) => s.positional().get(index).map(String::as_str).unwrap_or(""),
         WordPart::ArrayIndices { name, .. } => {
@@ -2308,48 +2339,7 @@ async fn expand(
             values.push(variant);
             continue;
         }
-        work.admit_parse(variant.len(), cancel).await?;
-        // Text copies and lexical metadata scale with bytes; AST vectors scale
-        // with syntax, not text length. Alternating `a\\a` creates two 112-byte
-        // WordParts per escape on native, whose doubled vector capacity alone
-        // exceeds 128 * source bytes. Count potential part/command boundaries
-        // cooperatively; four slots allow two parts and geometric Vec growth.
-        // Command/Word slots also cover parsed (but unsupported) substitutions.
-        let mut syntax = 0usize;
-        for ch in variant.chars() {
-            work.checkpoint(cancel).await?;
-            if ch.is_whitespace()
-                || matches!(
-                    ch,
-                    '$' | '\\'
-                        | '\''
-                        | '"'
-                        | '`'
-                        | '<'
-                        | '>'
-                        | '('
-                        | ')'
-                        | ';'
-                        | '|'
-                        | '&'
-                        | '\0'
-                        | '\u{1e}'
-                        | '\u{1f}'
-                )
-            {
-                syntax = syntax.saturating_add(1);
-            }
-        }
-        let slot = std::mem::size_of::<WordPart>()
-            .saturating_add(std::mem::size_of::<Word>())
-            .saturating_add(std::mem::size_of::<shell_parser::parser::Command>());
-        work.admit_storage(
-            variant
-                .len()
-                .saturating_mul(128)
-                .saturating_add(syntax.saturating_mul(4).saturating_mul(slot))
-                .saturating_add(512),
-        )?;
+        admit_generated_word(&variant, cancel, work).await?;
         let parsed = crate::parse::generated_word(&variant).map_err(|error| match error {
             shell_parser::Error::ResourceLimit(_) => Error::Status(2),
             _ => Error::BadSubstitution {
@@ -2498,6 +2488,56 @@ pub(crate) async fn fields_admitted(
     .await?;
     work.fields_remaining = work.fields_remaining.saturating_sub(values.len());
     Ok(values)
+}
+
+pub(crate) async fn admit_generated_word(
+    source: &str,
+    cancel: &Cancel,
+    work: &mut Work,
+) -> Result<(), Error> {
+    work.admit_parse(source.len(), cancel).await?;
+    // Text copies and lexical metadata scale with bytes; AST vectors scale
+    // with syntax, not text length. Alternating `a\\a` creates two 112-byte
+    // WordParts per escape on native, whose doubled vector capacity alone
+    // exceeds 128 * source bytes. Count potential part/command boundaries
+    // cooperatively; four slots allow two parts and geometric Vec growth.
+    // Command/Word slots also cover parsed (but unsupported) substitutions.
+    let mut syntax = 0usize;
+    for ch in source.chars() {
+        work.checkpoint(cancel).await?;
+        if ch.is_whitespace()
+            || matches!(
+                ch,
+                '$' | '\\'
+                    | '\''
+                    | '"'
+                    | '`'
+                    | '<'
+                    | '>'
+                    | '('
+                    | ')'
+                    | ';'
+                    | '|'
+                    | '&'
+                    | '\0'
+                    | '\u{1e}'
+                    | '\u{1f}'
+            )
+        {
+            syntax = syntax.saturating_add(1);
+        }
+    }
+    let slot = std::mem::size_of::<WordPart>()
+        .saturating_add(std::mem::size_of::<Word>())
+        .saturating_add(std::mem::size_of::<shell_parser::parser::Command>());
+    work.admit_storage(
+        source
+            .len()
+            .saturating_mul(128)
+            .saturating_add(syntax.saturating_mul(4).saturating_mul(slot))
+            .saturating_add(512),
+    )?;
+    Ok(())
 }
 
 /// Assignments and redirects are scalar contexts, distinct from argv fields.

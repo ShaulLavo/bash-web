@@ -167,3 +167,50 @@ pub(crate) fn declaration_tokens(source: &str) -> impl Iterator<Item = SpannedTo
 
 #[cfg(test)]
 mod tests;
+
+pub(crate) fn array_element(word: &Word) -> Option<(&str, &str, bool)> {
+    let raw = word.raw.as_deref()?.strip_prefix('[')?;
+    let mut quote = None;
+    let mut escaped = false;
+    let mut depth = 0usize;
+    for (offset, ch) in raw.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' && quote != Some('\'') {
+            escaped = true;
+            continue;
+        }
+        if quote == Some(ch) {
+            quote = None;
+            continue;
+        }
+        if quote.is_some() {
+            continue;
+        }
+        if matches!(ch, '\'' | '"') {
+            quote = Some(ch);
+            continue;
+        }
+        if ch == '[' {
+            depth += 1;
+            continue;
+        }
+        if ch != ']' {
+            continue;
+        }
+        if depth != 0 {
+            depth -= 1;
+            continue;
+        }
+        let suffix = &raw[offset + 1..];
+        if let Some(value) = suffix.strip_prefix("+=") {
+            return Some((&raw[..offset], value, true));
+        }
+        return suffix
+            .strip_prefix('=')
+            .map(|value| (&raw[..offset], value, false));
+    }
+    None
+}

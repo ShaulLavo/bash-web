@@ -717,6 +717,15 @@
         ],
         "change": "Retain typed file-read substitution eligibility and lexical backtick origins through quote and scalar assignment transformations. Keep legacy numeric redirect and trailing-input distinctions, escaped newlines and mixed-quote backticks. Traverse and print the dedicated AST variant.",
         "reason": "GNU Bash 5.3.15 treats one input-only command as a parent-side file capture, while specific backtick spellings disable the shortcut. No upstream test removed."
+      },
+      {
+        "paths": [
+          "shell/parser/src/parser/mod.rs",
+          "shell/parser/tests/api.rs"
+        ],
+        "classification": "Original quote-retention fix over the owned Bashkit parser; no new upstream code.",
+        "change": "Keep subscript quotes in array access AST nodes. Indexed arithmetic and associative string expansion interpret the raw subscript in their owning engine layer.",
+        "reason": "Removing quotes during parsing makes literal dollar keys expand and turns whitespace-containing keys into multiple generated words."
       }
     ],
     "removedUpstreamTests": [
@@ -2067,5 +2076,15 @@
       "PIPE trap/disposition behavior",
       "Existing closed-descriptor diagnostic and Bash diagnostic line-prefix mismatches retained as strict pending reproductions"
     ]
+  },
+  "ownShellAssociative": {
+    "classification": "Original string-keyed binding, compound assignment, expansion and unset implementation. GNU Bash 5.3.15 recorded observations; no copied upstream code.",
+    "tests": [
+      "scripts/fixtures/shell-associative.json",
+      "scripts/test-own-shell-associative.ts",
+      "shell/engine/tests/words/associative.rs"
+    ],
+    "scope": "declare -A, keyed and alternating compound replacement and append, string-key assignment/read/length, list expansion, unset, scalar key zero and local/subshell restoration.",
+    "deferred": "Bash hash iteration order, declare printing, arithmetic assoc access, associative nameref declarations, -v and whole-array transformations."
   }
 }

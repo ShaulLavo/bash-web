@@ -4388,3 +4388,6 @@ mod tilde;
 
 #[path = "words/index_names.rs"]
 mod index_names;
+
+#[path = "words/associative.rs"]
+mod associative;

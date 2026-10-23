@@ -90,7 +90,7 @@ fn nested_and_malformed_bracket_patterns_keep_their_parameter_boundaries() {
 #[test]
 fn pattern_bracket_fix_preserves_target_subscripts_and_literal_escape_metadata() {
     for (source, expected_index) in [
-        (r#"args ${a['key']}tail"#, "key"),
+        (r#"args ${a['key']}tail"#, "'key'"),
         (r#"args ${a[${i}]}tail"#, "${i}"),
     ] {
         let word = argument(source);
@@ -1587,4 +1587,14 @@ fn empty_quotes_next_to_unquoted_tilde_keep_quote_provenance() {
     let word = argument("args ''~");
     assert!(word.quoted, "{word:?}");
     assert!(matches!(&word.parts[..], [WordPart::Literal(text)] if text == "~"));
+}
+
+#[test]
+fn array_access_preserves_subscript_quotes_for_the_binding_owner() {
+    for index in ["'a b'", "'$key'", "\"$key\"", "\"2\""] {
+        let word = argument(&format!("echo ${{h[{index}]}}"));
+        assert!(
+            matches!(&word.parts[0], WordPart::ArrayAccess { index: actual, .. } if actual == index)
+        );
+    }
 }

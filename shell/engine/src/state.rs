@@ -15,6 +15,8 @@ use std::{
 
 mod declarations;
 pub(crate) use declarations::DeclarationView;
+mod associative;
+pub(crate) use associative::Associative;
 mod binding;
 pub use binding::Binding;
 use binding::BindingUndo;
@@ -612,7 +614,7 @@ impl State {
             .map_or_else(|| self.variables.get(name), |local| local.previous.as_ref())
             .map(|binding| match binding {
                 Binding::Scalar(value) => value.as_str(),
-                Binding::Indexed(_) => "",
+                Binding::Indexed(_) | Binding::Associative(_) => "",
             })
     }
     fn ifs_scope(&self) -> Option<usize> {
@@ -849,19 +851,15 @@ impl State {
         let live = self
             .variables
             .get(target)
-            .filter(|value| matches!(value, Binding::Indexed(_)))
-            .map_or(0, |value| {
-                value.storage_bytes().saturating_add(Binding::node_bytes())
-            });
+            .filter(|value| value.is_array())
+            .map_or(0, Binding::scalar_copy_bytes);
         let saved = self
             .prefixes
             .last()
             .and_then(|frame| frame.get(target))
             .and_then(Option::as_ref)
-            .filter(|value| matches!(value, Binding::Indexed(_)))
-            .map_or(0, |value| {
-                value.storage_bytes().saturating_add(Binding::node_bytes())
-            });
+            .filter(|value| value.is_array())
+            .map_or(0, Binding::scalar_copy_bytes);
         Ok(live.saturating_add(saved))
     }
     pub(crate) fn prefix_saved(&self, name: &str) -> bool {
@@ -917,12 +915,9 @@ impl State {
     fn scalar_assignment_value_bytes(&self, name: &str, bytes: usize) -> usize {
         self.variables
             .get(name)
-            .filter(|value| matches!(value, Binding::Indexed(_)))
+            .filter(|value| value.is_array())
             .map_or(bytes, |value| {
-                value
-                    .storage_bytes()
-                    .saturating_add(Binding::node_bytes())
-                    .saturating_add(bytes)
+                value.scalar_copy_bytes().saturating_add(bytes)
             })
     }
     fn assign_getopts_index(&mut self, name: &str, value: &str) {
@@ -992,7 +987,7 @@ impl State {
                 .checked_add(previous_writes)
                 .ok_or(2)?;
             let required = self.getopts_local_growth(target, requested)?;
-            let additional = if matches!(self.variables.get(target), Some(Binding::Indexed(_))) {
+            let additional = if self.variables.get(target).is_some_and(Binding::is_array) {
                 Binding::node_bytes().checked_add(*bytes).ok_or(2)?
             } else {
                 0
@@ -1114,7 +1109,7 @@ impl State {
             .filter_map(|name| {
                 self.variables.get(name).and_then(|value| match value {
                     Binding::Scalar(value) => Some((name.clone(), value.clone())),
-                    Binding::Indexed(_) => None,
+                    Binding::Indexed(_) | Binding::Associative(_) => None,
                 })
             })
             .collect()
@@ -1805,7 +1800,7 @@ impl PrefixFrame {
                                 state_ref
                                     .variables
                                     .get(&target)
-                                    .filter(|value| matches!(value, Binding::Indexed(_)))
+                                    .filter(|value| value.is_array())
                                     .map_or(0, Binding::storage_bytes),
                             ),
                         )

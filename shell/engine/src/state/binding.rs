@@ -4,28 +4,42 @@ use std::{collections::BTreeMap, ops::Deref, rc::Rc};
 /// assignment to an existing array replaces only element zero.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Binding {
+    Associative(Rc<super::Associative>),
     Scalar(String),
     Indexed(Rc<Indexed>),
 }
 impl Binding {
+    pub(crate) fn is_array(&self) -> bool {
+        !matches!(self, Self::Scalar(_))
+    }
     pub fn as_str(&self) -> &str {
         self.scalar().map(String::as_str).unwrap_or("")
     }
     pub fn scalar(&self) -> Option<&String> {
         match self {
             Self::Scalar(value) => Some(value),
+            Self::Associative(values) => values.get("0"),
             Self::Indexed(values) => values.values.get(&0),
         }
     }
     pub(crate) fn storage_bytes(&self) -> usize {
         match self {
             Self::Scalar(value) => value.capacity(),
+            Self::Associative(values) => values.storage_bytes(),
             Self::Indexed(values) => values.storage_bytes() + Self::indexed_header_bytes(),
         }
+    }
+    pub(crate) fn scalar_copy_bytes(&self) -> usize {
+        let entry = match self {
+            Self::Associative(_) => super::Associative::node_bytes().saturating_add(1),
+            _ => Self::node_bytes(),
+        };
+        self.storage_bytes().saturating_add(entry)
     }
     pub(crate) fn value_bytes(&self) -> usize {
         match self {
             Self::Scalar(value) => value.len(),
+            Self::Associative(values) => values.value_bytes(),
             Self::Indexed(values) => values.value_bytes,
         }
     }
@@ -38,18 +52,21 @@ impl Binding {
     pub(crate) fn count(&self) -> usize {
         match self {
             Self::Scalar(_) => 1,
+            Self::Associative(values) => values.count(),
             Self::Indexed(values) => values.values.len(),
         }
     }
     pub(crate) fn last_index(&self) -> Option<i64> {
         match self {
             Self::Scalar(_) => Some(0),
+            Self::Associative(_) => None,
             Self::Indexed(values) => values.values.last_key_value().map(|(index, _)| *index),
         }
     }
     pub(crate) fn slot(&self, index: i64) -> Option<&String> {
         match self {
             Self::Scalar(value) => (index == 0).then_some(value),
+            Self::Associative(_) => None,
             Self::Indexed(values) => values.get(index),
         }
     }
@@ -57,6 +74,7 @@ impl Binding {
         let index = self.resolve_index(index)?;
         match self {
             Self::Scalar(value) => (index == 0).then_some(value.as_str()),
+            Self::Associative(_) => None,
             Self::Indexed(values) => values.values.get(&index).map(String::as_str),
         }
     }
@@ -73,6 +91,7 @@ impl Binding {
         let start = previous.map_or(Some(0), |index| index.checked_add(1))?;
         match self {
             Self::Scalar(value) => (start == 0).then_some((0, value.as_str())),
+            Self::Associative(_) => None,
             Self::Indexed(values) => values
                 .values
                 .range(start..)
@@ -83,6 +102,7 @@ impl Binding {
     pub(crate) fn set_scalar(&mut self, value: String) {
         match self {
             Self::Scalar(current) => *current = value,
+            Self::Associative(values) => Rc::make_mut(values).insert("0".into(), value),
             Self::Indexed(values) => {
                 Rc::make_mut(values).insert(0, value);
             }
@@ -91,6 +111,7 @@ impl Binding {
     pub(crate) fn into_indexed(self) -> Indexed {
         match self {
             Self::Scalar(value) => Indexed::from_scalar(value),
+            Self::Associative(_) => unreachable!("indexed update to associative binding"),
             Self::Indexed(values) => Rc::unwrap_or_clone(values),
         }
     }
@@ -242,6 +263,7 @@ impl BindingUpdate {
         match old {
             Some(Binding::Indexed(values)) => (values.values.len(), values.bytes),
             Some(Binding::Scalar(value)) => (1, value.capacity()),
+            Some(Binding::Associative(_)) => (0, 0),
             None => (0, 0),
         }
     }
@@ -304,9 +326,9 @@ pub(crate) enum BindingUndo {
 impl BindingUndo {
     pub(crate) fn scalar_effect_bytes(&self, value_bytes: usize) -> usize {
         match self {
-            Self::Restore(Some(binding @ Binding::Indexed(_))) => value_bytes
-                .saturating_add(binding.storage_bytes())
-                .saturating_add(Binding::node_bytes()),
+            Self::Restore(Some(binding @ (Binding::Indexed(_) | Binding::Associative(_)))) => {
+                value_bytes.saturating_add(binding.scalar_copy_bytes())
+            }
             Self::Restore(_) | Self::Element { index: 0, .. } => value_bytes,
             _ => 0,
         }

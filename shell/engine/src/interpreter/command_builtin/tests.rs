@@ -171,6 +171,7 @@ impl Rig {
             core,
         };
         let prepared = PreparedCommand {
+            compounds: Vec::new(),
             line,
             argv,
             assigned: Vec::new(),

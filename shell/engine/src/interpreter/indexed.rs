@@ -40,6 +40,9 @@ async fn value(
     work: &mut expand::Work,
 ) -> Result<BindingUpdate, expand::Error> {
     State::admit_scalar_access(state, &assignment.name, &context.cancel, work).await?;
+    if state.borrow().is_associative(&assignment.name) {
+        return super::associative::value(assignment, state, context, work).await;
+    }
     match &assignment.value {
         AssignmentValue::Scalar(word) => scalar(assignment, word, state, context, work).await,
         AssignmentValue::Array(words) => compound(assignment, words, state, context, work).await,
@@ -87,7 +90,7 @@ async fn scalar(
     Ok(BindingUpdate::Element { index, value })
 }
 
-fn append(
+pub(super) fn append(
     old: Option<&String>,
     value: String,
     append: bool,
@@ -194,45 +197,5 @@ fn compact_fields(fields: &mut Vec<String>, work: &mut expand::Work) -> Result<(
 }
 
 fn explicit_subscript(word: &Word) -> bool {
-    let Some(raw) = word.raw.as_deref().filter(|raw| raw.starts_with('[')) else {
-        return false;
-    };
-    let mut quote = None;
-    let mut escaped = false;
-    let mut depth = 0usize;
-    for (offset, ch) in raw.char_indices() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        if ch == '\\' && quote != Some('\'') {
-            escaped = true;
-            continue;
-        }
-        if quote == Some(ch) {
-            quote = None;
-            continue;
-        }
-        if quote.is_some() {
-            continue;
-        }
-        if matches!(ch, '\'' | '"') {
-            quote = Some(ch);
-            continue;
-        }
-        if ch == '[' {
-            depth += 1;
-            continue;
-        }
-        if ch != ']' {
-            continue;
-        }
-        depth -= 1;
-        if depth != 0 {
-            continue;
-        }
-        let suffix = &raw[offset + 1..];
-        return suffix.starts_with('=') || suffix.starts_with("+=");
-    }
-    false
+    parse::array_element(word).is_some()
 }

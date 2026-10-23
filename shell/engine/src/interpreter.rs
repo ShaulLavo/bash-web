@@ -18,6 +18,7 @@ use std::{
     rc::Rc,
 };
 
+pub(crate) mod associative;
 mod builtin_wrapper;
 mod command_builtin;
 mod conditional;
@@ -2713,6 +2714,7 @@ async fn retain_declaration_syntax(
 struct PreparedCommand {
     line: Option<usize>,
     argv: Vec<String>,
+    compounds: Vec<(usize, Assignment)>,
     assigned: Vec<(String, String)>,
     fds: Descriptors,
     work: expand::Work,
@@ -2796,6 +2798,7 @@ async fn prepare_simple_command_body(
     .await?;
     bytes += argv.iter().map(String::len).sum::<usize>();
     let declaration = builtins::declaration_command(&simple.name);
+    let mut compounds = Vec::new();
     for word in simple.args {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
         let remaining_bytes = context.limits().expansion_bytes.saturating_sub(bytes);
@@ -2804,7 +2807,40 @@ async fn prepare_simple_command_body(
             .arguments
             .saturating_sub(assignment_count)
             .saturating_sub(argv.len());
-        let fields = if declaration && builtins::assignment_operand(&word) {
+        let fields = if declaration
+            && matches!(word.parts.as_slice(), [WordPart::CompoundAssignment { .. }])
+        {
+            if remaining_words == 0 {
+                return Err(2.into());
+            }
+            let slot = std::mem::size_of::<(usize, Assignment)>();
+            work.admit_storage(slot)?;
+            compounds.try_reserve_exact(1).map_err(|_| 2)?;
+            let [part]: [WordPart; 1] = word.parts.try_into().map_err(|_| 2)?;
+            let WordPart::CompoundAssignment {
+                name,
+                append,
+                elements,
+            } = part
+            else {
+                unreachable!()
+            };
+            let assignment = Assignment {
+                name,
+                index: None,
+                append,
+                value: AssignmentValue::Array(elements),
+            };
+            work.admit_storage(assignment.name.len())?;
+            let raw = word.raw.unwrap_or_else(|| assignment.name.clone());
+            if raw.len() > remaining_bytes {
+                return Err(2.into());
+            }
+            work.consume_scalar_field();
+            work.admit_storage(std::mem::size_of::<String>())?;
+            compounds.push((argv.len() - 1, assignment));
+            vec![raw]
+        } else if declaration && builtins::assignment_operand(&word) {
             if remaining_words == 0 {
                 return Err(2.into());
             }
@@ -2852,6 +2888,7 @@ async fn prepare_simple_command_body(
         return Ok(PreparedCommand {
             line,
             argv,
+            compounds,
             assigned: Vec::new(),
             fds,
             work,
@@ -2885,6 +2922,7 @@ async fn prepare_simple_command_body(
     Ok(PreparedCommand {
         line,
         argv,
+        compounds,
         assigned,
         fds,
         work,
@@ -2932,6 +2970,7 @@ async fn dispatch_simple_command_body(
     let PreparedCommand {
         line,
         argv,
+        compounds,
         assigned,
         fds,
         mut work,
@@ -3125,7 +3164,28 @@ async fn dispatch_simple_command_body(
         let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
             .await
             .map_err(admission_status)?;
+        if matches!(
+            builtin,
+            commands::Builtin::Declaration | commands::Builtin::Unset
+        ) {
+            work.substitutions = Some(Substitutions {
+                context: context.clone(),
+                fds: fds.clone(),
+                process_fds: None,
+            });
+        }
         let bindings = fds.borrow().clone();
+        if !compounds.is_empty() && builtin == commands::Builtin::Declaration {
+            return builtins::declarations(
+                &name,
+                (args, compounds),
+                &state,
+                &bindings,
+                &context,
+                &mut work,
+            )
+            .await;
+        }
         return builtins::run(builtin, &name, args, state, bindings, context, &mut work).await;
     }
     if builtin_only {
@@ -3432,7 +3492,7 @@ async fn assignments_body(
             || (commit
                 && matches!(
                     state.borrow().binding(&assignment.name),
-                    Some(crate::state::Binding::Indexed(_))
+                    Some(crate::state::Binding::Indexed(_) | crate::state::Binding::Associative(_))
                 ));
         if indexed && !commit {
             return Err(2.into());
@@ -3470,7 +3530,7 @@ async fn assignments_body(
         let storage = state
             .borrow()
             .binding(&assignment.name)
-            .filter(|value| matches!(value, crate::state::Binding::Indexed(_)))
+            .filter(|value| value.is_array())
             .map_or(0, |value| {
                 value
                     .storage_bytes()

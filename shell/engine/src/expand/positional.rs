@@ -9,6 +9,12 @@ impl Expansion<'_> {
         state: &SharedState,
         protected: bool,
     ) -> Result<(), Error> {
+        if state.borrow().is_associative(name) {
+            let value = self.associative_value(name, index, state).await?;
+            return self
+                .segment(&value, Protection::expansion(protected, state), protected)
+                .await;
+        }
         let index = self.indexed_index(name, index, state).await?;
         let value = {
             let state = state.borrow();
@@ -20,12 +26,7 @@ impl Expansion<'_> {
                     line: None,
                 });
             }
-            let value = value.unwrap_or("");
-            if value.len() > self.raw_remaining {
-                return Err(2.into());
-            }
-            self.work.admit_storage(value.len())?;
-            value.to_owned()
+            self.array_snapshot(value)?
         };
         self.segment(&value, Protection::expansion(protected, state), protected)
             .await
@@ -46,6 +47,26 @@ impl Expansion<'_> {
             } else {
                 state.borrow().array_count(name)
             };
+            self.work.admit_storage(20)?;
+            return self
+                .segment(
+                    &count.to_string(),
+                    Protection::expansion(protected, state),
+                    protected,
+                )
+                .await;
+        }
+        if state.borrow().is_associative(name) {
+            let value = self.associative_value(name, index, state).await?;
+            let utf8 = {
+                let state = state.borrow();
+                ["LC_ALL", "LC_CTYPE", "LANG"]
+                    .iter()
+                    .filter_map(|name| state.scalar_parameter(name))
+                    .find(|value| !value.is_empty())
+                    .is_some_and(super::utf8_locale)
+            };
+            let count = self.character_count(&value, utf8).await?;
             self.work.admit_storage(20)?;
             return self
                 .segment(
@@ -118,7 +139,9 @@ impl Expansion<'_> {
         state: &SharedState,
     ) -> Result<(), Error> {
         let state = state.borrow();
-        let present = matches!(state.binding(name), Some(crate::state::Binding::Indexed(_)))
+        let present = state
+            .binding(name)
+            .is_some_and(crate::state::Binding::is_array)
             || index.map_or_else(
                 || state.binding(name).is_some(),
                 |index| state.array_element(name, index).is_some(),

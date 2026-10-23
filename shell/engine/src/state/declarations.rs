@@ -13,7 +13,7 @@ impl State {
     pub(crate) fn declaration(&self, name: &str) -> Result<Option<DeclarationView<'_>>, ()> {
         let reference = self.namerefs.get(name);
         let binding = self.variables.get(name);
-        if reference.is_none() && matches!(binding, Some(Binding::Indexed(_))) {
+        if reference.is_none() && binding.is_some_and(Binding::is_array) {
             return Err(());
         }
         let value = reference.or_else(|| binding.and_then(Binding::scalar));

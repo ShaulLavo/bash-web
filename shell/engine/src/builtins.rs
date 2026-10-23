@@ -164,7 +164,7 @@ pub(crate) async fn run(
         }
         Builtin::Read => return read::run(&args, &state, &fds, &context, work).await,
         Builtin::Declaration => {
-            return declarations(name, args, &state, &fds, &context, work).await;
+            return declarations(name, (args, Vec::new()), &state, &fds, &context, work).await;
         }
         Builtin::Unset => return unset(args, &state, &fds, &context, work).await,
         Builtin::Cd => return directories::cd(&args, &state, &fds, &context, work).await,
@@ -681,15 +681,18 @@ async fn set_short_options(
     Ok(())
 }
 
-async fn declarations(
+pub(crate) async fn declarations(
     name: &str,
-    args: Vec<String>,
+    operands: (Vec<String>, Vec<(usize, shell_parser::parser::Assignment)>),
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
 ) -> Result<Outcome, i32> {
-    let mut args = args.into_iter().peekable();
+    let (args, compounds) = operands;
+    let mut compounds = compounds.into_iter().peekable();
+    let mut args = args.into_iter().enumerate().peekable();
+    let mut associative = false;
     let mut print = false;
     let mut nameref = false;
     let mut readonly = false;
@@ -698,7 +701,7 @@ async fn declarations(
         return Err(1);
     }
     if matches!(name, "local" | "declare" | "typeset") {
-        while let Some(option) = args.next_if(|arg| arg.starts_with('-')) {
+        while let Some((_, option)) = args.next_if(|(_, arg)| arg.starts_with('-')) {
             if option == "--" {
                 break;
             }
@@ -709,6 +712,7 @@ async fn declarations(
                 match flag {
                     b'p' if matches!(name, "declare" | "typeset") => print = true,
                     b'n' => nameref = true,
+                    b'A' => associative = true,
                     b'r' => readonly = true,
                     b'x' => exported = true,
                     _ => return Err(2),
@@ -717,16 +721,20 @@ async fn declarations(
         }
     }
     if print {
-        return declarations::print(name, args, state, fds, context, work).await;
+        return declarations::print(name, args.map(|(_, arg)| arg), state, fds, context, work)
+            .await;
     }
-    if nameref && (readonly || exported) {
+    if nameref && (readonly || exported || associative) {
         return Err(2);
     }
     if args.peek().is_none() && (nameref || matches!(name, "declare" | "typeset")) {
         return Err(2);
     }
     let mut status = 0;
-    for arg in args {
+    for (ordinal, arg) in args {
+        let compound = compounds
+            .next_if(|(index, _)| *index == ordinal)
+            .map(|(_, assignment)| assignment);
         // A pending reference-IFS classification belongs to the binding before
         // a declaration retargets or shadows it. Finish it before mutation.
         State::admit_scalar_access(state, "IFS", &context.cancel, work)
@@ -745,6 +753,9 @@ async fn declarations(
             .split_once('=')
             .map(|(key, value)| (key.to_owned(), Some(value.to_owned())))
             .unwrap_or((arg, None));
+        let key = compound
+            .as_ref()
+            .map_or(key, |assignment| assignment.name.clone());
         if !valid_name(&key) {
             if name == "local" {
                 status = 1;
@@ -760,6 +771,24 @@ async fn declarations(
                 .declaration_storage(&key, local)
                 .map_err(error_status)?;
             work.admit_storage(storage).map_err(error_status)?;
+        }
+        if associative {
+            let result =
+                associative_declaration(&key, value, compound, local, state, context, work).await;
+            if result.is_ok() && exported {
+                state.borrow_mut().export(key.clone(), None)?;
+            }
+            if result.is_ok() && readonly {
+                state.borrow_mut().readonly(key.clone(), None)?;
+            }
+            status |= i32::from(result.is_err());
+            if let Err(code @ (2 | crate::exec::RESOURCE_STATUS)) = result {
+                return Err(code);
+            }
+            continue;
+        }
+        if compound.is_some() {
+            return Err(2);
         }
         if nameref {
             let result = nameref_declaration(&key, value, local, state, context, work).await;
@@ -847,6 +876,49 @@ async fn nameref_declaration(
         .declare_nameref(key.to_owned(), target, local)
 }
 
+async fn associative_declaration(
+    key: &str,
+    value: Option<String>,
+    compound: Option<shell_parser::parser::Assignment>,
+    local: bool,
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    let bytes = state
+        .borrow()
+        .binding(key)
+        .map_or(0, |binding| binding.storage_bytes());
+    work.admit_storage(
+        bytes
+            .saturating_add(crate::state::Associative::node_bytes())
+            .saturating_add(128),
+    )
+    .map_err(error_status)?;
+    for _ in 0..bytes {
+        work.checkpoint(&context.cancel)
+            .await
+            .map_err(error_status)?;
+    }
+    state
+        .borrow_mut()
+        .declare_associative(key.to_owned(), local)?;
+    let assignment = compound.or_else(|| {
+        value.map(|value| shell_parser::parser::Assignment {
+            name: key.to_owned(),
+            index: None,
+            append: false,
+            value: shell_parser::parser::AssignmentValue::Scalar(Word::quoted_literal(value)),
+        })
+    });
+    let Some(assignment) = assignment else {
+        return Ok(());
+    };
+    crate::interpreter::associative::declare(&assignment, state, context, work)
+        .await
+        .map_err(error_status)
+}
+
 fn apply_declaration(
     name: &str,
     key: &str,
@@ -917,6 +989,22 @@ async fn unset(
     let mut budget = Budget::default();
     for name in names {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
+        if !functions
+            && !namerefs
+            && let Some((array, subscript)) = name.split_once('[').and_then(|(array, rest)| {
+                rest.strip_suffix(']').map(|subscript| (array, subscript))
+            })
+            && state.borrow().is_associative(array)
+        {
+            let result =
+                crate::interpreter::associative::unset(array, subscript, state, context, work)
+                    .await;
+            code |= i32::from(result.is_err());
+            if let Err(error @ Error::Status(2 | 130 | crate::exec::RESOURCE_STATUS)) = result {
+                return Err(error_status(error));
+            }
+            continue;
+        }
         if !valid_name(name) {
             continue;
         }

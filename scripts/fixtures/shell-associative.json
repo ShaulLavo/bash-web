@@ -1,0 +1,251 @@
+{
+  "bash": "5.3.15(1)-release",
+  "env": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "PWD": "/tmp/spec",
+    "SH": "bash",
+    "LC_ALL": "C.UTF-8"
+  },
+  "provenance": {
+    "base": "e6430b1554de7d2efad092f40751858292cb071d",
+    "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5"
+  },
+  "cases": [
+    {
+      "id": "oils:array-assoc:19",
+      "script": "declare -A a\na=([aa]=b [foo]=bar ['a+1']=c)\necho ${a[\"aa\"]}\necho ${a[\"foo\"]}\necho ${a[\"a+1\"]}\n",
+      "status": 0,
+      "stdoutHex": "620a6261720a630a"
+    },
+    {
+      "id": "oils:array-assoc:159",
+      "script": "declare -A a\n\na=([aa]=b [foo]=bar ['a+1']=c)\necho a=\"${a}\"\n\na=([0]=zzz)\necho a=\"${a}\"\n\na=(['0']=yyy)\necho a=\"${a}\"\n\n",
+      "status": 0,
+      "stdoutHex": "613d0a613d7a7a7a0a613d7979790a"
+    },
+    {
+      "id": "oils:array-assoc:177",
+      "script": "declare -A a\na[\"x\"]=1\na[\"y\"]=2\na[\"z\"]=3\necho \"${#a[@]}\"\n\n",
+      "status": 0,
+      "stdoutHex": "330a"
+    },
+    {
+      "id": "oils:array-assoc:185",
+      "script": "declare -A a\na[\"0\"]=a\na[\"1\"]=b\na[\"2\"]=c\necho 0 \"${a[0]}\" 1 \"${a[1]}\" 2 \"${a[2]}\"\n",
+      "status": 0,
+      "stdoutHex": "30206120312062203220630a"
+    },
+    {
+      "id": "oils:array-assoc:195",
+      "script": "declare -A a\na[\"aa\"]=b\na[\"foo\"]=bar\na['a+1']=c\necho \"${a[\"aa\"]}\" \"${a[\"foo\"]}\" \"${a[\"a+1\"]}\"\n",
+      "status": 0,
+      "stdoutHex": "622062617220630a"
+    },
+    {
+      "id": "oils:array-assoc:205",
+      "script": "declare -A a\na[\"aa\"]=b\na[\"foo\"]=bar\na['a+1']=c\necho \"${a['a+1']}\"\n\n",
+      "status": 0,
+      "stdoutHex": "630a"
+    },
+    {
+      "id": "oils:array-assoc:213",
+      "script": "declare -A A\nA[\"aa\"]=b\nA[\"foo\"]=bar\n\nkey=foo\necho ${A[$key]}\ni=a\necho ${A[\"$i$i\"]}   # note: ${A[$i$i]} doesn't work in OSH\n",
+      "status": 0,
+      "stdoutHex": "6261720a620a"
+    },
+    {
+      "id": "oils:array-assoc:227",
+      "script": "declare -A a\na[\"aa\"]=b\na[\"foo\"]=bar\na['a+1']=c\necho \"${a[a+1]}\"\n\n",
+      "status": 0,
+      "stdoutHex": "630a"
+    },
+    {
+      "id": "oils:array-assoc:238",
+      "script": "i=1\narray=(5 6 7)\necho array[i]=\"${array[i]}\"\necho array[i+1]=\"${array[i+1]}\"\n\ndeclare -A assoc\nassoc[i]=$i\nassoc[i+1]=$i+1\n\nassoc[\"i\"]=string\nassoc[\"i+1\"]=string+1\n\necho assoc[i]=\"${assoc[i]}\" \necho assoc[i+1]=\"${assoc[i+1]}\"\n\necho assoc[i]=\"${assoc[\"i\"]}\" \necho assoc[i+1]=\"${assoc[\"i+1\"]}\"\n\n",
+      "status": 0,
+      "stdoutHex": "61727261795b695d3d360a61727261795b692b315d3d370a6173736f635b695d3d737472696e670a6173736f635b692b315d3d737472696e672b310a6173736f635b695d3d737472696e670a6173736f635b692b315d3d737472696e672b310a"
+    },
+    {
+      "id": "oils:array-assoc:336",
+      "script": "declare -A assoc\nassoc[1]=1\nassoc[2]=2\necho ${assoc[1]} ${assoc[2]} ${assoc}\nassoc[0]=zero\necho ${assoc[1]} ${assoc[2]} ${assoc}\nassoc=string\necho ${assoc[1]} ${assoc[2]} ${assoc}\n",
+      "status": 0,
+      "stdoutHex": "3120320a312032207a65726f0a31203220737472696e670a"
+    },
+    {
+      "id": "oils:array-assoc:388",
+      "script": "declare -A foo\nfoo=([\"key\"]=\"value1\")\necho ${foo[\"key\"]}\nfoo=([\"key\"]=\"${foo[\"key\"]} value2\")\necho ${foo[\"key\"]}\n",
+      "status": 0,
+      "stdoutHex": "76616c7565310a76616c7565312076616c7565320a"
+    },
+    {
+      "id": "oils:array-assoc:403",
+      "script": "declare -Ar A\nA['x']=1\necho status=$?\n",
+      "status": 0,
+      "stdoutHex": "7374617475733d310a"
+    },
+    {
+      "id": "oils:array-assoc:413",
+      "script": "declare -A A=([k1]=v [k2]=-{a,b}-)\necho ${A[\"k1\"]}\necho ${A[\"k2\"]}\n",
+      "status": 0,
+      "stdoutHex": "760a2d7b612c627d2d0a"
+    },
+    {
+      "id": "oils:array-assoc:422",
+      "script": "set -o nounset\nshopt -s strict_arith || true\n\ndeclare -A ASSOC=()\necho len=${#ASSOC[@]}\n\nASSOC['k']='32'\necho len=${#ASSOC[@]}\n\nset +o nounset\ndeclare -A u\necho unset len=${#u[@]}\n",
+      "status": 0,
+      "stdoutHex": "6c656e3d300a6c656e3d310a756e736574206c656e3d300a"
+    },
+    {
+      "id": "oils:array-assoc:444",
+      "script": "shopt -s eval_unsafe_arith || true\n\nshow-len() {\n  echo len=${#assoc[@]}\n}\n\ndeclare -A assoc=(['K']=val)\nshow-len\n\nunset -v 'assoc[\"K\"]'\nshow-len\n\ndeclare -A assoc=(['K']=val)\nshow-len\nkey=K\nunset -v 'assoc[$key]'\nshow-len\n\ndeclare -A assoc=(['K']=val)\nshow-len\nunset -v 'assoc[$(echo K)]'\nshow-len\n\n\n",
+      "status": 0,
+      "stdoutHex": "6c656e3d310a6c656e3d300a6c656e3d310a6c656e3d300a6c656e3d310a6c656e3d300a"
+    },
+    {
+      "id": "oils:array-assoc:755",
+      "script": "declare -A a=([apple]=red [orange]=orange)\na+=([lemon]=yellow [banana]=yellow)\necho \"apple is ${a['apple']}\"\necho \"orange is ${a['orange']}\"\necho \"lemon is ${a['lemon']}\"\necho \"banana is ${a['banana']}\"\n\n",
+      "status": 0,
+      "stdoutHex": "6170706c65206973207265640a6f72616e6765206973206f72616e67650a6c656d6f6e2069732079656c6c6f770a62616e616e612069732079656c6c6f770a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:1",
+      "script": "declare -A mymap\nmymap[name]=\"Alice\"\nmymap[age]=\"30\"\necho \"${mymap[name]}\"\necho \"${mymap[age]}\"\n",
+      "status": 0,
+      "stdoutHex": "416c6963650a33300a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:12",
+      "script": "declare -A m\nm[a]=\"1\"\nm[b]=\"2\"\nm[c]=\"3\"\necho \"${#m[@]}\"\n",
+      "status": 0,
+      "stdoutHex": "330a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:42",
+      "script": "declare -A m\nm[key]=\"old\"\nm[key]=\"new\"\necho \"${m[key]}\"\n",
+      "status": 0,
+      "stdoutHex": "6e65770a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:51",
+      "script": "declare -A m\necho \">${#m[@]}<\"\n",
+      "status": 0,
+      "stdoutHex": "3e303c0a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:58",
+      "script": "declare -A m\nm[a]=\"1\"\nm[b]=\"2\"\nunset 'm[a]'\necho \"${#m[@]}\"\necho \"${m[b]}\"\n",
+      "status": 0,
+      "stdoutHex": "310a320a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:70",
+      "script": "declare -A m=([foo]=\"bar\" [baz]=\"qux\")\necho \"${m[foo]}\"\necho \"${m[baz]}\"\n",
+      "status": 0,
+      "stdoutHex": "6261720a7175780a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:79",
+      "script": "declare -A m=([a]=1 [b]=2 [c]=3)\necho \"${m[a]}\"\necho \"${m[c]}\"\n",
+      "status": 0,
+      "stdoutHex": "310a330a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:88",
+      "script": "declare -A m=([only]=\"value\")\necho \"${m[only]}\"\necho \"${#m[@]}\"\n",
+      "status": 0,
+      "stdoutHex": "76616c75650a310a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:97",
+      "script": "declare -A m=([k]=\"old\")\nm[k]=\"new\"\necho \"${m[k]}\"\n",
+      "status": 0,
+      "stdoutHex": "6e65770a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:105",
+      "script": "declare -A m\nm[1]=\"one\"\nm[2]=\"two\"\necho \"${m[1]}\"\necho \"${m[2]}\"\n",
+      "status": 0,
+      "stdoutHex": "6f6e650a74776f0a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:116",
+      "script": "declare -A m\nkey=\"mykey\"\nm[$key]=\"value\"\necho \"${m[$key]}\"\necho \"${m[mykey]}\"\n",
+      "status": 0,
+      "stdoutHex": "76616c75650a76616c75650a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:127",
+      "script": "declare -A m\nm[key]=\"hello world\"\necho \"${m[key]}\"\n",
+      "status": 0,
+      "stdoutHex": "68656c6c6f20776f726c640a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:135",
+      "script": "x=\"outside\"\ndeclare -A map=([x]=found [outside]=wrong)\necho \"${map[x]}\"\n",
+      "status": 0,
+      "stdoutHex": "666f756e640a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:144",
+      "script": "i=999\ndeclare -A assoc=([i]=correct [999]=incorrect)\necho \"${assoc[i]}\"\n",
+      "status": 0,
+      "stdoutHex": "636f72726563740a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:152",
+      "script": "x=\"other\"\ndeclare -A m6\nm6[x]=\"at-x\"\nm6[other]=\"at-other\"\necho \"${m6[x]} ${m6[other]}\"\n",
+      "status": 0,
+      "stdoutHex": "61742d782061742d6f746865720a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:205",
+      "script": "declare -A m=()\nm[\"$(echo hello)\"]=\"world\"\necho \"count: ${#m[@]}\"\nfor k in \"${!m[@]}\"; do echo \"key=[$k] val=[${m[$k]}]\"; done\n",
+      "status": 0,
+      "stdoutHex": "636f756e743a20310a6b65793d5b68656c6c6f5d2076616c3d5b776f726c645d0a"
+    },
+    {
+      "id": "bashkit-suite:assoc-arrays:215",
+      "script": "declare -A m=()\nfoo=\"left\"\nbar=\"right\"\nm[\"$foo$bar\"]=\"combined\"\nm[\"prefix-$foo-$bar\"]=\"mixed\"\necho \"${m[leftright]}\"\necho \"${m[prefix-left-right]}\"\n",
+      "status": 0,
+      "stdoutHex": "636f6d62696e65640a6d697865640a"
+    },
+    {
+      "id": "keyed-and-alternating-compounds",
+      "script": "declare -A h\nh=([\"a b\"]=\"one two\" ['x+y']=literal [empty]='')\nprintf '<%s>\\n' \"${h['a b']}\" \"${h[x+y]}\" \"${h[empty]}\" \"${#h[@]}\"\nh+=(['x+y']+=tail [new]=added)\nprintf '<%s>\\n' \"${h[x+y]}\" \"${h[new]}\"\nh=(key value odd)\nprintf '<%s>\\n' \"${h[key]}\" \"${h[odd]}\" \"${#h[@]}\"\n",
+      "status": 0,
+      "stdoutHex": "3c6f6e652074776f3e0a3c6c69746572616c3e0a3c3e0a3c333e0a3c6c69746572616c7461696c3e0a3c61646465643e0a3c76616c75653e0a3c3e0a3c323e0a"
+    },
+    {
+      "id": "substitution-and-literal-data",
+      "script": "declare -A h=()\nkey='two words'\nh[\"$key\"]='$(echo not-code)'\nh[\"$(printf %s dynamic)\"]='v'\nprintf '<%s>\\n' \"${h[$key]}\" \"${h[dynamic]}\" \"${#h[@]}\"\n",
+      "status": 0,
+      "stdoutHex": "3c24286563686f206e6f742d636f6465293e0a3c763e0a3c323e0a"
+    },
+    {
+      "id": "local-and-subshell",
+      "script": "declare -A h=([old]=global)\nf() { local -A h=([new]=local); echo \"${#h[@]}:${h[new]}:${h[old]}\"; }\nf\n(h[old]=child; h[new]=extra; echo \"${h[old]}:${#h[@]}\")\necho \"${h[old]}:${#h[@]}\"\n",
+      "status": 0,
+      "stdoutHex": "313a6c6f63616c3a0a6368696c643a320a676c6f62616c3a310a"
+    },
+    {
+      "id": "empty-star-and-one-key",
+      "script": "declare -A h=()\nprintf '<%s>\\n' \"${h[@]}\" \"${h[*]}\"\nh['two words']='one two'\nprintf '<%s>\\n' \"${!h[@]}\" \"${h[@]}\" \"${h[*]}\"\n",
+      "status": 0,
+      "stdoutHex": "3c3e0a3c74776f20776f7264733e0a3c6f6e652074776f3e0a3c6f6e652074776f3e0a"
+    },
+    {
+      "id": "scalar-zero-and-append",
+      "script": "declare -A h=([other]=kept)\nh=zero\nh+=tail\nh[other]+=more\nprintf '<%s>\\n' \"$h\" \"${h[other]}\" \"${#h[@]}\"\nunset 'h[0]'\necho \"${#h[@]}:$h\"\n",
+      "status": 0,
+      "stdoutHex": "3c7a65726f7461696c3e0a3c6b6570746d6f72653e0a3c323e0a313a0a"
+    },
+    {
+      "id": "quoted-dollar-key",
+      "script": "key=expanded\ndeclare -A h=()\nh['$key']=literal\nh[\"$key\"]=expanded-value\nprintf '<%s>\\n' \"${h['$key']}\" \"${h[\"$key\"]}\"\n",
+      "status": 0,
+      "stdoutHex": "3c6c69746572616c3e0a3c657870616e6465642d76616c75653e0a"
+    }
+  ]
+}

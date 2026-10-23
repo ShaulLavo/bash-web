@@ -5030,13 +5030,6 @@ impl<'a> Parser<'a> {
                     }
                     index.push(chars.next().unwrap());
                 }
-                // Strip surrounding quotes from index (e.g. "foo" -> foo)
-                if index.len() >= 2
-                    && ((index.starts_with('"') && index.ends_with('"'))
-                        || (index.starts_with('\'') && index.ends_with('\'')))
-                {
-                    index = index[1..index.len() - 1].to_string();
-                }
                 // After ], check for operators on array subscripts
                 if let Some(&next_c) = chars.peek() {
                     if next_c == ':' {
