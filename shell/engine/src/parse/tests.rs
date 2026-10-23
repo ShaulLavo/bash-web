@@ -298,7 +298,13 @@ fn reader_budget_admission_matches_old_call_at_every_work_boundary() {
         for entry in [script, eval] {
             let actual_budget = budget(fuel);
             assert_eq!(
-                entry(source, source.len(), &actual_budget).map(|_| ()),
+                entry(
+                    source,
+                    source.len(),
+                    &actual_budget,
+                    ParseOptions::default()
+                )
+                .map(|_| ()),
                 expected,
                 "fuel={fuel}",
             );
