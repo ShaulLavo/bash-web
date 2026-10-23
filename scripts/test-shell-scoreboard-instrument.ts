@@ -190,20 +190,35 @@ test("the runtime update preserves every target outcome and all Bash observation
   );
   assert.equal(oracle.environment.nodeVersion, "v26.12.1");
   assert.equal(oracle.environment.runner, "waffle-node");
-  assertInstrumentChanges(baseline, read(baselinePath), read(runtimeReceiptPath));
+  const migrated = {
+    identity: oracle.identity,
+    cases: committedBaseline(authorizedRuntimeTransition.target).cases,
+  };
+  assertInstrumentChanges(baseline, migrated, read(runtimeReceiptPath));
 });
 
-test("the runtime receipt rejects any new loss or changed host environment", () => {
+test("the runtime receipt rejects any gained or lost target case and changed host environment", () => {
   const oracle = read(oraclePath);
-  const changed = read(baselinePath);
-  const index = changed.cases.findIndex((item: { outcome: string }) => item.outcome === "pass");
-  changed.cases[index] = { ...changed.cases[index], outcome: "fail" };
+  const migrated = {
+    identity: oracle.identity,
+    cases: committedBaseline(authorizedRuntimeTransition.target).cases,
+  };
   const { baseline } = instrumentMigrationEvidence(
     root,
     authorizedRuntimeTransition.target,
     oracle,
   );
-  assert.throws(() => assertInstrumentChanges(baseline, changed, read(runtimeReceiptPath)));
+  assertInstrumentChanges(baseline, migrated, read(runtimeReceiptPath));
+  for (const outcome of ["pass", "fail"]) {
+    const changed = structuredClone(migrated);
+    const index = changed.cases.findIndex((item: { outcome: string }) => item.outcome === outcome);
+    assert.ok(index >= 0);
+    changed.cases[index].outcome = outcome === "pass" ? "fail" : "pass";
+    assert.throws(
+      () => assertInstrumentChanges(baseline, changed, read(runtimeReceiptPath)),
+      /recorded transition/,
+    );
+  }
   oracle.environment.nodeVersion = "v26.12.2";
   assert.throws(
     () => instrumentMigrationEvidence(root, authorizedRuntimeTransition.target, sealOracle(oracle)),
