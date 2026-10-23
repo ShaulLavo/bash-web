@@ -3039,15 +3039,22 @@ adjacent `review53-r5/`.
   `Trace::rewind()` in `interpreter/conditional/regex.rs` keeps open pairs.
   Make that restoration agree with epsilon-path selection, not another
   open-register exception, and keep all 482 exact records and both fixtures.
-- Reconstruction cost. Snapshots are linear (write log, no whole-register
-  copy), but reachability plus reconstruction still cost about 1.8 times the
-  whole-span scan. Under the default 1.37M-step command budget,
-  `"(" * 48 + "a" + ")" * 48 + "*"` and the 64-group form on 2048 `a` bytes
-  return 2 while main returns 0 (step profile: 64 groups at 2048 bytes needs
-  811K scan + 541K reachability + 922K reconstruction). 16 and 32 groups at
-  2048 bytes and 48 and 64 groups at 512 bytes pass. A single tagged pass or
-  a smaller per-position reachability table would remove the gap. Do not raise
-  the budget.
+- Reconstruction cost frontier. Main matches without capture nodes, so its
+  work per input byte does not depend on the group count. PR53's scan and
+  reachability now skip Save/Begin nodes (r7). 48 and 64 nested groups on
+  2048 bytes pass under the unchanged 1,376,256-step budget, using 14.6K scan
+  + 12.4K reachability + 922K reconstruction steps for 64 groups. But
+  reconstruction still walks every Save on the selected path, about seven
+  steps per group per byte. With the native frontier probe
+  (`regex-status-cost-fix-opus-r7/frontier.json`, pattern
+  `"(" * g + "a" + ")" * g + "*"` on `a` repeated n times), main returns 0
+  for every g ≤ 64 and n ≤ 65536. PR53 returns 2 from n = 3072 at g = 64,
+  4096 at g = 48, 8192 at g = 32, 16384 at g = 16 and 65536 at g = 1 or 4.
+  Closing this needs reconstruction that does not replay every capture write
+  per byte. One option is a summary per Save chain (net writes, plus whether
+  it closes a nonempty group) applied lazily. Another is a backward pass that
+  stops once every register is decided. Both must keep the snapshot,
+  rewind and seen semantics. Do not raise the budget.
 
 Reproduce through the production Waffle runner with new exact Bash
 recordings, keep admission, cooperative undo and cancellation, and change no

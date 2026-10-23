@@ -28,6 +28,13 @@ entry per differing register once it outgrows twice the register count.
 Reconstruction cost therefore stays linear in input length times compiled
 nodes, rather than adding a factor of the group count at every close.
 
+Save and Begin nodes only forward to their successor and never test the input
+position, so they share that successor's matching and reachability state. A
+skip map built once per match lets the whole-span scan and the reachability
+table run over the remaining nodes only. Neither pass then visits capture
+nodes once per input byte. Capture reconstruction still steps through every
+Save node on the selected path.
+
 ## Absent alternatives
 
 A branch that emits no nodes follows a branch that emits nodes. This applies

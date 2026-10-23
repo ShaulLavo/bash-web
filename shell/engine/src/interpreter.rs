@@ -2320,7 +2320,7 @@ fn admission_status(error: expand::Error) -> i32 {
         _ => 2,
     }
 }
-fn expansion_work(limits: &Limits) -> expand::Work {
+pub(crate) fn expansion_work(limits: &Limits) -> expand::Work {
     expand::Work::new(
         limits
             .source_bytes

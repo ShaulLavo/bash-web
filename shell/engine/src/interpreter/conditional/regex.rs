@@ -828,8 +828,68 @@ fn anchor(node: Node, position: usize, length: usize) -> bool {
     !matches!(node, Node::Start(_) if position != 0)
         && !matches!(node, Node::End(_) if position != length)
 }
+fn forward(node: Node) -> Option<usize> {
+    match node {
+        Node::Save(_, next) | Node::OptionalSave(_, next) | Node::Begin { next, .. } => Some(next),
+        _ => None,
+    }
+}
+
+// Save and Begin nodes only forward to `next` and never test the position, so
+// they share their target's state. Whole-span scans and reachability run over
+// the remaining nodes once, instead of revisiting every capture node per byte.
+// Capture reconstruction still steps through them.
+struct Graph<'a> {
+    nodes: &'a [Node],
+    skip: Vec<usize>,
+    kept: Vec<usize>,
+    consumers: Vec<usize>,
+    reverse: Reverse,
+}
+async fn graph<'a>(
+    nodes: &'a [Node],
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<Graph<'a>, Error> {
+    let mut skip = slots(nodes.len(), 0usize, work)?;
+    let mut kept = Vec::new();
+    let mut consumers = Vec::new();
+    for (index, node) in nodes.iter().enumerate() {
+        work.checkpoint(cancel).await?;
+        // Compiled continuations point at earlier nodes, already resolved.
+        let target = match forward(*node) {
+            Some(next) if next < index => skip[next],
+            _ => index,
+        };
+        skip.push(target);
+        if target != index {
+            continue;
+        }
+        push(&mut kept, index, work)?;
+        if matches!(node, Node::Consume(..)) {
+            push(&mut consumers, index, work)?;
+        }
+    }
+    let mut heads = initialized(nodes.len(), None, work, cancel).await?;
+    let mut edges = Vec::new();
+    for &index in &kept {
+        let (left, right) = epsilon(nodes[index]);
+        for next in left.into_iter().chain(right) {
+            work.checkpoint(cancel).await?;
+            let edge = push(&mut edges, (index, heads[skip[next]]), work)?;
+            heads[skip[next]] = Some(edge);
+        }
+    }
+    Ok(Graph {
+        nodes,
+        skip,
+        kept,
+        consumers,
+        reverse: Reverse { heads, edges },
+    })
+}
 async fn closure(
-    nodes: &[Node],
+    graph: &Graph<'_>,
     states: &mut [usize],
     stack: &mut Vec<usize>,
     candidate: (usize, usize),
@@ -838,6 +898,7 @@ async fn closure(
     cancel: &Cancel,
 ) -> Result<(), Error> {
     let (seed, origin) = candidate;
+    let seed = graph.skip[seed];
     if states[seed] <= origin {
         return Ok(());
     }
@@ -845,12 +906,13 @@ async fn closure(
     push(stack, seed, work)?;
     while let Some(index) = stack.pop() {
         work.checkpoint(cancel).await?;
-        if !anchor(nodes[index], position.start, position.end) {
+        if !anchor(graph.nodes[index], position.start, position.end) {
             continue;
         }
         let origin = states[index];
-        let (left, right) = epsilon(nodes[index]);
+        let (left, right) = epsilon(graph.nodes[index]);
         for next in left.into_iter().chain(right) {
+            let next = graph.skip[next];
             if states[next] <= origin {
                 continue;
             }
@@ -861,20 +923,21 @@ async fn closure(
     Ok(())
 }
 async fn longest(
-    nodes: &[Node],
+    graph: &Graph<'_>,
     start: usize,
     pattern: &Pattern,
     value: &str,
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<Option<(usize, usize)>, Error> {
-    let mut current = initialized(nodes.len(), usize::MAX, work, cancel).await?;
-    let mut next = initialized(nodes.len(), usize::MAX, work, cancel).await?;
-    let mut stack = slots(nodes.len(), 0usize, work)?;
+    let count = graph.nodes.len();
+    let mut current = initialized(count, usize::MAX, work, cancel).await?;
+    let mut next = initialized(count, usize::MAX, work, cancel).await?;
+    let mut stack = slots(count, 0usize, work)?;
     let mut found = None;
     for position in 0..=value.len() {
         closure(
-            nodes,
+            graph,
             &mut current,
             &mut stack,
             (start, position),
@@ -889,13 +952,14 @@ async fn longest(
         let Some(ch) = value.as_bytes().get(position) else {
             break;
         };
-        for state in &mut next {
+        // Closures only write kept nodes; skipped entries stay unset.
+        for &index in &graph.kept {
             work.checkpoint(cancel).await?;
-            *state = usize::MAX;
+            next[index] = usize::MAX;
         }
-        for (index, node) in nodes.iter().enumerate() {
+        for &index in &graph.consumers {
             work.checkpoint(cancel).await?;
-            let Node::Consume(atom, destination) = *node else {
+            let Node::Consume(atom, destination) = graph.nodes[index] else {
                 continue;
             };
             if current[index] == usize::MAX {
@@ -905,7 +969,7 @@ async fn longest(
                 continue;
             }
             closure(
-                nodes,
+                graph,
                 &mut next,
                 &mut stack,
                 (destination, current[index]),
@@ -957,8 +1021,9 @@ impl Reachable {
         old & mask == 0
     }
 }
+// Rows hold kept nodes only; look up any node through `Graph::skip`.
 async fn reachability(
-    nodes: &[Node],
+    graph: &Graph<'_>,
     pattern: &Pattern,
     value: &str,
     span: (usize, usize),
@@ -966,41 +1031,26 @@ async fn reachability(
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<Reachable, Error> {
-    let count = (span.1 - span.0 + 1).checked_mul(nodes.len()).ok_or(2)?;
+    let width = graph.nodes.len();
+    let count = (span.1 - span.0 + 1).checked_mul(width).ok_or(2)?;
     let bits = initialized(count.div_ceil(64), 0u64, work, cancel).await?;
     let mut result = Reachable {
         bits,
-        width: nodes.len(),
+        width,
         begin: span.0,
     };
-    let mut heads = initialized(nodes.len(), None, work, cancel).await?;
-    let mut edges = Vec::new();
-    // Rows scan only consuming nodes, not the whole arena per input byte.
-    let mut consumers = Vec::new();
-    for (index, node) in nodes.iter().enumerate() {
-        if matches!(node, Node::Consume(..)) {
-            push(&mut consumers, index, work)?;
-        }
-        let (left, right) = epsilon(*node);
-        for next in left.into_iter().chain(right) {
-            work.checkpoint(cancel).await?;
-            let edge = push(&mut edges, (index, heads[next]), work)?;
-            heads[next] = Some(edge);
-        }
-    }
-    let reverse = Reverse { heads, edges };
-    let mut stack = slots(nodes.len(), 0usize, work)?;
+    let mut stack = slots(width, 0usize, work)?;
     for position in (span.0..=span.1).rev() {
         if position == span.1 {
             result.insert(0, position);
             stack.push(0);
         }
-        for &index in &consumers {
+        for &index in &graph.consumers {
             work.checkpoint(cancel).await?;
-            let Node::Consume(atom, next) = nodes[index] else {
+            let Node::Consume(atom, next) = graph.nodes[index] else {
                 continue;
             };
-            if position == span.1 || !result.get(next, position + 1) {
+            if position == span.1 || !result.get(graph.skip[next], position + 1) {
                 continue;
             }
             if !atom_matches(
@@ -1018,8 +1068,7 @@ async fn reachability(
             stack.push(index);
         }
         reverse_closure(
-            nodes,
-            &reverse,
+            graph,
             &mut result,
             &mut stack,
             CapturePosition {
@@ -1041,8 +1090,7 @@ struct CapturePosition {
     unconstrained: bool,
 }
 async fn reverse_closure(
-    nodes: &[Node],
-    reverse: &Reverse,
+    graph: &Graph<'_>,
     result: &mut Reachable,
     stack: &mut Vec<usize>,
     position: CapturePosition,
@@ -1053,15 +1101,16 @@ async fn reverse_closure(
     while edge.is_some() || !stack.is_empty() {
         work.checkpoint(cancel).await?;
         let Some(id) = edge else {
-            edge = reverse.heads[stack.pop().ok_or(2)?];
+            edge = graph.reverse.heads[stack.pop().ok_or(2)?];
             continue;
         };
-        let (prior, previous) = reverse.edges[id];
+        let (prior, previous) = graph.reverse.edges[id];
         edge = previous;
-        if position.unconstrained && matches!(nodes[prior], Node::Start(_) | Node::End(_)) {
+        let node = graph.nodes[prior];
+        if position.unconstrained && matches!(node, Node::Start(_) | Node::End(_)) {
             continue;
         }
-        if !anchor(nodes[prior], position.offset, position.length) {
+        if !anchor(node, position.offset, position.length) {
             continue;
         }
         if result.insert(prior, position.offset) {
@@ -1300,7 +1349,7 @@ impl Trace {
     }
 }
 async fn captures(
-    nodes: &[Node],
+    graph: &Graph<'_>,
     start: usize,
     count: usize,
     reachable: &Reachable,
@@ -1309,6 +1358,7 @@ async fn captures(
     cancel: &Cancel,
 ) -> Result<Vec<Option<(usize, usize)>>, Error> {
     let count = count.checked_add(1).ok_or(2)?;
+    let nodes = graph.nodes;
     let mut trace = Trace {
         slots: initialized(count.checked_mul(2).ok_or(2)?, None, work, cancel).await?,
         previous: initialized(count.checked_mul(2).ok_or(2)?, None, work, cancel).await?,
@@ -1323,7 +1373,7 @@ async fn captures(
     let mut position = span.0;
     while index != 0 || position != span.1 {
         work.checkpoint(cancel).await?;
-        if !reachable.get(index, position) {
+        if !reachable.get(graph.skip[index], position) {
             index = trace.restore(work, cancel).await?.ok_or(2)?;
             continue;
         }
@@ -1358,7 +1408,8 @@ pub(super) async fn matches(
 ) -> Result<Option<Captures>, Error> {
     ascii(pattern, value, work, cancel).await?;
     let (nodes, start, count) = compile(pattern, work, cancel).await?;
-    let Some(span) = longest(&nodes, start, pattern, value, work, cancel).await? else {
+    let graph = graph(&nodes, work, cancel).await?;
+    let Some(span) = longest(&graph, start, pattern, value, work, cancel).await? else {
         return Ok(None);
     };
     if count == 0 {
@@ -1369,11 +1420,11 @@ pub(super) async fn matches(
     // Assertions constrain their epsilon suffix, not the whole matching path.
     // Prefer the original accepting terminal over an assertion-derived terminal
     // at the same span; retain ordinary branch order inside either terminal.
-    let mut reachable = reachability(&nodes, pattern, value, span, true, work, cancel).await?;
-    if !reachable.get(start, span.0) {
-        reachable = reachability(&nodes, pattern, value, span, false, work, cancel).await?;
+    let mut reachable = reachability(&graph, pattern, value, span, true, work, cancel).await?;
+    if !reachable.get(graph.skip[start], span.0) {
+        reachable = reachability(&graph, pattern, value, span, false, work, cancel).await?;
     }
-    captures(&nodes, start, count, &reachable, span, work, cancel)
+    captures(&graph, start, count, &reachable, span, work, cancel)
         .await
         .map(Some)
 }
@@ -1516,6 +1567,23 @@ mod tests {
         assert_eq!(captures.len(), groups + 1);
         budget - work.remaining
     }
+    // Main matches these under one command's default work and storage; the
+    // capture pipeline must too, without a larger budget.
+    #[test]
+    fn deep_nested_group_captures_fit_default_command_work() {
+        for groups in [48, 64] {
+            let source = "(".repeat(groups) + "a" + &")".repeat(groups) + "*";
+            let pattern = self::pattern(&source);
+            let value = "a".repeat(2048);
+            let mut work =
+                crate::interpreter::expansion_work(&crate::interpreter::Limits::default());
+            let captures = finish(matches(&pattern, &value, &mut work, &Cancel::new()))
+                .unwrap_or_else(|_| panic!("{groups} nested groups exhausted default work"))
+                .unwrap();
+            assert_eq!(captures[0], Some((0, 2048)));
+            assert_eq!(captures[1], Some((2047, 2048)));
+        }
+    }
     #[test]
     fn nested_group_reconstruction_is_linear_in_groups() {
         let small = reconstruction_steps(16);
@@ -1564,8 +1632,10 @@ mod tests {
         let (nodes, start, count) = finish(compile(&pattern, &mut work, &cancel))
             .unwrap_or_else(|_| panic!("fixture must compile"));
         let reachable = trace.then(|| {
+            let graph = finish(graph(&nodes, &mut work, &cancel))
+                .unwrap_or_else(|_| panic!("fixture graph must build"));
             finish(reachability(
-                &nodes, &pattern, &text, span, true, &mut work, &cancel,
+                &graph, &pattern, &text, span, true, &mut work, &cancel,
             ))
             .unwrap_or_else(|_| panic!("fixture span must be reachable"))
         });
@@ -1573,9 +1643,12 @@ mod tests {
         let child_cancel = cancel.clone();
         let job = executor.spawn(async move {
             let mut work = Work::new(100_000_000, 10_000_000, 16);
+            let Ok(graph) = graph(&nodes, &mut work, &child_cancel).await else {
+                panic!("fixture graph must build before cancellation");
+            };
             let result = match reachable {
                 Some(reachable) => captures(
-                    &nodes,
+                    &graph,
                     start,
                     count,
                     &reachable,
@@ -1586,7 +1659,7 @@ mod tests {
                 .await
                 .map(|_| ()),
                 None => reachability(
-                    &nodes,
+                    &graph,
                     &pattern,
                     &text,
                     span,
@@ -1623,8 +1696,10 @@ mod tests {
         let mut work = Work::new(100_000, 100_000, 16);
         let (nodes, start, count) = finish(compile(&pattern, &mut work, &cancel))
             .unwrap_or_else(|_| panic!("fixture must compile"));
+        let graph = finish(graph(&nodes, &mut work, &cancel))
+            .unwrap_or_else(|_| panic!("fixture graph must build"));
         let reachable = finish(reachability(
-            &nodes,
+            &graph,
             &pattern,
             "aa",
             (0, 2),
@@ -1636,7 +1711,7 @@ mod tests {
         let mut work = Work::new(100_000, 0, 16);
         assert!(matches!(
             finish(reachability(
-                &nodes,
+                &graph,
                 &pattern,
                 "aa",
                 (0, 2),
@@ -1648,7 +1723,7 @@ mod tests {
         ));
         assert!(matches!(
             finish(captures(
-                &nodes,
+                &graph,
                 start,
                 count,
                 &reachable,
