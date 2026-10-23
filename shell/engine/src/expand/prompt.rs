@@ -3,7 +3,18 @@ use super::{Captured, Error, Expansion, Segments, admit_vec_slot, operand};
 use crate::state::{SharedState, State};
 
 impl Expansion<'_> {
-    pub(super) async fn prompt(
+    /// Boxed like a recursive part, so the prompt's child expansion never
+    /// enlarges the `part` poll frame that every parameter expansion pays for.
+    pub(super) fn prompt<'a>(
+        &'a mut self,
+        value: &'a str,
+        state: &'a SharedState,
+        depth: usize,
+    ) -> crate::exec::ResultFuture<'a, String> {
+        self.part_frame(move |expansion| expansion.expand_prompt(value, state, depth))
+    }
+
+    async fn expand_prompt(
         &mut self,
         value: &str,
         state: &SharedState,

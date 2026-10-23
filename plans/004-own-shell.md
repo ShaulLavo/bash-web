@@ -2410,6 +2410,32 @@ or case attributes, `@P` or indirect names. See
 [the behavior notes](../docs/parameter-transformation.md) and
 [the receipt](../docs/evidence/parameter-transformation.json).
 
+## Follow-up: `@P` prompt expansion corners, 2026-10-24
+
+Status: Approved. These are corners found in the review of PR #73 (scalar `${p@P}`). They
+are not scored cases yet. Each expected value below is a GNU Bash 5.3.15
+recording in `/work/reports/wave-20261022/shell/review73-takeover-r1-evidence/neighbor-oracle.json`,
+made before the host moved to 5.3.20. The "ours" values were observed at PR #73 head
+`e7e17257`. Fix them in `expand/prompt.rs`. Keep the prompt work in its own
+boxed frame (`Expansion::prompt`), outside the recursive `part` poll.
+
+- Errors inside prompt expansion must not abort. Bash prints the diagnostic, keeps
+  the unexpanded text and returns 0.
+  - `p='${missing:?oops}'; printf '<%s>\n' "${p@P}"; printf 'after=%s\n' "$?"`
+    gives `<${missing:?oops}>` and `after=0`. Ours exits 127.
+  - The same happens for `p='$((1/0))'` (ours exits 1).
+  - It also happens for `p='$missing'; set -u` (Bash `<$missing>`, `after=0`; ours exits 127).
+  - With `p='${x:=before}${missing:?oops}'`, the `x=before` assignment survives.
+- `$?` from a prompt command substitution must not leak:
+  `p='$(false)'; true; printf '<%s>\n' "${p@P}" "$?"` gives `<>` and `<0>`. Ours gives `<1>`.
+- `\D{...}` literal text must not be reparsed: `p='\D{plain$HOME}'` gives `<plain$HOME>`.
+  Ours gives `<plain/home/user>`. The cause is in `prompt.rs`, where the format text is pushed unprotected.
+- `\}` must keep its backslash: `p='\}'` gives `<\}>`. Ours gives `<}>`, because of the
+  operand `}` escape rule in `operand.rs`.
+- Unrecorded source differences, which need a 5.3.15 recording before any change: `\w`/`\W` read
+  `state.cwd`, while Bash reads `$PWD`. `\u`/`\h` read `USER`/`HOSTNAME`, while Bash uses
+  getpwuid/gethostname.
+
 ## Follow-up: all-zero and overflowing digit parameters, 2026-10-22
 
 Status: Approved. Fix this in the direct parameter adapter, not in indirection.

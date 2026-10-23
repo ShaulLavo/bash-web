@@ -1104,12 +1104,12 @@ impl Expansion<'_> {
         })
     }
 
-    fn part_frame<'a, F>(
+    fn part_frame<'a, T, F>(
         &'a mut self,
         build: impl FnOnce(&'a mut Self) -> F,
-    ) -> crate::exec::ResultFuture<'a, ()>
+    ) -> crate::exec::ResultFuture<'a, T>
     where
-        F: std::future::Future<Output = Result<(), Error>> + 'a,
+        F: std::future::Future<Output = Result<T, Error>> + 'a,
     {
         // Admitted scalar/pattern contexts must charge the actual recursive
         // future before boxing it. Legacy argv retains its separate accounting.
