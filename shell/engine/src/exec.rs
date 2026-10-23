@@ -145,6 +145,39 @@ impl Drop for StorageAllocation {
 
 pub(crate) type RetainedStorage = Rc<StorageAllocation>;
 
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ReaderLocation {
+    name: Option<Rc<ReaderName>>,
+    pub(crate) line_offset: usize,
+}
+
+#[derive(Debug)]
+struct ReaderName {
+    text: String,
+    _storage: StorageAllocation,
+}
+
+impl ReaderLocation {
+    pub(crate) fn file(name: String, scope: &Scope) -> Result<Self, i32> {
+        let bytes = name
+            .capacity()
+            .checked_add(size_of::<ReaderName>() + 2 * size_of::<usize>())
+            .ok_or(2)?;
+        let storage = scope.admit_storage(bytes)?;
+        Ok(Self {
+            name: Some(Rc::new(ReaderName {
+                text: name,
+                _storage: storage,
+            })),
+            line_offset: 0,
+        })
+    }
+
+    pub(crate) fn filename(&self) -> Option<&str> {
+        self.name.as_ref().map(|name| name.text.as_str())
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct Source {
     text: Rc<str>,

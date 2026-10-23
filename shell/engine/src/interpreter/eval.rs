@@ -122,6 +122,7 @@ async fn join_body(
 #[inline(never)]
 pub(super) fn run(
     args: Vec<String>,
+    line: Option<usize>,
     state: SharedState,
     fds: Descriptors,
     context: Context,
@@ -134,13 +135,14 @@ pub(super) fn run(
     }
     let evaluation = context.evaluation.clone();
     evaluation.reader_frame(
-        |scope| run_body(args, state, fds, context, scope),
+        |scope| run_body(args, line, state, fds, context, scope),
         Outcome::status,
     )
 }
 
 async fn run_body(
     mut args: Vec<String>,
+    line: Option<usize>,
     state: SharedState,
     fds: Descriptors,
     context: Context,
@@ -152,15 +154,100 @@ async fn run_body(
         .first()
         .is_some_and(|arg| arg.starts_with('-') && arg != "-")
     {
-        let diagnostic = b"/usr/bin/bash: eval: invalid option\n";
-        let status = command_builtin::diagnostic(&fds, &context, diagnostic).await;
-        return Outcome::status(status.err().unwrap_or(2));
+        return Diagnostic::new("eval", line, &fds, &context)
+            .usage(args.first().map(String::as_str))
+            .await;
     }
     let source = match join(args, &evaluation, &context).await {
         Ok(source) => source,
         Err(code) => return Outcome::status(code),
     };
+    let mut context = context;
+    context.reader.line_offset = context
+        .reader
+        .line_offset
+        .saturating_add(line.unwrap_or(1).saturating_sub(1));
     read(source, evaluation, "eval", state, fds, context).await
+}
+
+pub(super) struct Diagnostic<'a> {
+    name: &'a str,
+    line: Option<usize>,
+    fds: &'a Descriptors,
+    context: &'a Context,
+}
+
+impl<'a> Diagnostic<'a> {
+    pub(super) fn new(
+        name: &'a str,
+        line: Option<usize>,
+        fds: &'a Descriptors,
+        context: &'a Context,
+    ) -> Self {
+        Self {
+            name,
+            line: line.map(|line| line.saturating_add(context.reader.line_offset)),
+            fds,
+            context,
+        }
+    }
+
+    async fn write(&self, bytes: &[u8]) -> Result<(), i32> {
+        command_builtin::diagnostic(self.fds, self.context, bytes).await
+    }
+
+    async fn prefix(&self) -> Result<(), i32> {
+        let filename = self.context.reader.filename().unwrap_or("/usr/bin/bash");
+        self.write(filename.as_bytes()).await?;
+        self.write(b": ").await?;
+        if let Some(line) = self.line {
+            self.write(b"line ").await?;
+            self.write(line.to_string().as_bytes()).await?;
+            self.write(b": ").await?;
+        }
+        Ok(())
+    }
+
+    pub(super) async fn failure(&self, subjects: &[&str], reason: &str, code: i32) -> Outcome {
+        let result = async {
+            self.prefix().await?;
+            for subject in subjects {
+                self.write(subject.as_bytes()).await?;
+                self.write(b": ").await?;
+            }
+            self.write(reason.as_bytes()).await?;
+            self.write(b"\n").await
+        }
+        .await;
+        Outcome::status(result.err().unwrap_or(code))
+    }
+
+    pub(super) async fn usage(&self, option: Option<&str>) -> Outcome {
+        let result = self.usage_body(option).await;
+        Outcome::status(result.err().unwrap_or(2))
+    }
+
+    async fn usage_body(&self, option: Option<&str>) -> Result<(), i32> {
+        self.prefix().await?;
+        self.write(self.name.as_bytes()).await?;
+        self.write(b": ").await?;
+        if let Some(option) = option {
+            self.write(&option.as_bytes()[..2.min(option.len())])
+                .await?;
+            self.write(b": invalid option\n").await?;
+        } else {
+            self.write(b"filename argument required\n").await?;
+        }
+        self.write(self.name.as_bytes()).await?;
+        self.write(b": usage: ").await?;
+        self.write(self.name.as_bytes()).await?;
+        self.write(if self.name == "eval" {
+            b" [arg ...]\n"
+        } else {
+            b" [-p path] filename [arguments]\n"
+        })
+        .await
+    }
 }
 
 pub(super) async fn read(

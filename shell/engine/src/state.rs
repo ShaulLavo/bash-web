@@ -118,6 +118,7 @@ pub(crate) fn getopts_number(value: &str) -> i32 {
 
 #[derive(Clone, Debug)]
 pub struct StoredFunction {
+    pub(crate) reader: crate::exec::ReaderLocation,
     pub body: Rc<Command>,
     pub(crate) storage: Option<crate::exec::RetainedStorage>,
 }
@@ -146,6 +147,7 @@ pub struct State {
     pub extglob: bool,
     /// Remove unmatched unquoted pathname patterns instead of keeping them.
     pub nullglob: bool,
+    pub sourcepath: bool,
     /// `set -f`: no pathname expansion of unquoted fields.
     pub noglob: bool,
     pub lastpipe: bool,
@@ -192,6 +194,7 @@ impl Default for State {
             inherit_errexit: false,
             extglob: false,
             nullglob: false,
+            sourcepath: true,
             noglob: false,
             lastpipe: false,
             monitor: false,
@@ -387,6 +390,7 @@ impl State {
             inherit_errexit: state.inherit_errexit,
             extglob: state.extglob,
             nullglob: state.nullglob,
+            sourcepath: state.sourcepath,
             noglob: state.noglob,
             lastpipe: state.lastpipe,
             monitor: state.monitor,
@@ -2071,6 +2075,7 @@ impl SourceFrame {
         } else {
             Some(Self::replace(&mut shell, args)?)
         };
+        shell.positional_set = false;
         shell.source_calls += 1;
         drop(shell);
         Ok(Self { state, positional })
@@ -2086,7 +2091,6 @@ impl SourceFrame {
 
     fn replace(shell: &mut State, args: Vec<String>) -> Result<SourcePositionals, i32> {
         let memory = shell.admit_positionals(&args)?;
-        shell.positional_set = false;
         Ok(SourcePositionals {
             args: std::mem::replace(&mut shell.positional, args),
             memory: std::mem::replace(&mut shell.positional_memory, memory),
@@ -2748,6 +2752,7 @@ mod tests {
                 StoredFunction {
                     body: body.clone(),
                     storage: None,
+                    reader: crate::exec::ReaderLocation::default(),
                 },
             );
             source.variables.insert("v".into(), "caller".into());

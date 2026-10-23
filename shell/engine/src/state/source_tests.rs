@@ -107,7 +107,10 @@ fn source_frame_future_drop_restores_arguments_and_refunds_storage() {
 fn source_frame_without_arguments_resets_an_earlier_set_marker() {
     let state = source_state(&["outer"], None);
     let outer = SourceFrame::enter(state.clone(), vec!["supplied".into()]).unwrap();
-    state.borrow_mut().replace_positional(vec!["changed".into()]).unwrap();
+    state
+        .borrow_mut()
+        .replace_positional(vec!["changed".into()])
+        .unwrap();
     let inner = SourceFrame::enter(state.clone(), Vec::new()).unwrap();
     inner.finish();
     assert_eq!(state.borrow().positional(), &["changed"]);
@@ -120,8 +123,34 @@ fn source_frame_without_arguments_keeps_its_own_set_marker() {
     let state = source_state(&["outer"], None);
     let outer = SourceFrame::enter(state.clone(), vec!["supplied".into()]).unwrap();
     let inner = SourceFrame::enter(state.clone(), Vec::new()).unwrap();
-    state.borrow_mut().replace_positional(vec!["changed".into()]).unwrap();
+    state
+        .borrow_mut()
+        .replace_positional(vec!["changed".into()])
+        .unwrap();
     inner.finish();
     outer.finish();
     assert_eq!(state.borrow().positional(), &["changed"]);
+}
+
+#[test]
+fn source_reader_filename_is_admitted_shared_and_refunded() {
+    let memory = StorageBudget::new(1024);
+    let scope = crate::exec::Scope::new(1024, memory.clone(), StorageBudget::new(1024));
+    let reader = crate::exec::ReaderLocation::file("dir/lib".into(), &scope).unwrap();
+    let used = memory.observation().0;
+    assert!(used > 0);
+    let saved = reader.clone();
+    drop(reader);
+    assert_eq!(memory.observation().0, used);
+    assert_eq!(saved.filename(), Some("dir/lib"));
+    drop(saved);
+    assert_eq!(memory.observation().0, 0);
+}
+
+#[test]
+fn source_reader_filename_admission_failure_does_not_retain_storage() {
+    let memory = StorageBudget::new(0);
+    let scope = crate::exec::Scope::new(1024, memory.clone(), StorageBudget::new(1024));
+    assert!(crate::exec::ReaderLocation::file("dir/lib".into(), &scope).is_err());
+    assert_eq!(memory.observation().0, 0);
 }

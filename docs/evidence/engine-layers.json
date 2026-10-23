@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "b8a1fa79abaf1d27b49a34882af5dbb90aa1939f77ef843e90ceba9267181078",
+    "engineSourceSha256": "6a966b2b6ccd5aec2c6fadec755a7352269fa0de71bcf709d299f7803ffdc589",
     "binaryBuild": null
   },
   "contract": {
@@ -407,7 +407,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 771,
+        "line": 779,
         "column": 39
       }
     },
@@ -567,7 +567,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 1615,
+        "line": 1617,
         "column": 33
       }
     },
@@ -897,7 +897,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter/function_names.rs",
-        "line": 207,
+        "line": 208,
         "column": 20
       }
     },
@@ -907,7 +907,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3805,
+        "line": 3809,
         "column": 25
       }
     },
@@ -917,7 +917,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 5118,
+        "line": 5124,
         "column": 17
       }
     },
@@ -937,7 +937,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3791,
+        "line": 3795,
         "column": 17
       }
     },
@@ -947,7 +947,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3791,
+        "line": 3795,
         "column": 31
       }
     },
@@ -1047,7 +1047,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 997,
+        "line": 1001,
         "column": 63
       }
     },
@@ -1057,7 +1057,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 2131,
+        "line": 2135,
         "column": 9
       }
     }

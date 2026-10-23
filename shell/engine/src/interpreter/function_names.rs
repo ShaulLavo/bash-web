@@ -32,6 +32,7 @@ pub(super) async fn declare(
         StoredFunction {
             body: Rc::new(*function.body),
             storage: context.evaluation.retained(),
+            reader: context.reader.clone(),
         },
     );
     Outcome::status(0)

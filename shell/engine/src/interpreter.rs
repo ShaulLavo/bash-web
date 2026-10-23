@@ -270,6 +270,7 @@ struct Core {
 pub(crate) struct Context {
     core: Rc<Core>,
     source: crate::exec::Source,
+    reader: crate::exec::ReaderLocation,
     pub cancel: Cancel,
     // The invoking foreground/background command, independent of nested scopes.
     lifetime: (Cancel, Rc<Cell<Option<i32>>>),
@@ -752,6 +753,7 @@ impl Session {
         let context = Context {
             core: self.core.clone(),
             source: crate::exec::Source::root(source),
+            reader: crate::exec::ReaderLocation::default(),
             lifetime: (cancel.clone(), signal.clone()),
             cancel,
             signal,
@@ -2234,6 +2236,7 @@ async fn launch_background(
     let child_context = Context {
         core: context.core.clone(),
         source: context.source.clone(),
+        reader: context.reader.clone(),
         lifetime: (cancel.clone(), signal.clone()),
         cancel: cancel.clone(),
         signal: signal.clone(),
@@ -3070,6 +3073,7 @@ async fn dispatch_simple_command_body(
         frame.prefixes(assigned)?;
         let context = Context {
             loop_depth: 0,
+            reader: body.reader.clone(),
             evaluation: context
                 .evaluation
                 .function_body()
@@ -3114,13 +3118,13 @@ async fn dispatch_simple_command_body(
         if !assigned.is_empty() {
             return Err(2);
         }
-        return Ok(eval::run(args, state, fds, context).await);
+        return Ok(eval::run(args, line, state, fds, context).await);
     }
     if handler == Some(commands::Handler::Source) {
         let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
             .await
             .map_err(admission_status)?;
-        return Ok(source::run(&name, args, state, fds, context).await);
+        return Ok(source::run(&name, args, line, state, fds, context).await);
     }
     if handler == Some(commands::Handler::Type) {
         let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
@@ -3809,6 +3813,7 @@ mod scope_tests {
             ),
             core: session.core.clone(),
             source: crate::exec::Source::root(""),
+            reader: crate::exec::ReaderLocation::default(),
             lifetime: (Cancel::new(), Rc::new(Cell::new(None))),
             cancel: Cancel::new(),
             signal: Rc::new(Cell::new(None)),
@@ -4326,6 +4331,7 @@ mod residual_review_tests {
                 ),
                 core,
                 source: crate::exec::Source::root(""),
+                reader: crate::exec::ReaderLocation::default(),
                 lifetime: (cancel.clone(), signal.clone()),
                 cancel,
                 signal,
