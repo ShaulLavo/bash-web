@@ -2855,3 +2855,106 @@ claim a frozen gain without a qualified replay. Exact scripts, bytes and setup
 failures are retained in
 `/work/reports/wave-20261022/shell/review60-main241-integration-r3/non-blocking-observations.md`
 and sibling `observations.json` / `small-observations.json`.
+
+## Native `-c` missing-parent redirection, 2026-10-22
+
+Status: Approved follow-up. Owner: BUILTINS coordinator, outside the trap
+registration family. Fix the native fixture filesystem before using native
+controls to judge missing-parent redirection failures.
+
+At source `6609e3cb0b8b5ababcca7ba0ee0269f09492d337`, run:
+
+```sh
+/work/tmp/bash-web-builtins-trap-exit-review-6609e3c/native/shell-engine -c ': > /nonexistent/dir/x; echo $?'
+/usr/bin/bash -c ': > /nonexistent/dir/x; echo $?'
+```
+
+Both processes exit 0. Native stdout is `0\n` with empty stderr. GNU Bash
+5.3.15 stdout is `1\n`, with a missing-directory diagnostic. The same script
+through production Waffle prints `1\n`. Reproduced in the independent trap
+review and again in the correction lane, without any trap command, so this is
+not evidence of trap registration behavior.
+
+Pinned native SHA-256 is
+`915e44c2c92591245ef33a62f3d8c46650f4765074ee112af421fe1d0878ee4e`.
+Production Waffle uses `shell-runtime.wasm` SHA-256
+`eb435393f9ff7a0b6d596497f6a7fd10080c94d4195a1c50efbf5513bfc40aaa`
+and the unchanged launch Node bundles. Bash's full version is
+`GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)`.
+Its binary SHA-256 is
+`575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5`.
+
+Suspected cause: `compat.rs:492` installs `MemoryFs` for native `-c`, and
+`io.rs:733` creates a missing file without checking its parent directory.
+`ReadOnlyMount::open` delegates to that method. This rules out trap dispatch
+and action execution. Add a missing-parent fixture and preserve successful
+opens, directory errors, permissions and the production-Waffle control when
+repairing it. Do not change frozen oracle identities or scoring to hide it.
+
+Reproducer and exact observations are in
+`/work/reports/wave-20261022/shell/trap-repair-r1-evidence/redirect-control.ts`
+and `redirect-before.json`. This lane leaves `main.rs`, `compat.rs` and `io.rs` unchanged. The coordinator owns the follow-up and retained evidence until it
+is repaired and verified.
+
+## Re-ignored inherited EXIT registration, 2026-10-22
+
+Status: Approved follow-up. Owner: BUILTINS coordinator. Separate from the
+nested-parent trap correction, with no trap action execution needed. At
+`535197097ea359ee15b2e73bdf0a944b41df0c82`, local GNU Bash 5.3.15
+and the guest differ on these exact registration controls:
+
+```bash
+trap '' EXIT; while read -r l; do echo "got:$l"; done < <(trap '' EXIT; trap -p EXIT); trap - EXIT
+trap '' EXIT; (trap : HUP; trap - EXIT; trap '' EXIT; trap -p EXIT); trap - EXIT
+```
+
+Both Bash scripts exit0 with no stdout. The guest prints
+`got:trap -- '' EXIT\n` for the first and `trap -- '' EXIT\n` for the
+second. The review found three such quirk rows. Setting a handler before the
+new ignore, or using a nested ordinary child, already matches. The suspected
+state belongs to ignored EXIT provenance after the inherited binding is cleared,
+not action execution or general process-substitution inheritance.
+
+Independent native and production-Waffle observations and exact scripts are
+retained in `/work/reports/wave-20261022/shell/review63-trap-opus-r1-evidence/`
+under `probe1.json`, `probe2.json`, `probe3.json` and `probe-categories.json`.
+The nested-parent correction deliberately does not encode this extra state.
+Record a narrow failing-first fixture before fixing it and preserve the173
+registration controls. Do not claim that any new ignored EXIT always stays
+visible in a process substitution. No frozen exclusion or scoring change.
+
+## Function-name grammar prerequisite, 2026-10-22
+
+Status: Approved. Owner: CONTROL follow-up after literal declaration-name validation.
+
+The current parser rejects `f\oo() { :; }`, `'foo'() { :; }` and `"foo"() { :; }`
+with syntax status 2 before producing `Command::Function`. GNU Bash 5.3.15 instead
+executes these declarations as failures with status 1 and an identifier diagnostic.
+For the escaped POSIX form, `parser/mod.rs::command_start` requires
+`current_escapes.is_empty()` before considering `FunctionPosix`; fully quoted
+names do not enter the `Token::Word` branch. `function f\oo { :; }` already reaches
+the function parser and now correctly fails at execution. This PR intentionally
+changes neither grammar nor token admission.
+
+Reproduce strictly after the toolchain setup in `docs/development.md`, with
+`npm run build:shell` then `npm run test:shell:function-names:pending`. The explicit pending recipe must
+fail until its recorded Bash comparisons pass. It is separate from the ordinary
+blocking scoreboard recipe, with no skipped or relaxed assertions. Expected bytes
+and exact Bash version are in `scripts/fixtures/shell-function-names-pending.json`.
+Before/after evidence, including the original escaped-POSIX failure, is retained in
+`/work/reports/bash-web/hill-climb/control/function-names/{before,after,pending}.log`.
+The follow-up must admit these names in the owning grammar, keep dead definitions
+inert, and reuse the execution-time validator rather than adding a parse-time
+identifier rejection. No new frozen case, exclusion or oracle change is authorized.
+
+### Alias runtime prerequisite
+
+Status: Approved. The parser's injected-alias function-name and print controls pass,
+but this base has no `alias` builtin and rejects `shopt -s expand_aliases`. End-to-end
+alias declaration controls therefore remain strict pending comparisons under
+`npm run test:shell:function-names:aliases-pending`, using
+`scripts/fixtures/shell-function-names-aliases-pending.json`. Their exact failures
+are retained in the function-name report's `verify6.log` and `aliases-pending.log`.
+This is a separate builtin prerequisite, not permission to add alias, shopt or
+function-name grammar in the literal-name validation change. Keep parser alias
+coverage and reuse its raw-token provenance when runtime aliases are implemented.

@@ -1,5 +1,6 @@
 //! Original shell state. Open descriptors and filesystem objects live outside
 //! this value: isolated shell environments copy rules/state, never byte streams.
+pub(crate) mod traps;
 use crate::{
     exec::{Error, Work},
     executor::Cancel,
@@ -133,6 +134,7 @@ pub struct State {
     directories: DirectoryStack,
     /// Function bodies are immutable. Isolated shells copy bindings, not ASTs.
     functions: BTreeMap<String, StoredFunction>,
+    pub(crate) traps: traps::Traps,
     status: i32,
     pipestatus: Vec<i32>,
     pub pipefail: bool,
@@ -179,6 +181,7 @@ impl Default for State {
             cwd: "/home/guest".into(),
             directories: DirectoryStack::default(),
             functions: BTreeMap::new(),
+            traps: traps::Traps::default(),
             status: 0,
             pipestatus: vec![0],
             pipefail: false,
@@ -371,6 +374,7 @@ impl State {
             cwd,
             directories,
             functions,
+            traps: state.traps.inherited(),
             status: state.status,
             pipestatus,
             pipefail: state.pipefail,

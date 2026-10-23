@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "bash": "5.3.15(1)-release",
+  "cases": [
+    {
+      "script": "f\\oo() { echo BAD_BODY; }; printf 'status=%s x=<%s>\\n' \"$?\" \"${x-unset}\"",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEgeD08dW5zZXQ+Cg==",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgZlxvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "'foo'() { :; }; echo status=$?",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgJ2ZvbycnOiBub3QgYSB2YWxpZCBpZGVudGlmaWVyCg=="
+      }
+    },
+    {
+      "script": "\"foo\"() { :; }; echo status=$?",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "c3RhdHVzPTEK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBgImZvbyInOiBub3QgYSB2YWxpZCBpZGVudGlmaWVyCg=="
+      }
+    }
+  ]
+}
