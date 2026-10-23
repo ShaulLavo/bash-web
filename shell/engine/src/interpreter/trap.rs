@@ -15,7 +15,21 @@ impl Drop for Running {
     }
 }
 
-pub(super) async fn run(
+#[inline(never)]
+pub(super) fn run(
+    event: Event,
+    result: Outcome,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> eval::Frame<'static, Outcome> {
+    context.evaluation.clone().frame(
+        run_body(event, result, state, fds, context),
+        Outcome::status,
+    )
+}
+
+async fn run_body(
     event: Event,
     result: Outcome,
     state: SharedState,
