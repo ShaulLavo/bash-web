@@ -390,6 +390,12 @@
       "status": 0,
       "stdout": "c3RhdHVzPTIK",
       "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBtaXNzaW5nOiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5Ci91c3IvYmluL2Jhc2g6IGxpbmUgMTogZXZhbDogLXg6IGludmFsaWQgb3B0aW9uCmV2YWw6IHVzYWdlOiBldmFsIFthcmcgLi4uXQo="
+    },
+    {
+      "script": "mkdir -p dir; echo 'source missing; eval -x' > dir/lib; PATH=dir . lib; echo status=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzPTIK",
+      "stderr": "ZGlyL2xpYjogbGluZSAxOiBtaXNzaW5nOiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5CmRpci9saWI6IGxpbmUgMTogZXZhbDogLXg6IGludmFsaWQgb3B0aW9uCmV2YWw6IHVzYWdlOiBldmFsIFthcmcgLi4uXQo="
     }
   ]
 }
