@@ -1129,7 +1129,9 @@ fn execute(
         return futures::future::Either::Left(futures::future::ready(Outcome::status(130)));
     }
     if state.borrow().noexec {
-        return futures::future::Either::Left(futures::future::ready(Outcome::status(0)));
+        // A skipped command leaves `$?` at the last status that actually ran.
+        let status = state.borrow().status();
+        return futures::future::Either::Left(futures::future::ready(Outcome::status(status)));
     }
     let context = match context.evaluation.descend() {
         Ok(evaluation) => Context {
@@ -2183,7 +2185,11 @@ async fn launch_background(
     }
     let mut work = expansion_work(context.limits());
     let child = match State::snapshot(state, &context.cancel, &mut work).await {
-        Ok(child) => child.shared(),
+        Ok(mut child) => {
+            // An asynchronous child is never an interactive shell.
+            child.interactive = false;
+            child.shared()
+        }
         Err(error) => return expansion_failure(error.into(), fds, context).await,
     };
     let job = JobId(context.core.allocate_id());

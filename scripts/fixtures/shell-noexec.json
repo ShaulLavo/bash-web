@@ -307,6 +307,78 @@
         "stdout": "",
         "stderr": ""
       }
+    },
+    {
+      "id": "control-28",
+      "script": "! set -n; echo BAD",
+      "bash": {
+        "status": 1,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-29",
+      "script": "{ ! set -n; }; echo BAD",
+      "bash": {
+        "status": 1,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-30",
+      "script": "f() { set -n; }; ! f; echo BAD",
+      "bash": {
+        "status": 1,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-31",
+      "script": "f() { ! set -n; echo BAD; }; f; echo BAD",
+      "bash": {
+        "status": 1,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-32",
+      "script": "set -e; ( ! set -n; echo BAD ); echo after",
+      "bash": {
+        "status": 1,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-33",
+      "script": "x=$(! set -n; echo BAD); echo \"$?\"",
+      "bash": {
+        "status": 0,
+        "stdout": "MQo=",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-34",
+      "script": "( ! set -n; echo BAD ); echo \"$?\"",
+      "bash": {
+        "status": 0,
+        "stdout": "MQo=",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "control-35",
+      "script": "for ((i=0;i<1;1/0)); do set -n; done 2>/dev/null; echo BAD",
+      "bash": {
+        "status": 1,
+        "stdout": "",
+        "stderr": ""
+      }
     }
   ]
 }
