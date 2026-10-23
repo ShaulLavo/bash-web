@@ -4651,7 +4651,7 @@ impl<'a> Parser<'a> {
                     inner_parser.started_at = self.started_at;
                     let mut commands = Vec::new();
                     let result = inner_parser
-                        .parse_script_into(&mut commands)
+                        .parse_script_into(&mut commands, false)
                         .map(|()| commands.into_iter().map(|(cmd, _)| cmd).collect::<Vec<_>>());
                     let raw = Some(format!(
                         "{}({cmd_src}){}",
