@@ -26,6 +26,8 @@ pub(crate) mod eval;
 mod file_substitution;
 mod function_names;
 mod indexed;
+mod redirect;
+use redirect::Descriptors;
 mod select;
 #[cfg(test)]
 mod trap_tests;
@@ -42,6 +44,8 @@ pub struct Limits {
     pub arguments: usize,
     pub pipeline_stages: usize,
     pub jobs: usize,
+    /// Shell policy for live logical descriptors, including named allocations.
+    pub descriptors: usize,
     /// Explicit host call-depth policy; usize::MAX means no depth policy.
     /// A positive FUNCNEST binding can impose a tighter dynamic limit.
     pub function_depth: usize,
@@ -60,6 +64,7 @@ impl Default for Limits {
             arguments: 65_536,
             pipeline_stages: 128,
             jobs: 128,
+            descriptors: 1024,
             function_depth: usize::MAX,
             execution_bytes: 100_000_000,
             line_bytes: 64 * 1024,
@@ -150,7 +155,6 @@ impl From<i32> for CommandError {
     }
 }
 
-type Descriptors = Rc<RefCell<FdTable>>;
 const TASK_METADATA_BYTES: usize = 4096;
 /// Shared forwarding keeps descendants attached when several isolated scopes
 /// finish in a different order. Captured parent handles follow later transfers.
@@ -670,7 +674,7 @@ impl Session {
                 eval_storage: crate::exec::StorageBudget::new(limits.expansion_bytes),
                 execution_storage: memory,
                 limits,
-                descriptors: Rc::new(RefCell::new(FdTable::default())),
+                descriptors: Descriptors::new(FdTable::default()),
                 jobs: RefCell::new(BTreeMap::new()),
                 residuals: RefCell::new(BTreeMap::new()),
                 next: Cell::new(1),
@@ -1299,7 +1303,7 @@ async fn pipeline_command(
         let stage_fds = if count == 1 {
             fds.clone()
         } else {
-            Rc::new(RefCell::new(stage_fds))
+            Descriptors::new(stage_fds)
         };
         let parent_scope = context.scope.clone();
         tasks.push(context.core.executor.spawn(pipeline_stage(
@@ -1412,19 +1416,6 @@ async fn compound_command(
     fds: Descriptors,
     context: Context,
 ) -> Outcome {
-    // Without compound redirections, `exec` inside a branch or loop changes
-    // the surrounding shell's bindings. A redirected compound restores its
-    // caller's table when its body finishes, including after `exec`.
-    let fds = if redirs.is_empty() {
-        fds
-    } else {
-        let table = fds.borrow().clone();
-        // Shadowing alone retains the incoming table until this body returns.
-        // A redirected background loop must release its old capture writer
-        // before running, even if the loop itself never finishes.
-        drop(fds);
-        Rc::new(RefCell::new(table))
-    };
     let mut work = substitution_work(&context, &fds);
     let fds = match command_redirects(&redirs, &state, fds, &context, &mut work).await {
         Err(outcome) => return outcome,
@@ -1685,7 +1676,7 @@ fn loop_arithmetic<'a>(
                 return Outcome::status(130);
             }
             let table = fds.borrow().clone();
-            let fds = Rc::new(RefCell::new(table));
+            let fds = Descriptors::new(table);
             let mut work = substitution_work(&context, &fds);
             let result = match cache {
                 Some(cache) => {
@@ -2034,7 +2025,7 @@ async fn subshell(
         cancel: child_cancel.clone(),
         ..context.isolated()
     };
-    let child_fds = Rc::new(RefCell::new(fds.borrow().clone()));
+    let child_fds = Descriptors::new(fds.borrow().clone());
     drop(fds);
     let child = context.core.executor.spawn(async move {
         work.substitutions = Some(Substitutions {
@@ -2245,7 +2236,7 @@ async fn launch_background(
         loop_depth: 0,
         ignore_errexit: context.ignore_errexit,
     };
-    let fds = Rc::new(RefCell::new(fds.borrow().clone()));
+    let fds = Descriptors::new(fds.borrow().clone());
     let parent_scope = context.scope.clone();
     let join = context.core.executor.spawn(async move {
         let mut processes = ProcessGroup::new(child_context.core.host.clone(), group)
@@ -2403,7 +2394,7 @@ impl Substitutions {
         }
         let mut table = self.fds.borrow().clone();
         table.insert(1, writer);
-        let fds = Rc::new(RefCell::new(table));
+        let fds = Descriptors::new(table);
         let cancel = Cancel::new();
         let group = self.context.core.host.allocate_background_group();
         let signal = Rc::new(Cell::new(None));
@@ -2549,7 +2540,7 @@ impl Substitutions {
             table.insert(0, reader);
             writer
         };
-        let fds = Rc::new(RefCell::new(table));
+        let fds = Descriptors::new(table);
         let child = state;
         let cancel = Cancel::new();
         let group = core.host.allocate_background_group();
@@ -2782,8 +2773,12 @@ async fn prepare_simple_command_body(
     let mut bytes = 0usize;
     let mut budget = Budget::default();
     // Process substitutions open descriptors for this command only.
-    let fds = Rc::new(RefCell::new(fds.borrow().clone()));
     let mut work = substitution_work(context, &fds);
+    let fds = fds.redirected(context, &mut work).await?;
+    work.substitutions
+        .as_mut()
+        .expect("substitution runner")
+        .fds = fds.clone();
     let mut argv = expand::fields(
         &simple.name,
         state,
@@ -2847,7 +2842,23 @@ async fn prepare_simple_command_body(
             None,
         )
         .await?;
-        let fds = redirects(&simple.redirects, state, fds, context, &mut work, Some(1)).await?;
+        let named = simple
+            .redirects
+            .iter()
+            .any(|redirect| redirect.fd_var.is_some());
+        let reader = if named {
+            State::snapshot(state, &context.cancel, &mut work)
+                .await?
+                .shared()
+        } else {
+            state.clone()
+        };
+        let fds = if named {
+            Descriptors::new(fds.borrow().clone())
+        } else {
+            fds
+        };
+        let fds = redirects(&simple.redirects, &reader, fds, context, &mut work, Some(1)).await?;
         work.substitutions = None;
         return Ok(PreparedCommand {
             line,
@@ -3564,6 +3575,7 @@ async fn redirect_target(
 #[inline(never)]
 fn duplicate_descriptor<'a>(
     target: &'a str,
+    label: Option<&'a str>,
     line: Option<usize>,
     fds: &'a Descriptors,
     context: &'a Context,
@@ -3576,7 +3588,14 @@ fn duplicate_descriptor<'a>(
             for (offset, byte) in target.bytes().enumerate() {
                 work.checkpoint(&context.cancel).await?;
                 if !byte.is_ascii_digit() {
-                    return Err(2.into());
+                    return Err(redirect::diagnostic(
+                        line,
+                        label.unwrap_or(target),
+                        "ambiguous redirect",
+                        fds,
+                        context,
+                    )
+                    .await);
                 }
                 if byte != b'0' && first_nonzero.is_none() {
                     first_nonzero = Some(offset);
@@ -3586,14 +3605,24 @@ fn duplicate_descriptor<'a>(
                     .and_then(|value| value.checked_add(u32::from(byte - b'0')));
             }
             if target.is_empty() {
-                return Err(2.into());
+                return Err(redirect::diagnostic(
+                    line,
+                    label.unwrap_or(target),
+                    "ambiguous redirect",
+                    fds,
+                    context,
+                )
+                .await);
             }
             if let Some(endpoint) = source.and_then(|source| fds.borrow().get(source)) {
                 return Ok(endpoint);
             }
             let stderr = fds.borrow().get(2);
             if let Some(stderr) = stderr {
-                let source = &target.as_bytes()[first_nonzero.unwrap_or(target.len() - 1)..];
+                let source = match label.filter(|label| label.contains('$')) {
+                    Some(label) => label.as_bytes(),
+                    None => &target.as_bytes()[first_nonzero.unwrap_or(target.len() - 1)..],
+                };
                 // A bounded stack buffer handles the line number; the possibly
                 // large target is borrowed and streamed without allocation.
                 let mut digits = [0u8; std::mem::size_of::<usize>() * 3];
@@ -3654,7 +3683,7 @@ async fn redirects(
     if redirs.is_empty() {
         return Ok(fds);
     }
-    let fds = Rc::new(RefCell::new(fds.borrow().clone()));
+    let fds = fds.redirected(context, work).await?;
     // Target substitutions observe the redirections already applied, and
     // process substitutions insert their descriptors into this same table.
     if let Some(runner) = &mut work.substitutions {
@@ -3667,9 +3696,6 @@ async fn redirects(
     let mut reader_state: Option<SharedState> = None;
     for redirect in redirs {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-        if redirect.fd_var.is_some() {
-            return Err(2.into());
-        }
         let reader_status = if matches!(
             redirect.kind,
             RedirectKind::HereDoc | RedirectKind::HereDocStrip
@@ -3707,73 +3733,7 @@ async fn redirects(
                     reader_status,
                 )
             })?;
-        let input = matches!(
-            redirect.kind,
-            RedirectKind::Input
-                | RedirectKind::DupInput
-                | RedirectKind::HereDoc
-                | RedirectKind::HereDocStrip
-                | RedirectKind::HereString
-                | RedirectKind::ReadWrite
-        );
-        let fd = redirect.fd.unwrap_or(if input { 0 } else { 1 });
-        let fd = u32::try_from(fd).map_err(|_| 2)?;
-        match redirect.kind {
-            RedirectKind::DupInput | RedirectKind::DupOutput => {
-                if target == "-" {
-                    fds.borrow_mut().remove(fd);
-                } else {
-                    let endpoint =
-                        duplicate_descriptor(&target, redirect.expansion_line, &fds, context, work)
-                            .await?;
-                    fds.borrow_mut().insert(fd, endpoint);
-                }
-            }
-            RedirectKind::HereDoc | RedirectKind::HereDocStrip | RedirectKind::HereString => {
-                work.admit_storage(io::buffered_input_metadata_bytes())?;
-                // The parser already removed `<<-` tabs; the body expanded
-                // like a double-quoted word. A here-string gains a newline.
-                let mut text = target;
-                if redirect.kind == RedirectKind::HereString {
-                    work.admit_storage(1)?;
-                    text.try_reserve_exact(1).map_err(|_| 2)?;
-                    text.push('\n');
-                }
-                fds.borrow_mut()
-                    .insert(fd, io::Endpoint::bytes(text.into_bytes()));
-            }
-            RedirectKind::Input
-            | RedirectKind::Output
-            | RedirectKind::Clobber
-            | RedirectKind::Append
-            | RedirectKind::OutputBoth
-            | RedirectKind::ReadWrite => {
-                let path = absolute(&state.borrow().cwd, &target);
-                let read_write = redirect.kind == RedirectKind::ReadWrite;
-                let options = OpenOptions {
-                    read: input,
-                    write: !input || read_write,
-                    create: !input || read_write,
-                    truncate: matches!(
-                        redirect.kind,
-                        RedirectKind::Output | RedirectKind::Clobber | RedirectKind::OutputBoth
-                    ),
-                    append: redirect.kind == RedirectKind::Append,
-                };
-                let opening = io::open_path(&path, &fds.borrow(), &options)
-                    .map_err(|error| error.status())?;
-                let endpoint = context
-                    .cancel
-                    .run(opening.open(context.fs(), &options))
-                    .await
-                    .map_err(|_| 130)?
-                    .map_err(|error| error.status())?;
-                if redirect.kind == RedirectKind::OutputBoth {
-                    fds.borrow_mut().insert(2, endpoint.clone());
-                }
-                fds.borrow_mut().insert(fd, endpoint);
-            }
-        }
+        redirect::apply(redirect, target, state, &fds, context, work).await?;
     }
     Ok(fds)
 }
@@ -3872,7 +3832,9 @@ mod scope_tests {
             let mut work = expand::Work::new(65536, 0, 16);
             let outcome = finish_replay(async {
                 let error =
-                    match duplicate_descriptor(&target, Some(2), &fds, &context, &mut work).await {
+                    match duplicate_descriptor(&target, None, Some(2), &fds, &context, &mut work)
+                        .await
+                    {
                         Ok(_) => panic!("descriptor must be closed"),
                         Err(error) => error,
                     };
@@ -3900,7 +3862,8 @@ mod scope_tests {
         let mut work = expand::Work::new(65536, 0, 16);
         let outcome = finish_replay(async {
             let error =
-                match duplicate_descriptor(&target, Some(1), &fds, &context, &mut work).await {
+                match duplicate_descriptor(&target, None, Some(1), &fds, &context, &mut work).await
+                {
                     Ok(_) => panic!("cancelled validation must not return a descriptor"),
                     Err(error) => error,
                 };

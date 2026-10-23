@@ -183,6 +183,48 @@
       "status": 1,
       "stdout": "MSBbXQo=",
       "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBmZDogYW1iaWd1b3VzIHJlZGlyZWN0Cg=="
+    },
+    {
+      "id": "nested-temporary-scopes",
+      "script": "f() { local fd; exec {fd}>f; printf first >&$fd; }; f >ignored; { exec {other}>g; printf second >&$other; } >ignored; printf third >&10; cat f g; echo ${fd-unset}",
+      "status": 0,
+      "stdout": "Zmlyc3RzZWNvbmR1bnNldAo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAxMDogQmFkIGZpbGUgZGVzY3JpcHRvcgo="
+    },
+    {
+      "id": "ordinary-close-persists",
+      "script": "exec {fd}>f; : {fd}>&-; printf hi >&$fd; echo status=$?; exec {x}>g; echo $x",
+      "status": 0,
+      "stdout": "c3RhdHVzPTAKMTEK",
+      "stderr": ""
+    },
+    {
+      "id": "numeric-close-of-named",
+      "script": "exec {fd}>f; exec 10>&-; exec {next}>g; echo $fd:$next",
+      "status": 0,
+      "stdout": "MTA6MTAK",
+      "stderr": ""
+    },
+    {
+      "id": "array-index-expression",
+      "script": "i=1; a=(x y); exec {a[i++]}>f; echo \"${a[@]}:$i\"; exec {a[1]}>&-; exec {b}>g; echo $b",
+      "status": 0,
+      "stdout": "eCAxMDoyCjEwCg==",
+      "stderr": ""
+    },
+    {
+      "id": "named-append-readwrite",
+      "script": "printf base >f; exec {a}>>f; printf end >&$a; exec {b}<>f; read -n4 x <&$b; printf XYZ >&$b; cat f; echo \":$x\"",
+      "status": 0,
+      "stdout": "YmFzZVhZWjpiYXNlCg==",
+      "stderr": ""
+    },
+    {
+      "id": "partial-redirected-errors",
+      "script": "exec {fd}>f; echo hi 2>err >&$fd </no/such/path; cat err; echo $fd",
+      "status": 0,
+      "stdout": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAvbm8vc3VjaC9wYXRoOiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5CjEwCg==",
+      "stderr": ""
     }
   ]
 }

@@ -4391,3 +4391,43 @@ mod index_names;
 
 #[path = "words/nameref_invalid.rs"]
 mod nameref_invalid;
+
+#[test]
+fn named_descriptors_share_descriptions_and_reuse_closed_slots() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("exec {a}>f; exec {b}>&$a; printf one >&$a; printf two >&$b; exec {a}>&-; exec {c}>g; echo $a:$b:$c; cat f"), 0);
+    assert_eq!(rig.output.bytes(), b"10:11:10\nonetwo");
+}
+
+#[test]
+fn named_descriptors_have_a_session_policy_and_release_capacity() {
+    let rig = Rig::new(Limits {
+        descriptors: 4,
+        ..Limits::default()
+    });
+    assert_eq!(rig.run("exec {a}>f"), 0);
+    assert_eq!(rig.run("exec {b}>g"), 2);
+    assert_eq!(rig.value("b"), None);
+    assert_eq!(rig.run("exec {a}>&-; exec {b}>g; echo $b"), 0);
+    assert_eq!(rig.output.bytes(), b"10\n");
+}
+
+#[test]
+fn named_descriptors_escape_temporary_command_tables_but_not_subshells() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("f() { local fd; exec {fd}>f; printf first >&$fd; }; f >ignored; { exec {other}>g; printf second >&$other; } >ignored; printf third >&10; cat f g; (exec {sub}>h); echo ${sub-unset}"), 0);
+    assert_eq!(rig.output.bytes(), b"firstthirdsecondunset\n");
+}
+
+#[test]
+fn named_allocation_loop_can_be_interrupted() {
+    let rig = Rig::new(Limits {
+        descriptors: 65536,
+        ..Limits::default()
+    });
+    let job = rig.shell.start("while :; do exec {fd}>&1; done").unwrap();
+    rig.ex.drive(100);
+    assert!(!job.is_finished());
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+}
