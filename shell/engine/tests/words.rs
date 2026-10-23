@@ -4385,3 +4385,6 @@ mod type_builtin;
 
 #[path = "words/tilde.rs"]
 mod tilde;
+
+#[path = "words/index_names.rs"]
+mod index_names;

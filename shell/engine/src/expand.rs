@@ -16,6 +16,7 @@ mod case_pattern;
 mod command;
 mod glob;
 mod ifs;
+mod indices;
 mod indirect;
 mod operand;
 pub(crate) mod pattern;
@@ -1042,6 +1043,9 @@ impl Expansion<'_> {
                 expansion.ifs_changed = true;
                 return result.map_err(Error::in_expansion);
             }
+            if matches!(part, WordPart::ArrayIndices { .. }) {
+                return expansion.elements(part, state, quoted, scalar).await;
+            }
             if let WordPart::ArrayLength(name) = part {
                 return expansion
                     .indexed_length(name, "@", state, scalar || quoted)
@@ -1889,10 +1893,14 @@ impl Expansion<'_> {
         quoted: bool,
         scalar: bool,
     ) -> Result<(), Error> {
+        if let WordPart::ArrayIndices { name, .. } = part {
+            State::admit_scalar_access(state, name, self.cancel, self.work).await?;
+        }
         let (count, at) = {
             let s = state.borrow();
             match part {
                 WordPart::Variable(name) => (s.positional().len(), name == "@"),
+                WordPart::ArrayIndices { name, star } => (indices::count(&s, name), !star),
                 WordPart::ArrayAccess { name, index } => (
                     if name == "PIPESTATUS" {
                         s.pipeline_status().len()
@@ -1914,8 +1922,12 @@ impl Expansion<'_> {
         } else {
             self.positional_star_separator(state).await?
         };
-        let list = !scalar && (at || !quoted);
-        self.segments.needs_split |= list;
+        let indices_space_join = !scalar
+            && !quoted
+            && matches!(part, WordPart::ArrayIndices { star: true, .. })
+            && ifs_separator.is_none();
+        let list = !scalar && (at || !quoted && !indices_space_join);
+        self.segments.needs_split |= list || indices_space_join;
         // An initially empty IFS selects Bash's list-word space path. A
         // nonempty reference IFS whose target later becomes empty does not.
         let reference_ifs = state.borrow().is_nameref("IFS");
@@ -1925,7 +1937,7 @@ impl Expansion<'_> {
             && !at
             && matches!(part, WordPart::Variable(_))
             && star_separator.is_none();
-        let separator = if scalar && at {
+        let separator = if scalar && at || indices_space_join {
             Some(' ')
         } else if list {
             ifs_separator.or(Some(' '))
@@ -1941,6 +1953,9 @@ impl Expansion<'_> {
         for index in 0..count {
             self.element_boundary(index, list, separator, quoted || scalar)
                 .await?;
+            if let WordPart::ArrayIndices { name, .. } = part {
+                State::admit_scalar_access(state, name, self.cancel, self.work).await?;
+            }
             let value = list_value(
                 part,
                 state,
@@ -2100,6 +2115,9 @@ fn list_value(
     let s = state.borrow();
     let value = match part {
         WordPart::Variable(_) => s.positional().get(index).map(String::as_str).unwrap_or(""),
+        WordPart::ArrayIndices { name, .. } => {
+            return indices::value(&s, name, index, array_index, max, work);
+        }
         WordPart::ArrayAccess { name, .. } if name != "PIPESTATUS" => {
             let (next, value) = s.array_next(name, *array_index).ok_or(2)?;
             *array_index = Some(next);
@@ -2128,6 +2146,7 @@ fn list_value(
 fn is_list(part: &WordPart) -> bool {
     match part {
         WordPart::Variable(name) => matches!(name.as_str(), "@" | "*"),
+        WordPart::ArrayIndices { .. } => true,
         WordPart::ArrayAccess { index, .. } => matches!(index.as_str(), "@" | "*"),
         _ => false,
     }

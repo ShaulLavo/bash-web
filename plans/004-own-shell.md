@@ -2560,6 +2560,37 @@ identities, exclusions, and limits. This unit is not the raw-byte field rewrite.
 Detailed source proof and evidence limits are in
 `/work/reports/bash-web/hill-climb/variables/rematch-ifs-prerequisite.md`.
 
+### Inherited nameref IFS joining control from PR60 review
+
+Status: Approved, VARIABLES IFS-family ownership. This is evidence for the
+existing effective-IFS contract above, not extra scope for index enumeration.
+
+At source `728ac9c0c3426bf935789df73df9cd4ae5af50f1`, run with GNU Bash
+`5.3.15(1)-release` or the native shell CLI using `-c`:
+
+```sh
+a=(x y); sep=:; declare -n IFS=sep; sep=; printf '<%s>\n' "${!a[@]}"
+a=(x y); sep=:; declare -n IFS=sep; sep=1; printf '<%s>\n' "${!a[@]}"
+a=(x y); sep=:; declare -n IFS=sep; sep=; printf '<%s>\n' "${a[@]}"
+a=(x y); sep=:; declare -n IFS=sep; sep=1; printf '<%s>\n' "${a[@]}"
+```
+
+Bash stdout is `<0 1>\n`, `<0:1>\n`, `<x y>\n`, `<x:y>\n` respectively.
+Native and fresh production Waffle instead print `<0>\n<1>\n`, `<011>\n`,
+`<x>\n<y>\n`, `<x1y>\n`. All statuses are 0. The first two are retained
+in `review60-r1-minimal-repros.json` and `review60-r1-waffle-repros.json` under
+`/work/reports/wave-20261022/shell/`; the full review records the value controls.
+The 452-probe sweep in `review60-r1-probes.log` reports nine mismatches when a
+nameref IFS target changes, apart from three index-star adjacency failures.
+No crash or nondeterministic output was reported for these controls.
+
+Inspect `Expansion::elements` in `shell/engine/src/expand.rs:1869-1887` and its
+existing `positional_star_separator` and `field_ifs` adapters. The unchanged
+ArrayAccess value path reproduces the same IFS joining policy limitation,
+so fixing inserted index-star separator protection alone cannot resolve it.
+Do not change the frozen oracle or treat the inherited mismatch as an accepted
+semantic match. Resolve the effective-IFS ownership contract in its own family.
+
 ## Indexed array index-name expansion
 
 Status: Approved follow-up in the VARIABLES array-expansion family. Do not add
@@ -2761,6 +2792,69 @@ observations. These are not claimed frozen-score gains or losses.
 Reproduce through production Waffle before repair. Keep recorded fixtures,
 local/prefix restoration and cancellation/storage controls; do not invent
 special-variable values or widen the current declaration PR's semantics.
+
+### Inherited declaration-function brace expansion
+
+Status: Approved bounded follow-up. Owner: VARIABLES declaration/dispatch.
+PR57 integration review recorded this inherited behavior, not a PR60 regression
+or an accepted Bash match. Reproduce before repair:
+
+```bash
+HOME=/one; declare() { printf '<%s>\n' "$@"; }; declare x={~,~/tail} {~,~/tail}
+```
+
+Bash 5.3.15 prints `<x=~>\n<x=~/tail>\n</one>\n</one/tail>\n`.
+The reviewed PR57 source `0d4cd315` prints
+`<x={~,~/tail}>\n</one>\n</one/tail>\n` in native and production Waffle.
+PR60 source `67462b95`, which integrates main241 without PR57, prints
+`<x={~,~/tail}>\n<~>\n<~/tail>\n` in both engines.
+All return status 0 with empty stderr. The old `a03e3a1` native minimal
+control and current PR57 runtime agree on the mismatch. The first old-source
+eight-case probe is invalid because it requires later declaration printing;
+do not use that failed probe as preservation evidence.
+
+At `shell/engine/src/interpreter.rs:2804-2828`, spelled declaration syntax
+selects scalar operand expansion before function lookup at `2996-3001`.
+The interpreter is unchanged by PR60. Exact byte evidence, source attribution,
+and rerunnable controls are in
+`/work/reports/wave-20261022/shell/review57-main3fd-integration-r3.md`,
+its sibling `classification.json`, and the author's `shadow-prior.json` and
+`shadow-current.json`. Those recorded controls, not a full replay, own the
+observation. Distinguish real declaration operands from function argv without
+weakening real declaration expansion, storage admission, or cancellation.
+Do not fold the repair into index-name integration or count this as a pass.
+
+
+### Inherited declaration invalid-operand diagnostic
+
+Status: Approved bounded follow-up. Owner: VARIABLES declaration/builtin
+diagnostics. Independent PR60 integration review reproduced both controls once
+in native and production Waffle at `67462b958932322deace9332962080eee7b12702`:
+
+```bash
+v="2 20"; builtin declare k=$v; declare -p k
+```
+
+```bash
+a[20]=twenty; a[2]=two; builtin declare k="${!a[@]}"; declare -p k
+```
+
+Bash 5.3.15 and both engines print `declare -- k="2"` followed by a newline
+and finish with status 0. Bash also diagnoses invalid identifier `20` on stderr;
+both engines omit that diagnostic. Neither control is an exact Bash match.
+The scalar control does not use index-name expansion. The suspected error return
+at `shell/engine/src/builtins.rs:738-743` is byte-identical to main241.
+No exact-main binary was run, so the source proof and scalar isolation, not a
+claimed main execution, establish the inherited boundary.
+
+Reproduce on current main through production Waffle before repair. Record
+Bash all-stream/status observations locally and preserve later-operand behavior,
+status propagation, storage admission and cancellation. Implement the general
+declaration diagnostic in its owning builtin, not in array expansion. Do not
+claim a frozen gain without a qualified replay. Exact scripts, bytes and setup
+failures are retained in
+`/work/reports/wave-20261022/shell/review60-main241-integration-r3/non-blocking-observations.md`
+and sibling `observations.json` / `small-observations.json`.
 
 ## Native `-c` missing-parent redirection, 2026-10-22
 

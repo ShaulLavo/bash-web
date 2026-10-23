@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "e6c67f4dcc700c077ef0c34e50292fadce7a9f95bbcaa1d07ed8ccaeea41ff35",
+    "engineSourceSha256": "a5d005f25256beeddea3b45f39c4d54d69ae980aeec45f806ced2e35aaf29e10",
     "binaryBuild": null
   },
   "contract": {
@@ -223,6 +223,7 @@
         "shell/engine/src/expand/command.rs",
         "shell/engine/src/expand/glob.rs",
         "shell/engine/src/expand/ifs.rs",
+        "shell/engine/src/expand/indices.rs",
         "shell/engine/src/expand/indirect.rs",
         "shell/engine/src/expand/operand.rs",
         "shell/engine/src/expand/pattern.rs",
@@ -474,7 +475,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 1006,
+        "line": 1007,
         "column": 29
       }
     },
@@ -484,7 +485,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 980,
+        "line": 981,
         "column": 17
       }
     },
@@ -494,7 +495,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 31,
+        "line": 32,
         "column": 30
       }
     },
@@ -514,7 +515,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 60,
+        "line": 61,
         "column": 38
       }
     },
@@ -534,7 +535,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 1241,
+        "line": 1245,
         "column": 15
       }
     },
@@ -884,7 +885,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 2848,
+        "line": 2867,
         "column": 21
       }
     },
