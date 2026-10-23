@@ -759,7 +759,12 @@ test("instrument migration prepares a cold patched sysroot before its first carg
       encoding: "utf8",
     }).trim();
     put(".git/objects/info/alternates", `${resolve(root, common, "objects")}\n`);
-    const candidate = JSON.parse(readFileSync(resolve(root, oraclePath), "utf8"));
+    const candidate = JSON.parse(
+      execFileSync("git", ["show", `38c229271c851543ce564976e7b09f2971c5e0f8:${oraclePath}`], {
+        cwd: root,
+        maxBuffer: 1 << 26,
+      }).toString(),
+    );
     update(candidate);
     put(instrumentReceiptPath, readFileSync(resolve(root, instrumentReceiptPath)));
     const proof = resolve(repo, "cold-build-proof");
