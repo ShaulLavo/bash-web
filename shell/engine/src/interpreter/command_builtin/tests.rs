@@ -151,26 +151,12 @@ impl Rig {
         let core = self.session.core.clone();
         let group = self.host.allocate_group();
         let signal = Rc::new(Cell::new(None));
-        let context = Context {
-            evaluation: crate::exec::Scope::new(
-                core.limits.source_bytes,
-                core.eval_storage.clone(),
-                core.execution_storage.clone(),
-            ),
-            source: crate::exec::Source::root(""),
-            scope: Scope::new(0),
-            group,
-            invocation_group: group,
-            signal: signal.clone(),
-            lifetime: (cancel.clone(), signal),
-            cancel,
-            parameter_error_status: 127,
-            loop_depth: 0,
-            ignore_errexit: false,
-            command_boundary: super::super::CommandBoundary::Ordinary,
-            compound_child: false,
-            core,
-        };
+        let evaluation = crate::exec::Scope::new(
+            core.limits.source_bytes,
+            core.eval_storage.clone(),
+            core.execution_storage.clone(),
+        );
+        let context = Context::root(core, "", evaluation, group, cancel, signal);
         let prepared = PreparedCommand {
             line,
             argv,

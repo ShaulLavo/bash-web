@@ -45,7 +45,7 @@ async fn run_body(
         state: state.clone(),
         event,
     };
-    let pipeline_storage = state.borrow().pipeline_status().len() * std::mem::size_of::<i32>();
+    let pipeline_storage = std::mem::size_of_val(state.borrow().pipeline_status());
     let _storage = match context
         .evaluation
         .admit_storage(action.text.len() + pipeline_storage)

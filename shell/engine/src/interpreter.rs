@@ -292,6 +292,31 @@ pub(crate) struct Context {
     command_boundary: CommandBoundary,
 }
 impl Context {
+    fn root(
+        core: Rc<Core>,
+        source: &str,
+        evaluation: crate::exec::Scope,
+        group: GroupId,
+        cancel: Cancel,
+        signal: Rc<Cell<Option<i32>>>,
+    ) -> Self {
+        Self {
+            core,
+            source: crate::exec::Source::root(source),
+            lifetime: (cancel.clone(), signal.clone()),
+            cancel,
+            signal,
+            group,
+            invocation_group: group,
+            scope: Scope::new(0),
+            parameter_error_status: 127,
+            compound_child: false,
+            loop_depth: 0,
+            ignore_errexit: false,
+            command_boundary: CommandBoundary::Ordinary,
+            evaluation,
+        }
+    }
     fn stop_signal(&self) -> i32 {
         self.signal.get().unwrap_or(2)
     }
@@ -757,22 +782,7 @@ impl Session {
         let foreground_cancel = cancel.clone();
         let signal = Rc::new(Cell::new(None));
         let foreground_signal = signal.clone();
-        let context = Context {
-            core: self.core.clone(),
-            source: crate::exec::Source::root(source),
-            lifetime: (cancel.clone(), signal.clone()),
-            cancel,
-            signal,
-            group,
-            invocation_group: group,
-            scope: Scope::new(0),
-            parameter_error_status: 127,
-            compound_child: false,
-            loop_depth: 0,
-            ignore_errexit: false,
-            command_boundary: CommandBoundary::Ordinary,
-            evaluation,
-        };
+        let context = Context::root(self.core.clone(), source, evaluation, group, cancel, signal);
         let state = self.state.clone();
         let join = self.core.executor.spawn(async move {
             let _foreground = ForegroundGuard(context.core.clone());
@@ -3870,26 +3880,19 @@ mod scope_tests {
             Rc::new(MemoryFs::new(4096)),
             Limits::default(),
         );
-        let context = Context {
-            evaluation: crate::exec::Scope::new(
-                session.core.limits.source_bytes,
-                session.core.eval_storage.clone(),
-                session.core.execution_storage.clone(),
-            ),
-            core: session.core.clone(),
-            source: crate::exec::Source::root(""),
-            lifetime: (Cancel::new(), Rc::new(Cell::new(None))),
-            cancel: Cancel::new(),
-            signal: Rc::new(Cell::new(None)),
+        let evaluation = crate::exec::Scope::new(
+            session.core.limits.source_bytes,
+            session.core.eval_storage.clone(),
+            session.core.execution_storage.clone(),
+        );
+        let context = Context::root(
+            session.core.clone(),
+            "",
+            evaluation,
             group,
-            invocation_group: group,
-            scope: Scope::new(0),
-            parameter_error_status: 127,
-            compound_child: false,
-            loop_depth: 0,
-            ignore_errexit: false,
-            command_boundary: CommandBoundary::Ordinary,
-        };
+            Cancel::new(),
+            Rc::new(Cell::new(None)),
+        );
         (session.state(), session.core.descriptors.clone(), context)
     }
 
@@ -4388,27 +4391,14 @@ mod residual_review_tests {
             let cancel = Cancel::new();
             let signal = Rc::new(Cell::new(None));
             let group = self.host.allocate_group();
-            Context {
-                evaluation: crate::exec::Scope::new(
-                    core.limits.source_bytes,
-                    core.eval_storage.clone(),
-                    core.execution_storage.clone(),
-                ),
-                core,
-                source: crate::exec::Source::root(""),
-                lifetime: (cancel.clone(), signal.clone()),
-                cancel,
-                signal,
-                group,
-                invocation_group: group,
-                scope: Scope::new(0),
-                parameter_error_status: 127,
-                compound_child: false,
-                loop_depth: 0,
-                ignore_errexit: false,
-                command_boundary: CommandBoundary::Ordinary,
-            }
+            let evaluation = crate::exec::Scope::new(
+                core.limits.source_bytes,
+                core.eval_storage.clone(),
+                core.execution_storage.clone(),
+            );
+            Context::root(core, "", evaluation, group, cancel, signal)
         }
+
         fn shutdown(mut self) {
             let session = self.session.take().unwrap();
             self.finish(self.executor.spawn(async move { session.shutdown().await }));

@@ -13,7 +13,7 @@ call. Removing a hidden handler restores the caller's binding.
 RETURN runs before function locals and positional arguments are restored. Its
 `$?` is the last command status before an explicit `return`, not that builtin's
 operand. An action's ordinary status does not replace the command status. An
-explicit `exit` or `return` in an action still controls execution. Actions retain
+explicit `exit`, or `return` from an ERR action, still controls execution. Actions retain
 PIPESTATUS and cannot recursively invoke the same event.
 
 Stored text uses the admitted eval reader, including its depth, storage, work and
@@ -22,4 +22,5 @@ frame. Later session submissions can run traps again.
 
 The recorded Bash 5.3.15 fixture `scripts/fixtures/shell-trap-actions.json` runs
 natively and through production Waffle. Source-file RETURN, EXIT, DEBUG,
-source-line metadata and runtime signal delivery remain separate work.
+source-line metadata, recursive RETURN control flow, and runtime signal delivery
+remain separate work.

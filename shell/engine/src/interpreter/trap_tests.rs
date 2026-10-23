@@ -34,6 +34,17 @@ fn complete(executor: &Executor, job: JoinHandle<i32>) -> i32 {
     }
     panic!("trap test exceeded executor turn limit");
 }
+fn interrupt_entered(shell: &Session, executor: &Executor, output: &Capture, job: JoinHandle<i32>) {
+    for _ in 0..1000 {
+        executor.drive(128);
+        if output.bytes() == b"entered\n" {
+            break;
+        }
+    }
+    assert_eq!(output.bytes(), b"entered\n");
+    shell.interrupt();
+    assert_eq!(complete(executor, job), 130);
+}
 #[test]
 fn persistent_submissions_retain_registration_without_running_actions() {
     let (shell, executor, output) = session();
@@ -75,15 +86,7 @@ fn interrupted_error_action_is_not_left_running_and_reset_refunds_storage() {
     let job = shell
         .start("trap 'echo entered; while :; do :; done' ERR; false")
         .unwrap();
-    for _ in 0..1000 {
-        executor.drive(128);
-        if output.bytes() == b"entered\n" {
-            break;
-        }
-    }
-    assert_eq!(output.bytes(), b"entered\n");
-    shell.interrupt();
-    assert_eq!(complete(&executor, job), 130);
+    interrupt_entered(&shell, &executor, &output, job);
     assert!(
         shell
             .state
@@ -104,15 +107,7 @@ fn interrupted_error_action_is_not_left_running_and_reset_refunds_storage() {
 fn interrupted_return_action_restores_function_bindings_and_running_guard() {
     let (shell, executor, output) = session();
     let job = shell.start("set -- outer; x=outer; f(){ local x=inner; trap 'echo entered; while :; do :; done' RETURN; :; }; f inner").unwrap();
-    for _ in 0..1000 {
-        executor.drive(128);
-        if output.bytes() == b"entered\n" {
-            break;
-        }
-    }
-    assert_eq!(output.bytes(), b"entered\n");
-    shell.interrupt();
-    assert_eq!(complete(&executor, job), 130);
+    interrupt_entered(&shell, &executor, &output, job);
     assert_eq!(shell.state.borrow().function_calls, 0);
     assert!(
         shell
