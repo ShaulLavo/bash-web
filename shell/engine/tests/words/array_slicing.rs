@@ -46,8 +46,8 @@ fn array_slicing_cancelled_large_slice_never_dispatches_partial_fields() {
     assert!(!job.is_finished());
     assert!(rig.calls.borrow().is_empty());
     rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert!(rig.calls.borrow().is_empty());
+    let cancelled = rig.finish(job);
+    assert_eq!((cancelled, rig.calls.borrow().len()), (130, 0));
     assert_eq!(rig.run("args \"${#a[@]}\" \"${a[8191]}\""), 0);
     assert_eq!(*rig.calls.borrow(), vec![vec!["8192", "8191"]]);
 }
