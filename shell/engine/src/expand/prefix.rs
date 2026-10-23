@@ -63,7 +63,10 @@ fn next_name(
 ) -> Result<Option<String>, Error> {
     let state = state.borrow();
     let lower = previous.map_or(Included(prefix), Excluded);
-    let Some((name, _)) = state.bindings().range::<str, _>((lower, Unbounded)).next() else {
+    let binding = state.bindings().range::<str, _>((lower, Unbounded)).next();
+    let nameref = state.namerefs().range::<str, _>((lower, Unbounded)).next();
+    let name = binding.map(|(name, _)| name).into_iter();
+    let Some(name) = name.chain(nameref.map(|(name, _)| name)).min() else {
         return Ok(None);
     };
     if !name.starts_with(prefix) {
@@ -88,20 +91,25 @@ mod tests {
             .assign_parameter("param_b".into(), "x".repeat(128 * 1024))
             .unwrap();
         state.assign_parameter("param_a".into(), "".into()).unwrap();
+        state
+            .declare_nameref("param_c".into(), "missing".repeat(16 * 1024), false)
+            .unwrap();
         let state = state.shared();
+        for (previous, expected) in [
+            (None, "param_a"),
+            (Some("param_a"), "param_b"),
+            (Some("param_b"), "param_c"),
+        ] {
+            let mut work = Work::new(16, 7, 1);
+            assert!(matches!(
+                next_name(&state, "param_", previous, 7, &mut work),
+                Ok(Some(name)) if name == expected
+            ));
+            assert_eq!(work.storage_remaining, 0);
+        }
         let mut work = Work::new(16, 7, 1);
         assert!(matches!(
-            next_name(&state, "param_", None, 7, &mut work),
-            Ok(Some(name)) if name == "param_a"
-        ));
-        assert_eq!(work.storage_remaining, 0);
-        let mut work = Work::new(16, 7, 1);
-        assert!(matches!(
-            next_name(&state, "param_", Some("param_a"), 7, &mut work),
-            Ok(Some(name)) if name == "param_b"
-        ));
-        assert!(matches!(
-            next_name(&state, "param_", Some("param_b"), 7, &mut work),
+            next_name(&state, "param_", Some("param_c"), 7, &mut work),
             Ok(None)
         ));
         assert!(next_name(&state, "param_", None, 6, &mut work).is_err());

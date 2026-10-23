@@ -2151,8 +2151,11 @@ fn scalar_operators_work_in_assignments_declarations_command_names_and_redirects
 
 #[test]
 fn selected_unsupported_operands_and_operator_targets_fail_without_dispatch() {
+    check(
+        r#"args ${u:-$@}; set -- a "b c"; args ${u:-$@}; args "${u:-$@}""#,
+        &[&[], &["a", "b", "c"], &["a", "b c"]],
+    );
     for source in [
-        "args ${u:-$@}",
         "args ${u:-${PIPESTATUS[@]}}",
         "args ${a[0]-x}",
         "args ${1-x}",
@@ -2951,11 +2954,10 @@ fn assignment_and_error_operands_are_lazy_including_unsupported_syntax() {
     assert_eq!(*rig.calls.borrow(), &[vec!["diagnostic"]]);
     assert_eq!(rig.errors.bytes(), b"/usr/bin/bash: line 1: u: failure\n");
     assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
-    let source = "args ${u:=$@}";
-    let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run(source), 2, "{source}");
-    assert!(rig.calls.borrow().is_empty());
-    assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
+    check(
+        r#"args ${u:=$@}; args "${u+x}" "$u"; set -- a "b c"; unset u; args "${u:=$@}" "$u""#,
+        &[&[], &["x", ""], &["a b c", "a b c"]],
+    );
 }
 
 #[test]

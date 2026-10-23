@@ -491,7 +491,7 @@
     },
     {
       "id": "prefix-empty",
-      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; show \"${!param_missing_@}\" \"${!param_missing_*}\"; param_empty=(); param_sparse=([5]=x); declare param_unset; param_null=; show \"${!param_@}\"",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; show \"${!param_missing_@}\" \"${!param_missing_*}\"; param_empty=(); param_sparse[5]=x; declare param_unset; param_null=; show \"${!param_@}\"",
       "status": 0,
       "stdout": "argc=1 <>\nargc=3 <param_empty> <param_null> <param_sparse>\n",
       "stderr": ""
