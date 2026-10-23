@@ -4391,3 +4391,5 @@ mod index_names;
 
 #[path = "words/array_slicing.rs"]
 mod array_slicing;
+#[path = "words/nameref_invalid.rs"]
+mod nameref_invalid;
