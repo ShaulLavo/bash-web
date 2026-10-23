@@ -112,6 +112,48 @@
       "status": 0,
       "stdout": "ok\non:0\noff:1\n",
       "stderr": ""
+    },
+    {
+      "id": "declarations",
+      "code": "echo top; declare -p FUNCNAME; f() { declare -p FUNCNAME BASH_ARGC BASH_ARGV; }; f a; echo after; declare -p FUNCNAME",
+      "status": 0,
+      "stdout": "top\ndeclare -a FUNCNAME\ndeclare -a FUNCNAME=([0]=\"f\")\ndeclare -a BASH_ARGC=()\ndeclare -a BASH_ARGV=()\nafter\ndeclare -a FUNCNAME\n",
+      "stderr": ""
+    },
+    {
+      "id": "function-definition-lines",
+      "code": "f() { :; }\ndeclare -F f missing; echo status:$?\nshopt -s extdebug\ndeclare -F f",
+      "status": 0,
+      "stdout": "f\nstatus:1\nf 1 bash\n",
+      "stderr": ""
+    },
+    {
+      "id": "root-arguments",
+      "code": "set -- root tail; echo \"${BASH_ARGC[*]}:${BASH_ARGV[*]}\"; f() { echo \"${BASH_ARGC[*]}:${BASH_ARGV[*]}\"; }; f child",
+      "status": 0,
+      "stdout": "2:tail root\n2:tail root\n",
+      "stderr": ""
+    },
+    {
+      "id": "late-extdebug",
+      "code": "set -- root; f() { :; }; shopt -s extdebug; f; shopt -u extdebug; f; echo \"${BASH_ARGC[*]}:${BASH_ARGV[*]}\"",
+      "status": 0,
+      "stdout": "1:root\n",
+      "stderr": ""
+    },
+    {
+      "id": "caller-numeric-bounds",
+      "code": "g() { for x in +0 2147483648 4294967296 9223372036854775807 18446744073709551615; do caller \"$x\"; echo \"$x:$?\"; done; }; f() { g; }; f",
+      "status": 0,
+      "stdout": "1 f bash\n+0:0\n2147483648:1\n4294967296:1\n9223372036854775807:1\n18446744073709551615:2\n",
+      "stderr": "bash: line 1: caller: 18446744073709551615: invalid number\ncaller: usage: caller [expr]\n"
+    },
+    {
+      "id": "trace-option-predicates",
+      "code": "for option in functrace errtrace; do [ -o \"$option\" ]; printf \"%s:%s\\n\" \"$option\" \"$?\"; done; set -TE; for option in functrace errtrace; do [[ -o \"$option\" ]]; printf \"%s:%s\\n\" \"$option\" \"$?\"; done; set +o functrace; [ -o functrace ]; echo \"off:$?\"; shopt -s extdebug; [ -o functrace ]; echo \"debug:$?\"; shopt -u extdebug; [ -o errtrace ]; echo \"clear:$?\"",
+      "status": 0,
+      "stdout": "functrace:1\nerrtrace:1\nfunctrace:0\nerrtrace:0\noff:1\ndebug:0\nclear:1\n",
+      "stderr": ""
     }
   ],
   "invocation": [

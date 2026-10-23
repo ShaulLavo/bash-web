@@ -386,7 +386,18 @@ pub(crate) async fn integer_diagnostic(
     }
 }
 
-pub(crate) async fn unary(
+pub(crate) fn shell_option(state: &State, name: &str) -> bool {
+    match name {
+        "nounset" => state.nounset,
+        "pipefail" => state.pipefail,
+        "errexit" => state.errexit,
+        "functrace" => state.functrace,
+        "errtrace" => state.errtrace,
+        _ => false,
+    }
+}
+
+async fn unary(
     operator: &str,
     operand: &str,
     state: &SharedState,
@@ -454,15 +465,7 @@ async fn unary_value(
             }
             Ok(state.borrow().is_nameref(operand))
         }
-        "-o" => {
-            let state = state.borrow();
-            Ok(match operand {
-                "nounset" => state.nounset,
-                "pipefail" => state.pipefail,
-                "errexit" => state.errexit,
-                _ => false,
-            })
-        }
+        "-o" => Ok(shell_option(&state.borrow(), operand)),
         operator if is_unary(operator) => {
             if let Some(fd) = crate::io::descriptor_number(operand) {
                 let Some(endpoint) = fds.get(fd) else {

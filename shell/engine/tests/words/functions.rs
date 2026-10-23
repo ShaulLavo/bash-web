@@ -449,7 +449,7 @@ fn return_and_shift_numeric_errors_take_priority_over_excess_operands() {
 #[test]
 fn command_function_reporting_admits_small_buffers_and_refuses_large_ones_before_allocation() {
     let rig = Rig::new(Limits {
-        execution_bytes: 64 * 1024,
+        execution_bytes: 128 * 1024,
         ..Limits::default()
     });
     assert_eq!(rig.run("f() { :; }; command -V f"), 0);
@@ -549,4 +549,40 @@ fn literal_punctuation_function_names_remain_callable() {
             "called\n",
         );
     }
+}
+
+#[test]
+fn call_frames_retain_definition_sources_across_submissions_and_eval() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("outer() {\n inner() { echo \"${FUNCNAME[*]}:${BASH_LINENO[*]}\"; }\n inner\n}"),
+        0
+    );
+    assert_eq!(rig.run("outer"), 0);
+    assert_eq!(rig.output.bytes(), b"inner outer:3 1\n");
+    assert_eq!(
+        rig.run("eval 'saved() { local item=\"a b\"; printf \"<%s>\" \"$item\"; }'"),
+        0
+    );
+    assert_eq!(rig.run("saved; saved"), 0);
+    assert_eq!(rig.output.bytes(), b"inner outer:3 1\n<a b><a b>");
+}
+
+#[test]
+fn oversized_stored_definition_source_refuses_admission_and_session_recovers() {
+    let rig = Rig::new(Limits {
+        execution_bytes: 64 * 1024,
+        ..Limits::default()
+    });
+    let code = format!("large() {{ echo '{}'; }}", "x".repeat(100 * 1024));
+    assert_eq!(rig.run(&code), 2);
+    assert!(!rig.shell.state().borrow().functions().contains_key("large"));
+    assert!(
+        String::from_utf8(rig.errors.bytes())
+            .unwrap()
+            .contains("function source live-memory limit exceeded")
+    );
+    assert_eq!(rig.run("small() { echo recovered; }; small"), 0);
+    assert_eq!(rig.output.bytes(), b"recovered\n");
+    assert_eq!(rig.ex.drive(64).pending, 0);
 }

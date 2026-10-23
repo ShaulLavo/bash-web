@@ -23,6 +23,10 @@ pub(super) async fn print(
     for name in names {
         count += 1;
         scan_bytes(name.len(), context, work).await?;
+        if state.borrow().stack_array(&name) && !state.borrow().is_nameref(&name) {
+            print_stack_array(&name, state, fds, context, work).await?;
+            continue;
+        }
         let Some(DeclarationSnapshot { value, attributes }) =
             snapshot(&name, state, context, work).await?
         else {
@@ -206,4 +210,106 @@ fn encode<'a>(
         ]);
     }
     std::str::from_utf8(&buffer[..bytes.len() * 4]).expect("octal escapes are ASCII")
+}
+
+async fn print_stack_array(
+    name: &str,
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    crate::state::State::admit_scalar_access(state, name, &context.cancel, work)
+        .await
+        .map_err(error_status)?;
+    write(fds, b"declare -a ", context).await?;
+    write(fds, name.as_bytes(), context).await?;
+    let count = state.borrow().array_count(name);
+    if count == 0 {
+        return write(
+            fds,
+            if name == "FUNCNAME" { b"\n" } else { b"=()\n" },
+            context,
+        )
+        .await;
+    }
+    write(fds, b"=(", context).await?;
+    let utf8 = super::printf::character_locale(state, context, work).await?;
+    let printability = Printability::new(utf8)?;
+    for index in 0..count {
+        print_stack_element(name, index, &printability, utf8, state, fds, context, work).await?;
+    }
+    write(fds, b")\n", context).await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn print_stack_element(
+    name: &str,
+    index: usize,
+    printability: &Printability,
+    utf8: bool,
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    let bytes = state
+        .borrow()
+        .array_element(name, index as i64)
+        .ok_or(2)?
+        .len();
+    work.admit_storage(bytes + 24).map_err(error_status)?;
+    scan_bytes(bytes + 24, context, work).await?;
+    let value = state
+        .borrow()
+        .array_element(name, index as i64)
+        .ok_or(2)?
+        .to_owned();
+    let mut line = if index == 0 {
+        format!("[{index}]")
+    } else {
+        format!(" [{index}]")
+    };
+    let prefix = line.len();
+    let ansi = value.chars().any(|ch| !printable(ch, utf8, printability));
+    quoted(&mut line, &value, ansi, utf8, printability, context, work).await?;
+    write(fds, line.as_bytes(), context).await?;
+    let retained = bytes + 24 + line.len() - prefix;
+    drop((line, value));
+    work.release_storage(retained);
+    Ok(())
+}
+
+pub(super) async fn function_names(
+    names: impl Iterator<Item = String>,
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<Outcome, i32> {
+    let mut status = 0;
+    for name in names {
+        scan_bytes(name.len(), context, work).await?;
+        let Some(line) = state
+            .borrow()
+            .functions()
+            .get(&name)
+            .map(|function| function.line)
+        else {
+            status = 1;
+            continue;
+        };
+        let bytes = name.len() + state.borrow().shell_name.len() + 24;
+        work.admit_storage(bytes).map_err(error_status)?;
+        scan_bytes(bytes, context, work).await?;
+        let output = if state.borrow().extdebug {
+            format!("{name} {line} {}\n", state.borrow().shell_name)
+        } else {
+            format!("{name}\n")
+        };
+        write(fds, output.as_bytes(), context).await?;
+        drop(output);
+        work.release_storage(bytes);
+    }
+    Ok(Outcome::status(status))
 }

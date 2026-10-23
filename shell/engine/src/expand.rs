@@ -1893,7 +1893,7 @@ impl Expansion<'_> {
         quoted: bool,
         scalar: bool,
     ) -> Result<(), Error> {
-        if let WordPart::ArrayIndices { name, .. } = part {
+        if let WordPart::ArrayIndices { name, .. } | WordPart::ArrayAccess { name, .. } = part {
             State::admit_scalar_access(state, name, self.cancel, self.work).await?;
         }
         let (count, at) = {
