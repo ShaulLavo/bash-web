@@ -717,6 +717,15 @@
         ],
         "change": "Retain typed file-read substitution eligibility and lexical backtick origins through quote and scalar assignment transformations. Keep legacy numeric redirect and trailing-input distinctions, escaped newlines and mixed-quote backticks. Traverse and print the dedicated AST variant.",
         "reason": "GNU Bash 5.3.15 treats one input-only command as a parent-side file capture, while specific backtick spellings disable the shortcut. No upstream test removed."
+      },
+      {
+        "paths": [
+          "shell/parser/src/parser/lexer.rs",
+          "shell/parser/src/parser/tokens.rs",
+          "shell/parser/src/parser/mod.rs"
+        ],
+        "change": "Lex `N<&word` and `N<&M-` as a word-target input duplicate, like the existing `N>&word` token, and accept any non-empty subscript in a `{name[subscript]}` descriptor variable.",
+        "reason": "GNU Bash 5.3.15 expands an input duplicate's word before choosing a descriptor, moves `N<&M-`, and assigns `{a[i++]}` descriptors. The previous lexer read `3<&$fd` as `3<&0` plus a stray argument. No upstream test removed."
       }
     ],
     "removedUpstreamTests": [

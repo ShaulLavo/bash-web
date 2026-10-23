@@ -268,6 +268,8 @@ struct Core {
     next: Cell<u64>,
     foreground: RefCell<Option<Job>>,
     exit_requested: Cell<bool>,
+    // Interactive Bash omits the `line N:` diagnostic prefix.
+    interactive: Cell<bool>,
 }
 #[derive(Clone)]
 pub(crate) struct Context {
@@ -680,9 +682,13 @@ impl Session {
                 next: Cell::new(1),
                 foreground: RefCell::new(None),
                 exit_requested: Cell::new(false),
+                interactive: Cell::new(false),
             }),
             state,
         }
+    }
+    pub fn set_interactive(&self, interactive: bool) {
+        self.core.interactive.set(interactive);
     }
     pub fn state(&self) -> SharedState {
         self.state.clone()
@@ -2783,12 +2789,8 @@ async fn prepare_simple_command_body(
     let mut bytes = 0usize;
     let mut budget = Budget::default();
     // Process substitutions open descriptors for this command only.
+    let fds = fds.redirected();
     let mut work = substitution_work(context, &fds);
-    let fds = fds.redirected(context, &mut work).await?;
-    work.substitutions
-        .as_mut()
-        .expect("substitution runner")
-        .fds = fds.clone();
     let mut argv = expand::fields(
         &simple.name,
         state,
@@ -3206,7 +3208,8 @@ async fn dispatch_simple_command_body(
                 path.into_parts()
             }
             command_builtin::Resolution::NonExecutable(path, reason) => {
-                command_builtin::execution_failure(&fds, &context, &path.text, reason).await?;
+                command_builtin::execution_failure(&fds, &context, line, &path.text, reason)
+                    .await?;
                 return Ok(Outcome::status(126));
             }
             command_builtin::Resolution::Missing => {
@@ -3215,7 +3218,7 @@ async fn dispatch_simple_command_body(
                 } else {
                     b"command not found".as_slice()
                 };
-                command_builtin::execution_failure(&fds, &context, &name, reason).await?;
+                command_builtin::execution_failure(&fds, &context, line, &name, reason).await?;
                 return Ok(Outcome::status(127));
             }
         }
@@ -3600,7 +3603,7 @@ async fn redirect_target(
 #[inline(never)]
 fn duplicate_descriptor<'a>(
     target: &'a str,
-    label: Option<&'a str>,
+    redirect: Option<&'a Redirect>,
     line: Option<usize>,
     fds: &'a Descriptors,
     context: &'a Context,
@@ -3608,19 +3611,16 @@ fn duplicate_descriptor<'a>(
 ) -> eval::Frame<'a, Result<io::Endpoint, CommandError>> {
     context.evaluation.frame(
         async move {
+            let ambiguous = redirect
+                .and_then(|redirect| redirect.fd_var.as_deref())
+                .unwrap_or(target);
             let mut source = Some(0u32);
             let mut first_nonzero = None;
             for (offset, byte) in target.bytes().enumerate() {
                 work.checkpoint(&context.cancel).await?;
                 if !byte.is_ascii_digit() {
-                    return Err(redirect::diagnostic(
-                        line,
-                        label.unwrap_or(target),
-                        "ambiguous redirect",
-                        fds,
-                        context,
-                    )
-                    .await);
+                    let message = "ambiguous redirect";
+                    return Err(redirect::diagnostic(line, ambiguous, message, fds, context).await);
                 }
                 if byte != b'0' && first_nonzero.is_none() {
                     first_nonzero = Some(offset);
@@ -3630,68 +3630,21 @@ fn duplicate_descriptor<'a>(
                     .and_then(|value| value.checked_add(u32::from(byte - b'0')));
             }
             if target.is_empty() {
-                return Err(redirect::diagnostic(
-                    line,
-                    label.unwrap_or(target),
-                    "ambiguous redirect",
-                    fds,
-                    context,
-                )
-                .await);
+                let ambiguous = redirect
+                    .and_then(|redirect| redirect.target.raw.as_deref())
+                    .unwrap_or(ambiguous);
+                let message = "ambiguous redirect";
+                return Err(redirect::diagnostic(line, ambiguous, message, fds, context).await);
             }
             if let Some(endpoint) = source.and_then(|source| fds.borrow().get(source)) {
                 return Ok(endpoint);
             }
-            let stderr = fds.borrow().get(2);
-            if let Some(stderr) = stderr {
-                let source = match label.filter(|label| label.contains('$')) {
-                    Some(label) => label.as_bytes(),
-                    None => &target.as_bytes()[first_nonzero.unwrap_or(target.len() - 1)..],
-                };
-                // A bounded stack buffer handles the line number; the possibly
-                // large target is borrowed and streamed without allocation.
-                let mut digits = [0u8; std::mem::size_of::<usize>() * 3];
-                let mut start = digits.len();
-                let (label, separator): (&[u8], &[u8]) = if let Some(mut value) = line {
-                    loop {
-                        start -= 1;
-                        digits[start] = b'0' + (value % 10) as u8;
-                        value /= 10;
-                        if value == 0 {
-                            break;
-                        }
-                    }
-                    (b"line ", b": ")
-                } else {
-                    (b"", b"")
-                };
-                let parts: [&[u8]; 6] = [
-                    b"/usr/bin/bash: ",
-                    label,
-                    &digits[start..],
-                    separator,
-                    source,
-                    b": Bad file descriptor\n",
-                ];
-                let bytes = parts
-                    .iter()
-                    .fold(0usize, |bytes, part| bytes.saturating_add(part.len()));
-                if bytes > context.limits().expansion_bytes {
-                    return Err(2.into());
-                }
-                for part in parts {
-                    if stderr.write_all(part, &context.cancel).await.is_err() {
-                        break;
-                    }
-                }
-            }
+            // The possibly large target is borrowed, not copied.
+            let digits = &target[first_nonzero.unwrap_or(target.len() - 1)..];
+            let label = redirect::closed_label(redirect, digits);
             // A redirect error is not intrinsically fatal; the command's
             // existing errexit boundary decides whether execution continues.
-            Err(if context.cancel.is_cancelled() {
-                130.into()
-            } else {
-                1.into()
-            })
+            Err(redirect::diagnostic(line, &label, "Bad file descriptor", fds, context).await)
         },
         |code| Err(code.into()),
     )
@@ -3709,7 +3662,7 @@ async fn redirects(
     if redirs.is_empty() {
         return Ok(fds);
     }
-    let fds = fds.redirected(context, work).await?;
+    let fds = fds.redirected();
     // Target substitutions observe the redirections already applied, and
     // process substitutions insert their descriptors into this same table.
     if let Some(runner) = &mut work.substitutions {

@@ -4431,3 +4431,48 @@ fn named_allocation_loop_can_be_interrupted() {
     rig.shell.interrupt();
     assert_eq!(rig.finish(job), 130);
 }
+
+#[test]
+fn execution_diagnostics_name_the_line_unless_interactive() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("\nnocmdq"), 127);
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: line 2: nocmdq: command not found\n"
+    );
+    let rig = Rig::new(Limits::default());
+    rig.shell.set_interactive(true);
+    assert_eq!(rig.run("\nnocmdq"), 127);
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: nocmdq: command not found\n"
+    );
+}
+
+#[test]
+fn duplicating_stdout_to_a_word_writes_both_streams_to_the_file() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("x=out; { echo a; echo b >&2; } >&$x; echo c 1>&\"$x\" 2>&1; cat out; : 2>&$x; echo s=$?"),
+        0
+    );
+    assert_eq!(rig.output.bytes(), b"c\ns=1\n");
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: line 1: out: ambiguous redirect\n"
+    );
+}
+
+#[test]
+fn descriptor_moves_close_their_source_for_the_command_or_exec() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("exec 3>f; echo hi >&3-; echo x >&3; cat f; test -e 3- || echo nofile; exec 5>h; exec 6>&5-; echo c >&6; echo d >&5; echo s=$?; cat h"),
+        0
+    );
+    assert_eq!(rig.output.bytes(), b"hi\nx\nnofile\ns=1\nc\n");
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: line 1: 5: Bad file descriptor\n"
+    );
+}

@@ -13,11 +13,11 @@ const run = await createWaffleRunner({
   utilityDirectory: directory,
 });
 
-async function output(script: string, expected: string) {
+async function output(script: string, expected: string, stderr = "") {
   const result = await run(script);
   assert.equal(result.crash, undefined);
   assert.equal(result.status, 0, result.stderr.toString());
-  assert.equal(result.stderr.toString(), "");
+  assert.equal(result.stderr.toString(), stderr);
   assert.equal(result.stdout.toString(), expected);
   assert.equal(liveNodeWorkers(), 0);
 }
@@ -42,6 +42,8 @@ test("closed logical fd cannot reopen a private WASI fd", () =>
   output(
     "exec 3<&-; if read -r x </dev/fd/3 2>/error; then printf wrong; else printf 'closed\\n'; fi",
     "closed\n",
+    // GNU Bash 5.3.15 reports the failed open before `2>/error` applies.
+    "/usr/bin/bash: line 1: /dev/fd/3: No such file or directory\n",
   ));
 
 test("stdio regular input reopens independently", () =>

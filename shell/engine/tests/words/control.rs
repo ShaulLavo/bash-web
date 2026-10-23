@@ -285,11 +285,25 @@ fn closed_descriptor_redirects_diagnose_without_unconditionally_aborting() {
         rig.errors.bytes(),
         format!("/usr/bin/bash: line 1: {number}: Bad file descriptor\n").as_bytes()
     );
-    let rig = Rig::new(Limits::default());
-    rig.variable("fd", &format!("{}9", "0".repeat(8192)));
-    assert_eq!(rig.run(": 1>&\"$fd\"; echo status:$?"), 0);
-    assert_eq!(rig.output.bytes(), b"status:1\n");
-    assert_eq!(rig.errors.bytes(), diagnostic.as_bytes());
+    // Bash 5.3.15 names an expanded source by its word when it replaces the
+    // default descriptor, and otherwise by the descriptor it would replace.
+    for (source, label) in [
+        (": 1>&\"$fd\"; echo status:$?", "\"$fd\""),
+        (": >&$fd; echo status:$?", "$fd"),
+        (": <&$fd; echo status:$?", "$fd"),
+        (": 2>&$fd; echo status:$?", "2"),
+        (": 3<&\"$fd\"; echo status:$?", "3"),
+    ] {
+        let rig = Rig::new(Limits::default());
+        rig.variable("fd", &format!("{}9", "0".repeat(8192)));
+        assert_eq!(rig.run(source), 0, "{source}");
+        assert_eq!(rig.output.bytes(), b"status:1\n", "{source}");
+        assert_eq!(
+            rig.errors.bytes(),
+            format!("/usr/bin/bash: line 1: {label}: Bad file descriptor\n").as_bytes(),
+            "{source}"
+        );
+    }
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("\n: 1>&9; echo status:$?"), 0);
     assert_eq!(rig.output.bytes(), b"status:1\n");

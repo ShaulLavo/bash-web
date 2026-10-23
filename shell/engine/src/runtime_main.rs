@@ -144,6 +144,7 @@ mod guest {
         let (Some(input), Some(output)) = (input, output) else {
             return 1;
         };
+        session.set_interactive(true);
         let mut editor = Editor::default();
         let mut skip_lf = false;
         loop {

@@ -1,0 +1,76 @@
+{
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "executableSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+  "env": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "SH": "bash",
+    "LC_ALL": "C"
+  },
+  "cases": [
+    {
+      "id": "dup-word-writes-both-streams",
+      "script": "x=out; { echo a; echo b >&2; } >&$x; cat out; echo c 1>&\"$x\"; cat out",
+      "status": 0,
+      "stdout": "YQpiCmMK",
+      "stderr": ""
+    },
+    {
+      "id": "dup-word-to-other-descriptor-is-ambiguous",
+      "script": "echo b 2>&out.txt; echo \"status $?\"; test -e out.txt || echo \"no file\"; x=abc; : <&$x; echo s=$?",
+      "status": 0,
+      "stdout": "c3RhdHVzIDEKbm8gZmlsZQpzPTEK",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiBvdXQudHh0OiBhbWJpZ3VvdXMgcmVkaXJlY3QKL3Vzci9iaW4vYmFzaDogbGluZSAxOiBhYmM6IGFtYmlndW91cyByZWRpcmVjdAo="
+    },
+    {
+      "id": "closed-source-labels",
+      "script": "exec 2>&1; fd=9; : >&$fd; : 1>&\"$fd\"; : <&$fd; : 2>&$fd; : 3<&\"$fd\"; : >&9; : >&0009; echo done",
+      "status": 0,
+      "stdout": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiAkZmQ6IEJhZCBmaWxlIGRlc2NyaXB0b3IKL3Vzci9iaW4vYmFzaDogbGluZSAxOiAiJGZkIjogQmFkIGZpbGUgZGVzY3JpcHRvcgovdXNyL2Jpbi9iYXNoOiBsaW5lIDE6ICRmZDogQmFkIGZpbGUgZGVzY3JpcHRvcgovdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IDI6IEJhZCBmaWxlIGRlc2NyaXB0b3IKL3Vzci9iaW4vYmFzaDogbGluZSAxOiAzOiBCYWQgZmlsZSBkZXNjcmlwdG9yCi91c3IvYmluL2Jhc2g6IGxpbmUgMTogOTogQmFkIGZpbGUgZGVzY3JpcHRvcgovdXNyL2Jpbi9iYXNoOiBsaW5lIDE6IDk6IEJhZCBmaWxlIGRlc2NyaXB0b3IKZG9uZQo=",
+      "stderr": ""
+    },
+    {
+      "id": "not-found-names-the-line",
+      "script": "out=$(nocmdq 2>&1); echo \"[$out]\"\nf() { :; }\nout=$( { f \"$(nocmdq)\" 2>/dev/null; } 2>&1 ); echo \"[$out]\"",
+      "status": 0,
+      "stdout": "Wy91c3IvYmluL2Jhc2g6IGxpbmUgMTogbm9jbWRxOiBjb21tYW5kIG5vdCBmb3VuZF0KWy91c3IvYmluL2Jhc2g6IGxpbmUgMzogbm9jbWRxOiBjb21tYW5kIG5vdCBmb3VuZF0K",
+      "stderr": ""
+    },
+    {
+      "id": "file-read-names-the-line",
+      "script": "out=$( { q=$(< /nofileq); } 2>&1 ); echo \"[$out]\"",
+      "status": 0,
+      "stdout": "Wy91c3IvYmluL2Jhc2g6IGxpbmUgMTogL25vZmlsZXE6IE5vIHN1Y2ggZmlsZSBvciBkaXJlY3RvcnldCg==",
+      "stderr": ""
+    },
+    {
+      "id": "permission-names-the-line",
+      "script": "printf x > f; out=$(./f 2>&1); echo \"[$out] $?\"",
+      "status": 0,
+      "stdout": "Wy91c3IvYmluL2Jhc2g6IGxpbmUgMTogLi9mOiBQZXJtaXNzaW9uIGRlbmllZF0gMTI2Cg==",
+      "stderr": ""
+    },
+    {
+      "id": "descriptor-moves",
+      "script": "exec 3>f; echo hi >&3-; echo s=$?; echo x >&3; cat f; test -e 3- || echo nofile; exec 5>h; exec 6>&5-; echo c >&6; echo d >&5; echo s=$?; cat h",
+      "status": 0,
+      "stdout": "cz0wCmhpCngKbm9maWxlCnM9MQpjCg==",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiA1OiBCYWQgZmlsZSBkZXNjcmlwdG9yCg=="
+    },
+    {
+      "id": "input-word-and-move",
+      "script": "printf 'one\\n' > f; exec 7<f; exec 8<&7-; read l <&8; echo \"$l\"; read m <&7; echo s=$?; fd=8; exec 3<&$fd; printf 'two\\n' > g; exec 8<g; read n <&3; echo \"[$n]\"",
+      "status": 0,
+      "stdout": "b25lCnM9MQpbXQo=",
+      "stderr": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiA3OiBCYWQgZmlsZSBkZXNjcmlwdG9yCg=="
+    },
+    {
+      "id": "trailing-slash-append",
+      "script": "echo z 2>/dev/null >> nodir/; echo \"rc=$?\"; test -e nodir || echo absent",
+      "status": 0,
+      "stdout": "cmM9MQphYnNlbnQK",
+      "stderr": ""
+    }
+  ]
+}

@@ -1451,6 +1451,20 @@ impl<'a> Parser<'a> {
                         heredoc_delim: None,
                     });
                 }
+                Some(tokens::Token::DupFdInWord(fd)) => {
+                    let fd = *fd;
+                    self.advance();
+                    if let Ok(target) = self.expect_word() {
+                        redirects.push(Redirect {
+                            expansion_line: None,
+                            fd: Some(fd),
+                            fd_var: None,
+                            kind: RedirectKind::DupInput,
+                            target,
+                            heredoc_delim: None,
+                        });
+                    }
+                }
                 Some(tokens::Token::RedirectFdIn(fd)) => {
                     let fd = *fd;
                     self.advance();
@@ -3809,14 +3823,19 @@ impl<'a> Parser<'a> {
 
     /// `{fd}` or `{arr[i]}` (a coproc hands its descriptors out as
     /// `${NAME[0]}` / `${NAME[1]}`, and `exec {NAME[1]}>&-` closes one).
+    /// Bash accepts any non-empty subscript (`{a[i++]}`); it is evaluated
+    /// when the descriptor number is assigned.
     fn is_fd_var_word(s: &str) -> bool {
-        s.starts_with('{')
-            && s.ends_with('}')
-            && s.len() > 2
-            && s[1..s.len() - 1]
-                .chars()
-                .all(|c| c.is_alphanumeric() || matches!(c, '_' | '[' | ']'))
-            && s[1..s.len() - 1].starts_with(|c: char| c.is_alphabetic() || c == '_')
+        let Some(inner) = s.strip_prefix('{').and_then(|rest| rest.strip_suffix('}')) else {
+            return false;
+        };
+        let name = match inner.split_once('[') {
+            Some((name, rest)) if rest.len() > 1 && rest.ends_with(']') => name,
+            Some(_) => return false,
+            None => inner,
+        };
+        name.starts_with(|c: char| c.is_alphabetic() || c == '_')
+            && name.chars().all(|c| c.is_alphanumeric() || c == '_')
     }
 
     // THREAT[TM-DOS-044]: on the recursive path. The in-progress command is
@@ -3909,6 +3928,7 @@ impl<'a> Parser<'a> {
                 | tokens::Token::DupInput
                 | tokens::Token::DupFdIn(..)
                 | tokens::Token::DupFdClose(_)
+                | tokens::Token::DupFdInWord(_)
                 | tokens::Token::RedirectFdIn(_)
                 | tokens::Token::RedirectReadWrite
                 | tokens::Token::RedirectFdReadWrite(_)
@@ -4393,6 +4413,19 @@ impl<'a> Parser<'a> {
                     fd_var: None,
                     kind: RedirectKind::DupInput,
                     target: Word::literal("-"),
+                    heredoc_delim: None,
+                });
+            }
+            Some(tokens::Token::DupFdInWord(fd)) => {
+                let fd = *fd;
+                self.advance();
+                let target = self.expect_word()?;
+                redirects.push(Redirect {
+                    expansion_line: None,
+                    fd: Some(fd),
+                    fd_var: None,
+                    kind: RedirectKind::DupInput,
+                    target,
                     heredoc_delim: None,
                 });
             }

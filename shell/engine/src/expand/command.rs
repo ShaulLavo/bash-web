@@ -149,6 +149,7 @@ impl Expansion<'_> {
         if targets.len() != 1 {
             runner
                 .file_substitution_error(
+                    redirect.expansion_line,
                     redirect.target.raw.as_deref().unwrap_or("redirect"),
                     "ambiguous redirect",
                 )
@@ -157,7 +158,7 @@ impl Expansion<'_> {
         }
         let target = targets.pop().ok_or(2)?;
         let Some(reader) = runner
-            .open_substitution_file(&target, state, self.work)
+            .open_substitution_file(&target, redirect.expansion_line, state, self.work)
             .await?
         else {
             return Ok(1);

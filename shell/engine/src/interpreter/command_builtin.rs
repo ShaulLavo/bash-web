@@ -69,14 +69,35 @@ pub(super) async fn diagnostic(
     Ok(())
 }
 
+/// Bash's non-interactive prefix names the command's line when it has one.
+pub(super) async fn prefix(
+    line: Option<usize>,
+    fds: &Descriptors,
+    context: &Context,
+) -> Result<(), i32> {
+    diagnostic(fds, context, b"/usr/bin/bash: ").await?;
+    let Some(line) = line.filter(|_| !context.core.interactive.get()) else {
+        return Ok(());
+    };
+    let mut digits = [0u8; 20];
+    let capacity = digits.len();
+    let mut remaining = digits.as_mut_slice();
+    std::io::Write::write_fmt(&mut remaining, format_args!("{line}")).map_err(|_| 2)?;
+    let length = capacity - remaining.len();
+    diagnostic(fds, context, b"line ").await?;
+    diagnostic(fds, context, &digits[..length]).await?;
+    diagnostic(fds, context, b": ").await
+}
+
 /// Stream the diagnostic without allocating another copy of an admitted path.
 pub(super) async fn execution_failure(
     fds: &Descriptors,
     context: &Context,
+    line: Option<usize>,
     name: &str,
     reason: &[u8],
 ) -> Result<(), i32> {
-    diagnostic(fds, context, b"/usr/bin/bash: ").await?;
+    prefix(line, fds, context).await?;
     diagnostic(fds, context, name.as_bytes()).await?;
     diagnostic(fds, context, b": ").await?;
     diagnostic(fds, context, reason).await?;

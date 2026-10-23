@@ -885,6 +885,12 @@ impl<'a> Lexer<'a> {
             // N<&M or N<&- - duplicate input fd
             consume(self, 2);
 
+            // `N<&M-` moves M: leave `M-` to be read as the target word.
+            let digits = self.lookahead().take_while(|c| c.is_ascii_digit()).count();
+            if digits > 0 && self.lookahead().nth(digits) == Some('-') {
+                return Some(Token::DupFdInWord(fd));
+            }
+
             // Read the target fd number or '-'
             let mut target_str = String::new();
             while let Some(c) = self.peek_char() {
@@ -901,6 +907,9 @@ impl<'a> Lexer<'a> {
 
             if target_str == "-" {
                 return Some(Token::DupFdClose(fd));
+            }
+            if target_str.is_empty() {
+                return Some(Token::DupFdInWord(fd));
             }
             let target_fd: i32 = target_str.parse().unwrap_or(0);
             return Some(Token::DupFdIn(fd, target_fd));

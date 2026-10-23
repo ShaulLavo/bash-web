@@ -153,6 +153,10 @@ pub enum Token {
     /// Duplicate input fd to another (e.g., 4<&0)
     DupFdIn(i32, i32),
 
+    /// `N<&` followed by a word that is not a digit or `-` (`3<&$fd`), or a
+    /// move (`3<&4-`): the word decides at expansion time.
+    DupFdInWord(i32),
+
     /// Close input fd (e.g., 4<&-)
     DupFdClose(i32),
 

@@ -1,5 +1,4 @@
 use super::*;
-use std::io::Write;
 
 pub(super) async fn options(
     args: &[String],
@@ -42,17 +41,8 @@ fn invalid_option(arg: &str) -> Option<u8> {
 }
 
 async fn prefix(line: Option<usize>, fds: &Descriptors, context: &Context) -> Result<(), i32> {
-    let Some(line) = line else {
-        return command_builtin::diagnostic(fds, context, b"/usr/bin/bash: builtin: ").await;
-    };
-    let mut digits = [0u8; 20];
-    let capacity = digits.len();
-    let mut remaining = digits.as_mut_slice();
-    write!(&mut remaining, "{}", line).map_err(|_| 2)?;
-    let length = capacity - remaining.len();
-    command_builtin::diagnostic(fds, context, b"/usr/bin/bash: line ").await?;
-    command_builtin::diagnostic(fds, context, &digits[..length]).await?;
-    command_builtin::diagnostic(fds, context, b": builtin: ").await
+    command_builtin::prefix(line, fds, context).await?;
+    command_builtin::diagnostic(fds, context, b"builtin: ").await
 }
 
 pub(super) async fn missing(

@@ -94,10 +94,10 @@
       "stderr": ""
     },
     {
-      "id": "bashkit-suite:bashbox-named-fd:139",
-      "script": "f(){ echo a {fd}>f; cat {x}<f 2>&1; read {y}<<<w; exec {z}>&-; echo {q}>&2; echo {r}>&$x; cat {h}<<E\nx\nE\n}; declare -f f\n",
+      "id": "named-redirect-printing",
+      "script": "f(){ echo a {fd}>f; cat {x}<f 2>&1; read {y}<<<w; exec {z}>&-; echo {q}>&2; echo {r}>&$x; cat {h}<<E\nx\nE\n}; type f",
       "status": 0,
-      "stdout": "ZiAoKSAKeyAKICAgIGVjaG8gYSB7ZmR9PiBmOwogICAgY2F0IHt4fTwgZiAyPiYxOwogICAgcmVhZCB7eX08PDwgdzsKICAgIGV4ZWMge3p9PiYtOwogICAgZWNobyB7cX0+JjI7CiAgICBlY2hvIHtyfT4mJHg7CiAgICBjYXQge2h9PDxFCngKRQoKfQo=",
+      "stdout": "ZiBpcyBhIGZ1bmN0aW9uCmYgKCkgCnsgCiAgICBlY2hvIGEge2ZkfT4gZjsKICAgIGNhdCB7eH08IGYgMj4mMTsKICAgIHJlYWQge3l9PDw8IHc7CiAgICBleGVjIHt6fT4mLTsKICAgIGVjaG8ge3F9PiYyOwogICAgZWNobyB7cn0+JiR4OwogICAgY2F0IHtofTw8RQp4CkUKCn0K",
       "stderr": ""
     },
     {

@@ -1,5 +1,6 @@
 use super::*;
 use std::{
+    borrow::Cow,
     cell::{Ref, RefMut},
     rc::Weak,
 };
@@ -7,16 +8,23 @@ use std::{
 #[derive(Clone)]
 pub(super) struct Descriptors {
     table: Rc<RefCell<FdTable>>,
-    // Weak tables preserve named changes across temporary redirects without
-    // keeping a displaced pipe writer alive until a compound command returns.
-    parents: Rc<[Weak<RefCell<FdTable>>]>,
+    callers: Option<Rc<Caller>>,
+}
+
+// Weak tables preserve named changes across temporary redirects without
+// keeping a displaced pipe writer alive until a compound command returns.
+// The links are shared, so a dropped intermediate table never hides the
+// tables above it.
+struct Caller {
+    table: Weak<RefCell<FdTable>>,
+    next: Option<Rc<Caller>>,
 }
 
 impl Descriptors {
     pub(super) fn new(table: FdTable) -> Self {
         Self {
             table: Rc::new(RefCell::new(table)),
-            parents: Rc::from([]),
+            callers: None,
         }
     }
 
@@ -27,30 +35,19 @@ impl Descriptors {
         self.table.borrow_mut()
     }
 
-    pub(super) async fn redirected(
-        &self,
-        context: &Context,
-        work: &mut expand::Work,
-    ) -> Result<Self, expand::Error> {
-        let count = self.parents.len().checked_add(1).ok_or(2)?;
-        work.admit_storage(
-            count
-                .checked_mul(std::mem::size_of::<Weak<RefCell<FdTable>>>())
-                .ok_or(2)?,
-        )?;
-        let mut parents = Vec::new();
-        parents.try_reserve_exact(count).map_err(|_| 2)?;
-        for parent in self.parents.iter() {
-            work.checkpoint(&context.cancel).await?;
-            if parent.strong_count() > 0 {
-                parents.push(parent.clone());
-            }
-        }
-        parents.push(Rc::downgrade(&self.table));
-        Ok(Self {
+    /// A temporary copy whose named changes still reach every live caller.
+    pub(super) fn redirected(&self) -> Self {
+        Self {
             table: Rc::new(RefCell::new(self.borrow().clone())),
-            parents: parents.into(),
-        })
+            callers: Some(Rc::new(Caller {
+                table: Rc::downgrade(&self.table),
+                next: self.callers.clone(),
+            })),
+        }
+    }
+
+    fn callers(&self) -> impl Iterator<Item = &Caller> {
+        std::iter::successors(self.callers.as_deref(), |caller| caller.next.as_deref())
     }
 
     pub(super) async fn publish(
@@ -60,11 +57,11 @@ impl Descriptors {
         context: &Context,
         work: &mut expand::Work,
     ) -> Result<(), expand::Error> {
-        for _ in self.parents.iter() {
+        for caller in self.callers() {
             work.checkpoint(&context.cancel).await?;
-        }
-        for parent in self.parents.iter().filter_map(Weak::upgrade) {
-            replace(&mut parent.borrow_mut(), fd, endpoint.clone());
+            if let Some(table) = caller.table.upgrade() {
+                replace(&mut table.borrow_mut(), fd, endpoint.clone());
+            }
         }
         replace(&mut self.borrow_mut(), fd, endpoint);
         Ok(())
@@ -113,9 +110,12 @@ async fn admit_publication(
     context: &Context,
     work: &mut expand::Work,
 ) -> Result<(), expand::Error> {
-    for parent in fds.parents.iter().filter_map(Weak::upgrade) {
+    for caller in fds.callers() {
         work.checkpoint(&context.cancel).await?;
-        let table = parent.borrow();
+        let Some(table) = caller.table.upgrade() else {
+            continue;
+        };
+        let table = table.borrow();
         if table.get(fd).is_none() && table.iter().count() >= context.limits().descriptors {
             return Err(crate::exec::RESOURCE_STATUS.into());
         }
@@ -165,7 +165,9 @@ async fn apply_body(
         fds.borrow_mut().remove(fd);
         return Ok(());
     }
-    let endpoint = endpoint(redirect, target, state, fds, context, work).await?;
+    let (target, moved) = moved_source(redirect, target);
+    let kind = effective_kind(redirect, &target);
+    let endpoint = endpoint(redirect, kind, target, state, fds, context, work).await?;
     let fd = if named {
         allocate(fds, context, work).await?
     } else {
@@ -178,11 +180,73 @@ async fn apply_body(
         fds.publish(fd, Some(endpoint.clone()), context, work)
             .await?;
     }
-    if redirect.kind == RedirectKind::OutputBoth {
+    if kind == RedirectKind::OutputBoth {
         fds.borrow_mut().insert(2, endpoint.clone());
     }
     fds.borrow_mut().insert(fd, endpoint);
+    if let Some(source) = moved.filter(|&source| source != fd) {
+        if named && mode == Mode::Exec {
+            fds.publish(source, None, context, work).await?;
+        }
+        fds.borrow_mut().remove(source);
+    }
     Ok(())
+}
+
+/// `[n]>&digits-` and `[n]<&digits-` duplicate `digits` and then close it.
+fn moved_source(redirect: &Redirect, mut target: String) -> (String, Option<u32>) {
+    let duplicate = matches!(
+        redirect.kind,
+        RedirectKind::DupInput | RedirectKind::DupOutput
+    );
+    let source = target
+        .strip_suffix('-')
+        .filter(|source| duplicate && !source.is_empty())
+        .filter(|source| source.bytes().all(|byte| byte.is_ascii_digit()))
+        .and_then(|source| source.parse::<u32>().ok());
+    if source.is_some() {
+        target.pop();
+    }
+    (target, source)
+}
+
+/// Bash reads `>&word` and `1>&word` with a non-numeric word as `&>word`.
+fn effective_kind(redirect: &Redirect, target: &str) -> RedirectKind {
+    let word = !target.is_empty() && !target.bytes().all(|byte| byte.is_ascii_digit());
+    let both = redirect.kind == RedirectKind::DupOutput
+        && redirect.fd_var.is_none()
+        && redirect.fd == Some(1)
+        && word;
+    if both {
+        RedirectKind::OutputBoth
+    } else {
+        redirect.kind
+    }
+}
+
+/// Bash names a source that is not open by its literal number. An expanded
+/// word names itself when it replaces the default descriptor; otherwise the
+/// diagnostic names the descriptor it would have replaced.
+pub(super) fn closed_label<'a>(redirect: Option<&'a Redirect>, digits: &'a str) -> Cow<'a, str> {
+    let Some(redirect) = redirect else {
+        return digits.into();
+    };
+    // A move names its source number, like a literal duplicate.
+    let literal =
+        |word: &&str| word.ends_with('-') || word.bytes().all(|byte| byte.is_ascii_digit());
+    let word = redirect.target.raw.as_deref();
+    let Some(word) = word.filter(|word| !literal(word)) else {
+        return digits.into();
+    };
+    let default = if redirect.kind == RedirectKind::DupInput {
+        0
+    } else {
+        1
+    };
+    match redirect.fd {
+        Some(fd) if fd != default => fd.to_string().into(),
+        _ => word.into(),
+    }
 }
 
 fn input(kind: RedirectKind) -> bool {
@@ -208,24 +272,22 @@ fn number(redirect: &Redirect) -> Result<u32, CommandError> {
 
 async fn endpoint(
     redirect: &Redirect,
+    kind: RedirectKind,
     target: String,
     state: &SharedState,
     fds: &Descriptors,
     context: &Context,
     work: &mut expand::Work,
 ) -> Result<io::Endpoint, CommandError> {
-    match redirect.kind {
+    match kind {
         RedirectKind::DupInput | RedirectKind::DupOutput => {
-            let label = redirect
-                .fd_var
-                .as_deref()
-                .or(redirect.target.raw.as_deref());
-            duplicate_descriptor(&target, label, redirect.expansion_line, fds, context, work).await
+            let line = redirect.expansion_line;
+            duplicate_descriptor(&target, Some(redirect), line, fds, context, work).await
         }
         RedirectKind::HereDoc | RedirectKind::HereDocStrip | RedirectKind::HereString => {
             work.admit_storage(io::buffered_input_metadata_bytes())?;
             let mut text = target;
-            if redirect.kind == RedirectKind::HereString {
+            if kind == RedirectKind::HereString {
                 work.admit_storage(1)?;
                 text.try_reserve_exact(1).map_err(|_| 2)?;
                 text.push('\n');
@@ -237,28 +299,33 @@ async fn endpoint(
         | RedirectKind::Clobber
         | RedirectKind::Append
         | RedirectKind::OutputBoth
-        | RedirectKind::ReadWrite => open(redirect, &target, state, fds, context).await,
+        | RedirectKind::ReadWrite => open(redirect, kind, &target, state, fds, context).await,
     }
 }
 
 async fn open(
     redirect: &Redirect,
+    kind: RedirectKind,
     target: &str,
     state: &SharedState,
     fds: &Descriptors,
     context: &Context,
 ) -> Result<io::Endpoint, CommandError> {
-    let path = absolute(&state.borrow().cwd, target);
-    let read_write = redirect.kind == RedirectKind::ReadWrite;
+    let mut path = absolute(&state.borrow().cwd, target);
+    // A trailing slash asks the runtime to resolve a directory.
+    if target.ends_with('/') && !path.ends_with('/') {
+        path.push('/');
+    }
+    let read_write = kind == RedirectKind::ReadWrite;
     let options = OpenOptions {
-        read: input(redirect.kind),
-        write: !input(redirect.kind) || read_write,
-        create: !input(redirect.kind) || read_write,
+        read: input(kind),
+        write: !input(kind) || read_write,
+        create: !input(kind) || read_write,
         truncate: matches!(
-            redirect.kind,
+            kind,
             RedirectKind::Output | RedirectKind::Clobber | RedirectKind::OutputBoth
         ),
-        append: redirect.kind == RedirectKind::Append,
+        append: kind == RedirectKind::Append,
     };
     let opening = io::open_path(&path, &fds.borrow(), &options);
     let opening = match opening {
