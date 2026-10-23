@@ -27,6 +27,8 @@ mod file_substitution;
 mod function_names;
 mod indexed;
 mod select;
+#[cfg(test)]
+mod trap_tests;
 mod type_builtin;
 
 #[derive(Clone, Debug)]

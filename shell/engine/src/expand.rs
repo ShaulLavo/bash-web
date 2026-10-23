@@ -978,9 +978,10 @@ impl Expansion<'_> {
                 }
                 let runner = expansion.work.substitutions.clone().ok_or(2)?;
                 crate::ast_copy::admit(commands, expansion.cancel, expansion.work).await?;
-                let child = crate::state::State::snapshot(state, expansion.cancel, expansion.work)
-                    .await?
-                    .shared();
+                let mut child =
+                    crate::state::State::snapshot(state, expansion.cancel, expansion.work).await?;
+                child.traps = state.borrow().traps.process_substitution();
+                let child = child.shared();
                 expansion.work.admit_storage(16)?;
                 let fd = runner
                     .process(commands.clone(), *is_input, child, state, expansion.work)

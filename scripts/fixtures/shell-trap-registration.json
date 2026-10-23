@@ -1,0 +1,1780 @@
+{
+  "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "sourceHead": "77b3963d904599932c2cd59fe46409f0ab7a6c9a",
+  "cases": [
+    {
+      "id": "empty",
+      "code": "trap; trap -p; trap -p EXIT; echo status:$?",
+      "status": 0,
+      "stdout": "status:0\n",
+      "stderr": ""
+    },
+    {
+      "id": "registration",
+      "code": "trap 'echo bye' EXIT; trap '' INT; trap 'echo hup' HUP; trap -p; trap - EXIT; trap -p",
+      "status": 0,
+      "stdout": "trap -- 'echo bye' EXIT\ntrap -- 'echo hup' SIGHUP\ntrap -- '' SIGINT\ntrap -- 'echo hup' SIGHUP\ntrap -- '' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "names",
+      "code": "trap : int; echo lower:$?; trap : SIGINT; trap : 2; trap -p INT SIGINT 2; trap -p 999; echo invalid:$?",
+      "status": 0,
+      "stdout": "lower:0\ntrap -- ':' SIGINT\ntrap -- ':' SIGINT\ntrap -- ':' SIGINT\ninvalid:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: 999: invalid signal specification\n"
+    },
+    {
+      "id": "numeric-reset",
+      "code": "trap : INT TERM; trap 2; trap -p; trap 15; trap -p",
+      "status": 0,
+      "stdout": "trap -- ':' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "one-operand",
+      "code": "trap EXIT; echo one:$?; trap 'echo hi'; echo action:$?; trap --; echo empty:$?",
+      "status": 0,
+      "stdout": "one:0\naction:2\nempty:0\n",
+      "stderr": "trap: usage: trap [-Plp] [[action] signal_spec ...]\n"
+    },
+    {
+      "id": "options",
+      "code": "trap -lp; echo s:$?; trap -P; echo s:$?; trap -x; echo s:$?; trap -- -p; echo s:$?",
+      "status": 0,
+      "stdout": " 1) SIGHUP\t 2) SIGINT\t 3) SIGQUIT\t 4) SIGILL\t 5) SIGTRAP\n 6) SIGABRT\t 7) SIGBUS\t 8) SIGFPE\t 9) SIGKILL\t10) SIGUSR1\n11) SIGSEGV\t12) SIGUSR2\t13) SIGPIPE\t14) SIGALRM\t15) SIGTERM\n16) SIGSTKFLT\t17) SIGCHLD\t18) SIGCONT\t19) SIGSTOP\t20) SIGTSTP\n21) SIGTTIN\t22) SIGTTOU\t23) SIGURG\t24) SIGXCPU\t25) SIGXFSZ\n26) SIGVTALRM\t27) SIGPROF\t28) SIGWINCH\t29) SIGIO\t30) SIGPWR\n31) SIGSYS\t34) SIGRTMIN\t35) SIGRTMIN+1\t36) SIGRTMIN+2\t37) SIGRTMIN+3\n38) SIGRTMIN+4\t39) SIGRTMIN+5\t40) SIGRTMIN+6\t41) SIGRTMIN+7\t42) SIGRTMIN+8\n43) SIGRTMIN+9\t44) SIGRTMIN+10\t45) SIGRTMIN+11\t46) SIGRTMIN+12\t47) SIGRTMIN+13\n48) SIGRTMIN+14\t49) SIGRTMIN+15\t50) SIGRTMAX-14\t51) SIGRTMAX-13\t52) SIGRTMAX-12\n53) SIGRTMAX-11\t54) SIGRTMAX-10\t55) SIGRTMAX-9\t56) SIGRTMAX-8\t57) SIGRTMAX-7\n58) SIGRTMAX-6\t59) SIGRTMAX-5\t60) SIGRTMAX-4\t61) SIGRTMAX-3\t62) SIGRTMAX-2\n63) SIGRTMAX-1\t64) SIGRTMAX\t\ns:0\ns:2\ns:2\ns:2\n",
+      "stderr": "/usr/bin/bash: line 1: trap: -P requires at least one signal name\n/usr/bin/bash: line 1: trap: -x: invalid option\ntrap: usage: trap [-Plp] [[action] signal_spec ...]\ntrap: usage: trap [-Plp] [[action] signal_spec ...]\n"
+    },
+    {
+      "id": "list",
+      "code": "trap -l",
+      "status": 0,
+      "stdout": " 1) SIGHUP\t 2) SIGINT\t 3) SIGQUIT\t 4) SIGILL\t 5) SIGTRAP\n 6) SIGABRT\t 7) SIGBUS\t 8) SIGFPE\t 9) SIGKILL\t10) SIGUSR1\n11) SIGSEGV\t12) SIGUSR2\t13) SIGPIPE\t14) SIGALRM\t15) SIGTERM\n16) SIGSTKFLT\t17) SIGCHLD\t18) SIGCONT\t19) SIGSTOP\t20) SIGTSTP\n21) SIGTTIN\t22) SIGTTOU\t23) SIGURG\t24) SIGXCPU\t25) SIGXFSZ\n26) SIGVTALRM\t27) SIGPROF\t28) SIGWINCH\t29) SIGIO\t30) SIGPWR\n31) SIGSYS\t34) SIGRTMIN\t35) SIGRTMIN+1\t36) SIGRTMIN+2\t37) SIGRTMIN+3\n38) SIGRTMIN+4\t39) SIGRTMIN+5\t40) SIGRTMIN+6\t41) SIGRTMIN+7\t42) SIGRTMIN+8\n43) SIGRTMIN+9\t44) SIGRTMIN+10\t45) SIGRTMIN+11\t46) SIGRTMIN+12\t47) SIGRTMIN+13\n48) SIGRTMIN+14\t49) SIGRTMIN+15\t50) SIGRTMAX-14\t51) SIGRTMAX-13\t52) SIGRTMAX-12\n53) SIGRTMAX-11\t54) SIGRTMAX-10\t55) SIGRTMAX-9\t56) SIGRTMAX-8\t57) SIGRTMAX-7\n58) SIGRTMAX-6\t59) SIGRTMAX-5\t60) SIGRTMAX-4\t61) SIGRTMAX-3\t62) SIGRTMAX-2\n63) SIGRTMAX-1\t64) SIGRTMAX\t\n",
+      "stderr": ""
+    },
+    {
+      "id": "quote",
+      "code": "trap \"a'b\nc\\d\" INT; trap -p",
+      "status": 0,
+      "stdout": "trap -- 'a'\\''b\nc\\d' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "mixed-invalid",
+      "code": "trap : INT BAD TERM; echo s:$?; trap -p; trap -p INT BAD TERM; echo s:$?",
+      "status": 0,
+      "stdout": "s:1\ntrap -- ':' SIGINT\ntrap -- ':' SIGTERM\ntrap -- ':' SIGINT\ntrap -- ':' SIGTERM\ns:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: BAD: invalid signal specification\n/usr/bin/bash: line 1: trap: BAD: invalid signal specification\n"
+    },
+    {
+      "id": "kill-stop",
+      "code": "trap : KILL STOP; trap -p; trap - SIGKILL SIGSTOP",
+      "status": 0,
+      "stdout": "trap -- ':' SIGKILL\ntrap -- ':' SIGSTOP\n",
+      "stderr": ""
+    },
+    {
+      "id": "special-names",
+      "code": "trap : ERR DEBUG RETURN; trap -p ERR DEBUG RETURN; trap - ERR DEBUG RETURN",
+      "status": 0,
+      "stdout": "trap -- ':' ERR\ntrap -- ':' DEBUG\ntrap -- ':' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "query-action",
+      "code": "trap 'echo hi' INT; trap -P INT EXIT; trap '' TERM; trap -P TERM; trap -p INT TERM",
+      "status": 0,
+      "stdout": "echo hi\n\ntrap -- 'echo hi' SIGINT\ntrap -- '' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "inherited-ignore",
+      "code": "trap '' INT; trap : TERM; (trap : HUP; trap -p); trap -p",
+      "status": 0,
+      "stdout": "trap -- ':' SIGHUP\ntrap -- '' SIGINT\ntrap -- '' SIGINT\ntrap -- ':' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "root-removal",
+      "code": "trap 'echo bad' EXIT; trap - EXIT; false",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "invalid-prefixed-event",
+      "code": "trap : SIGEXIT SIGERR SIGDEBUG SIGRETURN; echo status:$?",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: SIGEXIT: invalid signal specification\n/usr/bin/bash: line 1: trap: SIGERR: invalid signal specification\n/usr/bin/bash: line 1: trap: SIGDEBUG: invalid signal specification\n/usr/bin/bash: line 1: trap: SIGRETURN: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmin-offset",
+      "code": "trap : RTMIN+20; echo status:$?; trap -p 54; trap - 54",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMAX-10\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmax-offset",
+      "code": "trap : RTMAX-20; echo status:$?; trap -p 44; trap - 44",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMAX-20: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmin-zero",
+      "code": "trap : RTMIN+0; echo status:$?; trap -p 34; trap - 34",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMIN\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:numeric-spelling",
+      "code": "trap : +2; echo plus:$?; trap : 02; echo zero:$?; trap -p 2; trap - 2",
+      "status": 0,
+      "stdout": "plus:0\nzero:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:numeric-one-action",
+      "code": "trap '2' EXIT; echo status:$?; trap -p",
+      "status": 0,
+      "stdout": "status:0\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:query-combined-flags",
+      "code": "trap : INT; trap -pP INT; trap -Pp INT; trap -p -P INT; trap -P -p INT",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n"
+    },
+    {
+      "id": "r1:query-mutually-exclusive-errexit",
+      "code": "set -e; trap : INT; trap -pP INT; echo BAD",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n"
+    },
+    {
+      "id": "r1:query-mutually-exclusive-noargs",
+      "code": "trap -pP; echo status:$?",
+      "status": 0,
+      "stdout": "status:2\n",
+      "stderr": "/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n"
+    },
+    {
+      "id": "r1:query-mutually-exclusive-list",
+      "code": "trap -pPl; echo status:$?",
+      "status": 0,
+      "stdout": "status:2\n",
+      "stderr": "/usr/bin/bash: line 1: trap: cannot specify both -p and -P\n"
+    },
+    {
+      "id": "r1:list-option-priority",
+      "code": "trap -lP; echo status:$?; trap -lp; echo status:$?",
+      "status": 0,
+      "stdout": "status:2\n 1) SIGHUP\t 2) SIGINT\t 3) SIGQUIT\t 4) SIGILL\t 5) SIGTRAP\n 6) SIGABRT\t 7) SIGBUS\t 8) SIGFPE\t 9) SIGKILL\t10) SIGUSR1\n11) SIGSEGV\t12) SIGUSR2\t13) SIGPIPE\t14) SIGALRM\t15) SIGTERM\n16) SIGSTKFLT\t17) SIGCHLD\t18) SIGCONT\t19) SIGSTOP\t20) SIGTSTP\n21) SIGTTIN\t22) SIGTTOU\t23) SIGURG\t24) SIGXCPU\t25) SIGXFSZ\n26) SIGVTALRM\t27) SIGPROF\t28) SIGWINCH\t29) SIGIO\t30) SIGPWR\n31) SIGSYS\t34) SIGRTMIN\t35) SIGRTMIN+1\t36) SIGRTMIN+2\t37) SIGRTMIN+3\n38) SIGRTMIN+4\t39) SIGRTMIN+5\t40) SIGRTMIN+6\t41) SIGRTMIN+7\t42) SIGRTMIN+8\n43) SIGRTMIN+9\t44) SIGRTMIN+10\t45) SIGRTMIN+11\t46) SIGRTMIN+12\t47) SIGRTMIN+13\n48) SIGRTMIN+14\t49) SIGRTMIN+15\t50) SIGRTMAX-14\t51) SIGRTMAX-13\t52) SIGRTMAX-12\n53) SIGRTMAX-11\t54) SIGRTMAX-10\t55) SIGRTMAX-9\t56) SIGRTMAX-8\t57) SIGRTMAX-7\n58) SIGRTMAX-6\t59) SIGRTMAX-5\t60) SIGRTMAX-4\t61) SIGRTMAX-3\t62) SIGRTMAX-2\n63) SIGRTMAX-1\t64) SIGRTMAX\t\nstatus:0\n",
+      "stderr": "/usr/bin/bash: line 1: trap: -P requires at least one signal name\n"
+    },
+    {
+      "id": "r1:root-no-trap-errexit",
+      "code": "set -e; false; echo BAD",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "r1:root-no-trap-eval",
+      "code": "eval 'echo okay; exit 5'; echo BAD",
+      "status": 5,
+      "stdout": "okay\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-alias-0",
+      "code": "trap : RTMIN+0; echo status:$?; trap -p 34; trap - 34",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMIN\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-alias-1",
+      "code": "trap : RTMIN+1; echo status:$?; trap -p 35; trap - 35",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMIN+1\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-alias-15",
+      "code": "trap : RTMIN+15; echo status:$?; trap -p 49; trap - 49",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMIN+15\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-alias-16",
+      "code": "trap : RTMIN+16; echo status:$?; trap -p 50; trap - 50",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMAX-14\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-alias-20",
+      "code": "trap : RTMIN+20; echo status:$?; trap -p 54; trap - 54",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMAX-10\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-alias-29",
+      "code": "trap : RTMIN+29; echo status:$?; trap -p 63; trap - 63",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMAX-1\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-alias-30",
+      "code": "trap : RTMIN+30; echo status:$?; trap -p 64; trap - 64",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMAX\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmin-alias-31",
+      "code": "trap : RTMIN+31; echo status:$?; trap -p 65; trap - 65",
+      "status": 1,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMIN+31: invalid signal specification\n/usr/bin/bash: line 1: trap: 65: invalid signal specification\n/usr/bin/bash: line 1: trap: 65: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmax-alias-0",
+      "code": "trap : RTMAX-0; echo status:$?; trap -p 64; trap - 64",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMAX-0: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmax-alias-1",
+      "code": "trap : RTMAX-1; echo status:$?; trap -p 63; trap - 63",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMAX-1\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmax-alias-14",
+      "code": "trap : RTMAX-14; echo status:$?; trap -p 50; trap - 50",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGRTMAX-14\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:rtmax-alias-15",
+      "code": "trap : RTMAX-15; echo status:$?; trap -p 49; trap - 49",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMAX-15: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmax-alias-16",
+      "code": "trap : RTMAX-16; echo status:$?; trap -p 48; trap - 48",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMAX-16: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmax-alias-20",
+      "code": "trap : RTMAX-20; echo status:$?; trap -p 44; trap - 44",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMAX-20: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmax-alias-29",
+      "code": "trap : RTMAX-29; echo status:$?; trap -p 35; trap - 35",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMAX-29: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmax-alias-30",
+      "code": "trap : RTMAX-30; echo status:$?; trap -p 34; trap - 34",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMAX-30: invalid signal specification\n"
+    },
+    {
+      "id": "r1:rtmax-alias-31",
+      "code": "trap : RTMAX-31; echo status:$?; trap -p 33; trap - 33",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: RTMAX-31: invalid signal specification\n"
+    },
+    {
+      "id": "r1:numeric-alias-+2",
+      "code": "trap : +2; echo status:$?; trap -p 2; trap - 2",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:numeric-alias-0002",
+      "code": "trap : 0002; echo status:$?; trap -p 2; trap - 2",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:numeric-alias-+02",
+      "code": "trap : +02; echo status:$?; trap -p 2; trap - 2",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:numeric-alias- 2",
+      "code": "trap :  2; echo status:$?; trap -p 2; trap - 2",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:numeric-alias-2 ",
+      "code": "trap : 2 ; echo status:$?; trap -p 2; trap - 2",
+      "status": 0,
+      "stdout": "status:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "r1:numeric-alias--2",
+      "code": "trap : -2; echo status:$?; trap -p 2; trap - 2",
+      "status": 0,
+      "stdout": "status:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: -2: invalid signal specification\n"
+    },
+    {
+      "id": "r1:no-trap-explicit-exit",
+      "code": "v=global; f() { local v=local; exit 3; }; f one two; echo BAD",
+      "status": 3,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "inherit-subshell-registration",
+      "code": "trap 'echo parent' EXIT; (trap -p; trap); echo end; trap - EXIT",
+      "status": 0,
+      "stdout": "trap -- 'echo parent' EXIT\ntrap -- 'echo parent' EXIT\nend\n",
+      "stderr": ""
+    },
+    {
+      "id": "child-reset-registration",
+      "code": "trap 'echo parent' EXIT; (trap : INT; trap -p); trap -p; trap - EXIT",
+      "status": 0,
+      "stdout": "trap -- ':' SIGINT\ntrap -- 'echo parent' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "inherit-query-command-registration",
+      "code": "trap 'echo parent' EXIT; x=$(trap); printf 'query:%s\\n' \"$x\"; x=$(trap -p); printf 'explicit:%s\\n' \"$x\"; trap - EXIT",
+      "status": 0,
+      "stdout": "query:trap -- 'echo parent' EXIT\nexplicit:trap -- 'echo parent' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "inherit-invalid-mutation-registration",
+      "code": "trap 'echo parent' EXIT; (trap : BAD; trap -p); echo end; trap - EXIT",
+      "status": 0,
+      "stdout": "end\n",
+      "stderr": "/usr/bin/bash: line 1: trap: BAD: invalid signal specification\n"
+    },
+    {
+      "id": "inherit-child-reset-exit",
+      "code": "trap 'echo parent' EXIT; (trap - EXIT; trap -p; echo child:$?); trap -p; trap - EXIT",
+      "status": 0,
+      "stdout": "child:0\ntrap -- 'echo parent' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "inherit-pipeline-query",
+      "code": "trap 'echo parent' EXIT; trap '' INT; trap -p | { while read -r line; do echo \"got:$line\"; done; }; trap - EXIT",
+      "status": 0,
+      "stdout": "got:trap -- 'echo parent' EXIT\ngot:trap -- '' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "process-substitution-reset-signals",
+      "code": "trap 'echo p' INT; trap '' TERM; trap 'echo x' EXIT; while read -r l; do echo \"got:$l\"; done < <(trap -p); trap - INT TERM EXIT",
+      "status": 0,
+      "stdout": "got:trap -- '' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "process-substitution-nested-query",
+      "code": "trap 'echo p' INT; trap '' TERM; trap 'echo x' EXIT; while read -r l; do echo \"got:$l\"; done < <(trap -p; (trap -p)); trap - INT TERM EXIT",
+      "status": 0,
+      "stdout": "got:trap -- '' SIGTERM\ngot:trap -- '' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "process-substitution-special-mutation",
+      "code": "trap 'echo e' ERR; trap '' RETURN; while read -r l; do echo \"got:$l\"; done < <(trap : HUP; trap -p); trap - ERR RETURN",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGHUP\ngot:trap -- 'echo e' ERR\ngot:trap -- '' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "process-substitution-ignored-exit",
+      "code": "trap '' EXIT INT DEBUG ERR RETURN; while read -r l; do echo \"got:$l\"; done < <(trap : HUP; trap -p); trap - EXIT INT DEBUG ERR RETURN",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGHUP\ngot:trap -- '' SIGINT\ngot:trap -- '' DEBUG\ngot:trap -- '' ERR\ngot:trap -- '' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "process-substitution-nested-mutation",
+      "code": "trap 'echo e' ERR; trap '' TERM RETURN; while read -r l; do echo \"got:$l\"; done < <((trap : HUP; trap -p); trap -p); trap - ERR TERM RETURN",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGHUP\ngot:trap -- '' SIGTERM\ngot:trap -- '' SIGTERM\ngot:trap -- 'echo e' ERR\ngot:trap -- '' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "invalid-digit-action",
+      "code": "trap old INT; trap 99 INT; echo s:$?; trap -p INT; trap - INT",
+      "status": 0,
+      "stdout": "s:0\ntrap -- '99' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "invalid-padded-digit-action",
+      "code": "trap old INT TERM; trap 0099 INT TERM; echo s:$?; trap -p; trap - INT TERM",
+      "status": 0,
+      "stdout": "s:0\ntrap -- '0099' SIGINT\ntrap -- '0099' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "unrecorded-aliases",
+      "code": "trap : IOT CLD POLL; echo s:$?; trap -p; trap - 6 17 29",
+      "status": 0,
+      "stdout": "s:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: IOT: invalid signal specification\n/usr/bin/bash: line 1: trap: CLD: invalid signal specification\n/usr/bin/bash: line 1: trap: POLL: invalid signal specification\n"
+    },
+    {
+      "id": "unrecorded-prefixed-aliases",
+      "code": "trap : SIGIOT SIGCLD SIGPOLL; echo s:$?; trap -p; trap - 6 17 29",
+      "status": 0,
+      "stdout": "s:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: SIGIOT: invalid signal specification\n/usr/bin/bash: line 1: trap: SIGCLD: invalid signal specification\n/usr/bin/bash: line 1: trap: SIGPOLL: invalid signal specification\n"
+    },
+    {
+      "id": "numeric-placeholder-names-rejected",
+      "code": "trap : 32 33; trap -p SIG32 SIG33; echo q:$?; trap -p 32 33; trap - 32 33",
+      "status": 0,
+      "stdout": "q:1\ntrap -- ':' 32\ntrap -- ':' 33\n",
+      "stderr": "/usr/bin/bash: line 1: trap: SIG32: invalid signal specification\n/usr/bin/bash: line 1: trap: SIG33: invalid signal specification\n"
+    },
+    {
+      "id": "numeric-placeholder-registration-rejected",
+      "code": "trap : SIG32 SIG33; echo s:$?; trap -p; trap - 32 33",
+      "status": 0,
+      "stdout": "s:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: SIG32: invalid signal specification\n/usr/bin/bash: line 1: trap: SIG33: invalid signal specification\n"
+    },
+    {
+      "id": "ignored-err-child-mutation",
+      "code": "trap '' ERR; (trap : INT; trap -p ERR; echo c); trap -p ERR; trap - ERR",
+      "status": 0,
+      "stdout": "c\ntrap -- '' ERR\n",
+      "stderr": ""
+    },
+    {
+      "id": "ignored-debug-return-child-mutation",
+      "code": "trap '' DEBUG RETURN; (trap : INT; trap -p; echo c); trap - DEBUG RETURN",
+      "status": 0,
+      "stdout": "trap -- ':' SIGINT\nc\n",
+      "stderr": ""
+    },
+    {
+      "id": "ignored-exit-signal-child-mutation",
+      "code": "trap '' EXIT TERM DEBUG ERR RETURN; (trap : INT; trap -p); trap -p; trap - EXIT TERM DEBUG ERR RETURN",
+      "status": 0,
+      "stdout": "trap -- '' EXIT\ntrap -- ':' SIGINT\ntrap -- '' SIGTERM\ntrap -- '' EXIT\ntrap -- '' SIGTERM\ntrap -- '' DEBUG\ntrap -- '' ERR\ntrap -- '' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "ignored-special-command-substitution",
+      "code": "trap '' ERR RETURN; x=$(trap : INT; trap -p); printf '[%s]\\n' \"$x\"; trap -p; trap - ERR RETURN",
+      "status": 0,
+      "stdout": "[trap -- ':' SIGINT]\ntrap -- '' ERR\ntrap -- '' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "ignored-special-pipeline-child",
+      "code": "trap '' ERR RETURN; trap : INT | trap -p; trap -p; trap - ERR RETURN",
+      "status": 0,
+      "stdout": "trap -- '' ERR\ntrap -- '' RETURN\ntrap -- '' ERR\ntrap -- '' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "ignored-special-background-child",
+      "code": "trap '' ERR RETURN; { trap : INT; trap -p; } & wait; trap -p; trap - ERR RETURN",
+      "status": 0,
+      "stdout": "trap -- ':' SIGINT\ntrap -- '' ERR\ntrap -- '' RETURN\n",
+      "stderr": ""
+    },
+    {
+      "id": "single-quote-action",
+      "code": "trap \"'\" INT; trap -p INT; trap -P INT; trap - INT",
+      "status": 0,
+      "stdout": "trap -- \\' SIGINT\n'\n",
+      "stderr": ""
+    },
+    {
+      "id": "numeric-leading-whitespace",
+      "code": "trap : ' 2'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "numeric-trailing-whitespace",
+      "code": "trap : '2 '; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "numeric-signed-whitespace",
+      "code": "trap : ' +2 ' ' -0 '; echo s:$?; trap -p; trap - 0 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' EXIT\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "rtmin-negative-zero",
+      "code": "trap : RTMIN+-0; echo s:$?; trap -p; trap - 34",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGRTMIN\n",
+      "stderr": ""
+    },
+    {
+      "id": "rtmin-space-offset",
+      "code": "trap : 'RTMIN+ 5'; echo s:$?; trap -p; trap - 39",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGRTMIN+5\n",
+      "stderr": ""
+    },
+    {
+      "id": "rtmin-signed-offset-control",
+      "code": "trap : RTMIN++5; echo s:$?; trap -p; trap - 39",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGRTMIN+5\n",
+      "stderr": ""
+    },
+    {
+      "id": "process-ignored-exit-query",
+      "code": "trap '' EXIT; while read -r l; do echo \"got:$l\"; done < <(trap -p); trap - EXIT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "process-ignored-exit-set",
+      "code": "while read -r l; do echo \"got:$l\"; done < <(trap '' EXIT; trap -p)",
+      "status": 0,
+      "stdout": "got:trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "process-ignored-exit-query-reset",
+      "code": "trap '' EXIT INT; while read -r l; do echo \"got:$l\"; done < <(trap -p; trap : HUP; trap -p); trap - EXIT INT",
+      "status": 0,
+      "stdout": "got:trap -- '' SIGINT\ngot:trap -- ':' SIGHUP\ngot:trap -- '' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'\\x0b2'",
+      "code": "trap : '\u000b2'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'2\\x0b'",
+      "code": "trap : '2\u000b'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'\\x0c2'",
+      "code": "trap : '\f2'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'2\\x0c'",
+      "code": "trap : '2\f'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'\\r2'",
+      "code": "trap : '\r2'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'2\\r'",
+      "code": "trap : '2\r'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'\\n2'",
+      "code": "trap : '\n2'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'2\\n'",
+      "code": "trap : '2\n'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'\\t2'",
+      "code": "trap : '\t2'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'2\\t'",
+      "code": "trap : '2\t'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:0\ntrap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "number-'\\xa02'",
+      "code": "trap : '\u00a02'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: \u00a02: invalid signal specification\n"
+    },
+    {
+      "id": "number-'2\\xa0'",
+      "code": "trap : '2\u00a0'; echo s:$?; trap -p; trap - 2",
+      "status": 0,
+      "stdout": "s:1\n",
+      "stderr": "/usr/bin/bash: line 1: trap: 2\u00a0: invalid signal specification\n"
+    },
+    {
+      "id": "nested-parent-deferred-sub-handlers",
+      "code": "trap : HUP INT QUIT USR1 PIPE ALRM TERM CHLD WINCH; (while read -r l; do echo \"got:$l\"; done < <(trap -p)); trap - HUP INT QUIT USR1 PIPE ALRM TERM CHLD WINCH",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGHUP\ngot:trap -- ':' SIGUSR1\ngot:trap -- ':' SIGPIPE\ngot:trap -- ':' SIGALRM\ngot:trap -- ':' SIGTERM\ngot:trap -- ':' SIGWINCH\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-toplevel-handlers",
+      "code": "trap : HUP INT QUIT USR1 PIPE ALRM TERM CHLD WINCH; while read -r l; do echo \"got:$l\"; done < <(trap -p); trap - HUP INT QUIT USR1 PIPE ALRM TERM CHLD WINCH",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-sub-exit-handler",
+      "code": "trap 'echo x' EXIT; (while read -r l; do echo \"got:$l\"; done < <(trap -p EXIT)); trap - EXIT",
+      "status": 0,
+      "stdout": "got:trap -- 'echo x' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-sub-exit-ignored",
+      "code": "trap '' EXIT; (while read -r l; do echo \"got:$l\"; done < <(trap -p EXIT)); trap - EXIT",
+      "status": 0,
+      "stdout": "got:trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-comsub-exit-ignored",
+      "code": "trap '' EXIT; x=$(while read -r l; do echo \"got:$l\"; done < <(trap -p EXIT)); echo \"[$x]\"; trap - EXIT",
+      "status": 0,
+      "stdout": "[got:trap -- '' EXIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-pipeline-exit-ignored",
+      "code": "trap '' EXIT; echo | { while read -r l; do echo \"got:$l\"; done < <(trap -p EXIT); }; trap - EXIT",
+      "status": 0,
+      "stdout": "got:trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-async-exit-ignored",
+      "code": "trap '' EXIT; { while read -r l; do echo \"got:$l\"; done < <(trap -p EXIT); } & wait; trap - EXIT",
+      "status": 0,
+      "stdout": "got:trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-sub-procsub-mutation",
+      "code": "trap '' DEBUG ERR RETURN; trap 'echo e' ERR; (while read -r l; do echo \"got:$l\"; done < <(trap : HUP; trap -p)); trap - DEBUG ERR RETURN",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGHUP\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-mutated-sub-inherited-exit-ignored",
+      "code": "trap '' EXIT; (trap : HUP; while read -r l; do echo \"got:$l\"; done < <(trap -p EXIT)); trap - EXIT",
+      "status": 0,
+      "stdout": "got:trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-1",
+      "code": "trap : 1; (while read -r l; do echo \"got:$l\"; done < <(trap -p 1)); trap - 1",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGHUP\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-2",
+      "code": "trap : 2; (while read -r l; do echo \"got:$l\"; done < <(trap -p 2)); trap - 2",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-3",
+      "code": "trap : 3; (while read -r l; do echo \"got:$l\"; done < <(trap -p 3)); trap - 3",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-4",
+      "code": "trap : 4; (while read -r l; do echo \"got:$l\"; done < <(trap -p 4)); trap - 4",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGILL\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-5",
+      "code": "trap : 5; (while read -r l; do echo \"got:$l\"; done < <(trap -p 5)); trap - 5",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGTRAP\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-6",
+      "code": "trap : 6; (while read -r l; do echo \"got:$l\"; done < <(trap -p 6)); trap - 6",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGABRT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-7",
+      "code": "trap : 7; (while read -r l; do echo \"got:$l\"; done < <(trap -p 7)); trap - 7",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGBUS\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-8",
+      "code": "trap : 8; (while read -r l; do echo \"got:$l\"; done < <(trap -p 8)); trap - 8",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGFPE\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-9",
+      "code": "trap : 9; (while read -r l; do echo \"got:$l\"; done < <(trap -p 9)); trap - 9",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGKILL\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-10",
+      "code": "trap : 10; (while read -r l; do echo \"got:$l\"; done < <(trap -p 10)); trap - 10",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGUSR1\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-11",
+      "code": "trap : 11; (while read -r l; do echo \"got:$l\"; done < <(trap -p 11)); trap - 11",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGSEGV\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-12",
+      "code": "trap : 12; (while read -r l; do echo \"got:$l\"; done < <(trap -p 12)); trap - 12",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGUSR2\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-13",
+      "code": "trap : 13; (while read -r l; do echo \"got:$l\"; done < <(trap -p 13)); trap - 13",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGPIPE\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-14",
+      "code": "trap : 14; (while read -r l; do echo \"got:$l\"; done < <(trap -p 14)); trap - 14",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGALRM\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-15",
+      "code": "trap : 15; (while read -r l; do echo \"got:$l\"; done < <(trap -p 15)); trap - 15",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-16",
+      "code": "trap : 16; (while read -r l; do echo \"got:$l\"; done < <(trap -p 16)); trap - 16",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGSTKFLT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-17",
+      "code": "trap : 17; (while read -r l; do echo \"got:$l\"; done < <(trap -p 17)); trap - 17",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-18",
+      "code": "trap : 18; (while read -r l; do echo \"got:$l\"; done < <(trap -p 18)); trap - 18",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGCONT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-19",
+      "code": "trap : 19; (while read -r l; do echo \"got:$l\"; done < <(trap -p 19)); trap - 19",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGSTOP\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-20",
+      "code": "trap : 20; (while read -r l; do echo \"got:$l\"; done < <(trap -p 20)); trap - 20",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGTSTP\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-21",
+      "code": "trap : 21; (while read -r l; do echo \"got:$l\"; done < <(trap -p 21)); trap - 21",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGTTIN\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-22",
+      "code": "trap : 22; (while read -r l; do echo \"got:$l\"; done < <(trap -p 22)); trap - 22",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGTTOU\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-23",
+      "code": "trap : 23; (while read -r l; do echo \"got:$l\"; done < <(trap -p 23)); trap - 23",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGURG\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-24",
+      "code": "trap : 24; (while read -r l; do echo \"got:$l\"; done < <(trap -p 24)); trap - 24",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGXCPU\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-25",
+      "code": "trap : 25; (while read -r l; do echo \"got:$l\"; done < <(trap -p 25)); trap - 25",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGXFSZ\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-26",
+      "code": "trap : 26; (while read -r l; do echo \"got:$l\"; done < <(trap -p 26)); trap - 26",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGVTALRM\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-27",
+      "code": "trap : 27; (while read -r l; do echo \"got:$l\"; done < <(trap -p 27)); trap - 27",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGPROF\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-28",
+      "code": "trap : 28; (while read -r l; do echo \"got:$l\"; done < <(trap -p 28)); trap - 28",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGWINCH\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-29",
+      "code": "trap : 29; (while read -r l; do echo \"got:$l\"; done < <(trap -p 29)); trap - 29",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGIO\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-30",
+      "code": "trap : 30; (while read -r l; do echo \"got:$l\"; done < <(trap -p 30)); trap - 30",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGPWR\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-31",
+      "code": "trap : 31; (while read -r l; do echo \"got:$l\"; done < <(trap -p 31)); trap - 31",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGSYS\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-34",
+      "code": "trap : 34; (while read -r l; do echo \"got:$l\"; done < <(trap -p 34)); trap - 34",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-35",
+      "code": "trap : 35; (while read -r l; do echo \"got:$l\"; done < <(trap -p 35)); trap - 35",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+1\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-36",
+      "code": "trap : 36; (while read -r l; do echo \"got:$l\"; done < <(trap -p 36)); trap - 36",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+2\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-37",
+      "code": "trap : 37; (while read -r l; do echo \"got:$l\"; done < <(trap -p 37)); trap - 37",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+3\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-38",
+      "code": "trap : 38; (while read -r l; do echo \"got:$l\"; done < <(trap -p 38)); trap - 38",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+4\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-39",
+      "code": "trap : 39; (while read -r l; do echo \"got:$l\"; done < <(trap -p 39)); trap - 39",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+5\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-40",
+      "code": "trap : 40; (while read -r l; do echo \"got:$l\"; done < <(trap -p 40)); trap - 40",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+6\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-41",
+      "code": "trap : 41; (while read -r l; do echo \"got:$l\"; done < <(trap -p 41)); trap - 41",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+7\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-42",
+      "code": "trap : 42; (while read -r l; do echo \"got:$l\"; done < <(trap -p 42)); trap - 42",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+8\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-43",
+      "code": "trap : 43; (while read -r l; do echo \"got:$l\"; done < <(trap -p 43)); trap - 43",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+9\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-44",
+      "code": "trap : 44; (while read -r l; do echo \"got:$l\"; done < <(trap -p 44)); trap - 44",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+10\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-45",
+      "code": "trap : 45; (while read -r l; do echo \"got:$l\"; done < <(trap -p 45)); trap - 45",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+11\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-46",
+      "code": "trap : 46; (while read -r l; do echo \"got:$l\"; done < <(trap -p 46)); trap - 46",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+12\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-47",
+      "code": "trap : 47; (while read -r l; do echo \"got:$l\"; done < <(trap -p 47)); trap - 47",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+13\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-48",
+      "code": "trap : 48; (while read -r l; do echo \"got:$l\"; done < <(trap -p 48)); trap - 48",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+14\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-49",
+      "code": "trap : 49; (while read -r l; do echo \"got:$l\"; done < <(trap -p 49)); trap - 49",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMIN+15\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-50",
+      "code": "trap : 50; (while read -r l; do echo \"got:$l\"; done < <(trap -p 50)); trap - 50",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-14\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-51",
+      "code": "trap : 51; (while read -r l; do echo \"got:$l\"; done < <(trap -p 51)); trap - 51",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-13\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-52",
+      "code": "trap : 52; (while read -r l; do echo \"got:$l\"; done < <(trap -p 52)); trap - 52",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-12\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-53",
+      "code": "trap : 53; (while read -r l; do echo \"got:$l\"; done < <(trap -p 53)); trap - 53",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-11\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-54",
+      "code": "trap : 54; (while read -r l; do echo \"got:$l\"; done < <(trap -p 54)); trap - 54",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-10\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-55",
+      "code": "trap : 55; (while read -r l; do echo \"got:$l\"; done < <(trap -p 55)); trap - 55",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-9\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-56",
+      "code": "trap : 56; (while read -r l; do echo \"got:$l\"; done < <(trap -p 56)); trap - 56",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-8\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-57",
+      "code": "trap : 57; (while read -r l; do echo \"got:$l\"; done < <(trap -p 57)); trap - 57",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-7\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-58",
+      "code": "trap : 58; (while read -r l; do echo \"got:$l\"; done < <(trap -p 58)); trap - 58",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-6\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-59",
+      "code": "trap : 59; (while read -r l; do echo \"got:$l\"; done < <(trap -p 59)); trap - 59",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-5\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-60",
+      "code": "trap : 60; (while read -r l; do echo \"got:$l\"; done < <(trap -p 60)); trap - 60",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-4\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-61",
+      "code": "trap : 61; (while read -r l; do echo \"got:$l\"; done < <(trap -p 61)); trap - 61",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-3\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-62",
+      "code": "trap : 62; (while read -r l; do echo \"got:$l\"; done < <(trap -p 62)); trap - 62",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-2\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-63",
+      "code": "trap : 63; (while read -r l; do echo \"got:$l\"; done < <(trap -p 63)); trap - 63",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX-1\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-handler-64",
+      "code": "trap : 64; (while read -r l; do echo \"got:$l\"; done < <(trap -p 64)); trap - 64",
+      "status": 0,
+      "stdout": "got:trap -- ':' SIGRTMAX\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-invalid-mutation",
+      "code": "trap '' DEBUG; (while read -r l; do echo \"got:$l\"; done < <(trap : BOGUS; trap -p DEBUG)); trap - DEBUG",
+      "status": 0,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: trap: BOGUS: invalid signal specification\n"
+    },
+    {
+      "id": "nested-parent-procsub-in-deferred-procsub",
+      "code": "trap '' EXIT; (while read -r l; do echo \"got:$l\"; done < <(while read -r l; do echo \"got:$l\"; done < <(trap -p EXIT))); trap - EXIT",
+      "status": 0,
+      "stdout": "got:got:trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-mutated-sub-exit-propagates",
+      "code": "trap '' EXIT; (trap : HUP; while read -r l; do echo \"got:$l\"; done < <(while read -r l; do echo \"got:$l\"; done < <(trap -p EXIT))); trap - EXIT",
+      "status": 0,
+      "stdout": "got:got:trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-procsub-nested-sub",
+      "code": "trap 'echo h' HUP; (while read -r l; do echo \"got:$l\"; done < <((trap -p HUP))); trap - HUP",
+      "status": 0,
+      "stdout": "got:trap -- 'echo h' SIGHUP\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-procsub-query-then-ordinary-mutation",
+      "code": "trap '' DEBUG; trap 'echo h' HUP; (while read -r l; do echo \"got:$l\"; done < <(trap -p; (trap : INT; trap -p))); trap - DEBUG HUP",
+      "status": 0,
+      "stdout": "got:trap -- 'echo h' SIGHUP\ngot:trap -- '' DEBUG\ngot:trap -- ':' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-parent-deferred-func-procsub",
+      "code": "trap 'echo h' TERM; f() { while read -r l; do echo \"got:$l\"; done < <(trap -p TERM); }; (f); trap - TERM",
+      "status": 0,
+      "stdout": "got:trap -- 'echo h' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-INT-root-ignore",
+      "code": "trap '' INT; trap -p INT; trap - INT",
+      "status": 0,
+      "stdout": "trap -- '' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-INT-proc-new-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-INT-proc-handler-then-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : INT; trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-INT-root-ignore-proc-reignore",
+      "code": "trap '' INT; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-INT-root-handler-proc-reignore",
+      "code": "trap : INT; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-INT-ordinary-new-ignore",
+      "code": "(trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "trap -- '' SIGINT\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-INT-ordinary-proc-new-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p INT)); trap - INT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-INT-mutated-ordinary-proc-new-ignore",
+      "code": "(trap : USR1; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p INT)); trap - INT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-QUIT-root-ignore",
+      "code": "trap '' QUIT; trap -p QUIT; trap - QUIT",
+      "status": 0,
+      "stdout": "trap -- '' SIGQUIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-QUIT-proc-new-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-QUIT-proc-handler-then-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : QUIT; trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-QUIT-root-ignore-proc-reignore",
+      "code": "trap '' QUIT; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-QUIT-root-handler-proc-reignore",
+      "code": "trap : QUIT; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-QUIT-ordinary-new-ignore",
+      "code": "(trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "trap -- '' SIGQUIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-QUIT-ordinary-proc-new-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap -p QUIT)); trap - QUIT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-QUIT-mutated-ordinary-proc-new-ignore",
+      "code": "(trap : USR1; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap -p QUIT)); trap - QUIT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-HUP-root-ignore",
+      "code": "trap '' HUP; trap -p HUP; trap - HUP",
+      "status": 0,
+      "stdout": "trap -- '' SIGHUP\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-HUP-proc-new-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap -p HUP); trap - HUP",
+      "status": 0,
+      "stdout": "[trap -- '' SIGHUP]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-HUP-proc-handler-then-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : HUP; trap '' HUP; trap -p HUP); trap - HUP",
+      "status": 0,
+      "stdout": "[trap -- '' SIGHUP]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-HUP-root-ignore-proc-reignore",
+      "code": "trap '' HUP; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap -p HUP); trap - HUP",
+      "status": 0,
+      "stdout": "[trap -- '' SIGHUP]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-HUP-root-handler-proc-reignore",
+      "code": "trap : HUP; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap -p HUP); trap - HUP",
+      "status": 0,
+      "stdout": "[trap -- '' SIGHUP]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-HUP-ordinary-new-ignore",
+      "code": "(trap '' HUP; trap -p HUP); trap - HUP",
+      "status": 0,
+      "stdout": "trap -- '' SIGHUP\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-HUP-ordinary-proc-new-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap -p HUP)); trap - HUP",
+      "status": 0,
+      "stdout": "[trap -- '' SIGHUP]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-HUP-mutated-ordinary-proc-new-ignore",
+      "code": "(trap : USR1; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap -p HUP)); trap - HUP",
+      "status": 0,
+      "stdout": "[trap -- '' SIGHUP]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-TERM-root-ignore",
+      "code": "trap '' TERM; trap -p TERM; trap - TERM",
+      "status": 0,
+      "stdout": "trap -- '' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-TERM-proc-new-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' TERM; trap -p TERM); trap - TERM",
+      "status": 0,
+      "stdout": "[trap -- '' SIGTERM]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-TERM-proc-handler-then-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : TERM; trap '' TERM; trap -p TERM); trap - TERM",
+      "status": 0,
+      "stdout": "[trap -- '' SIGTERM]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-TERM-root-ignore-proc-reignore",
+      "code": "trap '' TERM; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' TERM; trap -p TERM); trap - TERM",
+      "status": 0,
+      "stdout": "[trap -- '' SIGTERM]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-TERM-root-handler-proc-reignore",
+      "code": "trap : TERM; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' TERM; trap -p TERM); trap - TERM",
+      "status": 0,
+      "stdout": "[trap -- '' SIGTERM]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-TERM-ordinary-new-ignore",
+      "code": "(trap '' TERM; trap -p TERM); trap - TERM",
+      "status": 0,
+      "stdout": "trap -- '' SIGTERM\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-TERM-ordinary-proc-new-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' TERM; trap -p TERM)); trap - TERM",
+      "status": 0,
+      "stdout": "[trap -- '' SIGTERM]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-TERM-mutated-ordinary-proc-new-ignore",
+      "code": "(trap : USR1; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' TERM; trap -p TERM)); trap - TERM",
+      "status": 0,
+      "stdout": "[trap -- '' SIGTERM]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-CHLD-root-ignore",
+      "code": "trap '' CHLD; trap -p CHLD; trap - CHLD",
+      "status": 0,
+      "stdout": "trap -- '' SIGCHLD\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-CHLD-proc-new-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' CHLD; trap -p CHLD); trap - CHLD",
+      "status": 0,
+      "stdout": "[trap -- '' SIGCHLD]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-CHLD-proc-handler-then-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : CHLD; trap '' CHLD; trap -p CHLD); trap - CHLD",
+      "status": 0,
+      "stdout": "[trap -- '' SIGCHLD]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-CHLD-root-ignore-proc-reignore",
+      "code": "trap '' CHLD; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' CHLD; trap -p CHLD); trap - CHLD",
+      "status": 0,
+      "stdout": "[trap -- '' SIGCHLD]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-CHLD-root-handler-proc-reignore",
+      "code": "trap : CHLD; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' CHLD; trap -p CHLD); trap - CHLD",
+      "status": 0,
+      "stdout": "[trap -- '' SIGCHLD]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-CHLD-ordinary-new-ignore",
+      "code": "(trap '' CHLD; trap -p CHLD); trap - CHLD",
+      "status": 0,
+      "stdout": "trap -- '' SIGCHLD\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-CHLD-ordinary-proc-new-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' CHLD; trap -p CHLD)); trap - CHLD",
+      "status": 0,
+      "stdout": "[trap -- '' SIGCHLD]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-CHLD-mutated-ordinary-proc-new-ignore",
+      "code": "(trap : USR1; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' CHLD; trap -p CHLD)); trap - CHLD",
+      "status": 0,
+      "stdout": "[trap -- '' SIGCHLD]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-EXIT-root-ignore",
+      "code": "trap '' EXIT; trap -p EXIT; trap - EXIT",
+      "status": 0,
+      "stdout": "trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-EXIT-proc-new-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' EXIT; trap -p EXIT); trap - EXIT",
+      "status": 0,
+      "stdout": "[trap -- '' EXIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-EXIT-proc-handler-then-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : EXIT; trap '' EXIT; trap -p EXIT); trap - EXIT",
+      "status": 0,
+      "stdout": "[trap -- '' EXIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-EXIT-root-handler-proc-reignore",
+      "code": "trap : EXIT; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' EXIT; trap -p EXIT); trap - EXIT",
+      "status": 0,
+      "stdout": "[trap -- '' EXIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-EXIT-ordinary-new-ignore",
+      "code": "(trap '' EXIT; trap -p EXIT); trap - EXIT",
+      "status": 0,
+      "stdout": "trap -- '' EXIT\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-EXIT-ordinary-proc-new-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' EXIT; trap -p EXIT)); trap - EXIT",
+      "status": 0,
+      "stdout": "[trap -- '' EXIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-EXIT-mutated-ordinary-proc-new-ignore",
+      "code": "(trap : USR1; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' EXIT; trap -p EXIT)); trap - EXIT",
+      "status": 0,
+      "stdout": "[trap -- '' EXIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-DEBUG-active-proc",
+      "code": "trap '' DEBUG; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p DEBUG INT); trap - DEBUG",
+      "status": 0,
+      "stdout": "[trap -- '' DEBUG]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-DEBUG-deferred-proc",
+      "code": "trap '' DEBUG; (while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p DEBUG INT)); trap - DEBUG",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-ERR-active-proc",
+      "code": "trap '' ERR; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p ERR INT); trap - ERR",
+      "status": 0,
+      "stdout": "[trap -- '' ERR]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-ERR-deferred-proc",
+      "code": "trap '' ERR; (while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p ERR INT)); trap - ERR",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-RETURN-active-proc",
+      "code": "trap '' RETURN; while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p RETURN INT); trap - RETURN",
+      "status": 0,
+      "stdout": "[trap -- '' RETURN]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-RETURN-deferred-proc",
+      "code": "trap '' RETURN; (while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p RETURN INT)); trap - RETURN",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-corrected-nested-ordinary-spaces",
+      "code": "trap : EXIT HUP INT; ( (while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap -p EXIT HUP INT))) ); trap - EXIT HUP INT",
+      "status": 0,
+      "stdout": "[[trap -- ':' EXIT]]\n[[trap -- ':' SIGHUP]]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-twice",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-deferred-twice",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap '' INT; trap -p INT); trap - INT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-reset-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap - INT; trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-deferred-reset-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap - INT; trap '' INT; trap -p INT); trap - INT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-handler-reset-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : INT; trap - INT; trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-deferred-handler-reset-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : INT; trap - INT; trap '' INT; trap -p INT); trap - INT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-other-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap '' INT; trap -p INT); trap - INT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-deferred-other-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap '' INT; trap -p INT); trap - INT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-nested-ordinary",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <((trap '' INT; trap -p INT)); trap - INT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-deferred-nested-ordinary",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <((trap '' INT; trap -p INT)); trap - INT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-nested-process",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p INT)); trap - INT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-INT-deferred-nested-process",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' INT; trap -p INT)); trap - INT)",
+      "status": 0,
+      "stdout": "[[trap -- '' SIGINT]]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-twice",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-deferred-twice",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap '' QUIT; trap -p QUIT); trap - QUIT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-reset-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap - QUIT; trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-deferred-reset-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap - QUIT; trap '' QUIT; trap -p QUIT); trap - QUIT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-handler-reset-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : QUIT; trap - QUIT; trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-deferred-handler-reset-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap : QUIT; trap - QUIT; trap '' QUIT; trap -p QUIT); trap - QUIT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-other-ignore",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap '' QUIT; trap -p QUIT); trap - QUIT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-deferred-other-ignore",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' HUP; trap '' QUIT; trap -p QUIT); trap - QUIT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-nested-ordinary",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <((trap '' QUIT; trap -p QUIT)); trap - QUIT",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-deferred-nested-ordinary",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <((trap '' QUIT; trap -p QUIT)); trap - QUIT)",
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-nested-process",
+      "code": "while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap -p QUIT)); trap - QUIT",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "implicit-extended-QUIT-deferred-nested-process",
+      "code": "(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(while read -r l; do printf \"[%s]\\n\" \"$l\"; done < <(trap '' QUIT; trap -p QUIT)); trap - QUIT)",
+      "status": 0,
+      "stdout": "[[trap -- '' SIGQUIT]]\n",
+      "stderr": ""
+    }
+  ],
+  "correctionRecording": {
+    "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "reviewedHead": "6609e3cb0b8b5ababcca7ba0ee0269f09492d337",
+    "addedCases": 39
+  },
+  "nestedParentRecording": {
+    "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "reviewedHead": "535197097ea359ee15b2e73bdf0a944b41df0c82",
+    "addedCases": 77,
+    "bashSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5"
+  },
+  "implicitIgnoreRecording": {
+    "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "reviewedHead": "477701c832ef0db48f4a400cab01d45b94c5899b",
+    "addedCases": 78,
+    "bashSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5"
+  }
+}

@@ -1,0 +1,304 @@
+{
+  "scope": "Registration, query, reset, list, ignore registration and child registration only. No trap execution.",
+  "reviewedHead": "6609e3cb0b8b5ababcca7ba0ee0269f09492d337",
+  "originalLaunch": "77b3963d904599932c2cd59fe46409f0ab7a6c9a",
+  "fixtureVersion": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "fixture": {
+    "preservedRows": 57,
+    "addedRows": 39,
+    "total": 96,
+    "preservedOriginalSourceHead": true
+  },
+  "failingFirst": {
+    "artifactHead": "6609e3cb0b8b5ababcca7ba0ee0269f09492d337",
+    "native": {
+      "passed": 62,
+      "failed": 34
+    },
+    "productionWaffle": {
+      "passed": 62,
+      "failed": 34
+    },
+    "originalRowsPassing": 57
+  },
+  "correction": {
+    "native": {
+      "passed": 96,
+      "failed": 0
+    },
+    "productionWaffle": {
+      "passed": 96,
+      "failed": 0
+    },
+    "nativeWorkspaceTests": 1398,
+    "officialWasiTests": 1377,
+    "qualityJs": "pass",
+    "hostAndWasiClippyAllTargets": "pass",
+    "capabilities": "pass",
+    "layers": {
+      "productionViolations": 0,
+      "testViolations": 0,
+      "receiptRefresh": "source hash and line locations only; policy and edges unchanged"
+    }
+  },
+  "reviewRuleCorrection": "Process substitutions reset active EXIT and caught signals. An ordinary parent still awaiting deferred reset keeps EXIT and caught signals except INT/QUIT/CHLD, and passes the deferred reset to its process substitution. Inherited ignored EXIT surviving mutation stays display-only until explicitly set again. Re-ignored EXIT after clearing is a separate unsupported Bash quirk.",
+  "sourceSha256": {
+    "shell/engine/src/builtins/trap.rs": "6e6bae8d3ddc6762a53c30150c0df2d768d9d9d7e651cc58405f40dddfd5db56",
+    "shell/engine/src/state/traps.rs": "f8f6d786273d5299fb21bb10ea3a1bc60246aaff326fc26fb256e543ccdee93e",
+    "shell/engine/src/expand.rs": "f481385ad90387ce4f238f0116264bddae3001407f7841dca4b8bea1cc294a0c",
+    "scripts/fixtures/shell-trap-registration.json": "f6739f3ac5cc5b62057117f19c445e0521afeb945296bbb29d983e969feeb11e"
+  },
+  "artifacts": {
+    "nativeShellEngine": "9ee961ba2280c3600072bb431748a2b002613284127b0eb0536452c2e28af936",
+    "shellRuntimeWasm": "d903fffa44fa675a38d5e27a18a02fa39fa5e5ec01fb175ec2d908843cfc8432"
+  },
+  "historicalQualification": {
+    "notRerunForThisCorrection": true,
+    "head": "6609e3cb0b8b5ababcca7ba0ee0269f09492d337",
+    "comparedWith": "77b3963d904599932c2cd59fe46409f0ab7a6c9a",
+    "gained": {
+      "oils": 11,
+      "brushSuite": 24,
+      "bashkitSuite": 3,
+      "total": 38
+    },
+    "lost": 0,
+    "inheritedTimeouts": 3,
+    "supersededExecutionExperimentGainsNotClaimed": 67,
+    "currentMainIntegrationAndFrozenQualification": "Coordinator-owned, pending."
+  },
+  "coincidentalFrozenGains": [
+    {
+      "id": "oils:builtin-trap:340",
+      "limitation": "Bash executes EXIT action echo < and emits only a stderr syntax error; frozen scoring ignores stderr."
+    },
+    {
+      "id": "bashkit-suite:bashbox-syntax-error:40",
+      "limitation": "Bash executes RETURN action fi and emits only a stderr syntax error; frozen scoring ignores stderr."
+    },
+    {
+      "id": "brush-suite:builtins/trap:65",
+      "limitation": "Guest kill -INT $$ is a no-op even without a trap. This is not proof that an ignore disposition is honored."
+    },
+    {
+      "id": "oils:builtin-trap:286",
+      "limitation": "Bash executes EXIT action # comment silently. Guest does not execute it."
+    }
+  ],
+  "provenance": {
+    "originalImplementation": "Continued on separate Claude Opus after actual Sol provider refusal; rejected execution experiments remain superseded and absent from final source.",
+    "wholeFamilyReview": "Separate Opus 5.5 xhigh after Sol xhigh review shell-wave-trap6609-review-r1-20261022 was refused. Verdict CHANGES REQUESTED.",
+    "refusal": "This content was flagged for possible cybersecurity risk",
+    "thisCorrection": "gpt-6.1-sol, no child agents, no provider refusal."
+  },
+  "notChanged": [
+    "frozen membership",
+    "frozen oracle and environment identities",
+    "exclusions",
+    "blocking gate policy",
+    "dependency pins",
+    "main integration",
+    "trap execution",
+    "errtrace/functrace",
+    "runtime completion"
+  ],
+  "deferredNativeRedirectBug": "Approved plan 004 follow-up. Native prints 0 for : > /nonexistent/dir/x; echo $?, while Bash and production Waffle print 1. Reproduced before and after; native files unchanged.",
+  "diagnosticPolicy": "Compare status and stdout. Require empty stderr when Bash recorded none. Nonempty stderr is retained, not exact-parity evidence.",
+  "earlierCorrectionStatus": "Historical 96-row correction at535197097ea359ee15b2e73bdf0a944b41df0c82. It did not cover nested-parent inheritance and is superseded by nestedParentCorrection. Its hashes and broad-test counts remain historical.",
+  "nestedParentCorrection": {
+    "reviewedHead": "535197097ea359ee15b2e73bdf0a944b41df0c82",
+    "failingFixtureHead": "6e0d748e67e91ef4f0e7277f562249fa64c8fed4",
+    "fixture": {
+      "preservedRows": 96,
+      "addedRows": 77,
+      "total": 173,
+      "preservedOriginalSourceHead": true
+    },
+    "failingFirst": {
+      "native": {
+        "passed": 100,
+        "failed": 73
+      },
+      "productionWaffle": {
+        "passed": 100,
+        "failed": 73
+      },
+      "allOriginal96Pass": true
+    },
+    "corrected": {
+      "native": {
+        "passed": 173,
+        "failed": 0
+      },
+      "productionWaffle": {
+        "passed": 173,
+        "failed": 0
+      },
+      "trapsStateUnitTests": 5,
+      "engineClippyAllTargets": "pass",
+      "productionBuild": "normal patched-libc build, all guests256MiB and no retained libc filesystem code",
+      "layers": "same policy/edges; source digest only",
+      "formatAndCiTypes": "pass",
+      "workflowAndLayerScannerTests": 43
+    },
+    "sourceSha256": {
+      "shell/engine/src/builtins/trap.rs": "6e6bae8d3ddc6762a53c30150c0df2d768d9d9d7e651cc58405f40dddfd5db56",
+      "shell/engine/src/state/traps.rs": "b7fd69edc950819155f6b2ea1aebb2a9ba71f3fc6cff669292e24e81be2b8502",
+      "shell/engine/src/expand.rs": "76d0ac3b9cd460353306aa2f6cf4411c3ac25d5472f5fa79a254181ac790f922",
+      "scripts/fixtures/shell-trap-registration.json": "528d4cb1271a0e98e5bc1c5e88cf8fbbe42d067864698cc7437f96c3a892d916"
+    },
+    "artifacts": {
+      "nativeShellEngine": "7210cfb8abdee9fc7974429c5f8b2bbbeab5be18dc7eb2f9630a962962891f77",
+      "shellRuntimeWasm": "2a8e8bd6e3267a2897a9bbf1530dc10d2c1168aa86e4b454a2e3a73559aa0ff6"
+    },
+    "reviewResolution": "Coordinator applied precise independent reviewer fixcheck.patch with two focused state tests and77 failing-first local Bash recordings. No action execution or admission-policy change. Independent main integration review and hosted frozen qualification remain pending.",
+    "diagnostics": "Compare status and stdout. Require empty stderr when Bash recorded none. Nonempty stderr is retained, not exact-parity evidence.",
+    "excludedQuirk": "Re-ignoring inherited EXIT after clearing it may remain invisible in Bash until a handler is set. Approved plan004 follow-up, not covered or claimed fixed."
+  },
+  "mainIntegration": {
+    "status": "Historical normal-main integration at477701c. Independent review requested changes for implicit INT/QUIT ignore provenance; fixed by implicitIgnoreCorrection. Hosted frozen qualification remains pending.",
+    "sourceParent": "1292df94f46cb7d61b67bafddc33e5f5daf524f4",
+    "mainParent": "3fd615b514c30b5d7b667b7ab76c90048d037247",
+    "versions": {
+      "package": "0.0.89",
+      "engine": "0.0.57"
+    },
+    "sourceSha256": {
+      "shell/engine/src/builtins/trap.rs": "6e6bae8d3ddc6762a53c30150c0df2d768d9d9d7e651cc58405f40dddfd5db56",
+      "shell/engine/src/state/traps.rs": "b7fd69edc950819155f6b2ea1aebb2a9ba71f3fc6cff669292e24e81be2b8502",
+      "shell/engine/src/expand.rs": "4a990ca2b9244d5bc0644131b571e126f03e6ff6e3497b3f67c911c196e14b60",
+      "shell/engine/src/state.rs": "a62b225d490ebafa8a41ce9f9943336deacef7b05629f493dcf31bcc8d6e244d",
+      "shell/engine/src/commands.rs": "51979fafe53f09763a3623ad2f3a157fff0f82295abd071cea940eab7311d722",
+      "shell/engine/src/builtins.rs": "6ea8f1a6ff6d065881653b848f44840467afda40b13071d2684cd046d9af77c4",
+      "shell/engine/src/interpreter.rs": "de22ffad587db89e7be746aac0fb2dce4f1a410a9b0d06729ab3e231c3e246aa",
+      "scripts/fixtures/shell-trap-registration.json": "528d4cb1271a0e98e5bc1c5e88cf8fbbe42d067864698cc7437f96c3a892d916"
+    },
+    "artifacts": {
+      "nativeShellEngine": {
+        "sha256": "bdc0ce5809d032994e953a1f35df1c75be8d9d6dd85560f3d06dc1f3c30dcafb",
+        "bytes": 53266208
+      },
+      "shellRuntimeWasm": {
+        "sha256": "78c299e607448fa9b01644568746bf8384aee87eda72fdf81076b2f79105f725",
+        "bytes": 2081540
+      }
+    },
+    "nodeBundleSha256": {
+      ".build/node/api.mjs": "a3d785527c14b4e92fba6ef4707eeee880e64988cb9efdb6d929338689f0e569",
+      ".build/node/child.mjs": "8fd3f45ee4603084446e2fdb01079b7d3c9622edc9f3a9b452c39ad5eef82814",
+      ".build/node/fs.mjs": "374837e29b66ce049b63d4815a1906550a19d979edb7cd56404db1837f3918dc",
+      ".build/node/root.mjs": "7cb815a85d7888690d551c0fe43ed3ca9ac16ec42749084b4d56bede8f4d4267",
+      ".build/node/shell.mjs": "426b194921d99aea2fd09e1cacb63bfa729d6b1696c5261a90022e8c04859ac2"
+    },
+    "waffle": {
+      "version": "0.0.63",
+      "pin": "c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289",
+      "provenance": "Exact inherited main pin. Reinstalled frozen dependencies and rebuilt node harness before production-Waffle checks."
+    },
+    "verification": {
+      "trapNative": {
+        "passed": 173,
+        "total": 173
+      },
+      "trapProductionWaffle": {
+        "passed": 173,
+        "total": 173
+      },
+      "prior96Preserved": true,
+      "trapStateUnits": 5,
+      "commandRegistryUnits": 7,
+      "trapSessionUnits": 2,
+      "recordedNativeFixtureTest": 1,
+      "mainDeclarationTests": 5,
+      "mainTypeTests": 9,
+      "mainFunctionTests": 21,
+      "mainDeclarationWaffleControls": 40,
+      "mainFunctionWaffleControls": 16,
+      "customUnionControls": {
+        "nativePassed": 7,
+        "wafflePassed": 7,
+        "total": 8,
+        "knownMainLimit": "array-declaration retains the documented unsupported indexed declaration printing boundary; expected Bash output and mismatch are retained. The declaration module is byte-identical to exact main."
+      },
+      "engineAllTargetClippy": "pass",
+      "productionBuild": "Normal patched-libc build verifies all eight guests and unchanged 256MiB cap.",
+      "static": "format, lint, CI types, 43 workflow/layer-scanner tests, layers, capabilities, parser provenance, Rustfmt and source-union audit pass."
+    },
+    "baseline": {
+      "sha256": "056d4026cf056f57bc79ae1b2cda63900ba2128071b3116bb255d41dd666ec26",
+      "source": "Exact main bytes, not regenerated or hand-picked. Hosted replay and membership recomputation remain pending.",
+      "inheritedPassCounts": {
+        "oils": 1210,
+        "brush-suite": 1203,
+        "bashkit-suite": 1644
+      }
+    },
+    "sourceUnion": "All447 tracked paths checked against exact main plus unchanged source additions and explicit mechanical conflict resolutions. Layer graph/policy/edge sets unchanged. Trap module/state implementation, recordings and non-execution tests remain exact source-parent bytes.",
+    "scopeLimits": "Registration only. No action execution, root EXIT, child-completion, IFS, runtime rewrite, oracle/gate/pin changes, local9221 replay, slot, watcher or merge. Four coincidental historical gains and optional re-ignored EXIT quirk remain limitations.",
+    "report": "/work/reports/wave-20261022/shell/pr63-main3fd-integration-r3.md"
+  },
+  "implicitIgnoreCorrection": {
+    "reviewedHead": "477701c832ef0db48f4a400cab01d45b94c5899b",
+    "failingFixtureHead": "64f46807f4f21b3b5379ad9e59a20ca5be094e7c",
+    "fixture": {
+      "preservedRows": 173,
+      "addedRows": 78,
+      "total": 251,
+      "preservedOriginalSourceHead": true,
+      "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+      "recording": {
+        "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+        "reviewedHead": "477701c832ef0db48f4a400cab01d45b94c5899b",
+        "addedCases": 78,
+        "bashSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5"
+      }
+    },
+    "failingFirst": {
+      "native": {
+        "passed": 236,
+        "failed": 15
+      },
+      "allOriginal173Pass": true,
+      "productionWaffle": "not rerun before production edit; prior independent45/55 isolate confirms defect"
+    },
+    "corrected": {
+      "native": {
+        "passed": 251,
+        "failed": 0
+      },
+      "productionWaffle": {
+        "passed": 251,
+        "failed": 0
+      },
+      "trapsStateUnitTests": 8,
+      "engineClippyAllTargets": "pass",
+      "productionBuild": "normal patched-libc build; eight guests256MiBcap and no retained libc filesystem code",
+      "layers": "42production/30test-onlyedges,zeroviolations; normalrecordagainstimmutablemain241",
+      "ciTests": 105,
+      "layerScannerTests": 34,
+      "ciTypecheck": "pass",
+      "rustFormat": "pass",
+      "whitespace": "pass"
+    },
+    "sourceSha256": {
+      "shell/engine/src/state/traps.rs": "08cd8adc2501a62e1480f716dccd952ed247d0fd795119b9d1fe0d3d58143a82",
+      "scripts/fixtures/shell-trap-registration.json": "f5aacec6f5afdd1624790d79a38c3b1c4726967dc0aedcdce3d040b8c81d50de"
+    },
+    "artifacts": {
+      "nativeShellEngine": {
+        "sha256": "10ec5e4ab34c32c352b6ced03c4a28d105258a7ec409d9d3be2d6b4629d10f3e",
+        "bytes": 53269272
+      },
+      "shellRuntimeWasm": {
+        "sha256": "2983312c76b6c5955fac00b6d63841861bbaf92bbaf09dbf51e0d3732d7712b3",
+        "bytes": 2081744
+      }
+    },
+    "runtime": {
+      "commit": "c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289",
+      "package": "0.0.63"
+    },
+    "resolution": "Separate implicit INT/QUIT ignore flags from displayed bindings. Reset/handler assignment clears the flag; ordinary inheritance clears it; nested process substitution retains it. Deferred ordinary parents keep their existing first-mutation behavior. No action execution, signal disposition or admission-policy change.",
+    "limits": "Known re-ignored inherited EXIT quirk remains unsupported. Independent review, current-main integration and hosted frozen qualification remain pending. No new full-score gains claimed."
+  }
+}
