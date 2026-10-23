@@ -173,7 +173,7 @@
     },
     {
       "id": "ifs-removal-preserves-separator",
-      "script": "x=:; declare -n IFS=x; set -- a b; printf \"<%s>\\n\" \"$*\"; declare +n IFS; set -- a b; printf \"<%s>\\n\" \"$*\"; declare -p IFS x",
+      "script": "unset IFS; x=:; declare -n IFS=x; set -- a b; printf \"<%s>\\n\" \"$*\"; declare +n IFS; set -- a b; printf \"<%s>\\n\" \"$*\"; declare -p IFS x",
       "status": 0,
       "stdout": "PGE6Yj4KPGE6Yj4KZGVjbGFyZSAtLSBJRlM9IngiCmRlY2xhcmUgLS0geD0iOiIK",
       "stderr": ""
