@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "a46c61419e1a5b757cdac117ee5c9271f9376237f4bae118a9b6a1c40d69a525",
+    "engineSourceSha256": "ee5965cf48e8608325e2580c5309038ad127499daa096343a05f40817a27180a",
     "binaryBuild": null
   },
   "contract": {
@@ -905,7 +905,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3798,
+        "line": 3845,
         "column": 25
       }
     },
@@ -915,7 +915,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 5111,
+        "line": 5158,
         "column": 17
       }
     },
@@ -935,7 +935,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3784,
+        "line": 3831,
         "column": 17
       }
     },
@@ -945,7 +945,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3784,
+        "line": 3831,
         "column": 31
       }
     },
@@ -1045,7 +1045,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 975,
+        "line": 991,
         "column": 63
       }
     },
@@ -1055,7 +1055,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 2065,
+        "line": 2081,
         "column": 9
       }
     }

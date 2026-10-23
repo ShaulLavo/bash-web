@@ -174,6 +174,7 @@ impl Default for State {
                 ("IFS".into(), " \t\n".into()),
                 ("OPTIND".into(), "1".into()),
                 ("OPTERR".into(), "1".into()),
+                ("_".into(), "bash".into()),
             ]),
             exported: BTreeSet::new(),
             readonly: BTreeSet::new(),
@@ -250,6 +251,18 @@ impl State {
     pub(crate) fn publish_pipeline_status(&mut self, statuses: Vec<i32>) {
         self.pipestatus = statuses;
     }
+    pub(crate) fn publish_last_argument(&mut self, value: String) -> Result<(), Error> {
+        self.exported.remove("_");
+        let name = self.assignment_name("_".into())?;
+        if self.is_readonly(&name) {
+            return Err(Error::Readonly {
+                name,
+                line: None,
+                expansion: false,
+            });
+        }
+        self.assign_parameter(name, value).map_err(Error::from)
+    }
     pub(crate) fn last_async(&self) -> Option<&str> {
         self.last_async.as_deref()
     }
@@ -267,6 +280,9 @@ impl State {
             .map(|(key, value)| (key, value.into()))
             .collect();
         self.exported = self.variables.keys().cloned().collect();
+        self.variables
+            .entry("_".into())
+            .or_insert_with(|| self.shell_name.clone().into());
         self.variables.insert("OPTIND".into(), "1".into());
         self.variables.insert("OPTERR".into(), "1".into());
         self.variables

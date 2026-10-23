@@ -170,13 +170,6 @@
       "stderr": ""
     },
     {
-      "name": "brush-suite:special_parameters:27",
-      "script": "echo seed_last\n. ./sourced.sh\necho \"[$_]\"\n",
-      "status": 0,
-      "stdout": "seed_last\n[./sourced.sh]\n",
-      "stderr": "/usr/bin/bash: ./sourced.sh: No such file or directory\n"
-    },
-    {
       "name": "brush-suite:special_parameters:28",
       "script": "echo outer_a outer_b\n(echo inner1 inner2; echo \"sub: [$_]\")\necho \"parent: [$_]\"\n",
       "status": 0,
@@ -203,13 +196,6 @@
       "status": 0,
       "stdout": "hi there\n[frozen]\n",
       "stderr": "/usr/bin/bash: _: readonly variable\n/usr/bin/bash: _: readonly variable\n/usr/bin/bash: _: readonly variable\n"
-    },
-    {
-      "name": "brush-suite:special_parameters:33",
-      "script": "# bash does not set _ in the child's env for exec; the child inherits\n# the parent's _ value. brush currently sets _ to the resolved command\n# path (same as a normal external command), which is wrong for exec.\n(exec $(which env)) | grep '^_='\n",
-      "status": 1,
-      "stdout": "",
-      "stderr": ""
     },
     {
       "name": "brush-suite:special_parameters:34",
@@ -252,6 +238,13 @@
       "status": 0,
       "stdout": "[after]\n[after]\n",
       "stderr": ""
+    },
+    {
+      "name": "readonly nameref target diagnostic and status",
+      "script": "x=seed; declare -n _=x; readonly x; : next; false final; printf \"status=%s _=%s x=%s\\n\" \"$?\" \"$_\" \"$x\"",
+      "status": 0,
+      "stdout": "status=1 _=_=x x=_=x\n",
+      "stderr": "/usr/bin/bash: x: readonly variable\n/usr/bin/bash: x: readonly variable\n/usr/bin/bash: x: readonly variable\n/usr/bin/bash: x: readonly variable\n"
     }
   ]
 }

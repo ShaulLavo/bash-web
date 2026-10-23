@@ -2730,6 +2730,53 @@ async fn simple_command(
         Ok(prepared) => prepared,
         Err(error) => return expansion_failure(error.at_line(line), &original_fds, &context).await,
     };
+    let last = prepared.argv.last().map_or("", String::as_str);
+    let storage = match context.evaluation.admit_storage(last.len()) {
+        Ok(storage) => storage,
+        Err(code) => return Outcome::status(code),
+    };
+    let mut budget = Budget::default();
+    if let Err(code) = context
+        .evaluation
+        .copy_bytes(last.len(), &mut budget, &context.cancel)
+        .await
+    {
+        return Outcome::status(code);
+    }
+    let last = last.to_owned();
+    let stderr = original_fds.borrow().get(2).map(|fd| fd.downgrade());
+    let result = run_prepared_command(prepared, state.clone(), original_fds, context.clone()).await;
+    let publication = publish_last_argument(last, &state, &context).await;
+    drop(storage);
+    if let Err(error) = publication {
+        if !matches!(error, expand::Error::Readonly { .. }) {
+            return Outcome::status(admission_status(error));
+        }
+        if let Some(stderr) = stderr.and_then(|fd| fd.upgrade()) {
+            let mut fds = FdTable::default();
+            fds.insert(2, stderr);
+            let _ = expansion_failure(error.into(), &Rc::new(RefCell::new(fds)), &context).await;
+        }
+    }
+    result
+}
+
+async fn publish_last_argument(
+    last: String,
+    state: &SharedState,
+    context: &Context,
+) -> Result<(), expand::Error> {
+    let mut work = expansion_work(context.limits());
+    State::admit_assignment(state, "_", last.len(), &context.cancel, &mut work).await?;
+    state.borrow_mut().publish_last_argument(last)
+}
+
+async fn run_prepared_command(
+    prepared: PreparedCommand,
+    state: SharedState,
+    original_fds: Descriptors,
+    context: Context,
+) -> Outcome {
     if prepared
         .argv
         .first()
