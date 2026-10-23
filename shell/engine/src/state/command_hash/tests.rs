@@ -51,16 +51,19 @@ fn put(state: &SharedState, name: &str, path: &str) {
         .expect("hash update");
 }
 fn retained(table: &CommandHash) -> usize {
-    let Some(version) = &table.0 else {
-        return 0;
-    };
-    boxed::<Version>()
-        + version.entries.capacity() * size_of::<Rc<Entry>>()
-        + version
-            .entries
-            .iter()
-            .map(|entry| boxed::<Entry>() + entry.name.capacity() + entry.path.capacity())
-            .sum::<usize>()
+    fn charged(link: &Link) -> usize {
+        let Some(node) = link else {
+            return 0;
+        };
+        let entry = &node.entry;
+        boxed::<Node>()
+            + boxed::<Entry>()
+            + entry.name.capacity()
+            + entry.path.capacity()
+            + charged(&node.left)
+            + charged(&node.right)
+    }
+    charged(&table.root)
 }
 #[test]
 fn command_hash_charges_actual_capacity_and_refunds_replacement_delete_reset() {
@@ -97,8 +100,8 @@ fn command_hash_snapshot_shares_entries_and_isolates_updates() {
         .shared();
     assert_eq!(budget.observation().0, charge);
     assert!(Rc::ptr_eq(
-        state.borrow().command_hash.0.as_ref().unwrap(),
-        child.borrow().command_hash.0.as_ref().unwrap()
+        state.borrow().command_hash.root.as_ref().unwrap(),
+        child.borrow().command_hash.root.as_ref().unwrap()
     ));
     put(&child, "tool", "/child");
     assert_eq!(state.borrow().command_hash.entries()[0].path, "/parent");
@@ -145,36 +148,69 @@ fn command_hash_cancel_and_drop_pending_updates_refund_all_unpublished_storage()
         put(&state, &format!("command{index}"), "/kept");
     }
     let charge = budget.observation().0;
-    let cancel = Cancel::new();
-    let mut work = work();
-    let mut pending = Box::pin(update(&state, "new", Some("/path"), &cancel, &mut work));
-    let mut context = Context::from_waker(Waker::noop());
-    poll_until_allocated(pending.as_mut(), &mut context, &budget, charge);
-    cancel.cancel();
-    assert!(matches!(block_on(pending), Err(Error::Status(130))));
-    assert_eq!(budget.observation().0, charge);
-    let cancel = Cancel::new();
-    let mut work = self::work();
-    let mut pending = Box::pin(update(&state, "new", Some("/path"), &cancel, &mut work));
-    poll_until_allocated(pending.as_mut(), &mut context, &budget, charge);
-    drop(pending);
-    assert_eq!(budget.observation().0, charge);
+    let offset = pending_offset(&state, &budget, charge);
+    for cancelled in [true, false] {
+        let cancel = Cancel::new();
+        let mut work = offset_work(offset);
+        let mut pending = Box::pin(update(&state, "new", Some("/path"), &cancel, &mut work));
+        poll_until_allocated(pending.as_mut(), &budget, charge);
+        if cancelled {
+            cancel.cancel();
+            assert!(matches!(block_on(pending), Err(Error::Status(130))));
+        } else {
+            drop(pending);
+        }
+        assert_eq!(budget.observation().0, charge);
+    }
     assert_eq!(state.borrow().command_hash.entries().len(), 600);
 }
 
-fn poll_until_allocated<F: Future>(
+/// Updates do bounded work after admitting their entry, so the cooperative
+/// yield lands there only for some starting positions within a quantum.
+fn pending_offset(state: &SharedState, budget: &StorageBudget, charge: usize) -> usize {
+    (0..64)
+        .find(|&offset| {
+            let table = state.borrow().command_hash.clone();
+            let mut work = offset_work(offset);
+            let cancel = Cancel::new();
+            let mut pending =
+                Box::pin(table.updated("new", Some("/path"), state, &cancel, &mut work));
+            allocated_while_pending(pending.as_mut(), budget, charge)
+        })
+        .expect("some alignment leaves an update pending with admitted storage")
+}
+fn offset_work(offset: usize) -> Work {
+    let mut work = work();
+    for _ in 0..offset {
+        block_on(work.checkpoint(&Cancel::new()))
+            .ok()
+            .expect("offset work");
+    }
+    work
+}
+fn allocated_while_pending<F: Future>(
     mut future: std::pin::Pin<&mut F>,
-    context: &mut Context<'_>,
+    budget: &StorageBudget,
+    initial: usize,
+) -> bool {
+    let mut context = Context::from_waker(Waker::noop());
+    while future.as_mut().poll(&mut context).is_pending() {
+        if budget.observation().0 > initial {
+            return true;
+        }
+    }
+    false
+}
+
+fn poll_until_allocated<F: Future>(
+    future: std::pin::Pin<&mut F>,
     budget: &StorageBudget,
     initial: usize,
 ) {
-    for _ in 0..1000 {
-        assert!(future.as_mut().poll(context).is_pending());
-        if budget.observation().0 > initial {
-            return;
-        }
-    }
-    panic!("update never yielded with admitted temporary storage");
+    assert!(
+        allocated_while_pending(future, budget, initial),
+        "update never yielded with admitted temporary storage"
+    );
 }
 
 #[test]
@@ -253,16 +289,17 @@ fn measured_update(state: &SharedState, name: &str, path: Option<&str>) -> usize
         .expect("measured update");
     1_000_000 - work.remaining
 }
-fn costs(count: usize) -> Costs {
-    let (state, budget) = state(20_000_000);
-    let insert = (0..count)
-        .map(|i| measured_update(&state, &format!("q{i:05}"), Some("/kept")))
+fn costs(names: &[String], absent: &str) -> Costs {
+    let (state, budget) = state(40_000_000);
+    let insert = names
+        .iter()
+        .map(|name| measured_update(&state, name, Some("/kept")))
         .sum();
     let table = state.borrow().command_hash.clone();
     let mut fuel = Work::new(100_000_000, 1_000_000, 1024);
-    for _ in 0..count {
+    for _ in names {
         assert!(
-            block_on(table.find("absent", &Cancel::new(), &mut fuel))
+            block_on(table.find(absent, &Cancel::new(), &mut fuel))
                 .ok()
                 .expect("missing lookup")
                 .is_none()
@@ -270,10 +307,11 @@ fn costs(count: usize) -> Costs {
     }
     let missing = 100_000_000 - fuel.remaining;
     drop(table);
-    let replace = measured_update(&state, "q00000", Some("/new"));
-    let delete = measured_update(&state, "q00000", None);
+    let replace = measured_update(&state, &names[0], Some("/new"));
+    let delete = measured_update(&state, &names[0], None);
     eprintln!(
-        "HASH_COST n={count} insert={insert} missing={missing} replace={replace} delete={delete} retained={}",
+        "HASH_COST n={} insert={insert} missing={missing} replace={replace} delete={delete} retained={}",
+        names.len(),
         budget.observation().0
     );
     Costs {
@@ -283,9 +321,7 @@ fn costs(count: usize) -> Costs {
         delete,
     }
 }
-#[test]
-fn command_hash_doubling_scales_with_indexed_paths_not_whole_tables() {
-    let samples = [128, 256, 512, 1024].map(costs);
+fn assert_doubling(samples: &[Costs]) {
     for pair in samples.windows(2) {
         let [small, large] = pair else { unreachable!() };
         assert!(large.insert * 10 < small.insert * 27, "insert {pair:?}");
@@ -293,4 +329,81 @@ fn command_hash_doubling_scales_with_indexed_paths_not_whole_tables() {
         assert!(large.replace * 10 < small.replace * 15, "replace {pair:?}");
         assert!(large.delete * 10 < small.delete * 15, "delete {pair:?}");
     }
+}
+#[test]
+fn command_hash_doubling_scales_with_indexed_paths_not_whole_tables() {
+    let samples = [128, 256, 512, 1024].map(|count| {
+        let names: Vec<_> = (0..count).map(|i| format!("q{i:05}")).collect();
+        costs(&names, "absent")
+    });
+    assert_doubling(&samples);
+}
+#[test]
+fn command_hash_doubling_stays_logarithmic_within_one_bucket() {
+    let target = slot("q00000");
+    let colliding: Vec<_> = (0..)
+        .map(|i| format!("c{i:06}"))
+        .filter(|name| slot(name) == target)
+        .take(1025)
+        .collect();
+    let (absent, names) = colliding.split_last().unwrap();
+    let samples = [128, 256, 512, 1024].map(|count| costs(&names[..count], absent));
+    assert_doubling(&samples);
+}
+#[test]
+fn command_hash_matches_bucket_newest_first_model_and_stays_balanced() {
+    let (state, budget) = state(10_000_000);
+    let mut model: Vec<(String, String)> = Vec::new();
+    let mut seed = 0x2545_f491u32;
+    for step in 0..3000 {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        let name = format!("n{}", seed % 300);
+        let delete = seed.is_multiple_of(5);
+        let path = format!("/p{step}");
+        let path = (!delete).then_some(path.as_str());
+        block_on(update(&state, &name, path, &Cancel::new(), &mut work()))
+            .ok()
+            .expect("model update");
+        apply_model(&mut model, &name, path);
+        let table = state.borrow().command_hash.clone();
+        let listed: Vec<_> = table
+            .entries()
+            .iter()
+            .map(|entry| (entry.name.clone(), entry.path.clone()))
+            .collect();
+        assert_eq!(listed, model, "step {step}");
+        assert_eq!(table.len, model.len());
+        balanced_height(&table.root);
+        assert_eq!(budget.observation().0, retained(&table));
+    }
+}
+/// The previous ordered-vector semantics: bucket order, newest insertion
+/// first within a bucket, replacement in place.
+fn apply_model(model: &mut Vec<(String, String)>, name: &str, path: Option<&str>) {
+    let found = model.iter().position(|(key, _)| key == name);
+    match (found, path) {
+        (Some(index), Some(path)) => model[index].1 = path.into(),
+        (Some(index), None) => {
+            model.remove(index);
+        }
+        (None, Some(path)) => {
+            let at = model
+                .iter()
+                .position(|(key, _)| slot(key) >= slot(name))
+                .unwrap_or(model.len());
+            model.insert(at, (name.into(), path.into()));
+        }
+        (None, None) => {}
+    }
+}
+fn balanced_height(link: &Link) -> u8 {
+    let Some(node) = link else {
+        return 0;
+    };
+    let (left, right) = (balanced_height(&node.left), balanced_height(&node.right));
+    assert!(left.abs_diff(right) <= 1);
+    assert_eq!(node.height, 1 + left.max(right));
+    node.height
 }

@@ -225,16 +225,21 @@ async fn list(
     work: &mut expand::Work,
 ) -> Result<i32, i32> {
     let table = state.borrow().command_hash.clone();
-    if table.entries().is_empty() {
+    if table.is_empty() {
         if !options.list {
             output(fds, context, b"hash: hash table empty\n").await?;
         }
         return Ok(0);
     }
+    let listing = table
+        .listed(state, &context.cancel, work)
+        .await
+        .map_err(admission_status)?;
+    drop(table);
     if !options.list {
         output(fds, context, b"hits\tcommand\n").await?;
     }
-    for entry in table.entries() {
+    for entry in listing.entries() {
         print(entry, options.list, true, false, fds, context, work).await?;
     }
     Ok(0)
