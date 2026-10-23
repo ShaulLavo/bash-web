@@ -3019,18 +3019,36 @@ control. These are explicit limitations, not accepted frozen-score gains or new
 exclusions. PR53's current repair does not claim to resolve them.
 
 
-### PR53 consuming-suffix support limit, 2026-10-23
+### PR53 restoration captures and reconstruction cost, 2026-10-23
 
-Status: Approved CONTROL follow-up. The bounded matcher rejects nullable
-expandable counts inside an unbounded repeat, followed by consumption, inside
-another repeat. It returns status 2 and preserves BASH_REMATCH. The 37 explicit
-unsupported records include all 24 independent-review regressions. See
-`docs/regex-capture-choice.md` and `scripts/fixtures/shell-regex-capture-unsupported.json`.
+Status: Approved CONTROL follow-up. Owner: CONTROL parent. PR53 no longer
+rejects any pattern main matched; every `[[ =~ ]]` status agrees with main and
+Bash 5.3.15 on the retained 560 rewind and 1,551 structural probes. Evidence:
+`/work/reports/wave-20261022/shell/regex-status-cost-fix-opus-r6/` and the
+adjacent `review53-r5/`.
 
-To admit that family later, reproduce both `((a*|b){2,3})*` and
-`(((a*|b){2,3})*b)*` on `bb` through production Waffle. GNU libc's whole-register
-snapshot restoration must agree with epsilon-path selection, rather than add
-another open-register exception. Preserve all 482 earlier records, resource
-admission, cooperative undo, and cancellation. The local experiment evidence is
-`/work/reports/wave-20261022/shell/pr53-regex-repair-r4/`. No frozen exclusion,
-score membership, oracle, or baseline changes are authorized by this limit.
+- Admitted wrong captures. Run Bash 5.3.15 in `LC_ALL=C` with
+  `p='((a*|b){2,3})*'; v=bba; [[ $v =~ $p ]]; printf 's=%s n=%s' "$?" "${#BASH_REMATCH[@]}"; printf '<%s>' "${BASH_REMATCH[@]}"`.
+  Bash prints `s=0 n=3<bba><ba><a>`; PR53 prints `s=0 n=3<bba><a><a>`.
+  The consuming-suffix family behaves the same way: status, whole span and
+  capture count agree, inner groups differ. `(((a*|b){2,3})*b)*` on `bb` prints
+  `<bb><bb><b><>` in Bash and `<bb><b><><>` here. 36 of the 37 records in
+  `scripts/fixtures/shell-regex-capture-restoration.json` and 174 of the 560
+  rewind probes differ only in captures. Cause: GNU libc restores its whole
+  register snapshot, including an open ancestor's start, while
+  `Trace::rewind()` in `interpreter/conditional/regex.rs` keeps open pairs.
+  Make that restoration agree with epsilon-path selection, not another
+  open-register exception, and keep all 482 exact records and both fixtures.
+- Reconstruction cost. Snapshots are linear (write log, no whole-register
+  copy), but reachability plus reconstruction still cost about 1.8 times the
+  whole-span scan. Under the default 1.37M-step command budget,
+  `"(" * 48 + "a" + ")" * 48 + "*"` and the 64-group form on 2048 `a` bytes
+  return 2 while main returns 0 (step profile: 64 groups at 2048 bytes needs
+  811K scan + 541K reachability + 922K reconstruction). 16 and 32 groups at
+  2048 bytes and 48 and 64 groups at 512 bytes pass. A single tagged pass or
+  a smaller per-position reachability table would remove the gap. Do not raise
+  the budget.
+
+Reproduce through the production Waffle runner with new exact Bash
+recordings, keep admission, cooperative undo and cancellation, and change no
+frozen exclusion, score membership, oracle or baseline.

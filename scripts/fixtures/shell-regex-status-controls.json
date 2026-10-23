@@ -1,0 +1,155 @@
+{
+  "bash": "5.3.15(1)-release",
+  "provenance": {
+    "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+    "package": "archlinux bash-5.3.15-1-x86_64",
+    "env": {
+      "PATH": "/usr/bin:/bin",
+      "HOME": "/home/user",
+      "LC_ALL": "C"
+    },
+    "scope": "[[ =~ ]] match status controls for consuming-suffix restoration shapes and nested-group cost. Recorded locally; CI replays only."
+  },
+  "cases": [
+    {
+      "name": "suffix status (((a*|b){2,3})*b)* on ''",
+      "script": "p='(((a*|b){2,3})*b)*'; v=''; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0w",
+      "stderrBase64": ""
+    },
+    {
+      "name": "suffix status (((a*|b){2,3})*b)* on 'bb'",
+      "script": "p='(((a*|b){2,3})*b)*'; v=bb; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0w",
+      "stderrBase64": ""
+    },
+    {
+      "name": "suffix status (((a*|b){2,3})*b)* on 'c'",
+      "script": "p='(((a*|b){2,3})*b)*'; v=c; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0w",
+      "stderrBase64": ""
+    },
+    {
+      "name": "suffix status (((a*|b){2,3})*b)* on 'ac'",
+      "script": "p='(((a*|b){2,3})*b)*'; v=ac; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0w",
+      "stderrBase64": ""
+    },
+    {
+      "name": "suffix status ^(((a*|b){2,3})*b)+$ on ''",
+      "script": "p='^(((a*|b){2,3})*b)+$'; v=''; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0x",
+      "stderrBase64": ""
+    },
+    {
+      "name": "suffix status ^(((a*|b){2,3})*b)+$ on 'bb'",
+      "script": "p='^(((a*|b){2,3})*b)+$'; v=bb; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0w",
+      "stderrBase64": ""
+    },
+    {
+      "name": "suffix status ^(((a*|b){2,3})*b)+$ on 'c'",
+      "script": "p='^(((a*|b){2,3})*b)+$'; v=c; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0x",
+      "stderrBase64": ""
+    },
+    {
+      "name": "suffix status ^(((a*|b){2,3})*b)+$ on 'ac'",
+      "script": "p='^(((a*|b){2,3})*b)+$'; v=ac; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0x",
+      "stderrBase64": ""
+    },
+    {
+      "name": "suffix status (((a*|b){2,3})*b){1} on ''",
+      "script": "p='(((a*|b){2,3})*b){1}'; v=''; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0x",
+      "stderrBase64": ""
+    },
+    {
+      "name": "suffix status (((a*|b){2,3})*b){1} on 'bb'",
+      "script": "p='(((a*|b){2,3})*b){1}'; v=bb; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0w",
+      "stderrBase64": ""
+    },
+    {
+      "name": "suffix status (((a*|b){2,3})*b){1} on 'c'",
+      "script": "p='(((a*|b){2,3})*b){1}'; v=c; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0x",
+      "stderrBase64": ""
+    },
+    {
+      "name": "suffix status (((a*|b){2,3})*b){1} on 'ac'",
+      "script": "p='(((a*|b){2,3})*b){1}'; v=ac; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0x",
+      "stderrBase64": ""
+    },
+    {
+      "name": "suffix status (((a*|b){2,3})*|b)* on ''",
+      "script": "p='(((a*|b){2,3})*|b)*'; v=''; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0w",
+      "stderrBase64": ""
+    },
+    {
+      "name": "suffix status (((a*|b){2,3})*|b)* on 'bb'",
+      "script": "p='(((a*|b){2,3})*|b)*'; v=bb; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0w",
+      "stderrBase64": ""
+    },
+    {
+      "name": "suffix status (((a*|b){2,3})*|b)* on 'c'",
+      "script": "p='(((a*|b){2,3})*|b)*'; v=c; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0w",
+      "stderrBase64": ""
+    },
+    {
+      "name": "suffix status (((a*|b){2,3})*|b)* on 'ac'",
+      "script": "p='(((a*|b){2,3})*|b)*'; v=ac; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0w",
+      "stderrBase64": ""
+    },
+    {
+      "name": "nested groups=16 on 2048 a",
+      "script": "p='((((((((((((((((a))))))))))))))))*'; v=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0w",
+      "stderrBase64": ""
+    },
+    {
+      "name": "nested groups=32 on 2048 a",
+      "script": "p='((((((((((((((((((((((((((((((((a))))))))))))))))))))))))))))))))*'; v=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0w",
+      "stderrBase64": ""
+    },
+    {
+      "name": "nested groups=48 on 512 a",
+      "script": "p='((((((((((((((((((((((((((((((((((((((((((((((((a))))))))))))))))))))))))))))))))))))))))))))))))*'; v=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0w",
+      "stderrBase64": ""
+    },
+    {
+      "name": "nested groups=64 on 512 a",
+      "script": "p='((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((a))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))*'; v=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; [[ $v =~ $p ]]; printf 's=%s' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "cz0w",
+      "stderrBase64": ""
+    }
+  ]
+}

@@ -20,6 +20,14 @@ The compiler retains copy provenance instead. Both current registers and their
 saved snapshot participate in epsilon-choice undo. Allocation admission and
 cooperative work and cancellation apply to snapshots and restoration.
 
+The snapshot is never copied whole. A register write log lists the registers
+changed since the last nonempty close. A snapshot updates only those entries,
+and a restoration reverts only those of closed groups, keeping open groups'
+entries for later. After each consumed character the log is compacted to one
+entry per differing register once it outgrows twice the register count.
+Reconstruction cost therefore stays linear in input length times compiled
+nodes, rather than adding a factor of the group count at every close.
+
 ## Absent alternatives
 
 A branch that emits no nodes follows a branch that emits nodes. This applies
@@ -66,13 +74,13 @@ accepting-node order. No upstream source was copied or translated. The local
 terminal-provenance reachability algorithm avoids importing libc's DFA, node
 cloning machinery or backtracking matcher.
 
-This correction changes no publication/state API. The unsupported shape below narrows the admitted pattern domain.
+This correction changes no publication/state API or admitted pattern domain.
 Direct/resolved IFS, compound-local restoration, array enumeration, declaration
 printing and Oils611 operand quoting retain their separately owned prerequisites.
 No full frozen-score gain, current-main integration or final publication
 acceptance is implied by these focused controls.
 
-## Unsupported enclosing restoration
+## Enclosing restoration with a consuming suffix
 
 GNU libc snapshots all registers after a nonempty group close. An empty optional
 close can restore that entire snapshot, including an open ancestor's start.
@@ -81,21 +89,19 @@ and repeat-progress traversal differ from GNU libc's sifted path traversal.
 Removing that protection fixes the suffix cases but breaks the eight no-suffix
 controls. Snapshot-only and traversal variants did not satisfy both sets.
 
-The compiler therefore rejects a nullable expandable count with minimum greater
-than one, nested in an unbounded repetition, followed by a consuming suffix,
-with that sequence inside another repetition. This includes
-`(((a*|b){2,3})*b)*`. Alternatives and groups propagate shape information;
-a branch does not create a sequence across alternatives. Zero-count subtrees
-have no effect. This conservative syntax check applies before input matching,
-including inputs that would miss. It returns status 2 without publishing captures.
+A nullable expandable count with minimum greater than one, nested in an
+unbounded repetition, followed by a consuming suffix, inside another
+repetition, therefore keeps Bash's match status, whole span and capture count
+but can publish different inner captures. `(((a*|b){2,3})*b)*` on `bb` prints
+`<bb><b><><>` here and `<bb><bb><b><>` in Bash. These patterns are matched like
+any other: the matcher never rejects a pattern main matched.
 
-`scripts/fixtures/shell-regex-capture-unsupported.json` retains the eight new
-Bash observations unchanged, records all 24 reviewer regressions, and adds five
-structural variants. Those 37 records describe Bash's successful behavior.
-Production tests separately assert rejection and preservation of a sentinel
-`BASH_REMATCH`, not parity. All 238 earlier choice records and 244 ordinary
-records still require exact Bash agreement. This is a bounded support limit,
-not a claim that capture restoration now matches GNU libc in general.
+`scripts/fixtures/shell-regex-capture-restoration.json` keeps the 37 Bash
+records (eight isolated, 24 reviewer regressions, five structural variants).
+The production test requires each to agree on status and capture count.
+`scripts/fixtures/shell-regex-status-controls.json` records exact match and
+no-match statuses for the suffix family and nested-group cost cases. All 238
+choice records and 244 ordinary records still require exact Bash agreement.
 
 ## Known Bash differences
 

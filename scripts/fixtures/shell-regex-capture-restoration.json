@@ -1,6 +1,6 @@
 {
   "bash": "5.3.15(1)-release",
-  "reason": "Repeated nullable counted captures with a consuming suffix inside another repetition are deliberately unsupported. These are unchanged Bash controls, not expected production capture values.",
+  "reason": "Repeated nullable counted captures with a consuming suffix inside another repetition. Production must agree on match status and capture count; inner capture values are a known restoration follow-up (plan 004), not expected production output.",
   "cases": [
     {
       "name": "isolated (((a*|b){2,3})*b)* on bb",

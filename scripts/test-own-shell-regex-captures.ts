@@ -58,15 +58,31 @@ for (const expected of cases)
     }
   });
 
-if (!process.env.BASH_REGEX_CAPTURES_FIXTURE)
+// Exact status-only recordings, plus restoration-shape recordings whose inner
+// capture values are a known plan-004 follow-up: those must agree on status and
+// capture count, never fail closed.
+if (!process.env.BASH_REGEX_CAPTURES_FIXTURE) {
   for (const expected of recording(
-    new URL("fixtures/shell-regex-capture-unsupported.json", import.meta.url),
+    new URL("fixtures/shell-regex-status-controls.json", import.meta.url),
   ))
-    test(`production Waffle rejects unsupported capture shape: ${expected.name}`, async () => {
-      const actual = await runner(`BASH_REMATCH=sentinel; ${expected.script}`);
+    test(`production Waffle regex status: ${expected.name}`, async () => {
+      const actual = await runner(expected.script);
       assert.equal(actual.crash, undefined);
       assert.equal(actual.outputLimit, undefined);
-      assert.equal(actual.status, 0);
-      assert.equal(actual.stdout.toString(), "s=2 n=1<sentinel>");
+      assert.equal(actual.status, expected.status);
+      assert.deepEqual(actual.stdout, Buffer.from(expected.stdoutBase64, "base64"));
       assert.equal(actual.stderr.length, 0);
     });
+  for (const expected of recording(
+    new URL("fixtures/shell-regex-capture-restoration.json", import.meta.url),
+  ))
+    test(`production Waffle restoration-shape status: ${expected.name}`, async () => {
+      const actual = await runner(expected.script);
+      const summary = (stdout: Buffer) => stdout.toString().split("<")[0];
+      assert.equal(actual.crash, undefined);
+      assert.equal(actual.outputLimit, undefined);
+      assert.equal(actual.status, expected.status);
+      assert.equal(summary(actual.stdout), summary(Buffer.from(expected.stdoutBase64, "base64")));
+      assert.equal(actual.stderr.length, 0);
+    });
+}

@@ -522,86 +522,6 @@ async fn parse(
     Ok((expressions, root, count))
 }
 
-// GNU register restoration and this arena's epsilon undo do not agree for a
-// repeated nullable count, followed by consumption, inside another repetition.
-// Reject that syntax before matching instead of publishing guessed captures.
-#[derive(Clone, Copy, Default)]
-struct CaptureShape {
-    nullable: bool,
-    consuming: bool,
-    nullable_count: bool,
-    counted_loop: bool,
-    suffix: bool,
-    unsupported: bool,
-}
-impl CaptureShape {
-    fn sequence(self, right: Self) -> Self {
-        Self {
-            nullable: self.nullable && right.nullable,
-            consuming: self.consuming || right.consuming,
-            nullable_count: self.nullable_count || right.nullable_count,
-            counted_loop: self.counted_loop || right.counted_loop,
-            suffix: self.suffix || right.suffix || self.counted_loop && right.consuming,
-            unsupported: self.unsupported || right.unsupported,
-        }
-    }
-    fn alternative(self, right: Self) -> Self {
-        Self {
-            nullable: self.nullable || right.nullable,
-            suffix: self.suffix || right.suffix,
-            ..self.sequence(right)
-        }
-    }
-    fn repeated(self, min: usize, max: Option<usize>) -> Self {
-        if max == Some(0) {
-            return Self {
-                nullable: true,
-                ..Self::default()
-            };
-        }
-        Self {
-            nullable: min == 0 || self.nullable,
-            nullable_count: self.nullable_count || self.nullable && min > 1 && max != Some(min),
-            counted_loop: self.counted_loop || max.is_none() && self.nullable_count,
-            unsupported: self.unsupported || self.suffix && max != Some(1),
-            ..self
-        }
-    }
-}
-fn capture_shape(expression: Expression, shapes: &[CaptureShape]) -> CaptureShape {
-    match expression {
-        Expression::Empty | Expression::Atom(Atom::Start | Atom::End) => CaptureShape {
-            nullable: true,
-            ..CaptureShape::default()
-        },
-        Expression::Atom(_) => CaptureShape {
-            consuming: true,
-            ..CaptureShape::default()
-        },
-        Expression::Group(child, _) => shapes[child],
-        Expression::Sequence(left, right) => shapes[left].sequence(shapes[right]),
-        Expression::Alternative(left, right) => shapes[left].alternative(shapes[right]),
-        Expression::Repeat { child, min, max } => shapes[child].repeated(min, max),
-    }
-}
-async fn supported_captures(
-    expressions: &[Expression],
-    root: usize,
-    work: &mut Work,
-    cancel: &Cancel,
-) -> Result<(), Error> {
-    let mut shapes = Vec::new();
-    for expression in expressions {
-        work.checkpoint(cancel).await?;
-        let shape = capture_shape(*expression, &shapes);
-        push(&mut shapes, shape, work)?;
-    }
-    if shapes[root].unsupported {
-        return Err(2.into());
-    }
-    Ok(())
-}
-
 // Copying an expanded subtree resets its optional-group markers. A newly
 // optional wrapper can then mark its own root group without marking descendants.
 #[derive(Clone, Copy, Default)]
@@ -867,9 +787,6 @@ async fn compile(
     cancel: &Cancel,
 ) -> Result<(Vec<Node>, usize, usize), Error> {
     let (expressions, root, count) = parse(pattern, work, cancel).await?;
-    if count > 0 {
-        supported_captures(&expressions, root, work, cancel).await?;
-    }
     let mut nodes = Vec::new();
     push(&mut nodes, Node::Accept, work)?;
     let mut tasks = Vec::new();
@@ -1058,7 +975,12 @@ async fn reachability(
     };
     let mut heads = initialized(nodes.len(), None, work, cancel).await?;
     let mut edges = Vec::new();
+    // Rows scan only consuming nodes, not the whole arena per input byte.
+    let mut consumers = Vec::new();
     for (index, node) in nodes.iter().enumerate() {
+        if matches!(node, Node::Consume(..)) {
+            push(&mut consumers, index, work)?;
+        }
         let (left, right) = epsilon(*node);
         for next in left.into_iter().chain(right) {
             work.checkpoint(cancel).await?;
@@ -1073,9 +995,9 @@ async fn reachability(
             result.insert(0, position);
             stack.push(0);
         }
-        for (index, node) in nodes.iter().enumerate() {
+        for &index in &consumers {
             work.checkpoint(cancel).await?;
-            let Node::Consume(atom, next) = *node else {
+            let Node::Consume(atom, next) = nodes[index] else {
                 continue;
             };
             if position == span.1 || !result.get(next, position + 1) {
@@ -1157,15 +1079,25 @@ struct Iteration {
 #[derive(Clone, Copy)]
 enum Undo {
     Slot(usize, Option<usize>),
+    Restored(usize, Option<usize>),
     Previous(usize, Option<usize>),
+    Logged,
+    Changed(usize),
     Iteration(usize, Iteration),
     Branch(usize),
 }
+// `previous` is the register set at the last nonempty close. Instead of
+// copying every register there, `log[changed..]` lists each register written
+// since, so snapshots and restorations visit only registers that may differ.
 struct Trace {
     slots: Vec<Option<usize>>,
     previous: Vec<Option<usize>>,
+    log: Vec<usize>,
+    changed: usize,
+    // Input-position stamps (position + 1) avoid clearing per character.
+    marked: Vec<usize>,
     iterations: Vec<Iteration>,
-    seen: Vec<bool>,
+    seen: Vec<usize>,
     undo: Vec<Undo>,
 }
 impl Trace {
@@ -1173,8 +1105,16 @@ impl Trace {
         while let Some(undo) = self.undo.pop() {
             work.checkpoint(cancel).await?;
             match undo {
-                Undo::Slot(slot, old) => self.slots[slot] = old,
+                Undo::Slot(slot, old) => {
+                    self.slots[slot] = old;
+                    self.log.pop();
+                }
+                Undo::Restored(slot, old) => self.slots[slot] = old,
                 Undo::Previous(slot, old) => self.previous[slot] = old,
+                Undo::Logged => {
+                    self.log.pop();
+                }
+                Undo::Changed(old) => self.changed = old,
                 Undo::Iteration(id, old) => self.iterations[id] = old,
                 Undo::Branch(next) => return Ok(Some(next)),
             }
@@ -1190,6 +1130,90 @@ impl Trace {
         self.iterations[id] = value;
         Ok(())
     }
+    fn write(&mut self, slot: usize, value: Option<usize>, work: &mut Work) -> Result<(), Error> {
+        push(&mut self.undo, Undo::Slot(slot, self.slots[slot]), work)?;
+        push(&mut self.log, slot, work)?;
+        self.slots[slot] = value;
+        Ok(())
+    }
+    fn log_from(&mut self, end: usize, work: &mut Work) -> Result<(), Error> {
+        push(&mut self.undo, Undo::Changed(self.changed), work)?;
+        self.changed = end;
+        Ok(())
+    }
+    async fn snapshot(&mut self, work: &mut Work, cancel: &Cancel) -> Result<(), Error> {
+        let end = self.log.len();
+        for index in self.changed..end {
+            work.checkpoint(cancel).await?;
+            let slot = self.log[index];
+            if self.previous[slot] == self.slots[slot] {
+                continue;
+            }
+            push(
+                &mut self.undo,
+                Undo::Previous(slot, self.previous[slot]),
+                work,
+            )?;
+            self.previous[slot] = self.slots[slot];
+        }
+        self.log_from(end, work)
+    }
+    // Restore changed registers of closed groups from the snapshot. Starts go
+    // first so each pair's open state is read before its end is restored.
+    async fn rewind(&mut self, work: &mut Work, cancel: &Cancel) -> Result<(), Error> {
+        let end = self.log.len();
+        for ends in [false, true] {
+            for index in self.changed..end {
+                work.checkpoint(cancel).await?;
+                let slot = self.log[index];
+                if slot % 2 == usize::from(ends) {
+                    self.rewind_slot(slot, work)?;
+                }
+            }
+        }
+        self.log_from(end, work)
+    }
+    fn rewind_slot(&mut self, slot: usize, work: &mut Work) -> Result<(), Error> {
+        if self.previous[slot] == self.slots[slot] {
+            return Ok(());
+        }
+        if self.slots[slot / 2 * 2 + 1].is_none() {
+            push(&mut self.undo, Undo::Logged, work)?;
+            push(&mut self.log, slot, work)?;
+            return Ok(());
+        }
+        push(&mut self.undo, Undo::Restored(slot, self.slots[slot]), work)?;
+        self.slots[slot] = self.previous[slot];
+        Ok(())
+    }
+    // A consumed character ends backtracking. Once the log outgrows twice the
+    // registers, keep one entry per register that still differs from the
+    // snapshot. Each compaction is paid for by the appends since the last one.
+    async fn compact(
+        &mut self,
+        position: usize,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<(), Error> {
+        if self.log.len() <= self.slots.len().saturating_mul(2) {
+            return Ok(());
+        }
+        let stamp = position + 1;
+        let mut kept = 0;
+        for index in self.changed..self.log.len() {
+            work.checkpoint(cancel).await?;
+            let slot = self.log[index];
+            if self.marked[slot] == stamp || self.previous[slot] == self.slots[slot] {
+                continue;
+            }
+            self.marked[slot] = stamp;
+            self.log[kept] = slot;
+            kept += 1;
+        }
+        self.log.truncate(kept);
+        self.changed = 0;
+        Ok(())
+    }
     // Empty optional closes restore the last completed nonempty register set,
     // without replacing an enclosing group that is still open. Unmarked closes overwrite.
     async fn save(
@@ -1200,40 +1224,17 @@ impl Trace {
         work: &mut Work,
         cancel: &Cancel,
     ) -> Result<(), Error> {
-        push(&mut self.undo, Undo::Slot(slot, self.slots[slot]), work)?;
-        self.slots[slot] = Some(position);
+        self.write(slot, Some(position), work)?;
         if slot.is_multiple_of(2) {
-            push(
-                &mut self.undo,
-                Undo::Slot(slot + 1, self.slots[slot + 1]),
-                work,
-            )?;
-            self.slots[slot + 1] = None;
+            return self.write(slot + 1, None, work);
+        }
+        if self.slots[slot - 1].is_some_and(|start| start < position) {
+            return self.snapshot(work, cancel).await;
+        }
+        if !optional || self.previous[slot - 1].is_none() {
             return Ok(());
         }
-        let nonempty = self.slots[slot - 1].is_some_and(|start| start < position);
-        if !nonempty && (!optional || self.previous[slot - 1].is_none()) {
-            return Ok(());
-        }
-        for index in 0..self.slots.len() {
-            work.checkpoint(cancel).await?;
-            let enclosing_open = self.slots[index / 2 * 2 + 1].is_none();
-            if !nonempty && enclosing_open {
-                continue;
-            }
-            if nonempty {
-                push(
-                    &mut self.undo,
-                    Undo::Previous(index, self.previous[index]),
-                    work,
-                )?;
-                self.previous[index] = self.slots[index];
-            } else {
-                push(&mut self.undo, Undo::Slot(index, self.slots[index]), work)?;
-                self.slots[index] = self.previous[index];
-            }
-        }
-        Ok(())
+        self.rewind(work, cancel).await
     }
     async fn step(
         &mut self,
@@ -1243,8 +1244,8 @@ impl Trace {
         work: &mut Work,
         cancel: &Cancel,
     ) -> Result<Option<usize>, Error> {
-        let seen = self.seen[index];
-        self.seen[index] = true;
+        let seen = self.seen[index] == position + 1;
+        self.seen[index] = position + 1;
         if let Node::Repeat { next, .. } = nodes[index]
             && seen
         {
@@ -1311,8 +1312,11 @@ async fn captures(
     let mut trace = Trace {
         slots: initialized(count.checked_mul(2).ok_or(2)?, None, work, cancel).await?,
         previous: initialized(count.checked_mul(2).ok_or(2)?, None, work, cancel).await?,
+        log: Vec::new(),
+        changed: 0,
+        marked: initialized(count.checked_mul(2).ok_or(2)?, 0, work, cancel).await?,
         iterations: initialized(nodes.len(), Iteration::default(), work, cancel).await?,
-        seen: initialized(nodes.len(), false, work, cancel).await?,
+        seen: initialized(nodes.len(), 0, work, cancel).await?,
         undo: Vec::new(),
     };
     let mut index = start;
@@ -1327,10 +1331,7 @@ async fn captures(
             position += 1;
             index = next;
             trace.undo.clear();
-            for seen in &mut trace.seen {
-                work.checkpoint(cancel).await?;
-                *seen = false;
-            }
+            trace.compact(position, work, cancel).await?;
             continue;
         }
         index = match trace.step(nodes, index, position, work, cancel).await? {
@@ -1476,8 +1477,15 @@ mod tests {
             assert_captures(source, value, &expected);
         }
     }
+    fn status(source: &str, value: &str) -> bool {
+        let pattern = self::pattern(source);
+        let mut work = Work::new(10_000_000, 10_000_000, 16);
+        finish(matches(&pattern, value, &mut work, &Cancel::new()))
+            .unwrap_or_else(|_| panic!("match failed: {source:?} on {value:?}"))
+            .is_some()
+    }
     #[test]
-    fn consuming_suffix_inside_repeated_nullable_count_fails_closed() {
+    fn consuming_suffix_inside_repeated_nullable_count_keeps_match_status() {
         for source in [
             "(((a*|b){2,3})*b)*",
             "((((a*)|b){2,3})*b)*",
@@ -1485,32 +1493,37 @@ mod tests {
             "(((a?|b){2,3})*b)*",
             "(((a*|b){2,3})*[ab])+",
             "(((a*|b){2,3})*(b)){1,3}",
+            "(((a*|b){2,3})*|b)*",
+            "(((a*|b){2,3})*b){1}",
+            "((((a*|b){2,3})*b){0})*",
         ] {
-            let pattern = self::pattern(source);
-            let mut work = Work::new(10_000_000, 10_000_000, 16);
-            assert!(
-                matches!(
-                    finish(matches(&pattern, "bbbb", &mut work, &Cancel::new())),
-                    Err(Error::Status(2))
-                ),
-                "{source}"
-            );
+            assert!(status(source, "bbbb"), "{source}");
+        }
+        for value in ["", "c", "ac"] {
+            assert!(!status("^(((a*|b){2,3})*b)+$", value), "{value:?}");
         }
     }
+    // Register snapshots must not copy every capture at each group close.
+    fn reconstruction_steps(groups: usize) -> usize {
+        let source = "(".repeat(groups) + "a" + &")".repeat(groups) + "*";
+        let pattern = self::pattern(&source);
+        let value = "a".repeat(256);
+        let budget = 100_000_000;
+        let mut work = Work::new(budget, 100_000_000, 16);
+        let captures = finish(matches(&pattern, &value, &mut work, &Cancel::new()))
+            .unwrap_or_else(|_| panic!("{groups} nested groups must match"))
+            .unwrap();
+        assert_eq!(captures.len(), groups + 1);
+        budget - work.remaining
+    }
     #[test]
-    fn alternatives_do_not_create_consuming_suffixes() {
-        for source in [
-            "(((a*|b){2,3})*|b)*",
-            "((((a*|b){2,3})*b){0})*",
-            "(((a*|b){2,3})*b){1}",
-        ] {
-            let pattern = self::pattern(source);
-            let mut work = Work::new(10_000_000, 10_000_000, 16);
-            assert!(
-                finish(compile(&pattern, &mut work, &Cancel::new())).is_ok(),
-                "{source}"
-            );
-        }
+    fn nested_group_reconstruction_is_linear_in_groups() {
+        let small = reconstruction_steps(16);
+        let large = reconstruction_steps(64);
+        assert!(
+            large < small * 6,
+            "16 groups: {small} steps, 64 groups: {large}"
+        );
     }
     #[test]
     fn state_vector_admission_precedes_growth() {
