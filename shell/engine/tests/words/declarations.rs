@@ -95,3 +95,22 @@ fn indexed_declaration_rejection_preserves_local_and_raw_reference() {
     assert_eq!(rig.run("declare -n r=a; declare -p r"), 0);
     assert_eq!(rig.output.bytes(), b"global\ndeclare -n r=\"a\"\n");
 }
+
+#[test]
+fn last_argument_publication_uses_builtin_prefix_target_before_restore() {
+    for (source, expected) in [
+        (
+            r#"x='_=x'; declare -n _=x; x=temp : last; printf '%s\n' "$x""#,
+            "_=x\n",
+        ),
+        (
+            r#"x='_=ref'; declare -n ref=x; declare -n _=ref; x=temp : last; printf '%s\n' "$x""#,
+            "_=ref\n",
+        ),
+        (r#"x=outer; x=temp : last; printf '%s\n' "$x""#, "outer\n"),
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 0, "{source}");
+        assert_eq!(rig.output.bytes(), expected.as_bytes(), "{source}");
+    }
+}

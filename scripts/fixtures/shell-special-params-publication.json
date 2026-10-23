@@ -42,6 +42,27 @@
       "status": 0,
       "stdout": "1 [after]\n",
       "stderr": "/usr/bin/bash: line 1: missing: No such file or directory\n"
+    },
+    {
+      "name": "nameref publication preserves getopts cursor",
+      "script": "set -- -a -b; getopts ab opt; declare -n _=OPTIND; : 1; getopts ab opt; printf '%s\\n' \"$opt\"",
+      "status": 0,
+      "stdout": "b\n",
+      "stderr": ""
+    },
+    {
+      "name": "publication uses builtin prefix target",
+      "script": "x='_=x'; declare -n _=x; x=temp : last; printf '%s\\n' \"$x\"",
+      "status": 0,
+      "stdout": "_=x\n",
+      "stderr": ""
+    },
+    {
+      "name": "publication uses chained builtin prefix target",
+      "script": "x='_=ref'; declare -n ref=x; declare -n _=ref; x=temp : last; printf '%s\\n' \"$x\"",
+      "status": 0,
+      "stdout": "_=ref\n",
+      "stderr": ""
     }
   ]
 }
