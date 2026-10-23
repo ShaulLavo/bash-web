@@ -29,6 +29,13 @@
       "status": 0,
       "stdout": "ZG9uZQo=",
       "stderr": ""
+    },
+    {
+      "id": "definitions-complete:32000",
+      "code": "shopt -s expand_aliases\nfor ((i=0;i<32000;i++)); do alias b$i=:; done\nalias b0 b31999\nunalias b0 b31999\nalias b1 b31998\n",
+      "status": 0,
+      "stdout": "YWxpYXMgYjA9JzonCmFsaWFzIGIzMTk5OT0nOicKYWxpYXMgYjE9JzonCmFsaWFzIGIzMTk5OD0nOicK",
+      "stderr": ""
     }
   ]
 }
