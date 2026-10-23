@@ -55,7 +55,7 @@ for (const expected of cases)
     if (expected.diagnostic) {
       const recorded = Buffer.from(expected.stderrBase64, "base64").toString();
       assert.equal(actual.stderr.toString(), recorded.replaceAll(/: line \d+: /g, ": "));
-    }
+    } else assert.deepEqual(actual.stderr, Buffer.from(expected.stderrBase64, "base64"));
   });
 
 if (!process.env.BASH_REGEX_CAPTURES_FIXTURE)
