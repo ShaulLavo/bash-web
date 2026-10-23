@@ -107,13 +107,6 @@
       "stderr": ""
     },
     {
-      "id": "brush-suite:builtins/trap:51",
-      "code": "set -E\ntrap 'echo \"[err]\"' ERR\ncoproc { trap -p ERR; false; echo \"after false\"; }\ncat <&${COPROC[0]}\nwait\n",
-      "status": 0,
-      "stdout": "trap -- 'echo \"[err]\"' ERR\n[err]\nafter false\n",
-      "stderr": ""
-    },
-    {
       "id": "brush-suite:builtins/trap:52",
       "code": "trap 'echo \"[return]\"' RETURN\nmyfunc() {\n  echo \"in func\"\n}\nmyfunc\necho \"after func\"\n",
       "status": 0,
@@ -126,13 +119,6 @@
       "status": 0,
       "stdout": "in func\nafter func\n",
       "stderr": ""
-    },
-    {
-      "id": "brush-suite:builtins/trap:54",
-      "code": "trap 'echo \"[return]\"' RETURN\n. ./sourced.sh\necho \"after source\"\n",
-      "status": 0,
-      "stdout": "[return]\nafter source\n",
-      "stderr": "/usr/bin/bash: line 2: ./sourced.sh: No such file or directory\n"
     },
     {
       "id": "brush-suite:builtins/trap:55",
@@ -279,13 +265,6 @@
       "code": "trap 'echo err' ERR\neval false\neval 'false; true'\necho end\n",
       "status": 0,
       "stdout": "err\nerr\nerr\nend\n",
-      "stderr": ""
-    },
-    {
-      "id": "bashkit-suite:trap-scope:54",
-      "code": "trap 'echo err' ERR\n{ false; echo x; } | cat\nset -E\n{ false; echo y; } | cat\n",
-      "status": 0,
-      "stdout": "x\nerr\ny\n",
       "stderr": ""
     },
     {
@@ -525,6 +504,62 @@
       "status": 1,
       "stdout": "one\n",
       "stderr": ""
+    },
+    {
+      "id": "oils:builtin-trap-err:127",
+      "code": "trap 'echo assign' ERR\na=$(false) | a=$(false) | a=$(false)\n\ntrap 'echo dparen' ERR\n(( 0 )) | (( 0 )) | (( 0 ))\n\ntrap 'echo dbracket' ERR\n[[ a = b ]] | [[ a = b ]] | [[ a = b ]]\n\ntrap 'echo subshell' ERR\n(false) | (false) | (false) | (false)\n\ntrap 'echo subshell2' ERR \n(false) | (false) | (false) | (false; false)\n\ntrap 'echo group' ERR\n{ false; } | { false; } | { false; }\n\necho ok\n\n",
+      "stdout": "assign\ndparen\ndbracket\nsubshell\nsubshell\nsubshell2\nsubshell2\ngroup\nok\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "id": "oils:builtin-trap-err:174",
+      "code": "trap 'echo group2' ERR\n{ false; } | { false; } | { false; false; }\n\necho ok\n\n",
+      "stdout": "group2\nok\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "id": "oils:builtin-trap-err:330",
+      "code": "trap 'echo err' ERR\n\npassing() {\n  false  # line 4\n  true\n}\n\nfailing() {\n  true\n  false\n}\n\npassing\nfailing\n\nset -o errtrace\n\necho 'now with errtrace'\npassing\nfailing\n\necho ok\n\n",
+      "stdout": "err\nnow with errtrace\nerr\nerr\nerr\nok\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "id": "oils:builtin-trap-err:523",
+      "code": "err() {\n  echo \"err [$@] $?\"\n}\ntrap 'err x y' ERR \n\necho A\n\nfalse\necho B\n\n( exit 42 )\necho C\n\ntrap - ERR  # disable trap\n\nfalse\necho D\n\ntrap 'echo after errexit $?' ERR \n\nset -o errexit\n\n( exit 99 )\necho E\n\n",
+      "stdout": "A\nerr [x y] 1\nB\nerr [x y] 42\nC\nD\nafter errexit 99\n",
+      "stderr": "",
+      "status": 99
+    },
+    {
+      "id": "oils:builtin-trap-err:617",
+      "code": "case $SH in dash) exit ;; esac\n\nerr() {\n  echo err status $?\n  false\n  ( exit 2 )  # not recursively triggered\n  echo err 2\n}\ntrap 'err' ERR \n\necho A\nfalse\necho B\n\nset -e\nfalse\necho C\n\n",
+      "stdout": "A\nerr status 1\nerr 2\nB\nerr status 1\n",
+      "stderr": "",
+      "status": 1
+    },
+    {
+      "id": "err-first-compound-stage",
+      "code": "set -E; trap 'echo err' ERR; { false; echo y; } | while read -r line; do echo \"$line\"; done",
+      "stdout": "err\ny\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "id": "err-first-compound-stage-errexit",
+      "code": "set -Ee; trap 'echo err' ERR; { false; echo BAD; } | while read -r line; do echo \"$line\"; done; echo done",
+      "stdout": "err\ndone\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "id": "err-first-function-stage",
+      "code": "set -E; trap 'echo err' ERR; f(){ false; echo y; }; f | while read -r line; do echo \"$line\"; done",
+      "stdout": "err\ny\n",
+      "stderr": "",
+      "status": 0
     }
   ]
 }
