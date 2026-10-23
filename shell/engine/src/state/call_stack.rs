@@ -398,4 +398,94 @@ mod tests {
         assert_eq!(state.borrow().array_element("BASH_ARGV", 0), Some("root"));
         drop(frame);
     }
+
+    fn measure_growth(depth: usize, debug: bool) -> (usize, usize) {
+        let memory = StorageBudget::new(8 << 20);
+        let state = State::with_memory(memory.clone()).shared();
+        state.borrow_mut().extdebug = debug;
+        let mut guards = Vec::new();
+        let mut growths = (0, 0);
+        let mut moved_slots = 0;
+        for _ in 0..depth {
+            let before = state.borrow().call_stack.frames.as_ptr();
+            let capacity = state.borrow().call_stack.frames.capacity();
+            let arguments = state.borrow().call_stack.arguments.capacity();
+            let mut frame = FunctionFrame::enter(state.clone(), vec!["x".into()], 2048)
+                .unwrap_or_else(|_| panic!("call fits"));
+            finish(frame.trace("f".into(), 1, &Cancel::new(), &mut work()))
+                .unwrap_or_else(|_| panic!("trace fits"));
+            let stack = &state.borrow().call_stack;
+            growths.0 += usize::from(stack.frames.capacity() != capacity);
+            growths.1 += usize::from(stack.arguments.capacity() != arguments);
+            if before != stack.frames.as_ptr() {
+                moved_slots += stack.frames.len() - 1;
+            }
+            guards.push(frame);
+        }
+        eprintln!(
+            "depth={depth} extdebug={debug} frame_growths={} argument_growths={} moved_frame_slots={moved_slots}",
+            growths.0, growths.1
+        );
+        while let Some(frame) = guards.pop() {
+            drop(frame);
+        }
+        drop(state);
+        assert_eq!(memory.observation().0, 0);
+        growths
+    }
+
+    #[test]
+    fn stack_slot_growth_is_amortized_for_ordinary_and_debug_calls() {
+        let mut bounded = true;
+        for (depth, maximum) in [(64, 5), (128, 6), (256, 7), (512, 8), (1024, 9)] {
+            let plain = measure_growth(depth, false);
+            let debug = measure_growth(depth, true);
+            bounded &= plain.0 <= maximum && plain.1 == 0;
+            bounded &= debug.0 <= maximum && debug.1 <= maximum;
+        }
+        assert!(
+            bounded,
+            "call slots must grow geometrically, not once per call"
+        );
+    }
+
+    #[test]
+    fn spare_slot_capacity_is_admitted_before_growth_and_refunded_on_drop() {
+        let slot = std::mem::size_of::<usize>();
+        let memory = StorageBudget::new(8 * slot);
+        let mut stack = CallStack::default();
+        stack.reserve(Some(&memory), true, true).unwrap();
+        assert_eq!(memory.observation().0, 8 * slot);
+        assert_eq!(
+            (stack.frames.capacity(), stack.arguments.capacity()),
+            (4, 4)
+        );
+        let frame = Rc::new(CallSite {
+            name: "f".into(),
+            source: "bash".into(),
+            line: "1".into(),
+            arguments: true,
+            _storage: None,
+        });
+        let args = Rc::new(CallArguments {
+            count: "0".into(),
+            values: Vec::new(),
+            end: 0,
+            _storage: None,
+        });
+        stack.frames.resize(4, frame);
+        stack.arguments.resize(4, args);
+        assert_eq!(
+            stack.reserve(Some(&memory), true, true),
+            Err(crate::exec::RESOURCE_STATUS)
+        );
+        assert_eq!(
+            (stack.frames.capacity(), stack.arguments.capacity()),
+            (4, 4)
+        );
+        assert_eq!((stack.frames.len(), stack.arguments.len()), (4, 4));
+        assert_eq!(memory.observation().0, 8 * slot);
+        drop(stack);
+        assert_eq!(memory.observation().0, 0);
+    }
 }

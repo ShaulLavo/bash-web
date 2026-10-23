@@ -586,3 +586,67 @@ fn oversized_stored_definition_source_refuses_admission_and_session_recovers() {
     assert_eq!(rig.output.bytes(), b"recovered\n");
     assert_eq!(rig.ex.drive(64).pending, 0);
 }
+
+#[test]
+fn unset_funcname_preserves_ordinary_bindings_across_calls_and_snapshots() {
+    check_output(
+        r#"unset FUNCNAME; FUNCNAME=ordinary; printf "<%s>\n" "$FUNCNAME""#,
+        r#"<ordinary>
+"#,
+    );
+    check_output(
+        r#"unset FUNCNAME; f() { echo "name:${FUNCNAME[*]}"; }; f"#,
+        r#"name:
+"#,
+    );
+    check_output(
+        r#"unset FUNCNAME; f() { local FUNCNAME=ordinary; echo "$FUNCNAME"; }; f"#,
+        r#"ordinary
+"#,
+    );
+    check_output(
+        r#"unset FUNCNAME; FUNCNAME=global; f() { local FUNCNAME=local; (printf "sub:<%s>\n" "$FUNCNAME"); printf "cmd:<%s>\n" "$(echo "$FUNCNAME")"; g; }; g() { echo "nested:$FUNCNAME"; }; f; echo "after:$FUNCNAME""#,
+        r#"sub:<local>
+cmd:<local>
+nested:local
+after:global
+"#,
+    );
+    check_output(
+        r#"f() { (unset FUNCNAME; FUNCNAME=child; echo "child:$FUNCNAME"); echo "parent:$FUNCNAME"; }; f"#,
+        r#"child:child
+parent:f
+"#,
+    );
+    check_output(
+        r#"f() { unset FUNCNAME; FUNCNAME=ordinary; echo "$FUNCNAME"; }; f; g() { echo "later:$FUNCNAME"; }; g; echo "after:$FUNCNAME""#,
+        r#"ordinary
+later:ordinary
+after:ordinary
+"#,
+    );
+    check_output(
+        r#"declare -n ref=FUNCNAME; unset ref; FUNCNAME=ordinary; f() { echo "$ref:${FUNCNAME[*]}"; }; f"#,
+        r#"ordinary:ordinary
+"#,
+    );
+    check_output(
+        r#"unset FUNCNAME; FUNCNAME=global; g() { local FUNCNAME=inner; echo "$FUNCNAME"; }; f() { local FUNCNAME=outer; g; echo "$FUNCNAME"; }; f; echo "$FUNCNAME""#,
+        r#"inner
+outer
+global
+"#,
+    );
+}
+
+#[test]
+fn unset_funcname_stays_ordinary_across_submissions() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("unset FUNCNAME; FUNCNAME=global"), 0);
+    assert_eq!(
+        rig.run("f() { local FUNCNAME=local; echo \"$(echo \"$FUNCNAME\")\"; }; f"),
+        0
+    );
+    assert_eq!(rig.run("echo \"$FUNCNAME\"; f"), 0);
+    assert_eq!(rig.output.bytes(), b"local\nglobal\nlocal\n");
+}
