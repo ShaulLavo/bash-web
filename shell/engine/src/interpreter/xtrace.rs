@@ -44,11 +44,11 @@ pub(super) fn command<'a>(
         let Some(mut writer) = Writer::start(state, fds, context).await? else {
             return Ok(());
         };
-        for (index, arg) in argv.iter().enumerate() {
-            if index != 0 {
-                writer.write(b" ").await?;
-            }
+        let mut separator: &[u8] = b"";
+        for arg in argv {
+            writer.write(separator).await?;
             writer.word(arg).await?;
+            separator = b" ";
         }
         writer.finish().await.map_err(Into::into)
     })
