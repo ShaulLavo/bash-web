@@ -757,7 +757,13 @@ pub(crate) async fn declarations(
             || matches!(name, "declare" | "typeset") && state.borrow().in_function_scope();
         if associative {
             let result = associative_operand(
-                arg, compound, local, exported, readonly, state, fds, context, work,
+                arg,
+                compound,
+                (local, exported, readonly),
+                state,
+                fds,
+                context,
+                work,
             )
             .await?;
             status |= result.code;
@@ -884,14 +890,13 @@ async fn nameref_declaration(
 async fn associative_operand(
     arg: String,
     compound: Option<shell_parser::parser::Assignment>,
-    local: bool,
-    exported: bool,
-    readonly: bool,
+    attributes: (bool, bool, bool),
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
 ) -> Result<Outcome, i32> {
+    let (local, exported, readonly) = attributes;
     let (lhs, value) = arg
         .split_once('=')
         .map_or((arg.as_str(), None), |(lhs, value)| (lhs, Some(value)));
