@@ -55,6 +55,7 @@ pub(crate) async fn admit_assignment(
 /// Keep feature state inline and preserve its lifetime through the whole command.
 pub(crate) struct Work {
     execution: crate::exec::Work,
+    frame_scope: Option<crate::exec::Scope>,
     arithmetic_depth: usize,
     arithmetic_names: Vec<(String, u64)>,
     pub(crate) arithmetic_writes: u64,
@@ -78,12 +79,32 @@ impl Work {
     pub(crate) fn new(steps: usize, storage: usize, fields: usize) -> Self {
         Self {
             execution: crate::exec::Work::new(steps, storage, fields),
+            frame_scope: None,
             arithmetic_depth: 0,
             arithmetic_names: Vec::new(),
             arithmetic_writes: 0,
             substitutions: None,
             substitution_status: None,
         }
+    }
+    pub(crate) fn with_frame_scope(mut self, scope: crate::exec::Scope) -> Self {
+        self.frame_scope = Some(scope);
+        self
+    }
+    fn frame<'a, T: 'a, F>(
+        &'a mut self,
+        build: impl FnOnce(&'a mut Self) -> F,
+    ) -> crate::exec::ResultFuture<'a, T>
+    where
+        F: std::future::Future<Output = Result<T, Error>> + 'a,
+    {
+        if let Some(scope) = self.frame_scope.clone() {
+            return scope.frame(build(self), |code| Err(code.into()));
+        }
+        if let Err(error) = self.admit_storage(std::mem::size_of::<F>()) {
+            return futures::future::Either::Left(futures::future::ready(Err(error)));
+        }
+        futures::future::Either::Right(build(self).boxed_local())
     }
     pub(crate) fn enter_arithmetic(&mut self) -> Result<(), Error> {
         if self.arithmetic_depth >= operand::MAX_DEPTH {
@@ -2665,6 +2686,48 @@ fn poll_argv(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pattern_frames_admit_actual_bytes_before_construction() {
+        let bytes = std::mem::size_of::<std::future::Ready<Result<usize, Error>>>();
+        let mut work = Work::new(8, bytes - 1, 1);
+        let called = std::cell::Cell::new(false);
+        let rejected = work.frame(|_| {
+            called.set(true);
+            std::future::ready(Ok(7usize))
+        });
+        assert!(matches!(
+            rejected.now_or_never(),
+            Some(Err(Error::Status(2)))
+        ));
+        assert!(!called.get());
+        assert_eq!(work.storage_left(), bytes - 1);
+        let mut work = Work::new(8, bytes, 1);
+        assert!(matches!(
+            work.frame(|_| std::future::ready(Ok(7usize)))
+                .now_or_never(),
+            Some(Ok(7))
+        ));
+        assert_eq!(work.storage_left(), 0);
+    }
+
+    #[test]
+    fn pattern_frames_share_and_refund_live_execution_admission() {
+        let execution = crate::exec::StorageBudget::new(4096);
+        let scope =
+            crate::exec::Scope::new(128, crate::exec::StorageBudget::new(128), execution.clone());
+        let mut work = Work::new(8, 0, 1).with_frame_scope(scope.clone());
+        let frame = work.frame(|_| std::future::pending::<Result<(), Error>>());
+        assert!(scope.execution_available() < 4096);
+        drop(frame);
+        assert_eq!(scope.execution_available(), 4096);
+        assert!(matches!(
+            work.frame(|_| std::future::ready(Ok(7))).now_or_never(),
+            Some(Ok(7))
+        ));
+        assert_eq!(scope.execution_available(), 4096);
+        assert_eq!(work.storage_left(), 0);
+    }
 
     #[test]
     fn admitted_fields_share_segment_output_and_slot_storage_without_changing_argv() {

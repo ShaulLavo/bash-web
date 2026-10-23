@@ -39,7 +39,8 @@ impl Pattern {
         cancel: &Cancel,
     ) -> Result<Self, Error> {
         let mut pattern = Self::with_options(false, state.borrow().extglob);
-        pattern.classes = Some(crate::state::CaseLocale::from_state(&state.borrow()).map_err(|_| 2));
+        pattern.classes =
+            Some(crate::state::CaseLocale::from_state(&state.borrow()).map_err(|_| 2));
         for ch in text.chars() {
             work.checkpoint(cancel).await?;
             pattern.push(ch, Protection::None, work)?;

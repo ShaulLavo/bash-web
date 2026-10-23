@@ -237,7 +237,7 @@ async fn for_assignment_body(
     fds: &Descriptors,
     context: &Context,
 ) -> Result<(), Outcome> {
-    let mut assignment = expansion_work(context.limits());
+    let mut assignment = expansion_work(context);
     if let Err(error) = expand::admit_assignment(
         state,
         &command.variable,

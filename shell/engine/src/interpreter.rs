@@ -1013,7 +1013,7 @@ async fn parse_failure(
 ) -> Outcome {
     let (message, line) = match failure {
         ParseFailure::Word(line) => {
-            let mut work = expansion_work(context.limits());
+            let mut work = expansion_work(context);
             let error = work
                 .admit_storage(256)
                 .err()
@@ -1245,7 +1245,7 @@ async fn pipeline_command(
         let state = state.borrow();
         state.lastpipe && !state.monitor
     };
-    let mut work = expansion_work(context.limits());
+    let mut work = expansion_work(&context);
     let children = match pipeline_children(count, &state, &context, &mut work).await {
         Ok(children) => children,
         Err(error) => {
@@ -1623,7 +1623,7 @@ fn loop_sequence<'a>(
         async move {
             // The prior iteration's copy is gone. Admit this retained AST
             // copy against fresh command storage, never elapsed loop work.
-            let mut work = expansion_work(context.limits());
+            let mut work = expansion_work(context);
             if let Err(error) = crate::ast_copy::admit(commands, &context.cancel, &mut work).await {
                 return expansion_failure(error.into(), fds, context).await;
             }
@@ -1658,7 +1658,7 @@ async fn cache_loop_arithmetic<'a>(
         .evaluation
         .admit_storage(arithmetic::Program::retained_bytes(source))
         .ok()?;
-    let mut work = expansion_work(context.limits());
+    let mut work = expansion_work(context);
     let program = match arithmetic::Program::compile(source, &mut work, &context.cancel).await {
         Ok(program) => program,
         Err(_) => return None,
@@ -2029,7 +2029,7 @@ async fn subshell(
     fds: Descriptors,
     context: Context,
 ) -> Outcome {
-    let mut work = expansion_work(context.limits());
+    let mut work = expansion_work(&context);
     let _task_allocation = match admit_task_metadata::<()>(&context, 1) {
         Ok(allocation) => allocation,
         Err(error) => return expansion_failure(error.into(), &fds, &context).await,
@@ -2192,7 +2192,7 @@ async fn launch_background(
     if !context.core.has_job_capacity() {
         return Outcome::status(2);
     }
-    let mut work = expansion_work(context.limits());
+    let mut work = expansion_work(context);
     let child = match State::snapshot(state, &context.cancel, &mut work).await {
         Ok(child) => child.shared(),
         Err(error) => return expansion_failure(error.into(), fds, context).await,
@@ -2333,7 +2333,8 @@ fn admission_status(error: expand::Error) -> i32 {
         _ => 2,
     }
 }
-fn expansion_work(limits: &Limits) -> expand::Work {
+fn expansion_work(context: &Context) -> expand::Work {
+    let limits = context.limits();
     expand::Work::new(
         limits
             .source_bytes
@@ -2342,11 +2343,12 @@ fn expansion_work(limits: &Limits) -> expand::Work {
         limits.expansion_bytes,
         limits.arguments,
     )
+    .with_frame_scope(context.evaluation.clone())
 }
 /// Expansion work that can run command substitutions with `fds` (the
 /// descriptors in effect before the command's own redirections).
 fn substitution_work(context: &Context, fds: &Descriptors) -> expand::Work {
-    let mut work = expansion_work(context.limits());
+    let mut work = expansion_work(context);
     work.substitutions = Some(Substitutions {
         context: context.clone(),
         fds: fds.clone(),

@@ -14,9 +14,9 @@ Rules belong to shell state. Isolated shells share immutable rule storage until 
 
 `compgen -W` splits the supplied text at unquoted IFS characters before brace expansion. It then performs parameter, arithmetic, and command substitution and field splitting. It does not expand filename patterns in the word list. Word order and repetitions survive.
 
-`-P` and `-S` add a prefix and suffix after filtering. `-X` removes matching candidates, or keeps matching candidates when its pattern starts with `!`. An unescaped `&` in the pattern expands to the completion word.
+`-P` and `-S` add a prefix and suffix to primary candidates after filtering, before fallback candidates are appended. `-X` removes matching candidates, or keeps matching candidates when its pattern starts with `!`. An unescaped `&` in the pattern expands to the completion word. Filters accept POSIX named character classes. With `extglob` enabled, `-G` also accepts positive extended glob groups. Complement groups remain unsupported.
 
-File and directory candidates use the runtime's directory reader. Command candidates combine the shell's actual keywords, functions, builtins, and executable registrations on PATH. A readable file is not necessarily executable. User, group, host, and service candidates read the runtime's `/etc/passwd`, `/etc/group`, `/etc/hosts`, and `/etc/services`. Missing databases produce no candidates.
+File and directory candidates use the runtime's directory reader. Command candidates combine the shell's actual keywords, functions, builtins, and executable registrations on PATH. A readable file is not necessarily executable. Explicit command paths also include directories. A quoted `~/` prefix resolves through HOME while keeping its spelling in output. User, group, host, and service candidates read the runtime's `/etc/passwd`, `/etc/group`, `/etc/hosts`, and `/etc/services`. HOSTFILE selects a different hostname file when set. Database order and duplicates survive. Missing databases produce no candidates.
 
 `-o default`, `-o dirnames`, and `-o plusdirs` enable the corresponding file or directory fallback. Formatting options are stored and printed but do not affect newline-separated output.
 

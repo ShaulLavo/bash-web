@@ -13,9 +13,9 @@ use std::{
     rc::{Rc, Weak},
 };
 
-pub(crate) mod completion;
 mod case;
 mod case_attributes;
+pub(crate) mod completion;
 pub(crate) use case::Locale as CaseLocale;
 pub(crate) use case_attributes::{CaseMapping, CaseOptions};
 mod declarations;

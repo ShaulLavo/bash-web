@@ -84,7 +84,7 @@ async fn body(
             control::LoopStep::Stop(outcome) => return outcome,
             control::LoopStep::Normal(_) | control::LoopStep::Continue => (),
         }
-        let mut work = expansion_work(context.limits());
+        let mut work = expansion_work(&context);
         if let Err(error) =
             State::admit_scalar_access(&state, "REPLY", &context.cancel, &mut work).await
         {
@@ -198,7 +198,7 @@ async fn read_reply_body(
     context: &Context,
     line: usize,
 ) -> Result<String, Outcome> {
-    let mut work = expansion_work(context.limits());
+    let mut work = expansion_work(context);
     if let Err(code) = prompt(choices, menu, state, fds, context, &mut work).await {
         return Err(Outcome::status(code));
     }
@@ -300,7 +300,7 @@ async fn assign_body(
     context: &Context,
     line: usize,
 ) -> Result<(), Outcome> {
-    let mut work = expansion_work(context.limits());
+    let mut work = expansion_work(context);
     if let Err(error) =
         expand::admit_assignment(state, name, value.len(), &context.cancel, &mut work).await
     {
