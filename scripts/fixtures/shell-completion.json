@@ -336,6 +336,136 @@
       "script": "mkdir completion-default; printf x >completion-default/file; compgen -o bashdefault completion-default/f; echo status:$?; compgen -o default completion-default/f",
       "status": 0,
       "stdoutBase64": "c3RhdHVzOjEKY29tcGxldGlvbi1kZWZhdWx0L2ZpbGUK"
+    },
+    {
+      "script": "printf x >zz_file; compgen -o default -W '' -P '<' -S '>' zz_",
+      "status": 0,
+      "stdoutBase64": "enpfZmlsZQo="
+    },
+    {
+      "script": "mkdir zz_dir; compgen -W 'zz_word' -o plusdirs -P '<' -S '>' zz_",
+      "status": 0,
+      "stdoutBase64": "PHp6X3dvcmQ+Cnp6X2Rpcgo="
+    },
+    {
+      "script": "mkdir zz_dir; compgen -W '' -o dirnames -P '<' -S '>' zz_",
+      "status": 0,
+      "stdoutBase64": "enpfZGlyCg=="
+    },
+    {
+      "script": "mkdir zz_dir; printf x >zz_file; compgen -c ./zz_",
+      "status": 0,
+      "stdoutBase64": "Li96el9kaXIK"
+    },
+    {
+      "script": "compgen -W '$(case x in x) printf \"a b\";; esac) c'; echo status:$?",
+      "status": 0,
+      "stdoutBase64": "YQpiCmMKc3RhdHVzOjAK"
+    },
+    {
+      "script": "compgen -W \"$'a b' x\"; compgen -W \"$'a\\\\tb' x\"",
+      "status": 0,
+      "stdoutBase64": "JGEgYgp4CiRhXHRiCngK"
+    },
+    {
+      "script": "printf '127.0.0.1 zz_custom_hostname zz_alias\\n' >zz_hosts; HOSTFILE=$PWD/zz_hosts compgen -A hostname zz_",
+      "status": 0,
+      "stdoutBase64": "enpfY3VzdG9tX2hvc3RuYW1lCnp6X2FsaWFzCg=="
+    },
+    {
+      "script": "compgen -W 'a b 1' -X '[[:alpha:]]'; echo status:$?",
+      "status": 0,
+      "stdoutBase64": "MQpzdGF0dXM6MAo="
+    },
+    {
+      "script": "shopt -s extglob; printf x >zz_one; printf x >zz_two; compgen -G 'zz_@(one|two)'; echo status:$?",
+      "status": 0,
+      "stdoutBase64": "enpfb25lCnp6X3R3bwpzdGF0dXM6MAo="
+    },
+    {
+      "script": "HOME=$PWD; printf x >zz_file; compgen -f '~/zz_'; compgen -d '~/zz_'; echo status:$?",
+      "status": 0,
+      "stdoutBase64": "fi96el9maWxlCnN0YXR1czoxCg=="
+    },
+    {
+      "script": "compgen -W \"$'a\\nb' x\"; compgen -W \"$'a\\x41b' x\"; compgen -W \"$'a\\\\b' x\"; compgen -W \"$'a\\'b' x\"",
+      "status": 0,
+      "stdoutBase64": "JGFcbmIKeAokYVx4NDFiCngKJGFcYgp4CiRhXGIgeAo="
+    },
+    {
+      "script": "compgen -W '\"$a\" $\"a b\"'; compgen -W '$(case x in (x) case y in y) printf \"a b\";; esac;; esac) c' ",
+      "status": 0,
+      "stdoutBase64": "CiRhIGIKYQpiCmMK"
+    },
+    {
+      "script": "compgen -W '$(printf \"%s\\n\" \"$'a b'\") c'; compgen -W '${missing:-$'a b'} c' ",
+      "status": 1,
+      "stdoutBase64": ""
+    },
+    {
+      "script": "mkdir zz_dir; printf x >zz_file; compgen -W 'zz_word' -o plusdirs -P '<' -S '>' -X '!zz_word' zz_",
+      "status": 0,
+      "stdoutBase64": "PHp6X3dvcmQ+Cnp6X2Rpcgo="
+    },
+    {
+      "script": "printf x >zz_file; compgen -o default -W 'zz_word' -P '<' -S '>' zz_; compgen -o default -W 'zz_word' -X '*' -P '<' -S '>' zz_",
+      "status": 0,
+      "stdoutBase64": "PHp6X3dvcmQ+Cnp6X2ZpbGUK"
+    },
+    {
+      "script": "mkdir -p zz_dir/inner; printf x >zz_plain; compgen -c ./zz_; compgen -c ./zz_dir/i; PATH=$PWD compgen -c zz_",
+      "status": 1,
+      "stdoutBase64": "Li96el9kaXIKLi96el9kaXIvaW5uZXIK"
+    },
+    {
+      "script": "HOME=$PWD; mkdir zz_dir; printf x >zz_file; compgen -d '~/zz_'; compgen -c '~/zz_'; HOME=missing compgen -f '~/zz_'; echo status:$?",
+      "status": 0,
+      "stdoutBase64": "fi96el9kaXIKfi96el9kaXIKc3RhdHVzOjEK"
+    },
+    {
+      "script": "printf '127.0.0.1 zz_z zz_a zz_z\\n' >zz_hosts; HOSTFILE=zz_hosts compgen -A hostname zz_; HOSTFILE=zz_absent compgen -A hostname zz_; echo status:$?",
+      "status": 0,
+      "stdoutBase64": "enpfegp6el9hCnp6X3oKenpfCnN0YXR1czowCg=="
+    },
+    {
+      "script": "for pattern in '[[:digit:]]' '[![:alpha:]]' '[[:upper:][:digit:]]' '[x[:lower:]]' '[[:xdigit:]]' '[[:notaclass:]]'; do compgen -W 'a b Z x 1 7 +' -X \"$pattern\"; done",
+      "status": 0,
+      "stdoutBase64": "YQpiCloKeAorCmEKYgpaCngKYQpiCngKKwpaCjEKNworCloKeAorCmEKYgpaCngKMQo3CisK"
+    },
+    {
+      "script": "compgen -W 'é β A 1' -X '[[:alpha:]]'; compgen -W 'a b 1' -X '![[:alpha:]]'; compgen -W ': a 1' -X '[\\[:alpha:]]'",
+      "status": 0,
+      "stdoutBase64": "MQphCmIKOgphCjEK"
+    },
+    {
+      "script": "printf x >zz_one; printf x >zz_two; printf x >zz_other; compgen -G 'zz_@(one|two)'; echo status:$?; shopt -s extglob; compgen -G 'zz_!(other)'; compgen -G 'zz_+(one|two)'",
+      "status": 0,
+      "stdoutBase64": "c3RhdHVzOjEKenpfb25lCnp6X3R3bwp6el9vbmUKenpfdHdvCg=="
+    },
+    {
+      "script": "shopt -s extglob; mkdir -p zz_dir1 zz_dir2; printf x >zz_dir1/one; printf x >zz_dir2/two; compgen -G 'zz_dir@(1|2)/@(one|two)'; compgen -G 'zz_@(absent)'; echo status:$?",
+      "status": 0,
+      "stdoutBase64": "enpfZGlyMS9vbmUKenpfZGlyMi90d28Kc3RhdHVzOjEK"
+    },
+    {
+      "script": "mkdir -p /etc; printf %s 'zz_z:x:1000:1000::/home/z:/bin/bash\nzz_a:x:1001:1001::/home/a:/bin/bash\nzz_z:x:1002:1002::/home/z:/bin/bash\n' > /etc/passwd; compgen -A user zz_",
+      "status": 0,
+      "stdoutBase64": "enpfegp6el9hCnp6X3oK"
+    },
+    {
+      "script": "mkdir -p /etc; printf %s 'zz_z:x:1000:\nzz_a:x:1001:\nzz_z:x:1002:\n' > /etc/group; compgen -A group zz_",
+      "status": 0,
+      "stdoutBase64": "enpfegp6el9hCnp6X3oK"
+    },
+    {
+      "script": "mkdir -p /etc; printf %s '127.0.0.1 zz_z zz_a zz_z\n' > /etc/hosts; compgen -A hostname zz_",
+      "status": 0,
+      "stdoutBase64": "enpfegp6el9hCnp6X3oK"
+    },
+    {
+      "script": "mkdir -p /etc; printf %s 'zz_z 1234/tcp zz_alias\nzz_a 1235/tcp\nzz_z 1234/udp\n' > /etc/services; compgen -A service zz_",
+      "status": 0,
+      "stdoutBase64": "enpfegp6el9hCnp6X3oK"
     }
   ]
 }
