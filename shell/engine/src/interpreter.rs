@@ -285,6 +285,32 @@ pub(crate) struct Context {
     ignore_errexit: bool,
 }
 impl Context {
+    fn root(
+        core: Rc<Core>,
+        source: crate::exec::Source,
+        evaluation: crate::exec::Scope,
+        cancel: Cancel,
+        group: GroupId,
+    ) -> Self {
+        let signal = Rc::new(Cell::new(None));
+        Self {
+            core,
+            source,
+            reader: crate::exec::ReaderLocation::default(),
+            lifetime: (cancel.clone(), signal.clone()),
+            cancel,
+            signal,
+            group,
+            invocation_group: group,
+            scope: Scope::new(0),
+            parameter_error_status: 127,
+            compound_child: false,
+            loop_depth: 0,
+            ignore_errexit: false,
+            evaluation,
+        }
+    }
+
     fn stop_signal(&self) -> i32 {
         self.signal.get().unwrap_or(2)
     }
@@ -747,25 +773,15 @@ impl Session {
             return Err(StartError::Invalid(message.clone()));
         }
         let group = self.core.host.allocate_group();
-        let foreground_cancel = cancel.clone();
-        let signal = Rc::new(Cell::new(None));
-        let foreground_signal = signal.clone();
-        let context = Context {
-            core: self.core.clone(),
-            source: crate::exec::Source::root(source),
-            reader: crate::exec::ReaderLocation::default(),
-            lifetime: (cancel.clone(), signal.clone()),
-            cancel,
-            signal,
-            group,
-            invocation_group: group,
-            scope: Scope::new(0),
-            parameter_error_status: 127,
-            compound_child: false,
-            loop_depth: 0,
-            ignore_errexit: false,
+        let context = Context::root(
+            self.core.clone(),
+            crate::exec::Source::root(source),
             evaluation,
-        };
+            cancel,
+            group,
+        );
+        let foreground_cancel = context.cancel.clone();
+        let foreground_signal = context.signal.clone();
         let state = self.state.clone();
         let join = self.core.executor.spawn(async move {
             let _foreground = ForegroundGuard(context.core.clone());
@@ -4320,29 +4336,18 @@ mod residual_review_tests {
         }
         fn context(&self) -> Context {
             let core = self.session().core.clone();
-            let cancel = Cancel::new();
-            let signal = Rc::new(Cell::new(None));
-            let group = self.host.allocate_group();
-            Context {
-                evaluation: crate::exec::Scope::new(
-                    core.limits.source_bytes,
-                    core.eval_storage.clone(),
-                    core.execution_storage.clone(),
-                ),
+            let evaluation = crate::exec::Scope::new(
+                core.limits.source_bytes,
+                core.eval_storage.clone(),
+                core.execution_storage.clone(),
+            );
+            Context::root(
                 core,
-                source: crate::exec::Source::root(""),
-                reader: crate::exec::ReaderLocation::default(),
-                lifetime: (cancel.clone(), signal.clone()),
-                cancel,
-                signal,
-                group,
-                invocation_group: group,
-                scope: Scope::new(0),
-                parameter_error_status: 127,
-                compound_child: false,
-                loop_depth: 0,
-                ignore_errexit: false,
-            }
+                crate::exec::Source::root(""),
+                evaluation,
+                Cancel::new(),
+                self.host.allocate_group(),
+            )
         }
         fn shutdown(mut self) {
             let session = self.session.take().unwrap();
