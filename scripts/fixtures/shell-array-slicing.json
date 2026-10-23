@@ -928,20 +928,6 @@
       "stderrBase64": ""
     },
     {
-      "id": "order-131",
-      "script": "a=(zero one two); i=0; printf \"<%s>\\n\" \"${a[@]:-8:i++}\"; echo \"$i\"",
-      "status": 0,
-      "stdoutBase64": "PHplcm8+CjxvbmU+Cjx0d28+CjAK",
-      "stderrBase64": ""
-    },
-    {
-      "id": "order-134",
-      "script": "a=(zero one two); printf \"<%s>\\n\" \"${a[@]:-1:(a[9]=9, 1)}\"; echo \"${a[@]}\"",
-      "status": 0,
-      "stdoutBase64": "PHplcm8+CjxvbmU+Cjx0d28+Cnplcm8gb25lIHR3bwo=",
-      "stderrBase64": ""
-    },
-    {
       "id": "order-135",
       "script": "a=(zero one two); printf \"<%s>\\n\" \"${a[@]:1:1/0}\"; echo after",
       "status": 1,
@@ -1044,6 +1030,125 @@
       "script": "a=(zero one two); IFS=:; printf \"<%s>\\n\" \"${a[*]:1:2}\"",
       "status": 0,
       "stdoutBase64": "PG9uZTp0d28+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "boundary-0",
+      "script": "a[0]=zero; a[9223372036854775806]=last; printf \"<%s>\\n\" \"${a[@]: 0:1}\"",
+      "status": 0,
+      "stdoutBase64": "PHplcm8+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "boundary-1",
+      "script": "a[0]=zero; a[9223372036854775806]=last; printf \"<%s>\\n\" \"${a[@]: 1:1}\"",
+      "status": 0,
+      "stdoutBase64": "PGxhc3Q+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "boundary-2",
+      "script": "a[0]=zero; a[9223372036854775806]=last; printf \"<%s>\\n\" \"${a[@]: -1:1}\"",
+      "status": 0,
+      "stdoutBase64": "PGxhc3Q+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "boundary-3",
+      "script": "a[0]=zero; a[9223372036854775806]=last; printf \"<%s>\\n\" \"${a[@]: 9223372036854775806:1}\"",
+      "status": 0,
+      "stdoutBase64": "PGxhc3Q+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "boundary-4",
+      "script": "a[0]=zero; a[9223372036854775806]=last; printf \"<%s>\\n\" \"${a[@]: 9223372036854775805:1}\"",
+      "status": 0,
+      "stdoutBase64": "PGxhc3Q+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "boundary-5",
+      "script": "a[0]=zero; a[9223372036854775806]=last; printf \"<%s>\\n\" \"${a[@]: -9223372036854775808:1}\"",
+      "status": 0,
+      "stdoutBase64": "PD4K",
+      "stderrBase64": ""
+    },
+    {
+      "id": "boundary-6",
+      "script": "a[0]=zero; a[9223372036854775807]=last; printf \"<%s>\\n\" \"${a[@]: 0:1}\"",
+      "status": 0,
+      "stdoutBase64": "PHplcm8+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "boundary-7",
+      "script": "a[0]=zero; a[9223372036854775807]=last; printf \"<%s>\\n\" \"${a[@]: 1:1}\"",
+      "status": 0,
+      "stdoutBase64": "PGxhc3Q+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "boundary-8",
+      "script": "a[0]=zero; a[9223372036854775807]=last; printf \"<%s>\\n\" \"${a[@]: -1:1}\"",
+      "status": 0,
+      "stdoutBase64": "PD4K",
+      "stderrBase64": ""
+    },
+    {
+      "id": "boundary-9",
+      "script": "a[0]=zero; a[9223372036854775807]=last; printf \"<%s>\\n\" \"${a[@]: 9223372036854775807:1}\"",
+      "status": 0,
+      "stdoutBase64": "PGxhc3Q+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "boundary-10",
+      "script": "a[0]=zero; a[9223372036854775807]=last; printf \"<%s>\\n\" \"${a[@]: 9223372036854775806:1}\"",
+      "status": 0,
+      "stdoutBase64": "PGxhc3Q+Cg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "boundary-11",
+      "script": "a[0]=zero; a[9223372036854775807]=last; printf \"<%s>\\n\" \"${a[@]: -9223372036854775808:1}\"",
+      "status": 0,
+      "stdoutBase64": "PD4K",
+      "stderrBase64": ""
+    },
+    {
+      "id": "boundary-12",
+      "script": "a=\"\"; i=0; printf \"<%s>\\n\" \"${a[@]:i++:++i}\"; echo \"$i\"",
+      "status": 0,
+      "stdoutBase64": "PD4KMgo=",
+      "stderrBase64": ""
+    },
+    {
+      "id": "boundary-13",
+      "script": "a=\"scalar words\"; printf \"<%s>\\n\" \"${a[@]:1:2}\"",
+      "status": 0,
+      "stdoutBase64": "PGNhPgo=",
+      "stderrBase64": ""
+    },
+    {
+      "id": "end-bound-0",
+      "script": "a=(a b c); i=0; printf \"<%s>\\n\" \"${a[@]:3:i++}\"; echo \"$i\"",
+      "status": 0,
+      "stdoutBase64": "PD4KMAo=",
+      "stderrBase64": ""
+    },
+    {
+      "id": "end-bound-1",
+      "script": "a=(a b c); i=0; printf \"<%s>\\n\" \"${a[@]:4:i++}\"; echo \"$i\"",
+      "status": 0,
+      "stdoutBase64": "PD4KMAo=",
+      "stderrBase64": ""
+    },
+    {
+      "id": "end-bound-2",
+      "script": "a[5]=five; i=0; printf \"<%s>\\n\" \"${a[@]:6:i++}\"; echo \"$i\"",
+      "status": 0,
+      "stdoutBase64": "PD4KMAo=",
       "stderrBase64": ""
     }
   ]

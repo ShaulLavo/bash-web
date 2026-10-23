@@ -1,0 +1,95 @@
+use super::{Limits, Rig, check};
+
+#[test]
+fn array_slicing_sparse_offsets_count_present_elements() {
+    check(
+        "a[0]=zero; a[2]='two words'; a[5]=five; a[9]=nine; args \"${a[@]:1:2}\"; args \"${a[@]: -5:2}\"; args \"${a[@]: -11:2}\"",
+        &[&["two words", "five"], &["five", "nine"], &[]],
+    );
+}
+
+#[test]
+fn array_slicing_at_star_and_empty_fields() {
+    check(
+        "a=(zero '' 'two words'); IFS=:; args \"pre${a[@]:1:2}post\"; args \"${a[*]:1:2}\"; args \"${a[@]:1:0}\"; args \"${a[*]:1:0}\"; args \"${missing[@]:0}\"",
+        &[&["pre", "two wordspost"], &[":two words"], &[], &[""], &[]],
+    );
+}
+
+#[test]
+fn array_slicing_bounds_are_lazy_and_share_side_effects() {
+    check(
+        "a=(zero one two); i=0; args \"${a[@]:i++:++i}\" \"$i\"; args \"${a[@]:9:1/0}\"; args \"${missing[@]:i++:++i}\" \"$i\"",
+        &[&["zero", "one", "2"], &[], &["2"]],
+    );
+}
+
+#[test]
+fn array_slicing_output_limits_reject_before_dispatch() {
+    let rig = Rig::new(Limits {
+        arguments: 2,
+        ..Limits::default()
+    });
+    assert_eq!(rig.run("a=(a b c)"), 0);
+    assert_eq!(rig.run("args \"${a[@]:0}\""), 2);
+    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.run("args \"${a[@]:1:1}\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["b"]]);
+}
+
+#[test]
+fn array_slicing_cancelled_large_slice_never_dispatches_partial_fields() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=({0..8191})"), 0);
+    let job = rig.shell.start("args \"${a[@]:0}\"").unwrap();
+    rig.ex.drive(32);
+    assert!(!job.is_finished());
+    assert!(rig.calls.borrow().is_empty());
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.run("args \"${#a[@]}\" \"${a[8191]}\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["8192", "8191"]]);
+}
+
+#[test]
+fn array_slicing_skips_unselected_values_under_the_output_limit() {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 4096,
+        ..Limits::default()
+    });
+    assert_eq!(rig.run("a=(first)"), 0);
+    for _ in 0..128 {
+        assert_eq!(
+            rig.run("a+=(unselected-unselected-unselected-unselected-unselected-unselected)"),
+            0
+        );
+    }
+    assert_eq!(rig.run("args \"${a[@]:0:1}\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["first"]]);
+    assert_eq!(rig.run("args \"${a[@]:0}\""), 2);
+    assert_eq!(rig.calls.borrow().len(), 1);
+}
+
+#[test]
+fn array_slicing_negative_length_aborts_before_dispatch() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(a b c); args \"${a[@]:1:-1}\"; args after"), 1);
+    assert!(rig.calls.borrow().is_empty());
+}
+
+#[test]
+fn array_slicing_end_offset_skips_length_arithmetic() {
+    check(
+        "a=(a b c); i=0; args \"${a[@]:3:i++}\" \"$i\"; a[5]=five; args \"${a[@]:6:i++}\" \"$i\"",
+        &[&["0"], &["0"]],
+    );
+}
+
+#[test]
+fn array_slicing_negative_offsets_reject_an_overflowed_exclusive_upper_bound() {
+    check(
+        "a[0]=zero; a[9223372036854775807]=last; args \"${a[@]: -1}\"; args \"${a[@]:9223372036854775807:1}\"",
+        &[&[], &["last"]],
+    );
+}
