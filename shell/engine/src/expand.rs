@@ -1891,6 +1891,10 @@ impl Expansion<'_> {
                 )
                 .await
             }
+            operand::Piece::Expansion { part, protected } if is_list(&part) => {
+                self.elements(&part, state, quoted || protected, scalar)
+                    .await
+            }
             operand::Piece::Expansion { part, protected } => {
                 self.part(&part, state, quoted || protected, scalar, depth)
                     .await

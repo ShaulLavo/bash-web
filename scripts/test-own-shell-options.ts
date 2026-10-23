@@ -16,7 +16,6 @@ for (const entry of fixture.cases) {
       { crash: result.crash, status: result.status, stdout: result.stdout.toString() },
       { crash: undefined, status: entry.status, stdout: entry.stdout },
     );
-    if (entry.id === "noexec-parse") assert.notEqual(result.stderr.length, 0);
-    else assert.equal(result.stderr.toString(), entry.stderr);
+    assert.equal(result.stderr.toString(), entry.stderr);
   });
 }

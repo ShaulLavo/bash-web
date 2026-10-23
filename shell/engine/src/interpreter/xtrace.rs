@@ -1,6 +1,7 @@
 use super::{Context, Descriptors, substitution_work};
 use crate::{exec::ResultFuture, executor::Budget, expand, io::Endpoint, state::SharedState};
 use futures::future::{Either, ready};
+use std::borrow::Cow;
 
 #[derive(Clone, Copy, Default)]
 pub(super) struct Trace {
@@ -29,7 +30,6 @@ fn frame<'a, F: std::future::Future<Output = Result<(), expand::Error>> + 'a>(
 
 pub(super) fn command<'a>(
     argv: &'a [String],
-    assigned: &'a [(String, String)],
     state: &'a SharedState,
     fds: &'a Descriptors,
     context: &'a Context,
@@ -38,9 +38,6 @@ pub(super) fn command<'a>(
         return Either::Left(ready(Ok(())));
     }
     frame(state, context, || async move {
-        for (name, value) in assigned {
-            assignment(name, value, state, fds, context).await?;
-        }
         let Some(mut writer) = Writer::start(state, fds, context).await? else {
             return Ok(());
         };
@@ -60,14 +57,20 @@ pub(crate) async fn builtin_assignment(
     state: &SharedState,
     fds: &crate::io::FdTable,
     context: &Context,
-) -> Result<(), i32> {
+) -> Result<(), super::Outcome> {
     if !state.borrow().xtrace || context.trace.prompt {
         return Ok(());
     }
     let descriptors = std::rc::Rc::new(std::cell::RefCell::new(fds.clone()));
-    assignment(name, value, state, &descriptors, context)
-        .await
-        .map_err(super::admission_status)
+    match assignment(name, value, state, &descriptors, context).await {
+        Ok(()) => Ok(()),
+        Err(error) => Err(super::expansion_failure(error.into(), &descriptors, context).await),
+    }
+}
+
+enum AssignmentValue<'a> {
+    Expanded(&'a str),
+    Bound,
 }
 
 pub(super) fn assignment<'a>(
@@ -77,18 +80,83 @@ pub(super) fn assignment<'a>(
     fds: &'a Descriptors,
     context: &'a Context,
 ) -> ResultFuture<'a, ()> {
+    trace_assignment(name, AssignmentValue::Expanded(value), state, fds, context)
+}
+
+pub(super) fn prefix_assignment<'a>(
+    name: &'a str,
+    state: &'a SharedState,
+    fds: &'a Descriptors,
+    context: &'a Context,
+) -> ResultFuture<'a, ()> {
+    trace_assignment(name, AssignmentValue::Bound, state, fds, context)
+}
+
+fn trace_assignment<'a>(
+    name: &'a str,
+    value: AssignmentValue<'a>,
+    state: &'a SharedState,
+    fds: &'a Descriptors,
+    context: &'a Context,
+) -> ResultFuture<'a, ()> {
     frame(state, context, || async move {
         let Some(mut writer) = Writer::start(state, fds, context).await? else {
             return Ok(());
         };
+        // Prompt expansion may write the temporary prefix binding itself.
+        let bytes = match value {
+            AssignmentValue::Expanded(_) => 0,
+            AssignmentValue::Bound => state.borrow().parameter(name).len(),
+        };
+        let _allocation = context.evaluation.admit_execution(bytes)?;
+        let value = match value {
+            AssignmentValue::Expanded(value) => Cow::Borrowed(value),
+            AssignmentValue::Bound => Cow::Owned(state.borrow().parameter(name).into_owned()),
+        };
         writer.write(name.as_bytes()).await?;
         writer.write(b"=").await?;
         if !value.is_empty() {
-            writer.word(value).await?;
+            writer.word(&value).await?;
         }
         writer.finish().await?;
         Ok(())
     })
+}
+
+async fn prompt(
+    state: &SharedState,
+    fds: &Descriptors,
+    context: &Context,
+) -> Result<String, expand::Error> {
+    let mut prompt_context = context.clone();
+    prompt_context.trace.prompt = true;
+    let mut work = substitution_work(&prompt_context, fds);
+    let raw = {
+        let state = state.borrow();
+        let value = state.parameter("PS4");
+        work.admit_storage(value.len())?;
+        value.into_owned()
+    };
+    let error = match expand::scalar_text(
+        expand::ScalarSyntax::Prompt,
+        &raw,
+        state,
+        &context.cancel,
+        context.limits().expansion_bytes,
+        &mut work,
+    )
+    .await
+    {
+        Ok(prefix) => return Ok(prefix),
+        Err(error @ (expand::Error::Status(_) | expand::Error::Abort(_))) => return Err(error),
+        Err(error) => error,
+    };
+    prompt_context.parameter_error_status = 1;
+    let failure = super::expansion_failure(error.into(), fds, &prompt_context).await;
+    if state.borrow().errexit && failure.flow == super::Flow::Abort {
+        return Err(expand::Error::Abort(failure.code));
+    }
+    Ok(raw)
 }
 
 struct Writer<'a> {
@@ -105,36 +173,7 @@ impl<'a> Writer<'a> {
         context: &'a Context,
     ) -> Result<Option<Self>, expand::Error> {
         let endpoint = fds.borrow().get(2);
-        let mut prompt_context = context.clone();
-        prompt_context.trace.prompt = true;
-        let mut work = substitution_work(&prompt_context, fds);
-        let raw = {
-            let state = state.borrow();
-            let value = state.parameter("PS4");
-            work.admit_storage(value.len())?;
-            value.into_owned()
-        };
-        let prefix = match expand::scalar_text(
-            expand::ScalarSyntax::Prompt,
-            &raw,
-            state,
-            &context.cancel,
-            context.limits().expansion_bytes,
-            &mut work,
-        )
-        .await
-        {
-            Ok(prefix) => prefix,
-            Err(error @ (expand::Error::Status(_) | expand::Error::Abort(_))) => return Err(error),
-            Err(error) => {
-                prompt_context.parameter_error_status = 1;
-                let failure = super::expansion_failure(error.into(), fds, &prompt_context).await;
-                if state.borrow().errexit && failure.flow == super::Flow::Abort {
-                    return Err(expand::Error::Abort(failure.code));
-                }
-                raw
-            }
-        };
+        let prefix = prompt(state, fds, context).await?;
         let Some(endpoint) = endpoint else {
             return Ok(None);
         };

@@ -1176,9 +1176,6 @@ fn execute(
     if context.cancel.is_cancelled() {
         return futures::future::Either::Left(futures::future::ready(Outcome::status(130)));
     }
-    if state.borrow().noexec {
-        return futures::future::Either::Left(futures::future::ready(Outcome::status(0)));
-    }
     context.frame(|context| async move {
         yield_now().await;
         if context.cancel.is_cancelled() {
@@ -2763,17 +2760,6 @@ async fn simple_command(
         Some(stderr) => WeakStderr::Open(stderr.downgrade()),
         None => WeakStderr::Closed,
     };
-    if let Err(error) = xtrace::command(
-        &prepared.argv,
-        &prepared.assigned,
-        &state,
-        &original_fds,
-        &context,
-    )
-    .await
-    {
-        return expansion_failure(error.into(), &original_fds, &context).await;
-    }
     drop(original_fds);
     dispatch_simple_command(prepared, state, context, parent_stderr)
         .await
@@ -2861,8 +2847,8 @@ async fn prepare_simple_command_body(
         bytes += fields.iter().map(String::len).sum::<usize>();
         argv.extend(fields);
     }
-    // Bash expands command words first. Assignment-only commands then assign
-    // before redirects; named commands redirect before expanding prefix RHSs.
+    // Command words expand first. Prefix traces observe each temporary binding;
+    // command traces and redirects observe the restored caller environment.
     if argv.is_empty() {
         assignments(
             simple.assignments,
@@ -2887,20 +2873,7 @@ async fn prepare_simple_command_body(
             work,
         });
     }
-    let name = &argv[0];
-    let shell_command = state.borrow().functions().contains_key(name)
-        || commands::lookup(name).is_some_and(commands::Command::shell_heredoc_errors);
-    let heredoc_status = (!shell_command).then_some(context.parameter_error_status);
-    let fds = redirects(
-        &simple.redirects,
-        state,
-        fds,
-        context,
-        &mut work,
-        heredoc_status,
-    )
-    .await?;
-    let function_prefix = state.borrow().functions().contains_key(name);
+    let function_prefix = state.borrow().functions().contains_key(&argv[0]);
     let assigned = assignments(
         simple.assignments,
         state,
@@ -2912,6 +2885,20 @@ async fn prepare_simple_command_body(
             diagnostics: function_prefix.then_some(&fds),
             fds: &fds,
         },
+    )
+    .await?;
+    xtrace::command(&argv, state, &fds, context).await?;
+    let name = &argv[0];
+    let shell_command = state.borrow().functions().contains_key(name)
+        || commands::lookup(name).is_some_and(commands::Command::shell_heredoc_errors);
+    let heredoc_status = (!shell_command).then_some(context.parameter_error_status);
+    let fds = redirects(
+        &simple.redirects,
+        state,
+        fds,
+        context,
+        &mut work,
+        heredoc_status,
     )
     .await?;
     work.substitutions = None;
@@ -3550,6 +3537,9 @@ async fn assignments_body(
                 line: None,
                 expansion: true,
             });
+        }
+        if !commit {
+            xtrace::prefix_assignment(&assignment_name, state, fds, context).await?;
         }
         names.push(assignment_name);
         if commit {

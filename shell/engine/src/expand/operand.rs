@@ -289,6 +289,9 @@ impl<'a> Scanner<'a> {
                     protected: self.protected(),
                 });
             }
+            Some('@' | '*' | '$') if self.context == Context::Prompt => {
+                self.take();
+            }
             Some('!') => {
                 self.take();
             }
@@ -302,6 +305,21 @@ impl<'a> Scanner<'a> {
                 at: token == "${@}",
                 protected: self.protected(),
             });
+        }
+        if self.context == Context::Prompt {
+            let name = match token {
+                "$@" | "${@}" => Some("@"),
+                "$*" | "${*}" => Some("*"),
+                "$$" | "${$}" => Some("$"),
+                _ => None,
+            };
+            if let Some(name) = name {
+                work.admit_storage(std::mem::size_of::<WordPart>() + name.len())?;
+                return Ok(Piece::Expansion {
+                    part: WordPart::Variable(name.to_owned()),
+                    protected: true,
+                });
+            }
         }
         validate_token(token, work)?;
         work.admit_parse(token.len(), cancel).await?;

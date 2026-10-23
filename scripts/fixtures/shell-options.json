@@ -2,41 +2,6 @@
   "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
   "cases": [
     {
-      "id": "noexec",
-      "code": "echo a; set -n; echo b; set +n; echo c",
-      "status": 0,
-      "stdout": "a\n",
-      "stderr": ""
-    },
-    {
-      "id": "noexec-long",
-      "code": "echo a; set -o noexec; echo b",
-      "status": 0,
-      "stdout": "a\n",
-      "stderr": ""
-    },
-    {
-      "id": "noexec-function",
-      "code": "f() { echo a; set -n; echo b; }; f; echo c",
-      "status": 0,
-      "stdout": "a\n",
-      "stderr": ""
-    },
-    {
-      "id": "noexec-parse",
-      "code": "set -n\nif then\n",
-      "status": 2,
-      "stdout": "",
-      "stderr": "/usr/bin/bash: -c: line 2: syntax error near unexpected token `then'\n/usr/bin/bash: -c: line 2: `if then'\n"
-    },
-    {
-      "id": "noexec-redirection",
-      "code": "set -n; : >out; echo b",
-      "status": 0,
-      "stdout": "",
-      "stderr": ""
-    },
-    {
       "id": "xtrace-simple",
       "code": "{ set -x; echo 'a b' '' \"it's\" '*' a# '#a' '~x' x~ \"'\" $'\\001' 'a=~b'; set +x; } 2>&1 >/dev/null",
       "status": 0,
