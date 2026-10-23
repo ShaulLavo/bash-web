@@ -1,0 +1,205 @@
+{
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "cases": [
+    {
+      "name": "count -n0",
+      "command": "read -n0 -p 'PROMPT' value",
+      "stderr_mode": "capture",
+      "input": "hello\n",
+      "script": "value=old; read -n0 -p 'PROMPT' value ; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "0|<>\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "name": "count -N0",
+      "command": "read -N0 -p 'PROMPT' value",
+      "stderr_mode": "capture",
+      "input": "hello\n",
+      "script": "value=old; read -N0 -p 'PROMPT' value ; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "0|<>\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "name": "count -n1",
+      "command": "read -n1 -p 'PROMPT' value",
+      "stderr_mode": "capture",
+      "input": "hello\n",
+      "script": "value=old; read -n1 -p 'PROMPT' value ; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "0|<h>\n",
+      "stderr": "PROMPT",
+      "status": 0
+    },
+    {
+      "name": "count -N1",
+      "command": "read -N1 -p 'PROMPT' value",
+      "stderr_mode": "capture",
+      "input": "hello\n",
+      "script": "value=old; read -N1 -p 'PROMPT' value ; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "0|<h>\n",
+      "stderr": "PROMPT",
+      "status": 0
+    },
+    {
+      "name": "count -N1 -n0",
+      "command": "read -N1 -n0 -p 'PROMPT' value",
+      "stderr_mode": "capture",
+      "input": "hello\n",
+      "script": "value=old; read -N1 -n0 -p 'PROMPT' value ; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "0|<>\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "name": "count -n1 -N0",
+      "command": "read -n1 -N0 -p 'PROMPT' value",
+      "stderr_mode": "capture",
+      "input": "hello\n",
+      "script": "value=old; read -n1 -N0 -p 'PROMPT' value ; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "0|<>\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "name": "count -s -n0",
+      "command": "read -s -n0 -p 'PROMPT' value",
+      "stderr_mode": "capture",
+      "input": "hello\n",
+      "script": "value=old; read -s -n0 -p 'PROMPT' value ; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "0|<>\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "name": "count -s -N0",
+      "command": "read -s -N0 -p 'PROMPT' value",
+      "stderr_mode": "capture",
+      "input": "hello\n",
+      "script": "value=old; read -s -N0 -p 'PROMPT' value ; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "0|<>\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "name": "failed prompt closed",
+      "command": "read -p 'Enter: ' value",
+      "stderr_mode": "closed",
+      "input": "hello\n",
+      "script": "value=old; read -p 'Enter: ' value 2>&-; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "0|<hello>\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "name": "failed prompt readonly",
+      "command": "read -p 'Enter: ' value",
+      "stderr_mode": "readonly",
+      "input": "hello\n",
+      "script": "value=old; read -p 'Enter: ' value 2</dev/null; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "0|<hello>\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "name": "failed prompt full",
+      "command": "read -p 'Enter: ' value",
+      "stderr_mode": "full",
+      "input": "hello\n",
+      "script": "value=old; read -p 'Enter: ' value 2>/dev/full; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "0|<hello>\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "name": "failed prompt broken",
+      "command": "trap '' PIPE; read -p 'Enter: ' value",
+      "stderr_mode": "broken",
+      "input": "hello\n",
+      "script": "value=old; trap '' PIPE; read -p 'Enter: ' value 2>&6; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "0|<hello>\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "name": "invalid name -n0",
+      "command": "read -n0 -p PROMPT bad-name",
+      "stderr_mode": "capture",
+      "input": "hello\n",
+      "script": "value=old; read -n0 -p PROMPT bad-name ; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "1|<old>\n",
+      "stderr": "/usr/bin/bash: line 1: read: `bad-name': not a valid identifier\n",
+      "status": 0
+    },
+    {
+      "name": "closed input -n0",
+      "command": "read -n0 -p PROMPT -u9 value",
+      "stderr_mode": "capture",
+      "input": "hello\n",
+      "script": "value=old; read -n0 -p PROMPT -u9 value ; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "1|<old>\n",
+      "stderr": "/usr/bin/bash: line 1: read: 9: invalid file descriptor: Bad file descriptor\n",
+      "status": 0
+    },
+    {
+      "name": "readonly destination -n0",
+      "command": "readonly value; read -n0 -p PROMPT value",
+      "stderr_mode": "capture",
+      "input": "hello\n",
+      "script": "value=old; readonly value; read -n0 -p PROMPT value ; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "1|<old>\n",
+      "stderr": "/usr/bin/bash: line 1: value: readonly variable\n",
+      "status": 0
+    },
+    {
+      "name": "invalid name -N0",
+      "command": "read -N0 -p PROMPT bad-name",
+      "stderr_mode": "capture",
+      "input": "hello\n",
+      "script": "value=old; read -N0 -p PROMPT bad-name ; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "1|<old>\n",
+      "stderr": "/usr/bin/bash: line 1: read: `bad-name': not a valid identifier\n",
+      "status": 0
+    },
+    {
+      "name": "closed input -N0",
+      "command": "read -N0 -p PROMPT -u9 value",
+      "stderr_mode": "capture",
+      "input": "hello\n",
+      "script": "value=old; read -N0 -p PROMPT -u9 value ; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "1|<old>\n",
+      "stderr": "/usr/bin/bash: line 1: read: 9: invalid file descriptor: Bad file descriptor\n",
+      "status": 0
+    },
+    {
+      "name": "readonly destination -N0",
+      "command": "readonly value; read -N0 -p PROMPT value",
+      "stderr_mode": "capture",
+      "input": "hello\n",
+      "script": "value=old; readonly value; read -N0 -p PROMPT value ; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "1|<old>\n",
+      "stderr": "/usr/bin/bash: line 1: value: readonly variable\n",
+      "status": 0
+    },
+    {
+      "name": "unread input -n0",
+      "command": "read -n0 -p PROMPT value; read -r value",
+      "stderr_mode": "capture",
+      "input": "hello\n",
+      "script": "value=old; read -n0 -p PROMPT value; read -r value ; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "0|<hello>\n",
+      "stderr": "",
+      "status": 0
+    },
+    {
+      "name": "unread input -N0",
+      "command": "read -N0 -p PROMPT value; read -r value",
+      "stderr_mode": "capture",
+      "input": "hello\n",
+      "script": "value=old; read -N0 -p PROMPT value; read -r value ; printf \"%s|<%s>\\n\" \"$?\" \"$value\"",
+      "stdout": "0|<hello>\n",
+      "stderr": "",
+      "status": 0
+    }
+  ]
+}

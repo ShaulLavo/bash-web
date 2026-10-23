@@ -3496,6 +3496,11 @@ async fn assignments_body(
         if commit {
             completed.reserve(&assignment.name, retained)?;
         }
+        let value = if commit {
+            state.borrow().case_value(&assignment.name, value)?
+        } else {
+            value
+        };
         let assignment_name = assignment.name.clone();
         if let Err(name) = frame.set(assignment.name, value) {
             if let Some(fds) = function_diagnostics {
@@ -3838,6 +3843,17 @@ mod scope_tests {
 
     #[test]
     fn counted_read_retains_and_refunds_its_buffer_on_pending_cancellation() {
+        for option in [
+            "-n2147483647",
+            "-N2147483647",
+            "-rn2147483647",
+            "-rN2147483647",
+        ] {
+            check_pending_read_cancellation(option);
+        }
+    }
+
+    fn check_pending_read_cancellation(option: &str) {
         let (state, _fds, context) = replay_context();
         let limit = context.limits().execution_bytes;
         let (reader, writer) = io::pipe();
@@ -3847,7 +3863,7 @@ mod scope_tests {
         let mut future = Box::pin(builtins::run(
             commands::Builtin::Read,
             "read",
-            vec!["-n2147483647".into(), "value".into()],
+            vec![option.into(), "value".into()],
             state.clone(),
             fds,
             context.clone(),

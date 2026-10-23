@@ -3017,3 +3017,103 @@ expansion, and `builtins/caller.rs` for whitespace and closed-output status.
 Do not repair these by inventing runtime facts or changing frozen membership.
 The inherited ordinary local-array mismatch is also outside this repair; its
 exact `normal-array-assignment` record stays in the same evidence.
+
+## Invalid nameref target review follow-ups, 2026-10-23
+
+Status: Approved. Owner: VARIABLES declaration/builtin family. These inherited
+notes are outside PR59's bounded invalid ordinary-target status correction.
+Independent review approved source `6bc405d677b24d3b3d961ebda559874d7158f76b`.
+The exact review and recorded controls are retained in
+`/work/reports/bash-web/hill-climb/variables/nameref-invalid-review-opus-r1.md.result`
+and its sibling evidence directory.
+
+- Caller cancellation classification: `nameref_declaration` maps its own
+  per-target checkpoint cancellation to `Err(130)`. The declaration caller
+  aborts only on status 2 or `RESOURCE_STATUS`; other errors become status 1
+  and processing continues. The existing large-value cancellation regression
+  interrupts the caller's earlier operand scan, not this target scan. The
+  reviewer found this in source and did not execute it. Reproduce cancellation
+  specifically inside the target scan on current native and production Waffle,
+  inspect the interpreter's final status handling, then repair in the owning
+  declaration path with a deterministic cancellation control. Preserve
+  nonmutation, ordinary status-1 continuation, resource rejection and refunds.
+- Invalid-target diagnostics: Bash diagnoses `declare -n ref='a b'` as an
+  invalid variable name for a name reference; the engine emits no diagnostic.
+  The recorded fixture keeps the Bash stderr bytes, but its strict frozen
+  comparison scores stdout and status only. Reproduce all streams on current
+  production Waffle before repair. Keep ordinary invalid targets distinct from
+  unsupported empty/unbound, bracket-bearing and PIPESTATUS references. Route
+  this with the inherited declaration invalid-operand diagnostic above, not
+  through an IFS, array-writer or durable-state change.
+
+Neither note is a fixed bug, an accepted Bash match or a frozen gain of this
+integration. PR59 leaves the caller and target-scan cancellation logic unchanged.
+
+## Case-attribute review follow-ups, 2026-10-23
+
+Status: Approved. Owner: VARIABLES declaration family. PR77's independent review
+approved source `7d9f73ee295d47c0f360b7bbb63379963719f851`. These are newly added
+feature corners, not demonstrated losses against main. Record failing-first
+Bash 5.3.15 controls before the next bounded correction.
+
+- Reapplying uppercase conversion rejects its own Unicode output. Run
+  `declare -u x=µ; x+=a; echo ok:$?; declare -p x`. Bash prints `ok:0` and
+  `declare -u x="ΜA"`; the engine prints `ok:2` and `declare -u x="Μ"`.
+  `ÿ` converting to `Ÿ` has the same problem. Check the mapper's output range
+  in `state/case_attributes.rs` and its append caller in `interpreter/indexed.rs`.
+- Adding an attribute through an existing local nameref destroys the reference.
+  Run `x=OUT; f(){ local -n r=x; local -l r=AB; r=CD; declare -p x r; }; f; declare -p x`.
+  Bash prints local `declare -l x="cd"`, `declare -n r="x"`, then restores
+  `declare -- x="OUT"`. The engine leaves x unchanged and prints scalar r.
+  Preserve reference ownership and target/local restoration in `case_attributes.rs`.
+- Combined `declare -nl r=x` loses the reference. Run
+  `x=old; declare -nl r=x; r=ABC; declare -p x r`. Bash prints x as `ABC` and
+  r as `declare -nl r="x"`; the engine prints x as `old` and scalar r as `ABC`.
+  Handle the declaration flags together in the owning builtin path.
+- Bare `+` is consumed as an empty option. Run
+  `declare + x=ok; echo status:$?; declare -p x`. Bash diagnoses the invalid
+  identifier and prints `status:1`, keeping x set. The engine prints `status:0`.
+  Correct operand admission without losing the later valid assignment.
+
+Exact Bash/native observations, file locations and the review reproducer are in
+`/work/reports/wave-20261022/shell/review77-r1.md` and `review77-r1-evidence/`.
+Keep frozen observations, exclusions and blocking gates unchanged.
+
+
+## Read option review follow-ups, 2026-10-23
+
+Status: Approved. Owner: BUILTINS read, with the shared byte-field and
+runtime/state prerequisite owners. Independent PR72 review approved
+`967fd177652ea12a974d63c6ab9862830fb04650`. These are explicit capability
+boundaries, not newly lost main passes or claimed repairs in that PR.
+
+- Multibyte delimiter suffix. Reproduce through production Waffle:
+  `printf 'a\xc3\xa9:tail\n' | { read -d é a; IFS= read -r tail; printf '%s|<%s>\n' "$?" "$tail"; }`.
+  Bash 5.3.15 leaves bytes `a9 3a 74 61 69 6c` in `tail` with read status 0.
+  The engine prints `2|<>` because scalar assignment rejects the invalid UTF-8
+  suffix left after the delimiter's first byte. Route this to the shared
+  "word fields carry bytes, not UTF-8 String" item above. Preserve raw bytes,
+  unread offsets, bounded storage and cancellation. Do not substitute Unicode
+  replacement characters or change the delimiter or frozen expectations.
+- Positive-count terminal silent reads. `read -s -n1 value` on a terminal
+  remains unsupported with status 2. `read -s -n0 value` succeeds without
+  consuming input or changing terminal echo. Use a real terminal input fixture,
+  not a pipe, when implementing echo control. Restore echo on success, EOF,
+  cancellation and output failure. PR72 does not change echo state and does not
+  claim silent-terminal support.
+- Timers and array destinations remain unsupported. Recorded reproducers are
+  `printf 'x\n' | { REPLY=old; read -t0; printf '%s|<%s>\n' "$?" "$REPLY"; }`
+  and `printf 'a:b\n' | { REPLY=old; read -d : -a arr; printf '%s|<%s>|<%s>\n' "$?" "$REPLY" "${arr[0]}"; }`.
+  Bash returns read status 0 and keeps `REPLY=old` in each control, and stores
+  `a` in `arr[0]` in the array control. Coordinate readiness/deadline support
+  with the runtime and array writes with state. Preserve input offsets,
+  nonmutation on rejected options, resource accounting and cancellation.
+
+Reproduce on current native and production Waffle before repair. Record exact
+Bash 5.3.15 streams/status locally. The original review, 309-case fixture and
+eight classified boundary differences remain in
+`/work/reports/wave-20261022/shell/review72-takeover-r2.md`, its sibling evidence
+directory and `/work/reports/wave-20261022/shell/review72-r1/neighbors.json`.
+The terminal controls are in `scripts/fixtures/shell-read-terminal.json` and
+`shell/engine/tests/words/read_options.rs`. Do not relax their assertions or
+claim a frozen gain without a qualified unchanged-ruler replay.
