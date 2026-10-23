@@ -18,7 +18,13 @@ const attributes: typeof fixture = JSON.parse(
 assert.equal(attributes.schema, fixture.schema);
 assert.equal(attributes.bash, fixture.bash);
 assert.deepEqual(attributes.environment, fixture.environment);
-fixture.cases = fixture.cases.concat(attributes.cases);
+const integers: typeof fixture = JSON.parse(
+  readFileSync(new URL("fixtures/shell-scalar-integer.json", import.meta.url), "utf8"),
+);
+assert.equal(integers.schema, fixture.schema);
+assert.equal(integers.bash, fixture.bash);
+assert.deepEqual(integers.environment, fixture.environment);
+fixture.cases = fixture.cases.concat(attributes.cases, integers.cases);
 assert.equal(fixture.schema, 1);
 assert.equal(fixture.bash, "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)");
 assert.equal(process.version, "v26.12.1");

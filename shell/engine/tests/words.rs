@@ -4397,3 +4397,23 @@ mod nameref_invalid;
 
 #[path = "words/array_slicing.rs"]
 mod array_slicing;
+
+#[test]
+fn scalar_integer_initial_value_uses_arithmetic_precedence() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("declare -i x=2*3+4; echo $x"), 0);
+    assert_eq!(rig.output.bytes(), b"10\n");
+    assert!(rig.errors.bytes().is_empty());
+}
+
+#[test]
+fn scalar_integer_plain_assignments_keep_arithmetic_side_effects() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("declare -i x; x=20+5; echo \"x: $x\"; x=\"3*4\"; echo \"x: $x\"; x=\"10/3\"; echo \"x: $x\"; x=\"y=7, y+3\"; echo \"x: $x\""),
+        0
+    );
+    assert_eq!(rig.output.bytes(), b"x: 25\nx: 12\nx: 3\nx: 10\n");
+    assert_eq!(rig.value("y").as_deref(), Some("7"));
+    assert!(rig.errors.bytes().is_empty());
+}
