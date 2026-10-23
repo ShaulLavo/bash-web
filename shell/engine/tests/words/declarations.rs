@@ -2,10 +2,20 @@ use super::*;
 
 #[test]
 fn named_declarations_match_recorded_bash_5_3_15() {
-    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+    declarations_match_recording(include_str!(
         "../../../../scripts/fixtures/shell-declare-print.json"
-    ))
-    .unwrap();
+    ));
+}
+
+#[test]
+fn declaration_appends_match_recorded_bash_5_3_15() {
+    declarations_match_recording(include_str!(
+        "../../../../scripts/fixtures/shell-declaration-append.json"
+    ));
+}
+
+fn declarations_match_recording(recording: &str) {
+    let fixture: serde_json::Value = serde_json::from_str(recording).unwrap();
     assert_eq!(
         fixture["bash"],
         "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)"
