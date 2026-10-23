@@ -50,7 +50,8 @@ for (const script of cases)
     const bash = oracle.recording ? runRecordingBash(script, env) : oracle.replay(script);
     if (oracle.recording) oracle.record(script, bash);
     const actual = await runner(script);
-    assert.equal(actual.crash, undefined);
-    assert.equal(actual.status, bash.status);
-    assert.deepEqual(actual.stdout, bash.stdout);
+    assert.deepEqual(
+      { status: actual.status, stdout: actual.stdout, crash: actual.crash },
+      { status: bash.status, stdout: bash.stdout, crash: undefined },
+    );
   });
