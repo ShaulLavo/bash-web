@@ -2119,13 +2119,17 @@
     "baseRevision": "e6430b1554de7d2efad092f40751858292cb071d",
     "implementationDestinations": [
       "shell/engine/src/interpreter.rs",
-      "shell/engine/src/state.rs"
+      "shell/engine/src/state.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/declarations.rs",
+      "shell/engine/src/interpreter/eval.rs"
     ],
     "testDestinations": [
       "scripts/test-own-shell-special-params.ts",
       "scripts/fixtures/shell-special-params.json",
       "shell/engine/src/state/bindings_tests.rs",
-      "shell/engine/tests/words/read_count.rs"
+      "shell/engine/tests/words/read_count.rs",
+      "scripts/fixtures/shell-special-params-publication.json"
     ],
     "testSources": [
       {

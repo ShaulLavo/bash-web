@@ -8,9 +8,9 @@ struct DeclarationSnapshot {
     attributes: [bool; 3],
 }
 
-pub(super) async fn print(
+pub(super) async fn print<'a>(
     builtin: &str,
-    names: impl Iterator<Item = String>,
+    names: impl Iterator<Item = &'a String>,
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
@@ -24,14 +24,14 @@ pub(super) async fn print(
         count += 1;
         scan_bytes(name.len(), context, work).await?;
         let Some(DeclarationSnapshot { value, attributes }) =
-            snapshot(&name, state, context, work).await?
+            snapshot(name, state, context, work).await?
         else {
-            missing(builtin, &name, fds, context, work).await?;
+            missing(builtin, name, fds, context, work).await?;
             status = 1;
             continue;
         };
         let line = render(
-            &name,
+            name,
             value.as_deref(),
             attributes,
             utf8,

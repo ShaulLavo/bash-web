@@ -251,17 +251,30 @@ impl State {
     pub(crate) fn publish_pipeline_status(&mut self, statuses: Vec<i32>) {
         self.pipestatus = statuses;
     }
+    pub(crate) fn last_argument_needs_admission(&self) -> bool {
+        self.is_nameref("_")
+            || matches!(self.variables.get("_"), Some(Binding::Indexed(_)))
+            || self.prefix_saved("_")
+            || self.assignment_undo.0.strong_count() != 0
+            || matches!(self.star_separator, StarSeparator::Snapshot { .. })
+                && self.ifs_members.is_none()
+    }
     pub(crate) fn publish_last_argument(&mut self, value: String) -> Result<(), Error> {
         self.exported.remove("_");
-        let name = self.assignment_name("_".into())?;
+        let name = if self.namerefs.contains_key("_") {
+            Cow::Owned(self.assignment_name("_".into())?)
+        } else {
+            Cow::Borrowed("_")
+        };
         if self.is_readonly(&name) {
             return Err(Error::Readonly {
-                name,
+                name: name.into_owned(),
                 line: None,
                 expansion: false,
             });
         }
-        self.assign_parameter(name, value).map_err(Error::from)
+        self.assign_resolved_parameter(name, value)
+            .map_err(Error::from)
     }
     pub(crate) fn last_async(&self) -> Option<&str> {
         self.last_async.as_deref()
@@ -890,6 +903,9 @@ impl State {
     }
     pub fn assign_parameter(&mut self, name: String, value: String) -> Result<(), i32> {
         let name = self.assignment_name(name)?;
+        self.assign_resolved_parameter(Cow::Owned(name), value)
+    }
+    fn assign_resolved_parameter(&mut self, name: Cow<'_, str>, value: String) -> Result<(), i32> {
         if self.is_readonly(&name) {
             return Err(1);
         }
@@ -911,7 +927,7 @@ impl State {
         if let Some(saved) = self
             .prefixes
             .last_mut()
-            .and_then(|frame| frame.get_mut(&name))
+            .and_then(|frame| frame.get_mut(name.as_ref()))
         {
             let mut binding = saved.clone().unwrap_or_else(|| "".into());
             binding.set_scalar(value.clone());
@@ -924,10 +940,11 @@ impl State {
         {
             changes.borrow_mut().getopts = Some(self.getopts);
         }
-        self.variables
-            .entry(name)
-            .and_modify(|binding| binding.set_scalar(value.clone()))
-            .or_insert_with(|| value.into());
+        if let Some(binding) = self.variables.get_mut(name.as_ref()) {
+            binding.set_scalar(value);
+        } else {
+            self.variables.insert(name.into_owned(), value.into());
+        }
         if direct_ifs {
             self.refresh_star_separator();
         }

@@ -122,9 +122,9 @@ async fn join_body(
 #[inline(never)]
 pub(super) fn run(
     args: Vec<String>,
-    state: SharedState,
+    state: &SharedState,
     fds: Descriptors,
-    context: Context,
+    context: &Context,
 ) -> Frame<'static> {
     if context.cancel.is_cancelled() {
         return Either::Left(ready(Outcome::status(130)));
@@ -138,7 +138,13 @@ pub(super) fn run(
     };
 
     evaluation.frame(
-        run_body(args, state, fds, context, evaluation.clone()),
+        run_body(
+            args,
+            state.clone(),
+            fds,
+            context.clone(),
+            evaluation.clone(),
+        ),
         Outcome::status,
     )
 }

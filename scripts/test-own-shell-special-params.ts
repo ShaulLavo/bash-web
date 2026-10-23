@@ -30,4 +30,9 @@ for (const item of publication.cases)
     assert.equal(actual.crash, undefined);
     assert.equal(actual.status, item.status);
     assert.equal(actual.stdout.toString(), item.stdout);
+    if (item.name.startsWith("circular"))
+      assert.equal(
+        actual.stderr.toString().replaceAll(/: line \d+:/g, ":"),
+        item.stderr.replaceAll(/: line \d+:/g, ":"),
+      );
   });

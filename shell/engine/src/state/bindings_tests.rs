@@ -465,3 +465,21 @@ fn completed_local_undo_restores_all_updates_and_refunds_exact_storage() {
     drop(function);
     assert_eq!(memory.observation().0, 0);
 }
+
+#[test]
+fn last_argument_moves_its_existing_string_into_binding_storage() {
+    let mut state = State::default();
+    let value = "x".repeat(4096);
+    let allocation = value.as_ptr();
+    assert!(!state.last_argument_needs_admission());
+    state
+        .publish_last_argument(value)
+        .unwrap_or_else(|_| panic!("ordinary publication fits"));
+    assert_eq!(state.bindings()["_"].as_str().as_ptr(), allocation);
+    let next = "y".repeat(4096);
+    let allocation = next.as_ptr();
+    state
+        .publish_last_argument(next)
+        .unwrap_or_else(|_| panic!("ordinary publication fits"));
+    assert_eq!(state.bindings()["_"].as_str().as_ptr(), allocation);
+}
