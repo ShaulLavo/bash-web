@@ -163,6 +163,48 @@
       "stderr": ""
     },
     {
+      "id": "xtrace-ps4-nounset-continue",
+      "code": "{ PS4='$missing '; set -ux; echo hi; set +x; } 2>/dev/null",
+      "status": 0,
+      "stdout": "hi\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-required-continue",
+      "code": "{ PS4='${missing:?oops} '; set -x; echo hi; set +x; } 2>/dev/null",
+      "status": 0,
+      "stdout": "hi\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-tested-function",
+      "code": "f() { PS4='$missing '; set -eux; echo hi; set +x; }; if f 2>/dev/null; then echo bad; fi",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-assignment-abort",
+      "code": "{ PS4='$missing '; set -eux; a=1; echo bad; } 2>/dev/null",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-assignment-continue",
+      "code": "{ PS4='$missing '; set -ux; a=1; set +x; echo $a; } 2>/dev/null",
+      "status": 0,
+      "stdout": "1\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-arithmetic-continue",
+      "code": "{ PS4='$((1/0)) '; set -ex; echo hi; set +x; } 2>/dev/null",
+      "status": 0,
+      "stdout": "hi\n",
+      "stderr": ""
+    },
+    {
       "id": "flags",
       "code": "echo \"$-\"; set -euxf; echo \"$-\"; set +euxf; echo \"$-\"",
       "status": 0,
