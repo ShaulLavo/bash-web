@@ -1170,7 +1170,6 @@ fn execute(
                         )
                 );
             let error_trap = check_errexit
-                && context.command_boundary != CommandBoundary::PipelineStage
                 && state
                     .borrow()
                     .traps
@@ -1180,9 +1179,11 @@ fn execute(
                 command_boundary: CommandBoundary::Ordinary,
                 ..context
             };
-            let mut result =
-                command_body(command, state.clone(), fds.clone(), context.clone()).await;
-            if error_trap && result.flow == Flow::Normal && result.code != 0 {
+            let trap_inputs = error_trap.then(|| (fds.clone(), context.clone()));
+            let mut result = command_body(command, state.clone(), fds, context).await;
+            let trap_inputs =
+                trap_inputs.filter(|_| result.flow == Flow::Normal && result.code != 0);
+            if let Some((fds, context)) = trap_inputs {
                 finish_command(&state, result, preserve);
                 result = trap::run(
                     crate::state::traps::Event::Error,

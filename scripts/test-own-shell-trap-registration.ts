@@ -8,8 +8,8 @@ type Fixture = {
   version: string;
   cases: { id: string; code: string; status: number; stdout: string; stderr: string }[];
 };
-const fixtures: readonly Fixture[] = ["shell-trap-registration", "shell-trap-actions"].map(
-  (name) => JSON.parse(readFileSync(new URL(`fixtures/${name}.json`, import.meta.url), "utf8")),
+const fixtures: readonly Fixture[] = ["shell-trap-registration", "shell-trap-actions"].map((name) =>
+  JSON.parse(readFileSync(new URL(`fixtures/${name}.json`, import.meta.url), "utf8")),
 );
 for (const fixture of fixtures) assert.match(fixture.version, /^GNU bash, version 5\.3\.15\(/u);
 const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
