@@ -2090,5 +2090,28 @@
     "implementation": "Unquoted non-scalar fields that can run substitutions expand pathnames for command names, arguments, indexed compound assignment operands, for-lists and file-substitution targets unless set -f or set -o noglob is active. Fields track quote protection as (bytes, protected) runs, charged only for admitted words like their other buffers, and expand them into an admitted byte mask only when an unprotected *, ? or [ occurs, so plain argv keeps its exact budgets and is returned unchanged. Admitted words with extglob on also send @(, +( and !( groups to the existing explicit rejection. The glob step knows whether its fields were storage-admitted: unadmitted argv slots are not charged, discarded text is not released and matched names are released, while admitted for-list and file-substitution accounting is unchanged. Matches are sorted bytewise, dot files need an explicit leading dot and nullglob removes only unquoted unmatched patterns. A component needing more characters than any path matches nothing and is read without building its pattern; candidate paths longer than any path, not counting a directory's trailing slash, are absent, while budget and storage failures stay errors. Scalar assignment and redirect words stay scalar.",
     "deferred": "Pathname extglob, dotglob, globstar, nocaseglob, failglob, GLOBIGNORE and set -o listing remain unsupported. With extglob on, argv fields containing extglob groups stay literal as before, while admitted for-list and file-substitution words keep the explicit unsupported status 2.",
     "gate": "Forty-one independent Bash-versus-production-Waffle controls, a native runtime control and the unchanged frozen 9221-case per-ID production replay. Only proven gained baseline outcomes and derived counts change; historical diagnostic payloads remain intact."
+  },
+  "shellTypedOutput": {
+    "classification": "Original local typed printf/echo output adapter and TypeScript production controls. GNU Bash 5.3.15 is a behavior oracle; no upstream implementation copied or adapted.",
+    "baseRevision": "77b3963d904599932c2cd59fe46409f0ab7a6c9a",
+    "implementationDestinations": [
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/printf.rs",
+      "shell/engine/src/builtins/printf/fields.rs",
+      "shell/engine/src/builtins/printf/quoting.rs"
+    ],
+    "contract": "Printer preserves IoError separately from ordinary statuses; only typed BrokenPipe becomes existing Abort141 at the Echo/Printf dispatch boundary. All other builtin contracts, numeric statuses, formatting and diagnostic suppression/order remain unchanged.",
+    "testDestinations": [
+      "scripts/test-own-shell-pipeline-broken-pipe.ts",
+      "scripts/repro-pipeline-broken-pipe.ts",
+      "scripts/fixtures/shell-pipeline-broken-pipe.json",
+      "scripts/fixtures/shell-pipeline-broken-pipe-pending.json"
+    ],
+    "documentation": "docs/pipeline-broken-pipe.md",
+    "excluded": [
+      "Other builtin-output boundaries, generic interpreter/pipeline/session/runtime/state and PIPESTATUS changes",
+      "PIPE trap/disposition behavior",
+      "Existing closed-descriptor diagnostic and Bash diagnostic line-prefix mismatches retained as strict pending reproductions"
+    ]
   }
 }
