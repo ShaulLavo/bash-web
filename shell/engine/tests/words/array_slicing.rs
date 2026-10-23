@@ -55,15 +55,13 @@ fn array_slicing_cancelled_large_slice_never_dispatches_partial_fields() {
 #[test]
 fn array_slicing_skips_unselected_values_under_the_output_limit() {
     let rig = Rig::new(Limits {
-        expansion_bytes: 4096,
+        expansion_bytes: 65_536,
         ..Limits::default()
     });
     assert_eq!(rig.run("a=(first)"), 0);
-    for _ in 0..128 {
-        assert_eq!(
-            rig.run("a+=(unselected-unselected-unselected-unselected-unselected-unselected)"),
-            0
-        );
+    let append = format!("a+=({})", "unselected".repeat(512));
+    for _ in 0..32 {
+        assert_eq!(rig.run(&append), 0);
     }
     assert_eq!(rig.run("args \"${a[@]:0:1}\""), 0);
     assert_eq!(*rig.calls.borrow(), vec![vec!["first"]]);
