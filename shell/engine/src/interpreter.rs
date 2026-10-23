@@ -271,6 +271,7 @@ enum CommandBoundary {
     Ordinary,
     PipelineStage,
     PipelineSubshell,
+    FunctionBody,
 }
 
 #[derive(Clone)]
@@ -1165,7 +1166,18 @@ fn execute(
             if context.cancel.is_cancelled() {
                 return Outcome::status(130);
             }
-            let preserve = matches!(command, Command::Pipeline(_) | Command::List(_));
+            let preserve = matches!(command, Command::Pipeline(_) | Command::List(_))
+                || (context.command_boundary == CommandBoundary::FunctionBody
+                    && matches!(
+                        &command,
+                        Command::Compound(compound, _)
+                            if !matches!(
+                                compound,
+                                CompoundCommand::Subshell(_)
+                                    | CompoundCommand::Arithmetic(_)
+                                    | CompoundCommand::Test(_)
+                            )
+                    ));
             let check_errexit = !context.ignore_errexit
                 && context.command_boundary != CommandBoundary::PipelineStage
                 && matches!(
@@ -1356,6 +1368,7 @@ async fn pipeline_command(
             (_, true, Command::Compound(CompoundCommand::Subshell(_), _)) => {
                 CommandBoundary::PipelineSubshell
             }
+            _ if shared_stage => CommandBoundary::Ordinary,
             _ => CommandBoundary::PipelineStage,
         };
         if command_boundary == CommandBoundary::PipelineSubshell {
@@ -3148,6 +3161,7 @@ async fn dispatch_simple_command_body(
         frame.prefixes(assigned)?;
         let context = Context {
             loop_depth: 0,
+            command_boundary: CommandBoundary::FunctionBody,
             evaluation: context
                 .evaluation
                 .function_body()
