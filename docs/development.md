@@ -41,9 +41,9 @@ persistent interactive editor; the host connects the shell's terminal byte
 bridge to its UI. Terminal rendering and demo controls live in `src/browser/`,
 separate from the shell facade.
 
-`waffle` is a **required peer dependency**, pinned to the published Git commit
-`c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289`:
-`git+https://github.com/ShaulLavo/waffle.git#c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289`.
+`waffle` is a **required peer dependency**, pinned to the accepted Git commit
+`b20fad173ebaa225cb87c51776f35edaaafd4a40`:
+`git+https://github.com/ShaulLavo/waffle.git#b20fad173ebaa225cb87c51776f35edaaafd4a40`.
 The development dependency uses the same pin so local builds and tests exercise
 the same runtime applications supply.
 
