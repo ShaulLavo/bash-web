@@ -39,7 +39,7 @@ One page per feature, each stating exactly what is supported and what is left ou
 
 - Output and input: [echo](echo.md), [printf options](printf-options.md), [printf quoting](printf-quoting.md), [printf string fields](printf-string-fields.md), [printf integer fields](printf-integer-fields.md), [printf integer operands](printf-integer-operands.md), [printf unsigned and radix operands](printf-unsigned-radix.md), [printf character](printf-character.md), [printf escaped fields](printf-escaped-fields.md), [printf scalar assignment](printf-scalar-assignment.md), [read](read.md), [getopts](getopts.md)
 - Expansion: [tilde expansion](tilde-expansion.md), [parameter transformations](parameter-transformation.md), [input-only command substitution](file-substitution.md), [indexed arrays](indexed-arrays.md), [grouped conditional ERE](regex-groups.md)
-- Commands and state: [aliases](aliases.md), [builtin wrapper](builtin-wrapper.md), [builtin enable state](shell-enable.md), [type](type.md), [declaration printing](declaration-printing.md), [cd and the directory stack](directories.md), [trap registration](trap-registration.md), [completion](completion.md)
+- Commands and state: [aliases](aliases.md), [builtin wrapper](builtin-wrapper.md), [type](type.md), [declaration printing](declaration-printing.md), [cd and the directory stack](directories.md), [trap registration](trap-registration.md), [completion](completion.md)
 - Files and descriptors: [file permission predicates](file-permissions.md), [descriptor reopening](descriptor-reopening.md), [broken pipes](pipeline-broken-pipe.md)
 
 ## Contribute
