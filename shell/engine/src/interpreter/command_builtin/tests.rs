@@ -528,3 +528,47 @@ fn builtin_wrapper_unknown_line_omits_numeric_label() {
         rig.shutdown();
     }
 }
+
+#[test]
+fn timed_function_declaration_output_releases_storage_on_cancel_and_drop() {
+    for interrupt in [true, false] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run("f() { time -- echo a; }"), 0);
+        let before = rig.session.core.execution_storage.observation().0;
+        let storage = rig.session.core.execution_storage.clone();
+        let state = rig.session.state.clone();
+        let (reader, writer) = io::pipe();
+        assert_eq!(
+            writer.write(&vec![0; io::PIPE_CAPACITY]).now_or_never(),
+            Some(Ok(io::PIPE_CAPACITY))
+        );
+        let mut fds = rig.session.core.descriptors.borrow().clone();
+        fds.insert(1, writer);
+        rig.session.set_descriptors(fds).unwrap();
+        let job = rig.session.start("a=temporary declare -f f").unwrap();
+        rig.executor.drive(1024);
+        assert!(!job.is_finished(), "function output must backpressure");
+        assert!(storage.observation().0 > before);
+        let Rig {
+            executor,
+            session,
+            host,
+            output: _,
+        } = rig;
+        if interrupt {
+            session.interrupt();
+            assert_eq!(finish(&executor, job), 130);
+            drop(session);
+        } else {
+            drop(session);
+            assert_eq!(finish(&executor, job), 130);
+        }
+        assert_eq!(executor.drive(1024).pending, 0);
+        assert!(!state.borrow().bindings().contains_key("a"));
+        assert!(state.borrow().functions().contains_key("f"));
+        assert_eq!(host.requests.get(), 0);
+        assert_eq!(host.spawns.get(), 0);
+        assert_eq!(storage.observation().0, before);
+        drop(reader);
+    }
+}

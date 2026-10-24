@@ -725,6 +725,13 @@
         ],
         "change": "Parse `time` with Bash's grammar: only `-p` and one `--` are options, a bare `--` selects the POSIX report, other words start the timed pipeline, and a newline, `;`, `&` or end of input right after them times nothing. Remove the GNU-time format, output, append, verbose and deferred option-error fields.",
         "reason": "GNU Bash 5.3.15 runs `time -f x cmd` as the command `-f`, reports a bare `time` before the next line, and rejects `time &&` or `time |`. No upstream test removed."
+      },
+      {
+        "paths": [
+          "shell/parser/src/parser/mod.rs"
+        ],
+        "change": "Expose the word parser's malformed parameter-header classification as an allocation-free scan for already-admitted lazy operand tokens. Preserve the same word-parser diagnostic text and grammar.",
+        "reason": "The existing GNU Bash 5.3.15 nested ${x:-${y!}} recording requires bad-substitution status 1, not the status 2 used for valid but unsupported parameter forms. No upstream test removed."
       }
     ],
     "removedUpstreamTests": [
@@ -2065,6 +2072,7 @@
     ],
     "strategy": "Borrow only the visible named declaration, with raw immediate nameref target and local-unset metadata; admit a single scalar snapshot and bounded cooperative declaration escaping before descriptor output. No binding mutation or whole-map/array snapshot.",
     "documentation": "docs/declaration-printing.md",
+    "namedFunctions": "Original named declare -f adapter needed by the existing timed-function GNU Bash 5.3.15 recordings. Reuses the command/type bounded AST renderer and its shared work, cancellation and live-storage admission without copying or executing function bodies. All-functions enumeration and function attributes remain unsupported. Original bounded-output, cancellation and drop controls accompany the adapter.",
     "qualification": "Targeted production-Waffle evidence only at this checkpoint. Parent owns independent review, serialized main integration, full frozen replay and baseline recomputation."
   },
   "shellTilde": {

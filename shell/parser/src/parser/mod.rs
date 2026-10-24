@@ -536,6 +536,17 @@ impl<'a> Parser<'a> {
         Ok(part)
     }
 
+    /// Classify a complete, already-admitted `${...}` token without building
+    /// an AST or evaluating its operands. Valid but unsupported forms are not
+    /// bad substitutions. The caller bounds and charges the token scan.
+    pub fn is_bad_parameter_token(input: &str) -> bool {
+        let Some(body) = input.strip_prefix("${") else {
+            return false;
+        };
+        let chars = WordChars::new(body, &[]);
+        bad_brace_parameter_length(&chars).is_some_and(|length| chars.count() == length + 1)
+    }
+
     /// Parse one already-admitted `${...}` token, retaining its enclosing
     /// operand context. Unlike a whole word this token has no quote markers.
     pub fn parse_parameter_token_with_limits(
@@ -6337,6 +6348,10 @@ fn bang_parameter_operator(chars: &mut WordChars<'_>) -> bool {
 /// forms and anything involving quote/escape markers are left to the
 /// regular parser, so this only ever rejects words bash rejects too.
 fn bad_brace_parameter(chars: &WordChars<'_>) -> Option<String> {
+    bad_brace_parameter_length(chars).map(|length| chars.clone().take(length).collect())
+}
+
+fn bad_brace_parameter_length(chars: &WordChars<'_>) -> Option<usize> {
     const MARKERS: [char; 3] = ['\x00', '\u{1e}', '\u{1f}'];
     let mut it = chars.clone();
     let length_prefix = match it.peek() {
@@ -6413,7 +6428,7 @@ fn bad_brace_parameter(chars: &WordChars<'_>) -> Option<String> {
         return None;
     }
     // Find the closing brace to report and skip the whole expansion.
-    let mut inner = String::new();
+    let mut length = 0;
     let mut depth = 0usize;
     for c in chars.clone() {
         // `${#1#'x'}` is bad whatever the quoting after the name.
@@ -6422,11 +6437,11 @@ fn bad_brace_parameter(chars: &WordChars<'_>) -> Option<String> {
         }
         match c {
             '{' => depth += 1,
-            '}' if depth == 0 => return Some(inner),
+            '}' if depth == 0 => return Some(length),
             '}' => depth -= 1,
             _ => {}
         }
-        inner.push(c);
+        length += 1;
     }
     None
 }

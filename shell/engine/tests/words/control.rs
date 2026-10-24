@@ -465,3 +465,23 @@ fn nested_bad_substitution_discards_its_line_with_status_one() {
             .contains("bad substitution")
     );
 }
+
+#[test]
+fn timed_function_declarations_reject_large_reports_and_refund_storage() {
+    let rig = Rig::new(Limits {
+        execution_bytes: 64 * 1024,
+        ..Limits::default()
+    });
+    assert_eq!(rig.run("f() { time -- echo a; }"), 0);
+    assert_eq!(
+        rig.run(&format!(
+            "large() {{ time echo '{}'; }}; declare -f large",
+            "x".repeat(100 * 1024)
+        )),
+        2
+    );
+    assert!(rig.output.bytes().is_empty());
+    assert_eq!(rig.run("declare -f f"), 0);
+    assert_eq!(rig.output.bytes(), b"f () \n{ \n    time -p echo a\n}\n");
+    assert_eq!(rig.ex.drive(64).pending, 0);
+}

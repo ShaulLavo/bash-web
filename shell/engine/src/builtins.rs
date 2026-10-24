@@ -691,6 +691,7 @@ async fn declarations(
 ) -> Result<Outcome, i32> {
     let mut args = args.into_iter().peekable();
     let mut print = false;
+    let mut functions = false;
     let mut nameref = false;
     let mut readonly = false;
     let mut exported = false;
@@ -708,6 +709,7 @@ async fn declarations(
                     .map_err(error_status)?;
                 match flag {
                     b'p' if matches!(name, "declare" | "typeset") => print = true,
+                    b'f' if matches!(name, "declare" | "typeset") => functions = true,
                     b'n' => nameref = true,
                     b'r' => readonly = true,
                     b'x' => exported = true,
@@ -715,6 +717,12 @@ async fn declarations(
                 }
             }
         }
+    }
+    if functions {
+        if nameref || readonly || exported || args.peek().is_none() {
+            return Err(2);
+        }
+        return declarations::functions(args, state, fds, context, work).await;
     }
     if print {
         return declarations::print(name, args, state, fds, context, work).await;

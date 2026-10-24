@@ -3,6 +3,43 @@ use super::{
 };
 use crate::{expand::Printability, state::DeclarationView};
 
+/// Named `declare -f` operands use the same bounded AST printer as `type`.
+/// Function bodies remain shared and are never copied or executed here.
+pub(super) async fn functions(
+    names: impl Iterator<Item = String>,
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<Outcome, i32> {
+    let mut status = 0;
+    for name in names {
+        scan_bytes(name.len(), context, work).await?;
+        let Some(function) = state.borrow().functions().get(&name).cloned() else {
+            status = 1;
+            continue;
+        };
+        print_function(&name, &function, fds, context, work).await?;
+    }
+    Ok(Outcome::status(status))
+}
+
+async fn print_function(
+    name: &str,
+    function: &crate::state::StoredFunction,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    let rendered = context.render_function(name, function, work)?;
+    write(fds, rendered.text.as_bytes(), context).await?;
+    write(fds, b"\n", context).await?;
+    let bytes = rendered.text.len();
+    drop(rendered);
+    work.release_storage(bytes);
+    Ok(())
+}
+
 struct DeclarationSnapshot {
     value: Option<String>,
     attributes: [bool; 3],

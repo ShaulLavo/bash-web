@@ -102,6 +102,12 @@ pub(crate) fn generated_word(source: &str) -> shell_parser::Result<Word> {
     )
 }
 
+/// The malformed-header classifier used by the word parser, without an AST.
+/// The operand caller has already bounded and charged the token scan.
+pub(crate) fn bad_parameter_token(token: &str) -> bool {
+    Parser::is_bad_parameter_token(token)
+}
+
 /// An active, boundary-scanned ${...} token. Quote/pattern context belongs to
 /// the operand scanner; nested operands remain raw and lazy in the parser AST.
 pub(crate) fn lazy_parameter(

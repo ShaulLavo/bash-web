@@ -284,8 +284,8 @@ impl<'a> Scanner<'a> {
                 protected: self.protected(),
             });
         }
-        validate_token(token, work)?;
         work.admit_parse(token.len(), cancel).await?;
+        validate_token(token, work)?;
         // Bound the scalar AST's owned strings and parser token allocations
         // before entering the synchronous, byte-capped parser.
         if work.arithmetic_depth != 0 || matches_substring(token) {
@@ -581,6 +581,9 @@ fn validate_token(token: &str, work: &mut Work) -> Result<(), Error> {
     if !(scalar_name(name) || substring && (length_name(name) || name == "@"))
         || !(substring || !indirect && trim || operator.starts_with(['-', '+', '=', '?']))
     {
+        if parse::bad_parameter_token(token) {
+            return bad_substitution("invalid parameter expansion", work);
+        }
         return Err(2.into());
     }
     Ok(())
@@ -657,6 +660,34 @@ fn admit_syntax(text: &str, work: &mut Work) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn malformed_headers_do_not_reclassify_valid_unsupported_parameters() {
+        for token in [
+            "${#0}",
+            "${#@}",
+            "${#*}",
+            "${PIPESTATUS[@]}",
+            "${a[0]-x}",
+            "${1-x}",
+        ] {
+            let mut work = Work::new(1, 1024, 1);
+            assert!(
+                matches!(validate_token(token, &mut work), Err(Error::Status(2))),
+                "{token}"
+            );
+        }
+        let mut work = Work::new(1, 1024, 1);
+        assert!(matches!(
+            validate_token("${y!}", &mut work),
+            Err(Error::BadSubstitution { .. })
+        ));
+        let mut work = Work::new(1, 0, 1);
+        assert!(matches!(
+            validate_token("${y!}", &mut work),
+            Err(Error::Status(2))
+        ));
+    }
 
     #[test]
     fn malformed_diagnostics_admit_both_owned_and_formatted_copies() {

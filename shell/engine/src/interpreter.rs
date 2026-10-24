@@ -286,6 +286,11 @@ pub(crate) struct Context {
     loop_depth: usize,
     ignore_errexit: bool,
 }
+pub(crate) struct RenderedFunction {
+    pub(crate) text: String,
+    _storage: crate::exec::Allocation,
+}
+
 impl Context {
     fn stop_signal(&self) -> i32 {
         self.signal.get().unwrap_or(2)
@@ -304,6 +309,39 @@ impl Context {
         bytes: usize,
     ) -> Result<crate::exec::Allocation, i32> {
         self.evaluation.admit_execution(bytes)
+    }
+    pub(crate) fn render_function(
+        &self,
+        name: &str,
+        function: &StoredFunction,
+        work: &mut expand::Work,
+    ) -> Result<RenderedFunction, i32> {
+        let limit = self
+            .limits()
+            .expansion_bytes
+            .min(work.storage_left())
+            .min(self.evaluation.execution_available());
+        // Reserve the printer's entire possible live buffer before allocation.
+        let storage = self.evaluation.admit_execution(limit)?;
+        let text = function_string_bounded(
+            name,
+            &function.body,
+            &Cell::new(limit),
+            limit,
+            Some(&self.parser_budget()),
+        )
+        .map_err(|_| {
+            if self.cancel.is_cancelled() {
+                self.cancel_status()
+            } else {
+                2
+            }
+        })?;
+        work.admit_storage(text.len()).map_err(admission_status)?;
+        Ok(RenderedFunction {
+            text,
+            _storage: storage,
+        })
     }
     fn parser_budget(&self) -> shell_parser::limits::ExecutionBudget {
         let core = self.core.clone();
