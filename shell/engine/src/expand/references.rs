@@ -175,6 +175,27 @@ pub(crate) async fn write(
     State::write_element(state, place, update, cancel, work).await
 }
 
+/// Unbound bare keys remain outside the indexed removal adapter. In particular,
+/// a rejected associative declaration must not make `unset a[key]` delete zero.
+pub(crate) async fn removal_place(
+    reference: Reference<'_>,
+    state: &SharedState,
+    cancel: &Cancel,
+    max: usize,
+    work: &mut Work,
+) -> Result<Option<Place>, Error> {
+    if let Some(subscript) = reference.subscript {
+        for _ in subscript.bytes() {
+            work.checkpoint(cancel).await?;
+        }
+        let bare_key = Reference::parse(subscript).is_some_and(|key| key.subscript.is_none());
+        if bare_key && !state.borrow().scalar_is_set(subscript) {
+            return Ok(None);
+        }
+    }
+    select(reference, state, cancel, max, work).await.map(Some)
+}
+
 pub(crate) async fn is_set(
     text: &str,
     state: &SharedState,
@@ -185,7 +206,15 @@ pub(crate) async fn is_set(
     let Some(reference) = Reference::parse(text) else {
         return Ok(false);
     };
-    let place = select(reference, state, cancel, max, work).await?;
+    if reference.subscript.is_none() {
+        State::admit_scalar_access(state, reference.name, cancel, work).await?;
+        return Ok(state.borrow().scalar_is_set(reference.name));
+    }
+    let place = match select(reference, state, cancel, max, work).await {
+        Ok(place) => place,
+        Err(Error::BadArraySubscript { .. }) => return Ok(false),
+        Err(error) => return Err(error),
+    };
     let state = state.borrow();
     Ok(state.dynamic_parameter(&place.name) || state.place_value(&place).is_some())
 }

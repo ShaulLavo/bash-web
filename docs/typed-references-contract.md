@@ -22,6 +22,15 @@ current dynamic scope; a declaration does not capture a local that later exits.
 current-local shadow versus calling-local reveal distinction. Element removal
 keeps the array, its other elements and declaration attributes.
 
+Presence on a bare name keeps the frozen scalar-name policy, including namerefs
+whose target text contains brackets. Explicit element predicates select that
+slot; an out-of-range negative slot is false, not a fatal expansion error.
+Element unset supports numeric selectors, arithmetic expressions and bound index
+variables. An unbound bare key remains outside that removal adapter and is a
+no-op. This preserves the frozen cases that continue after unsupported
+`declare -A` without introducing associative storage. Indexed assignment and
+arithmetic retain their existing unbound-variable-as-zero behavior.
+
 ## Minimal contract
 
 ```rust

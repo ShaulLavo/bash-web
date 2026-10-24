@@ -1100,7 +1100,7 @@ async fn unset(
         let removed = if namerefs {
             state.borrow_mut().unset_nameref(name)
         } else {
-            let place = expand::references::select(
+            let Some(place) = expand::references::removal_place(
                 expand::references::syntax(name).map_err(error_status)?,
                 state,
                 &context.cancel,
@@ -1108,7 +1108,10 @@ async fn unset(
                 work,
             )
             .await
-            .map_err(error_status)?;
+            .map_err(error_status)?
+            else {
+                continue;
+            };
             if let Some(index) = place.index {
                 let existed = state.borrow().place_value(&place).is_some();
                 let result = State::write_element(

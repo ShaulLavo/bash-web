@@ -2,6 +2,10 @@
 use std::process::Command;
 
 fn check(source: &str, expected: &str) {
+    check_status(source, expected, 0);
+}
+
+fn check_status(source: &str, expected: &str, status: i32) {
     let output = Command::new(env!("CARGO_BIN_EXE_shell-engine"))
         .args(["-c", source])
         .env("LC_ALL", "C.UTF-8")
@@ -9,7 +13,7 @@ fn check(source: &str, expected: &str) {
         .unwrap();
     assert_eq!(
         output.status.code(),
-        Some(0),
+        Some(status),
         "{source}\nstderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
@@ -116,8 +120,8 @@ fn typed_reference_shell_rhs_precedes_explicit_index() {
 #[test]
 fn typed_reference_negative_slot_empty_presence_and_unset_n() {
     check(
-        "a=(zero one ''); declare -n r='a[-1]'; test -v r; echo set=$?; r=last; unset -n r; echo \"${a[*]}\"; test -R r; echo ref=$?; unset 'a[-1]'; echo \"${a[*]}\"",
-        "set=0\nzero one last\nref=1\nzero one\n",
+        "a=(zero one ''); declare -n r='a[-1]'; test -v 'a[-1]'; echo set=$?; test -v r; echo named=$?; r=last; unset -n r; echo \"${a[*]}\"; test -R r; echo ref=$?; unset 'a[-1]'; echo \"${a[*]}\"",
+        "set=0\nnamed=1\nzero one last\nref=1\nzero one\n",
     );
 }
 
@@ -213,5 +217,46 @@ fn typed_reference_direct_special_defaults_keep_existing_array_reads() {
     check(
         "outer() { local -n ref=FUNCNAME; echo \"${ref[0]}:${ref[0]:-fallback}\"; }; outer; false | true; echo \"${PIPESTATUS[0]:-missing}:${PIPESTATUS[1]:-missing}:${PIPESTATUS[8]:-missing}\"",
         "outer:outer\n1:0:missing\n",
+    );
+}
+
+#[test]
+fn oils_array_868_empty_negative_presence_is_false() {
+    check_status("e=()\n[[ -v e[-1] ]] && echo 'e has -1'\n\n", "", 1);
+}
+
+#[test]
+fn oils_array_sparse_477_invalid_negative_presence_is_false() {
+    check_status(
+        "case $SH in mksh) exit ;; esac\n\nsp1=()\n([[ -v sp1[-1] ]]; echo \"$? (expect 1)\")\nsp2=({1..9})\n([[ -v sp2[-10] ]]; echo \"$? (expect 1)\")\nsp3=({1..9})\nunset -v 'sp3[4]'\n([[ -v sp3[-10] ]]; echo \"$? (expect 1)\")\n\n",
+        "1 (expect 1)\n1 (expect 1)\n1 (expect 1)\n",
+        0,
+    );
+}
+
+#[test]
+fn brush_extended_tests_48_bare_nameref_presence_keeps_literal_target() {
+    check_status(
+        "arr=(a b c d)\ndeclare -n ref='arr[2]'\n[[ -v ref ]] && echo \"set\" || echo \"unset\"\n",
+        "unset\n",
+        0,
+    );
+}
+
+#[test]
+fn bashkit_assoc_arrays_58_unsupported_key_unset_preserves_indexed_value() {
+    check_status(
+        "declare -A m\nm[a]=\"1\"\nm[b]=\"2\"\nunset 'm[a]'\necho \"${#m[@]}\"\necho \"${m[b]}\"\n",
+        "1\n2\n",
+        0,
+    );
+}
+
+#[test]
+fn bashkit_blackbox_305_unsupported_key_unset_keeps_indexed_count() {
+    check_status(
+        "declare -A m; m[a]=1; m[b]=2; unset m[a]; echo ${#m[@]}\n",
+        "1\n",
+        0,
     );
 }
