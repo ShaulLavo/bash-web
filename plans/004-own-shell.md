@@ -3401,6 +3401,38 @@ excluding hidden entries. Keep implicit hidden-name exclusion and ordinary
 argv matching unchanged. Add nested and suffix controls before the fix.
 
 
+## Durable indexed-write accounting follow-ups, 2026-10-24
+
+Status: Approved, deferred beyond PR #86's API-only integration. Owner: state
+storage and work accounting. No production consumer or scored gain is claimed.
+The independent approval of `fa3afca3959a1ddeb25585e4f421c0f214eacff5` is in
+`/work/reports/wave-20261022/shell/review86-replacement-admission-opus-r9.md`.
+Preserve the copy, descending B-tree set, cancellation, session-ticket and
+3,585-step replacement controls when addressing these inherited policies.
+
+- Live-array destruction: a unique local 4,096-element `a` admits replacement
+  with zero work fuel, then publication frees its old tree. This also occurs
+  at the prior PR86 pin and old PR84 base. `State::assign_parameter` and
+  `unset_binding` have the same policy. Reproduce with the retained r8 probe
+  `review86r8_live_unique_tree_drop_requires_work` before deciding an engine-wide
+  destruction policy. Do not repair only one writer here.
+- Shared inverse overcharge: k matching `Restore` inverses sharing one
+  N-element tree pay k*(N+1), although the final owner frees that tree once.
+  The independent r9 `Long alias` probe uses two owners and 100 elements,
+  admits exactly 5,013 steps, and rejects one step short. Preserve prepublication
+  rejection and full-budget rollback while investigating ownership-aware pricing.
+- Estimator walk policy: `replacement_effect_steps` walks the admitted journal
+  before charging the computed work, as `element_effect_cost` already does.
+  The doubled per-entry charge covers both estimation and publication, but the
+  first walk itself does not yield. Decide the shared estimator policy in a
+  separate unit. Keep the 512-inverse 3,585-step admission boundary unchanged
+  unless a separately reviewed accounting design replaces it.
+
+The r9 evidence directory retains the long-name repeated-replacement and shared
+alias probes. The r8 checkpoint and r6 report retain the live-drop reproducer
+and earlier repair history. These are nonblocking follow-ups, not fixes or
+new array semantics in this integration.
+
 ## Eval call-site line offsets from PR75 integration review, 2026-10-24
 
 Status: Approved follow-up. Owner: BUILTINS eval/call-stack family, separate from

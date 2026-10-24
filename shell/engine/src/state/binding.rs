@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, ops::Deref, rc::Rc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::Deref,
+    rc::Rc,
+};
 
 /// Original binding model. Indexed values are ordered and sparse; a scalar
 /// assignment to an existing array replaces only element zero.
@@ -32,7 +36,7 @@ impl Binding {
     pub(crate) fn node_bytes() -> usize {
         Indexed::tree_bytes(1) + 12 * std::mem::size_of::<usize>()
     }
-    fn indexed_header_bytes() -> usize {
+    pub(crate) fn indexed_header_bytes() -> usize {
         std::mem::size_of::<Indexed>() + 2 * std::mem::size_of::<usize>()
     }
     pub(crate) fn count(&self) -> usize {
@@ -88,6 +92,16 @@ impl Binding {
             }
         }
     }
+    /// Exact storage after `name[index]=value`, given the value's capacity.
+    pub(crate) fn element_storage_after(old: Option<&Self>, index: i64, capacity: usize) -> usize {
+        let (mut count, bytes) = BindingUpdate::dimensions(old);
+        let prior = old.and_then(|old| old.slot(index));
+        count += usize::from(prior.is_none());
+        let bytes = bytes
+            .saturating_sub(prior.map_or(0, String::capacity))
+            .saturating_add(capacity);
+        Self::indexed_header_bytes() + Indexed::tree_bytes(count) + bytes
+    }
     pub(crate) fn into_indexed(self) -> Indexed {
         match self {
             Self::Scalar(value) => Indexed::from_scalar(value),
@@ -137,7 +151,7 @@ pub struct Indexed {
     value_bytes: usize,
 }
 impl Indexed {
-    fn from_scalar(value: String) -> Self {
+    pub(crate) fn from_scalar(value: String) -> Self {
         let mut values = Self::default();
         values.insert(0, value);
         values
@@ -164,33 +178,23 @@ impl Indexed {
         self.value_bytes -= old.len();
         Some(old)
     }
-    fn undo_append(&mut self, first: Option<i64>, keep_zero: bool) {
-        while first.is_some_and(|first| {
-            self.values
-                .last_key_value()
-                .is_some_and(|(i, _)| *i >= first)
-        }) {
-            let index = *self.values.last_key_value().unwrap().0;
-            if index == 0 && keep_zero {
-                break;
+    /// Remove the appended run except slots a durable write has since set.
+    /// Each step is one lookup; nothing is allocated.
+    fn undo_append(&mut self, (first, last): (i64, i64), keep_zero: bool, kept: &BTreeSet<i64>) {
+        let mut cursor = Some(first);
+        while let Some(start) = cursor.filter(|start| *start <= last) {
+            let Some(index) = self.values.range(start..=last).next().map(|(i, _)| *i) else {
+                return;
+            };
+            cursor = index.checked_add(1);
+            if (index == 0 && keep_zero) || kept.contains(&index) {
+                continue;
             }
             self.remove(index);
         }
     }
     fn tree_bytes(count: usize) -> usize {
-        if count == 0 {
-            return 0;
-        }
-        // Rust 1.98.1 B-tree nodes hold 11 entries, with >=5 per nonroot.
-        // Root has >=2 children, other internal nodes >=6. See indexed docs.
-        let pointer = std::mem::size_of::<usize>();
-        let alignment = std::mem::align_of::<i64>().max(pointer);
-        let leaf =
-            (pointer + 4 + 11 * (8 + std::mem::size_of::<String>())).next_multiple_of(alignment);
-        let nodes = 1 + (count - 1) / 5;
-        nodes
-            .saturating_mul(leaf)
-            .saturating_add(((nodes + 3) / 6).saturating_mul(12 * pointer))
+        tree_bytes::<String>(count)
     }
     fn storage_bytes(&self) -> usize {
         self.bytes
@@ -246,22 +250,18 @@ impl BindingUpdate {
         }
     }
     pub(crate) fn storage_after(&self, old: Option<&Binding>) -> usize {
-        let (mut count, mut bytes) = Self::dimensions(old);
+        let (count, bytes) = Self::dimensions(old);
         match self {
-            Self::Replace(value) => return value.storage_bytes(),
+            Self::Replace(value) => value.storage_bytes(),
             Self::Element { index, value } => {
-                let prior = old.and_then(|old| old.slot(*index));
-                count += usize::from(prior.is_none());
-                bytes = bytes
-                    .saturating_sub(prior.map_or(0, String::capacity))
-                    .saturating_add(value.capacity());
+                Binding::element_storage_after(old, *index, value.capacity())
             }
             Self::Append(values) => {
-                count += values.values.len();
-                bytes = bytes.saturating_add(values.bytes);
+                Binding::indexed_header_bytes()
+                    + Indexed::tree_bytes(count + values.values.len())
+                    + bytes.saturating_add(values.bytes)
             }
         }
-        Binding::indexed_header_bytes() + Indexed::tree_bytes(count) + bytes
     }
     pub(crate) fn growth_bytes(&self, old: Option<&Binding>) -> usize {
         if matches!(self, Self::Replace(_)) {
@@ -295,11 +295,19 @@ pub(crate) enum BindingUndo {
         old: Option<String>,
         scalar: bool,
     },
+    /// Removes the appended run `range`, keeping slots set durably since.
     Append {
-        first: Option<i64>,
+        range: Option<(i64, i64)>,
         scalar: bool,
         keep_zero: bool,
+        kept: BTreeSet<i64>,
     },
+    /// A durable replacement made this inverse obsolete; rollback keeps it.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "constructed by durable indexed writes")
+    )]
+    Superseded,
 }
 impl BindingUndo {
     pub(crate) fn scalar_effect_bytes(&self, value_bytes: usize) -> usize {
@@ -322,8 +330,10 @@ impl BindingUndo {
         }
     }
     pub(crate) fn restore(self, live: Option<Binding>) -> Option<Binding> {
-        if let Self::Restore(old) = self {
-            return old;
+        match self {
+            Self::Restore(old) => return old,
+            Self::Superseded => return live,
+            _ => {}
         }
         let Binding::Indexed(mut values) = live.expect("committed array exists") else {
             unreachable!()
@@ -340,14 +350,17 @@ impl BindingUndo {
                 scalar
             }
             Self::Append {
-                first,
+                range,
                 scalar,
                 keep_zero,
+                kept,
             } => {
-                values_mut.undo_append(first, keep_zero);
+                if let Some(range) = range {
+                    values_mut.undo_append(range, keep_zero, &kept);
+                }
                 scalar
             }
-            Self::Restore(_) => unreachable!(),
+            Self::Restore(_) | Self::Superseded => unreachable!(),
         };
         if scalar {
             return values_mut.remove(0).map(Binding::Scalar);
@@ -395,17 +408,45 @@ impl BindingUpdate {
             },
             Self::Append(append) => {
                 let first = append.values.first_key_value().map(|(i, _)| *i);
+                let last = append.values.last_key_value().map(|(i, _)| *i);
                 for (index, value) in append.values {
                     values.insert(index, value);
                 }
                 BindingUndo::Append {
-                    first,
+                    range: first.zip(last),
                     scalar,
                     keep_zero: false,
+                    kept: BTreeSet::new(),
                 }
             }
             Self::Replace(_) => unreachable!(),
         };
         (binding, restore.unwrap_or(undo))
     }
+}
+
+// Rust 1.98.1 B-trees hold 11 entries per node, at least 5 per nonroot.
+// Count-based bounds include spare capacity admitted before a later split.
+fn tree_leaf_bytes<T>() -> usize {
+    let pointer = std::mem::size_of::<usize>();
+    let alignment = std::mem::align_of::<i64>().max(pointer);
+    (pointer + 4 + 11 * (8 + std::mem::size_of::<T>())).next_multiple_of(alignment)
+}
+
+pub(super) fn tree_bytes<T>(count: usize) -> usize {
+    if count == 0 {
+        return 0;
+    }
+    let nodes = 1 + (count - 1) / 5;
+    tree_leaf_bytes::<T>()
+        .saturating_mul(nodes)
+        .saturating_add(((nodes + 3) / 6).saturating_mul(12 * std::mem::size_of::<usize>()))
+}
+
+pub(super) fn kept_insertion_steps(count: usize) -> usize {
+    let path = count.checked_ilog(6).unwrap_or(0) as usize + 1;
+    let node = tree_leaf_bytes::<()>() + 12 * std::mem::size_of::<usize>();
+    // Two cost lookups and publication each visit a path. A split moves at
+    // most one node per level and can add one root, never the whole set.
+    3 * (path + 1) * node
 }

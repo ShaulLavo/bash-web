@@ -23,6 +23,13 @@ mod declarations;
 use call_stack::CallStack;
 pub(crate) use declarations::DeclarationView;
 mod binding;
+// Arithmetic element writes, `read -a` and `mapfile` are its consumers; the
+// first to land removes this expectation.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "durable indexed writes await their consumers")
+)]
+mod indexed_writes;
 pub use binding::Binding;
 use binding::BindingUndo;
 pub(crate) use binding::BindingUpdate;
@@ -2388,6 +2395,8 @@ use directory_stack::DirectoryStack;
 mod bindings_tests;
 #[cfg(test)]
 mod getopts_tests;
+#[cfg(test)]
+mod indexed_writes_tests;
 
 #[cfg(test)]
 mod tests {
