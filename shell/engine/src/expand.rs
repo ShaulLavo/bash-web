@@ -2013,7 +2013,12 @@ impl Expansion<'_> {
             operand::Piece::Expansion { part, protected } if is_list(&part) => {
                 self.part_frame(move |expansion| async move {
                     expansion
-                        .elements(&part, state, quoted || protected, scalar)
+                        .elements(
+                            &part,
+                            state,
+                            quoted || protected,
+                            scalar || expansion.captured.is_some(),
+                        )
                         .await
                 })
                 .await
