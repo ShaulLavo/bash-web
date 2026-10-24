@@ -3,9 +3,10 @@
 //! copied. Arrays, prompt expansion (@P) and indirect names stay unsupported.
 use super::{
     Error, Expansion, Printability, Protection, TransformContext, admit_string_growth,
-    admit_vec_slot, bounded, case::Locale, operand, utf8_locale,
+    admit_vec_slot, bounded, operand, utf8_locale,
 };
-use crate::state::{Binding, ScalarResolution, SharedState, State};
+use crate::state::CaseLocale as Locale;
+use crate::state::{Binding, CaseMapping, ScalarResolution, SharedState, State};
 
 /// A snapshot of the transformed parameter, taken before any suspension.
 struct Subject {
@@ -14,17 +15,18 @@ struct Subject {
     target: String,
     readonly: bool,
     exported: bool,
+    case: CaseMapping,
     /// Declared in the current function scope, which Bash's `@A` spells with `declare`.
     local: bool,
 }
 impl Subject {
     fn attributes(&self) -> &'static str {
-        match (self.readonly, self.exported) {
-            (true, true) => "rx",
-            (true, false) => "r",
-            (false, true) => "x",
-            (false, false) => "",
-        }
+        let flags = match self.case {
+            CaseMapping::Unchanged => ["", "x", "r", "rx"],
+            CaseMapping::Lower => ["l", "xl", "rl", "rxl"],
+            CaseMapping::Upper => ["u", "xu", "ru", "rxu"],
+        };
+        flags[usize::from(self.readonly) * 2 + usize::from(self.exported)]
     }
 }
 
@@ -57,6 +59,7 @@ impl Expansion<'_> {
             target: String::new(),
             readonly: false,
             exported: false,
+            case: CaseMapping::Unchanged,
             local: false,
         };
         if operand::scalar_name(name) {
@@ -66,6 +69,7 @@ impl Expansion<'_> {
             // Array-backed targets stay outside this scalar adapter.
             if target == "PIPESTATUS"
                 || !operand::scalar_name(target)
+                || s.stack_array(target)
                 || matches!(s.binding(target), Some(Binding::Indexed(_)))
             {
                 return Err(2.into());
@@ -74,6 +78,7 @@ impl Expansion<'_> {
             subject.target = target.to_owned();
             subject.readonly = s.is_readonly(target);
             subject.exported = s.exported_bindings().contains(target);
+            subject.case = s.case_mapping(target);
             subject.local = s.is_current_local(target);
         }
         if !parameter_set(&s, name) {

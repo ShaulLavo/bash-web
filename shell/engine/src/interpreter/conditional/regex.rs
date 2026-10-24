@@ -13,7 +13,10 @@
 //! Backreferences and locale collating/equivalence constructs fail closed (2).
 use crate::{
     executor::Cancel,
-    expand::{Error, Work, pattern::Pattern},
+    expand::{
+        Error, Work,
+        pattern::{Pattern, classes::Named},
+    },
     state::SharedState,
 };
 use std::mem::size_of;
@@ -238,21 +241,6 @@ async fn class_end(
     Err(2.into())
 }
 
-#[derive(Clone, Copy)]
-enum Named {
-    Alnum,
-    Alpha,
-    Blank,
-    Cntrl,
-    Digit,
-    Graph,
-    Lower,
-    Print,
-    Punct,
-    Space,
-    Upper,
-    Xdigit,
-}
 async fn class_member(
     pattern: &Pattern,
     index: &mut usize,
@@ -290,38 +278,8 @@ async fn class_member(
         return Err(2.into());
     }
     *index += 2;
-    let named = match &name[..len] {
-        b"alnum" => Named::Alnum,
-        b"alpha" => Named::Alpha,
-        b"blank" => Named::Blank,
-        b"cntrl" => Named::Cntrl,
-        b"digit" => Named::Digit,
-        b"graph" => Named::Graph,
-        b"lower" => Named::Lower,
-        b"print" => Named::Print,
-        b"punct" => Named::Punct,
-        b"space" => Named::Space,
-        b"upper" => Named::Upper,
-        b"xdigit" => Named::Xdigit,
-        _ => return Err(2.into()),
-    };
+    let named = Named::parse(&name[..len]).ok_or(2)?;
     Ok(('\0', Some(named)))
-}
-fn named_matches(named: Named, ch: char) -> bool {
-    match named {
-        Named::Alnum => ch.is_ascii_alphanumeric(),
-        Named::Alpha => ch.is_ascii_alphabetic(),
-        Named::Blank => matches!(ch, ' ' | '\t'),
-        Named::Cntrl => ch.is_ascii_control(),
-        Named::Digit => ch.is_ascii_digit(),
-        Named::Graph => ch.is_ascii_graphic(),
-        Named::Lower => ch.is_ascii_lowercase(),
-        Named::Print => ch == ' ' || ch.is_ascii_graphic(),
-        Named::Punct => ch.is_ascii_punctuation(),
-        Named::Space => matches!(ch, ' ' | '\t' | '\n' | '\r' | '\x0b' | '\x0c'),
-        Named::Upper => ch.is_ascii_uppercase(),
-        Named::Xdigit => ch.is_ascii_hexdigit(),
-    }
 }
 async fn atom_matches(
     atom: Atom,
@@ -348,7 +306,7 @@ async fn atom_matches(
                     let (high, _) = class_member(pattern, &mut index, end, work, cancel).await?;
                     low <= ch && ch <= high
                 } else {
-                    named.map_or(low == ch, |named| named_matches(named, ch))
+                    named.map_or(low == ch, |named| named.matches(ch, false))
                 };
                 matched |= found;
             }
@@ -1737,8 +1695,7 @@ mod tests {
             let source = "(".repeat(groups) + "a" + &")".repeat(groups) + "*";
             let pattern = self::pattern(&source);
             let value = "a".repeat(2048);
-            let mut work =
-                crate::interpreter::expansion_work(&crate::interpreter::Limits::default());
+            let mut work = crate::interpreter::command_work(&crate::interpreter::Limits::default());
             let captures = finish(matches(&pattern, &value, &mut work, &Cancel::new()))
                 .unwrap_or_else(|_| panic!("{groups} nested groups exhausted default work"))
                 .unwrap();
@@ -1759,8 +1716,7 @@ mod tests {
             let source = "(".repeat(groups) + "a" + &")".repeat(groups) + "*";
             let pattern = self::pattern(&source);
             let value = "a".repeat(length);
-            let mut work =
-                crate::interpreter::expansion_work(&crate::interpreter::Limits::default());
+            let mut work = crate::interpreter::command_work(&crate::interpreter::Limits::default());
             let captures = finish(matches(&pattern, &value, &mut work, &Cancel::new()))
                 .unwrap_or_else(|_| {
                     panic!("{groups} groups on {length} bytes exhausted default work")
