@@ -62,6 +62,36 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function assertPreStepEnv(env: unknown, scope: string) {
+  if (!env) return;
+  for (const [key, value] of Object.entries(object(env))) {
+    if (typeof value !== "string") continue;
+    for (const expression of value.matchAll(/\$\{\{(.*?)\}\}/gs))
+      assert.doesNotMatch(
+        expression[1].replace(/'(?:[^']|'')*'/g, ""),
+        /\brunner\s*(?:\.|\[)/,
+        `${scope}.${key}: runner context is unavailable before steps`,
+      );
+  }
+}
+
+test("runner context is rejected in workflow/job env rather than step env", () => {
+  const expression = "${{ runner.temp }}/engine-layers.json";
+  assert.throws(
+    () => assertPreStepEnv({ OUTPUT: expression }, "jobs.fixture.env"),
+    /jobs\.fixture\.env\.OUTPUT: runner context is unavailable before steps/,
+  );
+  assert.doesNotThrow(() =>
+    assertPreStepEnv({ LITERAL: "runner.temp", QUOTED: "${{ 'runner.temp' }}" }, "env"),
+  );
+  const workflow = object(
+    parse(readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8")),
+  );
+  assertPreStepEnv(workflow.env, "env");
+  for (const [id, job] of Object.entries(object(workflow.jobs)))
+    assertPreStepEnv(object(job).env, `jobs.${id}.env`);
+});
+
 function jobs() {
   return object(
     object(parse(readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8")))
@@ -168,10 +198,9 @@ test("quality package recipes preserve complete current selections", () => {
     scripts["test:guest-build"],
     "node --test scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts",
   );
-  assert.equal(
-    scripts["test:shell:scoreboard"],
-    "npm run build:node-harness && node --test scripts/test-shell-scoreboard*.mjs scripts/test-shell-scoreboard-instrument.ts scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-own-shell-root.ts scripts/test-own-shell-permissions.ts scripts/test-own-shell-descriptors.ts scripts/test-own-shell-printf-assignment.ts scripts/test-own-shell-extglob.ts scripts/test-own-shell-pathname.ts scripts/test-own-shell-tilde.ts scripts/test-own-shell-regex-groups.ts scripts/test-own-shell-file-substitution.ts scripts/test-own-shell-read-scalar.ts scripts/test-own-shell-read-options.ts scripts/test-own-shell-indirect-special.ts scripts/test-own-shell-special-params.ts scripts/test-own-shell-select.ts scripts/test-own-shell-source.ts scripts/test-own-shell-declarations.ts scripts/test-own-shell-index-names.ts scripts/test-own-shell-array-slicing.ts scripts/test-own-shell-function-names.ts scripts/test-own-shell-aliases.mjs scripts/test-own-shell-call-stack.ts scripts/test-own-shell-trap-registration.ts scripts/test-own-shell-pipeline-broken-pipe.ts scripts/test-own-shell-completion.ts scripts/test-own-shell-nameref-invalid.ts scripts/test-own-shell-noexec.ts scripts/test-bash-compat*.mjs",
-  );
+  assert.match(String(scripts["test:shell:scoreboard"]), /build:node-harness/);
+  assert.match(String(scripts["test:shell:scoreboard"]), /node scripts\/scoreboard-tests\.mjs/);
+  assert.doesNotMatch(String(scripts["test:shell:scoreboard"]), /scripts\/test-/);
 });
 
 test("compatibility keeps frozen identity, diagnostics, echo and target baseline wiring", () => {
@@ -291,4 +320,93 @@ test("browser apt uses the runner's existing HTTPS fallbacks instead of the slow
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test("main concurrency is isolated by source while PRs retain latest-head cancellation", () => {
+  const workflow = object(
+    parse(readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8")),
+  );
+  const concurrency = object(workflow.concurrency);
+  assert.match(String(concurrency.group), /github\.event\.pull_request\.number \|\| github\.sha/);
+  assert.equal(concurrency["cancel-in-progress"], "${{ github.event_name == 'pull_request' }}");
+});
+
+test("raw publication and the blocking cheap fold have no dependency cycle or whole-run wait", () => {
+  const workflowJobs = jobs();
+  const raw = object(workflowJobs["own-shell-compatibility"]);
+  const floor = object(workflowJobs["score-floor"]);
+  assert.deepEqual(raw.needs, ["prepare", "native"]);
+  assert.deepEqual(floor.needs, ["prepare", "own-shell-compatibility"]);
+  assert.ok(!("BASH_COMPAT_RAW" in object(raw.env)));
+  assert.equal(
+    object(raw.outputs)["raw-artifact-id"],
+    "${{ steps.raw-upload.outputs.artifact-id }}",
+  );
+  assert.ok(Array.isArray(floor.steps));
+  const download = floor.steps
+    .map(object)
+    .find((step) => step.uses === "actions/download-artifact@v4");
+  assert.ok(download);
+  assert.equal(
+    object(download.with)["artifact-ids"],
+    "${{ needs.own-shell-compatibility.outputs.raw-artifact-id }}",
+  );
+  const names = floor.steps.map((step: unknown) => object(step).name);
+  assert.ok(names.indexOf("Upload cumulative main floor") < names.indexOf("Enforce qualification"));
+  assert.doesNotMatch(
+    commands(floor),
+    /bash-compat\.mjs|compat:shell|build:|run.*status.*completed/,
+  );
+  assert.match(commands(floor), /scoreboard-ci\.mjs fold/);
+  assert.match(commands(floor), /scoreboard-ci\.mjs enforce/);
+  const producer = readFileSync(new URL("./bash-compat.mjs", import.meta.url), "utf8");
+  assert.match(producer, /BASH_COMPAT_RAW !== "1"/);
+  assert.doesNotMatch(producer, /requireMembership: true/);
+});
+
+test("raw mode belongs only to observation, never scorer or lifecycle test environments", () => {
+  const workflow = object(
+    parse(readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8")),
+  );
+  assert.ok(!workflow.env || !("BASH_COMPAT_RAW" in object(workflow.env)));
+  const workflowJobs = object(workflow.jobs);
+  for (const [id, value] of Object.entries(workflowJobs)) {
+    const job = object(value);
+    assert.ok(!job.env || !("BASH_COMPAT_RAW" in object(job.env)), `${id} leaks raw mode`);
+  }
+  const raw = object(workflowJobs["own-shell-compatibility"]);
+  assert.ok(Array.isArray(raw.steps));
+  const owners = raw.steps
+    .map(object)
+    .filter((step) => step.env && "BASH_COMPAT_RAW" in object(step.env));
+  assert.equal(owners.length, 1);
+  assert.equal(owners[0].name, "Observe compatibility with the same-job node build");
+  assert.equal(object(owners[0].env).BASH_COMPAT_RAW, "1");
+});
+
+test("read tokens stay out of the replay environment and layer graphs are artifact-only", () => {
+  for (const key of ["own-shell-compatibility", "score-floor"]) {
+    const job = object(jobs()[key]);
+    assert.equal(object(job.permissions).actions, "read");
+    assert.ok(!job.env || !("GH_TOKEN" in object(job.env)));
+  }
+  const raw = object(jobs()["own-shell-compatibility"]);
+  assert.ok(Array.isArray(raw.steps));
+  for (const step of raw.steps.map(object)) {
+    if (!step.env || !("GH_TOKEN" in object(step.env))) continue;
+    assert.equal(step.name, "Bind qualification and resolve PR main floor");
+  }
+  const layer = object(jobs().layers);
+  assert.doesNotMatch(commands(layer), /--record/);
+  assert.ok(Array.isArray(layer.steps));
+  const check = layer.steps
+    .map(object)
+    .find((step) => typeof step.run === "string" && step.run.includes("npm run check:layers"));
+  assert.ok(check);
+  assert.equal(object(check.env).LAYERS_OUTPUT, "${{ runner.temp }}/engine-layers.json");
+  const upload = layer.steps.map(object).find((step) => step.uses === "actions/upload-artifact@v4");
+  assert.ok(upload);
+  assert.equal(object(upload.with).path, object(check.env).LAYERS_OUTPUT);
+  assert.equal(upload.if, "always()");
+  assert.equal(object(upload.with)["retention-days"], 90);
 });

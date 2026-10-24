@@ -41,8 +41,7 @@ separate supported-format coverage.
 The native/WASI `words::printf_fields` tests cover byte edges, argument consumption,
 field overflow, output admission, chunking and cancellation in both walks. The
 existing 1,122-case printf and 492-case echo replays remain strict and unchanged.
-See `sources.lock.json` for original-local provenance and the approved shell plan
-for measured frozen real-Waffle memberships.
+See `sources.lock.json` for original-local provenance.
 
 ## Review boundary checks
 

@@ -27,7 +27,7 @@ CI builds the WASM guests on `ubuntu-latest`. The WASI and browser steps are ver
   Install the exact 26.12.1 if you plan to run `npm run compat:shell`. Node ships with npm. The native Rust build and the README example do not need Node.
 - Bun, only for the Node-side Waffle checks (`npm run compat:shell`, `npm run test:installed-waffle`). Bun builds Waffle's `dist/`, which `npm ci` leaves unbuilt. See [Install the Waffle peer](guides/embed-in-a-page.md#install-the-waffle-peer).
 - Rust 1.98.1 through rustup. `rust-toolchain.toml` pins it with the `rustfmt` and `clippy` components and the `wasm32-wasip1` target, so rustup installs it the first time you run `cargo` in the repository.
-- For WASI guests: wasi-sdk **34.0** with wasi-libc `2e6fb9d8ee0c` (`scripts/wasi-build.ts` rejects any other). Always set `WASI_SDK_PATH` to the SDK directory. The fallback in `scripts/wasi-build.ts` is `/work/cache/wasi-sdk-34.0-x86_64-linux`, a path that exists only on the maintainer's Linux x86_64 machine. CI downloads `wasi-sdk-34.0-x86_64-linux.tar.gz` from the [wasi-sdk-34 release](https://github.com/WebAssembly/wasi-sdk/releases/tag/wasi-sdk-34) into `.build/wasi-sdk` and checks its SHA-256 (`.github/actions/wasi-sdk/action.yml`). You also need wasmtime, CMake **3.26+**, Ninja, curl, tar, patch, sha256sum, Linux `setsid`, GNU `timeout`, and `flock`. The shared libc patch and builder come from Waffle. See [Guest libc and build provenance](wasi-libc.md).
+- For WASI guests: wasi-sdk **34.0** with wasi-libc `2e6fb9d8ee0c` (`scripts/wasi-build.ts` rejects any other). Always set `WASI_SDK_PATH` to the SDK directory. `scripts/wasi-build.ts` has a built-in default that fits only one Linux layout, so do not rely on it. CI downloads `wasi-sdk-34.0-x86_64-linux.tar.gz` from the [wasi-sdk-34 release](https://github.com/WebAssembly/wasi-sdk/releases/tag/wasi-sdk-34) into `.build/wasi-sdk` and checks its SHA-256 (`.github/actions/wasi-sdk/action.yml`). You also need wasmtime, CMake **3.26+**, Ninja, curl, tar, patch, sha256sum, Linux `setsid`, GNU `timeout`, and `flock`. The shared libc patch and builder come from Waffle. See [Guest libc and build provenance](wasi-libc.md).
 - For browser tests: `npx playwright install chromium firefox`.
 - For score capture only: Linux, GNU Bash 5.3.15, bubblewrap, and Python 3. Replay needs none of these.
 
@@ -88,7 +88,7 @@ Do not regenerate or edit these in ordinary work. Scripts check them by digest.
 - `tests/`: Playwright acceptance tests. `tests/guest/` holds the source-built `test-guest` and `test-spin` programs ([Test guests](test-guests.md)).
 - `scripts/`: build helpers, the scoreboard, differential fuzzers, provenance checks.
 - `docs/`: this documentation. [Docs map](README.md).
-- `plans/`: internal planning notes, not documentation. Frozen evidence and `sources.lock.json` name this path, so it stays.
+- `plans/`: internal notes, not documentation. `sources.lock.json` names this path, so it stays.
 
 ## Engine layer gate
 
@@ -102,15 +102,9 @@ LAYERS_BASE_REF=$(git rev-parse origin/main) npm run check:layers
 
 `LAYERS_BASE_REF` (or `--base-ref`) must be an immutable full commit SHA. CI fetches complete history and selects the PR base SHA, the pre-push main SHA, or the merge-base with main for another branch's push. The layer job runs independently of the shell, compatibility, and browser jobs, and a layer failure does not skip their coverage.
 
-The checker records production and test-only edges, violations, source locations, and a source digest in `docs/evidence/engine-layers.json`. Neither violation count may increase, and a new violating edge cannot replace an old one at the same count. The check is lexical. It does not resolve Rust aliases or macros and does not prove that optional capabilities compile separately.
+The checker compares production and test-only edges using the immutable base's scanner and policy for both source sets. Neither violation count may increase, and a new violating edge cannot replace an old one at the same count. The check is lexical. It does not resolve Rust aliases or macros and does not prove that optional capabilities compile separately.
 
-After you edit engine sources, refresh and commit the evidence in the same change:
-
-```sh
-LAYERS_BASE_REF=$(git rev-parse origin/main) npm run check:layers -- --record
-```
-
-Recording cannot bypass the committed-HEAD or immutable-target checks. A normal merge can carry unchanged evidence from a parent. The checker verifies that evidence against the parent's sources, rescans the merge, and compares it with the verified parent before it permits a refresh. Changed merge evidence must match exactly. Ordinary source commits with stale evidence are rejected, as are tampered parent or target records. The graph itself is recorded in [ADR 003](adr/003-one-core-shell-and-installable-utilities.md).
+Set `LAYERS_OUTPUT` or `--output` to retain complete base/candidate graphs and comparison evidence. CI uploads this file even when the comparison fails. Do not refresh or commit `docs/evidence/engine-layers.json`; it is historical evidence, not a gate input. The graph is described in [ADR 003](adr/003-one-core-shell-and-installable-utilities.md).
 
 ## Host boundary
 
