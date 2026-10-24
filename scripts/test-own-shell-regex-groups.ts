@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { createWaffleRunner } from "./waffle-compat.ts";
@@ -56,13 +56,15 @@ const cases = [
     String.raw`[[ a =~ (a) ]] && echo match; [[ b =~ (a) ]] || echo miss; [[ ! b =~ (a) ]] && echo negated`,
   ],
 );
-function observation(result: { status?: number | null; stdout: Buffer; stderr: Buffer }) {
-  return {
-    status: result.status,
-    stdout: result.stdout.toString("base64"),
-    stderr: result.stderr.toString("base64"),
-  };
-}
+const recordings: {
+  bash: string;
+  cases: { script: string; status: number; stdoutBase64: string; stderrBase64: string }[];
+} = JSON.parse(readFileSync(new URL("fixtures/shell-regex-groups.json", import.meta.url), "utf8"));
+assert.equal(recordings.bash, "5.3.15(1)-release");
+assert.deepEqual(
+  recordings.cases.map((entry) => entry.script),
+  cases,
+);
 
 test("production Waffle grouped ERE agrees with GNU Bash", async (suite) => {
   const directory = resolve(
@@ -77,19 +79,15 @@ test("production Waffle grouped ERE agrees with GNU Bash", async (suite) => {
     utilityDirectory: directory,
     modulePath: resolve(directory, "shell-runtime.wasm"),
   });
-  for (const script of cases) {
-    await suite.test(script, async (control) => {
-      const expected = spawnSync("/usr/bin/bash", ["-c", script], {
-        env: { ...environment, PATH: "/usr/bin:/bin" },
-      });
-      assert.equal(expected.error, undefined);
-      assert.equal(expected.signal, null);
+  for (const expected of recordings.cases) {
+    const { script } = expected;
+    await suite.test(script, async () => {
       const actual = await runner(script);
-      control.diagnostic(
-        JSON.stringify({ script, bash: observation(expected), actual: observation(actual) }),
-      );
       assert.equal(actual.crash, undefined);
-      assert.deepEqual([actual.status, actual.stdout], [expected.status, expected.stdout]);
+      assert.deepEqual(
+        [actual.status, actual.stdout],
+        [expected.status, Buffer.from(expected.stdoutBase64, "base64")],
+      );
     });
   }
 });

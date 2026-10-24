@@ -63,6 +63,18 @@ for (const expected of cases)
 // capture count, never fail closed.
 if (!process.env.BASH_REGEX_CAPTURES_FIXTURE) {
   for (const expected of recording(
+    new URL("fixtures/shell-regex-capture-chains.json", import.meta.url),
+  ))
+    test(`production Waffle capture chains: ${expected.name}`, async () => {
+      const actual = await runner(expected.script);
+      assert.equal(actual.crash, undefined);
+      assert.equal(actual.outputLimit, undefined);
+      assert.equal(actual.status, expected.status);
+      // Avoid constructing a multi-megabyte Buffer diff on a failed large span.
+      assert.ok(actual.stdout.equals(Buffer.from(expected.stdoutBase64, "base64")), expected.name);
+      assert.deepEqual(actual.stderr, Buffer.from(expected.stderrBase64, "base64"));
+    });
+  for (const expected of recording(
     new URL("fixtures/shell-regex-status-controls.json", import.meta.url),
   ))
     test(`production Waffle regex status: ${expected.name}`, async () => {

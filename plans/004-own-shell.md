@@ -3059,3 +3059,27 @@ adjacent `review53-r5/`.
 Reproduce through the production Waffle runner with new exact Bash
 recordings, keep admission, cooperative undo and cancellation, and change no
 frozen exclusion, score membership, oracle or baseline.
+
+
+### PR53 ordinary Save-chain reconstruction repair, 2026-10-24
+
+Status: Approved bounded residual repair, assigned by the manager at 03:57.
+The r7 frontier above is historical. The repair records last visits to owned
+Save chains when the graph has no `OptionalSave`, then resolves registers once.
+Graphs needing snapshot restoration retain their existing path and admitted
+capture differences. Dense kept-node columns also remove unused reachability
+storage. See [the ownership and reconstruction contract](../docs/regex-capture-choice.md).
+
+On pinned b0644670, 64 groups on 3072 bytes, 48 on 4096, 32 on 8192,
+16 on 16384, and 1 or 4 on 65536 return regex status 2. All now return 0
+with exact Bash 5.3.15 captures under unchanged default limits. A seventh
+production-Waffle recording pins 64 groups on 65536 bytes. The six-case Rust
+cost control bounds reconstruction by input length plus compiled node count.
+No frozen membership gain, new syntax, restoration-parity fix, larger budget,
+profile change or full replay is claimed. The CONTROL parent owns review,
+full qualification and landing. Before/after evidence is retained at
+`/work/reports/wave-20261022/shell/pr53-manager-residual-repair-evidence/`.
+
+The 248 existing grouped-ERE scripts and status/stdout assertions are unchanged.
+Their oracle now uses an exact Bash 5.3.15 recording instead of the host's
+mutable `/usr/bin/bash`, observed as 5.3.20 during this repair.

@@ -30,10 +30,23 @@ nodes, rather than adding a factor of the group count at every close.
 
 Save and Begin nodes only forward to their successor and never test the input
 position, so they share that successor's matching and reachability state. A
-skip map built once per match lets the whole-span scan and the reachability
-table run over the remaining nodes only. Neither pass then visits capture
-nodes once per input byte. Capture reconstruction still steps through every
-Save node on the selected path.
+dense column map built once per match lets the whole-span scan and the
+reachability table run over the remaining nodes only. The bitset stores only
+those columns, not unused capture-node columns.
+
+Only `OptionalSave` reads or restores a snapshot. When a compiled graph has no
+such node, reconstruction records the last actual visit to each owned Save
+chain instead of replaying all its register writes per byte. Shared successors
+and the root split chains, so no branch can enter a skipped interior. Undo
+restores prior chain visits. After path selection, one pass resolves each
+register's latest write, including the end cleared by an opening write.
+Graphs containing `OptionalSave` retain the existing snapshot and rewind path.
+Every chain allocation is admitted and every setup and resolution loop yields.
+No input content is inferred and no work or storage limit changes.
+
+Seven exact Bash recordings in `shell-regex-capture-chains.json` cover the
+larger-input frontier through 64 groups on 65,536 bytes. The Rust controls also
+bound reconstruction work and preserve cancellation and allocation admission.
 
 ## Absent alternatives
 

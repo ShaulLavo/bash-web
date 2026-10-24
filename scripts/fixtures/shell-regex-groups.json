@@ -1,0 +1,1503 @@
+{
+  "bash": "5.3.15(1)-release",
+  "provenance": {
+    "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+    "env": {
+      "HOME": "/home/user",
+      "TMP": "/tmp/spec",
+      "LC_ALL": "C",
+      "LANG": "C",
+      "PATH": "/usr/bin:/bin"
+    }
+  },
+  "cases": [
+    {
+      "script": "[[ 'a b' =~ ^(a\\ b)$ ]] && echo true",
+      "status": 0,
+      "stdoutBase64": "dHJ1ZQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "pat='^(a b)$'; [[ 'a b' =~ $pat ]] && echo true",
+      "status": 0,
+      "stdoutBase64": "dHJ1ZQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "f=fff; [[ fffx =~ $f(x) ]]; echo $?; [[ ffx =~ $f(x) ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAoxCg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "[[ a=x =~ a=(x) ]]; echo $?; [[ =x =~ a=(x) ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAoxCg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "[[ @fx =~ @f(x) ]]; echo $?; [[ fx =~ @f(x) ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAoxCg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "[[ 'a  b' =~ (a  b) ]]; echo $?; [[ 'a b' =~ (a  b) ]]; echo $?; [[ 'a b' =~ (a b|c) ]]; echo $?; [[ '  c' =~ (a|  c) ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAoxCjAKMAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "[[ '< >' =~ (< >) ]] && echo true",
+      "status": 0,
+      "stdoutBase64": "dHJ1ZQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "[[ a =~ ^(a)$ ]]; echo $?; [[ a =~ ^(a|b)$ ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAowCg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "if [[ xy =~ x+((y)) ]]; then echo Matches; fi",
+      "status": 0,
+      "stdoutBase64": "TWF0Y2hlcwo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "[[ '<' =~ (<) ]]; echo $?; [[ '>' =~ (<) ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAoxCg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "[[ '[' =~ ^([x[]) ]] && echo Matched",
+      "status": 0,
+      "stdoutBase64": "TWF0Y2hlZAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "x=ab; [[ $x =~ ^(a|b)b$ ]] && echo y",
+      "status": 0,
+      "stdoutBase64": "eQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "[[ x =~ (x$|y$) ]] && echo q7",
+      "status": 0,
+      "stdoutBase64": "cTcK",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(ab|c){2,3}$'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(ab|c){2,3}$'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(ab|c){2,3}$'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(ab|c){2,3}$'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(ab|c){2,3}$'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(ab|c){2,3}$'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(ab|c){2,3}$'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(ab|c){2,3}$'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(ab|c){2,3}$'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(ab|c){2,3}$'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((ab|c){2,3})+$'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((ab|c){2,3})+$'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((ab|c){2,3})+$'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((ab|c){2,3})+$'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((ab|c){2,3})+$'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((ab|c){2,3})+$'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((ab|c){2,3})+$'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((ab|c){2,3})+$'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((ab|c){2,3})+$'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((ab|c){2,3})+$'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|)b?$'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|)b?$'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|)b?$'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|)b?$'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|)b?$'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|)b?$'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|)b?$'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|)b?$'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|)b?$'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|)b?$'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^()$'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^()$'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^()$'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^()$'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^()$'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^()$'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^()$'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^()$'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^()$'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^()$'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(()|a?)*$'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(()|a?)*$'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(()|a?)*$'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(()|a?)*$'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(()|a?)*$'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(()|a?)*$'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(()|a?)*$'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(()|a?)*$'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(()|a?)*$'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(()|a?)*$'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|aa)*b$'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|aa)*b$'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|aa)*b$'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|aa)*b$'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|aa)*b$'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|aa)*b$'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|aa)*b$'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|aa)*b$'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|aa)*b$'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|aa)*b$'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((a|b)+c?)*$'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((a|b)+c?)*$'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((a|b)+c?)*$'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((a|b)+c?)*$'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((a|b)+c?)*$'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((a|b)+c?)*$'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((a|b)+c?)*$'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((a|b)+c?)*$'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((a|b)+c?)*$'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^((a|b)+c?)*$'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0}$'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0}$'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0}$'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0}$'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0}$'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0}$'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0}$'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0}$'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0}$'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0}$'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0,2}$'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0,2}$'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0,2}$'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0,2}$'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0,2}$'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0,2}$'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0,2}$'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0,2}$'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0,2}$'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){0,2}$'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){2,}$'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){2,}$'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){2,}$'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){2,}$'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){2,}$'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){2,}$'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){2,}$'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){2,}$'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){2,}$'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b){2,}$'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a^|b$)'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a^|b$)'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a^|b$)'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a^|b$)'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a^|b$)'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a^|b$)'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a^|b$)'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a^|b$)'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a^|b$)'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a^|b$)'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^a|b$)'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^a|b$)'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^a|b$)'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^a|b$)'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^a|b$)'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^a|b$)'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^a|b$)'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^a|b$)'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^a|b$)'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^a|b$)'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(x$|y$)'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(x$|y$)'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(x$|y$)'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(x$|y$)'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(x$|y$)'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(x$|y$)'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(x$|y$)'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(x$|y$)'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(x$|y$)'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(x$|y$)'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^)*'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^)*'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^)*'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^)*'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^)*'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^)*'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^)*'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^)*'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^)*'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(^)*'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='($)+'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='($)+'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='($)+'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='($)+'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='($)+'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='($)+'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='($)+'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='($)+'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='($)+'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='($)+'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((^|$)*)+'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((^|$)*)+'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((^|$)*)+'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((^|$)*)+'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((^|$)*)+'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((^|$)*)+'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((^|$)*)+'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((^|$)*)+'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((^|$)*)+'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((^|$)*)+'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([[:alpha:]]|[0-9])+$'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([[:alpha:]]|[0-9])+$'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([[:alpha:]]|[0-9])+$'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([[:alpha:]]|[0-9])+$'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([[:alpha:]]|[0-9])+$'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([[:alpha:]]|[0-9])+$'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([[:alpha:]]|[0-9])+$'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([[:alpha:]]|[0-9])+$'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([[:alpha:]]|[0-9])+$'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([[:alpha:]]|[0-9])+$'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([()|]|[x[])+$'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([()|]|[x[])+$'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([()|]|[x[])+$'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([()|]|[x[])+$'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([()|]|[x[])+$'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([()|]|[x[])+$'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([()|]|[x[])+$'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([()|]|[x[])+$'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([()|]|[x[])+$'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^([()|]|[x[])+$'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a\\+|b\\?)$'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a\\+|b\\?)$'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a\\+|b\\?)$'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a\\+|b\\?)$'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a\\+|b\\?)$'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a\\+|b\\?)$'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a\\+|b\\?)$'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a\\+|b\\?)$'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a\\+|b\\?)$'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a\\+|b\\?)$'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b)c|d(e|f)$'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b)c|d(e|f)$'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b)c|d(e|f)$'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b)c|d(e|f)$'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b)c|d(e|f)$'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b)c|d(e|f)$'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b)c|d(e|f)$'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b)c|d(e|f)$'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b)c|d(e|f)$'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='^(a|b)c|d(e|f)$'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a|b)(c|d)'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a|b)(c|d)'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a|b)(c|d)'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a|b)(c|d)'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a|b)(c|d)'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a|b)(c|d)'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a|b)(c|d)'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a|b)(c|d)'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a|b)(c|d)'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a|b)(c|d)'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((a)|(b))?'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((a)|(b))?'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((a)|(b))?'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((a)|(b))?'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((a)|(b))?'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((a)|(b))?'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((a)|(b))?'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((a)|(b))?'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((a)|(b))?'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='((a)|(b))?'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(|a|)'; [[ '' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(|a|)'; [[ 'a' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(|a|)'; [[ 'ab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(|a|)'; [[ 'abc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(|a|)'; [[ 'cababc' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(|a|)'; [[ 'aaab' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(|a|)'; [[ 'xby' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(|a|)'; [[ 'b' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(|a|)'; [[ '[()|' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(|a|)'; [[ 'a+' =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "[[ a =~ (^)* ]]; echo $?; [[ a =~ ($)+ ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAowCg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "[[ '(a|b)+' =~ ^'('a'|'b')+'$ ]]; echo $?; [[ a =~ ^('a'|\"b\")$ ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAowCg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='(a'; [[ a =~ $p ]]; echo $?; p='a|('; [[ a =~ $p ]]; echo $?; p='(a){3,2}'; [[ a =~ $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MgoyCjIK",
+      "stderrBase64": "L3dvcmsvdG1wL3NoZWxsLXByNTMtcmVzaWR1YWwtMjAyNjEwMjQvb3JhY2xlL3Vzci9iaW4vYmFzaDogbGluZSAxOiBbWzogaW52YWxpZCByZWd1bGFyIGV4cHJlc3Npb24gYChhJzogVW5tYXRjaGVkICggb3IgXCgKL3dvcmsvdG1wL3NoZWxsLXByNTMtcmVzaWR1YWwtMjAyNjEwMjQvb3JhY2xlL3Vzci9iaW4vYmFzaDogbGluZSAxOiBbWzogaW52YWxpZCByZWd1bGFyIGV4cHJlc3Npb24gYGF8KCc6IFVubWF0Y2hlZCAoIG9yIFwoCi93b3JrL3RtcC9zaGVsbC1wcjUzLXJlc2lkdWFsLTIwMjYxMDI0L29yYWNsZS91c3IvYmluL2Jhc2g6IGxpbmUgMTogW1s6IGludmFsaWQgcmVndWxhciBleHByZXNzaW9uIGAoYSl7MywyfSc6IEludmFsaWQgY29udGVudCBvZiBce1x9Cg=="
+    },
+    {
+      "script": "[[ yes || a =~ (a) ]]; echo $?; [[ '' && a =~ (a) ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAoxCg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "[[ a =~ (a) ]] && echo match; [[ b =~ (a) ]] || echo miss; [[ ! b =~ (a) ]] && echo negated",
+      "status": 0,
+      "stdoutBase64": "bWF0Y2gKbWlzcwpuZWdhdGVkCg==",
+      "stderrBase64": ""
+    }
+  ]
+}

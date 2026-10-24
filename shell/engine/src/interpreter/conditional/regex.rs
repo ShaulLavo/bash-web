@@ -838,10 +838,10 @@ fn forward(node: Node) -> Option<usize> {
 // Save and Begin nodes only forward to `next` and never test the position, so
 // they share their target's state. Whole-span scans and reachability run over
 // the remaining nodes once, instead of revisiting every capture node per byte.
-// Capture reconstruction still steps through them.
+// Capture reconstruction retains their register and repeat effects separately.
 struct Graph<'a> {
     nodes: &'a [Node],
-    skip: Vec<usize>,
+    columns: Vec<usize>,
     kept: Vec<usize>,
     consumers: Vec<usize>,
     reverse: Reverse,
@@ -851,20 +851,19 @@ async fn graph<'a>(
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<Graph<'a>, Error> {
-    let mut skip = slots(nodes.len(), 0usize, work)?;
+    let mut columns = slots(nodes.len(), 0usize, work)?;
     let mut kept = Vec::new();
     let mut consumers = Vec::new();
     for (index, node) in nodes.iter().enumerate() {
         work.checkpoint(cancel).await?;
         // Compiled continuations point at earlier nodes, already resolved.
-        let target = match forward(*node) {
-            Some(next) if next < index => skip[next],
-            _ => index,
-        };
-        skip.push(target);
-        if target != index {
+        if let Some(next) = forward(*node)
+            && next < index
+        {
+            columns.push(columns[next]);
             continue;
         }
+        columns.push(kept.len());
         push(&mut kept, index, work)?;
         if matches!(node, Node::Consume(..)) {
             push(&mut consumers, index, work)?;
@@ -876,13 +875,13 @@ async fn graph<'a>(
         let (left, right) = epsilon(nodes[index]);
         for next in left.into_iter().chain(right) {
             work.checkpoint(cancel).await?;
-            let edge = push(&mut edges, (index, heads[skip[next]]), work)?;
-            heads[skip[next]] = Some(edge);
+            let edge = push(&mut edges, (index, heads[kept[columns[next]]]), work)?;
+            heads[kept[columns[next]]] = Some(edge);
         }
     }
     Ok(Graph {
         nodes,
-        skip,
+        columns,
         kept,
         consumers,
         reverse: Reverse { heads, edges },
@@ -898,7 +897,7 @@ async fn closure(
     cancel: &Cancel,
 ) -> Result<(), Error> {
     let (seed, origin) = candidate;
-    let seed = graph.skip[seed];
+    let seed = graph.kept[graph.columns[seed]];
     if states[seed] <= origin {
         return Ok(());
     }
@@ -912,7 +911,7 @@ async fn closure(
         let origin = states[index];
         let (left, right) = epsilon(graph.nodes[index]);
         for next in left.into_iter().chain(right) {
-            let next = graph.skip[next];
+            let next = graph.kept[graph.columns[next]];
             if states[next] <= origin {
                 continue;
             }
@@ -1021,7 +1020,7 @@ impl Reachable {
         old & mask == 0
     }
 }
-// Rows hold kept nodes only; look up any node through `Graph::skip`.
+// Rows hold kept nodes only; look up any node through `Graph::columns`.
 async fn reachability(
     graph: &Graph<'_>,
     pattern: &Pattern,
@@ -1031,7 +1030,7 @@ async fn reachability(
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<Reachable, Error> {
-    let width = graph.nodes.len();
+    let width = graph.kept.len();
     let count = (span.1 - span.0 + 1).checked_mul(width).ok_or(2)?;
     let bits = initialized(count.div_ceil(64), 0u64, work, cancel).await?;
     let mut result = Reachable {
@@ -1050,7 +1049,7 @@ async fn reachability(
             let Node::Consume(atom, next) = graph.nodes[index] else {
                 continue;
             };
-            if position == span.1 || !result.get(graph.skip[next], position + 1) {
+            if position == span.1 || !result.get(graph.columns[next], position + 1) {
                 continue;
             }
             if !atom_matches(
@@ -1064,7 +1063,7 @@ async fn reachability(
             {
                 continue;
             }
-            result.insert(index, position);
+            result.insert(graph.columns[index], position);
             stack.push(index);
         }
         reverse_closure(
@@ -1113,11 +1112,141 @@ async fn reverse_closure(
         if !anchor(node, position.offset, position.length) {
             continue;
         }
-        if result.insert(prior, position.offset) {
+        if result.insert(graph.columns[prior], position.offset) {
             push(stack, prior, work)?;
         }
     }
     Ok(())
+}
+
+#[derive(Clone, Copy, Default)]
+struct CaptureVisit {
+    order: usize,
+    position: usize,
+}
+struct CaptureChain {
+    next: usize,
+    visit: CaptureVisit,
+}
+// Without OptionalSave, snapshots have no reader. Keep each owned Save chain's
+// last visit instead of replaying its register writes at every input byte.
+struct CaptureChains {
+    owners: Vec<usize>,
+    chains: Vec<CaptureChain>,
+    order: usize,
+}
+impl CaptureChains {
+    async fn new(
+        nodes: &[Node],
+        start: usize,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<Option<Self>, Error> {
+        for node in nodes {
+            work.checkpoint(cancel).await?;
+            if matches!(node, Node::OptionalSave(..)) {
+                return Ok(None);
+            }
+        }
+        let mut incoming = initialized(nodes.len(), 0usize, work, cancel).await?;
+        incoming[start] = 1;
+        for node in nodes {
+            let (left, right) = match *node {
+                Node::Consume(_, next) => (Some(next), None),
+                node => epsilon(node),
+            };
+            for next in left.into_iter().chain(right) {
+                work.checkpoint(cancel).await?;
+                incoming[next] = incoming[next].checked_add(1).ok_or(2)?;
+            }
+        }
+        let mut owners = initialized(nodes.len(), usize::MAX, work, cancel).await?;
+        let mut chains = Vec::new();
+        for (index, node) in nodes.iter().enumerate() {
+            work.checkpoint(cancel).await?;
+            let Node::Save(_, next) = *node else {
+                continue;
+            };
+            // A shared successor starts another chain. No branch or root can
+            // enter an interior, so marking its head preserves seen semantics.
+            owners[index] = if incoming[next] == 1 && owners[next] != usize::MAX {
+                owners[next]
+            } else {
+                push(
+                    &mut chains,
+                    CaptureChain {
+                        next,
+                        visit: CaptureVisit::default(),
+                    },
+                    work,
+                )?
+            };
+        }
+        let bytes = incoming
+            .capacity()
+            .checked_mul(size_of::<usize>())
+            .ok_or(2)?;
+        drop(incoming);
+        work.release_storage(bytes);
+        Ok(Some(Self {
+            owners,
+            chains,
+            order: 0,
+        }))
+    }
+    fn visit(
+        &mut self,
+        index: usize,
+        position: usize,
+        undo: &mut Vec<Undo>,
+        work: &mut Work,
+    ) -> Result<usize, Error> {
+        let id = self.owners[index];
+        let chain = &mut self.chains[id];
+        push(undo, Undo::Chain(id, chain.visit), work)?;
+        self.order = self.order.checked_add(1).ok_or(2)?;
+        chain.visit = CaptureVisit {
+            order: self.order,
+            position,
+        };
+        Ok(chain.next)
+    }
+    async fn resolve(
+        &self,
+        nodes: &[Node],
+        slots: &mut [Option<usize>],
+        written: &mut [usize],
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<(), Error> {
+        // Continuations have lower indices. At equal visit order, the first
+        // write encountered here was the last one executed inside the chain.
+        for (index, node) in nodes.iter().enumerate() {
+            work.checkpoint(cancel).await?;
+            let Node::Save(slot, _) = *node else {
+                continue;
+            };
+            let visit = self.chains[self.owners[index]].visit;
+            Self::resolve_slot(slots, written, slot, Some(visit.position), visit.order);
+            if slot.is_multiple_of(2) {
+                Self::resolve_slot(slots, written, slot + 1, None, visit.order);
+            }
+        }
+        Ok(())
+    }
+    fn resolve_slot(
+        slots: &mut [Option<usize>],
+        written: &mut [usize],
+        slot: usize,
+        value: Option<usize>,
+        order: usize,
+    ) {
+        if order <= written[slot] {
+            return;
+        }
+        written[slot] = order;
+        slots[slot] = value;
+    }
 }
 
 #[derive(Clone, Copy, Default)]
@@ -1134,11 +1263,13 @@ enum Undo {
     Changed(usize),
     Iteration(usize, Iteration),
     Branch(usize),
+    Chain(usize, CaptureVisit),
 }
 // `previous` is the register set at the last nonempty close. Instead of
 // copying every register there, `log[changed..]` lists each register written
 // since, so snapshots and restorations visit only registers that may differ.
 struct Trace {
+    chains: Option<CaptureChains>,
     slots: Vec<Option<usize>>,
     previous: Vec<Option<usize>>,
     log: Vec<usize>,
@@ -1166,6 +1297,7 @@ impl Trace {
                 Undo::Changed(old) => self.changed = old,
                 Undo::Iteration(id, old) => self.iterations[id] = old,
                 Undo::Branch(next) => return Ok(Some(next)),
+                Undo::Chain(id, old) => self.chains.as_mut().ok_or(2)?.chains[id].visit = old,
             }
         }
         Ok(None)
@@ -1285,6 +1417,32 @@ impl Trace {
         }
         self.rewind(work, cancel).await
     }
+    async fn capture_node(
+        &mut self,
+        index: usize,
+        node: Node,
+        position: usize,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<Option<usize>, Error> {
+        if let Some(chains) = &mut self.chains {
+            return chains
+                .visit(index, position, &mut self.undo, work)
+                .map(Some);
+        }
+        let (Node::Save(slot, next) | Node::OptionalSave(slot, next)) = node else {
+            return Err(2.into());
+        };
+        self.save(
+            slot,
+            position,
+            matches!(node, Node::OptionalSave(..)),
+            work,
+            cancel,
+        )
+        .await?;
+        Ok(Some(next))
+    }
     async fn step(
         &mut self,
         nodes: &[Node],
@@ -1332,16 +1490,8 @@ impl Trace {
                 )?;
                 Ok(Some(next))
             }
-            Node::Save(slot, next) | Node::OptionalSave(slot, next) => {
-                self.save(
-                    slot,
-                    position,
-                    matches!(nodes[index], Node::OptionalSave(..)),
-                    work,
-                    cancel,
-                )
-                .await?;
-                Ok(Some(next))
+            node @ (Node::Save(..) | Node::OptionalSave(..)) => {
+                self.capture_node(index, node, position, work, cancel).await
             }
             Node::Start(next) | Node::End(next) => Ok(Some(next)),
             _ => Ok(None),
@@ -1359,9 +1509,16 @@ async fn captures(
 ) -> Result<Vec<Option<(usize, usize)>>, Error> {
     let count = count.checked_add(1).ok_or(2)?;
     let nodes = graph.nodes;
+    let chains = CaptureChains::new(nodes, start, work, cancel).await?;
+    let snapshot_slots = if chains.is_some() {
+        0
+    } else {
+        count.checked_mul(2).ok_or(2)?
+    };
     let mut trace = Trace {
+        chains,
         slots: initialized(count.checked_mul(2).ok_or(2)?, None, work, cancel).await?,
-        previous: initialized(count.checked_mul(2).ok_or(2)?, None, work, cancel).await?,
+        previous: initialized(snapshot_slots, None, work, cancel).await?,
         log: Vec::new(),
         changed: 0,
         marked: initialized(count.checked_mul(2).ok_or(2)?, 0, work, cancel).await?,
@@ -1373,7 +1530,7 @@ async fn captures(
     let mut position = span.0;
     while index != 0 || position != span.1 {
         work.checkpoint(cancel).await?;
-        if !reachable.get(graph.skip[index], position) {
+        if !reachable.get(graph.columns[index], position) {
             index = trace.restore(work, cancel).await?.ok_or(2)?;
             continue;
         }
@@ -1388,6 +1545,11 @@ async fn captures(
             Some(next) => next,
             None => trace.restore(work, cancel).await?.ok_or(2)?,
         };
+    }
+    if let Some(chains) = &trace.chains {
+        chains
+            .resolve(nodes, &mut trace.slots, &mut trace.marked, work, cancel)
+            .await?;
     }
     let mut result = slots(count, None, work)?;
     result.push(Some(span));
@@ -1421,7 +1583,7 @@ pub(super) async fn matches(
     // Prefer the original accepting terminal over an assertion-derived terminal
     // at the same span; retain ordinary branch order inside either terminal.
     let mut reachable = reachability(&graph, pattern, value, span, true, work, cancel).await?;
-    if !reachable.get(graph.skip[start], span.0) {
+    if !reachable.get(graph.columns[start], span.0) {
         reachable = reachability(&graph, pattern, value, span, false, work, cancel).await?;
     }
     captures(&graph, start, count, &reachable, span, work, cancel)
@@ -1614,7 +1776,7 @@ mod tests {
         }
     }
     #[test]
-    fn manager_capture_chain_profile() {
+    fn ordinary_save_chains_bound_reconstruction_work() {
         for (groups, length) in [
             (64, 3072),
             (48, 4096),
@@ -1655,6 +1817,7 @@ mod tests {
                     .iter()
                     .all(|pair| *pair == Some((length - 1, length)))
             );
+            assert!(reached - work.remaining < length * 5 + nodes.len() * 8);
             eprintln!(
                 "PROFILE groups={groups} n={length} nodes={} kept={} compile={} graph={} scan={} reach={} reconstruction={} total={} storage={}",
                 nodes.len(),
