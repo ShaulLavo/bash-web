@@ -934,7 +934,7 @@ impl Expansion<'_> {
         scalar: bool,
         depth: usize,
     ) -> crate::exec::ResultFuture<'a, ()> {
-        self.part_frame(move |expansion| async move {
+        self.local_frame(self.admit_frames, move |expansion| async move {
             if !scalar && !quoted {
                 Ifs::admit_access(state, expansion.cancel, expansion.work).await?;
             }
@@ -1129,8 +1129,9 @@ impl Expansion<'_> {
         })
     }
 
-    fn part_frame<'a, F>(
+    fn local_frame<'a, F>(
         &'a mut self,
+        admitted: bool,
         build: impl FnOnce(&'a mut Self) -> F,
     ) -> crate::exec::ResultFuture<'a, ()>
     where
@@ -1138,9 +1139,7 @@ impl Expansion<'_> {
     {
         // Admitted scalar/pattern contexts must charge the actual recursive
         // future before boxing it. Legacy argv retains its separate accounting.
-        if self.admit_frames
-            && let Err(error) = self.work.admit_storage(std::mem::size_of::<F>())
-        {
+        if admitted && let Err(error) = self.work.admit_storage(std::mem::size_of::<F>()) {
             return futures::future::Either::Left(futures::future::ready(Err(error)));
         }
         futures::future::Either::Right(build(self).boxed_local())
@@ -1533,10 +1532,7 @@ impl Expansion<'_> {
         if let Some(scope) = self.work.frame_scope.clone() {
             return scope.frame(build(self), |code| Err(code.into()));
         }
-        if let Err(error) = self.work.admit_storage(std::mem::size_of::<F>()) {
-            return futures::future::Either::Left(futures::future::ready(Err(error)));
-        }
-        futures::future::Either::Right(build(self).boxed_local())
+        self.local_frame(true, build)
     }
 
     async fn parameter_value(
@@ -2920,8 +2916,13 @@ mod tests {
         let cancel = Cancel::new();
         let mut work = Work::new(8, 0, 1).with_frame_scope(scope.clone());
         let mut expansion = parameter_expansion(&mut work, &cancel);
-        let frame = expansion.parameter_frame(|_| std::future::pending::<Result<(), Error>>());
+        let mut frame = expansion.parameter_frame(|_| std::future::pending::<Result<(), Error>>());
         assert!(scope.execution_available() < 4096);
+        assert!(
+            frame
+                .poll_unpin(&mut std::task::Context::from_waker(std::task::Waker::noop()))
+                .is_pending()
+        );
         drop(frame);
         assert_eq!(scope.execution_available(), 4096);
         assert!(matches!(
