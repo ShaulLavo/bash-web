@@ -1,0 +1,3682 @@
+{
+  "schema": 1,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+  "cases": [
+    {
+      "name": "count-0-0-test",
+      "script": "test",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-0-0-[",
+      "script": "[ ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-1-1-test",
+      "script": "test ''",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-1-1-[",
+      "script": "[ '' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-1-2-test",
+      "script": "test x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-1-2-[",
+      "script": "[ x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-1-3-test",
+      "script": "test '!'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-1-3-[",
+      "script": "[ '!' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-1-4-test",
+      "script": "test '('",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-1-4-[",
+      "script": "[ '(' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-1-5-test",
+      "script": "test ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-1-5-[",
+      "script": "[ ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-1-6-test",
+      "script": "test -n",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-1-6-[",
+      "script": "[ -n ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-1-7-test",
+      "script": "test -a",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-1-7-[",
+      "script": "[ -a ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-1-8-test",
+      "script": "test --",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-1-8-[",
+      "script": "[ -- ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-2-9-test",
+      "script": "test '!' ''",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-2-9-[",
+      "script": "[ '!' '' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-2-10-test",
+      "script": "test '!' x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-2-10-[",
+      "script": "[ '!' x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-2-11-test",
+      "script": "test '!' '!'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-2-11-[",
+      "script": "[ '!' '!' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-2-12-test",
+      "script": "test -n ''",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-2-12-[",
+      "script": "[ -n '' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-2-13-test",
+      "script": "test -n x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-2-13-[",
+      "script": "[ -n x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-2-14-test",
+      "script": "test -z ''",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-2-14-[",
+      "script": "[ -z '' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-2-15-test",
+      "script": "test x y",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: x: unary operator expected\n"
+    },
+    {
+      "name": "count-2-15-[",
+      "script": "[ x y ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: x: unary operator expected\n"
+    },
+    {
+      "name": "count-2-16-test",
+      "script": "test '(' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: (: unary operator expected\n"
+    },
+    {
+      "name": "count-2-16-[",
+      "script": "[ '(' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: (: unary operator expected\n"
+    },
+    {
+      "name": "count-3-17-test",
+      "script": "test '!' '!' '!'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-17-[",
+      "script": "[ '!' '!' '!' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-18-test",
+      "script": "test '!' = '!'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-18-[",
+      "script": "[ '!' = '!' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-19-test",
+      "script": "test '!' '!=' '!'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-19-[",
+      "script": "[ '!' '!=' '!' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-20-test",
+      "script": "test '!' -a ''",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-20-[",
+      "script": "[ '!' -a '' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-21-test",
+      "script": "test '!' -o ''",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-21-[",
+      "script": "[ '!' -o '' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-22-test",
+      "script": "test '(' '!' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-22-[",
+      "script": "[ '(' '!' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-23-test",
+      "script": "test '(' -n ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-23-[",
+      "script": "[ '(' -n ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-24-test",
+      "script": "test '(' '' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-24-[",
+      "script": "[ '(' '' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-25-test",
+      "script": "test '(' x ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-25-[",
+      "script": "[ '(' x ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-4-26-test",
+      "script": "test '(' -n '' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-4-26-[",
+      "script": "[ '(' -n '' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-4-27-test",
+      "script": "test '!' '!' '!' '!'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-4-27-[",
+      "script": "[ '!' '!' '!' '!' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-4-28-test",
+      "script": "test '!' x = y",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-4-28-[",
+      "script": "[ '!' x = y ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "count-3-29-test",
+      "script": "test x y z",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: y: binary operator expected\n"
+    },
+    {
+      "name": "count-3-29-[",
+      "script": "[ x y z ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: y: binary operator expected\n"
+    },
+    {
+      "name": "count-4-30-test",
+      "script": "test x y z w",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "count-4-30-[",
+      "script": "[ x y z w ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "binary-=-0-test",
+      "script": "test '(' = ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-0-['x', '-a']-test",
+      "script": "test x -a '(' = ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-0-['', '-a']-test",
+      "script": "test '' -a '(' = ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-0-['x', '-o']-test",
+      "script": "test x -o '(' = ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-0-['', '-o']-test",
+      "script": "test '' -o '(' = ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-0-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a '(' = ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-0-['!', 'x', '-a']-test",
+      "script": "test '!' x -a '(' = ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-=-0-[",
+      "script": "[ '(' = ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-0-['x', '-a']-[",
+      "script": "[ x -a '(' = ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-0-['', '-a']-[",
+      "script": "[ '' -a '(' = ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-0-['x', '-o']-[",
+      "script": "[ x -o '(' = ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-0-['', '-o']-[",
+      "script": "[ '' -o '(' = ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-0-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a '(' = ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-0-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a '(' = ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-1-['x', '-a']-test",
+      "script": "test x -a '!' = '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-=-1-['', '-a']-test",
+      "script": "test '' -a '!' = '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-=-1-['x', '-o']-test",
+      "script": "test x -o '!' = '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-=-1-['', '-o']-test",
+      "script": "test '' -o '!' = '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-=-1-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a '!' = '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-=-1-['!', 'x', '-a']-test",
+      "script": "test '!' x -a '!' = '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-=-1-['x', '-a']-[",
+      "script": "[ x -a '!' = '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-=-1-['', '-a']-[",
+      "script": "[ '' -a '!' = '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-=-1-['x', '-o']-[",
+      "script": "[ x -o '!' = '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-=-1-['', '-o']-[",
+      "script": "[ '' -o '!' = '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-=-1-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a '!' = '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-=-1-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a '!' = '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "binary-=-2-test",
+      "script": "test -n = -n",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-2-['x', '-a']-test",
+      "script": "test x -a -n = -n",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-2-['', '-a']-test",
+      "script": "test '' -a -n = -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-2-['x', '-o']-test",
+      "script": "test x -o -n = -n",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-2-['', '-o']-test",
+      "script": "test '' -o -n = -n",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-2-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a -n = -n",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-2-['!', 'x', '-a']-test",
+      "script": "test '!' x -a -n = -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-=-2-[",
+      "script": "[ -n = -n ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-2-['x', '-a']-[",
+      "script": "[ x -a -n = -n ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-2-['', '-a']-[",
+      "script": "[ '' -a -n = -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-2-['x', '-o']-[",
+      "script": "[ x -o -n = -n ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-2-['', '-o']-[",
+      "script": "[ '' -o -n = -n ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-2-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a -n = -n ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-2-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a -n = -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-=-3-test",
+      "script": "test -z = x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-3-['x', '-a']-test",
+      "script": "test x -a -z = x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-3-['', '-a']-test",
+      "script": "test '' -a -z = x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-3-['x', '-o']-test",
+      "script": "test x -o -z = x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-3-['', '-o']-test",
+      "script": "test '' -o -z = x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-3-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a -z = x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-3-['!', 'x', '-a']-test",
+      "script": "test '!' x -a -z = x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-=-3-[",
+      "script": "[ -z = x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-3-['x', '-a']-[",
+      "script": "[ x -a -z = x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-3-['', '-a']-[",
+      "script": "[ '' -a -z = x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-3-['x', '-o']-[",
+      "script": "[ x -o -z = x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-3-['', '-o']-[",
+      "script": "[ '' -o -z = x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-3-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a -z = x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-3-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a -z = x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-=-4-test",
+      "script": "test '(' = x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-4-['x', '-a']-test",
+      "script": "test x -a '(' = x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-=-4-['', '-a']-test",
+      "script": "test '' -a '(' = x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-=-4-['x', '-o']-test",
+      "script": "test x -o '(' = x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-=-4-['', '-o']-test",
+      "script": "test '' -o '(' = x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-=-4-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a '(' = x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-=-4-['!', 'x', '-a']-test",
+      "script": "test '!' x -a '(' = x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "binary-=-4-[",
+      "script": "[ '(' = x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-4-['x', '-a']-[",
+      "script": "[ x -a '(' = x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-=-4-['', '-a']-[",
+      "script": "[ '' -a '(' = x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-=-4-['x', '-o']-[",
+      "script": "[ x -o '(' = x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-=-4-['', '-o']-[",
+      "script": "[ '' -o '(' = x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-=-4-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a '(' = x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-=-4-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a '(' = x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "binary-=-5-test",
+      "script": "test x = ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-5-['x', '-a']-test",
+      "script": "test x -a x = ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-5-['', '-a']-test",
+      "script": "test '' -a x = ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-5-['x', '-o']-test",
+      "script": "test x -o x = ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-5-['', '-o']-test",
+      "script": "test '' -o x = ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-5-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a x = ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-5-['!', 'x', '-a']-test",
+      "script": "test '!' x -a x = ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-=-5-[",
+      "script": "[ x = ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-5-['x', '-a']-[",
+      "script": "[ x -a x = ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-5-['', '-a']-[",
+      "script": "[ '' -a x = ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-5-['x', '-o']-[",
+      "script": "[ x -o x = ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-5-['', '-o']-[",
+      "script": "[ '' -o x = ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-5-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a x = ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-=-5-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a x = ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-==-0-test",
+      "script": "test '(' == ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-0-['x', '-a']-test",
+      "script": "test x -a '(' == ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-0-['', '-a']-test",
+      "script": "test '' -a '(' == ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-0-['x', '-o']-test",
+      "script": "test x -o '(' == ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-0-['', '-o']-test",
+      "script": "test '' -o '(' == ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-0-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a '(' == ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-0-['!', 'x', '-a']-test",
+      "script": "test '!' x -a '(' == ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-==-0-[",
+      "script": "[ '(' == ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-0-['x', '-a']-[",
+      "script": "[ x -a '(' == ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-0-['', '-a']-[",
+      "script": "[ '' -a '(' == ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-0-['x', '-o']-[",
+      "script": "[ x -o '(' == ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-0-['', '-o']-[",
+      "script": "[ '' -o '(' == ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-0-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a '(' == ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-0-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a '(' == ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-==-1-test",
+      "script": "test '!' == '!'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-1-['x', '-a']-test",
+      "script": "test x -a '!' == '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-==-1-['', '-a']-test",
+      "script": "test '' -a '!' == '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-==-1-['x', '-o']-test",
+      "script": "test x -o '!' == '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-==-1-['', '-o']-test",
+      "script": "test '' -o '!' == '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-==-1-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a '!' == '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-==-1-['!', 'x', '-a']-test",
+      "script": "test '!' x -a '!' == '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "binary-==-1-[",
+      "script": "[ '!' == '!' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-1-['x', '-a']-[",
+      "script": "[ x -a '!' == '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-==-1-['', '-a']-[",
+      "script": "[ '' -a '!' == '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-==-1-['x', '-o']-[",
+      "script": "[ x -o '!' == '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-==-1-['', '-o']-[",
+      "script": "[ '' -o '!' == '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-==-1-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a '!' == '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-==-1-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a '!' == '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "binary-==-2-test",
+      "script": "test -n == -n",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-2-['x', '-a']-test",
+      "script": "test x -a -n == -n",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-2-['', '-a']-test",
+      "script": "test '' -a -n == -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-2-['x', '-o']-test",
+      "script": "test x -o -n == -n",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-2-['', '-o']-test",
+      "script": "test '' -o -n == -n",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-2-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a -n == -n",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-2-['!', 'x', '-a']-test",
+      "script": "test '!' x -a -n == -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-==-2-[",
+      "script": "[ -n == -n ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-2-['x', '-a']-[",
+      "script": "[ x -a -n == -n ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-2-['', '-a']-[",
+      "script": "[ '' -a -n == -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-2-['x', '-o']-[",
+      "script": "[ x -o -n == -n ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-2-['', '-o']-[",
+      "script": "[ '' -o -n == -n ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-2-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a -n == -n ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-2-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a -n == -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-==-3-test",
+      "script": "test -z == x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-3-['x', '-a']-test",
+      "script": "test x -a -z == x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-3-['', '-a']-test",
+      "script": "test '' -a -z == x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-3-['x', '-o']-test",
+      "script": "test x -o -z == x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-3-['', '-o']-test",
+      "script": "test '' -o -z == x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-3-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a -z == x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-3-['!', 'x', '-a']-test",
+      "script": "test '!' x -a -z == x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-==-3-[",
+      "script": "[ -z == x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-3-['x', '-a']-[",
+      "script": "[ x -a -z == x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-3-['', '-a']-[",
+      "script": "[ '' -a -z == x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-3-['x', '-o']-[",
+      "script": "[ x -o -z == x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-3-['', '-o']-[",
+      "script": "[ '' -o -z == x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-3-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a -z == x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-3-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a -z == x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-==-4-test",
+      "script": "test '(' == x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-4-['x', '-a']-test",
+      "script": "test x -a '(' == x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-==-4-['', '-a']-test",
+      "script": "test '' -a '(' == x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-==-4-['x', '-o']-test",
+      "script": "test x -o '(' == x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-==-4-['', '-o']-test",
+      "script": "test '' -o '(' == x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-==-4-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a '(' == x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-==-4-['!', 'x', '-a']-test",
+      "script": "test '!' x -a '(' == x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "binary-==-4-[",
+      "script": "[ '(' == x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-4-['x', '-a']-[",
+      "script": "[ x -a '(' == x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-==-4-['', '-a']-[",
+      "script": "[ '' -a '(' == x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-==-4-['x', '-o']-[",
+      "script": "[ x -o '(' == x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-==-4-['', '-o']-[",
+      "script": "[ '' -o '(' == x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-==-4-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a '(' == x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-==-4-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a '(' == x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "binary-==-5-test",
+      "script": "test x == ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-5-['x', '-a']-test",
+      "script": "test x -a x == ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-5-['', '-a']-test",
+      "script": "test '' -a x == ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-5-['x', '-o']-test",
+      "script": "test x -o x == ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-5-['', '-o']-test",
+      "script": "test '' -o x == ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-5-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a x == ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-5-['!', 'x', '-a']-test",
+      "script": "test '!' x -a x == ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-==-5-[",
+      "script": "[ x == ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-5-['x', '-a']-[",
+      "script": "[ x -a x == ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-5-['', '-a']-[",
+      "script": "[ '' -a x == ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-5-['x', '-o']-[",
+      "script": "[ x -o x == ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-5-['', '-o']-[",
+      "script": "[ '' -o x == ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-5-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a x == ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-==-5-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a x == ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-!=-0-test",
+      "script": "test '(' '!=' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-0-['x', '-a']-test",
+      "script": "test x -a '(' '!=' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-0-['', '-a']-test",
+      "script": "test '' -a '(' '!=' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-0-['x', '-o']-test",
+      "script": "test x -o '(' '!=' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-0-['', '-o']-test",
+      "script": "test '' -o '(' '!=' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-0-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a '(' '!=' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-0-['!', 'x', '-a']-test",
+      "script": "test '!' x -a '(' '!=' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-!=-0-[",
+      "script": "[ '(' '!=' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-0-['x', '-a']-[",
+      "script": "[ x -a '(' '!=' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-0-['', '-a']-[",
+      "script": "[ '' -a '(' '!=' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-0-['x', '-o']-[",
+      "script": "[ x -o '(' '!=' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-0-['', '-o']-[",
+      "script": "[ '' -o '(' '!=' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-0-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a '(' '!=' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-0-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a '(' '!=' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-1-['x', '-a']-test",
+      "script": "test x -a '!' '!=' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-!=-1-['', '-a']-test",
+      "script": "test '' -a '!' '!=' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-!=-1-['x', '-o']-test",
+      "script": "test x -o '!' '!=' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-!=-1-['', '-o']-test",
+      "script": "test '' -o '!' '!=' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-!=-1-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a '!' '!=' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-!=-1-['!', 'x', '-a']-test",
+      "script": "test '!' x -a '!' '!=' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-!=-1-['x', '-a']-[",
+      "script": "[ x -a '!' '!=' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-!=-1-['', '-a']-[",
+      "script": "[ '' -a '!' '!=' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-!=-1-['x', '-o']-[",
+      "script": "[ x -o '!' '!=' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-!=-1-['', '-o']-[",
+      "script": "[ '' -o '!' '!=' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-!=-1-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a '!' '!=' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-!=-1-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a '!' '!=' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "binary-!=-2-test",
+      "script": "test -n '!=' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-2-['x', '-a']-test",
+      "script": "test x -a -n '!=' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-2-['', '-a']-test",
+      "script": "test '' -a -n '!=' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-2-['x', '-o']-test",
+      "script": "test x -o -n '!=' -n",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-2-['', '-o']-test",
+      "script": "test '' -o -n '!=' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-2-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a -n '!=' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-2-['!', 'x', '-a']-test",
+      "script": "test '!' x -a -n '!=' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-!=-2-[",
+      "script": "[ -n '!=' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-2-['x', '-a']-[",
+      "script": "[ x -a -n '!=' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-2-['', '-a']-[",
+      "script": "[ '' -a -n '!=' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-2-['x', '-o']-[",
+      "script": "[ x -o -n '!=' -n ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-2-['', '-o']-[",
+      "script": "[ '' -o -n '!=' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-2-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a -n '!=' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-2-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a -n '!=' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-!=-3-test",
+      "script": "test -z '!=' x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-3-['x', '-a']-test",
+      "script": "test x -a -z '!=' x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-3-['', '-a']-test",
+      "script": "test '' -a -z '!=' x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-3-['x', '-o']-test",
+      "script": "test x -o -z '!=' x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-3-['', '-o']-test",
+      "script": "test '' -o -z '!=' x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-3-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a -z '!=' x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-3-['!', 'x', '-a']-test",
+      "script": "test '!' x -a -z '!=' x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-!=-3-[",
+      "script": "[ -z '!=' x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-3-['x', '-a']-[",
+      "script": "[ x -a -z '!=' x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-3-['', '-a']-[",
+      "script": "[ '' -a -z '!=' x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-3-['x', '-o']-[",
+      "script": "[ x -o -z '!=' x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-3-['', '-o']-[",
+      "script": "[ '' -o -z '!=' x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-3-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a -z '!=' x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-3-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a -z '!=' x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-!=-4-test",
+      "script": "test '(' '!=' x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-4-['x', '-a']-test",
+      "script": "test x -a '(' '!=' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-!=-4-['', '-a']-test",
+      "script": "test '' -a '(' '!=' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-!=-4-['x', '-o']-test",
+      "script": "test x -o '(' '!=' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-!=-4-['', '-o']-test",
+      "script": "test '' -o '(' '!=' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-!=-4-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a '(' '!=' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-!=-4-['!', 'x', '-a']-test",
+      "script": "test '!' x -a '(' '!=' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "binary-!=-4-[",
+      "script": "[ '(' '!=' x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-4-['x', '-a']-[",
+      "script": "[ x -a '(' '!=' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-!=-4-['', '-a']-[",
+      "script": "[ '' -a '(' '!=' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-!=-4-['x', '-o']-[",
+      "script": "[ x -o '(' '!=' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-!=-4-['', '-o']-[",
+      "script": "[ '' -o '(' '!=' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-!=-4-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a '(' '!=' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-!=-4-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a '(' '!=' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "binary-!=-5-test",
+      "script": "test x '!=' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-5-['x', '-a']-test",
+      "script": "test x -a x '!=' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-5-['', '-a']-test",
+      "script": "test '' -a x '!=' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-5-['x', '-o']-test",
+      "script": "test x -o x '!=' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-5-['', '-o']-test",
+      "script": "test '' -o x '!=' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-5-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a x '!=' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-5-['!', 'x', '-a']-test",
+      "script": "test '!' x -a x '!=' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-!=-5-[",
+      "script": "[ x '!=' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-5-['x', '-a']-[",
+      "script": "[ x -a x '!=' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-5-['', '-a']-[",
+      "script": "[ '' -a x '!=' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-5-['x', '-o']-[",
+      "script": "[ x -o x '!=' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-5-['', '-o']-[",
+      "script": "[ '' -o x '!=' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-5-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a x '!=' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-!=-5-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a x '!=' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-<-0-test",
+      "script": "test '(' '<' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-0-['x', '-a']-test",
+      "script": "test x -a '(' '<' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-0-['', '-a']-test",
+      "script": "test '' -a '(' '<' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-0-['x', '-o']-test",
+      "script": "test x -o '(' '<' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-0-['', '-o']-test",
+      "script": "test '' -o '(' '<' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-0-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a '(' '<' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-0-['!', 'x', '-a']-test",
+      "script": "test '!' x -a '(' '<' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-<-0-[",
+      "script": "[ '(' '<' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-0-['x', '-a']-[",
+      "script": "[ x -a '(' '<' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-0-['', '-a']-[",
+      "script": "[ '' -a '(' '<' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-0-['x', '-o']-[",
+      "script": "[ x -o '(' '<' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-0-['', '-o']-[",
+      "script": "[ '' -o '(' '<' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-0-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a '(' '<' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-0-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a '(' '<' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-<-1-test",
+      "script": "test '!' '<' '!'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-1-['x', '-a']-test",
+      "script": "test x -a '!' '<' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-<-1-['', '-a']-test",
+      "script": "test '' -a '!' '<' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-<-1-['x', '-o']-test",
+      "script": "test x -o '!' '<' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-<-1-['', '-o']-test",
+      "script": "test '' -o '!' '<' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-<-1-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a '!' '<' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound-<-1-['!', 'x', '-a']-test",
+      "script": "test '!' x -a '!' '<' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "binary-<-1-[",
+      "script": "[ '!' '<' '!' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-1-['x', '-a']-[",
+      "script": "[ x -a '!' '<' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-<-1-['', '-a']-[",
+      "script": "[ '' -a '!' '<' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-<-1-['x', '-o']-[",
+      "script": "[ x -o '!' '<' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-<-1-['', '-o']-[",
+      "script": "[ '' -o '!' '<' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-<-1-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a '!' '<' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound-<-1-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a '!' '<' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "binary-<-2-test",
+      "script": "test -n '<' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-2-['x', '-a']-test",
+      "script": "test x -a -n '<' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-2-['', '-a']-test",
+      "script": "test '' -a -n '<' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-2-['x', '-o']-test",
+      "script": "test x -o -n '<' -n",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-2-['', '-o']-test",
+      "script": "test '' -o -n '<' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-2-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a -n '<' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-2-['!', 'x', '-a']-test",
+      "script": "test '!' x -a -n '<' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-<-2-[",
+      "script": "[ -n '<' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-2-['x', '-a']-[",
+      "script": "[ x -a -n '<' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-2-['', '-a']-[",
+      "script": "[ '' -a -n '<' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-2-['x', '-o']-[",
+      "script": "[ x -o -n '<' -n ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-2-['', '-o']-[",
+      "script": "[ '' -o -n '<' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-2-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a -n '<' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-2-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a -n '<' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-<-3-test",
+      "script": "test -z '<' x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-3-['x', '-a']-test",
+      "script": "test x -a -z '<' x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-3-['', '-a']-test",
+      "script": "test '' -a -z '<' x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-3-['x', '-o']-test",
+      "script": "test x -o -z '<' x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-3-['', '-o']-test",
+      "script": "test '' -o -z '<' x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-3-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a -z '<' x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-3-['!', 'x', '-a']-test",
+      "script": "test '!' x -a -z '<' x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-<-3-[",
+      "script": "[ -z '<' x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-3-['x', '-a']-[",
+      "script": "[ x -a -z '<' x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-3-['', '-a']-[",
+      "script": "[ '' -a -z '<' x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-3-['x', '-o']-[",
+      "script": "[ x -o -z '<' x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-3-['', '-o']-[",
+      "script": "[ '' -o -z '<' x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-3-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a -z '<' x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-3-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a -z '<' x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-<-4-test",
+      "script": "test '(' '<' x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-4-['x', '-a']-test",
+      "script": "test x -a '(' '<' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-<-4-['', '-a']-test",
+      "script": "test '' -a '(' '<' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-<-4-['x', '-o']-test",
+      "script": "test x -o '(' '<' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-<-4-['', '-o']-test",
+      "script": "test '' -o '(' '<' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-<-4-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a '(' '<' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-<-4-['!', 'x', '-a']-test",
+      "script": "test '!' x -a '(' '<' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "binary-<-4-[",
+      "script": "[ '(' '<' x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-4-['x', '-a']-[",
+      "script": "[ x -a '(' '<' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-<-4-['', '-a']-[",
+      "script": "[ '' -a '(' '<' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-<-4-['x', '-o']-[",
+      "script": "[ x -o '(' '<' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-<-4-['', '-o']-[",
+      "script": "[ '' -o '(' '<' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-<-4-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a '(' '<' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound-<-4-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a '(' '<' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "binary-<-5-test",
+      "script": "test x '<' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-5-['x', '-a']-test",
+      "script": "test x -a x '<' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-5-['', '-a']-test",
+      "script": "test '' -a x '<' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-5-['x', '-o']-test",
+      "script": "test x -o x '<' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-5-['', '-o']-test",
+      "script": "test '' -o x '<' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-5-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a x '<' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-5-['!', 'x', '-a']-test",
+      "script": "test '!' x -a x '<' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary-<-5-[",
+      "script": "[ x '<' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-5-['x', '-a']-[",
+      "script": "[ x -a x '<' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-5-['', '-a']-[",
+      "script": "[ '' -a x '<' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-5-['x', '-o']-[",
+      "script": "[ x -o x '<' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-5-['', '-o']-[",
+      "script": "[ '' -o x '<' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-5-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a x '<' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound-<-5-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a x '<' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary->-0-test",
+      "script": "test '(' '>' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-0-['x', '-a']-test",
+      "script": "test x -a '(' '>' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-0-['', '-a']-test",
+      "script": "test '' -a '(' '>' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-0-['x', '-o']-test",
+      "script": "test x -o '(' '>' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-0-['', '-o']-test",
+      "script": "test '' -o '(' '>' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-0-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a '(' '>' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-0-['!', 'x', '-a']-test",
+      "script": "test '!' x -a '(' '>' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary->-0-[",
+      "script": "[ '(' '>' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-0-['x', '-a']-[",
+      "script": "[ x -a '(' '>' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-0-['', '-a']-[",
+      "script": "[ '' -a '(' '>' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-0-['x', '-o']-[",
+      "script": "[ x -o '(' '>' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-0-['', '-o']-[",
+      "script": "[ '' -o '(' '>' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-0-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a '(' '>' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-0-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a '(' '>' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary->-1-test",
+      "script": "test '!' '>' '!'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-1-['x', '-a']-test",
+      "script": "test x -a '!' '>' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound->-1-['', '-a']-test",
+      "script": "test '' -a '!' '>' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound->-1-['x', '-o']-test",
+      "script": "test x -o '!' '>' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound->-1-['', '-o']-test",
+      "script": "test '' -o '!' '>' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound->-1-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a '!' '>' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "compound->-1-['!', 'x', '-a']-test",
+      "script": "test '!' x -a '!' '>' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "binary->-1-[",
+      "script": "[ '!' '>' '!' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-1-['x', '-a']-[",
+      "script": "[ x -a '!' '>' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound->-1-['', '-a']-[",
+      "script": "[ '' -a '!' '>' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound->-1-['x', '-o']-[",
+      "script": "[ x -o '!' '>' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound->-1-['', '-o']-[",
+      "script": "[ '' -o '!' '>' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound->-1-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a '!' '>' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "compound->-1-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a '!' '>' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "binary->-2-test",
+      "script": "test -n '>' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-2-['x', '-a']-test",
+      "script": "test x -a -n '>' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-2-['', '-a']-test",
+      "script": "test '' -a -n '>' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-2-['x', '-o']-test",
+      "script": "test x -o -n '>' -n",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-2-['', '-o']-test",
+      "script": "test '' -o -n '>' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-2-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a -n '>' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-2-['!', 'x', '-a']-test",
+      "script": "test '!' x -a -n '>' -n",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary->-2-[",
+      "script": "[ -n '>' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-2-['x', '-a']-[",
+      "script": "[ x -a -n '>' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-2-['', '-a']-[",
+      "script": "[ '' -a -n '>' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-2-['x', '-o']-[",
+      "script": "[ x -o -n '>' -n ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-2-['', '-o']-[",
+      "script": "[ '' -o -n '>' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-2-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a -n '>' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-2-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a -n '>' -n ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary->-3-test",
+      "script": "test -z '>' x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-3-['x', '-a']-test",
+      "script": "test x -a -z '>' x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-3-['', '-a']-test",
+      "script": "test '' -a -z '>' x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-3-['x', '-o']-test",
+      "script": "test x -o -z '>' x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-3-['', '-o']-test",
+      "script": "test '' -o -z '>' x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-3-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a -z '>' x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-3-['!', 'x', '-a']-test",
+      "script": "test '!' x -a -z '>' x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary->-3-[",
+      "script": "[ -z '>' x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-3-['x', '-a']-[",
+      "script": "[ x -a -z '>' x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-3-['', '-a']-[",
+      "script": "[ '' -a -z '>' x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-3-['x', '-o']-[",
+      "script": "[ x -o -z '>' x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-3-['', '-o']-[",
+      "script": "[ '' -o -z '>' x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-3-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a -z '>' x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-3-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a -z '>' x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary->-4-test",
+      "script": "test '(' '>' x",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-4-['x', '-a']-test",
+      "script": "test x -a '(' '>' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound->-4-['', '-a']-test",
+      "script": "test '' -a '(' '>' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound->-4-['x', '-o']-test",
+      "script": "test x -o '(' '>' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound->-4-['', '-o']-test",
+      "script": "test '' -o '(' '>' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound->-4-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a '(' '>' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "compound->-4-['!', 'x', '-a']-test",
+      "script": "test '!' x -a '(' '>' x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected, found x\n"
+    },
+    {
+      "name": "binary->-4-[",
+      "script": "[ '(' '>' x ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-4-['x', '-a']-[",
+      "script": "[ x -a '(' '>' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound->-4-['', '-a']-[",
+      "script": "[ '' -a '(' '>' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound->-4-['x', '-o']-[",
+      "script": "[ x -o '(' '>' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound->-4-['', '-o']-[",
+      "script": "[ '' -o '(' '>' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound->-4-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a '(' '>' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "compound->-4-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a '(' '>' x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found x\n"
+    },
+    {
+      "name": "binary->-5-test",
+      "script": "test x '>' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-5-['x', '-a']-test",
+      "script": "test x -a x '>' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-5-['', '-a']-test",
+      "script": "test '' -a x '>' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-5-['x', '-o']-test",
+      "script": "test x -o x '>' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-5-['', '-o']-test",
+      "script": "test '' -o x '>' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-5-['0', '-eq', '0', '-a']-test",
+      "script": "test 0 -eq 0 -a x '>' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-5-['!', 'x', '-a']-test",
+      "script": "test '!' x -a x '>' ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "binary->-5-[",
+      "script": "[ x '>' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-5-['x', '-a']-[",
+      "script": "[ x -a x '>' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-5-['', '-a']-[",
+      "script": "[ '' -a x '>' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-5-['x', '-o']-[",
+      "script": "[ x -o x '>' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-5-['', '-o']-[",
+      "script": "[ '' -o x '>' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-5-['0', '-eq', '0', '-a']-[",
+      "script": "[ 0 -eq 0 -a x '>' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "compound->-5-['!', 'x', '-a']-[",
+      "script": "[ '!' x -a x '>' ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-0-test",
+      "script": "test '!' '(' x -a '' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-0-[",
+      "script": "[ '!' '(' x -a '' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-1-test",
+      "script": "test x -o '' -a ''",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-1-[",
+      "script": "[ x -o '' -a '' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-2-test",
+      "script": "test '' -a x -o x",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-2-[",
+      "script": "[ '' -a x -o x ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-3-test",
+      "script": "test '(' x -o '' ')' -a ''",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-3-[",
+      "script": "[ '(' x -o '' ')' -a '' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-4-test",
+      "script": "test x -a '(' '!' ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-4-[",
+      "script": "[ x -a '(' '!' ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-5-test",
+      "script": "test x -a '(' -n ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-5-[",
+      "script": "[ x -a '(' -n ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-6-test",
+      "script": "test x -a y -a '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: argument expected\n"
+    },
+    {
+      "name": "grammar-6-[",
+      "script": "[ x -a y -a '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: argument expected\n"
+    },
+    {
+      "name": "grammar-7-test",
+      "script": "test x -a",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: x: unary operator expected\n"
+    },
+    {
+      "name": "grammar-7-[",
+      "script": "[ x -a ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: x: unary operator expected\n"
+    },
+    {
+      "name": "grammar-8-test",
+      "script": "test x -a y ')'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "grammar-8-[",
+      "script": "[ x -a y ')' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "grammar-9-test",
+      "script": "test '(' x -a y",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected\n"
+    },
+    {
+      "name": "grammar-9-[",
+      "script": "[ '(' x -a y ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found ]\n"
+    },
+    {
+      "name": "grammar-10-test",
+      "script": "test x -o 1 -eq x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: x: integer expected\n"
+    },
+    {
+      "name": "grammar-10-[",
+      "script": "[ x -o 1 -eq x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: x: integer expected\n"
+    },
+    {
+      "name": "grammar-11-test",
+      "script": "test '' -a 1 -eq x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: x: integer expected\n"
+    },
+    {
+      "name": "grammar-11-[",
+      "script": "[ '' -a 1 -eq x ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: x: integer expected\n"
+    },
+    {
+      "name": "grammar-12-test",
+      "script": "test x -o -invalid z",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "grammar-12-[",
+      "script": "[ x -o -invalid z ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "grammar-13-test",
+      "script": "test x -a '!' '!' '!' '!'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: argument expected\n"
+    },
+    {
+      "name": "grammar-13-[",
+      "script": "[ x -a '!' '!' '!' '!' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: argument expected\n"
+    },
+    {
+      "name": "grammar-14-test",
+      "script": "test x -a '(' '!' x ')'",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-14-[",
+      "script": "[ x -a '(' '!' x ')' ]",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-15-test",
+      "script": "test '(' '(' x ')' ')'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: (: unary operator expected\n"
+    },
+    {
+      "name": "grammar-15-[",
+      "script": "[ '(' '(' x ')' ')' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: (: unary operator expected\n"
+    },
+    {
+      "name": "grammar-16-test",
+      "script": "test x -a '(' x ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-16-[",
+      "script": "[ x -a '(' x ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-17-test",
+      "script": "test x -a '(' ')'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: `)' expected\n"
+    },
+    {
+      "name": "grammar-17-[",
+      "script": "[ x -a '(' ')' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: `)' expected, found ]\n"
+    },
+    {
+      "name": "grammar-18-test",
+      "script": "test x -a '(' x ')' ')'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: too many arguments\n"
+    },
+    {
+      "name": "grammar-18-[",
+      "script": "[ x -a '(' x ')' ')' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: too many arguments\n"
+    },
+    {
+      "name": "grammar-19-test",
+      "script": "test x -a '(' x y ')'",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: test: x: unary operator expected\n"
+    },
+    {
+      "name": "grammar-19-[",
+      "script": "[ x -a '(' x y ')' ]",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: x: unary operator expected\n"
+    },
+    {
+      "name": "grammar-20-test",
+      "script": "test x -a -n ')'",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "grammar-20-[",
+      "script": "[ x -a -n ')' ]",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "missing-bracket-0",
+      "script": "[",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: missing `]'\n"
+    },
+    {
+      "name": "missing-bracket-1",
+      "script": "[ x",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: missing `]'\n"
+    },
+    {
+      "name": "missing-bracket-2",
+      "script": "[ x ']' trailing",
+      "status": 2,
+      "stdout": "",
+      "stderr": "/work/tmp/scalar-test-main75-7HE9Mu/usr/bin/bash: line 1: [: missing `]'\n"
+    },
+    {
+      "name": "oils:bool-parse:44",
+      "script": "test '(' = ')'\necho status=$?\n\ntest 0 -eq 0 -a '(' = ')'\necho status=$?\n",
+      "status": 0,
+      "stdout": "status=1\nstatus=0\n",
+      "stderr": ""
+    },
+    {
+      "name": "oils:bool-parse:64",
+      "script": "test '(' == ')'\necho status=$?\n\ntest 0 -eq 0 -a '(' == ')'\necho status=$?\n",
+      "status": 0,
+      "stdout": "status=1\nstatus=0\n",
+      "stderr": ""
+    }
+  ]
+}
