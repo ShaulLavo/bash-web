@@ -27,7 +27,7 @@ means code written here to call that boundary, not a copied upstream implementat
 Upstream: [`WebAssembly/wasi-libc`, `libc-bottom-half/sources/preopens.c`](https://github.com/WebAssembly/wasi-libc/blob/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/libc-bottom-half/sources/preopens.c),
 revision `2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13`, shipped by wasi-sdk **34.0**.
 The change lives only in Waffle's
-[`patches/wasi-libc/preopen-scan.patch`](https://github.com/ShaulLavo/waffle/blob/b20fad173ebaa225cb87c51776f35edaaafd4a40/patches/wasi-libc/preopen-scan.patch).
+[`patches/wasi-libc/preopen-scan.patch`](https://github.com/ShaulLavo/waffle/blob/250967060c0268950266fc5afb85be2170fb8ed3/patches/wasi-libc/preopen-scan.patch).
 
 Unmodified libc stops on the first `fd_prestat_get` `BADF`. WASI truthfully
 returns `BADF` for an open inherited descriptor that is not a preopen, so an
@@ -40,8 +40,8 @@ and does not invent successful prestat metadata or a `NOTSUP` workaround.
 ## Waffle placement and builder
 
 Waffle is pinned to the commit in `peerDependencies.waffle` (`package.json`),
-currently `b20fad173ebaa225cb87c51776f35edaaafd4a40`, for both the required peer
-and the development dependency. Its [`docs/wasi-libc.md`](https://github.com/ShaulLavo/waffle/blob/b20fad173ebaa225cb87c51776f35edaaafd4a40/docs/wasi-libc.md)
+currently `250967060c0268950266fc5afb85be2170fb8ed3`, for both the required peer
+and the development dependency. Its [`docs/wasi-libc.md`](https://github.com/ShaulLavo/waffle/blob/250967060c0268950266fc5afb85be2170fb8ed3/docs/wasi-libc.md)
 is the shared contract; bash-web does not fork it.
 
 Before guest instantiation, Waffle reserves every inherited target and places
