@@ -1,6 +1,6 @@
 # Code quality gates
 
-Use Node 26.7.0, the checked-in Rust 1.98.1 toolchain, and locked dependencies:
+Use Node 26.12.1, the checked-in Rust 1.98.1 toolchain, and locked dependencies:
 
 ```sh
 npm ci --ignore-scripts
