@@ -1,4 +1,5 @@
 //! Bash builtins. External commands are installed by the embedding runtime.
+mod alias;
 mod caller;
 mod completion;
 mod declarations;
@@ -117,6 +118,11 @@ pub(crate) async fn run(
         Builtin::Test => return test::run(name, &args, &state, &fds, &context, work).await,
         Builtin::Trap => return trap::run(&args, &state, &fds, &context, work).await,
         Builtin::Getopts => return getopts::run(&args, &state, &fds, &context, work).await,
+        Builtin::Alias => {
+            return alias::run(name, &args, &state, &fds, &context, work)
+                .await
+                .map(Outcome::status);
+        }
         Builtin::Caller => return caller::run(&args, &state, &fds, &context, work).await,
         Builtin::Shopt => return shopt(&args, &state, &fds, &context, work).await,
         Builtin::LoopControl => {
@@ -348,7 +354,8 @@ fn error_status(error: Error) -> i32 {
     }
 }
 
-const SHOPT_OPTIONS: [&str; 5] = [
+const SHOPT_OPTIONS: [&str; 6] = [
+    "expand_aliases",
     "extdebug",
     "extglob",
     "inherit_errexit",
@@ -358,6 +365,7 @@ const SHOPT_OPTIONS: [&str; 5] = [
 
 fn shopt_value(state: &State, option: &str) -> Option<bool> {
     match option {
+        "expand_aliases" => Some(state.expand_aliases),
         "extglob" => Some(state.extglob),
         "extdebug" => Some(state.extdebug),
         "inherit_errexit" => Some(state.inherit_errexit),
@@ -384,6 +392,7 @@ async fn set_shopt_option(
     }
     let mut state = state.borrow_mut();
     match option {
+        "expand_aliases" => state.expand_aliases = enabled,
         "extglob" => state.extglob = enabled,
         "extdebug" => {
             state.extdebug = enabled;
@@ -452,7 +461,7 @@ async fn shopt(
     let options = if operands.is_empty() {
         SHOPT_OPTIONS.map(Some)
     } else {
-        [None; 5]
+        [None; 6]
     };
     let mut status = 0;
     // A fixed iterator over known names avoids allocating or copying argv.

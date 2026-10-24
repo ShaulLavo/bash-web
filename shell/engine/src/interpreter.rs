@@ -26,6 +26,7 @@ pub(crate) mod eval;
 mod file_substitution;
 mod function_names;
 mod indexed;
+mod reader;
 mod select;
 #[cfg(test)]
 mod trap_tests;
@@ -744,14 +745,20 @@ impl Session {
             self.core.execution_storage.clone(),
         );
         let parser = evaluation.parser_budget(Some(Rc::new(move || parser_cancel.probe_now())));
-        let (script, failure) = parse::script(source, self.core.limits.source_bytes, &parser)
-            .map_err(|error| {
-                if error == "request cancelled" {
-                    StartError::Interrupted
-                } else {
-                    StartError::Invalid(error)
-                }
-            })?;
+        let aliases = reader::AliasOptions::snapshot(&self.state);
+        let (script, failure) = parse::script(
+            source,
+            self.core.limits.source_bytes,
+            &parser,
+            aliases.options(),
+        )
+        .map_err(|error| {
+            if error == "request cancelled" {
+                StartError::Interrupted
+            } else {
+                StartError::Invalid(error)
+            }
+        })?;
         if script.commands.is_empty()
             && let Some(ParseFailure::Syntax { message, .. }) = failure.as_ref()
         {
@@ -781,19 +788,14 @@ impl Session {
             let _foreground = ForegroundGuard(context.core.clone());
             let mut processes = ProcessGroup::new(context.core.host.clone(), group)
                 .with_signal(context.signal.clone());
-            let mut result = script_sequence(
-                script.commands,
-                script.command_end_lines,
+            let result = reader::run(
+                reader::Reader::new(script, failure, aliases, parser),
+                "-c",
                 state.clone(),
                 context.core.descriptors.clone(),
                 context.clone(),
             )
             .await;
-            if matches!(result.flow, Flow::Normal | Flow::DiscardReadUnit)
-                && let Some(failure) = failure
-            {
-                result = parse_failure(failure, "-c", &context.core.descriptors, &context).await;
-            }
             if result.flow == Flow::Exit {
                 context.core.exit_requested.set(true);
             }
@@ -1042,51 +1044,6 @@ async fn parse_failure(
         code: 2,
         flow: Flow::Exit,
     }
-}
-
-async fn script_sequence(
-    commands: Vec<Command>,
-    command_end_lines: Vec<usize>,
-    state: SharedState,
-    fds: Descriptors,
-    context: Context,
-) -> Outcome {
-    let mut result = Outcome::status(0);
-    let mut discarded_line = None;
-    // The parser groups each top-level read unit through its terminating
-    // newline. Arithmetic expansion errors unwind functions and compound
-    // commands in that unit, then Bash's reader accepts the next one.
-    for (index, command) in commands.into_iter().enumerate() {
-        let end_line = command_end_lines.get(index).copied();
-        if discarded_line.is_some_and(|line| end_line.is_some_and(|end| end <= line)) {
-            continue;
-        }
-        result = execute(command, state.clone(), fds.clone(), context.clone()).await;
-        if result.flow == Flow::SpawnFailed {
-            return result;
-        }
-        if context.cancel.is_cancelled() {
-            return Outcome::status(130);
-        }
-        if result.flow == Flow::Resource {
-            return abort_diagnostic(
-                &fds,
-                &context,
-                b"shell live-execution memory limit exceeded",
-                2,
-            )
-            .await;
-        }
-        if result.flow == Flow::DiscardReadUnit {
-            discarded_line = end_line;
-        } else if matches!(
-            result.flow,
-            Flow::Exit | Flow::Abort | Flow::SpawnFailed | Flow::Return
-        ) {
-            break;
-        }
-    }
-    result
 }
 
 fn sequence(
