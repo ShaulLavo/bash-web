@@ -3400,3 +3400,37 @@ offsets only under an independently assigned bounded family owner. Preserve
 retained-source ownership, parser admission and cancellation. Late extdebug
 argument initialization and indexed compound initializers remain with their
 existing owners and are not duplicated here.
+
+## Sourced function BASH_SOURCE filename, 2026-10-24
+
+Status: Approved follow-up. Owner: source/call-stack family. No semantic repair
+is included in PR73's bounded integration.
+
+The exact actual-main `d61989ad342a47545c73cb665781f9c8cf971015` production release
+on Waffle prints `source=7\n<later:f:bash>\n` for this probe:
+
+```bash
+p='$1'
+printf '%s\n' 'f() { printf "<%s:%s:%s>\n" "$1" "${FUNCNAME[0]}" "${BASH_SOURCE[0]}"; }; return 7' > lib
+. ./lib sourced
+printf 'source=%s\n' "$?"
+f later
+unset -f f
+```
+
+PR73's integrated production release prints the same output when the first
+`printf` argument in `f` is `${p@P}`. There is no crash or stderr, and status is
+zero on both. This preserves actual-main behavior; it does not establish GNU
+Bash correctness. A supplemental expectation of `./lib` failed. No new Bash
+oracle recording was made.
+
+`state/call_stack.rs:278` initializes `CallSite.source` from `state.shell_name`.
+`interpreter.rs:3074-3081` traces the function before installing its retained
+`body.reader` in the execution context. Both files retain those main behaviors.
+A separate owner should first record the exact supported Bash result, then
+repair filename attribution without changing retained-reader/source ownership,
+call-site offsets, cancellation, storage admission or last-owner refunds.
+Evidence and paired release reproductions are in
+`/work/reports/wave-20261022/shell/pr73-actual69-integration-r1-evidence/` under
+`source-location-main.json`, `interactions-source.mjs`, `waffle-interactions.log`
+and `attempt3/waffle-interactions.log`.
