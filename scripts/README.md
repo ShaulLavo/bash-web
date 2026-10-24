@@ -2,7 +2,7 @@
 
 Build, provenance and deterministic differential-fuzzing tools for the shell.
 
-From the repository root, after [setup](../docs/getting-started.md#build-and-test):
+From the repository root, after [setup](../docs/development.md#prerequisites):
 
 ```sh
 npm run build:shell

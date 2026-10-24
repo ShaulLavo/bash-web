@@ -24,8 +24,8 @@ reopen a file. No FileSystem or HostEndpoint contract changed.
 An unexported byte buffer still shares its cursor. After child export, the existing
 buffer machinery exposes a real host pipe, and reopening shares that pipe. Neither
 state provides Bash's large here-input regular-file reopening behavior. Short input
-controls happen to match Bash's pipes; that does not make Bytes a pipe. Plan 004's
-Approved follow-up records the reproducer and removal condition. Descriptor metadata
+controls happen to match Bash's pipes; that does not make Bytes a pipe. A separate
+approved follow-up covers the reproducer and removal condition. Descriptor metadata
 predicates and lexical path normalization also retain their existing limitations;
 this change does not claim virtual symlink/stat or path traversal parity.
 The old parser also accepts a leading plus in `/dev/fd/+3`, unlike Linux and
