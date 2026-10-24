@@ -60,6 +60,25 @@ fn printf_valid_unimplemented_conversions_keep_unsupported_status() {
 }
 
 #[test]
+fn printf_valid_unimplemented_wide_conversions_keep_unsupported_status() {
+    for source in [
+        "printf '%C' 'A'",
+        "printf '%S' ''",
+        "printf '%lC' 'A'",
+        "printf '%lS' ''",
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 2, "{source}");
+        assert!(rig.output.bytes().is_empty(), "{source}");
+        assert_eq!(
+            rig.errors.bytes(),
+            b"/usr/bin/bash: printf: unsupported format conversion\n",
+            "{source}"
+        );
+    }
+}
+
+#[test]
 fn printf_invalid_format_merged_diagnostics_precede_buffered_prefix() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("printf 'prefix%z' 42 2>&1"), 1);

@@ -670,7 +670,7 @@ async fn rejected_conversion(
     }
     if input
         .get(*offset)
-        .is_some_and(|byte| b"sbcdiuoxXqQnaAeEfFgG(".contains(byte))
+        .is_some_and(|byte| b"sSbcCdiuoxXqQnaAeEfFgG(".contains(byte))
     {
         printer
             .emit(2, b"/usr/bin/bash: printf: unsupported format conversion\n")

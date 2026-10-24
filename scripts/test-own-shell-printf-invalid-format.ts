@@ -23,3 +23,24 @@ for (const expected of fixture.cases)
     assert.deepEqual(actual.stdout, Buffer.from(expected.stdout));
     assert.equal(diagnostic(actual.stderr.toString()), diagnostic(expected.stderr));
   });
+
+for (const source of ["printf '%C' 'A'", "printf '%S' ''", "printf '%lC' 'A'", "printf '%lS' ''"])
+  test(`production Waffle printf valid unimplemented wide: ${source}`, async () => {
+    const actual = await runner(source);
+    console.log(
+      JSON.stringify({
+        source,
+        status: actual.status,
+        stdout: actual.stdout.toString("base64"),
+        stderr: actual.stderr.toString("base64"),
+        crash: actual.crash,
+      }),
+    );
+    assert.equal(actual.crash, undefined);
+    assert.equal(actual.status, 2);
+    assert.deepEqual(actual.stdout, Buffer.alloc(0));
+    assert.deepEqual(
+      actual.stderr,
+      Buffer.from("/usr/bin/bash: printf: unsupported format conversion\n"),
+    );
+  });
