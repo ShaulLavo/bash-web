@@ -86,10 +86,11 @@ approve a whole-State rewrite or the earlier broad owned-image design.
 
 ## First executable checkpoint
 
-`shell/engine/tests/typed_references.rs` copies only small cases and saved expected
-outputs from the existing frozen evidence: Brush `nameref:16`, `:18`, `:29`;
-Bashkit `arith-array-lvalue:3`, `:33`; Oils `nameref:39`, `array:672`, `:700`.
-The scalar arithmetic control protects the existing old-value ordering.
+`shell/engine/tests/typed_references.rs` uses saved expected outputs from existing
+frozen evidence: Brush `nameref:16`, `:18`, `:29`; Bashkit
+`arith-array-lvalue:3`, `:33`; Oils `array:672`, `:700`. The Oils `nameref:39`
+scope control splits local declaration from array assignment, avoiding a separate
+compound-declaration prerequisite. A scalar control protects old-value ordering.
 The draft intentionally exposes failures without ignores or baseline edits.
 Selector side effects, readonly, retained readers, snapshots, nested prefix
 rollback, admission/cancel and final-drop charges must be covered before landing.

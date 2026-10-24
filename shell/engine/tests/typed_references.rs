@@ -56,9 +56,9 @@ fn bashkit_arith_array_lvalue_33_compound_write_evaluates_the_index() {
 }
 
 #[test]
-fn oils_nameref_39_resolves_a_calling_functions_local_array() {
+fn oils_nameref_39_scope_control_separates_declaration_from_array_assignment() {
     check(
-        "show_value() {\n  local -n array_name=$1\n  local idx=$2\n  echo \"${array_name[$idx]}\"\n}\ncaller() {\n  local shadock=(ga bu zo meu)\n  show_value shadock 2\n}\ncaller\n\n\n",
+        "show_value() {\n  local -n array_name=$1\n  local idx=$2\n  echo \"${array_name[$idx]}\"\n}\ncaller() {\n  local shadock\n  shadock=(ga bu zo meu)\n  show_value shadock 2\n}\ncaller\n\n\n",
         "zo\n",
     );
 }
