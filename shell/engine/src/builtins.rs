@@ -808,9 +808,6 @@ async fn declarations(
             }
             return Err(2);
         }
-        if append && (integer.is_some() || state.borrow().integer_assignment(&key)) {
-            return Err(2);
-        }
         let local = name == "local"
             || matches!(name, "declare" | "typeset") && state.borrow().in_function_scope();
         let target = if append && local && !nameref && state.borrow().is_current_local(&key) {
@@ -860,6 +857,9 @@ async fn declarations(
         } else {
             key
         };
+        if append && (integer.is_some() || !local && state.borrow().integer_assignment(&key)) {
+            return Err(2);
+        }
         let integer_result = integer.map_or(Ok(()), |enabled| {
             state.borrow_mut().declare_integer(&key, enabled, work)
         });
