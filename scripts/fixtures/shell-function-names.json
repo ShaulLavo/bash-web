@@ -1112,6 +1112,28 @@
         "stdoutBase64": "Y2FsbGVkOnN0YXR1cz0wCg==",
         "stderrBase64": ""
       }
+    },
+    {
+      "script": "shopt -s expand_aliases; alias def=function\ndef $foo { :; }; echo after",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "YWZ0ZXIK",
+        "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAyOiBgJGZvbyc6IG5vdCBhIHZhbGlkIGlkZW50aWZpZXIK"
+      }
+    },
+    {
+      "script": "shopt -s expand_aliases; alias make='function `echo $x` { echo called; }'\nmake\n'`echo $x`'",
+      "bash": {
+        "status": 0,
+        "signal": null,
+        "timedOut": false,
+        "error": null,
+        "stdoutBase64": "Y2FsbGVkCg==",
+        "stderrBase64": ""
+      }
     }
   ]
 }

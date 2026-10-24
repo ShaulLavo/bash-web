@@ -462,3 +462,137 @@ fn completed_local_undo_restores_all_updates_and_refunds_exact_storage() {
     drop(function);
     assert_eq!(memory.observation().0, 0);
 }
+
+/// A function-local array whose slot 9 holds a one-byte value with 8192 bytes
+/// of capacity, committed and kept by an earlier assignment.
+fn local_array_with_large_slot(state: &SharedState) {
+    state
+        .borrow_mut()
+        .local("a".into(), "local".into())
+        .unwrap();
+    let mut value = String::with_capacity(8192);
+    value.push('z');
+    let mut values = Indexed::default();
+    values.insert(0, "zero".into());
+    values.insert(9, value);
+    let mut seed = AssignmentFrame::enter(state.clone()).unwrap_or_else(|_| panic!("seed fits"));
+    commit_test_update(
+        state,
+        &mut seed,
+        BindingUpdate::Replace(Binding::Indexed(Rc::new(values))),
+    );
+    seed.keep();
+}
+
+/// Publish `a=durable` as an arithmetic or default-value expansion would.
+fn durable_scalar(state: &SharedState) {
+    let mut work = Work::new(65_536, 65_536, 0);
+    state
+        .borrow()
+        .admit_assignment_storage("a", 7, &mut work)
+        .unwrap_or_else(|_| panic!("durable write fits"));
+    state
+        .borrow_mut()
+        .assign_parameter("a".into(), "durable".into())
+        .unwrap();
+}
+
+fn assert_large_slot_restored_with_durable_zero(state: &SharedState) {
+    let state = state.borrow();
+    let binding = state.binding("a").unwrap();
+    assert_eq!(binding.slot(9).unwrap().capacity(), 8192);
+    assert_eq!(binding.count(), 2);
+    assert_eq!(state.scalar_parameter("a"), Some("durable"));
+}
+
+const LOCAL_ARRAY_MEMORY_LIMIT: usize = 65_536;
+
+fn local_array_assignment() -> (
+    crate::exec::StorageBudget,
+    SharedState,
+    FunctionFrame,
+    AssignmentFrame,
+) {
+    let memory = crate::exec::StorageBudget::new(LOCAL_ARRAY_MEMORY_LIMIT);
+    let state = State::with_memory(memory.clone()).shared();
+    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    local_array_with_large_slot(&state);
+    let completed = AssignmentFrame::enter(state.clone()).unwrap_or_else(|_| panic!("undo fits"));
+    (memory, state, function, completed)
+}
+
+fn rollback_with_full_budget(
+    memory: &crate::exec::StorageBudget,
+    state: &SharedState,
+    completed: AssignmentFrame,
+) {
+    let filler = memory
+        .admit(LOCAL_ARRAY_MEMORY_LIMIT - memory.observation().0)
+        .unwrap();
+    drop(completed);
+    assert_large_slot_restored_with_durable_zero(state);
+    drop(filler);
+}
+
+#[test]
+fn durable_scalar_preserves_unrelated_local_undo_capacity_until_rollback() {
+    let (memory, state, function, mut completed) = local_array_assignment();
+    commit_test_update(
+        &state,
+        &mut completed,
+        BindingUpdate::Element {
+            index: 9,
+            value: "small".into(),
+        },
+    );
+    let before = state.borrow().held_local_value("a");
+    durable_scalar(&state);
+    // The durable write prices only the live array, so the local ticket no
+    // longer covers the retained 8192-byte inverse that rollback reinstalls.
+    assert!(state.borrow().held_local_value("a") < before);
+    rollback_with_full_budget(&memory, &state, completed);
+    drop(function);
+    assert_eq!(memory.observation().0, 0);
+}
+
+#[test]
+fn durable_scalar_preserves_replaced_local_array_until_rollback() {
+    let (memory, state, function, mut completed) = local_array_assignment();
+    let mut small = Indexed::default();
+    small.insert(0, "small".into());
+    commit_test_update(
+        &state,
+        &mut completed,
+        BindingUpdate::Replace(Binding::Indexed(Rc::new(small))),
+    );
+    durable_scalar(&state);
+    rollback_with_full_budget(&memory, &state, completed);
+    drop(function);
+    assert_eq!(memory.observation().0, 0);
+}
+
+#[test]
+fn kept_assignments_under_an_exhausted_budget_only_shrink_local_tickets() {
+    let (memory, state, function, mut completed) = local_array_assignment();
+    commit_test_update(
+        &state,
+        &mut completed,
+        BindingUpdate::Element {
+            index: 9,
+            value: "small".into(),
+        },
+    );
+    durable_scalar(&state);
+    let filler = memory
+        .admit(LOCAL_ARRAY_MEMORY_LIMIT - memory.observation().0)
+        .unwrap();
+    completed.keep();
+    drop(completed);
+    assert_eq!(state.borrow().array_element("a", 9), Some("small"));
+    assert_eq!(state.borrow().scalar_parameter("a"), Some("durable"));
+    let live = state.borrow().binding("a").unwrap().storage_bytes();
+    assert_eq!(state.borrow().held_local_value("a"), live);
+    drop(filler);
+    drop(function);
+    assert_eq!(memory.observation().0, 0);
+}

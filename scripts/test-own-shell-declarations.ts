@@ -14,6 +14,7 @@ type Fixture = {
 };
 const fixtures: Fixture[] = [
   "shell-declare-print.json",
+  "shell-declare-attrs.json",
   "shell-declaration-append.json",
   "shell-declaration-append-scope.json",
 ].map((file) => JSON.parse(readFileSync(new URL(`fixtures/${file}`, import.meta.url), "utf8")));
@@ -24,7 +25,7 @@ for (const recording of fixtures) {
   assert.deepEqual(recording.environment, fixture.environment);
 }
 const cases = fixtures.flatMap((recording) => recording.cases);
-assert.equal(process.version, "v26.7.0");
+assert.equal(process.version, "v26.12.1");
 assert.equal(new Set(cases.map((item) => item.name)).size, cases.length);
 const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
 const run = await createWaffleRunner({

@@ -77,6 +77,18 @@ mod tests {
         let state = scalar_state();
         let word = shell_parser::Parser::parse_word_string("${!a[@]}");
         let cancel = Cancel::new();
+        let expand = |work: &mut Work, fields, raw| {
+            super::super::fields(
+                &word,
+                &state,
+                &cancel,
+                super::super::FieldContext::ForList,
+                (64, fields, raw),
+                work,
+            )
+            .now_or_never()
+            .unwrap()
+        };
         for (steps, storage, fields, raw) in [
             (0, 65536, 8, 64),
             (1024, 0, 8, 64),
@@ -84,22 +96,16 @@ mod tests {
             (1024, 65536, 8, 0),
         ] {
             let mut work = Work::new(steps, storage, fields);
-            let result =
-                super::super::fields_admitted(&word, &state, &cancel, 64, fields, raw, &mut work)
-                    .now_or_never()
-                    .unwrap();
-            assert!(matches!(result, Err(Error::Status(2))));
+            assert!(matches!(
+                expand(&mut work, fields, raw),
+                Err(Error::Status(2))
+            ));
         }
         let mut work = Work::new(1024, 65536, 8);
-        let result = super::super::fields_admitted(&word, &state, &cancel, 64, 8, 64, &mut work)
-            .now_or_never()
-            .unwrap()
-            .unwrap_or_else(|_| panic!("admitted key must expand"));
+        let result =
+            expand(&mut work, 8, 64).unwrap_or_else(|_| panic!("admitted key must expand"));
         assert_eq!(result, ["0"]);
         cancel.cancel();
-        let result = super::super::fields_admitted(&word, &state, &cancel, 64, 8, 64, &mut work)
-            .now_or_never()
-            .unwrap();
-        assert!(matches!(result, Err(Error::Status(130))));
+        assert!(matches!(expand(&mut work, 8, 64), Err(Error::Status(130))));
     }
 }

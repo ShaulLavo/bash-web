@@ -1055,7 +1055,7 @@ function runtimeEnvironment() {
   return {
     target: "wasm32-wasip1",
     runner: "waffle-node",
-    nodeVersion: "v26.7.0",
+    nodeVersion: "v26.12.1",
     shell: "shell-runtime -c SCRIPT, the production runtime_proc guest",
     env: {
       PATH: "/usr/bin:/bin",

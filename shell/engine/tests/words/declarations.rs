@@ -36,6 +36,13 @@ fn local_append_resolution_failure_continues_with_status_one() {
     }
 }
 
+#[test]
+fn scalar_case_attributes_match_recorded_bash_5_3_15() {
+    declarations_match_recording(include_str!(
+        "../../../../scripts/fixtures/shell-declare-attrs.json"
+    ));
+}
+
 fn declarations_match_recording(recording: &str) {
     let fixture: serde_json::Value = serde_json::from_str(recording).unwrap();
     assert_eq!(
@@ -186,4 +193,17 @@ fn local_declaration_append_cancellation_restores_array_and_reference() {
     assert!(rig.output.bytes().is_empty());
     assert_eq!(rig.run("declare -p r; printf '<%s>\\n' \"${a[@]}\""), 0);
     assert_eq!(rig.output.bytes(), b"declare -n r=\"a\"\n<outer>\n<keep>\n");
+}
+
+#[test]
+fn interrupted_case_declaration_preserves_previous_attributes() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("declare -l v=before"), 0);
+    let job = rig
+        .shell
+        .start(&format!("declare -u v={}", "A".repeat(12000)))
+        .unwrap();
+    rig.interrupt_after_counting_yields(job);
+    assert_eq!(rig.run("v=MIXED; printf '%s' \"$v\""), 0);
+    assert_eq!(rig.output.bytes(), b"mixed");
 }
