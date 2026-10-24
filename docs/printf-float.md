@@ -30,14 +30,16 @@ prefix plus a sticky tail from a normalized rational. A floating logarithm only
 chooses a scale; exact comparisons correct it before digit generation. Larger
 precisions use the finite value's exact decimal expansion. Implicit zero runs
 are streamed through the existing fixed-size printer, not allocated by precision.
+Big-integer quotients use word-wise long division and charge work per quotient
+word times divisor length rather than 64 bit-serial rounds.
 Storage and numeric work use the existing command budgets. Expensive operands
 can exhaust those budgets and fail before output, just like other builtin work.
 The limits are unchanged.
 
 ## Verification and exclusions
 
-`scripts/fixtures/shell-printf-float.json` contains 130 local recordings, including
-17 selected frozen scored failures. It identifies the exact Bash version and
+`scripts/fixtures/shell-printf-float.json` contains 132 local recordings, including
+17 selected frozen scored failures and two generated 3,000-operand cost controls. It identifies the exact Bash version and
 binary SHA-256. Native tests and `scripts/test-own-shell-printf-float.ts` compare
 status, stdout and stderr without running a live Bash oracle in CI. Native
 controls also cover admission, numeric work, chunking, pipe delivery and
