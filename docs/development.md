@@ -27,7 +27,7 @@ CI builds the WASM guests on `ubuntu-latest`. The WASI and browser steps are ver
   Install the exact 26.12.1 if you plan to run `npm run compat:shell`. Node ships with npm. The native Rust build and the README example do not need Node.
 - Bun, only for the Node-side Waffle checks (`npm run compat:shell`, `npm run test:installed-waffle`). Bun builds Waffle's `dist/`, which `npm ci` leaves unbuilt. See [Install the Waffle peer](guides/embed-in-a-page.md#install-the-waffle-peer).
 - Rust 1.98.1 through rustup. `rust-toolchain.toml` pins it with the `rustfmt` and `clippy` components and the `wasm32-wasip1` target, so rustup installs it the first time you run `cargo` in the repository.
-- For WASI guests: wasi-sdk **34.0** with wasi-libc `2e6fb9d8ee0c` (`scripts/wasi-build.ts` rejects any other). Always set `WASI_SDK_PATH` to the SDK directory. The fallback in `scripts/wasi-build.ts` is `/work/cache/wasi-sdk-34.0-x86_64-linux`, a path that exists only on the maintainer's Linux x86_64 machine. CI downloads `wasi-sdk-34.0-x86_64-linux.tar.gz` from the [wasi-sdk-34 release](https://github.com/WebAssembly/wasi-sdk/releases/tag/wasi-sdk-34) into `.build/wasi-sdk` and checks its SHA-256 (`.github/actions/wasi-sdk/action.yml`). You also need wasmtime, CMake **3.26+**, Ninja, curl, tar, patch, sha256sum, Linux `setsid`, GNU `timeout`, and `flock`. The shared libc patch and builder come from Waffle. See [Guest libc and build provenance](wasi-libc.md).
+- For WASI guests: wasi-sdk **34.0** with wasi-libc `2e6fb9d8ee0c` (`scripts/wasi-build.ts` rejects any other). Always set `WASI_SDK_PATH` to the SDK directory. `scripts/wasi-build.ts` has a built-in default that fits only one Linux layout, so do not rely on it. CI downloads `wasi-sdk-34.0-x86_64-linux.tar.gz` from the [wasi-sdk-34 release](https://github.com/WebAssembly/wasi-sdk/releases/tag/wasi-sdk-34) into `.build/wasi-sdk` and checks its SHA-256 (`.github/actions/wasi-sdk/action.yml`). You also need wasmtime, CMake **3.26+**, Ninja, curl, tar, patch, sha256sum, Linux `setsid`, GNU `timeout`, and `flock`. The shared libc patch and builder come from Waffle. See [Guest libc and build provenance](wasi-libc.md).
 - For browser tests: `npx playwright install chromium firefox`.
 - For score capture only: Linux, GNU Bash 5.3.15, bubblewrap, and Python 3. Replay needs none of these.
 
@@ -88,7 +88,7 @@ Do not regenerate or edit these in ordinary work. Scripts check them by digest.
 - `tests/`: Playwright acceptance tests. `tests/guest/` holds the source-built `test-guest` and `test-spin` programs ([Test guests](test-guests.md)).
 - `scripts/`: build helpers, the scoreboard, differential fuzzers, provenance checks.
 - `docs/`: this documentation. [Docs map](README.md).
-- `plans/`: internal planning notes, not documentation. Frozen evidence and `sources.lock.json` name this path, so it stays.
+- `plans/`: internal notes, not documentation. `sources.lock.json` names this path, so it stays.
 
 ## Engine layer gate
 
