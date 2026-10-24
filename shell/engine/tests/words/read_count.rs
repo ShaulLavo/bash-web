@@ -203,7 +203,8 @@ fn read_count_short_local_values_do_not_retain_the_reserved_ceiling() {
         ..Limits::default()
     });
     let (_reader, _writer) = pending_input(&rig, b"");
-    let job = rig.shell.start("f() { local a b c d; read -n99999 a <<<x; read -n99999 b <<<x; read -n99999 c <<<x; read -n99999 d <<<x; read -n1 waiting; }; f").unwrap();
+    assert_eq!(rig.run("f() { local a b c d; read -n99999 a <<<x; read -n99999 b <<<x; read -n99999 c <<<x; read -n99999 d <<<x; read -n1 waiting; }"), 0);
+    let job = rig.shell.start("f").unwrap();
     for _ in 0..10000 {
         rig.ex.drive(64);
     }
