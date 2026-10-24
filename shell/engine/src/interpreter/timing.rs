@@ -3,6 +3,7 @@
 use super::*;
 use crate::exec::Error;
 use std::{
+    borrow::Cow,
     fmt::Write as _,
     iter::Peekable,
     str::Chars,
@@ -77,17 +78,14 @@ async fn report(
 ) -> Result<(), Error> {
     let mut work = expansion_work(context);
     let format = if posix {
-        Some(POSIX_FORMAT.to_owned())
+        Some(Cow::Borrowed(POSIX_FORMAT))
     } else {
         configured_format(state, context, &mut work).await?
     };
     let Some(format) = format.filter(|format| !format.is_empty()) else {
         return Ok(());
     };
-    let text = match render(&format, elapsed, context, &mut work).await? {
-        Ok(text) => text,
-        Err(problem) => format!("/usr/bin/bash: TIMEFORMAT: {problem}\n"),
-    };
+    let text = render(&format, elapsed, context, &mut work).await?;
     let Some(error) = fds.borrow().get(2) else {
         return Ok(());
     };
@@ -102,26 +100,26 @@ async fn configured_format(
     state: &SharedState,
     context: &Context,
     work: &mut expand::Work,
-) -> Result<Option<String>, Error> {
+) -> Result<Option<Cow<'static, str>>, Error> {
     State::admit_scalar_access(state, "TIMEFORMAT", &context.cancel, work).await?;
     let Some(bytes) = state.borrow().scalar_parameter("TIMEFORMAT").map(str::len) else {
-        return Ok(Some(DEFAULT_FORMAT.to_owned()));
+        return Ok(Some(Cow::Borrowed(DEFAULT_FORMAT)));
     };
     work.admit_storage(bytes)?;
     Ok(state
         .borrow()
         .scalar_parameter("TIMEFORMAT")
-        .map(str::to_owned))
+        .map(|format| Cow::Owned(format.to_owned())))
 }
 
-/// Bash's `print_formatted_time`. The inner result is the diagnostic for a
+/// Bash's `print_formatted_time`, including an admitted diagnostic for a
 /// directive Bash rejects or this runtime cannot report.
 async fn render(
     format: &str,
     elapsed: Duration,
     context: &Context,
     work: &mut expand::Work,
-) -> Result<Result<String, String>, Error> {
+) -> Result<String, Error> {
     let bytes = format
         .len()
         .saturating_mul(REPORT_BYTES_PER_FORMAT_BYTE)
@@ -136,11 +134,13 @@ async fn render(
             continue;
         }
         if let Err(problem) = directive(&mut chars, elapsed, &mut text) {
-            return Ok(Err(problem));
+            drop(text);
+            work.release_storage(bytes);
+            return problem.render(work);
         }
     }
     text.push('\n');
-    Ok(Ok(text))
+    Ok(text)
 }
 
 /// One directive after `%`: `%%`, or `%[precision][l]` followed by `R` or `E`.
@@ -148,7 +148,7 @@ fn directive(
     chars: &mut Peekable<Chars<'_>>,
     elapsed: Duration,
     text: &mut String,
-) -> Result<(), String> {
+) -> Result<(), DirectiveProblem> {
     if chars.next_if_eq(&'%').is_some() {
         text.push('%');
         return Ok(());
@@ -163,11 +163,41 @@ fn directive(
             seconds(text, elapsed, precision, long);
             Ok(())
         }
-        Some(cpu @ ('U' | 'S' | 'P')) => Err(format!("`{cpu}': CPU time is unavailable")),
-        other => Err(format!(
-            "`{}': invalid format character",
-            other.map(String::from).unwrap_or_default()
-        )),
+        Some(cpu @ ('U' | 'S' | 'P')) => Err(DirectiveProblem {
+            character: Some(cpu),
+            message: "CPU time is unavailable",
+        }),
+        character => Err(DirectiveProblem {
+            character,
+            message: "invalid format character",
+        }),
+    }
+}
+
+struct DirectiveProblem {
+    character: Option<char>,
+    message: &'static str,
+}
+
+impl DirectiveProblem {
+    fn render(self, work: &mut expand::Work) -> Result<String, Error> {
+        const PREFIX: &str = "/usr/bin/bash: TIMEFORMAT: `";
+        const SEPARATOR: &str = "': ";
+        let bytes = PREFIX.len()
+            + self.character.map_or(0, char::len_utf8)
+            + SEPARATOR.len()
+            + self.message.len()
+            + 1;
+        work.admit_storage(bytes)?;
+        let mut text = String::with_capacity(bytes);
+        text.push_str(PREFIX);
+        if let Some(character) = self.character {
+            text.push(character);
+        }
+        text.push_str(SEPARATOR);
+        text.push_str(self.message);
+        text.push('\n');
+        Ok(text)
     }
 }
 
@@ -188,3 +218,6 @@ fn seconds(text: &mut String, elapsed: Duration, precision: u32, long: bool) {
         text.push('s');
     }
 }
+
+#[cfg(test)]
+mod tests;

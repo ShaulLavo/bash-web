@@ -3868,21 +3868,26 @@ async fn redirects(
 }
 
 #[cfg(test)]
+fn isolated_session(limits: Limits, filesystem_bytes: usize) -> (Session, GroupId) {
+    let executor = Executor::new();
+    let host = Rc::new(crate::process::InProcessHost::new(executor.clone()));
+    let group = host.allocate_group();
+    let session = Session::new(
+        executor,
+        host,
+        Rc::new(crate::io::MemoryFs::new(filesystem_bytes)),
+        limits,
+    );
+    (session, group)
+}
+
+#[cfg(test)]
 mod scope_tests {
     use super::*;
-    use crate::{io::MemoryFs, process::InProcessHost};
     use futures::FutureExt;
 
     fn replay_context() -> (SharedState, Descriptors, Context) {
-        let executor = Executor::new();
-        let host = Rc::new(InProcessHost::new(executor.clone()));
-        let group = host.allocate_group();
-        let session = Session::new(
-            executor,
-            host,
-            Rc::new(MemoryFs::new(4096)),
-            Limits::default(),
-        );
+        let (session, group) = isolated_session(Limits::default(), 4096);
         let context = Context {
             evaluation: crate::exec::Scope::new(
                 session.core.limits.source_bytes,

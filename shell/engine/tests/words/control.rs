@@ -485,3 +485,63 @@ fn timed_function_declarations_reject_large_reports_and_refund_storage() {
     assert_eq!(rig.output.bytes(), b"f () \n{ \n    time -p echo a\n}\n");
     assert_eq!(rig.ex.drive(64).pending, 0);
 }
+
+#[test]
+fn time_reporting_quota_failure_preserves_the_command_outcome() {
+    for (command, status) in [("true", 0), ("false", 1)] {
+        let rig = Rig::new(Limits {
+            expansion_bytes: 35,
+            ..Limits::default()
+        });
+        assert_eq!(rig.run(&format!("TIMEFORMAT='%U'; time {command}")), status);
+        assert!(rig.output.bytes().is_empty());
+        assert!(rig.errors.bytes().is_empty(), "{:?}", rig.errors.bytes());
+    }
+}
+
+#[test]
+fn time_reporting_tight_formats_cannot_emit_unadmitted_text() {
+    for (format, source, bytes) in [
+        (None, "time false", 160),
+        (None, "time -p false", 128),
+        (Some("T"), "time false", 17),
+        (Some("%U"), "time false", 57),
+        (Some("%S"), "time false", 57),
+        (Some("%P"), "time false", 57),
+        (Some("%X"), "time false", 58),
+        (Some("%💥"), "time false", 85),
+        (Some(""), "time false", 35),
+    ] {
+        let rig = Rig::new(Limits {
+            expansion_bytes: bytes,
+            ..Limits::default()
+        });
+        if let Some(format) = format {
+            rig.variable("TIMEFORMAT", format);
+        }
+        assert_eq!(rig.run(source), 1, "{format:?} {source} {bytes}");
+        assert!(
+            rig.errors.bytes().is_empty(),
+            "{format:?}: {:?}",
+            rig.errors.bytes()
+        );
+        assert!(rig.output.bytes().is_empty());
+    }
+}
+
+#[test]
+fn time_reporting_unicode_and_long_invalid_formats_keep_exact_diagnostics() {
+    for (format, directive) in [
+        ("%💥".to_owned(), "💥"),
+        (format!("{}%X", "💥".repeat(1024)), "X"),
+    ] {
+        let rig = Rig::new(Limits::default());
+        rig.variable("TIMEFORMAT", &format);
+        assert_eq!(rig.run("time false"), 1);
+        assert_eq!(
+            rig.errors.bytes(),
+            format!("/usr/bin/bash: TIMEFORMAT: `{directive}': invalid format character\n")
+                .as_bytes()
+        );
+    }
+}
