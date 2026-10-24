@@ -23,6 +23,7 @@ mod indirect;
 mod operand;
 pub(crate) mod pattern;
 mod positional;
+mod prefix;
 mod printable;
 mod replacement;
 mod tilde;
@@ -931,40 +932,56 @@ impl Expansion<'_> {
         scalar: bool,
         depth: usize,
     ) -> crate::exec::ResultFuture<'a, ()> {
+        if let WordPart::ParameterExpansion {
+            name,
+            operator,
+            operand,
+            colon_variant,
+        } = part
+            && matches!(name.as_str(), "@" | "*")
+            && operand::indirect_operator(operator)
+        {
+            return self.positional_part(
+                name,
+                operator,
+                operand,
+                *colon_variant,
+                OperandContext {
+                    state,
+                    quoted,
+                    scalar,
+                    depth,
+                },
+            );
+        }
+        if let WordPart::ParameterExpansion {
+            name,
+            operator,
+            operand,
+            colon_variant,
+        } = part
+        {
+            return self.parameter_part(
+                name,
+                operator,
+                operand,
+                *colon_variant,
+                OperandContext {
+                    state,
+                    quoted,
+                    scalar,
+                    depth,
+                },
+            );
+        }
         self.part_frame(move |expansion| async move {
-            if !scalar && !quoted {
-                Ifs::admit_access(state, expansion.cancel, expansion.work).await?;
-            }
-            expansion.segments.needs_split |= !scalar && !quoted;
+            expansion.begin_part(state, quoted, scalar).await?;
             if matches!(part, WordPart::BadSubstitution(_)) {
                 expansion.work.admit_storage(256)?;
                 return Err(Error::BadSubstitution {
                     message: "invalid parameter expansion",
                     line: None,
                 });
-            }
-            if let WordPart::ParameterExpansion {
-                name,
-                operator,
-                operand,
-                colon_variant,
-            } = part
-            {
-                return expansion
-                    .parameter(
-                        name,
-                        operator,
-                        operand,
-                        *colon_variant,
-                        OperandContext {
-                            state,
-                            quoted,
-                            scalar,
-                            depth,
-                        },
-                        None,
-                    )
-                    .await;
             }
             if let WordPart::IndirectExpansion {
                 name,
@@ -1066,8 +1083,21 @@ impl Expansion<'_> {
                     .await
                     .map_err(Error::in_expansion);
             }
-            if matches!(part, WordPart::ArrayIndices { .. }) {
-                return expansion.elements(part, state, quoted, scalar).await;
+            if is_list(part) {
+                return expansion
+                    .elements(part, state, quoted, scalar || expansion.captured.is_some())
+                    .await;
+            }
+            if let WordPart::PrefixMatch { prefix, star } = part {
+                return expansion
+                    .prefix_names(
+                        prefix,
+                        *star,
+                        state,
+                        quoted,
+                        scalar || expansion.captured.is_some(),
+                    )
+                    .await;
             }
             if let WordPart::ArrayLength(name) = part {
                 return expansion
@@ -1124,6 +1154,37 @@ impl Expansion<'_> {
                 )
                 .await
         })
+    }
+
+    fn parameter_part<'a>(
+        &'a mut self,
+        name: &'a str,
+        operator: &'a ParameterOp,
+        operand: &'a str,
+        colon_variant: bool,
+        context: OperandContext<'a>,
+    ) -> crate::exec::ResultFuture<'a, ()> {
+        self.part_frame(move |expansion| async move {
+            expansion
+                .begin_part(context.state, context.quoted, context.scalar)
+                .await?;
+            expansion
+                .parameter(name, operator, operand, colon_variant, context, None)
+                .await
+        })
+    }
+
+    async fn begin_part(
+        &mut self,
+        state: &SharedState,
+        quoted: bool,
+        scalar: bool,
+    ) -> Result<(), Error> {
+        if !scalar && !quoted {
+            Ifs::admit_access(state, self.cancel, self.work).await?;
+        }
+        self.segments.needs_split |= !scalar && !quoted;
+        Ok(())
     }
 
     fn part_frame<'a, F>(
@@ -1733,6 +1794,14 @@ impl Expansion<'_> {
             scalar,
             depth,
         } = context;
+        // Bash rejects a direct special target before expanding its operand;
+        // an indirect target is only checked after the operand expands.
+        let direct_special = matches!(operator, ParameterOp::AssignDefault)
+            && error_pointer.is_none()
+            && !operand::scalar_name(name);
+        if direct_special {
+            return self.special_assignment(name);
+        }
         // Reserve target/diagnostic bytes before copying either name or value.
         let diagnostic_bytes =
             error_pointer.map_or(name.len(), |pointer| pointer.len().saturating_add(1));
@@ -1802,12 +1871,7 @@ impl Expansion<'_> {
             self.admit_replacement_output().await?;
         }
         if !operand::scalar_name(name) {
-            self.work
-                .admit_storage(name.len().saturating_mul(2).saturating_add(128))?;
-            return Err(Error::SpecialAssignment {
-                name: format!("${name}"),
-                line: None,
-            });
+            return self.special_assignment(name);
         }
         admit_assignment(state, name, captured.value.len(), self.cancel, self.work).await?;
         State::admit_scalar_access(state, "IFS", self.cancel, self.work).await?;
@@ -1840,6 +1904,14 @@ impl Expansion<'_> {
             scalar || quoted,
         )
         .await
+    }
+    fn special_assignment(&mut self, name: &str) -> Result<(), Error> {
+        self.work
+            .admit_storage(name.len().saturating_mul(2).saturating_add(128))?;
+        Err(Error::SpecialAssignment {
+            name: format!("${name}"),
+            line: None,
+        })
     }
     async fn diagnostic_operand(
         &mut self,
@@ -2033,6 +2105,23 @@ impl Expansion<'_> {
             self.segments.empty(self.work)?;
         }
         Ok((list, separator))
+    }
+    async fn element(
+        &mut self,
+        index: usize,
+        list: bool,
+        separator: Option<char>,
+        value: &str,
+        protection: Protection,
+        protected: bool,
+    ) -> Result<(), Error> {
+        if self.elements_remaining == 0 {
+            return Err(2.into());
+        }
+        self.elements_remaining -= 1;
+        self.element_boundary(index, list, separator, protected)
+            .await?;
+        self.segment(value, protection, protected).await
     }
     async fn element_boundary(
         &mut self,
@@ -2740,6 +2829,65 @@ fn poll_argv(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_list_budgets(source: &str, state: &SharedState, expected: &[&str]) {
+        let token = shell_parser::Parser::parse_word_string(source);
+        for (steps, bytes, fields, raw, canceled, status) in [
+            (0, 65536, 8, 64, false, 2),
+            (4096, 0, 8, 64, false, 2),
+            (4096, 65536, 0, 64, false, 2),
+            (4096, 65536, 8, 0, false, 2),
+            (4096, 65536, 8, 64, true, 130),
+            (4096, 65536, 8, 64, false, 0),
+        ] {
+            let cancel = Cancel::new();
+            if canceled {
+                cancel.cancel();
+            }
+            let mut budget = Work::new(steps, bytes, fields);
+            let expanded = super::fields(
+                &token,
+                state,
+                &cancel,
+                FieldContext::ForList,
+                (64, fields, raw),
+                &mut budget,
+            )
+            .now_or_never()
+            .expect("bounded list expansion must not suspend");
+            assert_list_result(expanded, expected, status, source);
+        }
+    }
+
+    fn assert_list_result(
+        result: Result<Vec<String>, Error>,
+        expected: &[&str],
+        status: i32,
+        source: &str,
+    ) {
+        match result {
+            Ok(values) => {
+                assert_eq!(status, 0, "{source}");
+                assert_eq!(values, expected, "{source}");
+            }
+            Err(Error::Status(actual)) => assert_eq!(actual, status, "{source}"),
+            Err(_) => panic!("unexpected expansion fault: {source}"),
+        }
+    }
+
+    #[test]
+    fn list_names_and_lazy_positionals_share_admission_and_cancellation() {
+        let mut state = State::default();
+        state
+            .replace_positional(vec!["a".into(), "b".into()])
+            .unwrap();
+        state
+            .assign_parameter("param_a".into(), "value".into())
+            .unwrap();
+        let state = state.shared();
+        assert_list_budgets("${!param_@}", &state, &["param_a"]);
+        assert_list_budgets("${@:-unused}", &state, &["a", "b"]);
+    }
 
     #[test]
     fn pattern_frames_admit_actual_bytes_before_construction() {
