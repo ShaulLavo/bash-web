@@ -174,6 +174,7 @@ impl Rig {
                 core.execution_storage.clone(),
             ),
             source: crate::exec::Source::root(""),
+            reader: crate::exec::ReaderLocation::default(),
             scope: Scope::new(0),
             group,
             invocation_group: group,

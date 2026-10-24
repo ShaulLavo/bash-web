@@ -4395,6 +4395,9 @@ mod read_options;
 #[path = "words/nameref_invalid.rs"]
 mod nameref_invalid;
 
+#[path = "words/source.rs"]
+mod source;
+
 #[path = "words/aliases.rs"]
 mod aliases;
 

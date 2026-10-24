@@ -3352,6 +3352,29 @@ GNU Bash 5.3.15 prints `.zz_a\nzz_a\nstatus:0\n`. Reviewed source prints
 excluding hidden entries. Keep implicit hidden-name exclusion and ordinary
 argv matching unchanged. Add nested and suffix controls before the fix.
 
+
+## Eval call-site line offsets from PR75 integration review, 2026-10-24
+
+Status: Approved follow-up. Owner: BUILTINS eval/call-stack family, separate from
+PR69 source admission. No semantic repair is included in this integration.
+
+Independent review of `91ced06480dbf3d2d95394a256ce0a1d695ce66c` found that calling
+an eval-defined function inside that eval reports BASH_LINENO line 4 instead of
+Bash 5.3.15 line 6. The later outer call correctly reports line 7. The paired
+no-alias control has the same mismatch. Inspect `parse.rs:26-30`,
+`interpreter/eval.rs:159` and `interpreter.rs:3053` at that immutable head.
+
+Use exact probe `eval-retained-definition` in
+`/work/reports/wave-20261022/shell/review75-integration-after85-r7-evidence/probe-inputs.json`.
+The adjacent `probe-recordings.json`, `probe-results.json` and `counterpart-*`
+files retain full input, all output streams, statuses and source hashes. Run
+through `releaseShellRunner` after the pinned toolchain setup and
+`npm run build:shell && npm run build:node-harness`. Fix eval call-site line
+offsets only under an independently assigned bounded family owner. Preserve
+retained-source ownership, parser admission and cancellation. Late extdebug
+argument initialization and indexed compound initializers remain with their
+existing owners and are not duplicated here.
+
 ## Explicit command hash review follow-ups, 2026-10-24
 
 Status: Approved, deferred beyond PR88 integration. Preserve the immutable AVL,
