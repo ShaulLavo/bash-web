@@ -3,6 +3,37 @@ use crate::{arithmetic, state::SharedState};
 use shell_parser::parser::{ParameterOp, WordPart};
 
 impl Expansion<'_> {
+    pub(super) fn positional_part<'a>(
+        &'a mut self,
+        name: &'a str,
+        operator: &'a ParameterOp,
+        source: &'a str,
+        colon: bool,
+        context: OperandContext<'a>,
+    ) -> crate::exec::ResultFuture<'a, ()> {
+        self.part_frame(move |expansion| async move {
+            let OperandContext {
+                state,
+                quoted,
+                scalar,
+                depth,
+            } = context;
+            if !scalar && !quoted {
+                super::Ifs::admit_access(state, expansion.cancel, expansion.work).await?;
+            }
+            expansion.segments.needs_split |= !scalar && !quoted;
+            expansion.slice_boundaries(source).await?;
+            if depth >= super::operand::MAX_DEPTH {
+                return Err(2.into());
+            }
+            expansion
+                .part_frame(|expansion| {
+                    expansion.positional_parameter(name, operator, source, colon, context)
+                })
+                .await
+        })
+    }
+
     pub(super) async fn positional_parameter(
         &mut self,
         name: &str,

@@ -932,6 +932,28 @@ impl Expansion<'_> {
         scalar: bool,
         depth: usize,
     ) -> crate::exec::ResultFuture<'a, ()> {
+        if let WordPart::ParameterExpansion {
+            name,
+            operator,
+            operand,
+            colon_variant,
+        } = part
+            && matches!(name.as_str(), "@" | "*")
+            && operand::indirect_operator(operator)
+        {
+            return self.positional_part(
+                name,
+                operator,
+                operand,
+                *colon_variant,
+                OperandContext {
+                    state,
+                    quoted,
+                    scalar,
+                    depth,
+                },
+            );
+        }
         self.part_frame(move |expansion| async move {
             if !scalar && !quoted {
                 Ifs::admit_access(state, expansion.cancel, expansion.work).await?;
@@ -1500,17 +1522,9 @@ impl Expansion<'_> {
             depth,
         } = context;
         self.slice_boundaries(operand).await?;
-        let supported_name = operand::parameter_name(name)
-            || operand::indirect_operator(operator) && matches!(name, "@" | "*");
-        if error_pointer.is_none() && !supported_name || depth >= operand::MAX_DEPTH {
+        if error_pointer.is_none() && !operand::parameter_name(name) || depth >= operand::MAX_DEPTH
+        {
             return Err(2.into());
-        }
-        if matches!(name, "@" | "*") && operand::indirect_operator(operator) {
-            return self
-                .part_frame(|expansion| {
-                    expansion.positional_parameter(name, operator, operand, colon, context)
-                })
-                .await;
         }
         // These operators read their source value, unlike the four lazy
         // presence-testing operators below. Check before operand side effects.
