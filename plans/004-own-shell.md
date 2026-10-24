@@ -3374,3 +3374,32 @@ GNU Bash 5.3.15 prints `.zz_a\nzz_a\nstatus:0\n`. Reviewed source prints
 `zz_a\nstatus:0\n`. Treat explicitly dotted alternatives as eligible when
 excluding hidden entries. Keep implicit hidden-name exclusion and ordinary
 argv matching unchanged. Add nested and suffix controls before the fix.
+
+
+## Completion group slash boundary follow-up, 2026-10-24
+
+Status: Approved. Owner: `lite-completion-group-boundary-r1`. Independent PR91
+review N1 found a pre-existing caller gap at `expand/glob.rs:570-585`, where
+`text.split_inclusive('/')` splits inside an active extended-pattern group.
+This follow-up belongs to that separate lane, not PR91's CI repair.
+
+```bash
+shopt -s extglob
+printf x >a
+printf x >b
+compgen -G '!(a/b)'
+```
+
+GNU Bash 5.3.15 prints `a\nb\n` and returns 0. Actual main
+`7e1e15b3f2e0b5155f09160b26c725fa5bd813bb` and reviewed PR91
+`0886f025f06fb968acd23495a5248722890c74eb` print nothing and return 1.
+The review also reproduces identical candidate/base failures for `!(*/*)`,
+`!(a|a/b)`, `@(!(a/b)|a)`, `!(@(a/b|b))`, `!(a/b)a`, `d/!(a/b)`, and the
+positive control `@(a/b|a)`. Preserve passing outside-group slash controls:
+`!(d)/b` returns `e/b`, `d/!(a)` returns `d/b`, and `d/!(!(a))` returns `d/a`.
+Keep hidden-name policy unchanged. Repair component boundary recognition in the
+owning lane without expanding this CI repair's matcher scope.
+
+Exact report: `/work/reports/wave-20261022/shell/review91-negative-extglob-r1.md`.
+Its sibling evidence directory retains `candidate-boundaries.json`,
+`base-boundaries.json`, and the deterministic `boundaries.py` reproducer.

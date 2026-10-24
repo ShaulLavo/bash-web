@@ -1,5 +1,5 @@
 //! Complement edges use admitted substring relations, never recursive backtracking.
-use super::{Instruction, Pattern, States};
+use super::{Instruction, Pattern, States, initialize_flags};
 use crate::executor::Cancel;
 use crate::expand::{Error, Work, admit_vec_exact, admit_vec_slot};
 
@@ -100,10 +100,7 @@ impl Machine<'_> {
 async fn flags(count: usize, work: &mut Work, cancel: &Cancel) -> Result<Vec<bool>, Error> {
     let mut flags = Vec::new();
     admit_vec_exact(&mut flags, count, work)?;
-    for _ in 0..count {
-        work.checkpoint(cancel).await?;
-        flags.push(false);
-    }
+    initialize_flags(&mut flags, count, work, cancel).await?;
     Ok(flags)
 }
 

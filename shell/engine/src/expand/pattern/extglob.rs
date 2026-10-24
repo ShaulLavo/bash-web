@@ -226,6 +226,19 @@ async fn literal_tail(
     Ok(pattern.chars.len())
 }
 
+async fn initialize_flags(
+    flags: &mut Vec<bool>,
+    count: usize,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<(), Error> {
+    for _ in 0..count {
+        work.checkpoint(cancel).await?;
+        flags.push(false);
+    }
+    Ok(())
+}
+
 struct States {
     live: Vec<bool>,
     pending: Vec<usize>,
@@ -236,10 +249,7 @@ impl States {
         let mut pending = Vec::new();
         admit_vec_exact(&mut live, count, work)?;
         admit_vec_exact(&mut pending, count, work)?;
-        for _ in 0..count {
-            work.checkpoint(cancel).await?;
-            live.push(false);
-        }
+        initialize_flags(&mut live, count, work, cancel).await?;
         Ok(Self { live, pending })
     }
 
@@ -426,14 +436,22 @@ mod tests {
         ]);
     }
 
-    #[test]
-    fn nested_negative_groups_do_not_recurse_or_backtrack() {
-        let source = format!("{}a{}", "!(".repeat(128), ")".repeat(128));
+    fn assert_deep_group_matches(operator: &str, depth: usize) {
+        let source = format!(
+            "{}a{}",
+            format!("{operator}(").repeat(depth),
+            ")".repeat(depth)
+        );
         let mut work = Work::new(1000000, 4000000, 16);
         assert_eq!(
             finish(pattern(&source).matches_full("a", &mut work, &Cancel::new())).ok(),
             Some(true)
         );
+    }
+
+    #[test]
+    fn nested_negative_groups_do_not_recurse_or_backtrack() {
+        assert_deep_group_matches("!", 128);
     }
 
     #[test]
@@ -637,12 +655,7 @@ mod tests {
 
     #[test]
     fn deep_groups_compile_and_match_without_recursive_stack() {
-        let source = format!("{}a{}", "@(".repeat(4096), ")".repeat(4096));
-        let mut work = Work::new(1000000, 4000000, 16);
-        assert_eq!(
-            finish(pattern(&source).matches_full("a", &mut work, &Cancel::new())).ok(),
-            Some(true)
-        );
+        assert_deep_group_matches("@", 4096);
     }
 
     #[test]
