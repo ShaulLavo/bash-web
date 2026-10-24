@@ -126,6 +126,7 @@ pub(crate) fn getopts_number(value: &str) -> i32 {
 
 #[derive(Clone, Debug)]
 pub struct StoredFunction {
+    pub(crate) reader: crate::exec::ReaderLocation,
     pub body: Rc<Command>,
     pub(crate) source: crate::exec::Source,
     pub(crate) line: usize,
@@ -163,6 +164,7 @@ pub struct State {
     pub extglob: bool,
     /// Remove unmatched unquoted pathname patterns instead of keeping them.
     pub nullglob: bool,
+    pub sourcepath: bool,
     /// `set -f`: no pathname expansion of unquoted fields.
     pub noglob: bool,
     pub lastpipe: bool,
@@ -176,10 +178,12 @@ pub struct State {
     pub(crate) star_separator: StarSeparator,
     ifs_members: Option<IfsMembers>,
     positional: Vec<String>,
+    positional_set: bool,
     pub(crate) getopts: GetoptsState,
     getopts_numeric: bool,
     locals: Vec<BTreeMap<String, LocalVariable>>,
     pub(crate) function_calls: usize,
+    pub(crate) source_calls: usize,
     call_stack: CallStack,
     memory: Option<crate::exec::StorageBudget>,
     positional_memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
@@ -217,6 +221,7 @@ impl Default for State {
             extdebug: false,
             extglob: false,
             nullglob: false,
+            sourcepath: true,
             noglob: false,
             lastpipe: false,
             monitor: false,
@@ -226,10 +231,12 @@ impl Default for State {
             star_separator: StarSeparator::Live,
             ifs_members: None,
             positional: Vec::new(),
+            positional_set: false,
             getopts: GetoptsState::default(),
             getopts_numeric: true,
             locals: Vec::new(),
             function_calls: 0,
+            source_calls: 0,
             call_stack: CallStack::default(),
             memory: None,
             positional_memory: None,
@@ -423,6 +430,7 @@ impl State {
             extdebug: state.extdebug,
             extglob: state.extglob,
             nullglob: state.nullglob,
+            sourcepath: state.sourcepath,
             noglob: state.noglob,
             lastpipe: state.lastpipe,
             monitor: state.monitor,
@@ -432,9 +440,11 @@ impl State {
             star_separator: state.star_separator,
             ifs_members: state.ifs_members,
             positional,
+            positional_set: state.positional_set,
             getopts: state.getopts,
             getopts_numeric: state.getopts_numeric,
             function_calls: state.function_calls,
+            source_calls: state.source_calls,
             call_stack,
             memory: state.memory.clone(),
             positional_memory,
@@ -604,6 +614,21 @@ impl State {
         }
         self.binding(name)?.next(previous)
     }
+    fn admit_positionals(
+        &self,
+        args: &Vec<String>,
+    ) -> Result<Option<Rc<RefCell<crate::exec::StorageAllocation>>>, i32> {
+        self.memory
+            .as_ref()
+            .map(|memory| {
+                memory
+                    .admit(positional_bytes(args)?)
+                    .map_err(|_| crate::exec::RESOURCE_STATUS)
+            })
+            .transpose()
+            .map(|ticket| ticket.map(|ticket| Rc::new(RefCell::new(ticket))))
+    }
+
     /// Takes ownership of argv already admitted by command expansion.
     pub(crate) fn replace_positional(&mut self, args: Vec<String>) -> Result<(), i32> {
         let bytes = positional_bytes(&args)?;
@@ -620,6 +645,7 @@ impl State {
             )));
         }
         self.positional = args;
+        self.positional_set = true;
         Ok(())
     }
     /// Drop shifted argument strings while retaining the actual Vec capacity.
@@ -2189,6 +2215,59 @@ fn positional_bytes(args: &Vec<String>) -> Result<usize, i32> {
     )
 }
 
+struct SourcePositionals {
+    args: Vec<String>,
+    memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
+}
+
+pub(crate) struct SourceFrame {
+    state: SharedState,
+    positional: Option<SourcePositionals>,
+}
+impl SourceFrame {
+    pub(crate) fn enter(state: SharedState, args: Vec<String>) -> Result<Self, i32> {
+        let mut shell = state.borrow_mut();
+        let positional = if args.is_empty() {
+            None
+        } else {
+            Some(Self::replace(&mut shell, args)?)
+        };
+        shell.positional_set = false;
+        shell.source_calls += 1;
+        drop(shell);
+        Ok(Self { state, positional })
+    }
+
+    pub(crate) fn finish(mut self) {
+        let mut shell = self.state.borrow_mut();
+        if self.positional.is_some() && shell.function_calls == 0 && shell.positional_set {
+            self.positional.take();
+            shell.positional_set = false;
+        }
+    }
+
+    fn replace(shell: &mut State, args: Vec<String>) -> Result<SourcePositionals, i32> {
+        let memory = shell.admit_positionals(&args)?;
+        Ok(SourcePositionals {
+            args: std::mem::replace(&mut shell.positional, args),
+            memory: std::mem::replace(&mut shell.positional_memory, memory),
+        })
+    }
+}
+impl Drop for SourceFrame {
+    fn drop(&mut self) {
+        let mut state = self.state.borrow_mut();
+        state.source_calls -= 1;
+        if self.positional.is_some() {
+            state.positional_set = false;
+        }
+        if let Some(saved) = self.positional.take() {
+            state.positional = saved.args;
+            state.positional_memory = saved.memory;
+        }
+    }
+}
+
 /// No borrow is held over an await. Dropping a cancelled function future restores
 /// the positional/local frame, including when it is nested inside another call.
 pub(crate) struct FunctionFrame {
@@ -2205,16 +2284,7 @@ impl FunctionFrame {
         if s.function_calls >= limit {
             return Err(2);
         }
-        let memory = s
-            .memory
-            .as_ref()
-            .map(|memory| {
-                memory
-                    .admit(positional_bytes(&args)?)
-                    .map_err(|_| crate::exec::RESOURCE_STATUS)
-            })
-            .transpose()?
-            .map(|ticket| Rc::new(RefCell::new(ticket)));
+        let memory = s.admit_positionals(&args)?;
         s.locals.try_reserve(2).map_err(|_| 2)?;
         let positional_memory = std::mem::replace(&mut s.positional_memory, memory);
         let positional = std::mem::replace(&mut s.positional, args);
@@ -2278,6 +2348,7 @@ impl Drop for FunctionFrame {
             .restore(traps::Event::Error, self.saved_traps[0].take());
         s.traps
             .restore(traps::Event::Return, self.saved_traps[1].take());
+        s.positional_set = false;
         if self.traced {
             s.call_stack.pop();
         }
@@ -2849,6 +2920,7 @@ mod tests {
                     line: 1,
                     body: body.clone(),
                     storage: None,
+                    reader: crate::exec::ReaderLocation::default(),
                 },
             );
             source.variables.insert("v".into(), "caller".into());
@@ -3304,3 +3376,6 @@ mod tests {
         assert_eq!(state.borrow().case_mapping("x"), CaseMapping::Upper);
     }
 }
+
+#[cfg(test)]
+mod source_tests;

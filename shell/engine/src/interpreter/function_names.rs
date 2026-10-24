@@ -47,6 +47,7 @@ pub(super) async fn declare(
             source: context.source.clone(),
             line,
             storage: context.evaluation.retained(),
+            reader: context.reader.clone(),
         },
     );
     Outcome::status(0)

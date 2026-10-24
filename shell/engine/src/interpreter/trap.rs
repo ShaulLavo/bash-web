@@ -65,7 +65,7 @@ async fn run_body(
             return Outcome::status(context.cancel_status());
         }
     }
-    let handler = eval::run(vec![action.text.clone()], state.clone(), fds, context).await;
+    let handler = eval::run(vec![action.text.clone()], None, state.clone(), fds, context).await;
     let outcome = if handler.flow == Flow::Normal {
         result
     } else {

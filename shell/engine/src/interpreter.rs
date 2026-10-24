@@ -28,6 +28,7 @@ mod function_names;
 mod indexed;
 mod reader;
 mod select;
+mod source;
 mod trap;
 #[cfg(test)]
 mod trap_tests;
@@ -279,6 +280,7 @@ enum CommandBoundary {
 pub(crate) struct Context {
     core: Rc<Core>,
     source: crate::exec::Source,
+    reader: crate::exec::ReaderLocation,
     pub cancel: Cancel,
     // The invoking foreground/background command, independent of nested scopes.
     lifetime: (Cancel, Rc<Cell<Option<i32>>>),
@@ -305,6 +307,7 @@ impl Context {
         Self {
             core,
             source: crate::exec::Source::root(source),
+            reader: crate::exec::ReaderLocation::default(),
             lifetime: (cancel.clone(), signal.clone()),
             cancel,
             signal,
@@ -812,6 +815,7 @@ impl Session {
             let result = reader::run(
                 reader::Reader::new(script, failure, aliases, parser),
                 "-c",
+                false,
                 state.clone(),
                 context.core.descriptors.clone(),
                 context.clone(),
@@ -2294,6 +2298,7 @@ async fn launch_background(
     let child_context = Context {
         core: context.core.clone(),
         source: context.source.clone(),
+        reader: context.reader.clone(),
         lifetime: (cancel.clone(), signal.clone()),
         cancel: cancel.clone(),
         signal: signal.clone(),
@@ -3148,6 +3153,7 @@ async fn dispatch_simple_command_body(
         frame.prefixes(assigned)?;
         let context = Context {
             source: body.source.clone(),
+            reader: body.reader.clone(),
             loop_depth: 0,
             command_boundary: CommandBoundary::FunctionBody,
             evaluation: context
@@ -3201,7 +3207,13 @@ async fn dispatch_simple_command_body(
         if !assigned.is_empty() {
             return Err(2);
         }
-        return Ok(eval::run(args, state, fds, context).await);
+        return Ok(eval::run(args, line, state, fds, context).await);
+    }
+    if handler == Some(commands::Handler::Source) {
+        let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
+            .await
+            .map_err(admission_status)?;
+        return Ok(source::run(&name, args, line, state, fds, context).await);
     }
     if handler == Some(commands::Handler::Type) {
         let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)

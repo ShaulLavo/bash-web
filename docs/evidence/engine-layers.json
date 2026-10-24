@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "3529e24cc628802b09952f4af8a24ad33a39794869c5c0e5729bbc6702d845e2",
+    "engineSourceSha256": "1a8568bfcab50c7aea97b6ec2e18ee8b9a9c48ed65932307d4901167d98bcfa3",
     "binaryBuild": null
   },
   "contract": {
@@ -260,6 +260,7 @@
         "shell/engine/src/interpreter/indexed.rs",
         "shell/engine/src/interpreter/reader.rs",
         "shell/engine/src/interpreter/select.rs",
+        "shell/engine/src/interpreter/source.rs",
         "shell/engine/src/interpreter/trap.rs",
         "shell/engine/src/interpreter/trap_tests.rs",
         "shell/engine/src/interpreter/type_builtin.rs"
@@ -333,6 +334,7 @@
         "shell/engine/src/state/declarations.rs",
         "shell/engine/src/state/directory_stack.rs",
         "shell/engine/src/state/getopts_tests.rs",
+        "shell/engine/src/state/source_tests.rs",
         "shell/engine/src/state/traps.rs"
       ]
     },
@@ -421,7 +423,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 846,
+        "line": 852,
         "column": 25
       }
     },
@@ -591,7 +593,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 1659,
+        "line": 1663,
         "column": 33
       }
     },
@@ -621,7 +623,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 93,
+        "line": 94,
         "column": 30
       }
     },
@@ -931,7 +933,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter/function_names.rs",
-        "line": 222,
+        "line": 223,
         "column": 20
       }
     },
@@ -941,7 +943,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3897,
+        "line": 3909,
         "column": 26
       }
     },
@@ -951,7 +953,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 5214,
+        "line": 5226,
         "column": 17
       }
     },
@@ -971,7 +973,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3884,
+        "line": 3896,
         "column": 17
       }
     },
@@ -981,7 +983,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3884,
+        "line": 3896,
         "column": 31
       }
     },
@@ -1081,7 +1083,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 1094,
+        "line": 1120,
         "column": 63
       }
     },
@@ -1091,7 +1093,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 2231,
+        "line": 2301,
         "column": 9
       }
     }
