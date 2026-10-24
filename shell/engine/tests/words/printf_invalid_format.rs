@@ -46,16 +46,21 @@ fn printf_invalid_format_keeps_admission_and_diagnostic_cancellation() {
     printf::assert_diagnostic_backpressure_cancellation("printf '%-z' 42", 2);
 }
 
+fn assert_unsupported_format(source: &str) {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run(source), 2, "{source}");
+    assert!(rig.output.bytes().is_empty(), "{source}");
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: printf: unsupported format conversion\n",
+        "{source}"
+    );
+}
+
 #[test]
 fn printf_valid_unimplemented_conversions_keep_unsupported_status() {
     for source in ["printf '%f' 3", "printf '%ls' x", "printf '%n' x"] {
-        let rig = Rig::new(Limits::default());
-        assert_eq!(rig.run(source), 2);
-        assert!(rig.output.bytes().is_empty());
-        assert_eq!(
-            rig.errors.bytes(),
-            b"/usr/bin/bash: printf: unsupported format conversion\n"
-        );
+        assert_unsupported_format(source);
     }
 }
 
@@ -67,14 +72,7 @@ fn printf_valid_unimplemented_wide_conversions_keep_unsupported_status() {
         "printf '%lC' 'A'",
         "printf '%lS' ''",
     ] {
-        let rig = Rig::new(Limits::default());
-        assert_eq!(rig.run(source), 2, "{source}");
-        assert!(rig.output.bytes().is_empty(), "{source}");
-        assert_eq!(
-            rig.errors.bytes(),
-            b"/usr/bin/bash: printf: unsupported format conversion\n",
-            "{source}"
-        );
+        assert_unsupported_format(source);
     }
 }
 
