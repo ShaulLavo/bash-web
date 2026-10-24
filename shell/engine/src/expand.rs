@@ -954,40 +954,34 @@ impl Expansion<'_> {
                 },
             );
         }
+        if let WordPart::ParameterExpansion {
+            name,
+            operator,
+            operand,
+            colon_variant,
+        } = part
+        {
+            return self.parameter_part(
+                name,
+                operator,
+                operand,
+                *colon_variant,
+                OperandContext {
+                    state,
+                    quoted,
+                    scalar,
+                    depth,
+                },
+            );
+        }
         self.part_frame(move |expansion| async move {
-            if !scalar && !quoted {
-                Ifs::admit_access(state, expansion.cancel, expansion.work).await?;
-            }
-            expansion.segments.needs_split |= !scalar && !quoted;
+            expansion.begin_part(state, quoted, scalar).await?;
             if matches!(part, WordPart::BadSubstitution(_)) {
                 expansion.work.admit_storage(256)?;
                 return Err(Error::BadSubstitution {
                     message: "invalid parameter expansion",
                     line: None,
                 });
-            }
-            if let WordPart::ParameterExpansion {
-                name,
-                operator,
-                operand,
-                colon_variant,
-            } = part
-            {
-                return expansion
-                    .parameter(
-                        name,
-                        operator,
-                        operand,
-                        *colon_variant,
-                        OperandContext {
-                            state,
-                            quoted,
-                            scalar,
-                            depth,
-                        },
-                        None,
-                    )
-                    .await;
             }
             if let WordPart::IndirectExpansion {
                 name,
@@ -1160,6 +1154,37 @@ impl Expansion<'_> {
                 )
                 .await
         })
+    }
+
+    fn parameter_part<'a>(
+        &'a mut self,
+        name: &'a str,
+        operator: &'a ParameterOp,
+        operand: &'a str,
+        colon_variant: bool,
+        context: OperandContext<'a>,
+    ) -> crate::exec::ResultFuture<'a, ()> {
+        self.part_frame(move |expansion| async move {
+            expansion
+                .begin_part(context.state, context.quoted, context.scalar)
+                .await?;
+            expansion
+                .parameter(name, operator, operand, colon_variant, context, None)
+                .await
+        })
+    }
+
+    async fn begin_part(
+        &mut self,
+        state: &SharedState,
+        quoted: bool,
+        scalar: bool,
+    ) -> Result<(), Error> {
+        if !scalar && !quoted {
+            Ifs::admit_access(state, self.cancel, self.work).await?;
+        }
+        self.segments.needs_split |= !scalar && !quoted;
+        Ok(())
     }
 
     fn part_frame<'a, F>(
@@ -2080,12 +2105,22 @@ impl Expansion<'_> {
         }
         Ok((list, separator))
     }
-    fn take_element(&mut self) -> bool {
+    async fn element(
+        &mut self,
+        index: usize,
+        list: bool,
+        separator: Option<char>,
+        value: &str,
+        protection: Protection,
+        protected: bool,
+    ) -> Result<(), Error> {
         if self.elements_remaining == 0 {
-            return false;
+            return Err(2.into());
         }
         self.elements_remaining -= 1;
-        true
+        self.element_boundary(index, list, separator, protected)
+            .await?;
+        self.segment(value, protection, protected).await
     }
     async fn element_boundary(
         &mut self,
