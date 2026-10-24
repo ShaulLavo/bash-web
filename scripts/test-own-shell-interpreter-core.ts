@@ -1,28 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { after, test } from "node:test";
 import { stopNodeWorkers } from "./node-worker-host.ts";
-import { createWaffleRunner } from "./waffle-compat.ts";
+import { createShellFixtureRunner, readShellFixtureRecording } from "./shell-fixture-runner.ts";
 
-type Recording = {
-  schema: number;
-  bash: string;
-  cases: { id: string; script: string; bash: { status: number; stdout: string } }[];
-};
-const fixture: Recording = JSON.parse(
-  readFileSync(new URL("fixtures/shell-interpreter-core.json", import.meta.url), "utf8"),
+const fixture = readShellFixtureRecording<{ status: number; stdout: string }>(
+  new URL("fixtures/shell-interpreter-core.json", import.meta.url),
 );
-assert.equal(fixture.schema, 1);
-assert.equal(fixture.bash, "5.3.15(1)-release");
-const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
-const runner = await createWaffleRunner({
-  modulePath: resolve(directory, "shell-runtime.wasm"),
-  fixtureDirectory: directory,
-  utilityDirectory: directory,
-  tmp: "/tmp/spec",
-  env: { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" },
-});
+const runner = await createShellFixtureRunner();
 after(stopNodeWorkers);
 
 async function run(script: string) {
