@@ -10,17 +10,57 @@ pub(crate) struct DeclarationView<'a> {
 }
 
 impl State {
-    pub(crate) fn declaration_append_base(&self, name: &str, local: bool) -> Option<&str> {
+    pub(crate) fn declaration_append_base(
+        &self,
+        name: &str,
+        local: bool,
+        inherit: bool,
+    ) -> Option<&str> {
         if !local {
             return self.scalar_parameter(name);
         }
-        if !self.is_current_local(name) && !self.inherits_function_prefix(name) {
+        if !inherit && !self.is_current_local(name) && !self.inherits_function_prefix(name) {
             return None;
         }
         self.variables
             .get(name)
             .and_then(Binding::scalar)
             .map(String::as_str)
+    }
+
+    pub(crate) fn declare_inherited_local(
+        &mut self,
+        name: String,
+        value: Option<String>,
+        work: &mut crate::exec::Work,
+    ) -> Result<(), i32> {
+        if self.namerefs.contains_key(&name)
+            || matches!(self.variables.get(&name), Some(Binding::Indexed(_)))
+            || self.stack_array(&name)
+            || self.dynamic_parameter(&name)
+            || name == "OPTIND"
+        {
+            return Err(2);
+        }
+        if self.is_current_local(&name) {
+            return self.declare_local(name, value);
+        }
+        if self.is_readonly(&name) {
+            return Err(1);
+        }
+        let mapping = self.case_attributes.get(&name).copied();
+        let copied_value = if value.is_none() {
+            self.variables.get(&name).map_or(0, Binding::storage_bytes)
+        } else {
+            0
+        };
+        let bytes = copied_value
+            .checked_add(self.saved_case_storage(&name))
+            .ok_or(2)?;
+        work.admit_storage(bytes).map_err(|_| 2)?;
+        self.declare_local_value(name.clone(), value, true)?;
+        self.restore_case(&name, mapping);
+        Ok(())
     }
 
     pub(super) fn inherits_function_prefix(&self, name: &str) -> bool {
@@ -57,5 +97,68 @@ impl State {
             exported,
             case: self.case_mapping(name),
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        exec::{RESOURCE_STATUS, StorageBudget, Work},
+        state::{CaseMapping, FunctionFrame},
+    };
+
+    #[test]
+    fn inherited_local_admission_preserves_outer_attributes_and_refunds_on_return() {
+        let memory = StorageBudget::new(64 * 1024);
+        let state = State::with_memory(memory.clone()).shared();
+        state
+            .borrow_mut()
+            .assign_parameter("v".into(), "OUTER".into())
+            .unwrap();
+        state
+            .borrow_mut()
+            .case_attributes
+            .insert("v".into(), CaseMapping::Upper);
+        state.borrow_mut().export("v".into(), None).unwrap();
+        let frame = FunctionFrame::enter(state.clone(), Vec::new(), 8).unwrap();
+        let before = memory.observation().0;
+        let mut work = Work::new(100, 0, 0);
+        assert_eq!(
+            state
+                .borrow_mut()
+                .declare_inherited_local("v".into(), None, &mut work),
+            Err(2)
+        );
+        assert!(!state.borrow().is_current_local("v"));
+        assert_eq!(state.borrow().parameter("v"), "OUTER");
+        assert_eq!(memory.observation().0, before);
+        let pressure = memory.admit(64 * 1024 - before).unwrap();
+        let mut work = Work::new(100, 4096, 0);
+        assert_eq!(
+            state
+                .borrow_mut()
+                .declare_inherited_local("v".into(), None, &mut work),
+            Err(RESOURCE_STATUS)
+        );
+        assert!(!state.borrow().is_current_local("v"));
+        assert_eq!(state.borrow().case_mapping("v"), CaseMapping::Upper);
+        drop(pressure);
+        state
+            .borrow_mut()
+            .declare_inherited_local("v".into(), None, &mut work)
+            .unwrap();
+        state
+            .borrow_mut()
+            .assign_parameter("v".into(), "mixed".into())
+            .unwrap();
+        assert_eq!(state.borrow().parameter("v"), "MIXED");
+        drop(frame);
+        let state = state.borrow();
+        let outer = state.declaration("v").unwrap().unwrap();
+        assert_eq!(outer.value, Some("OUTER"));
+        assert!(outer.exported);
+        assert_eq!(outer.case, CaseMapping::Upper);
+        assert_eq!(memory.observation().0, 0);
     }
 }

@@ -109,6 +109,15 @@ impl Rig {
     fn run(&self, source: &str) -> i32 {
         self.finish(self.shell.start(source).unwrap())
     }
+    fn check_recorded(&self, case: &serde_json::Value, expected: &[u8]) {
+        let code = case["code"].as_str().unwrap();
+        assert_eq!(
+            self.run(code),
+            case["status"].as_i64().unwrap() as i32,
+            "{code}"
+        );
+        assert_eq!(self.output.bytes(), expected, "{code}");
+    }
     fn variable(&self, name: &str, value: &str) {
         self.shell
             .state()
@@ -2160,8 +2169,11 @@ fn scalar_operators_work_in_assignments_declarations_command_names_and_redirects
 
 #[test]
 fn selected_unsupported_operands_and_operator_targets_fail_without_dispatch() {
+    check(
+        r#"args ${u:-$@}; set -- a "b c"; args ${u:-$@}; args "${u:-$@}""#,
+        &[&[], &["a", "b", "c"], &["a", "b c"]],
+    );
     for source in [
-        "args ${u:-$@}",
         "args ${u:-${PIPESTATUS[@]}}",
         "args ${a[0]-x}",
         "args ${1-x}",
@@ -2960,11 +2972,10 @@ fn assignment_and_error_operands_are_lazy_including_unsupported_syntax() {
     assert_eq!(*rig.calls.borrow(), &[vec!["diagnostic"]]);
     assert_eq!(rig.errors.bytes(), b"/usr/bin/bash: line 1: u: failure\n");
     assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
-    let source = "args ${u:=$@}";
-    let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run(source), 2, "{source}");
-    assert!(rig.calls.borrow().is_empty());
-    assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
+    check(
+        r#"args ${u:=$@}; args "${u+x}" "$u"; set -- a "b c"; unset u; args "${u:=$@}" "$u""#,
+        &[&[], &["x", ""], &["a b c", "a b c"]],
+    );
 }
 
 #[test]
@@ -4391,6 +4402,8 @@ mod getopts;
 
 #[path = "words/declarations.rs"]
 mod declarations;
+#[path = "words/local_inherit.rs"]
+mod local_inherit;
 #[path = "words/select.rs"]
 mod select;
 
@@ -4417,6 +4430,9 @@ mod aliases;
 
 #[path = "words/array_slicing.rs"]
 mod array_slicing;
+
+#[path = "words/pipeline_status.rs"]
+mod pipeline_status;
 
 #[path = "words/command_hash.rs"]
 mod command_hash;
