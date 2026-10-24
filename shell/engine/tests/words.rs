@@ -2150,11 +2150,18 @@ fn scalar_operators_work_in_assignments_declarations_command_names_and_redirects
 }
 
 #[test]
+fn selected_element_default_distinguishes_missing_and_set_empty() {
+    check(
+        r#"args ${a[0]-x}; a[0]=; args "${a[0]-x}" "${a[0]:-x}"; a[0]=kept; args "${a[0]-x}""#,
+        &[&["x"], &["", "x"], &["kept"]],
+    );
+}
+
+#[test]
 fn selected_unsupported_operands_and_operator_targets_fail_without_dispatch() {
     for source in [
         "args ${u:-$@}",
         "args ${u:-${PIPESTATUS[@]}}",
-        "args ${a[0]-x}",
         "args ${1-x}",
         "args ${u:-~}",
         "args ${u:-*}",

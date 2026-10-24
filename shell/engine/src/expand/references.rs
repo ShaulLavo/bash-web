@@ -67,15 +67,14 @@ pub(crate) async fn parameter_place(
     let Some(reference) = Reference::parse(text) else {
         return Ok(None);
     };
-    let indexed = state
-        .borrow()
-        .reference(reference)
-        .map_err(|error| match error {
-            ScalarResolution::DepthExceeded => Error::AssignmentDepth,
-            _ => Error::Status(1),
-        })?
-        .subscript
-        .is_some();
+    let indexed = match state.borrow().reference(reference) {
+        Ok(target) => target.subscript.is_some(),
+        // Bare-name cycles and depth overflow keep the scalar adapter's unset
+        // reads. Its separate assignment admission still rejects writes.
+        Err(_) if reference.subscript.is_none() => return Ok(None),
+        Err(ScalarResolution::DepthExceeded) => return Err(Error::AssignmentDepth),
+        Err(_) => return Err(Error::Status(1)),
+    };
     if !indexed {
         return Ok(None);
     }
