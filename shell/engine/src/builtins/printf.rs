@@ -1,4 +1,5 @@
 mod fields;
+mod float;
 mod quoting;
 use super::error_status;
 use crate::{

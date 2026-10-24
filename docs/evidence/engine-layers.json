@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "d59fc9f827f5319f9ff7e1213eb8fe01838400b958536edf7ab36fb5db0c6346",
+    "engineSourceSha256": "ac83ca33d5c773da63eff9c32b176d22162a2a84ed3bf7d4a0baaee337deb6d1",
     "binaryBuild": null
   },
   "contract": {
@@ -182,6 +182,10 @@
         "shell/engine/src/builtins/getopts/tests.rs",
         "shell/engine/src/builtins/printf.rs",
         "shell/engine/src/builtins/printf/fields.rs",
+        "shell/engine/src/builtins/printf/float.rs",
+        "shell/engine/src/builtins/printf/float/decimal.rs",
+        "shell/engine/src/builtins/printf/float/integer.rs",
+        "shell/engine/src/builtins/printf/float/parse.rs",
         "shell/engine/src/builtins/printf/quoting.rs",
         "shell/engine/src/builtins/read.rs",
         "shell/engine/src/builtins/read/fields.rs",
