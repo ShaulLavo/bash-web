@@ -212,6 +212,7 @@ impl Default for State {
                 ("IFS".into(), " \t\n".into()),
                 ("OPTIND".into(), "1".into()),
                 ("OPTERR".into(), "1".into()),
+                ("_".into(), "bash".into()),
             ]),
             exported: BTreeSet::new(),
             readonly: BTreeSet::new(),
@@ -259,6 +260,12 @@ impl Default for State {
         }
     }
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AssignmentKind {
+    Explicit,
+    Publication,
+}
+
 impl State {
     /// Ordinary bindings, without special-parameter or nameref resolution.
     pub fn bindings(&self) -> &BTreeMap<String, Binding> {
@@ -300,6 +307,32 @@ impl State {
     pub(crate) fn publish_pipeline_status(&mut self, statuses: Vec<i32>) {
         self.pipestatus = statuses;
     }
+    pub(crate) fn last_argument_needs_admission(&self) -> bool {
+        self.is_nameref("_")
+            || matches!(self.variables.get("_"), Some(Binding::Indexed(_)))
+            || self.prefix_saved("_")
+            || self.assignment_undo.0.strong_count() != 0
+            || matches!(self.star_separator, StarSeparator::Snapshot { .. })
+                && self.ifs_members.is_none()
+    }
+    pub(crate) fn publish_last_argument(&mut self, mut value: String) -> Result<(), Error> {
+        self.exported.remove("_");
+        let name = if self.namerefs.contains_key("_") {
+            Cow::Owned(self.assignment_name("_".into())?)
+        } else {
+            Cow::Borrowed("_")
+        };
+        if self.is_readonly(&name) {
+            return Err(Error::Readonly {
+                name: name.into_owned(),
+                line: None,
+                expansion: false,
+            });
+        }
+        self.normalize_getopts_publication(&name, &mut value);
+        self.assign_resolved_parameter(name, value, AssignmentKind::Publication)
+            .map_err(Error::from)
+    }
     pub(crate) fn last_async(&self) -> Option<&str> {
         self.last_async.as_deref()
     }
@@ -317,8 +350,7 @@ impl State {
             .map(|(key, value)| (key, value.into()))
             .collect();
         self.exported = self.variables.keys().cloned().collect();
-        self.variables.insert("OPTIND".into(), "1".into());
-        self.variables.insert("OPTERR".into(), "1".into());
+        self.initialize_shell_defaults();
         self.variables
             .entry("PATH".into())
             .or_insert_with(|| "/usr/bin:/bin".into());
@@ -326,6 +358,7 @@ impl State {
     /// The browser process adapter keeps the engine's default IFS if absent
     /// from the inherited environment, and exports the resulting startup keys.
     pub fn inherit_environment(&mut self, environment: impl IntoIterator<Item = (String, String)>) {
+        self.variables.remove("_");
         self.variables.remove("OPTIND");
         self.variables.remove("OPTERR");
         self.variables.extend(
@@ -334,6 +367,12 @@ impl State {
                 .map(|(key, value)| (key, value.into())),
         );
         self.exported = self.variables.keys().cloned().collect();
+        self.initialize_shell_defaults();
+    }
+    fn initialize_shell_defaults(&mut self) {
+        self.variables
+            .entry("_".into())
+            .or_insert_with(|| self.shell_name.clone().into());
         self.variables.insert("OPTIND".into(), "1".into());
         self.variables.insert("OPTERR".into(), "1".into());
     }
@@ -1027,6 +1066,14 @@ impl State {
     }
     pub fn assign_parameter(&mut self, name: String, value: String) -> Result<(), i32> {
         let name = self.assignment_name(name)?;
+        self.assign_resolved_parameter(Cow::Owned(name), value, AssignmentKind::Explicit)
+    }
+    fn assign_resolved_parameter(
+        &mut self,
+        name: Cow<'_, str>,
+        value: String,
+        kind: AssignmentKind,
+    ) -> Result<(), i32> {
         if self.is_readonly(&name) {
             return Err(1);
         }
@@ -1049,23 +1096,27 @@ impl State {
         if let Some(saved) = self
             .prefixes
             .last_mut()
-            .and_then(|frame| frame.get_mut(&name))
+            .and_then(|frame| frame.get_mut(name.as_ref()))
         {
             let mut binding = saved.clone().unwrap_or_else(|| "".into());
             binding.set_scalar(value.clone());
             *saved = Some(binding);
         }
         let direct_ifs = name == "IFS";
-        self.assign_getopts_index(&name, &value);
-        if name == "OPTIND"
+        if kind == AssignmentKind::Explicit {
+            self.assign_getopts_index(&name, &value);
+        }
+        if kind == AssignmentKind::Explicit
+            && name == "OPTIND"
             && let Some(changes) = changes
         {
             changes.borrow_mut().getopts = Some(self.getopts);
         }
-        self.variables
-            .entry(name)
-            .and_modify(|binding| binding.set_scalar(value.clone()))
-            .or_insert_with(|| value.into());
+        if let Some(binding) = self.variables.get_mut(name.as_ref()) {
+            binding.set_scalar(value);
+        } else {
+            self.variables.insert(name.into_owned(), value.into());
+        }
         if direct_ifs {
             self.refresh_star_separator();
         }
@@ -1127,6 +1178,12 @@ impl State {
     }
     pub(crate) fn getopts_numeric(&self, name: &str) -> bool {
         name == "OPTIND" && self.getopts_numeric
+    }
+    pub(crate) fn normalize_getopts_publication(&self, target: &str, value: &mut String) {
+        if self.getopts_numeric(target) && value.bytes().any(|byte| !byte.is_ascii_digit()) {
+            value.clear();
+            value.push('0');
+        }
     }
     #[cfg(test)]
     pub(crate) fn getopts_publication_budget(&self) -> Option<crate::exec::StorageBudget> {
@@ -2459,6 +2516,9 @@ mod tests {
             + 6
             + snapshot_node_bytes::<String>().unwrap_or_else(|_| panic!("node fits"))
             + 9
+            + snapshot_node_bytes::<Binding>().unwrap_or_else(|_| panic!("node fits"))
+            + "_".len()
+            + "bash".len()
             + std::mem::size_of::<i32>();
         let mut child = snapshot_at_exact_limit(&state, bytes);
         child
