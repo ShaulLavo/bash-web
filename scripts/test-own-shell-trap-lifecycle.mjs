@@ -29,17 +29,37 @@ const ids = Array.from(witnesses.matchAll(/check\(\s*"([^"]+)"/g), (match) => ma
 assert.equal(new Set(ids).size, ids.length);
 assert.ok(ids.length >= 18);
 
-// Use the exact same frozen rows as the native witnesses, without another matrix.
-for (const id of ids) {
-  test(`real Waffle trap lifecycle ${id}`, { timeout: 15000 }, async () => {
-    const frozen = oracle.cases.find((row) => row.id === id);
-    assert.ok(frozen?.bash, id);
+// Frozen rows retain their identity; owner causal checks make no oracle claim.
+const frozenCases = ids.map((id) => {
+  const frozen = oracle.cases.find((row) => row.id === id);
+  assert.ok(frozen?.bash, id);
+  return {
+    id,
+    code: frozen.code,
+    status: frozen.bash.status,
+    stdout: Buffer.from(frozen.bash.stdout, "base64"),
+  };
+});
+const causalCases = Array.from(
+  witnesses.matchAll(
+    /check_causal\(\s*"([^"]+)",\s*r#"([\s\S]*?)"#,\s*(\d+),\s*("(?:[^"\\]|\\.)*"),\s*\);/g,
+  ),
+  (match) => ({
+    id: match[1],
+    code: match[2],
+    status: Number(match[3]),
+    stdout: Buffer.from(JSON.parse(match[4])),
+  }),
+);
+assert.equal(causalCases.length, 5);
+for (const row of frozenCases.concat(causalCases)) {
+  test(`real Waffle trap lifecycle ${row.id}`, { timeout: 15000 }, async () => {
     const run = await createWaffleRunner(options);
-    const result = await run(frozen.code);
-    assert.equal(result.crash, undefined, `${id} crash`);
-    assert.equal(result.status, frozen.bash.status, `${id} status`);
-    assert.deepEqual(result.stdout, Buffer.from(frozen.bash.stdout, "base64"), `${id} stdout`);
-    assert.equal(liveNodeWorkers(), 0, `${id} worker cleanup`);
+    const result = await run(row.code);
+    assert.equal(result.crash, undefined, `${row.id} crash`);
+    assert.equal(result.status, row.status, `${row.id} status`);
+    assert.deepEqual(result.stdout, row.stdout, `${row.id} stdout`);
+    assert.equal(liveNodeWorkers(), 0, `${row.id} worker cleanup`);
   });
 }
 

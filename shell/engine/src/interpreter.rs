@@ -162,6 +162,11 @@ impl From<i32> for CommandError {
 }
 
 type Descriptors = Rc<RefCell<FdTable>>;
+
+struct CompletionDescriptors {
+    fds: RefCell<Option<Descriptors>>,
+    _allocation: crate::exec::Allocation,
+}
 const TASK_METADATA_BYTES: usize = 4096;
 /// Shared forwarding keeps descendants attached when several isolated scopes
 /// finish in a different order. Captured parent handles follow later transfers.
@@ -318,6 +323,7 @@ pub(crate) struct Context {
     trap_mask: u8,
     skip_debug: bool,
     return_boundary: bool,
+    completion_descriptors: Option<Rc<CompletionDescriptors>>,
 }
 impl Context {
     fn root(
@@ -345,6 +351,7 @@ impl Context {
             trap_mask: 0,
             skip_debug: false,
             return_boundary: false,
+            completion_descriptors: None,
             evaluation,
         }
     }
@@ -416,6 +423,7 @@ impl Context {
     fn isolated(&self) -> Self {
         Self {
             loop_depth: 0,
+            completion_descriptors: None,
             trap_mask: traps::child_mask(self.trap_mask),
             scope: Scope::new(self.core.allocate_id()),
             evaluation: self.evaluation.new_task(),
@@ -446,6 +454,7 @@ impl Context {
                 self.parameter_error_status
             },
             compound_child: false,
+            completion_descriptors: None,
             ..self.clone()
         }
     }
@@ -1333,6 +1342,16 @@ fn command_body(
     fds: Descriptors,
     context: Context,
 ) -> eval::Frame<'static> {
+    let context = match command {
+        Command::Simple(_) => context,
+        Command::Compound(ref compound, _) if !matches!(compound, CompoundCommand::Subshell(_)) => {
+            context
+        }
+        _ => Context {
+            completion_descriptors: None,
+            ..context
+        },
+    };
     let evaluation = context.evaluation.clone();
     match command {
         Command::Simple(simple) => {
@@ -1496,7 +1515,7 @@ async fn pipeline_command(
     if (count == 1 || share_last) && last.flow != Flow::Normal {
         return *last;
     }
-    if !share_last && matches!(last.flow, Flow::Exit | Flow::Abort) {
+    if !share_last && last.flow == Flow::Abort {
         return *last;
     }
     if results.iter().any(|result| result.flow == Flow::Resource) {
@@ -1586,6 +1605,9 @@ async fn compound_command(
         Err(outcome) => return outcome,
         Ok(fds) => fds,
     };
+    if let Some(completion) = &context.completion_descriptors {
+        *completion.fds.borrow_mut() = Some(fds.clone());
+    }
     let context = context.compound_body();
     // Unredirected compounds share shell bindings so exec persists, but their
     // process-substitution descriptors still belong only to this command.
@@ -2398,6 +2420,13 @@ async fn launch_background(
         Ok(number) => number,
         Err(code) => return Outcome::status(code),
     };
+    traps::inherit(&child);
+    let fds = Rc::new(RefCell::new(fds.borrow().clone()));
+    let completion_descriptors =
+        match background_completion_descriptors(&command, &child, &fds, context) {
+            Ok(completion) => completion,
+            Err(error) => return pre_dispatch_failure(error, &fds, context).await,
+        };
     let group = context.core.host.allocate_background_group();
     let cancel = Cancel::new();
     let signal = Rc::new(Cell::new(None));
@@ -2419,27 +2448,17 @@ async fn launch_background(
         trap_mask: traps::child_mask(context.trap_mask),
         skip_debug: false,
         return_boundary: false,
+        completion_descriptors: completion_descriptors.clone(),
     };
-    let fds = Rc::new(RefCell::new(fds.borrow().clone()));
     let parent_scope = context.scope.clone();
     let join = context.core.executor.spawn(async move {
         let mut processes = child_context.process_group();
-        traps::inherit(&child);
-        // A background compound may redirect stdout away from the caller's
-        // capture. Keep the original table only for an EXIT handler already
-        // eligible at entry; otherwise release the capture writer before the
-        // long-running child command is awaited. Redirect setup then owns the
-        // command's replacement table, while the optional completion copy
-        // remains available for an inherited handler.
-        let completion_fds =
-            traps::active(traps::Event::Exit, &child, &child_context).then(|| fds.clone());
-        let command_fds = fds.clone();
-        drop(fds);
-        let result = execute(command, child.clone(), command_fds, child_context.clone()).await;
-        let result = match completion_fds {
-            Some(fds) => traps::completing(result, child, fds, child_context.clone()).await,
-            None => result,
+        let result = execute(command, child.clone(), fds, child_context.clone()).await;
+        let completion_fds = match completion_descriptors {
+            Some(completion) => completion.fds.borrow_mut().take().unwrap(),
+            None => Rc::new(RefCell::new(FdTable::default())),
         };
+        let result = traps::completing(result, child, completion_fds, child_context.clone()).await;
         child_context.finish_scope(parent_scope).await;
         child_context.finish_group(&mut processes, result).await
     });
@@ -2459,6 +2478,27 @@ async fn launch_background(
     );
     state.borrow_mut().publish_async_identity(identity);
     Outcome::status(0)
+}
+
+fn background_completion_descriptors(
+    command: &Command,
+    state: &SharedState,
+    fds: &Descriptors,
+    context: &Context,
+) -> Result<Option<Rc<CompletionDescriptors>>, expand::Error> {
+    // Explicit subshells complete their own snapshot and effective redirects.
+    if matches!(command, Command::Compound(CompoundCommand::Subshell(_), _))
+        || !traps::needs_completion_descriptors(command, state)
+    {
+        return Ok(None);
+    }
+    let allocation = context
+        .evaluation
+        .admit_execution(size_of::<CompletionDescriptors>() + 2 * size_of::<usize>())?;
+    Ok(Some(Rc::new(CompletionDescriptors {
+        fds: RefCell::new(Some(fds.clone())),
+        _allocation: allocation,
+    })))
 }
 
 fn admit_task_metadata<T>(
@@ -2923,6 +2963,15 @@ async fn simple_command(
     if let Err(error) = prepare_simple_command(simple, &state, fds, &context, &mut prepared).await {
         return expansion_failure(error.at_line(line), &original_fds, &context).await;
     }
+    if let Some(completion) = &context.completion_descriptors
+        && let Ok(execution) = &prepared.as_ref().unwrap().execution
+    {
+        *completion.fds.borrow_mut() = execution.fds.clone();
+    }
+    let context = Context {
+        completion_descriptors: None,
+        ..context
+    };
     let parent_stderr = match original_fds.borrow().get(2) {
         Some(stderr) => WeakStderr::Open(stderr.downgrade()),
         None => WeakStderr::Closed,
@@ -4419,6 +4468,7 @@ mod scope_tests {
             trap_mask: 0,
             skip_debug: false,
             return_boundary: false,
+            completion_descriptors: None,
         };
         (session.state(), session.core.descriptors.clone(), context)
     }

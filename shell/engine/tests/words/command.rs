@@ -369,17 +369,22 @@ fn capture_waits_for_a_gated_background_writer() {
 
 #[test]
 fn redirected_background_loop_does_not_postpone_capture_eof() {
-    let rig = Rig::new(Limits::default());
-    assert_eq!(
-        rig.run(r#"x=$(while :; do :; done >/dev/null &); args "$x" after"#),
-        0,
-    );
-    assert_eq!(*rig.calls.borrow(), &[vec!["", "after"]]);
-    assert!(
-        rig.ex.drive(0).pending > 0,
-        "the descendant is still running"
-    );
-    shutdown_and_check(&rig);
+    for source in [
+        r#"x=$(while :; do :; done >/dev/null &); args "$x" after"#,
+        r#"x=$({ trap 'echo BAD_EXIT' EXIT; while :; do :; done; } >/dev/null &); args "$x" after"#,
+        r#"f() { trap 'echo BAD_EXIT' EXIT; while :; do :; done; }; x=$(f >/dev/null &); args "$x" after"#,
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 0, "{source}");
+        assert_eq!(*rig.calls.borrow(), &[vec!["", "after"]], "{source}");
+        assert!(rig.output.bytes().is_empty(), "{source}");
+        assert!(
+            rig.ex.drive(0).pending > 0,
+            "the descendant is still running: {source}"
+        );
+        shutdown_and_check(&rig);
+        assert!(rig.output.bytes().is_empty(), "{source}");
+    }
 }
 
 #[test]

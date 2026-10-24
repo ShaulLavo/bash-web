@@ -485,3 +485,31 @@ fn err_metadata_entry_refusal_and_cancel_leave_binding_and_handler_untouched() {
     );
     assert_eq!(shell.core.execution_storage.observation().0, 0);
 }
+
+#[test]
+fn background_completion_handoff_refunds_on_completion_and_cancellation() {
+    let (shell, executor, output) = session();
+    let before = shell.core.execution_storage.observation().0;
+    let source = "value=$({ trap ':' EXIT; :; } & wait); unset value";
+    assert_eq!(complete(&executor, shell.start(source).unwrap()), 0);
+    executor.drive(256);
+    assert_eq!(shell.core.eval_storage.observation().0, 0);
+    assert_eq!(shell.core.execution_storage.observation().0, before);
+    let source = "{ trap 'echo BAD_EXIT' EXIT; while :; do :; done; } >/dev/null & wait";
+    let job = shell.start(source).unwrap();
+    executor.drive(256);
+    assert!(!job.is_finished());
+    shell.interrupt();
+    assert_eq!(complete(&executor, job), 130);
+    // Foreground interruption preserves the separately owned background job.
+    assert!(executor.drive(0).pending > 0);
+    assert_eq!(
+        complete(&executor, shell.start("kill %1; wait").unwrap()),
+        0
+    );
+    executor.drive(256);
+    assert!(output.bytes().is_empty());
+    assert_eq!(shell.core.eval_storage.observation().0, 0);
+    assert_eq!(shell.core.execution_storage.observation().0, before);
+    assert_eq!(complete(&executor, shell.start(":").unwrap()), 0);
+}

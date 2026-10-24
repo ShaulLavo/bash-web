@@ -196,6 +196,7 @@ impl Rig {
             trap_mask: 0,
             skip_debug: false,
             return_boundary: false,
+            completion_descriptors: None,
             compound_child: false,
             core,
         }

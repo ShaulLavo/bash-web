@@ -1,4 +1,4 @@
-//! Frozen lifecycle witnesses from docs/evidence/own-shell-oracle.json.
+//! Frozen lifecycle witnesses and explicit owner-contract causal checks.
 //! No host Bash, new recording, fixture identity or baseline change is involved.
 use std::{
     process::{Child, Command, Output, Stdio},
@@ -142,6 +142,70 @@ echo "result: $result"
 [sub exit]
 [parent exit]
 "#,
+    );
+}
+
+// Owner lifecycle invariants are causal checks, not new frozen oracle rows.
+fn check_causal(id: &str, source: &str, status: i32, stdout: &str) {
+    check(id, source, status, stdout);
+}
+
+#[test]
+fn background_child_installed_exit_runs_before_wait_completion() {
+    check_causal(
+        "owner contract: late background EXIT",
+        r#"{ trap 'printf "bg-exit\n"' EXIT; printf 'bg-body\n'; } & wait
+"#,
+        0,
+        "bg-body\nbg-exit\n",
+    );
+}
+
+#[test]
+fn capture_background_child_installed_exit_runs_before_capture_eof() {
+    check_causal(
+        "owner contract: late capture background EXIT",
+        r#"result=$( { trap 'printf "cap-exit\n"' EXIT; printf 'cap-body\n'; } & wait ); printf 'capture=<%s>\n' "$result"
+"#,
+        0,
+        "capture=<cap-body\ncap-exit>\n",
+    );
+}
+
+#[test]
+fn isolated_pipeline_errexit_does_not_abort_parent_with_errexit_off() {
+    check_causal(
+        "owner invariant: isolated pipeline errexit",
+        r#"set +e; true | { set -e; false; printf 'BAD\n'; }; printf 'after\n'
+"#,
+        0,
+        "after\n",
+    );
+}
+
+#[test]
+fn background_exit_uses_effective_compound_and_function_redirects() {
+    check_causal(
+        "owner contract: redirected background EXIT",
+        r#"f() { trap 'printf "function-exit\n"' EXIT; }
+value=$( { trap 'printf "brace-exit\n"' EXIT; :; } >/brace-exit & f >/function-exit & wait )
+read -r brace </brace-exit
+read -r function </function-exit
+printf '<%s>:%s:%s\n' "$value" "$brace" "$function"
+"#,
+        0,
+        "<>:brace-exit:function-exit\n",
+    );
+}
+
+#[test]
+fn isolated_pipeline_status_obeys_parent_errexit_and_negation() {
+    check_causal(
+        "owner invariant: parent pipeline failure policy",
+        r#"set -e; ! true | { set -e; false; }; printf 'negated\n'; true | { set -e; false; }; printf 'BAD\n'
+"#,
+        1,
+        "negated\n",
     );
 }
 
