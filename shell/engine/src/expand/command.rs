@@ -132,13 +132,12 @@ impl Expansion<'_> {
     ) -> Result<i32, Error> {
         let runner = self.work.substitutions.clone().ok_or(2)?;
         let remaining = self.work.fields_remaining;
-        let targets = super::fields_admitted(
+        let targets = super::fields(
             &redirect.target,
             state,
             self.cancel,
-            self.max_raw,
-            self.elements_remaining,
-            self.max_raw,
+            super::FieldContext::ForList,
+            (self.max_raw, self.elements_remaining, self.max_raw),
             self.work,
         )
         .await;
