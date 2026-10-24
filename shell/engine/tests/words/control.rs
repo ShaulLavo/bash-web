@@ -435,3 +435,33 @@ fn bad_substitution_discards_its_line_or_exits_under_errexit() {
     );
     assert!(rig.calls.borrow().is_empty());
 }
+
+#[test]
+fn timed_function_declarations_keep_bash_printing() {
+    for (script, expected) in [
+        (
+            "f() { time -- echo a; }; declare -f f",
+            "f () \n{ \n    time -p echo a\n}\n",
+        ),
+        (
+            "f() { time -p true | false; }; declare -f f",
+            "f () \n{ \n    time -p true | false\n}\n",
+        ),
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(script), 0, "{script}: {:?}", rig.errors.bytes());
+        assert_eq!(rig.output.bytes(), expected.as_bytes(), "{script}");
+    }
+}
+
+#[test]
+fn nested_bad_substitution_discards_its_line_with_status_one() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("echo ${x:-${y!}}\necho after $?"), 0);
+    assert_eq!(rig.output.bytes(), b"after 1\n");
+    assert!(
+        String::from_utf8(rig.errors.bytes())
+            .unwrap()
+            .contains("bad substitution")
+    );
+}
