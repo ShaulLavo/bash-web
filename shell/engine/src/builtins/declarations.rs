@@ -23,8 +23,8 @@ pub(super) async fn print<'a>(
     for name in names {
         count += 1;
         scan_bytes(name.len(), context, work).await?;
-        if state.borrow().stack_array(&name) && !state.borrow().is_nameref(&name) {
-            print_stack_array(&name, state, fds, context, work).await?;
+        if state.borrow().stack_array(name) && !state.borrow().is_nameref(name) {
+            print_stack_array(name, state, fds, context, work).await?;
             continue;
         }
         let Some(DeclarationSnapshot { value, attributes }) =
