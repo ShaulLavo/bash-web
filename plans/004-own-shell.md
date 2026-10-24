@@ -3230,6 +3230,29 @@ Implement bounded complement groups without recursive backtracking, preserve
 work/storage admission and cancellation, and add nested and suffix controls.
 That matcher change is larger than passing an option through completion's glob
 lookup. No frozen case, oracle, exclusion or baseline change is authorized.
+### Bounded full-pattern complement implementation, 2026-10-24
+
+Status: Approved. Implementation prepared for independent review in the negative
+extglob family, based on reviewed PR75 source `91ced064`. The core pattern layer
+now compiles detached complement bodies and evaluates admitted substring
+relations without recursive backtracking. Positive-only matching, ordinary argv
+pathname expansion, scalar trim/replacement, limits, and runtime contracts stay
+separate. See `docs/negative-extglob.md` for the algorithm and explicit cost bounds.
+
+New GNU Bash 5.3.15 recordings in `shell-negative-extglob.json` cover nested
+negation, suffixes, repetition, quoting, Unicode, malformed groups, case option
+state, and completion. The existing completion pending recording remains intact.
+The author reports only targeted real-Waffle measurements; full qualification,
+source review, baseline membership updates, and merge belong to the coordinator.
+
+Scalar trim/replacement remains a separate prerequisite. Frozen scored cases
+`bashkit-suite:bashbox-shopt-pattern:31` and `:131` still enter the basic scalar
+compiler, which rejects extglob operators. Their complete scripts and exact
+Bash 5.3.15 bytes remain in the frozen oracle. A minimal strict reproducer is
+`shopt -s extglob; x=abc; echo "${x#!(*)}"`: Bash prints `abc\n` with status 0;
+reviewed-source Waffle returns 2 without output. This implementation does not
+change that path or claim either case as a gain.
+
 ## Case-attribute review follow-ups, 2026-10-23
 
 Status: Approved. Owner: VARIABLES declaration family. PR77's independent review
