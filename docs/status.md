@@ -11,7 +11,7 @@ bash-web is experimental and pre-1.0. The package version is `0.0.x`, `package.j
 | Browser embedding | Chromium and Firefox through Playwright in CI | Safari. Chromium and Firefox results say nothing about it. |
 | Browser requirements | A secure context, cross-origin isolation for `SharedArrayBuffer`, WASM served as `application/wasm` | |
 | Demo terminal renderer | WebGPU, with a Canvas fallback when WebGPU exposes no adapter | |
-| JavaScript tooling | Node `>=26.12.1` | Older Node |
+| JavaScript tooling | Node `>=26.12.1` ([install](development.md#prerequisites)) | Older Node |
 
 `npm run test:rust` also runs `cargo fmt --check` and the parser provenance check. The CI jobs are listed in [CI inputs and job ownership](ci.md).
 
