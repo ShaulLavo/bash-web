@@ -20,11 +20,11 @@ fn baseline(names: &[&'static str]) -> Vec<&'static str> {
 }
 
 const BUILTINS: &[&str] = &[
-    ":", "[", "break", "builtin", "cd", "command", "compgen", "complete", "compopt", "continue",
-    "declare", "dirs", "echo", "eval", "exec", "exit", "export", "false", "getopts", "caller",
-    "help", "jobs", "kill", "let", "local", "popd", "printf", "pushd", "pwd", "read", "readonly",
-    "return", "set", "shift", "shopt", "alias", "unalias", "test", "trap", "true", "type",
-    "typeset", "unset", "wait",
+    ".", ":", "[", "break", "builtin", "cd", "command", "compgen", "complete", "compopt",
+    "continue", "declare", "dirs", "echo", "eval", "exec", "exit", "export", "false", "getopts",
+    "caller", "help", "jobs", "kill", "let", "local", "popd", "printf", "pushd", "pwd", "read",
+    "readonly", "return", "set", "shift", "shopt", "source", "alias", "unalias", "test", "trap",
+    "true", "type", "typeset", "unset", "wait",
 ];
 
 #[test]
@@ -74,6 +74,8 @@ fn builtin_dispatch_covers_the_current_builtin_arms_not_the_old_is_builtin_set()
         ("type", Handler::Type),
         ("exec", Handler::Exec),
         ("eval", Handler::Eval),
+        (".", Handler::Source),
+        ("source", Handler::Source),
         ("let", Handler::Let),
     ] {
         assert_eq!(handler(name), Some(expected));
@@ -106,7 +108,7 @@ fn classes_and_capabilities_do_not_mislabel_standins_or_unimplemented_syntax() {
     assert_eq!(
         names(|command| command.class == Class::SpecialBuiltin),
         baseline(&[
-            ":", "break", "continue", "eval", "exec", "exit", "export", "readonly", "return",
+            ".", ":", "break", "continue", "eval", "exec", "exit", "export", "readonly", "return",
             "set", "shift", "trap", "unset",
         ])
     );

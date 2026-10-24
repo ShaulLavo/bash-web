@@ -43,6 +43,10 @@ fn topic(command: &'static Command) -> Option<Topic> {
             " [arg ...]",
             "Join arguments and execute them as shell input.",
         ),
+        Handler::Source => (
+            " filename [arg ...]",
+            "Read and execute commands from a file in the current shell.",
+        ),
         Handler::Let => (
             " expression [expression ...]",
             "Evaluate arithmetic expressions.",
@@ -109,9 +113,10 @@ fn builtin_topic(builtin: Builtin, name: &str) -> (&'static str, &'static str) {
             " [-p] [name[=value] ...]",
             "Set or display alias definitions.",
         ),
-        Builtin::ExitReturn if name == "return" => {
-            (" [n]", "Return from the current shell function.")
-        }
+        Builtin::ExitReturn if name == "return" => (
+            " [n]",
+            "Return from the current shell function or sourced file.",
+        ),
         Builtin::ExitReturn => (" [n]", "Exit the shell with a status."),
         Builtin::Jobs => ("", "List shell jobs."),
         Builtin::Wait => (" [job]", "Wait for a shell job to finish."),

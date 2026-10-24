@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { WaffleCaseResult } from "./waffle-compat.ts";
 
 type Recorded = { script: string; status: number; stdoutBase64: string };
 type Observation = { status: number; stdout: Buffer };
@@ -50,4 +53,62 @@ export function runRecordingBash(script: string, env: NodeJS.ProcessEnv, cwd?: s
   assert.equal(bash.signal, null);
   assert.equal(bash.status, 0, bash.stderr.toString());
   return { status: 0, stdout: bash.stdout, stderr: bash.stderr };
+}
+
+type ReaderCase = { script: string; status: number; stdout: string; stderr: string };
+
+export function recordedReaderCases(options: {
+  fixturePath: URL;
+  fixture: { bash: string; cases: ReaderCase[] };
+  scripts: readonly string[];
+  env: NodeJS.ProcessEnv;
+  record: boolean;
+}): ReaderCase[] {
+  let fixture = options.fixture;
+  if (options.record) {
+    const version = spawnSync("/usr/bin/bash", ["-c", 'printf %s "$BASH_VERSION"']);
+    assert.equal(version.status, 0);
+    assert.equal(version.stdout.toString(), "5.3.15(1)-release");
+    fixture = {
+      bash: version.stdout.toString(),
+      cases: options.scripts.map((script) => recordReader(script, options.env)),
+    };
+    writeFileSync(options.fixturePath, JSON.stringify(fixture, null, 2) + "\n");
+  }
+  assert.equal(fixture.bash, "5.3.15(1)-release");
+  assert.deepEqual(
+    fixture.cases.map((entry) => entry.script),
+    options.scripts,
+  );
+  return fixture.cases;
+}
+
+function recordReader(script: string, env: NodeJS.ProcessEnv): ReaderCase {
+  const cwd = mkdtempSync(join(tmpdir(), "bash-web-record-"));
+  try {
+    const result = spawnSync("/usr/bin/bash", ["--noprofile", "--norc", "-c", script], {
+      cwd,
+      env,
+      timeout: 10000,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    assert.equal(result.error, undefined);
+    assert.equal(result.signal, null);
+    assert.ok(result.status !== null);
+    return {
+      script,
+      status: result.status,
+      stdout: result.stdout.toString("base64"),
+      stderr: result.stderr.toString("base64"),
+    };
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+export function assertReaderOutput(actual: WaffleCaseResult, expected: ReaderCase) {
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.outputLimit, undefined);
+  assert.equal(actual.status, expected.status);
+  assert.deepEqual(actual.stdout, Buffer.from(expected.stdout, "base64"));
 }

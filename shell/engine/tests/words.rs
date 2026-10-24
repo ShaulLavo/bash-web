@@ -4377,6 +4377,8 @@ mod getopts;
 
 #[path = "words/declarations.rs"]
 mod declarations;
+#[path = "words/help.rs"]
+mod help;
 #[path = "words/select.rs"]
 mod select;
 
@@ -4394,6 +4396,9 @@ mod read_options;
 
 #[path = "words/nameref_invalid.rs"]
 mod nameref_invalid;
+
+#[path = "words/source.rs"]
+mod source;
 
 #[path = "words/aliases.rs"]
 mod aliases;

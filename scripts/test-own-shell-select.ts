@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { test } from "node:test";
+import fixture from "./fixtures/shell-select.json" with { type: "json" };
+import { assertReaderOutput, recordedReaderCases } from "./recorded-bash.ts";
 import { createWaffleRunner } from "./waffle-compat.ts";
 
 const selection = 'select x in a b; do printf "<%s>|<%s>\\n" "$x" "$REPLY"; break; done';
@@ -91,55 +90,20 @@ const scripts = inputs
     repairScripts,
   );
 
-type Observation = { script: string; status: number; stdout: string; stderr: string };
 const fixturePath = new URL("fixtures/shell-select.json", import.meta.url);
-const record = process.env.BASH_SELECT_RECORD === "1";
 const environment = {
   PATH: "/usr/bin:/bin",
   HOME: "/home/user",
   TMP: "/tmp/spec",
   LC_ALL: "C.UTF-8",
 };
-function observe(script: string): Observation {
-  const cwd = mkdtempSync(join(tmpdir(), "bash-web-select-observe-"));
-  try {
-    const result = spawnSync("/usr/bin/bash", ["--noprofile", "--norc", "-c", script], {
-      cwd,
-      env: environment,
-      timeout: 10000,
-      maxBuffer: 1024 * 1024,
-    });
-    assert.equal(result.error, undefined);
-    assert.equal(result.signal, null);
-    assert.notEqual(result.status, null);
-    return {
-      script,
-      status: result.status ?? 2,
-      stdout: result.stdout.toString("base64"),
-      stderr: result.stderr.toString("base64"),
-    };
-  } finally {
-    rmSync(cwd, { recursive: true, force: true });
-  }
-}
-if (record) {
-  assert.equal(
-    spawnSync("/usr/bin/bash", ["-c", 'printf %s "$BASH_VERSION"']).stdout.toString(),
-    "5.3.15(1)-release",
-  );
-  writeFileSync(
-    fixturePath,
-    JSON.stringify({ bash: "5.3.15(1)-release", cases: scripts.map(observe) }, null, 2) + "\n",
-  );
-}
-const fixture: { bash: string; cases: Observation[] } = JSON.parse(
-  readFileSync(fixturePath, "utf8"),
-);
-assert.equal(fixture.bash, "5.3.15(1)-release");
-assert.deepEqual(
-  fixture.cases.map((entry) => entry.script),
+const cases = recordedReaderCases({
+  fixturePath,
+  fixture,
   scripts,
-);
+  env: environment,
+  record: process.env.BASH_SELECT_RECORD === "1",
+});
 const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
 const runner = await createWaffleRunner({
   env: environment,
@@ -148,13 +112,10 @@ const runner = await createWaffleRunner({
   fixtureDirectory: directory,
   modulePath: resolve(directory, "shell-runtime.wasm"),
 });
-for (const expected of fixture.cases)
+for (const expected of cases)
   test(`production Waffle select: ${expected.script}`, async () => {
     const actual = await runner(expected.script);
-    assert.equal(actual.crash, undefined);
-    assert.equal(actual.outputLimit, undefined);
-    assert.equal(actual.status, expected.status);
-    assert.deepEqual(actual.stdout, Buffer.from(expected.stdout, "base64"));
+    assertReaderOutput(actual, expected);
     // Runtime errors retain their own diagnostic spelling. Menu and prompt bytes are exact.
     if (!expected.script.includes("readonly") || repairScripts.includes(expected.script))
       assert.deepEqual(actual.stderr, Buffer.from(expected.stderr, "base64"));

@@ -29,12 +29,9 @@ test("help lists only implemented builtin topics with bash-web identity", async 
   assert.equal(actual.status, 0);
   const text = actual.stdout.toString();
   assert.match(text, /^bash-web shell builtins\n/);
-  for (const name of ["help", "true", "false", ":", "printf", "builtin", "type"])
+  for (const name of ["help", "true", "false", ":", "printf", "builtin", "type", ".", "source"])
     assert.ok(text.split("\n").some((line) => line === name || line.startsWith(`${name} `)));
-  assert.doesNotMatch(
-    text,
-    /GNU bash|linux-gnu|\b(?:ulimit|history|fc|coproc|mapfile|source|times)\b/,
-  );
+  assert.doesNotMatch(text, /GNU bash|linux-gnu|\b(?:ulimit|history|fc|coproc|mapfile|times)\b/);
   assert.equal(liveNodeWorkers(), 0);
 });
 
@@ -79,4 +76,17 @@ test("help prefers exact topics to prefixes and documents its own options", asyn
   const own = await runner("help --help");
   assert.equal(own.status, 2);
   assert.match(own.stdout.toString(), /^help: help \[-dms\] \[pattern \.\.\.\]/);
+});
+
+test("help source topics compose with local append and builtin dispatch", async () => {
+  const actual = await runner(
+    "echo 'local value+=s; builtin help -s source .; command help -s true' > lib; f() { local value=b; . ./lib arg; printf '%s\\n' \"$value\"; }; f; help -s true false :",
+  );
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.status, 0);
+  assert.equal(
+    actual.stdout.toString(),
+    "source: source filename [arg ...]\n.: . filename [arg ...]\ntrue: true\nbs\ntrue: true\nfalse: false\n:: :\n",
+  );
+  assert.equal(liveNodeWorkers(), 0);
 });

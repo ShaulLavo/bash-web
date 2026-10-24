@@ -108,7 +108,8 @@ impl Reader {
 
 pub(super) async fn run(
     mut reader: Reader,
-    name: &str,
+    name: impl AsRef<str>,
+    nested: bool,
     state: SharedState,
     fds: Descriptors,
     context: Context,
@@ -161,8 +162,8 @@ pub(super) async fn run(
         }
     }
     if let Some(failure) = reader.failure {
-        result = parse_failure(failure, name, &fds, &context).await;
-        if name == "eval" && result.code == 2 && result.flow == Flow::Exit {
+        result = parse_failure(failure, name.as_ref(), &fds, &context).await;
+        if nested && result.code == 2 && result.flow == Flow::Exit {
             result.flow = Flow::Normal;
         }
     }
