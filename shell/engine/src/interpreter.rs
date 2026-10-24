@@ -252,6 +252,27 @@ struct Job {
     join: JoinHandle<i32>,
     _allocation: Option<crate::exec::Allocation>,
 }
+impl Job {
+    fn foreground(
+        join: JoinHandle<i32>,
+        group: GroupId,
+        cancel: Cancel,
+        signal: Rc<Cell<Option<i32>>>,
+    ) -> Self {
+        Self {
+            label: None,
+            notified: false,
+            owner: Scope::new(0),
+            kind: JobKind::Internal,
+            group,
+            cancel,
+            signal,
+            join,
+            _allocation: None,
+        }
+    }
+}
+
 struct Residual {
     owner: Scope,
     cleanup: JoinHandle<Result<(), ProcessError>>,
@@ -482,6 +503,10 @@ impl Context {
         });
         self.scope.forward_to(parent_scope);
     }
+    fn process_group(&self) -> ProcessGroup {
+        ProcessGroup::new(self.core.host.clone(), self.group).with_signal(self.signal.clone())
+    }
+
     async fn finish_group(&self, processes: &mut ProcessGroup, outcome: Outcome) -> i32 {
         let code = outcome.code;
         let finished = self.cancel.run(processes.complete()).await;
@@ -822,8 +847,7 @@ impl Session {
         let state = self.state.clone();
         let join = self.core.executor.spawn(async move {
             let _foreground = ForegroundGuard(context.core.clone());
-            let mut processes = ProcessGroup::new(context.core.host.clone(), group)
-                .with_signal(context.signal.clone());
+            let mut processes = context.process_group();
             let result = reader::run(
                 reader::Reader::new(script, failure, aliases, parser),
                 "-c",
@@ -849,17 +873,12 @@ impl Session {
             state.borrow_mut().publish_status(code);
             code
         });
-        *self.core.foreground.borrow_mut() = Some(Job {
-            label: None,
-            notified: false,
-            owner: Scope::new(0),
-            kind: JobKind::Internal,
+        *self.core.foreground.borrow_mut() = Some(Job::foreground(
+            join.clone(),
             group,
-            cancel: foreground_cancel,
-            signal: foreground_signal,
-            join: join.clone(),
-            _allocation: None,
-        });
+            foreground_cancel,
+            foreground_signal,
+        ));
         Ok(join)
     }
     /// Complete the executing environment at actual EOF, not after a submission.
@@ -898,8 +917,7 @@ impl Session {
         let group = context.group;
         let job = self.core.executor.spawn(async move {
             let _foreground = ForegroundGuard(context.core.clone());
-            let mut processes = ProcessGroup::new(context.core.host.clone(), context.group)
-                .with_signal(context.signal.clone());
+            let mut processes = context.process_group();
             let result =
                 traps::completing(Outcome::status(status), state.clone(), fds, context.clone())
                     .await;
@@ -912,17 +930,8 @@ impl Session {
             state.borrow_mut().publish_status(code);
             code
         });
-        *self.core.foreground.borrow_mut() = Some(Job {
-            label: None,
-            notified: false,
-            owner: Scope::new(0),
-            kind: JobKind::Internal,
-            group,
-            cancel,
-            signal,
-            join: job.clone(),
-            _allocation: None,
-        });
+        *self.core.foreground.borrow_mut() =
+            Some(Job::foreground(job.clone(), group, cancel, signal));
         Ok(job)
     }
     pub async fn shutdown(&self) {
@@ -1107,6 +1116,17 @@ impl Core {
         id
     }
 }
+async fn isolated_sequence(
+    commands: Vec<Command>,
+    state: SharedState,
+    fds: Descriptors,
+    context: &Context,
+) -> Outcome {
+    traps::inherit(&state);
+    let result = sequence(commands, state.clone(), fds.clone(), context.clone()).await;
+    traps::completing(result, state, fds, context.clone()).await
+}
+
 async fn finish_environment(
     result: Outcome,
     state: SharedState,
@@ -1255,10 +1275,12 @@ fn execute(
                             _
                         )
                 );
-            match traps::debug(&command, state.clone(), fds.clone(), context.clone()).await {
-                traps::DebugDecision::Execute => {}
-                traps::DebugDecision::Skip => return Outcome::status(0),
-                traps::DebugDecision::Transfer(result) => return result,
+            if let Some(result) =
+                traps::debug(&command, state.clone(), fds.clone(), context.clone())
+                    .await
+                    .outcome()
+            {
+                return result;
             }
             let body_context = Context {
                 skip_debug: false,
@@ -1389,7 +1411,15 @@ async fn pipeline_command(
         };
         let child = match child {
             Ok(child) => child,
-            Err(err) => return launch_failed(err, (cancel, input, pipes, tasks), &fds, &ctx).await,
+            Err(err) => {
+                let pending = PendingPipeline {
+                    cancel,
+                    input,
+                    pipes,
+                    tasks,
+                };
+                return launch_failed(err, pending, &fds, &ctx).await;
+            }
         };
         let mut stage_fds = fds.borrow().clone();
         if let Some(input) = input.take() {
@@ -1401,18 +1431,14 @@ async fn pipeline_command(
             input = Some(reader);
         }
         let stage_ctx = if shared_stage {
-            if pipeline.negated {
-                ctx.condition()
-            } else {
-                ctx.clone()
-            }
+            ctx.clone()
         } else {
-            let child = ctx.isolated_command(&command);
-            if index + 1 < count || pipeline.negated {
-                child.condition()
-            } else {
-                child
-            }
+            ctx.isolated_command(&command)
+        };
+        let stage_ctx = if pipeline.negated || !shared_stage && index + 1 < count {
+            stage_ctx.condition()
+        } else {
+            stage_ctx
         };
         let stage_ctx = Context {
             skip_debug: true,
@@ -1470,21 +1496,23 @@ async fn pipeline_command(
     Outcome::status(code)
 }
 
+struct PendingPipeline {
+    cancel: Cancel,
+    input: Option<io::Endpoint>,
+    pipes: VecDeque<(io::Endpoint, io::Endpoint)>,
+    tasks: Vec<JoinHandle<Outcome>>,
+}
+
 async fn launch_failed(
     error: expand::Error,
-    (cancel, input, pipes, tasks): (
-        Cancel,
-        Option<io::Endpoint>,
-        VecDeque<(io::Endpoint, io::Endpoint)>,
-        Vec<JoinHandle<Outcome>>,
-    ),
+    pending: PendingPipeline,
     fds: &Descriptors,
     context: &Context,
 ) -> Outcome {
-    cancel.cancel();
-    drop(input);
-    drop(pipes);
-    join_all(tasks).await;
+    pending.cancel.cancel();
+    drop(pending.input);
+    drop(pending.pipes);
+    join_all(pending.tasks).await;
     expansion_failure(error.into(), fds, context).await
 }
 
@@ -2360,8 +2388,7 @@ async fn launch_background(
     let fds = Rc::new(RefCell::new(fds.borrow().clone()));
     let parent_scope = context.scope.clone();
     let join = context.core.executor.spawn(async move {
-        let mut processes = ProcessGroup::new(child_context.core.host.clone(), group)
-            .with_signal(child_context.signal.clone());
+        let mut processes = child_context.process_group();
         traps::inherit(&child);
         let result = execute(command, child.clone(), fds.clone(), child_context.clone()).await;
         let result = traps::completing(result, child, fds, child_context.clone()).await;
@@ -2540,12 +2567,9 @@ impl Substitutions {
         let captured = capture_complete.clone();
         let (complete, completion) = futures::channel::oneshot::channel();
         let join = self.context.core.executor.spawn(async move {
-            let mut processes = ProcessGroup::new(context.core.host.clone(), group)
-                .with_signal(context.signal.clone());
+            let mut processes = context.process_group();
             let body = async {
-                traps::inherit(&child);
-                let result = sequence(commands, child.clone(), fds.clone(), context.clone()).await;
-                let result = traps::completing(result, child, fds, context.clone()).await;
+                let result = isolated_sequence(commands, child, fds, &context).await;
                 // Capturing waits for actual stdout EOF, not every background
                 // job: redirected descendants may keep running after EOF.
                 if context.cancel.run(captured.cancelled()).await.is_err() {
@@ -2686,12 +2710,9 @@ impl Substitutions {
         let link = cancel.clone();
         let link_signal = signal.clone();
         let join = core.executor.spawn(async move {
-            let mut processes = ProcessGroup::new(context.core.host.clone(), group)
-                .with_signal(context.signal.clone());
+            let mut processes = context.process_group();
             let body = async {
-                traps::inherit(&child);
-                let result = sequence(commands, child.clone(), fds.clone(), context.clone()).await;
-                let result = traps::completing(result, child, fds, context.clone()).await;
+                let result = isolated_sequence(commands, child, fds, &context).await;
                 let _ = context.wait_jobs(None, true).await;
                 context.finish_scope(parent_scope).await;
                 context.finish_group(&mut processes, result).await
@@ -3330,6 +3351,26 @@ impl Drop for CommandArguments<'_> {
     }
 }
 
+async fn traced_function(
+    body: Command,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> Outcome {
+    let _traps = match traps::FunctionScope::enter(&state, &context) {
+        Ok(scope) => scope,
+        Err(code) => return Outcome::status(code),
+    };
+    if let Some(result) = traps::function_entry(state.clone(), fds.clone(), context.clone())
+        .await
+        .outcome()
+    {
+        return result;
+    }
+    let result = execute(body, state.clone(), fds.clone(), context.clone()).await;
+    traps::returning(result, state, fds, context).await
+}
+
 async fn dispatch_arguments(
     arguments: &Cell<Vec<String>>,
     last_storage: &mut Option<crate::exec::StorageAllocation>,
@@ -3516,23 +3557,7 @@ async fn dispatch_arguments(
                 let _frame = frame;
                 let _call_storage = call_storage;
                 let _allocation = allocation;
-                let _traps = match traps::FunctionScope::enter(&state, &context) {
-                    Ok(scope) => scope,
-                    Err(code) => return Outcome::status(code),
-                };
-                match traps::function_entry(state.clone(), fds.clone(), context.clone()).await {
-                    traps::DebugDecision::Execute => {}
-                    traps::DebugDecision::Skip => return Outcome::status(0),
-                    traps::DebugDecision::Transfer(result) => return result,
-                }
-                let result = execute(
-                    body.body.as_ref().clone(),
-                    state.clone(),
-                    fds.clone(),
-                    context.clone(),
-                )
-                .await;
-                traps::returning(result, state, fds, context).await
+                traced_function(body.body.as_ref().clone(), state, fds, context).await
             },
             Outcome::status,
         );

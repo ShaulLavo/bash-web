@@ -1631,11 +1631,16 @@ pub fn command_string(
 /// Render only a for-loop header for its per-iteration DEBUG event.
 pub fn for_header_string(
     command: &ForCommand,
-    fuel: &Cell<usize>,
     max_fuel: usize,
     execution_budget: Option<&ExecutionBudget>,
 ) -> Result<String> {
-    let quota = Rc::new(PrintQuota { fuel, max_fuel, execution_budget, failure: RefCell::new(None) });
+    let fuel = Cell::new(max_fuel);
+    let quota = Rc::new(PrintQuota {
+        fuel: &fuel,
+        max_fuel,
+        execution_budget,
+        failure: RefCell::new(None),
+    });
     quota.charge(0);
     let mut printer = Printer::with_quota(quota);
     printer.print_for_header(command);

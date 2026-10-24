@@ -35,6 +35,16 @@ pub(super) enum DebugDecision {
     Transfer(Outcome),
 }
 
+impl DebugDecision {
+    pub(super) fn outcome(self) -> Option<Outcome> {
+        match self {
+            Self::Execute => None,
+            Self::Skip => Some(Outcome::status(0)),
+            Self::Transfer(result) => Some(result),
+        }
+    }
+}
+
 struct Status {
     state: SharedState,
     code: i32,
@@ -258,12 +268,8 @@ pub(super) fn for_iteration(
         return Either::Left(ready(DebugDecision::Execute));
     }
     let limit = context.limits().source_bytes;
-    let text = shell_parser::parser::for_header_string(
-        command,
-        &Cell::new(limit),
-        limit,
-        Some(&context.parser_budget()),
-    );
+    let text =
+        shell_parser::parser::for_header_string(command, limit, Some(&context.parser_budget()));
     planned_debug(text, state, fds, context)
 }
 
@@ -396,20 +402,7 @@ pub(super) fn failed(
     let Some(fds) = fds else {
         return Either::Left(ready(result));
     };
-    let reader = run(Event::Err, state, fds, context.clone());
-    context.evaluation.frame(
-        async move {
-            let handler = reader.await;
-            if handler.flow != Flow::Normal {
-                return handler;
-            }
-            Outcome {
-                flow: if errexit { Flow::Exit } else { result.flow },
-                ..result
-            }
-        },
-        Outcome::status,
-    )
+    at_boundary(Event::Err, result, state, fds, context)
 }
 
 pub(super) fn returning(
@@ -427,18 +420,7 @@ pub(super) fn returning(
     ) {
         return Either::Left(ready(result));
     }
-    state.borrow_mut().publish_status(result.code);
-    let reader = run(Event::Return, state, fds, context.clone());
-    context.evaluation.frame(
-        async move {
-            let handler = reader.await;
-            if handler.flow != Flow::Normal {
-                return handler;
-            }
-            result
-        },
-        Outcome::status,
-    )
+    at_boundary(Event::Return, result, state, fds, context)
 }
 
 pub(super) fn completing(
@@ -450,8 +432,18 @@ pub(super) fn completing(
     if context.cancel.is_cancelled() {
         return Either::Left(ready(result));
     }
+    at_boundary(Event::Exit, result, state, fds, context)
+}
+
+fn at_boundary(
+    event: Event,
+    result: Outcome,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> eval::Frame<'static> {
     state.borrow_mut().publish_status(result.code);
-    let reader = run(Event::Exit, state, fds, context.clone());
+    let reader = run(event, state, fds, context.clone());
     context.evaluation.frame(
         async move {
             let handler = reader.await;
