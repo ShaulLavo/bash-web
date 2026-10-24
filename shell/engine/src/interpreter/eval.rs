@@ -85,7 +85,7 @@ async fn join_body(
     if bytes > context.limits().source_bytes {
         return Err(2);
     }
-    // String plus the later Rc<str> copy and both reference-count headers.
+    // Text conversion and allocation headers. Shape::storage admits reader metadata.
     let storage = bytes
         .checked_mul(2)
         .and_then(|bytes| bytes.checked_add(size_of::<usize>() * 4))

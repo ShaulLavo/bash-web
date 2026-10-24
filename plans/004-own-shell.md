@@ -3016,6 +3016,160 @@ The reader-budget and alias-printing blockers are fixed in PR #75, not deferred.
   `type x` and `command -v x` also omit aliases. Add recorded query and sorting
   controls, then repair the builtin/query paths without changing PATH lookup.
 
+
+## Call-stack introspection follow-ups from PR85 review, 2026-10-23
+
+Status: Approved. Owner: BUILTINS, separate from the bounded FUNCNAME lifecycle
+and slot-growth repair. Reviewed source is
+`48b03b89dc7de89a78bcb983bd4e64eef1a4fb20`. These were not passing base
+controls and are not charged to the repair as new regressions.
+
+Reproduce through `releaseShellRunner` after the pinned toolchain setup and
+`npm run build:shell && npm run build:node-harness`. Exact Bash 5.3.15
+recordings and production-Waffle observations, including stderr and exit status,
+are retained under `/work/reports/wave-20261022/shell/review85-takeover-r1-evidence/`
+in `bash-recordings.json` and `waffle-probes.json`. The following commands each
+reproduced once in independent review. Expected and observed stdout use JSON
+escaping. Final numbers are Bash/Waffle exit statuses.
+
+```bash
+g(){ :; }; f(){ :; }; declare -F
+```
+Expected `"declare -f f\ndeclare -f g\n"`; observed `""`; statuses 0/0.
+
+```bash
+g(){ :; }; f(){ :; }; declare -Fp f g
+```
+Expected `"declare -f f\ndeclare -f g\n"`; observed `"f\ng\n"`; statuses 0/0.
+
+```bash
+set -- root; f(){ shopt -s extdebug; g x; }; g(){ echo "${BASH_ARGC[*]}:${BASH_ARGV[*]}"; }; f a b; echo "${BASH_ARGC[*]}:${BASH_ARGV[*]}"
+```
+Expected `"1 2:x b a\n2:b a\n"`; observed `"1:x\n1:root\n"`; statuses 0/0.
+
+```bash
+shopt -s extdebug; f(){ echo "$((BASH_ARGC[0])):$((BASH_LINENO[0]))"; }; f a b
+```
+Expected `"2:1\n"`; observed `""`; statuses 0/2.
+
+```bash
+set -TE; echo "$-"; set +TE; echo "$-"
+```
+Expected `"hBETc\nhBc\n"`; observed `"\n\n"`; statuses 0/0.
+
+```bash
+g(){ caller " 0"; echo s:$?; caller "0 "; echo s:$?; }; f(){ g; }; f
+```
+Expected `"1 f bash\ns:0\n1 f bash\ns:0\n"`; observed `"s:2\ns:2\n"`; statuses 0/0.
+
+```bash
+f(){ caller >&-; echo status:$?; }; f
+```
+Expected `"status:0\n"`; observed `"status:1\n"`; statuses 0/0.
+
+Inspect `builtins/declarations.rs::function_names` for listing and `-Fp`
+formatting, `state/call_stack.rs::initialize_arguments` for extdebug enabled
+inside an active call, arithmetic's indexed-binding reader, option flag
+expansion, and `builtins/caller.rs` for whitespace and closed-output status.
+Do not repair these by inventing runtime facts or changing frozen membership.
+The inherited ordinary local-array mismatch is also outside this repair; its
+exact `normal-array-assignment` record stays in the same evidence.
+
+### Four additional inherited reproducers from approved PR85 review
+
+Status: Approved follow-up, not implemented in PR85. Owner: BUILTINS for
+function-name dispatch and special-array unset; VARIABLES for local unbind and
+ordinary sparse-array behavior. Independent Opus review approved
+`a4be47129e830634ee9da2fd19c94a69c84083d3`, production `7bfe246`, after the
+provider safety refusal. Each case also fails on main `750fb65`; none is a new
+integration regression. Keep every earlier follow-up above.
+
+Evidence: [approved review](file:///work/reports/wave-20261022/shell/review85-opus-refusal-r3.md),
+[exact Bash recordings](file:///work/reports/wave-20261022/shell/review85-takeover-r2-evidence/bash-recordings.json),
+and [native head/main observations](file:///work/reports/wave-20261022/shell/review85-opus-refusal-r3-evidence/native-control.json).
+Bash is 5.3.15, binary SHA-256
+`575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5`.
+Run the exact script through `releaseShellRunner` as above for production Waffle.
+Observed and expected stdout below use JSON escaping; statuses are final shell
+exit statuses, not the status printed by the script. Native control evidence
+compares stdout/status only and does not establish diagnostic parity.
+The current Node 26.12.1/Bun 1.4.4 integration reproduced all four approved-head
+outputs and statuses, with empty observed stderr for each. Exact current Waffle
+observations are in [the integration probes](file:///work/reports/wave-20261022/shell/pr85-integrate-current-runtime-after-review-evidence/waffle-probes.json).
+
+#### `function-F-plus-case`
+
+```bash
+f(){ :; }; declare -Fu f; declare -F f; x=a; declare -u x; x=b; echo "$x"
+```
+Expected stdout "f\nB\n"; status 0.
+Observed approved-head stdout "f\nf\nB\n"; status 0.
+Observed main `750fb65` stdout "B\n"; status 0.
+Expected stderr "".
+
+#### `unset-FUNCNAME-index`
+
+```bash
+f(){ unset "FUNCNAME[0]"; echo "s:$?:${FUNCNAME[*]}"; }; f; g(){ echo "${FUNCNAME[*]}"; }; g
+```
+Expected stdout "s:0:\ng\n"; status 0.
+Observed approved-head stdout "s:0:f\ng\n"; status 0.
+Observed main `750fb65` stdout "s:0:\n\n"; status 0.
+Expected stderr "".
+
+#### `unset-local-active`
+
+```bash
+f(){ local FUNCNAME=local; unset FUNCNAME; FUNCNAME=ordinary; echo "$FUNCNAME"; }; f; g(){ echo "later:${FUNCNAME[*]}"; }; g; echo "root:$FUNCNAME"
+```
+Expected stdout "ordinary\nlater:ordinary\nroot:ordinary\n"; status 0.
+Observed approved-head stdout "ordinary\nlater:\nroot:\n"; status 0.
+Observed main `750fb65` stdout "ordinary\nlater:\nroot:\n"; status 0.
+Expected stderr "bash: line 1: local: FUNCNAME: variable may not be assigned value\n".
+
+#### `negative-sparse-ordinary`
+
+```bash
+unset FUNCNAME; FUNCNAME=(a b); f(){ echo "${FUNCNAME[-1]}:${#FUNCNAME[@]}:${!FUNCNAME[@]}"; }; f
+```
+Expected stdout "b:3:0 1 2\n"; status 0.
+Observed approved-head stdout "b:2:0 1\n"; status 0.
+Observed main `750fb65` stdout "b:2:0 1\n"; status 0.
+Expected stderr "".
+
+Do not implement these rare cases in this integration or change the oracle,
+recordings, scored membership, skips, environment, or limits to make them pass.
+
+### Additional observations in the existing ordinary-array follow-ups
+
+Status: Approved follow-up, not implemented by the PR85 call-stack slice repair.
+Owner: VARIABLES. The signed Arch Bash 5.3.15 binary has SHA-256
+`575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5`.
+The following controls differ from that frozen oracle identically on parent
+`54a553db5b61051f9c30e93c2fd325d7d3c6a033` and the r7 repair source.
+They extend the ordinary sparse/deactivated and local-array follow-ups above,
+not the active computed-array slice fix.
+
+```bash
+unset FUNCNAME; FUNCNAME=(a b c); f(){ printf "<%s>\n" "${FUNCNAME[@]:1:2}" "${FUNCNAME[*]: -1}"; }; f
+```
+
+Expected stdout "<a>\n<b>\n<c>\n"; observed "<b>\n<c>\n<c>\n".
+Both statuses are 0 and both stderr streams are empty. Do not substitute the
+reviewer's installed Bash 5.3.20 observation for the frozen 5.3.15 result.
+
+```bash
+f(){ local -a s=(a b c); printf "<%s>\n" "${s[@]:1}"; }; f
+```
+
+Expected stdout "<b>\n<c>\n"; observed "<>\n". Both statuses are 0 and both
+stderr streams are empty. Inspect the existing local-array declaration path,
+not the computed-array slice bounds.
+
+Evidence: [signed-oracle controls](file:///work/reports/wave-20261022/shell/pr85-callstack-slice-composition-fix-r7-evidence/oracle-controls.json),
+[exact parent/native controls](file:///work/reports/wave-20261022/shell/pr85-callstack-slice-composition-fix-r7-evidence/parent-controls.json),
+and [production Waffle observations](file:///work/reports/wave-20261022/shell/pr85-callstack-slice-composition-fix-r7-evidence/new-waffle-controls.json).
+
 ## Invalid nameref target review follow-ups, 2026-10-23
 
 Status: Approved. Owner: VARIABLES declaration/builtin family. These inherited
@@ -3046,3 +3200,154 @@ and its sibling evidence directory.
 
 Neither note is a fixed bug, an accepted Bash match or a frozen gain of this
 integration. PR59 leaves the caller and target-scan cancellation logic unchanged.
+
+## Completion negative-extglob follow-up, 2026-10-23
+
+Status: Approved. Owner: BUILTINS completion family after PR #79.
+The nine round-one review reproducers are repaired. The broader control below
+still differs because `expand/pattern/extglob.rs::Compiler::open` rejects `!`.
+Positive `@`, `?`, `*` and `+` operators now use the existing bounded matcher
+for completion `-G`; ordinary argv globbing keeps its prior behavior.
+
+```bash
+shopt -s extglob
+printf x >zz_one; printf x >zz_two; printf x >zz_other
+compgen -G 'zz_!(other)'
+```
+
+GNU Bash 5.3.15 prints `zz_one\nzz_two\n` and exits 0. Production Waffle at
+`3e52e60c655f4159312dad81fbdb797e422cbf35` prints nothing for that command and
+returns 2. The complete failing control remains unchanged in
+`scripts/fixtures/shell-completion-pending.json`. After the normal WASI build,
+run `npm run test:shell:completion:pending`. It is a strict failing recipe,
+not an ignored assertion or a relaxed expected result. Its two unrelated runtime
+controls remain included. The ordinary recipe retains every earlier passing
+completion control and records positive operators separately.
+
+Evidence is in `/work/reports/wave-20261022/shell/builtins-completion-fix-r2-evidence`
+and `/work/reports/machine-fleet/remote-gate/completion-r2-final-20261023T082914Z-tp5_5kgk`.
+Implement bounded complement groups without recursive backtracking, preserve
+work/storage admission and cancellation, and add nested and suffix controls.
+That matcher change is larger than passing an option through completion's glob
+lookup. No frozen case, oracle, exclusion or baseline change is authorized.
+## Case-attribute review follow-ups, 2026-10-23
+
+Status: Approved. Owner: VARIABLES declaration family. PR77's independent review
+approved source `7d9f73ee295d47c0f360b7bbb63379963719f851`. These are newly added
+feature corners, not demonstrated losses against main. Record failing-first
+Bash 5.3.15 controls before the next bounded correction.
+
+- Reapplying uppercase conversion rejects its own Unicode output. Run
+  `declare -u x=µ; x+=a; echo ok:$?; declare -p x`. Bash prints `ok:0` and
+  `declare -u x="ΜA"`; the engine prints `ok:2` and `declare -u x="Μ"`.
+  `ÿ` converting to `Ÿ` has the same problem. Check the mapper's output range
+  in `state/case_attributes.rs` and its append caller in `interpreter/indexed.rs`.
+- Adding an attribute through an existing local nameref destroys the reference.
+  Run `x=OUT; f(){ local -n r=x; local -l r=AB; r=CD; declare -p x r; }; f; declare -p x`.
+  Bash prints local `declare -l x="cd"`, `declare -n r="x"`, then restores
+  `declare -- x="OUT"`. The engine leaves x unchanged and prints scalar r.
+  Preserve reference ownership and target/local restoration in `case_attributes.rs`.
+- Combined `declare -nl r=x` loses the reference. Run
+  `x=old; declare -nl r=x; r=ABC; declare -p x r`. Bash prints x as `ABC` and
+  r as `declare -nl r="x"`; the engine prints x as `old` and scalar r as `ABC`.
+  Handle the declaration flags together in the owning builtin path.
+- Bare `+` is consumed as an empty option. Run
+  `declare + x=ok; echo status:$?; declare -p x`. Bash diagnoses the invalid
+  identifier and prints `status:1`, keeping x set. The engine prints `status:0`.
+  Correct operand admission without losing the later valid assignment.
+
+Exact Bash/native observations, file locations and the review reproducer are in
+`/work/reports/wave-20261022/shell/review77-r1.md` and `review77-r1-evidence/`.
+Keep frozen observations, exclusions and blocking gates unchanged.
+
+
+## Read option review follow-ups, 2026-10-23
+
+Status: Approved. Owner: BUILTINS read, with the shared byte-field and
+runtime/state prerequisite owners. Independent PR72 review approved
+`967fd177652ea12a974d63c6ab9862830fb04650`. These are explicit capability
+boundaries, not newly lost main passes or claimed repairs in that PR.
+
+- Multibyte delimiter suffix. Reproduce through production Waffle:
+  `printf 'a\xc3\xa9:tail\n' | { read -d é a; IFS= read -r tail; printf '%s|<%s>\n' "$?" "$tail"; }`.
+  Bash 5.3.15 leaves bytes `a9 3a 74 61 69 6c` in `tail` with read status 0.
+  The engine prints `2|<>` because scalar assignment rejects the invalid UTF-8
+  suffix left after the delimiter's first byte. Route this to the shared
+  "word fields carry bytes, not UTF-8 String" item above. Preserve raw bytes,
+  unread offsets, bounded storage and cancellation. Do not substitute Unicode
+  replacement characters or change the delimiter or frozen expectations.
+- Positive-count terminal silent reads. `read -s -n1 value` on a terminal
+  remains unsupported with status 2. `read -s -n0 value` succeeds without
+  consuming input or changing terminal echo. Use a real terminal input fixture,
+  not a pipe, when implementing echo control. Restore echo on success, EOF,
+  cancellation and output failure. PR72 does not change echo state and does not
+  claim silent-terminal support.
+- Timers and array destinations remain unsupported. Recorded reproducers are
+  `printf 'x\n' | { REPLY=old; read -t0; printf '%s|<%s>\n' "$?" "$REPLY"; }`
+  and `printf 'a:b\n' | { REPLY=old; read -d : -a arr; printf '%s|<%s>|<%s>\n' "$?" "$REPLY" "${arr[0]}"; }`.
+  Bash returns read status 0 and keeps `REPLY=old` in each control, and stores
+  `a` in `arr[0]` in the array control. Coordinate readiness/deadline support
+  with the runtime and array writes with state. Preserve input offsets,
+  nonmutation on rejected options, resource accounting and cancellation.
+
+Reproduce on current native and production Waffle before repair. Record exact
+Bash 5.3.15 streams/status locally. The original review, 309-case fixture and
+eight classified boundary differences remain in
+`/work/reports/wave-20261022/shell/review72-takeover-r2.md`, its sibling evidence
+directory and `/work/reports/wave-20261022/shell/review72-r1/neighbors.json`.
+The terminal controls are in `scripts/fixtures/shell-read-terminal.json` and
+`shell/engine/tests/words/read_options.rs`. Do not relax their assertions or
+claim a frozen gain without a qualified unchanged-ruler replay.
+
+## Completion nonblocking review follow-ups, 2026-10-23
+
+Status: Approved, deferred beyond PR #79's bounded integration after read #72.
+Independent review `review79-takeover-r2.md` approves completion source
+`f13a5c310bf082da56e00401b43d4a1c2b0dd28b` and records these three remaining
+corners. These are not demonstrated regressions against main. Preserve the
+reviewer's recordings and ordinary argv behavior when implementing them.
+Evidence is in `/work/reports/wave-20261022/shell/review79-takeover-r2-evidence/`.
+
+### Preserve word-list newlines when IFS excludes newline
+
+Owner: completion word-list parsing, `builtins/completion/wordlist.rs`.
+
+```bash
+IFS=:; compgen -W $'a\nb:c'; echo status:$?
+```
+
+The generated word list contains a literal newline, not a backslash followed by
+`n`. GNU Bash 5.3.15 prints `a\nb\nc\nstatus:0\n`. Reviewed source prints
+`ab\nc\nstatus:0\n`. Preserve that newline instead of encoding it as a removed
+line continuation. The review's retained recording uses this equivalent input:
+
+```bash
+IFS=:; compgen -W 'a
+b:c'; echo status:$?
+```
+
+### Enable POSIX classes for completion pathname patterns
+
+Owner: completion pathname matching, `expand/glob.rs`.
+
+```bash
+printf x >zz_a; compgen -G 'zz_[[:alpha:]]'; echo status:$?
+```
+
+GNU Bash 5.3.15 prints `zz_a\nstatus:0\n`. Reviewed source prints `status:2\n`.
+The difference occurs both with extglob off and after `shopt -s extglob`.
+Apply the supported named-class policy to `-G` without changing argv globbing.
+
+### Recognize explicitly dotted positive-extglob alternatives
+
+Owner: completion pathname matching, `expand/glob.rs`.
+
+```bash
+shopt -s extglob; printf x >.zz_a; printf x >zz_a
+compgen -G '@(.zz_a|zz_a)'; echo status:$?
+```
+
+GNU Bash 5.3.15 prints `.zz_a\nzz_a\nstatus:0\n`. Reviewed source prints
+`zz_a\nstatus:0\n`. Treat explicitly dotted alternatives as eligible when
+excluding hidden entries. Keep implicit hidden-name exclusion and ordinary
+argv matching unchanged. Add nested and suffix controls before the fix.

@@ -1,19 +1,18 @@
 //! Original bounded locale adapter. Bashkit's full Rust Unicode expansion is
 //! deliberately not used: GNU Bash maps one character to at most one character.
-use super::Error;
-use crate::state::SharedState;
+use super::State;
+use crate::exec::Error;
 
 #[derive(Clone, Copy)]
-pub(super) enum Locale {
+pub(crate) enum Locale {
     C,
     Utf8,
 }
 impl Locale {
-    pub(super) fn from_state(state: &SharedState) -> Result<Self, Error> {
-        let s = state.borrow();
+    pub(crate) fn from_state(state: &State) -> Result<Self, Error> {
         let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
             .iter()
-            .filter_map(|name| s.scalar_parameter(name))
+            .filter_map(|name| state.scalar_parameter(name))
             .find(|value| !value.is_empty())
             .unwrap_or("C");
         match locale {
@@ -22,10 +21,10 @@ impl Locale {
             _ => Err(2.into()),
         }
     }
-    pub(super) fn utf8(self) -> bool {
+    pub(crate) fn utf8(self) -> bool {
         matches!(self, Self::Utf8)
     }
-    pub(super) fn map(self, ch: char, upper: bool) -> Result<char, Error> {
+    pub(crate) fn map(self, ch: char, upper: bool) -> Result<char, Error> {
         if ch.is_ascii() {
             return Ok(if upper {
                 ch.to_ascii_uppercase()

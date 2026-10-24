@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "cases": [
+    {
+      "script": "printf x >zz_one; printf x >zz_two; printf x >zz_other; compgen -G 'zz_@(one|two)'; echo status:$?; shopt -s extglob; compgen -G 'zz_!(other)'; compgen -G 'zz_+(one|two)'",
+      "status": 0,
+      "stdoutBase64": "c3RhdHVzOjEKenpfb25lCnp6X3R3bwp6el9vbmUKenpfdHdvCg=="
+    }
+  ]
+}

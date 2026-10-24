@@ -1,0 +1,231 @@
+{
+  "schema": 1,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "cases": [
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read   a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbYcOpXVtiIGNhYl1bXQpbVEFJTF0K"
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read  -d : a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbYcOpXVtdW10KW2JcIGNcXQo="
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read  -d '' a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbYcOpXVtiIGNhXVtdCltiXQo="
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -r  a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbYcOpXVtiXF1bY1xdClthYl0K"
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -r -d : a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbYcOpXVtdW10KW2JcIGNcXQo="
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -r -d '' a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbYcOpXVtiXF1bY1wKYV0KW2JdCg=="
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -n0  a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW10KW2HDqTpiXCBjXF0K"
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -n0 -d : a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW10KW2HDqTpiXCBjXF0K"
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -n0 -d '' a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW10KW2HDqTpiXCBjXF0K"
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -n3  a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdClvDqTpiXCBjXF0K"
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -n3 -d : a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdClvDqTpiXCBjXF0K"
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -n3 -d '' a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bXVtdClvDqTpiXCBjXF0K"
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -N0  a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW10KW2HDqTpiXCBjXF0K"
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -N0 -d : a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW10KW2HDqTpiXCBjXF0K"
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -N0 -d '' a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbXVtdW10KW2HDqTpiXCBjXF0K"
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -N3  a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhXVtdW10KW8OpOmJcIGNcXQo="
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -N3 -d : a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhXVtdW10KW8OpOmJcIGNcXQo="
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -N3 -d '' a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhXVtdW10KW8OpOmJcIGNcXQo="
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -n3 -N5  a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhw6k6XVtdW10KW2JcIGNcXQo="
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -n3 -N5 -d : a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhw6k6XVtdW10KW2JcIGNcXQo="
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -n3 -N5 -d '' a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhw6k6XVtdW10KW2JcIGNcXQo="
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -N5 -n3  a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhXVtdW10KW8OpOmJcIGNcXQo="
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -N5 -n3 -d : a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhXVtdW10KW8OpOmJcIGNcXQo="
+    },
+    {
+      "script": "printf '  aé:b\\\\ c\\\\\\na\\0b\\nTAIL\\n' | { IFS=': '; read -N5 -n3 -d '' a b c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; read -r tail; printf '[%s]\\n' \"$tail\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbICBhXVtdW10KW8OpOmJcIGNcXQo="
+    },
+    {
+      "script": "read -s a b <<< 'x y:z' 3<<< 'abc def'; printf '%s:[%s][%s]\\n' \"$?\" \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "MDpbeF1beTp6XQo="
+    },
+    {
+      "script": "read -sn2 a b <<< 'x y:z' 3<<< 'abc def'; printf '%s:[%s][%s]\\n' \"$?\" \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "MDpbeF1bXQo="
+    },
+    {
+      "script": "read -p 'Enter: ' a b <<< 'x y:z' 3<<< 'abc def'; printf '%s:[%s][%s]\\n' \"$?\" \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "MDpbeF1beTp6XQo="
+    },
+    {
+      "script": "read -rp prompt -d : a b <<< 'x y:z' 3<<< 'abc def'; printf '%s:[%s][%s]\\n' \"$?\" \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "MDpbeF1beV0K"
+    },
+    {
+      "script": "read -u3 -s -N4 a b <<< 'x y:z' 3<<< 'abc def'; printf '%s:[%s][%s]\\n' \"$?\" \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYWJjIF1bXQo="
+    },
+    {
+      "script": "printf 'a:b:c' | { read -d : a; read -d : b; read -d : c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; }",
+      "status": 0,
+      "stdoutBase64": "MTpbYV1bYl1bY10K"
+    },
+    {
+      "script": "printf 'a\\0b\\0tail' | { read -d '' a; read -rd '' b; read -rd '' c; printf '%s:[%s][%s][%s]\\n' \"$?\" \"$a\" \"$b\" \"$c\"; }",
+      "status": 0,
+      "stdoutBase64": "MTpbYV1bYl1bdGFpbF0K"
+    },
+    {
+      "script": "printf 'a\\\\:b:c' | { read -d : a; read -rd : b; printf '%s:[%s][%s]\\n' \"$?\" \"$a\" \"$b\"; }",
+      "status": 0,
+      "stdoutBase64": "MTpbYTpiXVtjXQo="
+    },
+    {
+      "script": "read -N4 a b <<'END'\na b\nc\nEND\nprintf '%s:[%s][%s]\\n' \"$?\" \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYSBiCl1bXQo="
+    },
+    {
+      "script": "read -N2 a 1x <<< 'xyz'; printf '%s:[%s]\\n' \"$?\" \"$a\"",
+      "status": 0,
+      "stdoutBase64": "MTpbeHldCg=="
+    },
+    {
+      "script": "read -u -3; printf '%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "MQo="
+    },
+    {
+      "script": "IFS=': '; read -rN5 a b <<< ' a:b '; printf '%s:[%s][%s]\\n' \"$?\" \"$a\" \"$b\"",
+      "status": 0,
+      "stdoutBase64": "MDpbIGE6YiBdW10K"
+    },
+    {
+      "script": "read -rN3 a <<< 'é中😀!'; printf '%s:[%s]\\n' \"$?\" \"$a\"",
+      "status": 0,
+      "stdoutBase64": "MDpbw6nkuK3wn5iAXQo="
+    },
+    {
+      "script": "LC_ALL=C read -rN3 a <<< 'abcé'; printf '%s:[%s]\\n' \"$?\" \"$a\"",
+      "status": 0,
+      "stdoutBase64": "MDpbYWJjXQo="
+    },
+    {
+      "script": "REPLY=old; read -N0; printf '%s:[%s]\\n' \"$?\" \"$REPLY\"",
+      "status": 0,
+      "stdoutBase64": "MDpbXQo="
+    },
+    {
+      "script": "read -N -1 a <<< 'x'; printf '%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "MQo="
+    },
+    {
+      "script": "read -N nope a <<< 'x'; printf '%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "MQo="
+    },
+    {
+      "script": "printf 'ab\\xc3\\xa9c\\n' | { read -r -d é x; printf '[%s]\\n' \"$x\"; }",
+      "status": 0,
+      "stdoutBase64": "W2FiXQo="
+    },
+    {
+      "script": "printf 'a\\\\\\0 b\\0' | { read -d '' a b; printf '%s:[%s][%s]\\n' \"$?\" \"$a\" \"$b\"; }",
+      "status": 0,
+      "stdoutBase64": "MDpbYV1bYl0K"
+    },
+    {
+      "script": "read -d; printf '%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "Mgo="
+    },
+    {
+      "script": "read -p; printf '%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "Mgo="
+    }
+  ]
+}

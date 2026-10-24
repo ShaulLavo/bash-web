@@ -16,6 +16,9 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import {
   authorizedInstrumentTransition,
+  authorizedRuntimeTransition,
+  baseBranchBaseline,
+  runtimeReceiptPath,
   baselinePath,
   instrumentReceiptPath,
   oraclePath,
@@ -97,7 +100,7 @@ writeFileSync(process.env.BASH_COMPAT_OUT, JSON.stringify({
   })),
 }));
 `;
-function makeOracle(environment = { nodeVersion: "v26.7.0", stdin: "empty", timeoutMs: 10000 }) {
+function makeOracle(environment = { nodeVersion: "v26.12.1", stdin: "empty", timeoutMs: 10000 }) {
   return sealOracle({
     schema: 1,
     oracle: { capture: "old" },
@@ -254,7 +257,7 @@ async function fixture(
       entrypoint
         ? JSON.parse(readFileSync(new URL(`../${oraclePath}`, import.meta.url))).environment
         : targetRunner
-          ? { nodeVersion: "v26.7.0", stdin: "empty", timeoutMs: 10000, runner: targetRunner }
+          ? { nodeVersion: "v26.12.1", stdin: "empty", timeoutMs: 10000, runner: targetRunner }
           : undefined,
     );
     const sourcePins = {
@@ -751,15 +754,25 @@ test("waffle target migration installs target-pinned dependencies in target scra
   );
 });
 
+function linkRepositoryHistory(put) {
+  const root = resolve(import.meta.dirname, "..");
+  const common = execFileSync("git", ["rev-parse", "--git-common-dir"], {
+    cwd: root,
+    encoding: "utf8",
+  }).trim();
+  put(".git/objects/info/alternates", `${resolve(root, common, "objects")}\n`);
+  return root;
+}
+
 test("instrument migration prepares a cold patched sysroot before its first cargo build", async () => {
   await fixture(async ({ repo, runner, put, update }) => {
-    const root = resolve(import.meta.dirname, "..");
-    const common = execFileSync("git", ["rev-parse", "--git-common-dir"], {
-      cwd: root,
-      encoding: "utf8",
-    }).trim();
-    put(".git/objects/info/alternates", `${resolve(root, common, "objects")}\n`);
-    const candidate = JSON.parse(readFileSync(resolve(root, oraclePath), "utf8"));
+    const root = linkRepositoryHistory(put);
+    const candidate = JSON.parse(
+      execFileSync("git", ["show", `38c229271c851543ce564976e7b09f2971c5e0f8:${oraclePath}`], {
+        cwd: root,
+        maxBuffer: 1 << 26,
+      }).toString(),
+    );
     update(candidate);
     put(instrumentReceiptPath, readFileSync(resolve(root, instrumentReceiptPath)));
     const proof = resolve(repo, "cold-build-proof");
@@ -783,6 +796,95 @@ process.exit(21);
       /cargo failed \(21\)/,
     );
     assert.ok(readFileSync(proof, "utf8").startsWith(resolve(repo, ".build/wasi-libc")));
+    assert.deepEqual(readdirSync(runner), []);
+  });
+});
+
+test("runtime migration builds and supplies immutable target utility guests", async () => {
+  await fixture(async ({ repo, runner, put, update }) => {
+    const root = linkRepositoryHistory(put);
+    const candidate = JSON.parse(readFileSync(resolve(root, oraclePath), "utf8"));
+    update(candidate);
+    put(runtimeReceiptPath, readFileSync(resolve(root, runtimeReceiptPath)));
+    put(baselinePath, readFileSync(resolve(root, baselinePath)));
+    const migratedTarget = {
+      identity: candidate.identity,
+      cases: baseBranchBaseline(root, authorizedRuntimeTransition.target).cases,
+    };
+    put("fixture-target-score.json", JSON.stringify(migratedTarget));
+    put("scripts/build-node-harness.ts", "");
+    const compiler = resolve(runner, "../bin/cargo");
+    writeFileSync(
+      compiler,
+      `#!${process.execPath}
+import assert from 'node:assert/strict';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+const release = resolve(process.env.CARGO_TARGET_DIR, 'wasm32-wasip1/release');
+mkdirSync(release, { recursive: true });
+const names = process.argv.includes('shell-utilities')
+  ? ['shell-runtime', 'cat', 'grep', 'mkdir', 'seq']
+  : ['argv-py', 'printenv-py'];
+if (process.cwd() !== ${JSON.stringify(repo)}) {
+  assert.match(readFileSync('shell/utilities/Cargo.toml', 'utf8'), /name = "shell-utilities"/);
+  for (const name of names) assert.ok(process.argv.includes(name), 'missing target binary ' + name);
+}
+const wasm = Buffer.from([0, 97, 115, 109, 1, 0, 0, 0, 5, 5, 1, 1, 1, 128, 32]);
+for (const name of names) writeFileSync(resolve(release, name + '.wasm'), wasm);
+`,
+    );
+    put(
+      "scripts/bash-compat.mjs",
+      `
+import assert from 'node:assert/strict';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+const release = dirname(process.env.BASH_COMPAT_SHELL_WASM);
+assert.equal(process.env.BASH_COMPAT_UTILITY_DIR, release);
+for (const name of ['cat', 'grep', 'mkdir', 'seq'])
+  assert.ok(readFileSync(resolve(release, name + '.wasm')).length > 0);
+writeFileSync(process.env.BASH_COMPAT_OUT, readFileSync('fixture-target-score.json'));
+`,
+    );
+    const result = await targetBranchBaseline(repo, authorizedRuntimeTransition.target, candidate);
+    assert.deepEqual(result, migratedTarget);
+    const candidateScore = JSON.parse(readFileSync(resolve(repo, baselinePath)));
+    const delta = compareScores(result, candidateScore);
+    assert.equal(delta.ok, true);
+    assert.ok(
+      Object.values(delta.corpora).some((row) => row.gained.length > 0),
+      "later candidate gains remain separate from target evidence",
+    );
+    const passing = result.cases.find((item) => item.outcome === "pass");
+    const failing = result.cases.find((item) => item.outcome === "fail");
+    assert.ok(passing && failing);
+    for (const mutations of [
+      { [passing.id]: "fail" },
+      { [failing.id]: "pass" },
+      { [passing.id]: "fail", [failing.id]: "pass" },
+    ]) {
+      const changed = {
+        ...migratedTarget,
+        cases: migratedTarget.cases.map((item) => ({
+          ...item,
+          outcome: mutations[item.id] ?? item.outcome,
+        })),
+      };
+      put("fixture-target-score.json", JSON.stringify(changed));
+      await assert.rejects(
+        targetBranchBaseline(repo, authorizedRuntimeTransition.target, candidate),
+        /recorded transition/,
+      );
+    }
+    const changedIdentity = {
+      ...migratedTarget,
+      identity: { ...migratedTarget.identity, environment: "wrong" },
+    };
+    put("fixture-target-score.json", JSON.stringify(changedIdentity));
+    await assert.rejects(
+      targetBranchBaseline(repo, authorizedRuntimeTransition.target, candidate),
+      /incomparable/,
+    );
     assert.deepEqual(readdirSync(runner), []);
   });
 });

@@ -423,7 +423,11 @@ async fn sift(
     }
     Ok(())
 }
-async fn sort(paths: &mut [String], work: &mut Work, cancel: &Cancel) -> Result<(), Error> {
+pub(crate) async fn sort(
+    paths: &mut [String],
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<(), Error> {
     for root in (0..paths.len() / 2).rev() {
         sift(paths, root, work, cancel).await?;
     }
@@ -513,17 +517,42 @@ impl Survivors<'_> {
     }
 }
 
+async fn component_matches(
+    pattern: &mut Pattern,
+    name: &str,
+    extglob: bool,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<bool, Error> {
+    if extglob {
+        return pattern.matches_full(name, work, cancel).await;
+    }
+    pattern.matches_pathname(name, work, cancel).await
+}
+
+struct MatchOptions {
+    limits: (usize, usize, usize),
+    extglob: bool,
+}
+impl MatchOptions {
+    fn basic(limits: (usize, usize, usize)) -> Self {
+        Self {
+            limits,
+            extglob: false,
+        }
+    }
+}
 async fn matches(
     text: &str,
     protection: &[bool],
     cwd: &str,
     fs: &Rc<dyn FileSystem>,
-    limits: (usize, usize, usize),
+    options: MatchOptions,
     work: &mut Work,
     cancel: &Cancel,
 ) -> Result<Vec<String>, Error> {
-    let (max_bytes, max_fields, raw) = limits;
-    if unmatchable(text, protection, work, cancel).await? {
+    let (max_bytes, max_fields, raw) = options.limits;
+    if !options.extglob && unmatchable(text, protection, work, cancel).await? {
         return Ok(Vec::new());
     }
     let mut prefixes = Vec::new();
@@ -553,9 +582,10 @@ async fn matches(
         };
         let protection = &protection[start..start + part.len()];
         start += component.len();
-        let wildcard = magic(part, protection, work, cancel).await?;
+        let wildcard = options.extglob && extglob_group(part, protection, work, cancel).await?
+            || magic(part, protection, work, cancel).await?;
         let pattern_storage = work.storage_left();
-        let mut pattern = Pattern::default();
+        let mut pattern = Pattern::with_options(false, options.extglob);
         let literal = if wildcard {
             for (index, ch) in part.char_indices() {
                 work.checkpoint(cancel).await?;
@@ -640,10 +670,11 @@ async fn matches(
                 if name == "." || name == ".." || (name.starts_with('.') && !explicit_dot) {
                     continue;
                 }
-                // matches_pathname's compiler/state buffers are temporary. Return
+                // The component matcher's compiler/state buffers are temporary. Return
                 // their exact charge only after the future has dropped them.
                 let storage = work.storage_left();
-                let matched = pattern.matches_pathname(name, work, cancel).await?;
+                let matched =
+                    component_matches(&mut pattern, name, options.extglob, work, cancel).await?;
                 let released = storage.saturating_sub(work.storage_left());
                 work.release_storage(released);
                 if !matched {
@@ -783,11 +814,11 @@ pub(super) async fn expand_fields(
             &protection,
             &cwd,
             &fs,
-            (
+            MatchOptions::basic((
                 max_bytes.saturating_sub(output.bytes),
                 max_fields.saturating_sub(output.values.len()),
                 *raw_remaining,
-            ),
+            )),
             work,
             cancel,
         )
@@ -817,6 +848,34 @@ pub(super) async fn expand_fields(
         work.release_storage(field_slots);
     }
     Ok(output.values)
+}
+
+/// Completion -G uses literal glob syntax without another shell expansion pass.
+pub(crate) async fn completion_matches(
+    text: &str,
+    state: &SharedState,
+    limits: (usize, usize),
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<Vec<String>, Error> {
+    work.admit_storage(text.len().saturating_add(state.borrow().cwd.len()))?;
+    let protection = vec![false; text.len()];
+    let cwd = state.borrow().cwd.clone();
+    let fs = work.substitutions.as_ref().ok_or(2)?.filesystem();
+    let extglob = state.borrow().extglob;
+    matches(
+        text,
+        &protection,
+        &cwd,
+        &fs,
+        MatchOptions {
+            limits: (limits.0, limits.1, limits.0),
+            extglob,
+        },
+        work,
+        cancel,
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -949,7 +1008,7 @@ mod tests {
                 &protection,
                 cwd,
                 &fs,
-                limits,
+                MatchOptions::basic(limits),
                 &mut work,
                 &cancel,
             ));
@@ -981,7 +1040,7 @@ mod tests {
                 &protection,
                 "/",
                 &fs,
-                (1 << 20, 16, 1 << 20),
+                MatchOptions::basic((1 << 20, 16, 1 << 20)),
                 &mut work,
                 &cancel,
             ));
@@ -1018,7 +1077,7 @@ mod tests {
                     &[false; 5],
                     "/",
                     &fs,
-                    (bytes, fields, raw),
+                    MatchOptions::basic((bytes, fields, raw)),
                     &mut work,
                     &cancel
                 )),
@@ -1032,7 +1091,7 @@ mod tests {
                 &[false; 5],
                 "/",
                 &fs,
-                (1024, 16, 1024),
+                MatchOptions::basic((1024, 16, 1024)),
                 &mut work,
                 &cancel
             ))
@@ -1115,7 +1174,7 @@ mod tests {
             &[false],
             "/",
             &fs,
-            (1024, 16, 1024),
+            MatchOptions::basic((1024, 16, 1024)),
             &mut work,
             &cancel,
         ));
@@ -1149,7 +1208,7 @@ mod tests {
             &[false; 5],
             "/",
             &fs,
-            (65536, 1024, 65536),
+            MatchOptions::basic((65536, 1024, 65536)),
             &mut work,
             &cancel,
         ));
