@@ -3020,8 +3020,8 @@ async fn prepare_execution_body(
     mut work: expand::Work,
 ) -> Result<PreparedExecution, CommandError> {
     let line = simple.expansion_line;
-    // Bash expands command words first. Assignment-only commands then assign
-    // before redirects; named commands redirect before expanding prefix RHSs.
+    // Bash expands command words first. Prefix assignments must finish before
+    // redirects so a fatal RHS does not create the command's output files.
     if argv.is_empty() {
         assignments(
             simple.assignments,
@@ -3045,21 +3045,7 @@ async fn prepare_execution_body(
             work,
         });
     }
-    let name = &argv[0];
-    let shell_command = state.borrow().functions().contains_key(name)
-        || commands::lookup(name).is_some_and(commands::Command::shell_heredoc_errors);
-    let heredoc_status = (!shell_command).then_some(context.parameter_error_status);
-    xtrace::command(argv, state, &fds, context).await?;
-    let fds = redirects(
-        &simple.redirects,
-        state,
-        fds,
-        context,
-        &mut work,
-        heredoc_status,
-    )
-    .await?;
-    let function_prefix = state.borrow().functions().contains_key(name);
+    let function_prefix = state.borrow().functions().contains_key(&argv[0]);
     let assigned = assignments(
         simple.assignments,
         state,
@@ -3071,6 +3057,20 @@ async fn prepare_execution_body(
             diagnostics: function_prefix.then_some(&fds),
             fds: &fds,
         },
+    )
+    .await?;
+    xtrace::command(argv, state, &fds, context).await?;
+    let name = &argv[0];
+    let shell_command = state.borrow().functions().contains_key(name)
+        || commands::lookup(name).is_some_and(commands::Command::shell_heredoc_errors);
+    let heredoc_status = (!shell_command).then_some(context.parameter_error_status);
+    let fds = redirects(
+        &simple.redirects,
+        state,
+        fds,
+        context,
+        &mut work,
+        heredoc_status,
     )
     .await?;
     work.substitutions = None;
