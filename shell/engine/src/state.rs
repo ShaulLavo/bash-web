@@ -1430,21 +1430,29 @@ impl State {
         self.declare_local(name, Some(value))
     }
     pub(crate) fn declare_local(&mut self, name: String, value: Option<String>) -> Result<(), i32> {
+        self.declare_local_value(name, value, false)
+    }
+    fn declare_local_value(
+        &mut self,
+        name: String,
+        value: Option<String>,
+        inherit: bool,
+    ) -> Result<(), i32> {
         let already_local = self
             .locals
             .last()
             .is_some_and(|frame| frame.contains_key(&name));
-        // Temporary environments of function calls are inherited by a bare
-        // local declaration, unlike ordinary dynamically visible bindings.
-        let prefix = self.inherits_function_prefix(&name);
-        let inherited_bytes = if !already_local && prefix && value.is_none() {
+        // Bare locals inherit function prefixes; -I also inherits ordinary
+        // visible bindings. Neither reloads a current local's saved outer value.
+        let inherit_value = inherit || self.inherits_function_prefix(&name);
+        let inherited_bytes = if !already_local && inherit_value && value.is_none() {
             self.variables.get(&name).map_or(0, Binding::storage_bytes)
         } else {
             0
         };
         let value = value
             .map(|value| {
-                if already_local {
+                if already_local || inherit {
                     self.case_value(&name, value)
                 } else {
                     Ok(value)
@@ -1461,7 +1469,7 @@ impl State {
         if already_local && value.is_some() {
             self.reserve_local_value(&name, bytes)?;
         }
-        let inherited = if !already_local && prefix && value.is_none() {
+        let inherited = if !already_local && inherit_value && value.is_none() {
             self.locals
                 .last()
                 .and_then(|frame| frame.get(&name))

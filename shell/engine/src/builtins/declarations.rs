@@ -29,6 +29,7 @@ pub(super) async fn append_scalar(
     name: &str,
     value: String,
     local: bool,
+    inherit: bool,
     state: &SharedState,
     context: &Context,
     work: &mut Work,
@@ -40,11 +41,13 @@ pub(super) async fn append_scalar(
     }
     let bytes = state
         .borrow()
-        .declaration_append_base(name, local)
+        .declaration_append_base(name, local, inherit)
         .map_or(0, str::len);
     scan_bytes(bytes, context, work).await?;
     let state = state.borrow();
-    let old = state.declaration_append_base(name, local).unwrap_or("");
+    let old = state
+        .declaration_append_base(name, local, inherit)
+        .unwrap_or("");
     let bytes = old.len().checked_add(value.len()).ok_or(2)?;
     if bytes > context.limits().expansion_bytes {
         return Err(2);
