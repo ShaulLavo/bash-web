@@ -1010,7 +1010,7 @@ impl Expansion<'_> {
                 }
                 let runner = expansion.work.substitutions.clone().ok_or(2)?;
                 crate::ast_copy::admit(commands, expansion.cancel, expansion.work).await?;
-                let child = expansion.process_child(
+                let child = Self::process_child(
                     crate::state::State::snapshot(state, expansion.cancel, expansion.work).await?,
                     state,
                 );
