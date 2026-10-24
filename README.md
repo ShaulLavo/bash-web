@@ -45,7 +45,7 @@ await runtime.dispose();
 
 ## Why
 
-- **Bash behavior, measured.** GNU Bash 5.3.15 is the oracle. The committed baseline passes 1,315 of 1,682 Oils builtins-only cases (78.2%), comparing stdout bytes and exit status, and CI rejects a change that loses a pass. [Reproduce it](docs/status.md#compatibility-with-bash).
+- **Bash behavior, measured.** GNU Bash 5.3.15 is the oracle. The committed baseline passes 1,315 of 1,682 Oils builtins-only cases (78.2%), comparing stdout bytes and exit status, and CI fails any change that stops a passing case from passing. [Reproduce it](docs/status.md#compatibility-with-bash).
 - **Pipelines stream.** Every pipeline stage is a task on one thread, and pipes are bounded. `producer | grep` shows lines as they arrive, and Ctrl+C stops the foreground job without touching background jobs.
 - **You pay for the commands you use.** The shell core has no external commands. `cat`, `grep`, `mkdir`, and `seq` are separate WASM programs that you install on demand. Anything not installed exits 127.
 - **One runtime per page.** The shell borrows your [Waffle](https://github.com/ShaulLavo/waffle) runtime. It never creates one, and disposing a shell leaves the runtime and other shells alone.
@@ -59,7 +59,7 @@ The page creates the runtime and `createShell` borrows it. The terminal is two b
 
 ## Quick start
 
-You need `git` and Rust through [rustup](https://rustup.rs). rustup installs the Rust version in `rust-toolchain.toml`.
+You need `git` and Rust through [rustup](https://rustup.rs), because the repository pins its Rust version in `rust-toolchain.toml` and rustup installs that version.
 
 1. Clone and build the engine:
 
@@ -80,16 +80,14 @@ You need `git` and Rust through [rustup](https://rustup.rs). rustup installs the
    exit: 7
    ```
 
-[Getting started](docs/getting-started.md) continues with pipelines and the utilities. The browser build needs wasi-sdk and more. Start with [Embed a shell in a page](docs/guides/embed-in-a-page.md).
+[Getting started](docs/getting-started.md) continues with pipelines and the utilities. The browser build also needs wasi-sdk 34.0 to compile the WASM guests. Start with [Embed a shell in a page](docs/guides/embed-in-a-page.md).
 
 ## What you can do
 
-| Task | Where |
-| ---- | ----- |
-| Build the engine and try scripts | [Getting started](docs/getting-started.md) |
-| Run a script or an interactive shell in a page | [Embed a shell in a page](docs/guides/embed-in-a-page.md) |
-| Add `cat`, `grep`, `mkdir`, and `seq` | [Install utilities](docs/guides/install-utilities.md) |
-| Fix `command not found` or a blank page | [Troubleshooting](docs/troubleshooting.md) |
+- Build the engine and try scripts: [Getting started](docs/getting-started.md)
+- Run a script or an interactive shell in a page: [Embed a shell in a page](docs/guides/embed-in-a-page.md)
+- Add `cat`, `grep`, `mkdir`, and `seq`: [Install utilities](docs/guides/install-utilities.md)
+- Fix `command not found` or a blank page: [Troubleshooting](docs/troubleshooting.md)
 
 ## How it works
 
@@ -103,13 +101,11 @@ The shell is a WASM program, not a runtime. A thin TypeScript adapter starts it 
 
 Experimental and pre-1.0. The version is `0.0.x`, the package is private, and there are no releases. Any commit can change the API.
 
-| Area | State |
-| ---- | ----- |
-| Native engine | Builds and tests on macOS arm64 and Linux |
-| WASI guests and browser build | Linux only (CI). Not verified on macOS or Windows. |
-| Browsers | Chromium and Firefox in CI. Safari is not verified. |
-| Bash compatibility | 78.2% of Oils builtins-only cases. Missing: associative arrays, `mapfile`, running traps, printf floats. |
-| Bun | Not included. The Bun-specific browser tests are skipped. |
+- **Native engine:** builds and tests on macOS arm64 and Linux.
+- **WASI guests and browser build:** Linux only (CI). Not verified on macOS or Windows.
+- **Browsers:** Chromium and Firefox in CI. Safari is not verified.
+- **Bash compatibility:** 78.2% of Oils builtins-only cases. Missing: associative arrays, `mapfile`, running traps, printf floats.
+- **Bun:** not included. The Bun-specific browser tests are skipped.
 
 Every gap, with a command that shows it, is in [Status and limits](docs/status.md).
 
