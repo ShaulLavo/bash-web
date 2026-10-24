@@ -749,6 +749,13 @@
         ],
         "change": "Expose the word parser's malformed parameter-header classification as an allocation-free scan for already-admitted lazy operand tokens. Preserve the same word-parser diagnostic text and grammar.",
         "reason": "The existing GNU Bash 5.3.15 nested ${x:-${y!}} recording requires bad-substitution status 1, not the status 2 used for valid but unsupported parameter forms. No upstream test removed."
+      },
+      {
+        "paths": [
+          "shell/parser/src/parser/mod.rs"
+        ],
+        "change": "Enumerate malformed-substitution header characters instead of maintaining a loop counter.",
+        "reason": "Pass the blocking explicit_counter_loop lint while preserving Unicode character offsets and existing recovery decisions."
       }
     ],
     "removedUpstreamTests": [

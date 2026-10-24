@@ -472,15 +472,20 @@ fn builtin_wrapper_blocked_diagnostic_cancellation_releases_all_frames() {
     rig.shutdown();
 }
 
-#[test]
-fn builtin_wrapper_usage_diagnostic_cancellation_and_broken_pipe() {
-    let rig = Rig::new(Limits::default());
-    let before = rig.session.core.execution_storage.observation().0;
+fn full_pipe() -> (Endpoint, Endpoint) {
     let (reader, writer) = io::pipe();
     assert_eq!(
         writer.write(&vec![0; io::PIPE_CAPACITY]).now_or_never(),
         Some(Ok(io::PIPE_CAPACITY))
     );
+    (reader, writer)
+}
+
+#[test]
+fn builtin_wrapper_usage_diagnostic_cancellation_and_broken_pipe() {
+    let rig = Rig::new(Limits::default());
+    let before = rig.session.core.execution_storage.observation().0;
+    let (reader, writer) = full_pipe();
     let mut fds = rig.session.core.descriptors.borrow().clone();
     fds.insert(2, writer);
     rig.session.set_descriptors(fds).unwrap();
@@ -538,11 +543,7 @@ fn timed_function_declaration_output_releases_storage_on_cancel_and_drop() {
         let before = rig.session.core.execution_storage.observation().0;
         let storage = rig.session.core.execution_storage.clone();
         let state = rig.session.state.clone();
-        let (reader, writer) = io::pipe();
-        assert_eq!(
-            writer.write(&vec![0; io::PIPE_CAPACITY]).now_or_never(),
-            Some(Ok(io::PIPE_CAPACITY))
-        );
+        let (reader, writer) = full_pipe();
         let mut fds = rig.session.core.descriptors.borrow().clone();
         fds.insert(1, writer);
         rig.session.set_descriptors(fds).unwrap();

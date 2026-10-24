@@ -3,9 +3,15 @@ use super::{
 };
 use crate::{expand::Printability, state::DeclarationView};
 
+pub(super) enum FunctionFormat {
+    Definition,
+    Name,
+}
+
 /// Named `declare -f` operands use the same bounded AST printer as `type`.
 /// Function bodies remain shared and are never copied or executed here.
 pub(super) async fn functions(
+    format: FunctionFormat,
     names: impl Iterator<Item = String>,
     state: &SharedState,
     fds: &FdTable,
@@ -15,29 +21,34 @@ pub(super) async fn functions(
     let mut status = 0;
     for name in names {
         scan_bytes(name.len(), context, work).await?;
-        let Some(function) = state.borrow().functions().get(&name).cloned() else {
-            status = 1;
-            continue;
+        let found = match format {
+            FunctionFormat::Definition => print_function(&name, state, fds, context, work).await?,
+            FunctionFormat::Name => print_function_name(&name, state, fds, context, work).await?,
         };
-        print_function(&name, &function, fds, context, work).await?;
+        if !found {
+            status = 1;
+        }
     }
     Ok(Outcome::status(status))
 }
 
 async fn print_function(
     name: &str,
-    function: &crate::state::StoredFunction,
+    state: &SharedState,
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
-) -> Result<(), i32> {
-    let rendered = context.render_function(name, function, work)?;
+) -> Result<bool, i32> {
+    let Some(function) = state.borrow().functions().get(name).cloned() else {
+        return Ok(false);
+    };
+    let rendered = context.render_function(name, &function, work)?;
     write(fds, rendered.text.as_bytes(), context).await?;
     write(fds, b"\n", context).await?;
     let bytes = rendered.text.len();
     drop(rendered);
     work.release_storage(bytes);
-    Ok(())
+    Ok(true)
 }
 
 struct DeclarationSnapshot {
@@ -324,36 +335,31 @@ async fn print_stack_element(
     Ok(())
 }
 
-pub(super) async fn function_names(
-    names: impl Iterator<Item = String>,
+async fn print_function_name(
+    name: &str,
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
-) -> Result<Outcome, i32> {
-    let mut status = 0;
-    for name in names {
-        scan_bytes(name.len(), context, work).await?;
-        let Some(line) = state
-            .borrow()
-            .functions()
-            .get(&name)
-            .map(|function| function.line)
-        else {
-            status = 1;
-            continue;
-        };
-        let bytes = name.len() + state.borrow().shell_name.len() + 24;
-        work.admit_storage(bytes).map_err(error_status)?;
-        scan_bytes(bytes, context, work).await?;
-        let output = if state.borrow().extdebug {
-            format!("{name} {line} {}\n", state.borrow().shell_name)
-        } else {
-            format!("{name}\n")
-        };
-        write(fds, output.as_bytes(), context).await?;
-        drop(output);
-        work.release_storage(bytes);
-    }
-    Ok(Outcome::status(status))
+) -> Result<bool, i32> {
+    let Some(line) = state
+        .borrow()
+        .functions()
+        .get(name)
+        .map(|function| function.line)
+    else {
+        return Ok(false);
+    };
+    let bytes = name.len() + state.borrow().shell_name.len() + 24;
+    work.admit_storage(bytes).map_err(error_status)?;
+    scan_bytes(bytes, context, work).await?;
+    let output = if state.borrow().extdebug {
+        format!("{name} {line} {}\n", state.borrow().shell_name)
+    } else {
+        format!("{name}\n")
+    };
+    write(fds, output.as_bytes(), context).await?;
+    drop(output);
+    work.release_storage(bytes);
+    Ok(true)
 }

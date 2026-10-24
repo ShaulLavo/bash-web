@@ -6475,9 +6475,8 @@ fn bad_brace_parameter_length(chars: &WordChars<'_>) -> Option<usize> {
         return None;
     }
     // Find the closing brace to report and skip the whole expansion.
-    let mut length = 0;
     let mut depth = 0usize;
-    for c in chars.clone() {
+    for (length, c) in chars.clone().enumerate() {
         // `${#1#'x'}` is bad whatever the quoting after the name.
         if !length_prefix && (MARKERS.contains(&c) || c == '\'' || c == '"' || c == '\\') {
             return None;
@@ -6488,7 +6487,6 @@ fn bad_brace_parameter_length(chars: &WordChars<'_>) -> Option<usize> {
             '}' => depth -= 1,
             _ => {}
         }
-        length += 1;
     }
     None
 }

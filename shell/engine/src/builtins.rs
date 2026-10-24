@@ -771,10 +771,26 @@ async fn declarations(
         {
             return Err(2);
         }
-        return declarations::functions(args, state, fds, context, work).await;
+        return declarations::functions(
+            declarations::FunctionFormat::Definition,
+            args,
+            state,
+            fds,
+            context,
+            work,
+        )
+        .await;
     }
     if function_names {
-        return declarations::function_names(args, state, fds, context, work).await;
+        return declarations::functions(
+            declarations::FunctionFormat::Name,
+            args,
+            state,
+            fds,
+            context,
+            work,
+        )
+        .await;
     }
     if print {
         return declarations::print(name, args, state, fds, context, work).await;
