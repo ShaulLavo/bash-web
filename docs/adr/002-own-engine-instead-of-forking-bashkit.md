@@ -31,7 +31,7 @@ Measure correctness against GNU Bash 5.3.15, and let CI refuse any change that l
 
 ## Consequences
 
-- The shell starts behind Bashkit on score. The committed baseline today is 77.8% on the same Oils set ([Status](../status.md#compatibility-with-bash)). Every change must not lower any corpus's pass count, so the number only goes up.
+- The shell starts behind Bashkit on score. The committed baseline today is 78.2% on the same Oils set ([Status](../status.md#compatibility-with-bash)). Every change must not lower any corpus's pass count, so the number only goes up.
 - Guardrails that climb with the score: the standalone core stays at or under 1,000,000 bytes after brotli-11 compression, and the streaming acceptance tests stay green. `npm run test:shell:wasi` checks the size.
 - The parser can diverge from Bashkit freely. Provenance is a record in `sources.lock.json`, not byte identity.
 - Ported code carries its upstream license. `THIRD_PARTY_NOTICES.md` and `npm run notices:shell` keep the notices current.

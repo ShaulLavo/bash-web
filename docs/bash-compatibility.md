@@ -1,13 +1,20 @@
 # Bash compatibility
 
-**Historical study.** The tables below preserve the original Brush, Bashkit,
-just-bash, and native-reference comparison. They are historical evidence from
-brush-web, not standalone bash-web gates or fresh measurements. The
-bash-web-owned fixed scoreboard and replay instructions are in the own-shell
-section below.
+## Current score
 
-Reproduce the frozen standalone result with `npm run compat:shell`. Raw
-historical results remain in [bash-compatibility.json](evidence/bash-compatibility.json).
+bash-web's own engine passes **1,315 of 1,682** Oils builtins-only cases (78.2%), **1,391 of 1,888** Brush-suite cases (73.7%), and **1,763 of 2,222** Bashkit-suite cases (79.3%). These are the committed baseline at `a745a96`. Print them with the command in [Status](status.md#compatibility-with-bash). Reproduce them with `npm run compat:shell`. Every other number on this page is a dated measurement kept as history.
+
+Names on this page:
+
+- **own-shell** is the engine name the scoring scripts use for bash-web's own Rust engine (`BASH_COMPAT_ENGINES=own-shell`). It is the only engine the fixed replay runs.
+- **brush-web** is the retired prototype repository that ran Brush in the browser. It produced the historical comparison below. bash-web replaced it, and its browser adapter code was ported here (see [third-party notices](../THIRD_PARTY_NOTICES.md)).
+- **Brush**, **Bashkit**, and **just-bash** are other bash implementations, scored for comparison only.
+
+The case counts differ by one between the two parts of this page. The historical study classified 1,889 Brush-suite and 2,223 Bashkit-suite cases as builtins-only. The fixed scoreboard scores 1,888 and 2,222, because it re-ran GNU Bash twice and dropped the two cases whose output differed between runs: `brush-suite:options/set-e:145` and `bashkit-suite:background:11`. Oils stays at 1,682. The oracle file marks both cases `fresh bash oracle output is not deterministic`.
+
+## Historical study: Brush, Bashkit and just-bash
+
+**Historical.** The sections from here through [Caveats](#caveats) preserve the original comparison of Brush, Bashkit, just-bash, and native Brush, measured in brush-web. They are evidence of the field at that time, not bash-web gates or fresh measurements. Raw results are in [bash-compatibility.json](evidence/bash-compatibility.json).
 
 ## Method
 
@@ -105,14 +112,14 @@ Cause: `mapfile` replaces the array through builtin side effects that remove the
 - Category labels group Oils files by subject. Cases inside a file can touch other features.
 - Bashkit and just-bash were tuned against Oils. Treat their Oils numbers as upper bounds, and use the held-out rows for the comparison.
 
-## Own-shell fixed scoreboard
+## Own-shell fixed scoreboard and its history
 
-The numbers in this section are dated measurements, kept as history. For the current committed baseline and the command that prints it, see [Status](status.md#compatibility-with-bash).
+**Method first, history after.** The replay command and the rules that hold the score are in the paragraphs and code blocks below. The tables of passes (288, 291, 951, 948, 524, 527 and so on) are dated steps on the way to the current score above, not the current score. For the committed baseline, see [Current score](#current-score).
 
 `own-shell` is the package's only default engine. Since 2026-10-18 its frozen
 replay runs the production `shell-runtime` guest on Waffle's Node runtime (see
 [the replay instrument transition](#replay-instrument-transition)); earlier
-measurements below came from the original standalone `shell-engine` CLI. The first measured baseline is
+measurements below came from the original standalone `shell-engine` CLI. The first measured baseline, now superseded, was
 **288/1,682 Oils, 295/1,888 Brush-suite and 445/2,222 Bashkit-suite**. The
 historical engine tables above keep their original case sets and are not a
 comparison under this fixed identity.

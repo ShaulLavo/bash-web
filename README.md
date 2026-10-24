@@ -45,7 +45,7 @@ await runtime.dispose();
 
 ## Why
 
-- **Bash behavior, measured.** GNU Bash 5.3.15 is the oracle. The committed baseline passes 1,308 of 1,682 Oils builtins-only cases (77.8%), comparing stdout bytes and exit status, and CI rejects a change that loses a pass. [Reproduce it](docs/status.md#compatibility-with-bash).
+- **Bash behavior, measured.** GNU Bash 5.3.15 is the oracle. The committed baseline passes 1,315 of 1,682 Oils builtins-only cases (78.2%), comparing stdout bytes and exit status, and CI rejects a change that loses a pass. [Reproduce it](docs/status.md#compatibility-with-bash).
 - **Pipelines stream.** Every pipeline stage is a task on one thread, and pipes are bounded. `producer | grep` shows lines as they arrive, and Ctrl+C stops the foreground job without touching background jobs.
 - **You pay for the commands you use.** The shell core has no external commands. `cat`, `grep`, `mkdir`, and `seq` are separate WASM programs that you install on demand. Anything not installed exits 127.
 - **One runtime per page.** The shell borrows your [Waffle](https://github.com/ShaulLavo/waffle) runtime. It never creates one, and disposing a shell leaves the runtime and other shells alone.
@@ -108,7 +108,7 @@ Experimental and pre-1.0. The version is `0.0.x`, the package is private, and th
 | Native engine | Builds and tests on macOS arm64 and Linux |
 | WASI guests and browser build | Linux only (CI). Not verified on macOS or Windows. |
 | Browsers | Chromium and Firefox in CI. Safari is not verified. |
-| Bash compatibility | 77.8% of Oils builtins-only cases. Missing: associative arrays, `mapfile`, running traps, printf floats. |
+| Bash compatibility | 78.2% of Oils builtins-only cases. Missing: associative arrays, `mapfile`, running traps, printf floats. |
 | Bun | Not included. The Bun-specific browser tests are skipped. |
 
 Every gap, with a command that shows it, is in [Status and limits](docs/status.md).

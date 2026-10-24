@@ -6,7 +6,7 @@ bash-web is experimental and pre-1.0. The package version is `0.0.x`, `package.j
 
 | Area | Runs on | Not verified |
 | ---- | ------- | ------------ |
-| Native engine build and tests (`npm run test:rust`) | macOS arm64 (1,648 tests passed at `a26ce56`), Linux (CI, `ubuntu-latest`) | Windows |
+| Native engine build and tests (`npm run test:rust`) | macOS arm64 (TESTS tests passed at `a745a96`), Linux (CI, `ubuntu-latest`) | Windows |
 | WASI guests, size gate, frozen score replay | Linux (CI) | macOS, Windows. The wasi-sdk default path in `scripts/wasi-build.ts` is a Linux x86_64 build, and the libc rebuild needs `setsid`, `flock`, and GNU `timeout`. |
 | Browser embedding | Chromium and Firefox through Playwright in CI | Safari. Chromium and Firefox results say nothing about it. |
 | Browser requirements | A secure context, cross-origin isolation for `SharedArrayBuffer`, WASM served as `application/wasm` | |
@@ -23,9 +23,11 @@ CI compares every pass against a committed baseline and rejects a change that lo
 
 | Corpus | Scored cases | Passes | Pass rate |
 | ------ | -----------: | -----: | --------: |
-| Oils spec tests | 1,682 | 1,308 | 77.8% |
-| Brush suite | 1,888 | 1,361 | 72.1% |
-| Bashkit suite | 2,222 | 1,762 | 79.3% |
+| Oils spec tests | 1,682 | 1,315 | 78.2% |
+| Brush suite | 1,888 | 1,391 | 73.7% |
+| Bashkit suite | 2,222 | 1,763 | 79.3% |
+
+The Brush and Bashkit suites are test suites from those two projects. `brush-suite` and `bashkit-suite` below name the same corpora. The Brush and Bashkit totals are one lower than the historical study's 1,889 and 2,223 ([why](bash-compatibility.md#current-score)).
 
 Print these numbers from the committed baseline:
 
@@ -34,9 +36,9 @@ node -e 'const b=JSON.parse(require("fs").readFileSync("docs/evidence/own-shell-
 ```
 
 ```text
-oils 1308/1682
-brush-suite 1361/1888
-bashkit-suite 1762/2222
+oils 1315/1682
+brush-suite 1391/1888
+bashkit-suite 1763/2222
 ```
 
 The baseline is a floor, not a fresh measurement. `npm run compat:shell` replays the shell against the frozen oracle and needs the WASI build ([Development](development.md#replay-the-compatibility-score)). The method, the corpora, and each score change are in [Bash compatibility](bash-compatibility.md).
@@ -59,12 +61,12 @@ Pass counts by Oils category, from the same file:
 | Parameter expansion | 173 | 119 | 68.8% |
 | Real-world idioms | 82 | 53 | 64.6% |
 | errexit, options and traps | 164 | 103 | 62.8% |
-| Assignment, scope and special vars | 109 | 60 | 55.0% |
+| Assignment, scope and special vars | 109 | 67 | 61.5% |
 | Arrays and assoc arrays | 127 | 55 | 43.3% |
 
 ## Not supported yet
 
-Observed at commit `a26ce56` with the native `shell-engine`. Each row is a one-line script you can pass to `shell-engine -c`. The last column is what GNU Bash 5 does.
+Observed at commit `a745a96` with the native `shell-engine`. Each row is a one-line script you can pass to `shell-engine -c`. The last column is what GNU Bash 5 does.
 
 | Feature | Try | What happens | Bash |
 | ------- | --- | ------------ | ---- |
