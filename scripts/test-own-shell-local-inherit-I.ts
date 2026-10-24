@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { after, test } from "node:test";
 import { resolve } from "node:path";
 import { liveNodeWorkers } from "./node-worker-host.ts";
+import { assertReaderOutput } from "./recorded-bash.ts";
 import { createWaffleRunner } from "./waffle-compat.ts";
 
 type OracleCase = {
@@ -29,10 +30,7 @@ for (const line of selected.concat(neighbors)) {
   assert.ok(entry);
   test(`local inheritance frozen ${id}`, async () => {
     const actual = await run(entry.code);
-    assert.equal(actual.crash, undefined);
-    assert.equal(actual.outputLimit, undefined);
-    assert.equal(actual.status, entry.bash.status);
-    assert.deepEqual(actual.stdout, Buffer.from(entry.bash.stdout, "base64"));
+    assertReaderOutput(actual, entry.bash);
   });
 }
 // These are authored ownership controls, not additional Bash oracle recordings.
