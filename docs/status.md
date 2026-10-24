@@ -4,14 +4,12 @@ bash-web is experimental and pre-1.0. The package version is `0.0.x`, `package.j
 
 ## Platforms
 
-| Area | Runs on | Not verified |
-| ---- | ------- | ------------ |
-| Native engine build and tests (`npm run test:rust`) | macOS arm64 (1,657 tests passed at `a745a96`), Linux (CI, `ubuntu-latest`) | Windows |
-| WASI guests, size gate, frozen score replay | Linux (CI) | macOS, Windows. The wasi-sdk fallback path in `scripts/wasi-build.ts` is a Linux x86_64 path on the maintainer's machine (always set `WASI_SDK_PATH`), and the libc rebuild needs `setsid`, `flock`, and GNU `timeout`. |
-| Browser embedding | Chromium and Firefox through Playwright in CI | Safari. Chromium and Firefox results say nothing about it. |
-| Browser requirements | A secure context, cross-origin isolation for `SharedArrayBuffer`, WASM served as `application/wasm` | |
-| Demo terminal renderer | WebGPU, with a Canvas fallback when WebGPU exposes no adapter | |
-| JavaScript tooling | Node `>=26.12.1` ([install](development.md#prerequisites)) | Older Node |
+- **Native engine build and tests** (`npm run test:rust`): run on macOS arm64 (1,657 tests passed at `a745a96`) and Linux (CI, `ubuntu-latest`). Windows is not verified.
+- **WASI guests, size gate, frozen score replay:** run on Linux (CI). macOS and Windows are not verified. The wasi-sdk fallback path in `scripts/wasi-build.ts` is a Linux x86_64 path on the maintainer's machine (always set `WASI_SDK_PATH`), and the libc rebuild needs `setsid`, `flock`, and GNU `timeout`.
+- **Browser embedding:** Chromium and Firefox through Playwright in CI. Safari is not verified, and Chromium and Firefox results say nothing about it.
+- **Browser requirements:** a secure context, cross-origin isolation because the terminal uses `SharedArrayBuffer`, and WASM served as `application/wasm`.
+- **Demo terminal renderer:** WebGPU, with a Canvas fallback when WebGPU exposes no adapter.
+- **JavaScript tooling:** Node `>=26.12.1` ([install](development.md#prerequisites)), because scripts such as `npm run check:layers` run `.ts` files directly. Older Node is not verified.
 
 `npm run test:rust` also runs `cargo fmt --check` and the parser provenance check. The CI jobs are listed in [CI inputs and job ownership](ci.md).
 
@@ -19,7 +17,7 @@ bash-web is experimental and pre-1.0. The package version is `0.0.x`, `package.j
 
 The oracle is GNU Bash 5.3.15. A case passes when stdout bytes and exit status match. stderr is recorded but not scored. Each case runs in a fresh shell with a 10-second timeout. Only builtins-only cases are scored. Cases that need external commands, interactive input, job control, or other excluded features are skipped.
 
-CI compares every pass against a committed baseline and rejects a change that loses one. The baseline records these passes:
+CI compares every pass against a committed baseline and fails any change that stops a passing case from passing. The baseline records these passes:
 
 | Corpus | Scored cases | Passes | Pass rate |
 | ------ | -----------: | -----: | --------: |
@@ -32,7 +30,7 @@ The Brush and Bashkit suites are test suites from those two projects. `brush-sui
 Print these numbers from the committed baseline:
 
 ```sh
-node -e 'const b=JSON.parse(require("fs").readFileSync("docs/evidence/own-shell-baseline.json","utf8"));for(const [k,v] of Object.entries(b.counts))console.log(k,v.passed+"/"+(v.total-v.skipped))'
+jq -r '.counts | to_entries[] | "\(.key) \(.value.passed)/\(.value.total - .value.skipped)"' docs/evidence/own-shell-baseline.json
 ```
 
 ```text

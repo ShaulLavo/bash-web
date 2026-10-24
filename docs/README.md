@@ -4,7 +4,6 @@ Start at the [README](../README.md) for what bash-web is. This page maps the res
 
 ## Learn and do
 
-- ----: ---------
 - [Getting started](getting-started.md): Build the engine and run your first scripts
 - [Embed a shell in a page](guides/embed-in-a-page.md): Run a script or an interactive shell in the browser
 - [Install utilities](guides/install-utilities.md): Add `cat`, `grep`, `mkdir`, and `seq`
@@ -12,7 +11,6 @@ Start at the [README](../README.md) for what bash-web is. This page maps the res
 
 ## Understand
 
-- ----: ---------
 - [How bash-web works](concepts/architecture.md): See the parts and why they sit where they do
 - [Status and limits](status.md): Check platforms, bash compatibility numbers, gaps, and limits
 - [001 Borrowed runtime](adr/001-shell-is-a-wasm-program-on-a-borrowed-runtime.md): Why `createShell` takes a runtime
@@ -21,7 +19,6 @@ Start at the [README](../README.md) for what bash-web is. This page maps the res
 
 ## Look up
 
-- ----: ------
 - [API reference](reference/api.md): `createShell`, `Shell`, `SharedBridge`, utility entries
 - [Browser integration](browser-runtime.md): Asset contract, storage, `PATH` lookup, test scope, source provenance
 - [Async shell core](shell-engine.md): Execution contract, bounds, supported syntax
@@ -41,7 +38,6 @@ One page per feature, each stating exactly what is supported and what is left ou
 
 ## Contribute
 
-- ----: ---------
 - [Development](development.md): Set up, build, test, and find your way around the repository
 - [Bash compatibility](bash-compatibility.md): Read how the score is produced and how each change moved it
 - [Shell fuzzing](shell-fuzzing.md): Run and record the differential fuzzers
