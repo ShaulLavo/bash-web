@@ -1,0 +1,2029 @@
+{
+  "bash": "5.3.15(1)-release",
+  "provenance": {
+    "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+    "base": "e6430b1554de7d2efad092f40751858292cb071d",
+    "scope": "Local Bash controls and frozen scored candidates. Status and stdout; CI replays recordings only.",
+    "captureRepair": {
+      "bash": "5.3.15(1)-release",
+      "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+      "controls": 177
+    },
+    "assignmentOrderingRepair": {
+      "bash": "5.3.15(1)-release",
+      "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+      "controls": 16
+    }
+  },
+  "env": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "LC_ALL": "C",
+    "LANG": "C"
+  },
+  "cases": [
+    {
+      "id": "list-0",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show ${@-DEFAULT}; value=${@-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-1",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show \"${@-DEFAULT}\"; value=${@-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-2",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show ${@:-DEFAULT}; value=${@:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-3",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show \"${@:-DEFAULT}\"; value=${@:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-4",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show ${@+DEFAULT}; value=${@+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-5",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show \"${@+DEFAULT}\"; value=${@+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-6",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show ${@:+DEFAULT}; value=${@:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-7",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show \"${@:+DEFAULT}\"; value=${@:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-8",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show ${*-DEFAULT}; value=${*-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-9",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show \"${*-DEFAULT}\"; value=${*-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-10",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show ${*:-DEFAULT}; value=${*:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-11",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show \"${*:-DEFAULT}\"; value=${*:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-12",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show ${*+DEFAULT}; value=${*+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-13",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show \"${*+DEFAULT}\"; value=${*+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-14",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show ${*:+DEFAULT}; value=${*:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-15",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; IFS=; show \"${*:+DEFAULT}\"; value=${*:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-16",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show ${@-DEFAULT}; value=${@-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-17",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show \"${@-DEFAULT}\"; value=${@-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-18",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show ${@:-DEFAULT}; value=${@:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-19",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show \"${@:-DEFAULT}\"; value=${@:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-20",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show ${@+DEFAULT}; value=${@+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-21",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show \"${@+DEFAULT}\"; value=${@+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-22",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show ${@:+DEFAULT}; value=${@:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-23",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show \"${@:+DEFAULT}\"; value=${@:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-24",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show ${*-DEFAULT}; value=${*-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-25",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show \"${*-DEFAULT}\"; value=${*-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-26",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show ${*:-DEFAULT}; value=${*:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-27",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show \"${*:-DEFAULT}\"; value=${*:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-28",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show ${*+DEFAULT}; value=${*+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-29",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show \"${*+DEFAULT}\"; value=${*+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-30",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show ${*:+DEFAULT}; value=${*:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-31",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; IFS=; show \"${*:+DEFAULT}\"; value=${*:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-32",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show ${@-DEFAULT}; value=${@-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=< >\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-33",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show \"${@-DEFAULT}\"; value=${@-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=2 <> <>\nassigned=< >\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-34",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show ${@:-DEFAULT}; value=${@:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=< >\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-35",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show \"${@:-DEFAULT}\"; value=${@:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=2 <> <>\nassigned=< >\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-36",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show ${@+DEFAULT}; value=${@+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-37",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show \"${@+DEFAULT}\"; value=${@+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-38",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show ${@:+DEFAULT}; value=${@:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-39",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show \"${@:+DEFAULT}\"; value=${@:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-40",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show ${*-DEFAULT}; value=${*-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-41",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show \"${*-DEFAULT}\"; value=${*-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-42",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show ${*:-DEFAULT}; value=${*:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-43",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show \"${*:-DEFAULT}\"; value=${*:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-44",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show ${*+DEFAULT}; value=${*+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-45",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show \"${*+DEFAULT}\"; value=${*+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-46",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show ${*:+DEFAULT}; value=${*:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-47",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=; show \"${*:+DEFAULT}\"; value=${*:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nassigned=<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-48",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show ${@-DEFAULT}; value=${@-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=2 <a b> <c>\nassigned=<a b  c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-49",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show \"${@-DEFAULT}\"; value=${@-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=3 <a b> <> <c>\nassigned=<a b  c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-50",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show ${@:-DEFAULT}; value=${@:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=2 <a b> <c>\nassigned=<a b  c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-51",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show \"${@:-DEFAULT}\"; value=${@:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=3 <a b> <> <c>\nassigned=<a b  c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-52",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show ${@+DEFAULT}; value=${@+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-53",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show \"${@+DEFAULT}\"; value=${@+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-54",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show ${@:+DEFAULT}; value=${@:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-55",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show \"${@:+DEFAULT}\"; value=${@:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-56",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show ${*-DEFAULT}; value=${*-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=2 <a b> <c>\nassigned=<a bc>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-57",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show \"${*-DEFAULT}\"; value=${*-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <a bc>\nassigned=<a bc>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-58",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show ${*:-DEFAULT}; value=${*:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=2 <a b> <c>\nassigned=<a bc>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-59",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show \"${*:-DEFAULT}\"; value=${*:-DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <a bc>\nassigned=<a bc>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-60",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show ${*+DEFAULT}; value=${*+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-61",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show \"${*+DEFAULT}\"; value=${*+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-62",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show ${*:+DEFAULT}; value=${*:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-63",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"a b\" \"\" c; IFS=; show \"${*:+DEFAULT}\"; value=${*:+DEFAULT}; printf \"assigned=<%s>\\n\" \"$value\"",
+      "status": 0,
+      "stdout": "argc=1 <DEFAULT>\nassigned=<DEFAULT>\n",
+      "stderr": ""
+    },
+    {
+      "id": "lazy-list-nested",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- x \"y z\"; show \"${u:-${@}}\" \"${u:+${@:bad}}\"; echo \"${@:-${unbound:?bad}}\"",
+      "status": 0,
+      "stdout": "argc=3 <x> <y z> <>\nx y z\n",
+      "stderr": ""
+    },
+    {
+      "id": "lazy-list-side-effects",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- x; show \"${@:-${unused:=no}}\" \"${@:+${selected:=yes}}\" \"$unused\" \"$selected\"",
+      "status": 0,
+      "stdout": "argc=4 <x> <yes> <> <yes>\n",
+      "stderr": ""
+    },
+    {
+      "id": "lazy-list-empty-alternates",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; show \"${@+}\" \"${@:+}\"; set -- \"\"; show \"${@:+x}\" \"${@+}\"; set -- a b; show \"${@+}\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nargc=2 <> <>\nargc=1 <>\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-fields",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; param_b=2 param_a=1; show \"${!param_@}\" \"${!param_*}\" ${!param_@} ${!param_*}; IFS=:; show \"${!param_@}\" \"${!param_*}\" ${!param_@} ${!param_*}",
+      "status": 0,
+      "stdout": "argc=7 <param_a> <param_b> <param_a param_b> <param_a> <param_b> <param_a> <param_b>\nargc=7 <param_a> <param_b> <param_a:param_b> <param_a> <param_b> <param_a> <param_b>\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-empty",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; show \"${!param_missing_@}\" \"${!param_missing_*}\"; param_empty=(); param_sparse[5]=x; declare param_unset; param_null=; show \"${!param_@}\"",
+      "status": 0,
+      "stdout": "argc=1 <>\nargc=3 <param_empty> <param_null> <param_sparse>\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-dynamic",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; param_a=1 param_b=2; (local=1; unset param_a; show \"${!param_@}\"); show \"${!param_@}\"; unset param_b; show \"${!param_@}\"",
+      "status": 0,
+      "stdout": "argc=1 <param_b>\nargc=2 <param_a> <param_b>\nargc=1 <param_a>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-nounset",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -u; set --; show \"${@-x}\" \"${@+x}\" \"${*-x}\"; set -- \"\"; show \"${@:-x}\" \"${*:+x}\"",
+      "status": 0,
+      "stdout": "argc=2 <x> <x>\nargc=2 <x> <>\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-nounset",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -u; show \"${!param_none_@}\"; param_null=; show \"${!param_@}\"",
+      "status": 0,
+      "stdout": "argc=0 <>\nargc=1 <param_null>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-captured-operands",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- a \"b c\"; show \"${captured:=$@}\" \"$captured\"; IFS=:; unset captured; show \"${captured:=$*}\" \"$captured\"; param_a=1 param_b=2; unset captured; show \"${captured:=${!param_@}}\" \"$captured\"",
+      "status": 0,
+      "stdout": "argc=2 <a b c> <a b c>\nargc=2 <a:b c> <a:b c>\nargc=2 <param_a:param_b> <param_a:param_b>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-nonempty-ifs",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\" \"\"; IFS=:; show \"${@:-x}\" \"${*:-x}\" ${@:-x} ${*:-x}; a=${@:-x}; b=${*:-x}; show \"$a\" \"$b\"",
+      "status": 0,
+      "stdout": "argc=5 <> <> <:> <> <>\nargc=2 < > <:>\n",
+      "stderr": ""
+    },
+    {
+      "id": "list-assignment-failure",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; printf \"before\\n\"; echo \"${@:=x}\"; echo after",
+      "status": 1,
+      "stdout": "before\n",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "list-error-empty",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set --; printf \"before\\n\"; echo \"${@:?missing}\"; echo after",
+      "status": 127,
+      "stdout": "before\n",
+      "stderr": "/usr/bin/bash: line 1: @: missing\n"
+    },
+    {
+      "id": "list-error-null",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; printf \"before\\n\"; echo \"${*:?missing}\"; echo after",
+      "status": 127,
+      "stdout": "before\n",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "list-selected-effects",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; set -- \"\"; show \"${@:-${selected:=yes}}\" \"${@+${selected}}\"; show \"$selected\"; set -- a b; show \"${@:=bad}\" \"${*?bad}\"",
+      "status": 0,
+      "stdout": "argc=2 <yes> <yes>\nargc=1 <yes>\nargc=3 <a> <b> <a b>\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-empty-ifs-fields",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; param_a=1 param_b=2; IFS=; show ${!param_@} ${!param_*} \"${!param_@}\" \"${!param_*}\"",
+      "status": 0,
+      "stdout": "argc=6 <param_a> <param_b> <param_aparam_b> <param_a> <param_b> <param_aparam_b>\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-literal-edges",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; param_a=1 param_b=2; show x\"${!param_@}\"y x\"${!param_*}\"y; IFS=_; show ${!param_@} ${!param_*} \"${!param_*}\"",
+      "status": 0,
+      "stdout": "argc=3 <xparam_a> <param_by> <xparam_a param_by>\nargc=9 <param> <a> <param> <b> <param> <a> <param> <b> <param_a_param_b>\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-reference",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; param_target=x; declare -n param_ref=param_target; show \"${!param_@}\"; unset param_target; show \"${!param_@}\"",
+      "status": 0,
+      "stdout": "argc=2 <param_ref> <param_target>\nargc=1 <param_ref>\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-nested",
+      "script": "show() { printf \"argc=%s\" \"$#\"; printf \" <%s>\" \"$@\"; echo; }; param_a=1 param_b=2; show \"${u:-${!param_@}}\"; IFS=; a=${!param_@}; b=${!param_*}; show \"$a\" \"$b\"",
+      "status": 0,
+      "stdout": "argc=2 <param_a> <param_b>\nargc=2 <param_a param_b> <param_aparam_b>\n",
+      "stderr": ""
+    },
+    {
+      "id": "oils:var-op-bash:237",
+      "script": "hello1=1 hello2=2 hello3=3\necho ${!hello@}\nhello=()\necho ${!hello@}\n",
+      "status": 0,
+      "stdout": "hello1 hello2 hello3\nhello hello1 hello2 hello3\n",
+      "stderr": ""
+    },
+    {
+      "id": "oils:var-op-test:396",
+      "script": "echo argv=${@-minus}\necho argv=${@+plus}\necho argv=${@:-minus}\necho argv=${@:+plus}\n",
+      "status": 0,
+      "stdout": "argv=minus\nargv=\nargv=minus\nargv=\n",
+      "stderr": ""
+    },
+    {
+      "id": "oils:var-op-test:414",
+      "script": "set -- \"\"\necho argv=${@-minus}\necho argv=${@+plus}\necho argv=${@:-minus}\necho argv=${@:+plus}\n",
+      "status": 0,
+      "stdout": "argv=\nargv=plus\nargv=minus\nargv=\n",
+      "stderr": ""
+    },
+    {
+      "id": "oils:var-op-test:437",
+      "script": "set -- \"\" \"\"\necho argv=${@-minus}\necho argv=${@+plus}\necho argv=${@:-minus}\necho argv=${@:+plus}\n",
+      "status": 0,
+      "stdout": "argv=\nargv=plus\nargv=\nargv=plus\n",
+      "stderr": ""
+    },
+    {
+      "id": "oils:var-op-test:450",
+      "script": "set -- \"\" \"\"\nIFS=\necho argv=${*-minus}\necho argv=${*+plus}\necho argv=${*:-minus}\necho argv=${*:+plus}\n",
+      "status": 0,
+      "stdout": "argv=\nargv=plus\nargv=\nargv=plus\n",
+      "stderr": ""
+    },
+    {
+      "id": "oils:var-op-test:470",
+      "script": "set -- \"\" \"\"\nIFS=\necho \"argv=${*-minus}\"\necho \"argv=${*+plus}\"\necho \"argv=${*:-minus}\"\necho \"argv=${*:+plus}\"\n",
+      "status": 0,
+      "stdout": "argv=\nargv=plus\nargv=minus\nargv=\n",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:word_expansion/params:19",
+      "script": "var1=\"Hello\"\nvar2=\"World\"\n\necho \"${!var*}\"\necho \"${!var@}\"\n\necho \"Dumping *\"\nfor i in \"${!var*}\"; do\n    echo \"i: $i\"\ndone\n\necho \"Dumping @\"\nfor i in \"${!var@}\"; do\n    echo \"i: $i\"\ndone\n",
+      "status": 0,
+      "stdout": "var1 var2\nvar1 var2\nDumping *\ni: var1 var2\nDumping @\ni: var1\ni: var2\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:param-expansion-gaps:17",
+      "script": "cfg_host=localhost cfg_port=80 other=1\nfor v in ${!cfg_@}; do echo \"$v=${!v}\"; done\nn=0; for v in ${!cfg_*}; do n=$((n+1)); done; echo $n\nset -- ${!cfg_@}; echo $#\n",
+      "status": 0,
+      "stdout": "cfg_host=localhost\ncfg_port=80\n2\n2\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:var-op-test:167",
+      "script": "set --\necho \"argv=${@-minus}\"\necho \"argv=${@+plus}\"\necho \"argv=${@:-minus}\"\necho \"argv=${@:+plus}\"\n",
+      "status": 0,
+      "stdout": "argv=minus\nargv=\nargv=minus\nargv=\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:var-op-test:181",
+      "script": "set -- \"\"\necho \"argv=${@-minus}\"\necho \"argv=${@+plus}\"\necho \"argv=${@:-minus}\"\necho \"argv=${@:+plus}\"\n",
+      "status": 0,
+      "stdout": "argv=\nargv=plus\nargv=minus\nargv=\n",
+      "stderr": ""
+    },
+    {
+      "id": "bashkit-suite:var-op-test:195",
+      "script": "set -- \"\" \"\"\necho \"argv=${@-minus}\"\necho \"argv=${@+plus}\"\necho \"argv=${@:-minus}\"\necho \"argv=${@:+plus}\"\n",
+      "status": 0,
+      "stdout": "argv= \nargv=plus\nargv= \nargv=plus\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-error",
+      "script": "set -- \"\"; printf \"<%s>\\n\" \"${x:=${@:?missing}}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: @: missing\n"
+    },
+    {
+      "id": "nested-assignment-error",
+      "script": "set -- \"\"; printf \"<%s>\\n\" \"${x:=${@:=fallback}}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "nested-default",
+      "script": "set -- \"\"; printf \"<%s>\\n\" \"${x:=${@:-fallback}}\" \"$x\"",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\n",
+      "stderr": ""
+    },
+    {
+      "id": "nested-alternate-side-effect",
+      "script": "set -- \"\"; printf \"<%s>\\n\" \"${x:=${@:+${y:=wrong}}}\" \"${y-unset}\"",
+      "status": 0,
+      "stdout": "<>\n<unset>\n",
+      "stderr": ""
+    },
+    {
+      "id": "captured-star-presence",
+      "script": "set -- \"\"; x=${u:=${*:-fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"",
+      "status": 0,
+      "stdout": "<>\n<>\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-5",
+      "script": "set --; IFS=; printf \"<%s>\\n\" \"${u:=${@:-fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-6",
+      "script": "set --; IFS=; printf \"<%s>\\n\" \"${u:=${@:+${y:=wrong}}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-7",
+      "script": "set --; IFS=; printf \"<%s>\\n\" \"${u:=${@:?missing}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: @: missing\n"
+    },
+    {
+      "id": "capture-8",
+      "script": "set --; IFS=; printf \"<%s>\\n\" \"${u:=${@:=fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-9",
+      "script": "set --; IFS=; x=${u:=${@:-fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-10",
+      "script": "set --; IFS=; x=${u:=${@:+${y:=wrong}}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-11",
+      "script": "set --; IFS=; x=${u:=${@:?missing}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: @: missing\n"
+    },
+    {
+      "id": "capture-12",
+      "script": "set --; IFS=; x=${u:=${@:=fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-13",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${@:-fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-14",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${@:+${y:=wrong}}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-15",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${@:?missing}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: @: missing\n"
+    },
+    {
+      "id": "capture-16",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${@:=fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-17",
+      "script": "set -- \"\"; IFS=; x=${u:=${@:-fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-18",
+      "script": "set -- \"\"; IFS=; x=${u:=${@:+${y:=wrong}}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-19",
+      "script": "set -- \"\"; IFS=; x=${u:=${@:?missing}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-20",
+      "script": "set -- \"\"; IFS=; x=${u:=${@:=fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-21",
+      "script": "set -- \"\" \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${@:-fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "< >\n< >\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-22",
+      "script": "set -- \"\" \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${@:+${y:=wrong}}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-23",
+      "script": "set -- \"\" \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${@:?missing}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "< >\n< >\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-24",
+      "script": "set -- \"\" \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${@:=fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "< >\n< >\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-25",
+      "script": "set -- \"\" \"\"; IFS=; x=${u:=${@:-fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "< >\n< >\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-26",
+      "script": "set -- \"\" \"\"; IFS=; x=${u:=${@:+${y:=wrong}}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-27",
+      "script": "set -- \"\" \"\"; IFS=; x=${u:=${@:?missing}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "< >\n< >\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-28",
+      "script": "set -- \"\" \"\"; IFS=; x=${u:=${@:=fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "< >\n< >\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-29",
+      "script": "set -- \"a b\" c; IFS=; printf \"<%s>\\n\" \"${u:=${@:-fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<a b c>\n<a b c>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-30",
+      "script": "set -- \"a b\" c; IFS=; printf \"<%s>\\n\" \"${u:=${@:+${y:=wrong}}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-31",
+      "script": "set -- \"a b\" c; IFS=; printf \"<%s>\\n\" \"${u:=${@:?missing}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<a b c>\n<a b c>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-32",
+      "script": "set -- \"a b\" c; IFS=; printf \"<%s>\\n\" \"${u:=${@:=fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<a b c>\n<a b c>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-33",
+      "script": "set -- \"a b\" c; IFS=; x=${u:=${@:-fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<a b c>\n<a b c>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-34",
+      "script": "set -- \"a b\" c; IFS=; x=${u:=${@:+${y:=wrong}}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-35",
+      "script": "set -- \"a b\" c; IFS=; x=${u:=${@:?missing}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<a b c>\n<a b c>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-36",
+      "script": "set -- \"a b\" c; IFS=; x=${u:=${@:=fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<a b c>\n<a b c>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-37",
+      "script": "set --; IFS=; printf \"<%s>\\n\" \"${u:=${*:-fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-38",
+      "script": "set --; IFS=; printf \"<%s>\\n\" \"${u:=${*:+${y:=wrong}}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-39",
+      "script": "set --; IFS=; printf \"<%s>\\n\" \"${u:=${*:?missing}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "capture-40",
+      "script": "set --; IFS=; printf \"<%s>\\n\" \"${u:=${*:=fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-41",
+      "script": "set --; IFS=; x=${u:=${*:-fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-42",
+      "script": "set --; IFS=; x=${u:=${*:+${y:=wrong}}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-43",
+      "script": "set --; IFS=; x=${u:=${*:?missing}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "capture-44",
+      "script": "set --; IFS=; x=${u:=${*:=fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-45",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${*:-fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-46",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${*:+${y:=wrong}}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-47",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${*:?missing}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "capture-48",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${*:=fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-49",
+      "script": "set -- \"\"; IFS=; x=${u:=${*:-fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-50",
+      "script": "set -- \"\"; IFS=; x=${u:=${*:+${y:=wrong}}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-51",
+      "script": "set -- \"\"; IFS=; x=${u:=${*:?missing}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "capture-52",
+      "script": "set -- \"\"; IFS=; x=${u:=${*:=fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-53",
+      "script": "set -- \"\" \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${*:-fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-54",
+      "script": "set -- \"\" \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${*:+${y:=wrong}}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-55",
+      "script": "set -- \"\" \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${*:?missing}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "capture-56",
+      "script": "set -- \"\" \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${*:=fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-57",
+      "script": "set -- \"\" \"\"; IFS=; x=${u:=${*:-fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-58",
+      "script": "set -- \"\" \"\"; IFS=; x=${u:=${*:+${y:=wrong}}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-59",
+      "script": "set -- \"\" \"\"; IFS=; x=${u:=${*:?missing}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "capture-60",
+      "script": "set -- \"\" \"\"; IFS=; x=${u:=${*:=fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-61",
+      "script": "set -- \"a b\" c; IFS=; printf \"<%s>\\n\" \"${u:=${*:-fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<a bc>\n<a bc>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-62",
+      "script": "set -- \"a b\" c; IFS=; printf \"<%s>\\n\" \"${u:=${*:+${y:=wrong}}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-63",
+      "script": "set -- \"a b\" c; IFS=; printf \"<%s>\\n\" \"${u:=${*:?missing}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<a bc>\n<a bc>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-64",
+      "script": "set -- \"a b\" c; IFS=; printf \"<%s>\\n\" \"${u:=${*:=fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<a bc>\n<a bc>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-65",
+      "script": "set -- \"a b\" c; IFS=; x=${u:=${*:-fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<a bc>\n<a bc>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-66",
+      "script": "set -- \"a b\" c; IFS=; x=${u:=${*:+${y:=wrong}}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-67",
+      "script": "set -- \"a b\" c; IFS=; x=${u:=${*:?missing}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<a bc>\n<a bc>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-68",
+      "script": "set -- \"a b\" c; IFS=; x=${u:=${*:=fallback}}; printf \"<%s>\\n\" \"$x\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<a bc>\n<a bc>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-join-69",
+      "script": "set -- \"a b\" c; unset IFS; value=${x:=${@-fallback}}; printf \"<%s>\\n\" \"$value\" \"$x\"",
+      "status": 0,
+      "stdout": "<a b c>\n<a b c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-join-70",
+      "script": "set -- \"a b\" c; unset IFS; value=\"${x:=${@-fallback}}\"; printf \"<%s>\\n\" \"$value\" \"$x\"",
+      "status": 0,
+      "stdout": "<a b c>\n<a b c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-join-71",
+      "script": "set -- \"a b\" c; IFS=:; value=${x:=${@-fallback}}; printf \"<%s>\\n\" \"$value\" \"$x\"",
+      "status": 0,
+      "stdout": "<a b c>\n<a b c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-join-72",
+      "script": "set -- \"a b\" c; IFS=:; value=\"${x:=${@-fallback}}\"; printf \"<%s>\\n\" \"$value\" \"$x\"",
+      "status": 0,
+      "stdout": "<a b c>\n<a b c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-join-73",
+      "script": "set -- \"a b\" c; IFS=; value=${x:=${@-fallback}}; printf \"<%s>\\n\" \"$value\" \"$x\"",
+      "status": 0,
+      "stdout": "<a b c>\n<a b c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-join-74",
+      "script": "set -- \"a b\" c; IFS=; value=\"${x:=${@-fallback}}\"; printf \"<%s>\\n\" \"$value\" \"$x\"",
+      "status": 0,
+      "stdout": "<a b c>\n<a b c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-join-75",
+      "script": "set -- \"a b\" c; unset IFS; value=${x:=${*-fallback}}; printf \"<%s>\\n\" \"$value\" \"$x\"",
+      "status": 0,
+      "stdout": "<a b c>\n<a b c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-join-76",
+      "script": "set -- \"a b\" c; unset IFS; value=\"${x:=${*-fallback}}\"; printf \"<%s>\\n\" \"$value\" \"$x\"",
+      "status": 0,
+      "stdout": "<a b c>\n<a b c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-join-77",
+      "script": "set -- \"a b\" c; IFS=:; value=${x:=${*-fallback}}; printf \"<%s>\\n\" \"$value\" \"$x\"",
+      "status": 0,
+      "stdout": "<a b:c>\n<a b:c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-join-78",
+      "script": "set -- \"a b\" c; IFS=:; value=\"${x:=${*-fallback}}\"; printf \"<%s>\\n\" \"$value\" \"$x\"",
+      "status": 0,
+      "stdout": "<a b:c>\n<a b:c>\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-join-79",
+      "script": "set -- \"a b\" c; IFS=; value=${x:=${*-fallback}}; printf \"<%s>\\n\" \"$value\" \"$x\"",
+      "status": 0,
+      "stdout": "<a bc>\n<a bc>\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-join-80",
+      "script": "set -- \"a b\" c; IFS=; value=\"${x:=${*-fallback}}\"; printf \"<%s>\\n\" \"$value\" \"$x\"",
+      "status": 0,
+      "stdout": "<a bc>\n<a bc>\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-unset IFS-quoted-argument-:-",
+      "script": "set -- \"\"; unset IFS; printf \"<%s>\\n\" \"${u:=${@:-fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-unset IFS-quoted-argument-:+",
+      "script": "set -- \"\"; unset IFS; printf \"<%s>\\n\" \"${u:=${@:+${y:=wrong}}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-unset IFS-quoted-argument-:?",
+      "script": "set -- \"\"; unset IFS; printf \"<%s>\\n\" \"${u:=${@:?missing}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: @: missing\n"
+    },
+    {
+      "id": "capture-presence-@-unset IFS-quoted-argument-:=",
+      "script": "set -- \"\"; unset IFS; printf \"<%s>\\n\" \"${u:=${@:=fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-presence-@-unset IFS-bare-argument-:-",
+      "script": "set -- \"\"; unset IFS; printf \"<%s>\\n\" ${u:=${@:-fallback}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-unset IFS-bare-argument-:+",
+      "script": "set -- \"\"; unset IFS; printf \"<%s>\\n\" ${u:=${@:+${y:=wrong}}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-unset IFS-bare-argument-:?",
+      "script": "set -- \"\"; unset IFS; printf \"<%s>\\n\" ${u:=${@:?missing}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-unset IFS-bare-argument-:=",
+      "script": "set -- \"\"; unset IFS; printf \"<%s>\\n\" ${u:=${@:=fallback}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-unset IFS-quoted-assignment-:-",
+      "script": "set -- \"\"; unset IFS; v=\"${u:=${@:-fallback}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-unset IFS-quoted-assignment-:+",
+      "script": "set -- \"\"; unset IFS; v=\"${u:=${@:+${y:=wrong}}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-unset IFS-quoted-assignment-:?",
+      "script": "set -- \"\"; unset IFS; v=\"${u:=${@:?missing}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: @: missing\n"
+    },
+    {
+      "id": "capture-presence-@-unset IFS-quoted-assignment-:=",
+      "script": "set -- \"\"; unset IFS; v=\"${u:=${@:=fallback}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-presence-@-unset IFS-bare-assignment-:-",
+      "script": "set -- \"\"; unset IFS; v=${u:=${@:-fallback}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-unset IFS-bare-assignment-:+",
+      "script": "set -- \"\"; unset IFS; v=${u:=${@:+${y:=wrong}}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-unset IFS-bare-assignment-:?",
+      "script": "set -- \"\"; unset IFS; v=${u:=${@:?missing}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-unset IFS-bare-assignment-:=",
+      "script": "set -- \"\"; unset IFS; v=${u:=${@:=fallback}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=:-quoted-argument-:-",
+      "script": "set -- \"\"; IFS=:; printf \"<%s>\\n\" \"${u:=${@:-fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=:-quoted-argument-:+",
+      "script": "set -- \"\"; IFS=:; printf \"<%s>\\n\" \"${u:=${@:+${y:=wrong}}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=:-quoted-argument-:?",
+      "script": "set -- \"\"; IFS=:; printf \"<%s>\\n\" \"${u:=${@:?missing}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: @: missing\n"
+    },
+    {
+      "id": "capture-presence-@-IFS=:-quoted-argument-:=",
+      "script": "set -- \"\"; IFS=:; printf \"<%s>\\n\" \"${u:=${@:=fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-presence-@-IFS=:-bare-argument-:-",
+      "script": "set -- \"\"; IFS=:; printf \"<%s>\\n\" ${u:=${@:-fallback}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=:-bare-argument-:+",
+      "script": "set -- \"\"; IFS=:; printf \"<%s>\\n\" ${u:=${@:+${y:=wrong}}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=:-bare-argument-:?",
+      "script": "set -- \"\"; IFS=:; printf \"<%s>\\n\" ${u:=${@:?missing}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=:-bare-argument-:=",
+      "script": "set -- \"\"; IFS=:; printf \"<%s>\\n\" ${u:=${@:=fallback}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=:-quoted-assignment-:-",
+      "script": "set -- \"\"; IFS=:; v=\"${u:=${@:-fallback}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=:-quoted-assignment-:+",
+      "script": "set -- \"\"; IFS=:; v=\"${u:=${@:+${y:=wrong}}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=:-quoted-assignment-:?",
+      "script": "set -- \"\"; IFS=:; v=\"${u:=${@:?missing}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: @: missing\n"
+    },
+    {
+      "id": "capture-presence-@-IFS=:-quoted-assignment-:=",
+      "script": "set -- \"\"; IFS=:; v=\"${u:=${@:=fallback}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-presence-@-IFS=:-bare-assignment-:-",
+      "script": "set -- \"\"; IFS=:; v=${u:=${@:-fallback}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=:-bare-assignment-:+",
+      "script": "set -- \"\"; IFS=:; v=${u:=${@:+${y:=wrong}}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=:-bare-assignment-:?",
+      "script": "set -- \"\"; IFS=:; v=${u:=${@:?missing}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=:-bare-assignment-:=",
+      "script": "set -- \"\"; IFS=:; v=${u:=${@:=fallback}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=-quoted-argument-:-",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${@:-fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=-quoted-argument-:+",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${@:+${y:=wrong}}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=-quoted-argument-:?",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${@:?missing}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: @: missing\n"
+    },
+    {
+      "id": "capture-presence-@-IFS=-quoted-argument-:=",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${@:=fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-presence-@-IFS=-bare-argument-:-",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" ${u:=${@:-fallback}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=-bare-argument-:+",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" ${u:=${@:+${y:=wrong}}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=-bare-argument-:?",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" ${u:=${@:?missing}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=-bare-argument-:=",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" ${u:=${@:=fallback}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=-quoted-assignment-:-",
+      "script": "set -- \"\"; IFS=; v=\"${u:=${@:-fallback}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=-quoted-assignment-:+",
+      "script": "set -- \"\"; IFS=; v=\"${u:=${@:+${y:=wrong}}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=-quoted-assignment-:?",
+      "script": "set -- \"\"; IFS=; v=\"${u:=${@:?missing}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: @: missing\n"
+    },
+    {
+      "id": "capture-presence-@-IFS=-quoted-assignment-:=",
+      "script": "set -- \"\"; IFS=; v=\"${u:=${@:=fallback}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-presence-@-IFS=-bare-assignment-:-",
+      "script": "set -- \"\"; IFS=; v=${u:=${@:-fallback}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=-bare-assignment-:+",
+      "script": "set -- \"\"; IFS=; v=${u:=${@:+${y:=wrong}}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=-bare-assignment-:?",
+      "script": "set -- \"\"; IFS=; v=${u:=${@:?missing}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-@-IFS=-bare-assignment-:=",
+      "script": "set -- \"\"; IFS=; v=${u:=${@:=fallback}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-unset IFS-quoted-argument-:-",
+      "script": "set -- \"\"; unset IFS; printf \"<%s>\\n\" \"${u:=${*:-fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-unset IFS-quoted-argument-:+",
+      "script": "set -- \"\"; unset IFS; printf \"<%s>\\n\" \"${u:=${*:+${y:=wrong}}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-unset IFS-quoted-argument-:?",
+      "script": "set -- \"\"; unset IFS; printf \"<%s>\\n\" \"${u:=${*:?missing}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "capture-presence-*-unset IFS-quoted-argument-:=",
+      "script": "set -- \"\"; unset IFS; printf \"<%s>\\n\" \"${u:=${*:=fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-presence-*-unset IFS-bare-argument-:-",
+      "script": "set -- \"\"; unset IFS; printf \"<%s>\\n\" ${u:=${*:-fallback}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-unset IFS-bare-argument-:+",
+      "script": "set -- \"\"; unset IFS; printf \"<%s>\\n\" ${u:=${*:+${y:=wrong}}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-unset IFS-bare-argument-:?",
+      "script": "set -- \"\"; unset IFS; printf \"<%s>\\n\" ${u:=${*:?missing}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-unset IFS-bare-argument-:=",
+      "script": "set -- \"\"; unset IFS; printf \"<%s>\\n\" ${u:=${*:=fallback}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-unset IFS-quoted-assignment-:-",
+      "script": "set -- \"\"; unset IFS; v=\"${u:=${*:-fallback}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-unset IFS-quoted-assignment-:+",
+      "script": "set -- \"\"; unset IFS; v=\"${u:=${*:+${y:=wrong}}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-unset IFS-quoted-assignment-:?",
+      "script": "set -- \"\"; unset IFS; v=\"${u:=${*:?missing}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "capture-presence-*-unset IFS-quoted-assignment-:=",
+      "script": "set -- \"\"; unset IFS; v=\"${u:=${*:=fallback}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-presence-*-unset IFS-bare-assignment-:-",
+      "script": "set -- \"\"; unset IFS; v=${u:=${*:-fallback}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-unset IFS-bare-assignment-:+",
+      "script": "set -- \"\"; unset IFS; v=${u:=${*:+${y:=wrong}}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-unset IFS-bare-assignment-:?",
+      "script": "set -- \"\"; unset IFS; v=${u:=${*:?missing}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-unset IFS-bare-assignment-:=",
+      "script": "set -- \"\"; unset IFS; v=${u:=${*:=fallback}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=:-quoted-argument-:-",
+      "script": "set -- \"\"; IFS=:; printf \"<%s>\\n\" \"${u:=${*:-fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=:-quoted-argument-:+",
+      "script": "set -- \"\"; IFS=:; printf \"<%s>\\n\" \"${u:=${*:+${y:=wrong}}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=:-quoted-argument-:?",
+      "script": "set -- \"\"; IFS=:; printf \"<%s>\\n\" \"${u:=${*:?missing}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "capture-presence-*-IFS=:-quoted-argument-:=",
+      "script": "set -- \"\"; IFS=:; printf \"<%s>\\n\" \"${u:=${*:=fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-presence-*-IFS=:-bare-argument-:-",
+      "script": "set -- \"\"; IFS=:; printf \"<%s>\\n\" ${u:=${*:-fallback}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=:-bare-argument-:+",
+      "script": "set -- \"\"; IFS=:; printf \"<%s>\\n\" ${u:=${*:+${y:=wrong}}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=:-bare-argument-:?",
+      "script": "set -- \"\"; IFS=:; printf \"<%s>\\n\" ${u:=${*:?missing}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=:-bare-argument-:=",
+      "script": "set -- \"\"; IFS=:; printf \"<%s>\\n\" ${u:=${*:=fallback}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=:-quoted-assignment-:-",
+      "script": "set -- \"\"; IFS=:; v=\"${u:=${*:-fallback}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=:-quoted-assignment-:+",
+      "script": "set -- \"\"; IFS=:; v=\"${u:=${*:+${y:=wrong}}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=:-quoted-assignment-:?",
+      "script": "set -- \"\"; IFS=:; v=\"${u:=${*:?missing}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "capture-presence-*-IFS=:-quoted-assignment-:=",
+      "script": "set -- \"\"; IFS=:; v=\"${u:=${*:=fallback}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-presence-*-IFS=:-bare-assignment-:-",
+      "script": "set -- \"\"; IFS=:; v=${u:=${*:-fallback}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=:-bare-assignment-:+",
+      "script": "set -- \"\"; IFS=:; v=${u:=${*:+${y:=wrong}}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<wrong>\n<wrong>\ny=<wrong>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=:-bare-assignment-:?",
+      "script": "set -- \"\"; IFS=:; v=${u:=${*:?missing}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=:-bare-assignment-:=",
+      "script": "set -- \"\"; IFS=:; v=${u:=${*:=fallback}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=-quoted-argument-:-",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${*:-fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=-quoted-argument-:+",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${*:+${y:=wrong}}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=-quoted-argument-:?",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${*:?missing}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "capture-presence-*-IFS=-quoted-argument-:=",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" \"${u:=${*:=fallback}}\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-presence-*-IFS=-bare-argument-:-",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" ${u:=${*:-fallback}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=-bare-argument-:+",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" ${u:=${*:+${y:=wrong}}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=-bare-argument-:?",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" ${u:=${*:?missing}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "capture-presence-*-IFS=-bare-argument-:=",
+      "script": "set -- \"\"; IFS=; printf \"<%s>\\n\" ${u:=${*:=fallback}} \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-presence-*-IFS=-quoted-assignment-:-",
+      "script": "set -- \"\"; IFS=; v=\"${u:=${*:-fallback}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=-quoted-assignment-:+",
+      "script": "set -- \"\"; IFS=; v=\"${u:=${*:+${y:=wrong}}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=-quoted-assignment-:?",
+      "script": "set -- \"\"; IFS=; v=\"${u:=${*:?missing}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "capture-presence-*-IFS=-quoted-assignment-:=",
+      "script": "set -- \"\"; IFS=; v=\"${u:=${*:=fallback}}\"; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "capture-presence-*-IFS=-bare-assignment-:-",
+      "script": "set -- \"\"; IFS=; v=${u:=${*:-fallback}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<fallback>\n<fallback>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=-bare-assignment-:+",
+      "script": "set -- \"\"; IFS=; v=${u:=${*:+${y:=wrong}}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 0,
+      "stdout": "<>\n<>\ny=<unset>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "capture-presence-*-IFS=-bare-assignment-:?",
+      "script": "set -- \"\"; IFS=; v=${u:=${*:?missing}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "capture-presence-*-IFS=-bare-assignment-:=",
+      "script": "set -- \"\"; IFS=; v=${u:=${*:=fallback}}; printf \"<%s>\\n\" \"$v\" \"$u\"; printf \"y=<%s>\\n\" \"${y-unset}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-@-null-error",
+      "script": "set -- \"\"; printf \"<%s>\\n\" \"${u:=${@:=\"${y:?nested}\"}}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-@-null-side-effect",
+      "script": "set -- \"\"; ( printf \"<%s>\\n\" \"${u:=${@:=\"$(printf evaluated >&3)\"}}\" ) 3>&1; echo \"status=$?\"",
+      "status": 0,
+      "stdout": "status=1\n",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-@-unset-error",
+      "script": "set --; printf \"<%s>\\n\" \"${u:=${@=\"${y:?nested}\"}}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-@-unset-side-effect",
+      "script": "set --; ( printf \"<%s>\\n\" \"${u:=${@=\"$(printf evaluated >&3)\"}}\" ) 3>&1; echo \"status=$?\"",
+      "status": 0,
+      "stdout": "status=1\n",
+      "stderr": "/usr/bin/bash: line 1: $@: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-@-selected-error-error",
+      "script": "set -- \"\"; printf \"<%s>\\n\" \"${u:=${@:?\"${y:?nested}\"}}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: y: nested\n"
+    },
+    {
+      "id": "assignment-order-@-selected-error-side-effect",
+      "script": "set -- \"\"; ( printf \"<%s>\\n\" \"${u:=${@:?\"$(printf evaluated >&3)missing\"}}\" ) 3>&1; echo \"status=$?\"",
+      "status": 0,
+      "stdout": "evaluatedstatus=1\n",
+      "stderr": "/usr/bin/bash: line 1: @: missing\n"
+    },
+    {
+      "id": "assignment-order-@-unselected-error",
+      "script": "set -- present; printf \"<%s>\\n\" \"${u:=${@:=\"${y:?nested}\"}}\"; echo after",
+      "status": 0,
+      "stdout": "<present>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "assignment-order-@-unselected-side-effect",
+      "script": "set -- present; ( printf \"<%s>\\n\" \"${u:=${@:=\"$(printf evaluated >&3)\"}}\" ) 3>&1; echo \"status=$?\"",
+      "status": 0,
+      "stdout": "<present>\nstatus=0\n",
+      "stderr": ""
+    },
+    {
+      "id": "assignment-order-*-null-error",
+      "script": "set -- \"\"; printf \"<%s>\\n\" \"${u:=${*:=\"${y:?nested}\"}}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-*-null-side-effect",
+      "script": "set -- \"\"; ( printf \"<%s>\\n\" \"${u:=${*:=\"$(printf evaluated >&3)\"}}\" ) 3>&1; echo \"status=$?\"",
+      "status": 0,
+      "stdout": "status=1\n",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-*-unset-error",
+      "script": "set --; printf \"<%s>\\n\" \"${u:=${*=\"${y:?nested}\"}}\"; echo after",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-*-unset-side-effect",
+      "script": "set --; ( printf \"<%s>\\n\" \"${u:=${*=\"$(printf evaluated >&3)\"}}\" ) 3>&1; echo \"status=$?\"",
+      "status": 0,
+      "stdout": "status=1\n",
+      "stderr": "/usr/bin/bash: line 1: $*: cannot assign in this way\n"
+    },
+    {
+      "id": "assignment-order-*-selected-error-error",
+      "script": "set -- \"\"; printf \"<%s>\\n\" \"${u:=${*:?\"${y:?nested}\"}}\"; echo after",
+      "status": 127,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: y: nested\n"
+    },
+    {
+      "id": "assignment-order-*-selected-error-side-effect",
+      "script": "set -- \"\"; ( printf \"<%s>\\n\" \"${u:=${*:?\"$(printf evaluated >&3)missing\"}}\" ) 3>&1; echo \"status=$?\"",
+      "status": 0,
+      "stdout": "evaluatedstatus=1\n",
+      "stderr": "/usr/bin/bash: line 1: *: missing\n"
+    },
+    {
+      "id": "assignment-order-*-unselected-error",
+      "script": "set -- present; printf \"<%s>\\n\" \"${u:=${*:=\"${y:?nested}\"}}\"; echo after",
+      "status": 0,
+      "stdout": "<present>\nafter\n",
+      "stderr": ""
+    },
+    {
+      "id": "assignment-order-*-unselected-side-effect",
+      "script": "set -- present; ( printf \"<%s>\\n\" \"${u:=${*:=\"$(printf evaluated >&3)\"}}\" ) 3>&1; echo \"status=$?\"",
+      "status": 0,
+      "stdout": "<present>\nstatus=0\n",
+      "stderr": ""
+    }
+  ]
+}

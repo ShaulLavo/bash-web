@@ -2,9 +2,9 @@
 // Differential readonly declaration and scalar mutation checks. Bash observations
 // are recorded once and replayed in CI without relying on the runner's Bash.
 import { execFileSync, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { fingerprint, run as runProcess, encode, decode } from "./fuzz-shell-process.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const queue = "/work/tmp/wave-heavy/run.sh";
@@ -54,7 +54,6 @@ function randomFor(seed) {
   };
 }
 
-const fingerprint = () => createHash("sha256").update(readFileSync(process.argv[1])).digest("hex");
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
 const values = ["", "1", "2", "7"];
 const names = ["x", "counter42", "_item", "result"];
@@ -125,37 +124,10 @@ function generate(seed, count) {
 }
 
 function run(bin, script, timeout, bash = false) {
-  const env = { ...process.env, LC_ALL: "C.UTF-8", LANG: "C.UTF-8" };
-  for (const name of ["BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS", "BASH_COMPAT", "POSIXLY_CORRECT"])
-    delete env[name];
   const args = bash ? ["--noprofile", "--norc", "-c", `set -f\n${script}`] : ["-c", script];
-  const result = spawnSync(bin, args, {
-    env,
-    encoding: null,
-    timeout,
-    maxBuffer: 4 * 1024 * 1024,
-  });
-  return {
-    status: result.status,
-    signal: result.signal ?? null,
-    timedOut: result.error?.code === "ETIMEDOUT",
-    stdout: Buffer.from(result.stdout ?? ""),
-    stderr: Buffer.from(result.stderr ?? result.error?.message ?? ""),
-  };
+  return runProcess(bin, args, timeout);
 }
 
-const encode = (result) => ({
-  status: result.status,
-  signal: result.signal,
-  timedOut: result.timedOut,
-  stdoutBase64: result.stdout.toString("base64"),
-  stderrBase64: result.stderr.toString("base64"),
-});
-const decode = (result) => ({
-  ...result,
-  stdout: Buffer.from(result.stdoutBase64, "base64"),
-  stderr: Buffer.from(result.stderrBase64, "base64"),
-});
 const equal = (left, right) =>
   !left.timedOut &&
   !right.timedOut &&

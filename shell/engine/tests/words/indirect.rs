@@ -130,6 +130,18 @@ fn indirect_selected_errors_preserve_nested_names_and_completed_effects() {
 
 #[test]
 fn indirect_selected_syntax_fails_closed_and_skipped_operands_stay_lazy() {
+    check(
+        r#"param_b=2 param_a=1; args ${!param_*} "${!param_*}" ${!param_@} "${!param_@}""#,
+        &[&[
+            "param_a",
+            "param_b",
+            "param_a param_b",
+            "param_a",
+            "param_b",
+            "param_a",
+            "param_b",
+        ]],
+    );
     for expression in [
         "${!p#x}",
         "${!p%%x}",
@@ -137,8 +149,6 @@ fn indirect_selected_syntax_fails_closed_and_skipped_operands_stay_lazy() {
         "${!p/a/b}",
         "${!p:1}",
         "${!p@Q}",
-        "${!p*}",
-        "${!p@}",
         "${!a[0]}",
         "${!PIPESTATUS}",
         "${!1}",
