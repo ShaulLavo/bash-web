@@ -40,7 +40,7 @@ pub(super) const OPTIONS: &[&str] = &[
 ];
 pub(super) const TEXT_FLAGS: &[u8; 7] = b"GWPSXCF";
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum Kind {
+pub(in crate::builtins) enum Kind {
     Generate,
     Complete,
     Options,
