@@ -6,16 +6,27 @@ import { liveNodeWorkers } from "./node-worker-host.ts";
 import { createWaffleRunner } from "./waffle-compat.ts";
 
 type Observation = { name: string; code: string; status: number; stdout: string; stderr: string };
-const fixture: {
+type Fixture = {
   schema: number;
   bash: string;
   environment: Record<string, string>;
   cases: Observation[];
-} = JSON.parse(readFileSync(new URL("fixtures/shell-declare-print.json", import.meta.url), "utf8"));
-assert.equal(fixture.schema, 1);
-assert.equal(fixture.bash, "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)");
-assert.equal(process.version, "v26.7.0");
-assert.equal(new Set(fixture.cases.map((item) => item.name)).size, fixture.cases.length);
+};
+const fixtures: Fixture[] = [
+  "shell-declare-print.json",
+  "shell-declare-attrs.json",
+  "shell-declaration-append.json",
+  "shell-declaration-append-scope.json",
+].map((file) => JSON.parse(readFileSync(new URL(`fixtures/${file}`, import.meta.url), "utf8")));
+const fixture = fixtures[0];
+for (const recording of fixtures) {
+  assert.equal(recording.schema, 1);
+  assert.equal(recording.bash, "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)");
+  assert.deepEqual(recording.environment, fixture.environment);
+}
+const cases = fixtures.flatMap((recording) => recording.cases);
+assert.equal(process.version, "v26.12.1");
+assert.equal(new Set(cases.map((item) => item.name)).size, cases.length);
 const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
 const run = await createWaffleRunner({
   modulePath: resolve(directory, "shell-runtime.wasm"),
@@ -23,7 +34,7 @@ const run = await createWaffleRunner({
   tmp: "/tmp/spec",
   env: fixture.environment,
 });
-for (const item of fixture.cases) {
+for (const item of cases) {
   test(`named declaration: ${item.name}`, async () => {
     const actual = await run(item.code);
     assert.equal(actual.crash, undefined);

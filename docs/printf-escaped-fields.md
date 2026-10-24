@@ -44,4 +44,3 @@ to 1,413. All 9,221 case classifications and frozen identities remain unchanged.
 Only the two gained memberships and derived counts change in the baseline;
 historical failure payloads stay intact. The unchanged strict comparator passes
 offline on the same saved output. See the [measurement receipt](evidence/printf-escaped-fields.json).
-Final parent review, hosted gates and exact-main acceptance remain pending.

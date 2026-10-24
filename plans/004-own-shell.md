@@ -2949,15 +2949,235 @@ identifier rejection. No new frozen case, exclusion or oracle change is authoriz
 
 ### Alias runtime prerequisite
 
-Status: Approved. The parser's injected-alias function-name and print controls pass,
-but this base has no `alias` builtin and rejects `shopt -s expand_aliases`. End-to-end
-alias declaration controls therefore remain strict pending comparisons under
-`npm run test:shell:function-names:aliases-pending`, using
-`scripts/fixtures/shell-function-names-aliases-pending.json`. Their exact failures
-are retained in the function-name report's `verify6.log` and `aliases-pending.log`.
-This is a separate builtin prerequisite, not permission to add alias, shopt or
-function-name grammar in the literal-name validation change. Keep parser alias
-coverage and reuse its raw-token provenance when runtime aliases are implemented.
+Status: Implemented in PR #75. The core now has `alias`, `unalias` and
+`shopt -s expand_aliases`. The two end-to-end function-name alias controls
+now run in the blocking `test:shell:scoreboard` function-name test. Their
+Bash 5.3.15 recordings moved into `scripts/fixtures/shell-function-names.json`.
+Parser raw-token provenance still owns literal function-name recognition.
+The separate escaped and quoted POSIX-name grammar prerequisite above remains.
+
+### Alias review follow-ups, 2026-10-23
+
+Status: Approved. Owner: parser/interpreter alias family. PR #75 review r2
+covers source `5156b40fe27d22eb59bb497e1a6a24fd60c89f5a` plus baseline-only
+`0378ec3`. Repro scripts, Bash 5.3.15 observations and native/production-Waffle
+results are under `/work/reports/wave-20261022/shell/review75-r2-evidence/`
+and sibling `review75-r1-evidence/`. These gaps need separate bounded controls.
+The reader-budget and alias-printing blockers are fixed in PR #75, not deferred.
+
+- Alias-definition table-copy cost, confirmed by review r4 at `2ccb34a`.
+  Release native definitions at 4k/8k/16k/32k took 1.04/4.21/15.62/61.21
+  seconds on the PC, with the same cost when expansion was disabled.
+  PR #75's r5 repair gives the reader a revision stamp rather than a retained
+  alias table. Unique tables update in place; genuine snapshots retain their
+  admitted immutable versions and require a charged, separately admitted copy.
+  Geometric table growth admits both old and new storage before allocation.
+  Deterministic pointer, cumulative-work, snapshot, rejection, refund and
+  cancellation controls accompany the same-artifact native/production-Waffle
+  scaling recordings. Evidence and current qualification are in
+  `/work/reports/wave-20261022/shell/builtins-alias-table-cost-fix-r5.md`.
+  This does not change the read-unit or function-definition timing contract.
+- Command-substitution alias timing, finding 4. After `alias x='echo YES'`,
+  `echo "${v:-$(x)}"`, `: "${v:=$(x)}"` and `${v:-\`x\`}` run `x` in Bash,
+  but our lazy substitution parsers receive no aliases. Arithmetic substitution
+  has the same gap. Direct substitutions retain definition-time aliases:
+  `alias xx='echo OLD'`, `f() { echo "$(xx)"; }`, `alias xx='echo NEW'`, `f`
+  on separate lines prints NEW in Bash and OLD here. An alias defined inside
+  a substitution also does not reach its next line. Trace `parse.rs` lazy-body
+  adapters and substitution execution. Preserve inactive operands and function
+  definition-time expansion outside substitutions.
+- Interactive default, finding 5. `runtime_main.rs` starts the editor without
+  enabling `expand_aliases`. Start an interactive terminal, enter
+  `alias ll='echo YES'`, then `ll` on the next input. Bash prints YES without
+  an explicit `shopt -s expand_aliases`; ours reports command not found.
+  Add interactive real-runtime coverage before setting the interactive default.
+  Keep noninteractive `-c` default-off.
+- Trailing-blank chaining, finding 7. After `alias p='echo ' x=YES`,
+  `p 'x' x` prints `x YES` in Bash and `x x` here. Escaped words also consume
+  the parser's next-word flag too soon. Preserve the flag across such words.
+- Keyword aliases, finding 7. After `alias n='!'`, `n false; echo $?` prints
+  0 in Bash and 127 here. After `alias DO=do`,
+  `for x in yes; DO echo $x; done` prints yes in Bash and fails grammar here.
+  Alias expansion must precede keyword recognition at these grammar positions.
+- Alias-value newlines, finding 7. `alias a=$'alias b=echo\nb yes'` followed
+  by `a` introduces a new Bash read unit inside the alias replacement.
+  The original-source continuation alone cannot represent that boundary.
+  Review r4 also reproduced a here-doc entirely inside an alias value:
+  `shopt -s expand_aliases`, `alias h=$'read -r a <<E\nfrom alias\nE'`,
+  `h`, `echo "[$a]"`, `echo next`, each on its own line. Bash 5.3.15 prints
+  `[from alias]\nnext\n`, status 0. Source `2ccb34a` prints
+  `[echo "[]"]\nnext\n`, status 0: the next source line becomes the here-doc
+  body and never executes. The exact probe and results are in
+  `review75-opus-refusal-r4-evidence/probes2.json` under the wave shell reports.
+  Fix the replacement-text/source continuation boundary with a recorded control
+  in a separate bounded parser change; do not fold it into table ownership.
+- Alias queries and order, finding 7. `alias é=one z=two; alias -p` lists é
+  before z in Bash's signed-byte ordering, unlike our Rust string ordering.
+  `type x` and `command -v x` also omit aliases. Add recorded query and sorting
+  controls, then repair the builtin/query paths without changing PATH lookup.
+
+
+## Call-stack introspection follow-ups from PR85 review, 2026-10-23
+
+Status: Approved. Owner: BUILTINS, separate from the bounded FUNCNAME lifecycle
+and slot-growth repair. Reviewed source is
+`48b03b89dc7de89a78bcb983bd4e64eef1a4fb20`. These were not passing base
+controls and are not charged to the repair as new regressions.
+
+Reproduce through `releaseShellRunner` after the pinned toolchain setup and
+`npm run build:shell && npm run build:node-harness`. Exact Bash 5.3.15
+recordings and production-Waffle observations, including stderr and exit status,
+are retained under `/work/reports/wave-20261022/shell/review85-takeover-r1-evidence/`
+in `bash-recordings.json` and `waffle-probes.json`. The following commands each
+reproduced once in independent review. Expected and observed stdout use JSON
+escaping. Final numbers are Bash/Waffle exit statuses.
+
+```bash
+g(){ :; }; f(){ :; }; declare -F
+```
+Expected `"declare -f f\ndeclare -f g\n"`; observed `""`; statuses 0/0.
+
+```bash
+g(){ :; }; f(){ :; }; declare -Fp f g
+```
+Expected `"declare -f f\ndeclare -f g\n"`; observed `"f\ng\n"`; statuses 0/0.
+
+```bash
+set -- root; f(){ shopt -s extdebug; g x; }; g(){ echo "${BASH_ARGC[*]}:${BASH_ARGV[*]}"; }; f a b; echo "${BASH_ARGC[*]}:${BASH_ARGV[*]}"
+```
+Expected `"1 2:x b a\n2:b a\n"`; observed `"1:x\n1:root\n"`; statuses 0/0.
+
+```bash
+shopt -s extdebug; f(){ echo "$((BASH_ARGC[0])):$((BASH_LINENO[0]))"; }; f a b
+```
+Expected `"2:1\n"`; observed `""`; statuses 0/2.
+
+```bash
+set -TE; echo "$-"; set +TE; echo "$-"
+```
+Expected `"hBETc\nhBc\n"`; observed `"\n\n"`; statuses 0/0.
+
+```bash
+g(){ caller " 0"; echo s:$?; caller "0 "; echo s:$?; }; f(){ g; }; f
+```
+Expected `"1 f bash\ns:0\n1 f bash\ns:0\n"`; observed `"s:2\ns:2\n"`; statuses 0/0.
+
+```bash
+f(){ caller >&-; echo status:$?; }; f
+```
+Expected `"status:0\n"`; observed `"status:1\n"`; statuses 0/0.
+
+Inspect `builtins/declarations.rs::function_names` for listing and `-Fp`
+formatting, `state/call_stack.rs::initialize_arguments` for extdebug enabled
+inside an active call, arithmetic's indexed-binding reader, option flag
+expansion, and `builtins/caller.rs` for whitespace and closed-output status.
+Do not repair these by inventing runtime facts or changing frozen membership.
+The inherited ordinary local-array mismatch is also outside this repair; its
+exact `normal-array-assignment` record stays in the same evidence.
+
+### Four additional inherited reproducers from approved PR85 review
+
+Status: Approved follow-up, not implemented in PR85. Owner: BUILTINS for
+function-name dispatch and special-array unset; VARIABLES for local unbind and
+ordinary sparse-array behavior. Independent Opus review approved
+`a4be47129e830634ee9da2fd19c94a69c84083d3`, production `7bfe246`, after the
+provider safety refusal. Each case also fails on main `750fb65`; none is a new
+integration regression. Keep every earlier follow-up above.
+
+Evidence: [approved review](file:///work/reports/wave-20261022/shell/review85-opus-refusal-r3.md),
+[exact Bash recordings](file:///work/reports/wave-20261022/shell/review85-takeover-r2-evidence/bash-recordings.json),
+and [native head/main observations](file:///work/reports/wave-20261022/shell/review85-opus-refusal-r3-evidence/native-control.json).
+Bash is 5.3.15, binary SHA-256
+`575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5`.
+Run the exact script through `releaseShellRunner` as above for production Waffle.
+Observed and expected stdout below use JSON escaping; statuses are final shell
+exit statuses, not the status printed by the script. Native control evidence
+compares stdout/status only and does not establish diagnostic parity.
+The current Node 26.12.1/Bun 1.4.4 integration reproduced all four approved-head
+outputs and statuses, with empty observed stderr for each. Exact current Waffle
+observations are in [the integration probes](file:///work/reports/wave-20261022/shell/pr85-integrate-current-runtime-after-review-evidence/waffle-probes.json).
+
+#### `function-F-plus-case`
+
+```bash
+f(){ :; }; declare -Fu f; declare -F f; x=a; declare -u x; x=b; echo "$x"
+```
+Expected stdout "f\nB\n"; status 0.
+Observed approved-head stdout "f\nf\nB\n"; status 0.
+Observed main `750fb65` stdout "B\n"; status 0.
+Expected stderr "".
+
+#### `unset-FUNCNAME-index`
+
+```bash
+f(){ unset "FUNCNAME[0]"; echo "s:$?:${FUNCNAME[*]}"; }; f; g(){ echo "${FUNCNAME[*]}"; }; g
+```
+Expected stdout "s:0:\ng\n"; status 0.
+Observed approved-head stdout "s:0:f\ng\n"; status 0.
+Observed main `750fb65` stdout "s:0:\n\n"; status 0.
+Expected stderr "".
+
+#### `unset-local-active`
+
+```bash
+f(){ local FUNCNAME=local; unset FUNCNAME; FUNCNAME=ordinary; echo "$FUNCNAME"; }; f; g(){ echo "later:${FUNCNAME[*]}"; }; g; echo "root:$FUNCNAME"
+```
+Expected stdout "ordinary\nlater:ordinary\nroot:ordinary\n"; status 0.
+Observed approved-head stdout "ordinary\nlater:\nroot:\n"; status 0.
+Observed main `750fb65` stdout "ordinary\nlater:\nroot:\n"; status 0.
+Expected stderr "bash: line 1: local: FUNCNAME: variable may not be assigned value\n".
+
+#### `negative-sparse-ordinary`
+
+```bash
+unset FUNCNAME; FUNCNAME=(a b); f(){ echo "${FUNCNAME[-1]}:${#FUNCNAME[@]}:${!FUNCNAME[@]}"; }; f
+```
+Expected stdout "b:3:0 1 2\n"; status 0.
+Observed approved-head stdout "b:2:0 1\n"; status 0.
+Observed main `750fb65` stdout "b:2:0 1\n"; status 0.
+Expected stderr "".
+
+Do not implement these rare cases in this integration or change the oracle,
+recordings, scored membership, skips, environment, or limits to make them pass.
+
+### Additional observations in the existing ordinary-array follow-ups
+
+Status: Approved follow-up, not implemented by the PR85 call-stack slice repair.
+Owner: VARIABLES. The signed Arch Bash 5.3.15 binary has SHA-256
+`575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5`.
+The following controls differ from that frozen oracle identically on parent
+`54a553db5b61051f9c30e93c2fd325d7d3c6a033` and the r7 repair source.
+They extend the ordinary sparse/deactivated and local-array follow-ups above,
+not the active computed-array slice fix.
+
+```bash
+unset FUNCNAME; FUNCNAME=(a b c); f(){ printf "<%s>\n" "${FUNCNAME[@]:1:2}" "${FUNCNAME[*]: -1}"; }; f
+```
+
+Expected stdout "<a>\n<b>\n<c>\n"; observed "<b>\n<c>\n<c>\n".
+Both statuses are 0 and both stderr streams are empty. Do not substitute the
+reviewer's installed Bash 5.3.20 observation for the frozen 5.3.15 result.
+
+```bash
+f(){ local -a s=(a b c); printf "<%s>\n" "${s[@]:1}"; }; f
+```
+
+Expected stdout "<b>\n<c>\n"; observed "<>\n". Both statuses are 0 and both
+stderr streams are empty. Inspect the existing local-array declaration path,
+not the computed-array slice bounds.
+
+Evidence: [signed-oracle controls](file:///work/reports/wave-20261022/shell/pr85-callstack-slice-composition-fix-r7-evidence/oracle-controls.json),
+[exact parent/native controls](file:///work/reports/wave-20261022/shell/pr85-callstack-slice-composition-fix-r7-evidence/parent-controls.json),
+and [production Waffle observations](file:///work/reports/wave-20261022/shell/pr85-callstack-slice-composition-fix-r7-evidence/new-waffle-controls.json).
+
+
+## Temporary prefix declaration writes
+
+Status: Approved follow-up, observed 2026-10-23 in the assignment/scope lane.
+
+- Bash 5.3.15 runs `x=outer; x=temp export x+=suffix; echo "$x"` with stdout `suffix\n` and status 0. The unchanged production Waffle guest at `e6430b1554de7d2efad092f40751858292cb071d` prints `outer\n` and status 0. Reproduced once in the local declaration-append probe.
+- `state::PrefixFrame::builtin` saves bindings outside `State::prefixes`, and its drop path restores the saved binding after the declaration. Trace `shell/engine/src/state.rs` around `PrefixBindings::Builtin` and `Drop for PrefixFrame`, plus `interpreter.rs` builtin dispatch. A fix must distinguish a declaration write from an ordinary temporary environment; comparing final values is insufficient when the declaration assigns the same value.
+- Keep regular builtin prefixes temporary and function-prefix locals inherited. Add recorded Bash controls for plain assignment and append through export, readonly, declare, local and eval. Pair them with the frozen temp-binding cases. This is separate from scalar declaration += recognition and scope lookup.
 
 ## Invalid nameref target review follow-ups, 2026-10-23
 
@@ -3024,3 +3244,215 @@ Record the array control and quoted, empty, and IFS neighbors before changing th
 scalar prompt/list boundary. Preserve `operand_piece`'s admitted `part_frame`
 boxing, depth limits, cancellation, and storage accounting. This is not part of
 the declaration fatal-error repair and has no claimed scoreboard gain.
+## Local append scope-chain follow-ups from PR71 review
+
+Status: Approved. Owner: VARIABLES assignment/scope family. Keep these separate
+from the ordinary failed-operand continuation repair. Independent review at
+`1bf847b7e21afcc3a260dd42244621ec9603cefe` recorded the complete streams in
+`/work/reports/wave-20261022/shell/review71-takeover-r2-evidence/observations.json`
+and `bare-local-observations.json`.
+
+### Mixed-scope reference chains
+
+```sh
+t=one; declare -n s=t; f(){ local t=base; local -n r=s; local r+=two; echo "$r:$s:$t"; declare -p r s; }; f; echo "$t"
+```
+
+Recorded Bash 5.3.15 prints `:base:base`, raw `r="stwo"`, raw `s="t"`, then
+`one`. The reviewed candidate prints `basetwo:basetwo:basetwo`, raw `r="s"`,
+raw `s="t"`, then `one`. Both exit 0. The same mismatch occurs with `declare`
+and `typeset`. This was not a passing original-base case. Trace
+`shell/engine/src/builtins/declarations.rs:local_append_target` and the owning
+scope's reference lookup. Resolve the scope chain without over-resolving an
+alias from another scope. Keep current-only chains, indexed target writes,
+readonly rejection, first-local shadowing, and fatal bounds covered.
+
+### Caller-local unset with a function prefix
+
+```sh
+x=outer; f(){ local x=caller; g; h; echo "$x"; }; g(){ unset x; x=again; }; h(){ local x+=a; echo "$x"; }; x=prefix f; echo "$x"
+```
+
+Recorded Bash 5.3.15 prints `a\nagain\nagain\n`. The reviewed candidate prints
+`againa\nagain\nouter\n`; original base prints `again\nagain\nouter\n`.
+All exit 0. Caller-local record removal predates PR71. Trace
+`shell/engine/src/state.rs:unset` and function-prefix restoration around lines
+1176-1201 at the reviewed pin. Reproduce on the eventual integrated main, then
+fix caller-unset ownership without making a callee's new local propagate prefix
+origin. Pair local/unset/reassignment with normal return, subshell, and
+cancellation controls. Neither follow-up is implemented or claimed as a gain by
+the continuation repair.
+
+## Completion negative-extglob follow-up, 2026-10-23
+
+Status: Approved. Owner: BUILTINS completion family after PR #79.
+The nine round-one review reproducers are repaired. The broader control below
+still differs because `expand/pattern/extglob.rs::Compiler::open` rejects `!`.
+Positive `@`, `?`, `*` and `+` operators now use the existing bounded matcher
+for completion `-G`; ordinary argv globbing keeps its prior behavior.
+
+```bash
+shopt -s extglob
+printf x >zz_one; printf x >zz_two; printf x >zz_other
+compgen -G 'zz_!(other)'
+```
+
+GNU Bash 5.3.15 prints `zz_one\nzz_two\n` and exits 0. Production Waffle at
+`3e52e60c655f4159312dad81fbdb797e422cbf35` prints nothing for that command and
+returns 2. The complete failing control remains unchanged in
+`scripts/fixtures/shell-completion-pending.json`. After the normal WASI build,
+run `npm run test:shell:completion:pending`. It is a strict failing recipe,
+not an ignored assertion or a relaxed expected result. Its two unrelated runtime
+controls remain included. The ordinary recipe retains every earlier passing
+completion control and records positive operators separately.
+
+Evidence is in `/work/reports/wave-20261022/shell/builtins-completion-fix-r2-evidence`
+and `/work/reports/machine-fleet/remote-gate/completion-r2-final-20261023T082914Z-tp5_5kgk`.
+Implement bounded complement groups without recursive backtracking, preserve
+work/storage admission and cancellation, and add nested and suffix controls.
+That matcher change is larger than passing an option through completion's glob
+lookup. No frozen case, oracle, exclusion or baseline change is authorized.
+## Case-attribute review follow-ups, 2026-10-23
+
+Status: Approved. Owner: VARIABLES declaration family. PR77's independent review
+approved source `7d9f73ee295d47c0f360b7bbb63379963719f851`. These are newly added
+feature corners, not demonstrated losses against main. Record failing-first
+Bash 5.3.15 controls before the next bounded correction.
+
+- Reapplying uppercase conversion rejects its own Unicode output. Run
+  `declare -u x=µ; x+=a; echo ok:$?; declare -p x`. Bash prints `ok:0` and
+  `declare -u x="ΜA"`; the engine prints `ok:2` and `declare -u x="Μ"`.
+  `ÿ` converting to `Ÿ` has the same problem. Check the mapper's output range
+  in `state/case_attributes.rs` and its append caller in `interpreter/indexed.rs`.
+- Adding an attribute through an existing local nameref destroys the reference.
+  Run `x=OUT; f(){ local -n r=x; local -l r=AB; r=CD; declare -p x r; }; f; declare -p x`.
+  Bash prints local `declare -l x="cd"`, `declare -n r="x"`, then restores
+  `declare -- x="OUT"`. The engine leaves x unchanged and prints scalar r.
+  Preserve reference ownership and target/local restoration in `case_attributes.rs`.
+- Combined `declare -nl r=x` loses the reference. Run
+  `x=old; declare -nl r=x; r=ABC; declare -p x r`. Bash prints x as `ABC` and
+  r as `declare -nl r="x"`; the engine prints x as `old` and scalar r as `ABC`.
+  Handle the declaration flags together in the owning builtin path.
+- Bare `+` is consumed as an empty option. Run
+  `declare + x=ok; echo status:$?; declare -p x`. Bash diagnoses the invalid
+  identifier and prints `status:1`, keeping x set. The engine prints `status:0`.
+  Correct operand admission without losing the later valid assignment.
+
+Exact Bash/native observations, file locations and the review reproducer are in
+`/work/reports/wave-20261022/shell/review77-r1.md` and `review77-r1-evidence/`.
+Keep frozen observations, exclusions and blocking gates unchanged.
+
+
+## Read option review follow-ups, 2026-10-23
+
+Status: Approved. Owner: BUILTINS read, with the shared byte-field and
+runtime/state prerequisite owners. Independent PR72 review approved
+`967fd177652ea12a974d63c6ab9862830fb04650`. These are explicit capability
+boundaries, not newly lost main passes or claimed repairs in that PR.
+
+- Multibyte delimiter suffix. Reproduce through production Waffle:
+  `printf 'a\xc3\xa9:tail\n' | { read -d é a; IFS= read -r tail; printf '%s|<%s>\n' "$?" "$tail"; }`.
+  Bash 5.3.15 leaves bytes `a9 3a 74 61 69 6c` in `tail` with read status 0.
+  The engine prints `2|<>` because scalar assignment rejects the invalid UTF-8
+  suffix left after the delimiter's first byte. Route this to the shared
+  "word fields carry bytes, not UTF-8 String" item above. Preserve raw bytes,
+  unread offsets, bounded storage and cancellation. Do not substitute Unicode
+  replacement characters or change the delimiter or frozen expectations.
+- Positive-count terminal silent reads. `read -s -n1 value` on a terminal
+  remains unsupported with status 2. `read -s -n0 value` succeeds without
+  consuming input or changing terminal echo. Use a real terminal input fixture,
+  not a pipe, when implementing echo control. Restore echo on success, EOF,
+  cancellation and output failure. PR72 does not change echo state and does not
+  claim silent-terminal support.
+- Timers and array destinations remain unsupported. Recorded reproducers are
+  `printf 'x\n' | { REPLY=old; read -t0; printf '%s|<%s>\n' "$?" "$REPLY"; }`
+  and `printf 'a:b\n' | { REPLY=old; read -d : -a arr; printf '%s|<%s>|<%s>\n' "$?" "$REPLY" "${arr[0]}"; }`.
+  Bash returns read status 0 and keeps `REPLY=old` in each control, and stores
+  `a` in `arr[0]` in the array control. Coordinate readiness/deadline support
+  with the runtime and array writes with state. Preserve input offsets,
+  nonmutation on rejected options, resource accounting and cancellation.
+
+Reproduce on current native and production Waffle before repair. Record exact
+Bash 5.3.15 streams/status locally. The original review, 309-case fixture and
+eight classified boundary differences remain in
+`/work/reports/wave-20261022/shell/review72-takeover-r2.md`, its sibling evidence
+directory and `/work/reports/wave-20261022/shell/review72-r1/neighbors.json`.
+The terminal controls are in `scripts/fixtures/shell-read-terminal.json` and
+`shell/engine/tests/words/read_options.rs`. Do not relax their assertions or
+claim a frozen gain without a qualified unchanged-ruler replay.
+
+## Completion nonblocking review follow-ups, 2026-10-23
+
+Status: Approved, deferred beyond PR #79's bounded integration after read #72.
+Independent review `review79-takeover-r2.md` approves completion source
+`f13a5c310bf082da56e00401b43d4a1c2b0dd28b` and records these three remaining
+corners. These are not demonstrated regressions against main. Preserve the
+reviewer's recordings and ordinary argv behavior when implementing them.
+Evidence is in `/work/reports/wave-20261022/shell/review79-takeover-r2-evidence/`.
+
+### Preserve word-list newlines when IFS excludes newline
+
+Owner: completion word-list parsing, `builtins/completion/wordlist.rs`.
+
+```bash
+IFS=:; compgen -W $'a\nb:c'; echo status:$?
+```
+
+The generated word list contains a literal newline, not a backslash followed by
+`n`. GNU Bash 5.3.15 prints `a\nb\nc\nstatus:0\n`. Reviewed source prints
+`ab\nc\nstatus:0\n`. Preserve that newline instead of encoding it as a removed
+line continuation. The review's retained recording uses this equivalent input:
+
+```bash
+IFS=:; compgen -W 'a
+b:c'; echo status:$?
+```
+
+### Enable POSIX classes for completion pathname patterns
+
+Owner: completion pathname matching, `expand/glob.rs`.
+
+```bash
+printf x >zz_a; compgen -G 'zz_[[:alpha:]]'; echo status:$?
+```
+
+GNU Bash 5.3.15 prints `zz_a\nstatus:0\n`. Reviewed source prints `status:2\n`.
+The difference occurs both with extglob off and after `shopt -s extglob`.
+Apply the supported named-class policy to `-G` without changing argv globbing.
+
+### Recognize explicitly dotted positive-extglob alternatives
+
+Owner: completion pathname matching, `expand/glob.rs`.
+
+```bash
+shopt -s extglob; printf x >.zz_a; printf x >zz_a
+compgen -G '@(.zz_a|zz_a)'; echo status:$?
+```
+
+GNU Bash 5.3.15 prints `.zz_a\nzz_a\nstatus:0\n`. Reviewed source prints
+`zz_a\nstatus:0\n`. Treat explicitly dotted alternatives as eligible when
+excluding hidden entries. Keep implicit hidden-name exclusion and ordinary
+argv matching unchanged. Add nested and suffix controls before the fix.
+
+
+## Eval call-site line offsets from PR75 integration review, 2026-10-24
+
+Status: Approved follow-up. Owner: BUILTINS eval/call-stack family, separate from
+PR69 source admission. No semantic repair is included in this integration.
+
+Independent review of `91ced06480dbf3d2d95394a256ce0a1d695ce66c` found that calling
+an eval-defined function inside that eval reports BASH_LINENO line 4 instead of
+Bash 5.3.15 line 6. The later outer call correctly reports line 7. The paired
+no-alias control has the same mismatch. Inspect `parse.rs:26-30`,
+`interpreter/eval.rs:159` and `interpreter.rs:3053` at that immutable head.
+
+Use exact probe `eval-retained-definition` in
+`/work/reports/wave-20261022/shell/review75-integration-after85-r7-evidence/probe-inputs.json`.
+The adjacent `probe-recordings.json`, `probe-results.json` and `counterpart-*`
+files retain full input, all output streams, statuses and source hashes. Run
+through `releaseShellRunner` after the pinned toolchain setup and
+`npm run build:shell && npm run build:node-harness`. Fix eval call-site line
+offsets only under an independently assigned bounded family owner. Preserve
+retained-source ownership, parser admission and cancellation. Late extdebug
+argument initialization and indexed compound initializers remain with their
+existing owners and are not duplicated here.

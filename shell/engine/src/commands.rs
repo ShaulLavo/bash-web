@@ -10,6 +10,7 @@ pub(crate) enum Builtin {
     Printf,
     Read,
     Getopts,
+    Caller,
     Trap,
     Declaration,
     Cd,
@@ -20,6 +21,7 @@ pub(crate) enum Builtin {
     Set,
     Shift,
     Shopt,
+    Alias,
     ExitReturn,
     Jobs,
     Wait,
@@ -27,6 +29,7 @@ pub(crate) enum Builtin {
     Unset,
     Test,
     LoopControl,
+    Completion,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -37,6 +40,7 @@ pub(crate) enum Handler {
     Type,
     Exec,
     Eval,
+    Source,
     Let,
 }
 
@@ -153,6 +157,10 @@ static COMMANDS: &[Command] = &[
     regular("printf", Builtin::Printf),
     regular("read", Builtin::Read),
     regular("getopts", Builtin::Getopts),
+    regular("caller", Builtin::Caller),
+    regular("compgen", Builtin::Completion),
+    regular("complete", Builtin::Completion),
+    regular("compopt", Builtin::Completion),
     special("trap", Handler::Builtin(Builtin::Trap)),
     declaration("export", Class::SpecialBuiltin),
     declaration("local", Class::RegularBuiltin),
@@ -185,6 +193,8 @@ static COMMANDS: &[Command] = &[
         Handler::Type,
     ),
     regular("shopt", Builtin::Shopt),
+    regular("alias", Builtin::Alias),
+    regular("unalias", Builtin::Alias),
     special("exit", Handler::Builtin(Builtin::ExitReturn)),
     special("return", Handler::Builtin(Builtin::ExitReturn)),
     regular("jobs", Builtin::Jobs),
@@ -197,6 +207,13 @@ static COMMANDS: &[Command] = &[
     special("continue", Handler::Builtin(Builtin::LoopControl)),
     special("exec", Handler::Exec),
     special("eval", Handler::Eval),
+    special(".", Handler::Source),
+    core(
+        "source",
+        Class::RegularBuiltin,
+        Declaration::Ordinary,
+        Handler::Source,
+    ),
     core(
         "let",
         Class::RegularBuiltin,
@@ -226,6 +243,10 @@ static COMMANDS: &[Command] = &[
     keyword("]]", Availability::Included),
     keyword("coproc", Availability::UnsupportedSyntax),
 ];
+
+pub(crate) fn catalogue() -> &'static [Command] {
+    COMMANDS
+}
 
 pub(crate) fn lookup(name: &str) -> Option<&'static Command> {
     COMMANDS.iter().find(|command| command.name == name)

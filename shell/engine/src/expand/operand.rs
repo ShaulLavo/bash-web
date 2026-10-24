@@ -44,6 +44,7 @@ fn basic_name(name: &str) -> bool {
 }
 
 pub(super) enum Piece<'a> {
+    Home,
     Text {
         value: &'a str,
         protected: bool,
@@ -203,6 +204,15 @@ impl<'a> Scanner<'a> {
                 protected: false,
             }));
         }
+        if ch == '~'
+            && start == 0
+            && !self.outer_quoted
+            && self.context == Context::Operand
+            && !self.case_positionals
+            && self.peek().is_none_or(|next| matches!(next, '/' | ':'))
+        {
+            return Ok(Some(Piece::Home));
+        }
         self.check_literal(ch)?;
         // Bash protects source spaces in a pattern, but not source tabs/newlines.
         // Expansion-provided spaces retain the expansion's existing IFS rules.
@@ -240,7 +250,8 @@ impl<'a> Scanner<'a> {
         }
         if !self.protected()
             && !self.outer_quoted
-            && (ch == '~' || !self.pattern && matches!(ch, '*' | '?' | '['))
+            && (ch == '~' && self.case_positionals
+                || !self.pattern && matches!(ch, '~' | '*' | '?' | '['))
         {
             return Err(2.into());
         }

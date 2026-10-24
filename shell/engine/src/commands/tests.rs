@@ -1,5 +1,5 @@
 //! Original contracts that started from the independent production-view
-//! inventory at bash-web 92ab384, plus builtins added since (pushd, popd, dirs).
+//! inventory at bash-web 92ab384, plus subsequently added builtins.
 //! Baseline lists belong in tests, not in production dispatch.
 use super::*;
 use std::collections::BTreeSet;
@@ -20,9 +20,10 @@ fn baseline(names: &[&'static str]) -> Vec<&'static str> {
 }
 
 const BUILTINS: &[&str] = &[
-    ":", "[", "break", "builtin", "cd", "command", "continue", "declare", "dirs", "echo", "eval",
-    "exec", "exit", "export", "false", "getopts", "jobs", "kill", "let", "local", "popd", "printf",
-    "pushd", "pwd", "read", "readonly", "return", "set", "shift", "shopt", "test", "trap", "true",
+    ".", ":", "[", "break", "builtin", "cd", "command", "compgen", "complete", "compopt",
+    "continue", "declare", "dirs", "echo", "eval", "exec", "exit", "export", "false", "getopts",
+    "caller", "jobs", "kill", "let", "local", "popd", "printf", "pushd", "pwd", "read", "readonly",
+    "return", "set", "shift", "shopt", "source", "alias", "unalias", "test", "trap", "true",
     "type", "typeset", "unset", "wait",
 ];
 
@@ -59,10 +60,10 @@ fn builtin_dispatch_covers_the_current_builtin_arms_not_the_old_is_builtin_set()
     assert_eq!(
         names(|command| matches!(command.handler(), Some(Handler::Builtin(_)))),
         baseline(&[
-            ":", "true", "false", "echo", "printf", "read", "getopts", "trap", "export", "local",
-            "readonly", "declare", "typeset", "cd", "pwd", "pushd", "popd", "dirs", "set", "shift",
-            "shopt", "exit", "return", "jobs", "wait", "kill", "unset", "test", "[", "break",
-            "continue"
+            ":", "true", "false", "echo", "printf", "read", "getopts", "caller", "trap", "export",
+            "local", "readonly", "declare", "typeset", "cd", "pwd", "pushd", "popd", "dirs", "set",
+            "shift", "shopt", "alias", "unalias", "exit", "return", "jobs", "wait", "kill",
+            "unset", "test", "[", "break", "continue", "compgen", "complete", "compopt"
         ])
     );
     // `command` was recognized by is_builtin but never had a builtins::run arm.
@@ -73,6 +74,8 @@ fn builtin_dispatch_covers_the_current_builtin_arms_not_the_old_is_builtin_set()
         ("type", Handler::Type),
         ("exec", Handler::Exec),
         ("eval", Handler::Eval),
+        (".", Handler::Source),
+        ("source", Handler::Source),
         ("let", Handler::Let),
     ] {
         assert_eq!(handler(name), Some(expected));
@@ -105,7 +108,7 @@ fn classes_and_capabilities_do_not_mislabel_standins_or_unimplemented_syntax() {
     assert_eq!(
         names(|command| command.class == Class::SpecialBuiltin),
         baseline(&[
-            ":", "break", "continue", "eval", "exec", "exit", "export", "readonly", "return",
+            ".", ":", "break", "continue", "eval", "exec", "exit", "export", "readonly", "return",
             "set", "shift", "trap", "unset",
         ])
     );

@@ -717,6 +717,23 @@
         ],
         "change": "Retain typed file-read substitution eligibility and lexical backtick origins through quote and scalar assignment transformations. Keep legacy numeric redirect and trailing-input distinctions, escaped newlines and mixed-quote backticks. Traverse and print the dedicated AST variant.",
         "reason": "GNU Bash 5.3.15 treats one input-only command as a parent-side file capture, while specific backtick spellings disable the shortcut. No upstream test removed."
+      },
+      {
+        "paths": [
+          "shell/parser/src/parser/mod.rs",
+          "shell/parser/src/parser/lexer.rs",
+          "shell/parser/tests/aliases.rs"
+        ],
+        "change": "Read source suffixes with original offsets and retain alias recursion guards through the final token. Enable plain-word tracking before the first alias-aware token.",
+        "reason": "The engine re-reads future input after alias definitions change. Aliases remain lexical parser substitutions, recursive aliases terminate, and diagnostics keep original source lines."
+      },
+      {
+        "paths": [
+          "shell/parser/src/parser/mod.rs",
+          "shell/parser/tests/aliases.rs"
+        ],
+        "change": "Add a recovering single-read-unit entry point with an original-source continuation and no full-source AST copy. Preserve compound, multiline quote, heredoc, recovery and shared execution-budget handling.",
+        "reason": "Alias changes must re-read only the next complete input unit instead of charging and copying every remaining alias expansion on each change."
       }
     ],
     "removedUpstreamTests": [
@@ -729,7 +746,7 @@
   "shellScoreboard": {
     "oracleFile": "docs/evidence/own-shell-oracle.json",
     "baselineFile": "docs/evidence/own-shell-baseline.json",
-    "oracleSha256": "bb13fdf4319ae0af179457ff4b3e3c0db57002902f07eb37fde02ff7a6636eaa",
+    "oracleSha256": "90c9ddafface903c3af1eee3039c949d6cb5062cf2ee17f64010b6431b772b06",
     "format": "Schema 1, exact base64 stdout/stderr and numeric exit status; original classifications retained; source files SHA-256 in oracle fixture.",
     "corpora": {
       "oils": {
@@ -1530,7 +1547,9 @@
     },
     "invalidTargetStatus": {
       "classification": "Original GNU Bash 5.3.15 semantic adapter and nonmutation, operand-continuation, local, readonly, admission and cancellation controls. No upstream implementation copied. Nine fixture scripts are adapted separately from the frozen corpus below.",
-      "implementationDestinations": ["shell/engine/src/builtins.rs::nameref_declaration"],
+      "implementationDestinations": [
+        "shell/engine/src/builtins.rs::nameref_declaration"
+      ],
       "testDestinations": [
         "shell/engine/tests/words/nameref_invalid.rs",
         "shell/engine/tests/words/namerefs.rs",
@@ -1546,7 +1565,9 @@
           "path": "spec/nameref.test.sh",
           "sha256": "8aa55ed6c5dbf24d414175c988819411b60ba459ae8e43f3b1e543b6c492f304",
           "license": "Apache-2.0",
-          "caseIds": ["oils:nameref:604"]
+          "caseIds": [
+            "oils:nameref:604"
+          ]
         },
         {
           "repository": "https://github.com/reubeno/brush",
@@ -1570,7 +1591,9 @@
           "path": "crates/bashkit/tests/spec_cases/bash/bashbox-declare.test.sh",
           "sha256": "fdcd96c28f338796272a1928491d37dbae60a561fd624aefa19a73e8c7a2291f",
           "license": "MIT",
-          "caseIds": ["bashkit-suite:bashbox-declare:220"]
+          "caseIds": [
+            "bashkit-suite:bashbox-declare:220"
+          ]
         }
       ]
     }
@@ -2056,6 +2079,23 @@
     "documentation": "docs/declaration-printing.md",
     "qualification": "Targeted production-Waffle evidence only at this checkpoint. Parent owns independent review, serialized main integration, full frozen replay and baseline recomputation."
   },
+  "shellDeclarationAppend": {
+    "classification": "Original Rust scalar declaration append adapter and scope-aware state view. GNU Bash is a behavior oracle; no upstream implementation copied or adapted.",
+    "oracle": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "implementationDestinations": [
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/declarations.rs",
+      "shell/engine/src/state/declarations.rs",
+      "shell/engine/src/state.rs"
+    ],
+    "testDestinations": [
+      "shell/engine/tests/words/declarations.rs",
+      "scripts/test-own-shell-declarations.ts",
+      "scripts/fixtures/shell-declaration-append.json",
+      "scripts/fixtures/shell-declaration-append-scope.json"
+    ],
+    "strategy": "Recognize scalar += declaration words without splitting their RHS. Resolve current local namerefs before selecting the target scope. Read only the current local or inherited function-prefix value for a local append; ordinary declarations read the visible scalar target. Admit and cooperatively scan before state-owned assignment for repeated locals, preserving indexed element zero and raw references. Record prefix-owner provenance separately from ordinary locals. Compound array declarations and explicit -n appends remain separate work."
+  },
   "shellTilde": {
     "classification": "Original HOME-only tilde adapter and controls. GNU Bash 5.3.15 is a behavior oracle; no upstream implementation copied or adapted.",
     "baseRevision": "93fdf762f2a694427440d07156c7a8c458ecc995",
@@ -2113,5 +2153,146 @@
       "PIPE trap/disposition behavior",
       "Existing closed-descriptor diagnostic and Bash diagnostic line-prefix mismatches retained as strict pending reproductions"
     ]
+  },
+  "shellLastArgument": {
+    "classification": "Original command-completion adapter. GNU Bash 5.3.15 is a behavior oracle; no upstream implementation copied or adapted. Thirty fixture scripts are adapted from the frozen Brush corpus.",
+    "baseRevision": "e6430b1554de7d2efad092f40751858292cb071d",
+    "implementationDestinations": [
+      "shell/engine/src/interpreter.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/declarations.rs",
+      "shell/engine/src/builtins/getopts.rs",
+      "shell/engine/src/interpreter/eval.rs"
+    ],
+    "testDestinations": [
+      "scripts/test-own-shell-special-params.ts",
+      "scripts/fixtures/shell-special-params.json",
+      "shell/engine/src/state/bindings_tests.rs",
+      "shell/engine/tests/words/read_count.rs",
+      "shell/engine/tests/words/getopts.rs",
+      "shell/engine/tests/words/declarations.rs",
+      "scripts/fixtures/shell-special-params-publication.json"
+    ],
+    "testSources": [
+      {
+        "repository": "https://github.com/reubeno/brush",
+        "revision": "4cfba081f2f8bcda8150010a57203d020f14f0cc",
+        "path": "brush-shell/tests/cases/compat/special_parameters.yaml",
+        "sha256": "cb564f8142f6a22417050a1e5adba9a8ca1afd5f813a17423ea687cacccab8fc",
+        "license": "MIT",
+        "caseIds": [
+          "brush-suite:special_parameters:1",
+          "brush-suite:special_parameters:2",
+          "brush-suite:special_parameters:3",
+          "brush-suite:special_parameters:4",
+          "brush-suite:special_parameters:5",
+          "brush-suite:special_parameters:6",
+          "brush-suite:special_parameters:7",
+          "brush-suite:special_parameters:10",
+          "brush-suite:special_parameters:11",
+          "brush-suite:special_parameters:12",
+          "brush-suite:special_parameters:13",
+          "brush-suite:special_parameters:14",
+          "brush-suite:special_parameters:15",
+          "brush-suite:special_parameters:16",
+          "brush-suite:special_parameters:17",
+          "brush-suite:special_parameters:18",
+          "brush-suite:special_parameters:19",
+          "brush-suite:special_parameters:20",
+          "brush-suite:special_parameters:21",
+          "brush-suite:special_parameters:22",
+          "brush-suite:special_parameters:23",
+          "brush-suite:special_parameters:24",
+          "brush-suite:special_parameters:25",
+          "brush-suite:special_parameters:26",
+          "brush-suite:special_parameters:28",
+          "brush-suite:special_parameters:29",
+          "brush-suite:special_parameters:30",
+          "brush-suite:special_parameters:32",
+          "brush-suite:special_parameters:34",
+          "brush-suite:special_parameters:35"
+        ]
+      }
+    ],
+    "strategy": "Retain the admitted expanded last argument, then publish it through ordinary binding storage after dispatch. Builtin prefix frames remain active until publication reaches their temporary nameref targets, then restore the caller bindings. Automatic publication uses the existing numeric OPTIND publication policy without applying explicit-assignment cursor resets. External dispatch clones its retained command name once for argv and borrows the original for diagnostics. Assignment-only commands publish an empty value. Preserve internal dispatch errors, terminal cancellation and resource outcomes, pipeline/subshell isolation, readonly target diagnostics and export clearing. Startup uses the actual shell name unless the environment supplied _. No runtime facts or command add-ons are introduced.",
+    "oracle": "Local GNU Bash 5.3.15(1)-release observations. CI replays the recording through production Waffle, without invoking host Bash. Frozen oracle, baseline, exclusions and scoring are unchanged.",
+    "deferred": "Other special parameters and well-known variables, including BASHPID, UID, EUID and LINENO."
+  },
+  "shellCompletion": {
+    "repository": "https://github.com/everruns/bashkit",
+    "revision": "491c3281f668b76d64b15210b8f5d7bf97244be0",
+    "license": "MIT",
+    "classification": "Adapted completion option tables, printing order and quote-aware word-list splitting. GNU Bash 5.3.15 is the behavior oracle, not copied implementation.",
+    "implementationSources": [
+      {
+        "path": "crates/bashkit/src/interpreter/completion.rs",
+        "sha256": "6e0e85b16e06805e9d61015eaa87a2167f84fd4f71a1db6fe039086bbcbd2d64",
+        "items": [
+          "ACTIONS and COMP_OPTIONS, with the Bash 5.3 fullquote option",
+          "parse_comp_args option grammar and complete/compopt printing",
+          "split_wordlist quote and substitution boundaries"
+        ]
+      }
+    ],
+    "implementationDestinations": [
+      "shell/engine/src/builtins/completion.rs",
+      "shell/engine/src/builtins/completion/options.rs",
+      "shell/engine/src/builtins/completion/wordlist.rs",
+      "shell/engine/src/builtins/completion/generate.rs",
+      "shell/engine/src/builtins/completion/generate/filesystem.rs",
+      "shell/engine/src/state/completion.rs"
+    ],
+    "originalAdapters": "Immutable budget-owned table and spec versions shared across state snapshots. Typed special selectors, Bash-observed hash traversal, checked cooperative copies and generation, existing shell expansion without pathname expansion for -W, and shared pattern matching for -X. Runtime directory readers, filesystem databases and authoritative process-host executable registration provide host facts. No fallback users, hosts, files or executable permissions are invented.",
+    "oracle": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "testDestinations": [
+      "scripts/test-own-shell-completion.ts",
+      "scripts/fixtures/shell-completion.json",
+      "shell/engine/src/state/completion/tests.rs"
+    ],
+    "deferred": "Executing -F/-C callbacks, alias generation pending alias state, readline bindings, and job-command completion. Registration and printing retain callback text without executing it.",
+    "documentation": "docs/completion.md"
+  },
+  "shellCaseAttributes": {
+    "classification": "Original scalar case-attribute metadata and write adapters, observed against GNU Bash 5.3.15. No upstream implementation copied or adapted.",
+    "oracle": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "implementationDestinations": [
+      "shell/engine/src/state/case.rs",
+      "shell/engine/src/state/case_attributes.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/declarations.rs",
+      "shell/engine/src/state/declarations.rs",
+      "shell/engine/src/interpreter.rs",
+      "shell/engine/src/interpreter/indexed.rs",
+      "shell/engine/src/expand/transformation.rs"
+    ],
+    "strategy": "Keep lower/upper metadata in state, save and restore it with locals, admit it in snapshots, and map owned scalar values before assignment publication. Reuse the existing bounded locale mapper moved unchanged below expansion. Preserve attribute-only values and expose case metadata through named declaration and parameter-transform rendering.",
+    "fixture": {
+      "path": "scripts/fixtures/shell-declare-attrs.json",
+      "sha256": "5c6274e5112f7086be86557ba114429de1133860e96de500564648b550dd7868"
+    },
+    "documentation": "docs/declaration-printing.md",
+    "deferred": [
+      "integer attributes",
+      "array declaration and printing",
+      "global declaration enumeration",
+      "declare -g",
+      "export -n and attribute removal other than +l/+u"
+    ]
+  },
+  "shellIndexedSlices": {
+    "classification": "Original local sparse indexed slice adapter and recorded GNU Bash 5.3.15 observations. No external implementation copied or adapted.",
+    "baseRevision": "e6430b1554de7d2efad092f40751858292cb071d",
+    "implementationDestinations": [
+      "shell/engine/src/expand/array_slice.rs",
+      "shell/engine/src/expand.rs"
+    ],
+    "testDestinations": [
+      "shell/engine/tests/words/array_slicing.rs",
+      "scripts/test-own-shell-array-slicing.ts",
+      "scripts/fixtures/shell-array-slicing.json"
+    ],
+    "implementation": "Sparse numeric offsets seek through the existing borrowed state reader. Length counts present entries, not holes. Empty sources and out-of-range offsets skip bound arithmetic. Selected strings are admitted before copying and emitted through shared quote/list/IFS logic with cooperative cancellation and command-wide limits. Scalar bindings keep existing text slicing. PIPESTATUS reads its existing producer. No indexed state mutation or durable producer publication API changes."
   }
 }
