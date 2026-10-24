@@ -110,6 +110,7 @@ enum DiagnosticStderr {
     Redirected(Option<io::Endpoint>),
 }
 
+#[derive(Clone)]
 enum WeakStderr {
     Open(io::WeakEndpoint),
     Closed,
@@ -2704,10 +2705,14 @@ async fn retain_declaration_syntax(
 }
 
 struct PreparedCommand {
-    line: Option<usize>,
     argv: Vec<String>,
+    execution: Result<PreparedExecution, CommandError>,
+}
+
+struct PreparedExecution {
+    line: Option<usize>,
     assigned: Vec<(String, String)>,
-    fds: Descriptors,
+    fds: Option<Descriptors>,
     work: expand::Work,
 }
 
@@ -2719,31 +2724,180 @@ async fn simple_command(
 ) -> Outcome {
     let line = simple.expansion_line;
     let original_fds = fds.clone();
-    let prepared = match prepare_simple_command(simple, &state, fds, &context).await {
-        Ok(prepared) => prepared,
-        Err(error) => return expansion_failure(error.at_line(line), &original_fds, &context).await,
-    };
-    if prepared
-        .argv
-        .first()
-        .is_some_and(|name| commands::handler(name) == Some(commands::Handler::Exec))
-    {
-        if prepared.argv.len() != 1 || !prepared.assigned.is_empty() {
-            return Outcome::status(2);
-        }
-        *original_fds.borrow_mut() = prepared.fds.borrow().clone();
-        return Outcome::status(0);
+    let mut prepared = None;
+    if let Err(error) = prepare_simple_command(simple, &state, fds, &context, &mut prepared).await {
+        return expansion_failure(error.at_line(line), &original_fds, &context).await;
     }
-    // Even a saved stderr can alias a pipe reader. Release all diagnostic-only
-    // ownership before dispatch, so a child's close can deliver EPIPE promptly.
     let parent_stderr = match original_fds.borrow().get(2) {
         Some(stderr) => WeakStderr::Open(stderr.downgrade()),
         None => WeakStderr::Closed,
     };
+    // Only exec retains the original table; diagnostic ownership stays weak.
+    if prepared
+        .as_ref()
+        .unwrap()
+        .argv
+        .first()
+        .is_some_and(|name| commands::handler(name) == Some(commands::Handler::Exec))
+    {
+        return exec_prepared_command(&mut prepared, &state, original_fds, &context, parent_stderr)
+            .await;
+    }
     drop(original_fds);
-    dispatch_simple_command(prepared, state, context, parent_stderr)
-        .await
-        .unwrap_or_else(Outcome::status)
+    let PreparedCommand { argv, execution } = prepared.as_mut().unwrap();
+    let argv = Cell::new(std::mem::take(argv));
+    let mut last_storage = None;
+    let builtin_prefix = Cell::new(None);
+    dispatch_simple_command(
+        &argv,
+        &mut last_storage,
+        &builtin_prefix,
+        execution,
+        &state,
+        &context,
+        parent_stderr,
+    )
+    .await
+    .unwrap_or_else(Outcome::status)
+}
+
+#[inline(never)]
+fn exec_prepared_command(
+    prepared: &mut Option<PreparedCommand>,
+    state: &SharedState,
+    original_fds: Descriptors,
+    context: &Context,
+    stderr: WeakStderr,
+) -> eval::Frame<'static> {
+    let prepared = prepared.take().unwrap();
+    let evaluation = context.evaluation.clone();
+    evaluation.frame(
+        exec_prepared_command_body(
+            prepared,
+            state.clone(),
+            original_fds,
+            context.clone(),
+            stderr,
+        ),
+        Outcome::status,
+    )
+}
+
+async fn exec_prepared_command_body(
+    prepared: PreparedCommand,
+    state: SharedState,
+    original_fds: Descriptors,
+    context: Context,
+    stderr: WeakStderr,
+) -> Outcome {
+    let result = match prepared.execution {
+        Err(error) => expansion_failure(error, &original_fds, &context).await,
+        Ok(execution) if prepared.argv.len() == 1 && execution.assigned.is_empty() => {
+            *original_fds.borrow_mut() = execution.fds.unwrap().borrow().clone();
+            Outcome::status(0)
+        }
+        Ok(_) => Outcome::status(2),
+    };
+    drop(original_fds);
+    finish_last_argument(prepared.argv, result, &state, &context, &stderr).await
+}
+
+#[inline(never)]
+fn finish_last_argument(
+    mut argv: Vec<String>,
+    result: Outcome,
+    state: &SharedState,
+    context: &Context,
+    stderr: &WeakStderr,
+) -> eval::Frame<'static> {
+    if context.cancel.is_cancelled() || matches!(result.flow, Flow::Resource) {
+        return futures::future::Either::Left(futures::future::ready(result));
+    }
+    let last = argv.pop().unwrap_or_default();
+    let needs_admission = state.borrow().last_argument_needs_admission();
+    if needs_admission {
+        return finish_last_argument_slow(
+            Ok(last),
+            result,
+            state.clone(),
+            context.clone(),
+            stderr.clone(),
+        );
+    }
+    let publication = state.borrow_mut().publish_last_argument(last);
+    match publication {
+        Ok(()) => futures::future::Either::Left(futures::future::ready(result)),
+        Err(error) => finish_last_argument_slow(
+            Err(error),
+            result,
+            state.clone(),
+            context.clone(),
+            stderr.clone(),
+        ),
+    }
+}
+
+#[inline(never)]
+fn finish_last_argument_slow(
+    last: Result<String, expand::Error>,
+    result: Outcome,
+    state: SharedState,
+    context: Context,
+    stderr: WeakStderr,
+) -> eval::Frame<'static> {
+    context.evaluation.frame(
+        finish_last_argument_slow_body(last, result, state.clone(), context.clone(), stderr),
+        Outcome::status,
+    )
+}
+
+async fn admit_last_argument(
+    last: String,
+    state: &SharedState,
+    context: &Context,
+) -> Result<(), expand::Error> {
+    let mut work = expansion_work(context);
+    State::admit_assignment(state, "_", last.len(), &context.cancel, &mut work).await?;
+    state.borrow_mut().publish_last_argument(last)
+}
+
+async fn finish_last_argument_slow_body(
+    last: Result<String, expand::Error>,
+    result: Outcome,
+    state: SharedState,
+    context: Context,
+    stderr: WeakStderr,
+) -> Outcome {
+    let publication = match last {
+        Ok(last) => admit_last_argument(last, &state, &context).await,
+        Err(error) => Err(error),
+    };
+    let Err(mut error) = publication else {
+        return result;
+    };
+    if matches!(error, expand::Error::Status(1)) {
+        error = expand::Error::Parameter {
+            name: "warning".into(),
+            message: "_: circular name reference".into(),
+            line: None,
+        };
+    }
+    if matches!(error, expand::Error::Status(_)) {
+        return Outcome::status(admission_status(error));
+    }
+    let fds = diagnostic_descriptors(&stderr);
+    let _ = expansion_failure(error.into(), &fds, &context).await;
+    result
+}
+
+fn diagnostic_descriptors(stderr: &WeakStderr) -> Descriptors {
+    let mut fds = FdTable::default();
+    if let WeakStderr::Open(fd) = stderr
+        && let Some(fd) = fd.upgrade()
+    {
+        fds.insert(2, fd);
+    }
+    Rc::new(RefCell::new(fds))
 }
 
 #[inline(never)]
@@ -2752,10 +2906,14 @@ fn prepare_simple_command<'a>(
     state: &'a SharedState,
     fds: Descriptors,
     context: &'a Context,
-) -> eval::Frame<'a, Result<PreparedCommand, CommandError>> {
+    prepared: &'a mut Option<PreparedCommand>,
+) -> eval::Frame<'a, Result<(), CommandError>> {
     let evaluation = context.evaluation.clone();
     evaluation.frame(
-        prepare_simple_command_body(simple, state, fds, context),
+        async move {
+            *prepared = Some(prepare_simple_command_body(simple, state, fds, context).await?);
+            Ok(())
+        },
         |code| Err(code.into()),
     )
 }
@@ -2766,7 +2924,6 @@ async fn prepare_simple_command_body(
     fds: Descriptors,
     context: &Context,
 ) -> Result<PreparedCommand, CommandError> {
-    let line = simple.expansion_line;
     retain_declaration_syntax(&mut simple, &context.source, &context.cancel).await?;
     let assignment_count = simple.assignments.len();
     if assignment_count > context.limits().arguments {
@@ -2792,7 +2949,7 @@ async fn prepare_simple_command_body(
     .await?;
     bytes += argv.iter().map(String::len).sum::<usize>();
     let declaration = builtins::declaration_command(&simple.name);
-    for word in simple.args {
+    for word in std::mem::take(&mut simple.args) {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
         let remaining_bytes = context.limits().expansion_bytes.saturating_sub(bytes);
         let remaining_words = context
@@ -2833,6 +2990,23 @@ async fn prepare_simple_command_body(
         bytes += fields.iter().map(String::len).sum::<usize>();
         argv.extend(fields);
     }
+    let line = simple.expansion_line;
+    let execution = prepare_execution_body(simple, &argv, state, fds, context, bytes, work)
+        .await
+        .map_err(|error| error.at_line(line));
+    Ok(PreparedCommand { argv, execution })
+}
+
+async fn prepare_execution_body(
+    simple: SimpleCommand,
+    argv: &[String],
+    state: &SharedState,
+    fds: Descriptors,
+    context: &Context,
+    mut bytes: usize,
+    mut work: expand::Work,
+) -> Result<PreparedExecution, CommandError> {
+    let line = simple.expansion_line;
     // Bash expands command words first. Assignment-only commands then assign
     // before redirects; named commands redirect before expanding prefix RHSs.
     if argv.is_empty() {
@@ -2848,11 +3022,10 @@ async fn prepare_simple_command_body(
         .await?;
         let fds = redirects(&simple.redirects, state, fds, context, &mut work, Some(1)).await?;
         work.substitutions = None;
-        return Ok(PreparedCommand {
+        return Ok(PreparedExecution {
             line,
-            argv,
             assigned: Vec::new(),
-            fds,
+            fds: Some(fds),
             work,
         });
     }
@@ -2881,11 +3054,10 @@ async fn prepare_simple_command_body(
     )
     .await?;
     work.substitutions = None;
-    Ok(PreparedCommand {
+    Ok(PreparedExecution {
         line,
-        argv,
         assigned,
-        fds,
+        fds: Some(fds),
         work,
     })
 }
@@ -2908,55 +3080,168 @@ async fn abort_diagnostic(
     }
 }
 
-#[inline(never)]
-fn dispatch_simple_command(
-    prepared: PreparedCommand,
-    state: SharedState,
-    context: Context,
-    parent_stderr: WeakStderr,
-) -> eval::Frame<'static, Result<Outcome, i32>> {
-    let evaluation = context.evaluation.clone();
-    evaluation.frame(
-        dispatch_simple_command_body(prepared, state, context, parent_stderr),
-        Err,
-    )
+// Project the execution future in place. An async completion wrapper would
+// reserve dispatch-sized scratch on every recursive poll.
+pin_project_lite::pin_project! {
+    struct PublishLastArgument<'a, F> {
+        #[pin]
+        future: F,
+        argv: &'a Cell<Vec<String>>,
+        state: &'a SharedState,
+        context: &'a Context,
+        stderr: WeakStderr,
+        publication: Option<eval::Frame<'static>>,
+        dispatch_error: Option<i32>,
+    }
 }
 
-async fn dispatch_simple_command_body(
-    prepared: PreparedCommand,
-    state: SharedState,
-    context: Context,
+impl<F: std::future::Future<Output = Result<Outcome, i32>>> std::future::Future
+    for PublishLastArgument<'_, F>
+{
+    type Output = Result<Outcome, i32>;
+
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        let this = self.project();
+        if this.publication.is_none() {
+            let result = std::task::ready!(this.future.poll(cx));
+            *this.dispatch_error = result.as_ref().err().copied();
+            let outcome = result.unwrap_or_else(Outcome::status);
+            *this.publication = Some(finish_last_argument(
+                this.argv.take(),
+                outcome,
+                this.state,
+                this.context,
+                this.stderr,
+            ));
+        }
+        std::pin::Pin::new(this.publication.as_mut().unwrap())
+            .poll(cx)
+            .map(|outcome| preserve_dispatch_error(outcome, *this.dispatch_error))
+    }
+}
+
+fn preserve_dispatch_error(outcome: Outcome, error: Option<i32>) -> Result<Outcome, i32> {
+    let Some(code) = error else {
+        return Ok(outcome);
+    };
+    let original = Outcome::status(code);
+    if outcome.code == original.code && outcome.flow == original.flow {
+        return Err(code);
+    }
+    Ok(outcome)
+}
+
+#[inline(never)]
+fn dispatch_simple_command<'a>(
+    argv: &'a Cell<Vec<String>>,
+    last_storage: &'a mut Option<crate::exec::StorageAllocation>,
+    builtin_prefix: &'a Cell<Option<PrefixFrame>>,
+    execution: &'a mut Result<PreparedExecution, CommandError>,
+    state: &'a SharedState,
+    context: &'a Context,
+    stderr: WeakStderr,
+) -> eval::Frame<'a, Result<Outcome, i32>> {
+    let evaluation = context.evaluation.clone();
+    match execution {
+        Ok(execution) => evaluation.frame(
+            PublishLastArgument {
+                future: dispatch_arguments(
+                    argv,
+                    last_storage,
+                    builtin_prefix,
+                    execution,
+                    state,
+                    context,
+                    stderr.clone(),
+                ),
+                argv,
+                state,
+                context,
+                stderr,
+                publication: None,
+                dispatch_error: None,
+            },
+            Err,
+        ),
+        Err(error) => evaluation.frame(
+            PublishLastArgument {
+                future: preparation_failure(error, stderr.clone(), context),
+                argv,
+                state,
+                context,
+                stderr,
+                publication: None,
+                dispatch_error: None,
+            },
+            Err,
+        ),
+    }
+}
+
+async fn preparation_failure(
+    error: &mut CommandError,
+    stderr: WeakStderr,
+    context: &Context,
+) -> Result<Outcome, i32> {
+    let diagnostic = diagnostic_descriptors(&stderr);
+    let error = std::mem::replace(error, 2.into());
+    Ok(expansion_failure(error, &diagnostic, context).await)
+}
+
+// Dispatch owns the words until completion or cancellation. Drop restores them
+// before the publication adapter can read the final argument.
+struct CommandArguments<'a> {
+    saved: &'a Cell<Vec<String>>,
+    argv: Vec<String>,
+}
+
+impl Drop for CommandArguments<'_> {
+    fn drop(&mut self) {
+        self.saved.set(std::mem::take(&mut self.argv));
+    }
+}
+
+async fn dispatch_arguments(
+    arguments: &Cell<Vec<String>>,
+    last_storage: &mut Option<crate::exec::StorageAllocation>,
+    builtin_prefix: &Cell<Option<PrefixFrame>>,
+    execution: &mut PreparedExecution,
+    state: &SharedState,
+    context: &Context,
     parent_stderr: WeakStderr,
 ) -> Result<Outcome, i32> {
-    let PreparedCommand {
-        line,
-        argv,
-        assigned,
-        fds,
-        mut work,
-    } = prepared;
-    let mut fields = argv.into_iter();
+    let line = execution.line;
+    let assigned = std::mem::take(&mut execution.assigned);
+    let fds = execution.fds.take().unwrap();
+    let work = &mut execution.work;
+    let mut arguments = CommandArguments {
+        saved: arguments,
+        argv: arguments.take(),
+    };
+    let argv = &mut arguments.argv;
+    let mut fields = argv.iter();
     let Some(mut name) = fields.next() else {
-        // A command with no words left takes the status of the last command
-        // substitution it ran (words, then redirects and assignments).
         return Ok(Outcome::status(work.substitution_status.unwrap_or(0)));
     };
     let mut bypass_functions = false;
     let mut default_path = false;
     let mut builtin_only = false;
     while matches!(
-        commands::handler(&name),
+        commands::handler(name),
         Some(commands::Handler::Command | commands::Handler::BuiltinWrapper)
-    ) && (bypass_functions || !state.borrow().functions().contains_key(&name))
+    ) && (bypass_functions || !state.borrow().functions().contains_key(name))
     {
         work.checkpoint(&context.cancel)
             .await
             .map_err(admission_status)?;
-        builtin_only = commands::handler(&name) == Some(commands::Handler::BuiltinWrapper);
+        builtin_only = commands::handler(name) == Some(commands::Handler::BuiltinWrapper);
         let mut options = if builtin_only {
-            builtin_wrapper::options(fields.as_slice(), line, &fds, &context).await?
+            builtin_wrapper::options(fields.as_slice(), line, &fds, context).await?
         } else {
-            command_builtin::options(fields.as_slice(), &fds, &context, &mut work).await?
+            command_builtin::options(fields.as_slice(), &fds, context, work).await?
         };
         default_path |= options.default_path;
         options.default_path = default_path;
@@ -2964,18 +3249,14 @@ async fn dispatch_simple_command_body(
             fields.next();
         }
         if options.query {
-            let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
+            let frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, work)
                 .await
                 .map_err(admission_status)?;
-            return command_builtin::query(
-                fields.as_slice(),
-                &options,
-                &state,
-                &fds,
-                &context,
-                &mut work,
-            )
-            .await;
+            let result =
+                command_builtin::query(fields.as_slice(), &options, state, &fds, context, work)
+                    .await;
+            builtin_prefix.set(Some(frame));
+            return result;
         }
         let Some(target) = fields.next() else {
             return Ok(Outcome::status(0));
@@ -2983,15 +3264,18 @@ async fn dispatch_simple_command_body(
         name = target;
         bypass_functions = true;
     }
-    let args: Vec<_> = fields.collect();
+    let argument_offset = argv.len() - fields.len();
+    let args = fields.as_slice();
     // Ordinary function calls share shell state. Their temporary exported
     // bindings belong to call-local restore frames, not an isolated State.
     let function = if bypass_functions {
         None
     } else {
-        state.borrow().functions().get(&name).cloned()
+        state.borrow().functions().get(name).cloned()
     };
     if let Some(body) = function {
+        let state = state.clone();
+        let context = context.clone();
         let funcnest = {
             let state = state.borrow();
             let target = state.scalar_target("FUNCNEST").ok().flatten();
@@ -3049,11 +3333,13 @@ async fn dispatch_simple_command_body(
                 .declaration_storage(name, true)
                 .map_err(admission_status)?;
             work.admit_storage(bytes).map_err(admission_status)?;
-            State::admit_assignment(&state, name, value.len(), &context.cancel, &mut work)
+            State::admit_assignment(&state, name, value.len(), &context.cancel, work)
                 .await
                 .map_err(admission_status)?;
         }
-        let mut frame = match FunctionFrame::enter(state.clone(), args, limit) {
+        let arguments =
+            take_command_arguments(argv, last_storage, argument_offset, &context).await?;
+        let mut frame = match FunctionFrame::enter(state.clone(), arguments, limit) {
             Ok(frame) => frame,
             Err(_) => {
                 return Ok(abort_diagnostic(
@@ -3071,7 +3357,12 @@ async fn dispatch_simple_command_body(
             .saturating_add(context.limits().expansion_bytes);
         let mut trace_work = expand::Work::new(trace_bytes, trace_bytes, 0);
         frame
-            .trace(name, line.unwrap_or(1), &context.cancel, &mut trace_work)
+            .trace(
+                &argv[argument_offset - 1],
+                line.unwrap_or(1),
+                &context.cancel,
+                &mut trace_work,
+            )
             .await
             .map_err(admission_status)?;
         frame.prefixes(assigned)?;
@@ -3112,33 +3403,51 @@ async fn dispatch_simple_command_body(
         }
         return Ok(outcome);
     }
-    let handler = commands::handler(&name);
+    let handler = commands::handler(name);
     if handler == Some(commands::Handler::Let) {
         if !assigned.is_empty() {
             return Err(2);
         }
-        return Ok(let_command(args, state, fds, context, work).await);
+        let arguments =
+            take_command_arguments(argv, last_storage, argument_offset, context).await?;
+        return Ok(let_command(arguments, state, fds, context, work).await);
     }
     if handler == Some(commands::Handler::Eval) {
         if !assigned.is_empty() {
             return Err(2);
         }
-        return Ok(eval::run(args, line, state, fds, context).await);
+        let arguments =
+            take_command_arguments(argv, last_storage, argument_offset, context).await?;
+        return Ok(eval::run(arguments, line, state, fds, context).await);
     }
     if handler == Some(commands::Handler::Source) {
-        let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
+        let frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, work)
             .await
             .map_err(admission_status)?;
-        return Ok(source::run(&name, args, line, state, fds, context).await);
+        let arguments =
+            take_command_arguments(argv, last_storage, argument_offset, context).await?;
+        let result = source::run(
+            &argv[argument_offset - 1],
+            arguments,
+            line,
+            state,
+            fds,
+            context,
+        )
+        .await;
+        builtin_prefix.set(Some(frame));
+        return Ok(result);
     }
     if handler == Some(commands::Handler::Type) {
-        let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
+        let frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, work)
             .await
             .map_err(admission_status)?;
-        return type_builtin::run(&args, &state, &fds, &context, &mut work).await;
+        let result = type_builtin::run(args, state, &fds, context, work).await;
+        builtin_prefix.set(Some(frame));
+        return result;
     }
     if let Some(commands::Handler::Builtin(builtin)) = handler {
-        let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
+        let frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, work)
             .await
             .map_err(admission_status)?;
         if builtin == commands::Builtin::Completion && name == "compgen" {
@@ -3149,15 +3458,27 @@ async fn dispatch_simple_command_body(
             });
         }
         let bindings = fds.borrow().clone();
-        return builtins::run(builtin, &name, args, state, bindings, context, &mut work).await;
+        let (name, arguments) = if builtin == commands::Builtin::Set {
+            (
+                "set",
+                std::borrow::Cow::Owned(
+                    take_command_arguments(argv, last_storage, argument_offset, context).await?,
+                ),
+            )
+        } else {
+            (name.as_str(), std::borrow::Cow::Borrowed(args))
+        };
+        let result = builtins::run(builtin, name, arguments, state, &bindings, context, work).await;
+        builtin_prefix.set(Some(frame));
+        return result;
     }
     if builtin_only {
-        builtin_wrapper::missing(&name, line, &fds, &context).await?;
+        builtin_wrapper::missing(name, line, &fds, context).await?;
         return Ok(Outcome::status(1));
     }
     // A pipe named by an open descriptor exists but cannot be executed.
     if name.starts_with("/dev/fd/")
-        && crate::io::descriptor_number(&name).is_some_and(|fd| fds.borrow().get(fd).is_some())
+        && crate::io::descriptor_number(name).is_some_and(|fd| fds.borrow().get(fd).is_some())
     {
         let diagnostic = format!("/usr/bin/bash: {name}: Permission denied\n");
         let stderr = fds.borrow().get(2);
@@ -3178,11 +3499,11 @@ async fn dispatch_simple_command_body(
             .rev()
             .find_map(|(key, value)| (key == "PATH").then_some(value.as_str()));
         match command_builtin::executable(
-            &name,
-            &state,
+            name,
+            state,
             default_path,
             path_override,
-            &context,
+            context,
             &mut lookup,
         )
         .await?
@@ -3193,7 +3514,7 @@ async fn dispatch_simple_command_body(
                 path.into_parts()
             }
             command_builtin::Resolution::NonExecutable(path, reason) => {
-                command_builtin::execution_failure(&fds, &context, &path.text, reason).await?;
+                command_builtin::execution_failure(&fds, context, &path.text, reason).await?;
                 return Ok(Outcome::status(126));
             }
             command_builtin::Resolution::Missing => {
@@ -3202,7 +3523,7 @@ async fn dispatch_simple_command_body(
                 } else {
                     b"command not found".as_slice()
                 };
-                command_builtin::execution_failure(&fds, &context, &name, reason).await?;
+                command_builtin::execution_failure(&fds, context, name, reason).await?;
                 return Ok(Outcome::status(127));
             }
         }
@@ -3212,12 +3533,13 @@ async fn dispatch_simple_command_body(
         (s.environment(), s.cwd.clone())
     };
     env.extend(assigned);
-    let command = name.clone();
-    let mut argv = vec![name];
-    argv.extend(args);
+    let mut arguments =
+        take_command_arguments(argv, last_storage, argument_offset, context).await?;
+    let command = argv[argument_offset - 1].as_str();
+    arguments.insert(0, command.to_owned());
     let pid = context.core.host.spawn(SpawnRequest {
         executable,
-        argv,
+        argv: arguments,
         env,
         cwd,
         fds: fds.borrow().clone(),
@@ -3229,20 +3551,20 @@ async fn dispatch_simple_command_body(
         Err(ProcessError::Runtime(errno @ (6 | 29 | 48))) => {
             return external_wait_failure(
                 ProcessError::StartFailed(errno),
-                &command,
+                command,
                 None,
                 parent_stderr,
-                &context,
+                context,
             )
             .await;
         }
         Err(ProcessError::ProcessLimit) => {
             return external_wait_failure(
                 ProcessError::StartFailed(6),
-                &command,
+                command,
                 None,
                 parent_stderr,
-                &context,
+                context,
             )
             .await;
         }
@@ -3256,9 +3578,9 @@ async fn dispatch_simple_command_body(
     drop(fds);
     let startup = context.cancel.run(context.core.host.wait_start(pid)).await;
     let failure = match startup {
-        Ok(Err(error @ ProcessError::StartFailed(_))) => Some(
-            external_wait_failure(error, &command, stderr.take(), parent_stderr, &context).await,
-        ),
+        Ok(Err(error @ ProcessError::StartFailed(_))) => {
+            Some(external_wait_failure(error, command, stderr.take(), parent_stderr, context).await)
+        }
         Ok(Err(ProcessError::Runtime(11))) | Ok(Ok(())) | Err(_) => None,
         Ok(Err(_)) => {
             let _ = context.core.host.kill(pid, context.stop_signal());
@@ -3295,6 +3617,30 @@ async fn dispatch_simple_command_body(
             Err(context.cancel_status())
         }
     }
+}
+
+// Only consumers that retain argv need a separate last-argument copy. Its live
+// storage ticket is independent of the command's already-admitted expansion.
+async fn take_command_arguments(
+    argv: &mut Vec<String>,
+    last_storage: &mut Option<crate::exec::StorageAllocation>,
+    offset: usize,
+    context: &Context,
+) -> Result<Vec<String>, i32> {
+    if offset == argv.len() {
+        return Ok(Vec::new());
+    }
+    let last = argv.last().map_or("", String::as_str);
+    *last_storage = Some(context.evaluation.admit_storage(last.len())?);
+    let mut budget = Budget::default();
+    context
+        .evaluation
+        .copy_bytes(last.len(), &mut budget, &context.cancel)
+        .await?;
+    let last = last.to_owned();
+    let args = argv.drain(offset..).collect();
+    argv.push(last);
+    Ok(args)
 }
 
 async fn external_wait_failure(
@@ -3342,11 +3688,14 @@ async fn external_wait_failure(
 #[inline(never)]
 fn let_command(
     args: Vec<String>,
-    state: SharedState,
+    state: &SharedState,
     fds: Descriptors,
-    context: Context,
-    mut work: expand::Work,
+    context: &Context,
+    work: &mut expand::Work,
 ) -> eval::Frame<'static, Outcome> {
+    let state = state.clone();
+    let context = context.clone();
+    let mut work = std::mem::replace(work, expand::Work::new(0, 0, 0));
     let evaluation = context.evaluation.clone();
     evaluation.frame(
         async move {
@@ -3856,6 +4205,34 @@ mod scope_tests {
     }
 
     #[test]
+    fn last_argument_publication_keeps_cancellation_and_resource_outcomes() {
+        for cancelled in [false, true] {
+            let (state, _fds, context) = replay_context();
+            state
+                .borrow_mut()
+                .assign_parameter("_".into(), "kept".into())
+                .unwrap();
+            let outcome = if cancelled {
+                context.cancel.cancel();
+                Outcome::status(130)
+            } else {
+                Outcome::status(crate::exec::RESOURCE_STATUS)
+            };
+            let actual = finish_replay(finish_last_argument(
+                vec!["replacement".into()],
+                outcome,
+                &state,
+                &context,
+                &WeakStderr::Closed,
+            ));
+            assert_eq!(actual.code, outcome.code);
+            assert_eq!(actual.flow, outcome.flow);
+            assert_eq!(state.borrow().scalar_parameter("_"), Some("kept"));
+            assert_eq!(context.core.execution_storage.observation().0, 0);
+        }
+    }
+
+    #[test]
     fn counted_read_retains_and_refunds_its_buffer_on_pending_cancellation() {
         for option in [
             "-n2147483647",
@@ -3877,10 +4254,10 @@ mod scope_tests {
         let mut future = Box::pin(builtins::run(
             commands::Builtin::Read,
             "read",
-            vec![option.into(), "value".into()],
-            state.clone(),
-            fds,
-            context.clone(),
+            vec![option.into(), "value".into()].into(),
+            &state,
+            &fds,
+            &context,
             &mut work,
         ));
         for _ in 0..1000 {
