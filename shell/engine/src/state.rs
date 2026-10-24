@@ -164,6 +164,8 @@ pub struct State {
     pub pipefail: bool,
     pub nounset: bool,
     pub errexit: bool,
+    pub noexec: bool,
+    pub interactive: bool,
     /// Keep errexit in command-substitution children instead of clearing it.
     pub inherit_errexit: bool,
     pub functrace: bool,
@@ -226,6 +228,8 @@ impl Default for State {
             pipefail: false,
             nounset: false,
             errexit: false,
+            noexec: false,
+            interactive: false,
             inherit_errexit: false,
             functrace: false,
             errtrace: false,
@@ -472,6 +476,8 @@ impl State {
             pipefail: state.pipefail,
             nounset: state.nounset,
             errexit: state.errexit,
+            noexec: state.noexec,
+            interactive: state.interactive,
             inherit_errexit: state.inherit_errexit,
             functrace: state.functrace,
             errtrace: state.errtrace,
@@ -2993,6 +2999,8 @@ mod tests {
             source.status = 7;
             source.pipefail = true;
             source.nounset = true;
+            source.noexec = true;
+            source.interactive = true;
         }
         // Much less storage than the immutable function payload alone.
         let mut work = Work::new(1_000_000, 16 * 1024, 0);
@@ -3005,6 +3013,8 @@ mod tests {
         assert_eq!(child.pipestatus, [3, 7]);
         assert!(child.pipefail);
         assert!(child.nounset);
+        assert!(child.noexec);
+        assert!(child.interactive);
         assert!(child.exported.contains("v"));
         assert!(child.readonly.contains("r"));
         assert_eq!(child.positional, ["argument"]);
