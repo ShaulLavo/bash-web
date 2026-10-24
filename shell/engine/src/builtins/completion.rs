@@ -17,9 +17,9 @@ use options::{ACTIONS, Arguments, Kind, OPTIONS, TEXT_FLAGS};
 pub(super) async fn run(
     name: &str,
     args: &[String],
-    state: SharedState,
-    fds: FdTable,
-    context: Context,
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
     work: &mut Work,
 ) -> Result<Outcome, i32> {
     let kind = match name {
@@ -28,23 +28,23 @@ pub(super) async fn run(
         _ => Kind::Options,
     };
     for arg in args {
-        scan_bytes(arg.len(), &context, work).await?;
+        scan_bytes(arg.len(), context, work).await?;
     }
     let parsed = match options::parse(kind, args) {
         Ok(parsed) => parsed,
         Err(code) => {
             diagnose(
-                &fds,
+                fds,
                 &format!("{name}: invalid option or argument\n"),
-                &context,
+                context,
             )
             .await?;
             return Err(code);
         }
     };
     let result = match kind {
-        Kind::Generate => generate::run(&parsed, &state, &fds, &context, work).await,
-        _ => registrations(kind, &parsed, &state, &fds, &context, work).await,
+        Kind::Generate => generate::run(&parsed, state, fds, context, work).await,
+        _ => registrations(kind, &parsed, state, fds, context, work).await,
     };
     match result {
         Err(141) => Ok(Outcome {

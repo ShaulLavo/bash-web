@@ -2835,7 +2835,7 @@ async fn admit_last_argument(
     state: &SharedState,
     context: &Context,
 ) -> Result<(), expand::Error> {
-    let mut work = expansion_work(context.limits());
+    let mut work = expansion_work(context);
     State::admit_assignment(state, "_", last.len(), &context.cancel, &mut work).await?;
     state.borrow_mut().publish_last_argument(last)
 }
@@ -3336,7 +3336,12 @@ async fn dispatch_arguments(
             .saturating_add(context.limits().expansion_bytes);
         let mut trace_work = expand::Work::new(trace_bytes, trace_bytes, 0);
         frame
-            .trace(name, line.unwrap_or(1), &context.cancel, &mut trace_work)
+            .trace(
+                &argv[argument_offset - 1],
+                line.unwrap_or(1),
+                &context.cancel,
+                &mut trace_work,
+            )
             .await
             .map_err(admission_status)?;
         frame.prefixes(assigned)?;
