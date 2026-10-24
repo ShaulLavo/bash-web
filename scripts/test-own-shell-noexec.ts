@@ -82,10 +82,9 @@ for (const name of [".", "source"]) {
     );
     assert.deepEqual(control.stderr, Buffer.alloc(0));
     const skipped = await runner(setup + "set -n; v=prefix f function; echo BAD");
-    assert.equal(skipped.crash, undefined);
-    assert.equal(skipped.outputLimit, undefined);
-    assert.equal(skipped.status, 0);
-    assert.deepEqual(skipped.stdout, Buffer.alloc(0));
-    assert.deepEqual(skipped.stderr, Buffer.alloc(0));
+    assert.deepEqual(
+      [skipped.crash, skipped.outputLimit, skipped.status, skipped.stdout, skipped.stderr],
+      [undefined, undefined, 0, Buffer.alloc(0), Buffer.alloc(0)],
+    );
   });
 }
