@@ -59,7 +59,7 @@ fn assert_unsupported_format(source: &str) {
 
 #[test]
 fn printf_valid_unimplemented_conversions_keep_unsupported_status() {
-    for source in ["printf '%f' 3", "printf '%ls' x", "printf '%n' x"] {
+    for source in ["printf '%a' 3", "printf '%ls' x", "printf '%n' x"] {
         assert_unsupported_format(source);
     }
 }
@@ -98,4 +98,82 @@ fn printf_invalid_format_broken_diagnostic_pipe_preserves_signal_status() {
     fds.insert(2, writer);
     rig.shell.set_descriptors(fds).unwrap();
     assert_eq!(rig.run("printf '%z' 42"), 141);
+}
+
+#[test]
+fn printf_composition_float_family_precedes_missing_format() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("printf '[%e|%E|%f|%F|%g|%G]%-5.2z' 1 2 -0 4 5 6"),
+        1
+    );
+    assert_eq!(
+        rig.output.bytes(),
+        b"[1.000000e+00|2.000000E+00|-0.000000|4.000000|5|6]"
+    );
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: printf: `%-5.2z': missing format character\n"
+    );
+}
+
+#[test]
+fn printf_composition_range_and_invalid_diagnostics_precede_prefix() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("printf '[%g]%Y' 9e2147483647 2>&1"), 1);
+    assert_eq!(
+        rig.output.bytes(),
+        b"/usr/bin/bash: printf: 9e2147483647: Numerical result out of range\n/usr/bin/bash: printf: `Y': invalid format character\n[inf]"
+    );
+    assert!(rig.errors.bytes().is_empty());
+}
+
+#[test]
+fn printf_composition_wide_conversions_remain_unsupported_after_float() {
+    for conversion in ["C", "S", "lC", "lS"] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(
+            rig.run(&format!("printf '[%.1f]%{conversion}' 1.25 A")),
+            2,
+            "{conversion}"
+        );
+        assert_eq!(rig.output.bytes(), b"[1.2]", "{conversion}");
+        assert_eq!(
+            rig.errors.bytes(),
+            b"/usr/bin/bash: printf: unsupported format conversion\n",
+            "{conversion}"
+        );
+    }
+}
+
+#[test]
+fn printf_composition_assignment_keeps_unsigned_failed_number_and_format_status() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("x=old; printf -v x '[%f]%z' -"), 1);
+    assert_eq!(rig.value("x").as_deref(), Some("[0.000000]"));
+    assert!(rig.output.bytes().is_empty());
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: printf: -: invalid number\n/usr/bin/bash: printf: `%z': missing format character\n"
+    );
+}
+
+#[test]
+fn printf_composition_stop_escape_skips_later_format_validation() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run(r"printf '[%.1f]%b%Y%S%g' 1.25 'kept\c' 9"), 0);
+    assert_eq!(rig.output.bytes(), b"[1.2]kept");
+    assert!(rig.errors.bytes().is_empty());
+}
+
+#[test]
+fn printf_composition_noexec_skips_float_and_rejection_paths() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("set -n; printf '[%g]%Y%C' 9e2147483647 A; printf '%z'"),
+        0
+    );
+    assert!(rig.output.bytes().is_empty());
+    assert!(rig.errors.bytes().is_empty());
+    assert!(rig.calls.borrow().is_empty());
 }

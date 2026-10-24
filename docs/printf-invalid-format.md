@@ -9,8 +9,9 @@ while `%z\n` reports the backslash as an invalid format character.
 The existing field parser gets the first chance to print a directive. The
 rejection path only recognizes modifier syntax to locate the error; it does not
 implement length-modified output. Valid but unimplemented conversions still
-return the existing unsupported status 2. This includes unsupported numeric,
-time, grouping, and destination behavior.
+return the existing unsupported status 2. The supported `%e`, `%E`, `%f`, `%F`,
+`%g` and `%G` conversions print before any later format error. Hexadecimal float output, length modifiers, wide
+characters, time, grouping, and destination behavior remain unsupported.
 
 Both admission and delivery use the same rejection path. Diagnostics retain
 work admission, cancellation, partial-write handling, and broken-pipe status.
