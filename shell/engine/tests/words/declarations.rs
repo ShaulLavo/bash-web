@@ -207,3 +207,58 @@ fn interrupted_case_declaration_preserves_previous_attributes() {
     assert_eq!(rig.run("v=MIXED; printf '%s' \"$v\""), 0);
     assert_eq!(rig.output.bytes(), b"mixed");
 }
+
+#[test]
+fn last_argument_publication_uses_builtin_prefix_target_before_restore() {
+    for (source, expected) in [
+        (
+            r#"x='_=x'; declare -n _=x; x=temp : last; printf '%s\n' "$x""#,
+            "_=x\n",
+        ),
+        (
+            r#"x='_=ref'; declare -n ref=x; declare -n _=ref; x=temp : last; printf '%s\n' "$x""#,
+            "_=ref\n",
+        ),
+        (r#"x=outer; x=temp : last; printf '%s\n' "$x""#, "outer\n"),
+    ] {
+        check_output(source, expected);
+    }
+}
+
+#[test]
+fn declaration_append_source_eval_preserves_arguments_and_publication() {
+    let rig = Rig::new(Limits::default());
+    rig.fs.write_file(
+        "/home/guest/lib",
+        b"local t+=tail; eval 'local t+=eval'; : inner; printf 'in:%s:%s:%s\\n' \"$t\" \"$1\" \"$_\"",
+    ).unwrap();
+    assert_eq!(rig.run("t=outer; f(){ local t=base; . ./lib supplied; printf 'done:%s:%s\\n' \"$t\" \"$_\"; }; f caller; printf 'outer:%s:%s\\n' \"$t\" \"$_\""), 0);
+    assert_eq!(
+        rig.output.bytes(),
+        b"in:basetaileval:supplied:inner\ndone:basetaileval:supplied\nouter:outer:caller\n"
+    );
+    assert!(rig.errors.bytes().is_empty());
+}
+
+#[test]
+fn declaration_append_source_eval_keeps_automatic_getopts_cursor() {
+    let rig = Rig::new(Limits::default());
+    rig.fs
+        .write_file("/home/guest/lib", b"local x+=source; : 1")
+        .unwrap();
+    assert_eq!(rig.run("f(){ set -- -ab; getopts ab opt; declare -n _=OPTIND; local x=base; eval 'local x+=tail'; . ./lib 1; getopts ab opt; printf '%s:%s:%s\\n' \"$opt\" \"$OPTIND\" \"$x\"; }; f"), 0);
+    assert_eq!(rig.output.bytes(), b"b:0:basetailsource\n");
+    assert!(rig.errors.bytes().is_empty());
+}
+
+#[test]
+fn declaration_append_source_eval_keeps_explicit_nameref_failure_fatal() {
+    let rig = Rig::new(Limits::default());
+    rig.fs
+        .write_file("/home/guest/lib", b"eval 'local -n r+=t after=yes'")
+        .unwrap();
+    assert_eq!(rig.run("f(){ . ./lib; }; f"), 2);
+    assert_eq!(rig.value("after"), None);
+    assert!(rig.output.bytes().is_empty());
+    assert_eq!(rig.run(": recovered"), 0);
+}

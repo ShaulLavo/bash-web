@@ -58,3 +58,19 @@ fn help_closed_output_recovers_without_changing_the_catalogue() {
         b"source: source filename [arg ...]\n.: . filename [arg ...]\n"
     );
 }
+
+#[test]
+fn help_publication_keeps_getopts_cluster_progress() {
+    check_output(
+        "set -- -ab; getopts ab opt; declare -n _=OPTIND; help -s true; getopts ab opt; printf '%s:%s\\n' \"$opt\" \"$?\"",
+        "true: true\nb:0\n",
+    );
+}
+
+#[test]
+fn help_source_publication_restores_prefix_and_appends_the_current_local() {
+    check_output(
+        "echo 'local value+=s; builtin help -s source .; return 7' > lib; value=outer; f() { local value=b; value=p command builtin source ./lib arg; printf '%s:%s\\n' \"$?\" \"$value\"; }; f; printf '%s\\n' \"$value\"",
+        "source: source filename [arg ...]\n.: . filename [arg ...]\n7:b\nouter\n",
+    );
+}

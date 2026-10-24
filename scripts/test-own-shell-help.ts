@@ -90,3 +90,28 @@ test("help source topics compose with local append and builtin dispatch", async 
   );
   assert.equal(liveNodeWorkers(), 0);
 });
+
+test("help publication preserves numeric getopts cluster progress", async () => {
+  const actual = await runner(
+    'set -- -ab; getopts ab opt; declare -n _=OPTIND; help -s true; getopts ab opt; printf \'%s:%s\\n\' "$opt" "$?"',
+  );
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.status, 0);
+  assert.equal(actual.stdout.toString(), "true: true\nb:0\n");
+  assert.equal(actual.stderr.length, 0);
+  assert.equal(liveNodeWorkers(), 0);
+});
+
+test("help source publication preserves prefix local ownership and return", async () => {
+  const actual = await runner(
+    "echo 'local value+=s; builtin help -s source .; return 7' > lib; value=outer; f() { local value=b; value=p command builtin source ./lib arg; printf '%s:%s\\n' \"$?\" \"$value\"; }; f; printf '%s\\n' \"$value\"",
+  );
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.status, 0);
+  assert.equal(
+    actual.stdout.toString(),
+    "source: source filename [arg ...]\n.: . filename [arg ...]\n7:b\nouter\n",
+  );
+  assert.equal(actual.stderr.length, 0);
+  assert.equal(liveNodeWorkers(), 0);
+});
