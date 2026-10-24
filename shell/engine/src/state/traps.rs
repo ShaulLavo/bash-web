@@ -66,10 +66,14 @@ impl Traps {
         }
         saved
     }
-    pub(crate) fn restore_function(&mut self, [debug, err, returning]: [Option<Binding>; 3]) {
+    pub(crate) fn restore_function(
+        &mut self,
+        [debug, err, returning]: [Option<Binding>; 3],
+        err_traced: bool,
+    ) {
         self.bindings[65] = debug;
         self.bindings[67] = returning;
-        if self.bindings[66].is_none() {
+        if !err_traced && self.bindings[66].is_none() {
             self.bindings[66] = err;
         }
     }

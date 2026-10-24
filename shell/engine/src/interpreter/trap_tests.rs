@@ -164,7 +164,9 @@ fn cancellation_inside_handler_unwinds_without_starting_exit_and_refunds_reader(
     assert_eq!(
         complete(
             &executor,
-            shell.start("trap - ERR EXIT; unset ready").unwrap()
+            shell
+                .start("trap - ERR EXIT; unset ready BASH_COMMAND")
+                .unwrap()
         ),
         0
     );
@@ -204,7 +206,9 @@ fn late_resource_failure_preserves_completed_handler_effects() {
     assert_eq!(
         complete(
             &executor,
-            shell.start("trap - ERR; unset seen; unset -f f").unwrap()
+            shell
+                .start("trap - ERR; unset seen BASH_COMMAND; unset -f f")
+                .unwrap()
         ),
         0
     );
@@ -269,7 +273,9 @@ fn dropping_handler_wait_cancels_reader_and_restores_status_before_reuse() {
     assert_eq!(
         complete(
             &executor,
-            shell.start("trap - ERR; unset seen; unset -f f").unwrap()
+            shell
+                .start("trap - ERR; unset seen BASH_COMMAND; unset -f f")
+                .unwrap()
         ),
         0
     );
@@ -386,4 +392,96 @@ fn explicit_handler_exit_keeps_its_status_and_pipeline_instead_of_restoring_trig
     assert_eq!(shell.state().borrow().status(), 9);
     assert_eq!(shell.state().borrow().pipeline_status(), &[9]);
     assert!(output.bytes().is_empty());
+}
+
+#[test]
+fn err_metadata_stays_at_trigger_through_handler_commands_and_debug() {
+    let (shell, executor, output) = session();
+    let source = "set -T; trap ':' DEBUG; trap 'before=$BASH_COMMAND; :; after=$BASH_COMMAND' ERR; false; trap - ERR DEBUG; echo \"$before/$after\"";
+    assert_eq!(complete(&executor, shell.start(source).unwrap()), 0);
+    assert_eq!(output.bytes(), b"false/false\n");
+}
+
+#[test]
+fn function_err_restore_uses_entry_trace_policy_not_changed_option() {
+    let (shell, executor, output) = session();
+    let source = "set -E; trap 'echo BAD' ERR; f() { trap - ERR; set +E; }; f; false; trap 'echo kept' ERR; g() { set -E; trap - ERR; return 1; }; g; false";
+    assert_eq!(complete(&executor, shell.start(source).unwrap()), 1);
+    assert_eq!(output.bytes(), b"kept\nkept\n");
+}
+
+#[test]
+fn explicit_subshell_pipeline_retains_structural_condition_suppression() {
+    let (shell, executor, output) = session();
+    let source = "trap 'echo BAD' ERR; (false) | true; ! true | (false); if true | (false); then :; fi; true | (false) || :; echo done";
+    assert_eq!(complete(&executor, shell.start(source).unwrap()), 0);
+    assert_eq!(output.bytes(), b"done\n");
+}
+
+#[test]
+fn arithmetic_loop_err_metadata_uses_the_normal_command_entry() {
+    let (shell, executor, output) = session();
+    let source = "trap 'echo \"$BASH_COMMAND\"' ERR; while :; do ((0)); break; done";
+    assert_eq!(complete(&executor, shell.start(source).unwrap()), 0);
+    assert_eq!(output.bytes(), b"((0))\n");
+}
+
+#[test]
+fn err_metadata_entry_refusal_and_cancel_leave_binding_and_handler_untouched() {
+    let (shell, executor, output) = session();
+    assert_eq!(
+        complete(
+            &executor,
+            shell
+                .start("BASH_COMMAND=prior; trap 'seen=1' ERR")
+                .unwrap()
+        ),
+        0
+    );
+    let context = context(&shell);
+    let command =
+        super::Command::Compound(super::CompoundCommand::Arithmetic("0".into()), Vec::new());
+    let before = shell.core.execution_storage.observation().0;
+    let used = shell.core.eval_storage.observation().0;
+    let held = shell
+        .core
+        .execution_storage
+        .admit(shell.core.limits.execution_bytes - before)
+        .unwrap();
+    let decision = super::traps::debug(
+        &command,
+        shell.state(),
+        shell.core.descriptors.clone(),
+        context.clone(),
+    )
+    .now_or_never()
+    .unwrap();
+    assert_eq!(decision.outcome().unwrap().flow, super::Flow::Resource);
+    drop(held);
+    context.cancel.cancel();
+    let decision = super::traps::debug(
+        &command,
+        shell.state(),
+        shell.core.descriptors.clone(),
+        context,
+    )
+    .now_or_never()
+    .unwrap();
+    assert_eq!(decision.outcome().unwrap().code, 130);
+    assert_eq!(
+        shell.state().borrow().scalar_parameter("BASH_COMMAND"),
+        Some("prior")
+    );
+    assert!(shell.state().borrow().scalar_parameter("seen").is_none());
+    assert!(output.bytes().is_empty());
+    assert_eq!(shell.core.eval_storage.observation().0, used);
+    assert_eq!(shell.core.execution_storage.observation().0, before);
+    assert_eq!(
+        complete(
+            &executor,
+            shell.start("trap - ERR; unset BASH_COMMAND").unwrap()
+        ),
+        0
+    );
+    assert_eq!(shell.core.execution_storage.observation().0, 0);
 }

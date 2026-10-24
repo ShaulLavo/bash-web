@@ -379,3 +379,109 @@ fn extdebug_repeats_function_entry_before_its_body() {
         "[debug: echo \"before\"]\nbefore\n[debug: myfunc]\n[debug: myfunc]\n[debug: echo \"in func\"]\nin func\n[debug: echo \"after\"]\nafter\n",
     );
 }
+
+#[test]
+fn review_err_traced_reset_survives_function_restore() {
+    check(
+        "brush-suite:options/errtrace:18",
+        r###"set -E
+trap 'echo "ERR"' ERR
+myfunc() {
+  trap - ERR
+  false
+  echo "no ERR in func"
+}
+myfunc
+false
+echo "after"
+"###,
+        0,
+        r###"no ERR in func
+after
+"###,
+    );
+}
+
+#[test]
+fn review_err_final_explicit_subshell_keeps_its_event() {
+    check(
+        "oils:builtin-trap-err:127",
+        r###"trap 'echo assign' ERR
+a=$(false) | a=$(false) | a=$(false)
+
+trap 'echo dparen' ERR
+(( 0 )) | (( 0 )) | (( 0 ))
+
+trap 'echo dbracket' ERR
+[[ a = b ]] | [[ a = b ]] | [[ a = b ]]
+
+trap 'echo subshell' ERR
+(false) | (false) | (false) | (false)
+
+trap 'echo subshell2' ERR
+(false) | (false) | (false) | (false; false)
+
+trap 'echo group' ERR
+{ false; } | { false; } | { false; }
+
+echo ok
+
+"###,
+        0,
+        r###"assign
+dparen
+dbracket
+subshell
+subshell
+subshell2
+subshell2
+group
+ok
+"###,
+    );
+}
+
+#[test]
+fn review_err_function_registration_is_not_retroactive() {
+    check(
+        "bashkit-suite:bashbox-err-trap:47",
+        r###"f(){ trap 'echo t' ERR; return 1; }; f; false; echo end
+"###,
+        0,
+        r###"t
+end
+"###,
+    );
+}
+
+#[test]
+fn review_err_reports_original_command_without_debug() {
+    check(
+        "brush-suite:builtins/trap:22",
+        r###"trap 'echo "ERR for: $BASH_COMMAND"' ERR
+nonexistent_command_xyz 2>/dev/null
+echo "after"
+"###,
+        0,
+        r###"ERR for: nonexistent_command_xyz 2> /dev/null
+after
+"###,
+    );
+}
+
+#[test]
+fn review_err_brace_pipeline_has_only_aggregate_event() {
+    check(
+        "oils:builtin-trap-err:174",
+        r###"trap 'echo group2' ERR
+{ false; } | { false; } | { false; false; }
+
+echo ok
+
+"###,
+        0,
+        r###"group2
+ok
+"###,
+    );
+}

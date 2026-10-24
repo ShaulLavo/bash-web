@@ -89,6 +89,7 @@ impl Drop for Status {
 pub(super) struct FunctionScope {
     state: SharedState,
     saved: Option<[Option<Binding>; 3]>,
+    err_traced: bool,
     _allocation: crate::exec::Allocation,
 }
 impl FunctionScope {
@@ -101,6 +102,7 @@ impl FunctionScope {
         Ok(Self {
             state: state.clone(),
             saved: Some(saved),
+            err_traced: err,
             _allocation: allocation,
         })
     }
@@ -110,7 +112,7 @@ impl Drop for FunctionScope {
         self.state
             .borrow_mut()
             .traps
-            .restore_function(self.saved.take().unwrap());
+            .restore_function(self.saved.take().unwrap(), self.err_traced);
     }
 }
 
@@ -119,9 +121,13 @@ pub(super) fn child_mask(mask: u8) -> u8 {
 }
 
 pub(super) fn inherit(state: &SharedState) {
+    inherit_boundary(state, false);
+}
+
+pub(super) fn inherit_boundary(state: &SharedState, err_boundary: bool) {
     let mut shell = state.borrow_mut();
     let debug = shell.functrace || shell.extdebug;
-    let err = shell.errtrace;
+    let err = shell.errtrace || err_boundary;
     shell.traps.inherit_execution(debug, err);
 }
 
@@ -250,12 +256,24 @@ fn prepare(
 }
 
 pub(super) fn debug_active(state: &SharedState, context: &Context) -> bool {
-    !context.skip_debug
-        && context.trap_mask & Event::Debug.bit() == 0
+    !context.skip_debug && active(Event::Debug, state, context)
+}
+
+pub(super) fn active(event: Event, state: &SharedState, context: &Context) -> bool {
+    context.trap_mask & event.bit() == 0
         && matches!(
-            state.borrow().traps.executable(Event::Debug as usize),
+            state.borrow().traps.executable(event as usize),
             Some(Binding::Handler(_))
         )
+}
+
+pub(super) fn command_metadata_active(state: &SharedState, context: &Context) -> bool {
+    if debug_active(state, context) {
+        return true;
+    }
+    !context.skip_debug
+        && context.trap_mask & Event::Debug.bit() == 0
+        && active(Event::Err, state, context)
 }
 
 pub(super) fn for_iteration(
@@ -284,7 +302,7 @@ pub(super) fn debug(
         Command::Simple(_)
             | Command::Compound(CompoundCommand::Arithmetic(_) | CompoundCommand::Test(_), _)
     );
-    if !eligible || !debug_active(&state, &context) {
+    if !eligible || !command_metadata_active(&state, &context) {
         return Either::Left(ready(DebugDecision::Execute));
     }
     let limit = context.limits().source_bytes;
@@ -307,7 +325,11 @@ fn planned_debug(
         Ok(text) => text,
         Err(_) => {
             return Either::Left(ready(DebugDecision::Transfer(Outcome::status(
-                crate::exec::RESOURCE_STATUS,
+                if context.cancel.is_cancelled() {
+                    130
+                } else {
+                    crate::exec::RESOURCE_STATUS
+                },
             ))));
         }
     };
@@ -339,27 +361,33 @@ async fn debug_body(
     fds: Descriptors,
     context: Context,
 ) -> DebugDecision {
-    let mut work = expansion_work(&context);
-    if let Err(error) = State::admit_assignment(
-        &state,
+    if context.trap_mask & Event::Err.bit() == 0
+        && let Err(code) = publish_command(text, &state, &context).await
+    {
+        return DebugDecision::Transfer(Outcome::status(code));
+    }
+    if !debug_active(&state, &context) {
+        return DebugDecision::Execute;
+    }
+    let extdebug = state.borrow().extdebug;
+    let result = run(Event::Debug, state, fds, context.clone()).await;
+    debug_decision(result, extdebug, context.return_boundary)
+}
+
+async fn publish_command(text: String, state: &SharedState, context: &Context) -> Result<(), i32> {
+    let mut work = expansion_work(context);
+    State::admit_assignment(
+        state,
         "BASH_COMMAND",
         text.len(),
         &context.cancel,
         &mut work,
     )
     .await
-    {
-        return DebugDecision::Transfer(Outcome::status(admission_status(error)));
-    }
-    if let Err(code) = state
+    .map_err(admission_status)?;
+    state
         .borrow_mut()
         .assign_parameter("BASH_COMMAND".into(), text)
-    {
-        return DebugDecision::Transfer(Outcome::status(code));
-    }
-    let extdebug = state.borrow().extdebug;
-    let result = run(Event::Debug, state, fds, context.clone()).await;
-    debug_decision(result, extdebug, context.return_boundary)
 }
 
 fn debug_decision(result: Outcome, extdebug: bool, return_boundary: bool) -> DebugDecision {
@@ -381,6 +409,7 @@ fn debug_decision(result: Outcome, extdebug: bool, return_boundary: bool) -> Deb
 pub(super) fn failed(
     result: Outcome,
     eligible: bool,
+    err_at_entry: bool,
     state: SharedState,
     fds: Option<Descriptors>,
     context: Context,
@@ -393,10 +422,7 @@ pub(super) fn failed(
         flow: if errexit { Flow::Exit } else { result.flow },
         ..result
     };
-    if !matches!(
-        state.borrow().traps.executable(Event::Err as usize),
-        Some(Binding::Handler(_))
-    ) {
+    if !err_at_entry || !active(Event::Err, &state, &context) {
         return Either::Left(ready(result));
     }
     let Some(fds) = fds else {

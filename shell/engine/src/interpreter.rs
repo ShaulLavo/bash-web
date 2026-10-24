@@ -1286,6 +1286,8 @@ fn execute(
                 skip_debug: false,
                 ..context.clone()
             };
+            // Later function registration changes future commands, not this call's eligibility.
+            let err_at_entry = traps::active(traps::Event::Err, &state, &context);
             let boundary_fds = Rc::downgrade(&fds);
             let result = command_body(command, state.clone(), fds, body_context).await;
             let setup_failed = result.flow == Flow::RedirectFailed;
@@ -1298,6 +1300,7 @@ fn execute(
             traps::failed(
                 result,
                 check_errexit || setup_failed && !context.ignore_errexit,
+                err_at_entry,
                 state,
                 boundary_fds.upgrade(),
                 context,
@@ -1440,10 +1443,16 @@ async fn pipeline_command(
         } else {
             stage_ctx
         };
+        // The final explicit subshell has its own ERR boundary. Ordinary and
+        // brace stages still defer to the enclosing pipeline's aggregate event.
+        let explicit_subshell =
+            matches!(command, Command::Compound(CompoundCommand::Subshell(_), _));
         let stage_ctx = Context {
             skip_debug: true,
             cancel: cancel.clone(),
-            ignore_errexit: count > 1 || pipeline.negated || ctx.ignore_errexit,
+            ignore_errexit: count > 1 && !explicit_subshell
+                || pipeline.negated
+                || stage_ctx.ignore_errexit,
             ..stage_ctx
         };
         let stage_fds = if count == 1 {
@@ -1526,7 +1535,9 @@ async fn pipeline_stage(
     skip: bool,
 ) -> Outcome {
     if isolated {
-        traps::inherit(&state);
+        let err_boundary = matches!(command, Command::Compound(CompoundCommand::Subshell(_), _))
+            && !context.ignore_errexit;
+        traps::inherit_boundary(&state, err_boundary);
     }
     let completion_fds = traps::needs_completion_descriptors(&command, &state).then(|| fds.clone());
     let mut result = if skip {
@@ -1736,7 +1747,7 @@ fn loop_sequence<'a>(
 ) -> eval::Frame<'a> {
     if let [Command::Compound(CompoundCommand::Arithmetic(source), redirs)] = commands
         && redirs.is_empty()
-        && !traps::debug_active(state, context)
+        && !traps::command_metadata_active(state, context)
     {
         return loop_arithmetic(source, state, fds, context, cache);
     }
@@ -1821,6 +1832,7 @@ fn loop_arithmetic<'a>(
             let table = fds.borrow().clone();
             let fds = Rc::new(RefCell::new(table));
             let mut work = substitution_work(&context, &fds);
+            let err_at_entry = traps::active(traps::Event::Err, state, &context);
             let result = match cache {
                 Some(cache) => {
                     arithmetic_command_program(&cache.program, state, &fds, &context, &mut work)
@@ -1835,6 +1847,7 @@ fn loop_arithmetic<'a>(
             traps::failed(
                 result,
                 !context.ignore_errexit,
+                err_at_entry,
                 state.clone(),
                 Some(fds),
                 context,
