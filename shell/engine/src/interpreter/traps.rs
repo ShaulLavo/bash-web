@@ -175,7 +175,7 @@ pub(super) fn run(
             let mut status = status;
             let _action = action;
             let result = reader::run(reader, "trap", true, state, fds, context).await;
-            if matches!(result.flow, Flow::Exit | Flow::Return) {
+            if matches!(result.flow, Flow::Complete | Flow::Exit | Flow::Return) {
                 status.pipeline.take();
             }
             result

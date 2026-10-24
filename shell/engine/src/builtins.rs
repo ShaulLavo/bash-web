@@ -157,7 +157,7 @@ pub(crate) async fn run(
                             flow: if name == "return" {
                                 Flow::Return
                             } else {
-                                Flow::Exit
+                                Flow::Complete
                             },
                         });
                     }
@@ -173,7 +173,7 @@ pub(crate) async fn run(
             return Ok(Outcome {
                 code,
                 flow: if name == "exit" {
-                    Flow::Exit
+                    Flow::Complete
                 } else {
                     Flow::Return
                 },

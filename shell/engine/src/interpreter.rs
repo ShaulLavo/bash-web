@@ -72,6 +72,9 @@ impl Default for Limits {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum Flow {
     Normal,
+    /// A user-level `exit` completed the executing shell environment.
+    Complete,
+    /// The current submission must stop, but the reusable environment stays open.
     Exit,
     Abort,
     // Unlike isolated errexit, a failed fork aborts the invoking reader even
@@ -857,7 +860,7 @@ impl Session {
                 context.clone(),
             )
             .await;
-            let result = if matches!(result.flow, Flow::Exit) && !context.cancel.is_cancelled() {
+            let result = if result.flow == Flow::Complete && !context.cancel.is_cancelled() {
                 context.core.exit_requested.set(true);
                 finish_environment(
                     result,
@@ -1443,14 +1446,12 @@ async fn pipeline_command(
         } else {
             stage_ctx
         };
-        // The final explicit subshell has its own ERR boundary. Ordinary and
-        // brace stages still defer to the enclosing pipeline's aggregate event.
-        let explicit_subshell =
-            matches!(command, Command::Compound(CompoundCommand::Subshell(_), _));
+        // Non-final stages suppress errexit; the final stage still owns its
+        // command-level failure and can terminate the submitted reader.
         let stage_ctx = Context {
             skip_debug: true,
             cancel: cancel.clone(),
-            ignore_errexit: count > 1 && !explicit_subshell
+            ignore_errexit: count > 1 && index + 1 < count
                 || pipeline.negated
                 || stage_ctx.ignore_errexit,
             ..stage_ctx
@@ -1490,8 +1491,12 @@ async fn pipeline_command(
     {
         return *result;
     }
-    if (count == 1 || share_last) && results.last().unwrap().flow != Flow::Normal {
-        return *results.last().unwrap();
+    let last = results.last().unwrap();
+    if (count == 1 || share_last) && last.flow != Flow::Normal {
+        return *last;
+    }
+    if !share_last && matches!(last.flow, Flow::Exit | Flow::Abort) {
+        return *last;
     }
     if results.iter().any(|result| result.flow == Flow::Resource) {
         return Outcome::status(crate::exec::RESOURCE_STATUS);
@@ -1522,7 +1527,7 @@ async fn launch_failed(
     drop(pending.input);
     drop(pending.pipes);
     join_all(pending.tasks).await;
-    expansion_failure(error.into(), fds, context).await
+    pre_dispatch_failure(error, fds, context).await
 }
 
 async fn pipeline_stage(
@@ -2046,6 +2051,22 @@ async fn arithmetic_result(
     }
 }
 
+async fn pre_dispatch_failure(
+    error: expand::Error,
+    fds: &Descriptors,
+    context: &Context,
+) -> Outcome {
+    let code = match error {
+        expand::Error::Status(code) => code,
+        error => return expansion_failure(error.into(), fds, context).await,
+    };
+    let mut result = Outcome::status(code);
+    if result.flow == Flow::Normal {
+        result.flow = Flow::Abort;
+    }
+    result
+}
+
 async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Context) -> Outcome {
     let CommandError {
         error,
@@ -2170,7 +2191,7 @@ async fn subshell(
     };
     let child = match State::snapshot(&state, &context.cancel, &mut work).await {
         Ok(child) => child.shared(),
-        Err(error) => return expansion_failure(error.into(), &fds, &context).await,
+        Err(error) => return pre_dispatch_failure(error, &fds, &context).await,
     };
     let parent_scope = context.scope.clone();
     // A subshell is an isolated Bash execution scope: a fatal fork failure
@@ -2331,12 +2352,12 @@ async fn launch_background(
     let mut work = expansion_work(context);
     let child = match State::snapshot(state, &context.cancel, &mut work).await {
         Ok(child) => child.shared(),
-        Err(error) => return expansion_failure(error.into(), fds, context).await,
+        Err(error) => return pre_dispatch_failure(error, fds, context).await,
     };
     let job = JobId(context.core.allocate_id());
     let identity = match async_identity(job, &context.cancel, &mut work).await {
         Ok(identity) => identity,
-        Err(error) => return expansion_failure(error.into(), fds, context).await,
+        Err(error) => return pre_dispatch_failure(error, fds, context).await,
     };
     let limit = context.limits().expansion_bytes;
     let printed = command_string(
@@ -2365,7 +2386,7 @@ async fn launch_background(
     });
     let allocation = match admit_job(context) {
         Ok(allocation) => allocation,
-        Err(error) => return expansion_failure(error.into(), fds, context).await,
+        Err(error) => return pre_dispatch_failure(error, fds, context).await,
     };
     // Snapshot checkpoints may have let another scope create async children.
     context.core.reap_completed_jobs();
@@ -2403,8 +2424,21 @@ async fn launch_background(
     let join = context.core.executor.spawn(async move {
         let mut processes = child_context.process_group();
         traps::inherit(&child);
-        let result = execute(command, child.clone(), fds.clone(), child_context.clone()).await;
-        let result = traps::completing(result, child, fds, child_context.clone()).await;
+        // A background compound may redirect stdout away from the caller's
+        // capture. Keep the original table only for an EXIT handler already
+        // eligible at entry; otherwise release the capture writer before the
+        // long-running child command is awaited. Redirect setup then owns the
+        // command's replacement table, while the optional completion copy
+        // remains available for an inherited handler.
+        let completion_fds =
+            traps::active(traps::Event::Exit, &child, &child_context).then(|| fds.clone());
+        let command_fds = fds.clone();
+        drop(fds);
+        let result = execute(command, child.clone(), command_fds, child_context.clone()).await;
+        let result = match completion_fds {
+            Some(fds) => traps::completing(result, child, fds, child_context.clone()).await,
+            None => result,
+        };
         child_context.finish_scope(parent_scope).await;
         child_context.finish_group(&mut processes, result).await
     });
