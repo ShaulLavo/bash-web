@@ -74,12 +74,12 @@ impl<'a> Count<'a> {
 }
 
 #[derive(Clone, Copy, Default)]
-struct Flags {
-    left: bool,
-    plus: bool,
-    space: bool,
-    zero: bool,
-    alternate: bool,
+pub(super) struct Flags {
+    pub(super) left: bool,
+    pub(super) plus: bool,
+    pub(super) space: bool,
+    pub(super) zero: bool,
+    pub(super) alternate: bool,
     grouping: bool,
 }
 impl Flags {
@@ -109,10 +109,10 @@ pub(super) struct Field<'a> {
     precision: Option<Count<'a>>,
     conversion: u8,
 }
-struct ResolvedField {
-    left: bool,
-    width: usize,
-    precision: Option<usize>,
+pub(super) struct ResolvedField {
+    pub(super) left: bool,
+    pub(super) width: usize,
+    pub(super) precision: Option<usize>,
 }
 impl<'a> Field<'a> {
     pub async fn parse(
@@ -131,7 +131,7 @@ impl<'a> Field<'a> {
         };
         let Some(
             &conversion @ (b's' | b'b' | b'c' | b'd' | b'i' | b'u' | b'o' | b'x' | b'X' | b'q'
-            | b'Q'),
+            | b'Q' | b'e' | b'E' | b'f' | b'F' | b'g' | b'G'),
         ) = input.get(*offset)
         else {
             return Ok(None);
@@ -270,6 +270,9 @@ impl<'a> Field<'a> {
             field.print_string(value, printer).await?;
             return Ok(false);
         }
+        if matches!(self.conversion, b'e' | b'E' | b'f' | b'F' | b'g' | b'G') {
+            return super::float::print(self.conversion, self.flags, field, args, printer).await;
+        }
         let range = if matches!(self.conversion, b'd' | b'i') {
             NumberRange::Signed
         } else {
@@ -301,7 +304,7 @@ async fn count_warning(
         .await
 }
 
-async fn field_overflow(
+pub(super) async fn field_overflow(
     args: &mut Arguments<'_>,
     printer: &mut Printer<'_>,
 ) -> Result<bool, PrintFailure> {

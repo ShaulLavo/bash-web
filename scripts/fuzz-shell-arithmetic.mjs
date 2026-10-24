@@ -2,9 +2,9 @@
 // Differential arithmetic and scalar-slice checks. Recorded Bash observations
 // are replayed in CI without relying on the runner's installed Bash version.
 import { execFileSync, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { fingerprint, run, encode, decode } from "./fuzz-shell-process.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const queue = "/work/tmp/wave-heavy/run.sh";
@@ -54,7 +54,6 @@ const numbers = [
 ];
 const values = ["", "abcdef", "a b:c", "héllo", "日本語", "a\tb\nc", "don't", "${x}"];
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
-const fingerprint = () => createHash("sha256").update(readFileSync(process.argv[1])).digest("hex");
 
 function optionsFor(args) {
   const options = { count: 3000, seed: 7, timeout: 2000, replays: [] };
@@ -445,31 +444,6 @@ function generate(seed, count) {
   return cases.concat(boundaryCases(seed));
 }
 
-function run(bin, args, timeout) {
-  const env = { ...process.env, LC_ALL: "C.UTF-8", LANG: "C.UTF-8" };
-  for (const name of ["BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS", "BASH_COMPAT", "POSIXLY_CORRECT"])
-    delete env[name];
-  const result = spawnSync(bin, args, { env, encoding: null, timeout, maxBuffer: 4 * 1024 * 1024 });
-  return {
-    status: result.status,
-    signal: result.signal ?? null,
-    timedOut: result.error?.code === "ETIMEDOUT",
-    stdout: Buffer.from(result.stdout ?? ""),
-    stderr: Buffer.from(result.stderr ?? result.error?.message ?? ""),
-  };
-}
-const encode = (result) => ({
-  status: result.status,
-  signal: result.signal,
-  timedOut: result.timedOut,
-  stdoutBase64: result.stdout.toString("base64"),
-  stderrBase64: result.stderr.toString("base64"),
-});
-const decode = (result) => ({
-  ...result,
-  stdout: Buffer.from(result.stdoutBase64, "base64"),
-  stderr: Buffer.from(result.stderrBase64, "base64"),
-});
 const equal = (a, b) =>
   !a.timedOut &&
   !b.timedOut &&

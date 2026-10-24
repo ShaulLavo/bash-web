@@ -164,6 +164,8 @@ pub struct State {
     pub pipefail: bool,
     pub nounset: bool,
     pub errexit: bool,
+    pub noexec: bool,
+    pub interactive: bool,
     /// Keep errexit in command-substitution children instead of clearing it.
     pub inherit_errexit: bool,
     pub functrace: bool,
@@ -222,10 +224,12 @@ impl Default for State {
             functions: BTreeMap::new(),
             traps: traps::Traps::default(),
             status: 0,
-            pipestatus: vec![0],
+            pipestatus: Vec::new(),
             pipefail: false,
             nounset: false,
             errexit: false,
+            noexec: false,
+            interactive: false,
             inherit_errexit: false,
             functrace: false,
             errtrace: false,
@@ -472,6 +476,8 @@ impl State {
             pipefail: state.pipefail,
             nounset: state.nounset,
             errexit: state.errexit,
+            noexec: state.noexec,
+            interactive: state.interactive,
             inherit_errexit: state.inherit_errexit,
             functrace: state.functrace,
             errtrace: state.errtrace,
@@ -1434,21 +1440,29 @@ impl State {
         self.declare_local(name, Some(value))
     }
     pub(crate) fn declare_local(&mut self, name: String, value: Option<String>) -> Result<(), i32> {
+        self.declare_local_value(name, value, false)
+    }
+    fn declare_local_value(
+        &mut self,
+        name: String,
+        value: Option<String>,
+        inherit: bool,
+    ) -> Result<(), i32> {
         let already_local = self
             .locals
             .last()
             .is_some_and(|frame| frame.contains_key(&name));
-        // Temporary environments of function calls are inherited by a bare
-        // local declaration, unlike ordinary dynamically visible bindings.
-        let prefix = self.inherits_function_prefix(&name);
-        let inherited_bytes = if !already_local && prefix && value.is_none() {
+        // Bare locals inherit function prefixes; -I also inherits ordinary
+        // visible bindings. Neither reloads a current local's saved outer value.
+        let inherit_value = inherit || self.inherits_function_prefix(&name);
+        let inherited_bytes = if !already_local && inherit_value && value.is_none() {
             self.variables.get(&name).map_or(0, Binding::storage_bytes)
         } else {
             0
         };
         let value = value
             .map(|value| {
-                if already_local {
+                if already_local || inherit {
                     self.case_value(&name, value)
                 } else {
                     Ok(value)
@@ -1465,7 +1479,7 @@ impl State {
         if already_local && value.is_some() {
             self.reserve_local_value(&name, bytes)?;
         }
-        let inherited = if !already_local && prefix && value.is_none() {
+        let inherited = if !already_local && inherit_value && value.is_none() {
             self.locals
                 .last()
                 .and_then(|frame| frame.get(&name))
@@ -2513,8 +2527,7 @@ mod tests {
             + 9
             + snapshot_node_bytes::<Binding>().unwrap_or_else(|_| panic!("node fits"))
             + "_".len()
-            + "bash".len()
-            + std::mem::size_of::<i32>();
+            + "bash".len();
         let mut child = snapshot_at_exact_limit(&state, bytes);
         child
             .assign_parameter("ref".into(), "child".into())
@@ -2993,6 +3006,8 @@ mod tests {
             source.status = 7;
             source.pipefail = true;
             source.nounset = true;
+            source.noexec = true;
+            source.interactive = true;
         }
         // Much less storage than the immutable function payload alone.
         let mut work = Work::new(1_000_000, 16 * 1024, 0);
@@ -3005,6 +3020,8 @@ mod tests {
         assert_eq!(child.pipestatus, [3, 7]);
         assert!(child.pipefail);
         assert!(child.nounset);
+        assert!(child.noexec);
+        assert!(child.interactive);
         assert!(child.exported.contains("v"));
         assert!(child.readonly.contains("r"));
         assert_eq!(child.positional, ["argument"]);
