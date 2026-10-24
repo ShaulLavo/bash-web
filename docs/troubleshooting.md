@@ -62,7 +62,7 @@ Something called `createShell` or an `install*` function after `runtime.dispose(
 
 ## The WASI build cannot find wasi-sdk
 
-`scripts/wasi-build.ts` reads `WASI_SDK_PATH`. Its default is a path on the maintainer's machine, so set the variable to your wasi-sdk 34.0 directory before `npm run build:shell` or `npm run build:browser`. See [Development](development.md#prerequisites).
+`scripts/wasi-build.ts` reads `WASI_SDK_PATH`. Its fallback, `/work/cache/wasi-sdk-34.0-x86_64-linux`, exists only on the maintainer's machine, so set the variable to your wasi-sdk 34.0 directory before `npm run build:shell` or `npm run build:browser`. See [Development](development.md#prerequisites).
 
 ## Still stuck
 

@@ -7,7 +7,7 @@ bash-web is a Rust shell engine compiled to WASM, plus a TypeScript browser adap
 - Rust change: `npm run test:rust` (parser provenance, rustfmt, native tests). It needs only rustup.
 - Engine source change: also run `LAYERS_BASE_REF=$(git rev-parse origin/main) npm run check:layers -- --record` and commit the updated `docs/evidence/engine-layers.json` with the change.
 - TypeScript change: `npm run sources:browser && npm run build:worker && npm run quality:js`. Typechecking fails until `sources:browser` has fetched the terminal source.
-- WASI, browser, and score work needs wasi-sdk 34.0 on Linux. Set `WASI_SDK_PATH`. The built-in default is a path on the maintainer's machine. See [docs/development.md](docs/development.md#prerequisites).
+- WASI, browser, and score work needs wasi-sdk 34.0 on Linux. Always set `WASI_SDK_PATH`. The built-in default, `/work/cache/wasi-sdk-34.0-x86_64-linux` in `scripts/wasi-build.ts`, exists only on the maintainer's Linux x86_64 machine. See [docs/development.md](docs/development.md#prerequisites).
 - Compatibility change: `npm run compat:shell` must not lose a passing case against the committed baseline.
 - Engine tests live in `shell/engine/tests/` and in each module's `tests` folder. Replay tests for builtins are `scripts/test-own-shell-*.ts`. Add yours beside them.
 

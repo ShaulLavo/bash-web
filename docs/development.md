@@ -11,13 +11,13 @@ How to build bash-web, run its checks, and find your way around the repository. 
 | Build and test the browser demo | The above, plus Playwright browsers | longest |
 | Replay the frozen compatibility score | The WASI build, plus the installed Waffle dependency | see [Bash compatibility](bash-compatibility.md) |
 
-CI builds the WASM guests on `ubuntu-latest`, and the wasi-sdk default path in `scripts/wasi-build.ts` is a Linux x86_64 build. The WASI and browser steps are verified on Linux only. The native Rust steps also run on macOS (see [Status](status.md#platforms)).
+CI builds the WASM guests on `ubuntu-latest`. The WASI and browser steps are verified on Linux only. The native Rust steps also run on macOS (see [Status](status.md#platforms)).
 
 ## Prerequisites
 
 - Node `>=26.12.1` and npm. `package.json` sets `engines` and CI uses 26.12.1. The compatibility replay is stricter: `scripts/bash-compat.mjs` refuses to run unless `process.version` equals the oracle's recorded `v26.12.1`.
 - Rust 1.98.1 through rustup. `rust-toolchain.toml` pins it with the `rustfmt` and `clippy` components and the `wasm32-wasip1` target, so rustup installs it the first time you run `cargo` in the repository.
-- For WASI guests: wasi-sdk **34.0** (set `WASI_SDK_PATH`), wasmtime, CMake **3.26+**, Ninja, curl, tar, patch, sha256sum, Linux `setsid`, GNU `timeout`, and `flock`. The shared libc patch and builder come from Waffle. See [Guest libc and build provenance](wasi-libc.md).
+- For WASI guests: wasi-sdk **34.0** with wasi-libc `2e6fb9d8ee0c` (`scripts/wasi-build.ts` rejects any other). Always set `WASI_SDK_PATH` to the SDK directory. The fallback in `scripts/wasi-build.ts` is `/work/cache/wasi-sdk-34.0-x86_64-linux`, a path that exists only on the maintainer's Linux x86_64 machine. CI downloads `wasi-sdk-34.0-x86_64-linux.tar.gz` from the [wasi-sdk-34 release](https://github.com/WebAssembly/wasi-sdk/releases/tag/wasi-sdk-34) into `.build/wasi-sdk` and checks its SHA-256 (`.github/actions/wasi-sdk/action.yml`). You also need wasmtime, CMake **3.26+**, Ninja, curl, tar, patch, sha256sum, Linux `setsid`, GNU `timeout`, and `flock`. The shared libc patch and builder come from Waffle. See [Guest libc and build provenance](wasi-libc.md).
 - For browser tests: `npx playwright install chromium firefox`.
 - For score capture only: Linux, GNU Bash 5.3.15, bubblewrap, and Python 3. Replay needs none of these.
 
