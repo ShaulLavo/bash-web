@@ -144,12 +144,18 @@ impl State {
         work: &mut Work,
     ) -> Result<(), Error> {
         Self::admit_scalar_access(state, name, cancel, work).await?;
-        let state = state.borrow();
-        let (target, _) = state.indexed_target(name)?;
-        work.admit_storage(
-            Binding::indexed_header_bytes().saturating_add(state.indexed_key_bytes(name, target)?),
-        )?;
-        Ok(())
+        let steps = {
+            let state = state.borrow();
+            let (target, destination) = state.indexed_target(name)?;
+            work.admit_storage(
+                Binding::indexed_header_bytes()
+                    .saturating_add(state.indexed_key_bytes(name, target)?),
+            )?;
+            state.durable_journal(destination).map_or(0, |changes| {
+                changes.borrow().replacement_effect_steps(target)
+            })
+        };
+        snapshot_steps(steps, cancel, work).await
     }
     /// Durably replace `name` with `values`, as `read -a` and `mapfile`
     /// without an origin do. Errors as `assign_indexed_element`.
@@ -249,6 +255,23 @@ impl AssignmentChanges {
             undo.element_effect(index, value);
         }
     }
+    fn replacement_effect_steps(&self, name: &str) -> usize {
+        let mut steps = 0usize;
+        for (target, undo) in &self.undo {
+            // Both this estimate and publication visit and compare each name.
+            steps = steps.saturating_add(
+                target
+                    .len()
+                    .saturating_add(name.len())
+                    .saturating_mul(2)
+                    .saturating_add(2),
+            );
+            if target == name {
+                steps = steps.saturating_add(undo.supersede_steps());
+            }
+        }
+        steps
+    }
     /// A durable replacement leaves nothing earlier for rollback to restore.
     fn supersede(&mut self, name: &str) {
         for (_, undo) in self.undo.iter_mut().filter(|(target, _)| target == name) {
@@ -301,6 +324,15 @@ impl Binding {
 }
 
 impl BindingUndo {
+    fn supersede_steps(&self) -> usize {
+        // Multiple matching inverses may share the last owners of one tree.
+        let elements = match self {
+            Self::Restore(Some(binding @ Binding::Indexed(_))) => binding.count(),
+            Self::Append { kept, .. } => kept.len(),
+            Self::Restore(_) | Self::Element { .. } | Self::Superseded => 0,
+        };
+        elements.saturating_add(1)
+    }
     /// Storage and work needed before a synchronous inverse update.
     fn element_effect_cost(&self, index: i64, value_bytes: usize) -> ElementEffectCost {
         match self {

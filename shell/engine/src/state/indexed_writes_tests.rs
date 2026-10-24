@@ -1144,3 +1144,284 @@ fn review86r5_replacement_supersession_must_consume_work() {
         "zero work cannot admit scanning and superseding {inverse_count} journal inverses"
     );
 }
+
+fn review86r7_replacement_history(state: &SharedState, completed: &mut AssignmentFrame) {
+    for index in 0..512 {
+        journal_update(
+            state,
+            completed,
+            "a",
+            BindingUpdate::Replace(index.to_string().into()),
+        );
+    }
+}
+
+#[test]
+fn review86r7_replacement_exact_work_preserves_snapshot_and_full_budget_refunds() {
+    let limit = 1 << 22;
+    let memory = StorageBudget::new(limit);
+    let state = State::with_memory(memory.clone()).shared();
+    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    state.borrow_mut().declare_local("a".into(), None).unwrap();
+    replace(&state, "a", &["original"]).unwrap();
+    let snapshot = finish(State::snapshot(&state, &Cancel::new(), &mut work()))
+        .unwrap_or_else(|_| panic!("snapshot fits"));
+    let mut completed = enter(&state);
+    review86r7_replacement_history(&state, &mut completed);
+    let steps = 512 * (2 + 2 * (1 + 1) + 1) + 1;
+    let held = state.borrow().held_local_value("a");
+    let used = memory.observation().0;
+    let mut short = Work::new(steps - 1, limit, 0);
+    assert!(matches!(
+        finish(State::admit_indexed_replacement(
+            &state,
+            "a",
+            &Cancel::new(),
+            &mut short
+        )),
+        Err(Error::Status(2))
+    ));
+    assert_eq!(state.borrow().scalar_parameter("a"), Some("511"));
+    assert_eq!(state.borrow().held_local_value("a"), held);
+    assert_eq!(memory.observation().0, used);
+    assert!(
+        completed
+            .changes
+            .borrow()
+            .undo
+            .iter()
+            .all(|(_, undo)| !matches!(undo, BindingUndo::Superseded))
+    );
+    let mut exact = Work::new(steps, limit, 0);
+    finish(State::admit_indexed_replacement(
+        &state,
+        "a",
+        &Cancel::new(),
+        &mut exact,
+    ))
+    .unwrap_or_else(|_| panic!("exact replacement work fits"));
+    assert_eq!(exact.remaining, 0);
+    state
+        .borrow_mut()
+        .assign_indexed("a".into(), values(&["durable"]))
+        .unwrap();
+    let filler = memory.admit(limit - memory.observation().0).unwrap();
+    drop(completed);
+    assert_eq!(state.borrow().array_element("a", 0), Some("durable"));
+    assert_eq!(snapshot.array_element("a", 0), Some("original"));
+    println!(
+        "replacement_inverses=512 exact_work={steps} short_status=2 remaining={}",
+        exact.remaining
+    );
+    drop(filler);
+    drop(snapshot);
+    drop(function);
+    assert_eq!(memory.observation().0, 0);
+}
+
+#[test]
+fn review86r7_replacement_pending_cancel_and_drop_leave_journal_unchanged() {
+    for cancelled in [false, true] {
+        let memory = StorageBudget::new(1 << 22);
+        let state = State::with_memory(memory.clone()).shared();
+        let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+        state
+            .borrow_mut()
+            .local("a".into(), "original".into())
+            .unwrap();
+        let mut completed = enter(&state);
+        review86r7_replacement_history(&state, &mut completed);
+        let used = memory.observation().0;
+        let held = state.borrow().held_local_value("a");
+        let cancel = Cancel::new();
+        let mut fuel = work();
+        let mut admission = Box::pin(State::admit_indexed_replacement(
+            &state, "a", &cancel, &mut fuel,
+        ));
+        let waker = noop_waker();
+        let mut context = Context::from_waker(&waker);
+        assert!(admission.as_mut().poll(&mut context).is_pending());
+        assert!(state.try_borrow_mut().is_ok());
+        assert!(completed.changes.try_borrow_mut().is_ok());
+        if cancelled {
+            cancel.cancel();
+            assert!(matches!(
+                admission.as_mut().poll(&mut context),
+                std::task::Poll::Ready(Err(Error::Status(130)))
+            ));
+        }
+        drop(admission);
+        assert_eq!(state.borrow().scalar_parameter("a"), Some("511"));
+        assert_eq!(state.borrow().held_local_value("a"), held);
+        assert_eq!(memory.observation().0, used);
+        assert_eq!(completed.changes.borrow().undo.len(), 512);
+        assert!(
+            completed
+                .changes
+                .borrow()
+                .undo
+                .iter()
+                .all(|(_, undo)| !matches!(undo, BindingUndo::Superseded))
+        );
+        let filler = memory.admit((1 << 22) - used).unwrap();
+        drop(completed);
+        assert_eq!(state.borrow().scalar_parameter("a"), Some("original"));
+        drop(filler);
+        drop(function);
+        assert_eq!(memory.observation().0, 0);
+    }
+}
+
+#[test]
+fn review86r7_replacement_prices_only_matching_inverse_payload_drops() {
+    let array = Binding::Indexed(Rc::new(values(&["x", "y", "z"])));
+    let kept = std::collections::BTreeSet::from([1, 2, 3, 4]);
+    let changes = AssignmentChanges {
+        getopts: None,
+        memory: None,
+        undo: vec![
+            ("a".into(), BindingUndo::Restore(None)),
+            ("a".into(), BindingUndo::Restore(Some("scalar".into()))),
+            ("a".into(), BindingUndo::Restore(Some(array.clone()))),
+            ("a".into(), BindingUndo::Restore(Some(array))),
+            (
+                "other".into(),
+                BindingUndo::Restore(Some(Binding::Indexed(Rc::new(values(&["x"; 128]))))),
+            ),
+            (
+                "a".into(),
+                BindingUndo::Element {
+                    index: 0,
+                    old: Some("old".into()),
+                    scalar: false,
+                },
+            ),
+            (
+                "a".into(),
+                BindingUndo::Append {
+                    range: Some((0, 4)),
+                    scalar: false,
+                    keep_zero: false,
+                    kept,
+                },
+            ),
+            ("a".into(), BindingUndo::Superseded),
+        ],
+    };
+    let matching_updates = 1 + 1 + 4 + 4 + 1 + 5 + 1;
+    let steps = 7 * 6 + 14 + matching_updates;
+    let changes = Rc::new(std::cell::RefCell::new(changes));
+    let state = State::default().shared();
+    state.borrow_mut().assignment_undo = AssignmentJournal(Rc::downgrade(&changes));
+    for (name, expected) in [("a", steps), ("absent", 7 * 16 + 24)] {
+        let mut short = Work::new(expected - 1, 1 << 22, 0);
+        assert!(matches!(
+            finish(State::admit_indexed_replacement(
+                &state,
+                name,
+                &Cancel::new(),
+                &mut short
+            )),
+            Err(Error::Status(2))
+        ));
+        let mut exact = Work::new(expected, 1 << 22, 0);
+        finish(State::admit_indexed_replacement(
+            &state,
+            name,
+            &Cancel::new(),
+            &mut exact,
+        ))
+        .unwrap_or_else(|_| panic!("matching payload bound fits"));
+        assert_eq!(exact.remaining, 0);
+    }
+}
+
+#[test]
+fn review86r7_replacement_alias_and_saved_prefix_admit_resolved_journal() {
+    let state = State::default().shared();
+    replace(&state, "a", &["a0", "a1"]).unwrap();
+    replace(&state, "b", &["b0"; 128]).unwrap();
+    state
+        .borrow_mut()
+        .declare_nameref("alias".into(), "a".into(), false)
+        .unwrap();
+    let mut completed = enter(&state);
+    for name in ["a", "b"] {
+        journal_update(
+            &state,
+            &mut completed,
+            name,
+            BindingUpdate::Replace("assigned".into()),
+        );
+    }
+    let prefix = PrefixFrame::enter(state.clone());
+    prefix.set("a".into(), "prefix".into()).unwrap();
+    let reference = state.borrow().reference_work("alias").unwrap();
+    let expected = reference + 2 * 6 + 1 + 2;
+    let mut fuel = Work::new(expected, 1 << 22, 0);
+    finish(State::admit_indexed_replacement(
+        &state,
+        "alias",
+        &Cancel::new(),
+        &mut fuel,
+    ))
+    .unwrap_or_else(|_| panic!("resolved journal work fits"));
+    assert_eq!(fuel.remaining, 0);
+    state
+        .borrow_mut()
+        .assign_indexed("alias".into(), values(&["durable"]))
+        .unwrap();
+    assert_eq!(state.borrow().scalar_parameter("a"), Some("prefix"));
+    assert!(matches!(
+        completed.changes.borrow().undo[0].1,
+        BindingUndo::Superseded
+    ));
+    assert!(!matches!(
+        completed.changes.borrow().undo[1].1,
+        BindingUndo::Superseded
+    ));
+    drop(prefix);
+    drop(completed);
+    assert_eq!(state.borrow().array_element("a", 0), Some("durable"));
+    assert_eq!(state.borrow().array_count("b"), 128);
+}
+
+#[test]
+fn review86r7_temporary_replacement_skips_outer_journal() {
+    let state = State::default().shared();
+    let mut completed = enter(&state);
+    for index in 0..512 {
+        journal_update(
+            &state,
+            &mut completed,
+            "b",
+            BindingUpdate::Replace(index.to_string().into()),
+        );
+    }
+    let prefix = PrefixFrame::enter(state.clone());
+    prefix.set("a".into(), "prefix".into()).unwrap();
+    let mut fuel = Work::new(0, 1 << 22, 0);
+    finish(State::admit_indexed_replacement(
+        &state,
+        "a",
+        &Cancel::new(),
+        &mut fuel,
+    ))
+    .unwrap_or_else(|_| panic!("temporary replacement does not visit a journal"));
+    state
+        .borrow_mut()
+        .assign_indexed("a".into(), values(&["durable"]))
+        .unwrap();
+    assert!(
+        completed
+            .changes
+            .borrow()
+            .undo
+            .iter()
+            .all(|(_, undo)| !matches!(undo, BindingUndo::Superseded))
+    );
+    drop(prefix);
+    drop(completed);
+    assert!(state.borrow().binding("a").is_none());
+    assert!(state.borrow().binding("b").is_none());
+}
