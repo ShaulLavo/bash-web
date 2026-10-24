@@ -74,3 +74,19 @@ fn help_source_publication_restores_prefix_and_appends_the_current_local() {
         "source: source filename [arg ...]\n.: . filename [arg ...]\n7:b\nouter\n",
     );
 }
+
+#[test]
+fn help_hash_topic_preserves_real_command_recognition_and_hash_entries() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("hash -p /literal tool; command builtin help -s hash; help -s 'ha*'; command builtin hash -t tool; type -t hash; command -v hash; builtin hash -r; printf 'status:%s\\n' \"$?\""),
+        0
+    );
+    assert_eq!(
+        rig.output.bytes(),
+        b"hash: hash [-lr] [-p pathname] [-dt] [name ...]\nShell commands matching keyword `ha*'\n\nhash: hash [-lr] [-p pathname] [-dt] [name ...]\n/literal\nbuiltin\nhash\nstatus:0\n"
+    );
+    assert!(rig.errors.bytes().is_empty());
+    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.host.active_count(), 0);
+}

@@ -35,6 +35,10 @@ fn topic(command: &'static Command) -> Option<Topic> {
             " [-afptP] name [name ...]",
             "Describe how command names resolve.",
         ),
+        Handler::Hash => (
+            " [-lr] [-p pathname] [-dt] [name ...]",
+            "Manage explicit command pathname entries.",
+        ),
         Handler::Exec => (
             " [command [arg ...]]",
             "Replace the shell command or apply redirections.",

@@ -22,9 +22,9 @@ fn baseline(names: &[&'static str]) -> Vec<&'static str> {
 const BUILTINS: &[&str] = &[
     ".", ":", "[", "break", "builtin", "cd", "command", "compgen", "complete", "compopt",
     "continue", "declare", "dirs", "echo", "eval", "exec", "exit", "export", "false", "getopts",
-    "caller", "help", "jobs", "kill", "let", "local", "popd", "printf", "pushd", "pwd", "read",
-    "readonly", "return", "set", "shift", "shopt", "source", "alias", "unalias", "test", "trap",
-    "true", "type", "typeset", "unset", "wait",
+    "caller", "hash", "help", "jobs", "kill", "let", "local", "popd", "printf", "pushd", "pwd",
+    "read", "readonly", "return", "set", "shift", "shopt", "source", "alias", "unalias", "test",
+    "trap", "true", "type", "typeset", "unset", "wait",
 ];
 
 #[test]
@@ -72,6 +72,7 @@ fn builtin_dispatch_covers_the_current_builtin_arms_not_the_old_is_builtin_set()
         ("command", Handler::Command),
         ("builtin", Handler::BuiltinWrapper),
         ("type", Handler::Type),
+        ("hash", Handler::Hash),
         ("exec", Handler::Exec),
         ("eval", Handler::Eval),
         (".", Handler::Source),
