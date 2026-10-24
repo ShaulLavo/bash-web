@@ -7,8 +7,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: shell-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: shell-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -65,6 +65,15 @@ jobs:
           fi
           echo "LAYERS_BASE_REF=$baseline" >> "$GITHUB_ENV"
       - run: npm run test:check-layers && npm run check:layers && npm run typecheck:layers
+        env:
+          LAYERS_OUTPUT: ${{ runner.temp }}/engine-layers.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: engine-layers-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/engine-layers.json
+          retention-days: 90
+          if-no-files-found: error
   quality:
     needs: prepare
     runs-on: ubuntu-latest
@@ -218,6 +227,11 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
   own-shell-compatibility:
+    outputs:
+      raw-artifact-id: ${{ steps.raw-upload.outputs.artifact-id }}
+    permissions:
+      contents: read
+      actions: read
     needs:
       - prepare
       - native
@@ -261,6 +275,10 @@ jobs:
           # The disposable Ubuntu runner must permit bubblewrap's user namespace.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --unshare-all --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 --proc /proc --dev /dev -- /usr/bin/true
+      - name: Bind qualification and resolve PR main floor
+        run: node scripts/scoreboard-ci.mjs prepare "${{ runner.temp }}/scoreboard-input.json"
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: node --test scripts/test-diagnose-compat.ts
       - run: npm run test:shell:scoreboard
       - run: npm run fuzz:shell-echo:ci -- --waffle --shell "$GITHUB_WORKSPACE/.build/shell/wasm32-wasip1/release/shell-runtime.wasm"
@@ -269,16 +287,70 @@ jobs:
       - name: Observe compatibility with the same-job node build
         run: node scripts/diagnose-compat.ts "${{ runner.temp }}/own-shell-diagnostics" -- npm run compat:shell:prebuilt
         env:
+          BASH_COMPAT_RAW: "1"
           BASH_COMPAT_OUT: ${{ runner.temp }}/own-shell-current.json
           BASH_COMPAT_SCRATCH: ${{ runner.temp }}
+      - name: Seal complete raw score
+        run: node scripts/scoreboard-ci.mjs raw "${{ runner.temp }}/scoreboard-input.json" "${{ runner.temp }}/own-shell-current.json" "${{ runner.temp }}/scoreboard-raw"
+      - name: Upload complete raw score
+        id: raw-upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: own-shell-raw-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/scoreboard-raw/raw.json
+          retention-days: 90
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: own-shell-current
+          name: own-shell-current-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/own-shell-current.json
             ${{ runner.temp }}/own-shell-diagnostics/
           if-no-files-found: ignore
+  score-floor:
+    needs:
+      - prepare
+      - own-shell-compatibility
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.12.1
+      - uses: ./.github/actions/javascript
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.own-shell-compatibility.outputs.raw-artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/scoreboard-raw
+      - name: Fold main floor and qualification
+        run: node scripts/scoreboard-ci.mjs fold "${{ runner.temp }}/scoreboard-raw/raw.json" "${{ runner.temp }}/scoreboard-floor"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Upload cumulative main floor
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: own-shell-floor-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/scoreboard-floor/floor.json
+          retention-days: 90
+          if-no-files-found: error
+      - name: Upload gained and lost IDs
+        uses: actions/upload-artifact@v4
+        with:
+          name: own-shell-qualification-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/scoreboard-floor/qualification.json
+          retention-days: 90
+          if-no-files-found: error
+      - name: Enforce qualification
+        run: node scripts/scoreboard-ci.mjs enforce "${{ runner.temp }}/scoreboard-floor/qualification.json"
   browser:
     needs:
       - prepare
@@ -325,6 +397,7 @@ jobs:
       - wasi
       - fuzz
       - own-shell-compatibility
+      - score-floor
       - browser
     if: always()
     runs-on: ubuntu-latest

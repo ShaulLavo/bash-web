@@ -1207,9 +1207,9 @@ async function runFrozen() {
   )
     throw new Error("incomparable runtime environment");
   const baselines = [];
-  if (process.env.BASH_COMPAT_RECORD !== "1") {
+  if (process.env.BASH_COMPAT_RECORD !== "1" && process.env.BASH_COMPAT_RAW !== "1") {
     const committed = JSON.parse(await readFile(baselineFile, "utf8"));
-    baselines.push({ label: "committed baseline", score: committed, requireMembership: true });
+    baselines.push({ label: "committed baseline", score: committed });
     if (cancelled) return;
     let target;
     try {
@@ -1270,8 +1270,6 @@ async function runFrozen() {
     const delta = compareScores(baseline.score, score);
     console.log(JSON.stringify({ baseline: baseline.label, ...delta }, null, 2));
     passed &&= delta.ok;
-    if (baseline.requireMembership)
-      compareScores(baseline.score, score, { requireMembership: true });
   }
   if (!passed)
     throw new Error("own-shell corpus regression; see gained/lost/newlyFailing cases above");

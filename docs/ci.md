@@ -1,7 +1,8 @@
 # CI inputs and job ownership
 
 `Shell` runs on pull requests and pushes to `main`, without a second branch-push
-run. A newer run supersedes the older run for that pull request or `main`.
+run. A newer PR head supersedes its older run. Main concurrency groups include
+the immutable source SHA and do not cancel another main source.
 
 | Job                       | Work it owns                                                                                                                                                                                |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -12,6 +13,7 @@ run. A newer run supersedes the older run for that pull request or `main`.
 | `wasi`                    | All ten WASI test executables, smoke/stdio/helper controls, scanner proof, core Brotli ceiling and runtime/utility size reports                                                             |
 | `fuzz`                    | Every existing generator test and frozen native differential replay, including echo                                                                                                         |
 | `own-shell-compatibility` | Diagnostic observer tests, complete scoreboard tests, real-Waffle echo and the unchanged wrapped frozen replay                                                                              |
+| `score-floor`             | Completed-producer admission, cumulative main floor and gained/lost IDs; no build or replay                                                                                                 |
 | `browser`                 | Frontend assets, terminal tests and the complete Chromium/Firefox suite with the checked-in worker count                                                                                    |
 | `shell`                   | Always-running aggregate; any failed, skipped or cancelled dependency fails                                                                                                                 |
 
@@ -46,6 +48,26 @@ runner's `--prebuilt` mode executes those tests and keeps the normal smoke,
 stdio, helper, scanner and size assertions. Its no-argument local mode still
 builds and runs the same targets. Local `quality` and `build:browser` remain
 complete; CI uses their nonduplicating JS/assets parts.
+
+## Score and layer evidence
+
+The compatibility producer publishes a complete raw result before the separate
+blocking `score-floor` job compares passes. A regression therefore cannot erase
+evidence or lower the next PR's floor. Main evidence requires an authenticated
+main run, a completed producer job, successful observation/upload steps, exact
+attempt, artifact ID, archive digest and uploader log linkage. The workflow may
+still be running while the floor job reads its producer.
+
+Retry only the cheap floor job when a predecessor finishes later. Its artifact-ID
+input refers to the original raw producer, even when the rerun attempt changes.
+If the one-day JavaScript input archive has expired, rerun `prepare` as well, not
+the compatibility replay. Missing non-equivalent source evidence or a bridge
+longer than 32 edges stops with a named prerequisite. See [landing checks](landing-infrastructure.md)
+for the bootstrap, source-equivalence and 90-day evidence retention limits.
+
+The layer job uploads complete base/candidate graphs on success or comparison
+failure. It reads actual immutable base sources and never requires a generated
+JSON commit.
 
 ## Caches and input closure
 
