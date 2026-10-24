@@ -1,0 +1,219 @@
+{
+  "oracle": {
+    "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "executableSha256": "9fac81fba388b23979503502730357710b307e16a64a136d4124af6e6792ba4c",
+    "capturePlatform": "linux",
+    "captureArch": "x64",
+    "sandbox": "bubblewrap unshare-all; /usr read-only; private case home/tmp; no network or owner files",
+    "classification": "Published docs/evidence/bash-compatibility.json builtins-only membership, fresh observations; external and excluded cases retained as skips",
+    "classificationSha256": "65da50f1c7ce548fb0ca72ce1c10f3dd67a4d608f565f1bb30d5af374c45266f",
+    "helpersSha256": "c38a78adcaec1ca6b85085dfe3b665efca4559d80cfa6264e739305aad557dce",
+    "transportCorrection": {
+      "reason": "Only proven socket artifacts are corrected; all other frozen observations and initial recording provenance are retained.",
+      "audit": "docs/evidence/oracle-pipe-audit.json",
+      "capture": {
+        "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+        "executableSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+        "executableMatchesFrozen": false,
+        "captureNode": "v26.7.0",
+        "capturePlatform": "linux",
+        "captureArch": "x64",
+        "stdoutTransport": "Python3 subprocess stdout=PIPE forwarded byte-for-byte; explicit fd3 exit status",
+        "stderrTransport": "Independent Python3 subprocess stderr=PIPE forwarded byte-for-byte",
+        "sandbox": "bubblewrap unshare-all; /usr read-only; private case home/tmp; no network or owner files",
+        "helpersSha256": "c38a78adcaec1ca6b85085dfe3b665efca4559d80cfa6264e739305aad557dce"
+      }
+    }
+  },
+  "identity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "6ed3e700fcfca7d03ae94ae372480a00ca737d3baa211cea90659f91c6e94c60",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "selected": [
+    {
+      "id": "oils:pipeline:53",
+      "corpus": "oils",
+      "file": "pipeline",
+      "line": 53,
+      "name": "Initial value of PIPESTATUS is empty string",
+      "category": "Pipelines",
+      "code": "case $SH in dash|zsh) exit ;; esac\n\necho pipestatus ${PIPESTATUS[@]}\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "cGlwZXN0YXR1cwo=",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:bashbox-shell-variables:33",
+      "corpus": "bashkit-suite",
+      "file": "bashbox-shell-variables",
+      "line": 33,
+      "name": "bashbox_shell_variables_a_pipeline_sets_one_status_per_command",
+      "category": "bashbox-shell-variables",
+      "code": "true | false | true; echo \"${PIPESTATUS[*]}\" ${#PIPESTATUS[@]}; declare -p PIPESTATUS\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "MCAxIDAgMwpkZWNsYXJlIC1hIFBJUEVTVEFUVVM9KFswXT0iMCIpCg==",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:bashbox-shell-variables:60",
+      "corpus": "bashkit-suite",
+      "file": "bashbox-shell-variables",
+      "line": 60,
+      "name": "bashbox_shell_variables_other_compound_commands_and_definitions_leave_the_last_one_i",
+      "category": "bashbox-shell-variables",
+      "code": "false | true; { false | true; }; echo ${PIPESTATUS[@]}; false | true; case x in y) ;; esac; echo ${PIPESTATUS[@]}; false | true; f() { :; }; echo ${PIPESTATUS[@]}\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "MSAwCjEgMAoxIDAK",
+        "stderr": ""
+      }
+    }
+  ],
+  "controls": [
+    {
+      "id": "oils:pipeline:66",
+      "corpus": "oils",
+      "file": "pipeline",
+      "line": 66,
+      "name": "PIPESTATUS",
+      "category": "Pipelines",
+      "code": "return3() {\n  return 3\n}\n{ sleep 0.03; exit 1; } | { sleep 0.02; exit 2; } | { sleep 0.01; return3; }\necho ${PIPESTATUS[@]}\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "MSAyIDMK",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "oils:pipeline:80",
+      "corpus": "oils",
+      "file": "pipeline",
+      "line": 80,
+      "name": "PIPESTATUS is set on simple commands",
+      "category": "Pipelines",
+      "code": "case $SH in dash|zsh) exit ;; esac\n\nfalse\necho pipestatus ${PIPESTATUS[@]}\n\nexit 55 | (exit 44)\necho pipestatus ${PIPESTATUS[@]}\n\ntrue\necho pipestatus ${PIPESTATUS[@]}\n\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "cGlwZXN0YXR1cyAxCnBpcGVzdGF0dXMgNTUgNDQKcGlwZXN0YXR1cyAwCg==",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "oils:pipeline:100",
+      "corpus": "oils",
+      "file": "pipeline",
+      "line": 100,
+      "name": "PIPESTATUS with shopt -s lastpipe",
+      "category": "Pipelines",
+      "code": "shopt -s lastpipe\nreturn3() {\n  return 3\n}\n{ sleep 0.03; exit 1; } | { sleep 0.02; exit 2; } | { sleep 0.01; return3; }\necho ${PIPESTATUS[@]}\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "MSAyIDMK",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "brush-suite:options/set-e:110",
+      "corpus": "brush-suite",
+      "file": "options/set-e",
+      "line": 110,
+      "name": "PIPESTATUS with pipefail and multiple failures",
+      "category": "options/set-e",
+      "code": "set -o pipefail\n(exit 2) | (exit 3) | (exit 0)\necho \"Exit: $?; PIPESTATUS: ${PIPESTATUS[@]}\"\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "RXhpdDogMzsgUElQRVNUQVRVUzogMiAzIDAK",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "brush-suite:options/set-e:111",
+      "corpus": "brush-suite",
+      "file": "options/set-e",
+      "line": 111,
+      "name": "PIPESTATUS preserved correctly with pipefail",
+      "category": "options/set-e",
+      "code": "set -o pipefail\n(exit 0) | (exit 5) | (exit 0)\necho \"Exit: $?; PIPESTATUS: ${PIPESTATUS[@]}\"\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "RXhpdDogNTsgUElQRVNUQVRVUzogMCA1IDAK",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:bashbox-shell-variables:41",
+      "corpus": "bashkit-suite",
+      "file": "bashbox-shell-variables",
+      "line": 41,
+      "name": "bashbox_shell_variables_a_single_command_and_a_negated_one_set_it_too",
+      "category": "bashbox-shell-variables",
+      "code": "false; echo ${PIPESTATUS[@]}; ! true; echo ${PIPESTATUS[@]}; f() { return 3; }; f; echo ${PIPESTATUS[@]}\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "MQowCjMK",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:bashbox-shell-variables:50",
+      "corpus": "bashkit-suite",
+      "file": "bashbox-shell-variables",
+      "line": 50,
+      "name": "bashbox_shell_variables_an_assignment_and_a_subshell_each_set_it",
+      "category": "bashbox-shell-variables",
+      "code": "false | true; x=$(false); echo ${PIPESTATUS[@]}; (( 0 )); echo ${PIPESTATUS[@]}; [[ a == a ]]; echo ${PIPESTATUS[@]}; (exit 3); echo ${PIPESTATUS[@]}\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "MQoxCjAKMwo=",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:bashbox-shell-variables:69",
+      "corpus": "bashkit-suite",
+      "file": "bashbox-shell-variables",
+      "line": 69,
+      "name": "bashbox_shell_variables_a_substitution_sees_the_status_from_before_it",
+      "category": "bashbox-shell-variables",
+      "code": "false | true; echo $(echo ${PIPESTATUS[@]})\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "MSAwCg==",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:bashbox-shell-variables:76",
+      "corpus": "bashkit-suite",
+      "file": "bashbox-shell-variables",
+      "line": 76,
+      "name": "bashbox_shell_variables_pipefail_changes_but_not_pipestatus_and_the_shell_overwrites",
+      "category": "bashbox-shell-variables",
+      "code": "set -o pipefail; false | true; echo $? ${PIPESTATUS[@]}; PIPESTATUS=(9 9); echo ${PIPESTATUS[@]}; readonly PIPESTATUS; true | false; echo ${PIPESTATUS[@]}\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "MSAxIDAKMAowIDEK",
+        "stderr": ""
+      }
+    }
+  ]
+}
