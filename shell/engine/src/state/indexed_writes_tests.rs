@@ -1398,3 +1398,38 @@ fn review86r7_temporary_replacement_skips_outer_journal() {
     assert!(state.borrow().binding("a").is_none());
     assert!(state.borrow().binding("b").is_none());
 }
+
+#[test]
+fn source_frame_drop_preserves_durable_write_and_isolated_snapshot() {
+    let (memory, state, function) = scoped_state(1 << 22);
+    state
+        .borrow_mut()
+        .replace_positional(vec!["caller".into()])
+        .unwrap();
+    state.borrow_mut().declare_local("a".into(), None).unwrap();
+    let completed = appended_assignment(&state, &["source-value"]);
+    let saved = snapshot(&state);
+    let before_reader = memory.observation().0;
+    let source = SourceFrame::enter(state.clone(), vec!["reader-arg".into()]).unwrap();
+    element(&state, "a", 1, "durable-source").unwrap();
+    let mut suspended = Box::pin(async move {
+        let _source = source;
+        futures::future::pending::<()>().await;
+    });
+    assert!(poll_once(suspended.as_mut()).is_pending());
+    assert_eq!(state.borrow().positional(), &["reader-arg"]);
+    assert_eq!(state.borrow().source_calls, 1);
+    assert!(memory.observation().0 > before_reader);
+    assert_eq!(saved.source_calls, 0);
+    assert_eq!(saved.positional(), &["caller"]);
+    drop(suspended);
+    assert_eq!(state.borrow().positional(), &["caller"]);
+    assert_eq!(state.borrow().source_calls, 0);
+    drop(completed);
+    assert_eq!(state.borrow().array_element("a", 1), Some("durable-source"));
+    assert_eq!(saved.array_element("a", 1), Some("source-value"));
+    drop(saved);
+    drop(function);
+    drop(state);
+    assert_eq!(memory.observation().0, 0);
+}
