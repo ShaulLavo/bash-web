@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { after, test } from "node:test";
 import { liveNodeWorkers } from "./node-worker-host.ts";
+import { assertReaderOutput } from "./recorded-bash.ts";
 import { createWaffleRunner } from "./waffle-compat.ts";
 
 type Observation = { status: number; stdout: string; stderr: string };
@@ -22,10 +23,7 @@ after(() => assert.equal(liveNodeWorkers(), 0));
 for (const entry of fixture.cases) {
   test(`production Waffle HOME tilde ${entry.id}`, async () => {
     const actual = await run(entry.code);
-    assert.equal(actual.crash, undefined);
-    assert.equal(actual.outputLimit, undefined);
-    assert.equal(actual.status, entry.bash.status);
-    assert.deepEqual(actual.stdout, Buffer.from(entry.bash.stdout, "base64"));
+    assertReaderOutput(actual, entry.bash);
     assert.deepEqual(actual.stderr, Buffer.from(entry.bash.stderr, "base64"));
   });
 }
