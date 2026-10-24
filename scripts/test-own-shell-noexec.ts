@@ -65,3 +65,27 @@ for (const name of [".", "source"]) {
     assert.deepEqual(unread.stderr, Buffer.alloc(0));
   });
 }
+
+for (const name of [".", "source"]) {
+  test(`production Waffle noexec composes with ${name} local append and eval`, async () => {
+    const setup =
+      `echo 'local v+=S; eval "local v+=E"; echo body:$v:$#:$1; return 9' > lib; ` +
+      `v=outer; set -- caller tail; f(){ ${name} ./lib supplied tail; result=$?; ` +
+      "echo after:$result:$v:$#:$1; }; ";
+    const control = await runner(setup + "v=prefix f function; echo outer:$v:$#:$1");
+    assert.equal(control.crash, undefined);
+    assert.equal(control.outputLimit, undefined);
+    assert.equal(control.status, 0);
+    assert.deepEqual(
+      control.stdout,
+      Buffer.from("body:prefixSE:2:supplied\nafter:9:prefixSE:1:function\nouter:outer:2:caller\n"),
+    );
+    assert.deepEqual(control.stderr, Buffer.alloc(0));
+    const skipped = await runner(setup + "set -n; v=prefix f function; echo BAD");
+    assert.equal(skipped.crash, undefined);
+    assert.equal(skipped.outputLimit, undefined);
+    assert.equal(skipped.status, 0);
+    assert.deepEqual(skipped.stdout, Buffer.alloc(0));
+    assert.deepEqual(skipped.stderr, Buffer.alloc(0));
+  });
+}
