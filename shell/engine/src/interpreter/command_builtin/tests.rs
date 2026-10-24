@@ -498,7 +498,10 @@ fn builtin_wrapper_usage_diagnostic_cancellation_and_broken_pipe() {
     assert!(!job.is_finished());
     rig.session.interrupt();
     assert_eq!(finish(&rig.executor, job), 130);
-    assert_eq!(rig.session.core.execution_storage.observation().0, before);
+    assert_eq!(
+        rig.session.core.execution_storage.observation().0,
+        before + rig.session.state.borrow().prefix_capacity_bytes()
+    );
     assert!(!rig.session.state.borrow().bindings().contains_key("a"));
     drop(reader);
     assert_eq!(rig.run("builtin -z"), 141);

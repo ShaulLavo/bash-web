@@ -83,3 +83,56 @@ fn oils_array_700_double_bracket_uses_the_same_element_presence_contract() {
 fn scalar_compound_assignment_keeps_the_old_value_before_rhs_effects() {
     check("x=7; echo \"$((x+=x=4)):$x\"", "11:11\n");
 }
+
+#[test]
+fn typed_reference_selector_runs_only_in_active_arithmetic_branches() {
+    check(
+        "a=(4 5); i=0; ((0 && a[i++]++)); ((1 || a[i++]++)); ((0 ? a[i++]++ : a[1]++)); echo \"$i:${a[0]}:${a[1]}\"",
+        "0:4:6\n",
+    );
+}
+
+#[test]
+fn typed_reference_compound_and_increment_select_once() {
+    check(
+        "a=(3 4 5); i=0; ((a[i++]+=7)); ((++a[i++])); ((a[i++]++)); echo \"$i:${a[*]}\"",
+        "3:10 5 6\n",
+    );
+}
+
+#[test]
+fn typed_reference_plain_store_does_not_evaluate_unused_old_value() {
+    check("a[0]='1/0'; ((a[0]=7)); echo \"${a[0]}\"", "7\n");
+}
+
+#[test]
+fn typed_reference_shell_rhs_precedes_explicit_index() {
+    check(
+        "a=(3 4); i=0; a[i++]=$((i=1,9)); echo \"$i:${a[*]}\"",
+        "2:3 9\n",
+    );
+}
+
+#[test]
+fn typed_reference_negative_slot_empty_presence_and_unset_n() {
+    check(
+        "a=(zero one ''); declare -n r='a[-1]'; test -v r; echo set=$?; r=last; unset -n r; echo \"${a[*]}\"; test -R r; echo ref=$?; unset 'a[-1]'; echo \"${a[*]}\"",
+        "set=0\nzero one last\nref=1\nzero one\n",
+    );
+}
+
+#[test]
+fn typed_reference_rhs_rebind_keeps_selected_index_and_old_value() {
+    check(
+        "a=(3 4); i=0; ((a[i++]+=a[0]=8)); echo \"$i:${a[*]}\"",
+        "1:11 4\n",
+    );
+}
+
+#[test]
+fn typed_reference_dynamic_scope_is_resolved_at_use_not_declaration() {
+    check(
+        "a=(global); declare -n r='a[0]'; f() { local a; a=(local); r=changed; echo \"$r:${a[0]}\"; }; f; echo \"$r:${a[0]}\"",
+        "changed:changed\nglobal:global\n",
+    );
+}

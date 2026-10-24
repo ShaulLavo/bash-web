@@ -44,7 +44,10 @@ impl ScanTrial {
         assert_eq!(finish(&executor, job), 0);
         let state = state.borrow();
         assert_eq!(state.parameter("o"), "a");
-        assert!(matches!(state.bindings()["OPTIND"], Binding::Indexed(_)));
+        assert!(matches!(
+            state.raw_bindings()["OPTIND"],
+            Binding::Indexed(_)
+        ));
         let memory = state.getopts_publication_budget().unwrap();
         let used = memory.observation().0;
         Self {
@@ -53,7 +56,7 @@ impl ScanTrial {
             frame,
             memory,
             used,
-            bindings: state.bindings().clone(),
+            bindings: state.raw_bindings().clone(),
             cursor: cursor(&state),
         }
     }
@@ -78,7 +81,7 @@ impl ScanTrial {
             "rejected getopts must not consume b"
         );
         assert_eq!(
-            state.bindings(),
+            state.raw_bindings(),
             &self.bindings,
             "rejected getopts must not publish bindings"
         );
@@ -132,5 +135,10 @@ fn getopts_indexed_local_rejected_publication_preserves_cluster() {
     assert_eq!(trial.run(), 0);
     assert_eq!(trial.session.state().borrow().parameter("o"), "b");
     drop(trial.frame);
+    assert_eq!(
+        trial.memory.observation().0,
+        trial.session.state().borrow().prefix_capacity_bytes()
+    );
+    drop(trial.session);
     assert_eq!(trial.memory.observation().0, 0);
 }

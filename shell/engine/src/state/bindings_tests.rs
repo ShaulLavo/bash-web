@@ -109,7 +109,7 @@ fn expansion_checks_readonly_but_builtin_replay_and_restore_are_privileged() {
         .borrow_mut()
         .readonly("locked".into(), Some("caller".into()))
         .unwrap();
-    let expansion = PrefixFrame::enter(state.clone());
+    let expansion = PrefixFrame::test_enter(state.clone());
     assert_eq!(
         expansion.set("locked".into(), "rejected".into()),
         Err("locked".into())
@@ -184,7 +184,7 @@ fn builtin_ifs_replay_keeps_cache_while_expansion_refreshes_and_restores_it() {
     assert_eq!(state.borrow().parameter("IFS"), ":");
     assert_eq!(state.borrow().cached_ifs_members(), Some(members));
 
-    let frame = PrefixFrame::enter(state.clone());
+    let frame = PrefixFrame::test_enter(state.clone());
     frame.set("IFS".into(), ",".into()).unwrap();
     // The effective target is sep, not IFS: even expansion leaves the IFS
     // special-variable cache alone when writing through this alias.
@@ -196,7 +196,7 @@ fn builtin_ifs_replay_keeps_cache_while_expansion_refreshes_and_restores_it() {
         .borrow_mut()
         .assign_parameter("IFS".into(), ":".into())
         .unwrap();
-    let frame = PrefixFrame::enter(direct.clone());
+    let frame = PrefixFrame::test_enter(direct.clone());
     frame.set("IFS".into(), ",".into()).unwrap();
     assert_eq!(direct.borrow().positional_separator(), Some(','));
     drop(frame);
@@ -228,9 +228,9 @@ fn builtin_inside_expansion_routes_durable_writes_to_only_the_last_expansion_sav
         .borrow_mut()
         .declare_nameref("alias".into(), "x".into(), false)
         .unwrap();
-    let outer = PrefixFrame::enter(state.clone());
+    let outer = PrefixFrame::test_enter(state.clone());
     outer.set("x".into(), "outer".into()).unwrap();
-    let inner = PrefixFrame::enter(state.clone());
+    let inner = PrefixFrame::test_enter(state.clone());
     inner.set("alias".into(), "inner".into()).unwrap();
     let frame = builtin(
         &state,
@@ -342,7 +342,7 @@ fn indexed_commit_moves_unique_rc_and_copies_only_shared_snapshots() {
         value: "new".into(),
     };
     assert_eq!(update.copy_bytes(state.borrow().binding("a")), 0);
-    PrefixFrame::enter(state.clone())
+    PrefixFrame::test_enter(state.clone())
         .commit_update("a".into(), update, &mut completed)
         .unwrap_or_else(|_| panic!("admitted update fits"));
     assert_eq!(address(&state), original);
@@ -355,7 +355,7 @@ fn indexed_commit_moves_unique_rc_and_copies_only_shared_snapshots() {
         update.copy_bytes(state.borrow().binding("a")),
         saved.storage_bytes()
     );
-    PrefixFrame::enter(state.clone())
+    PrefixFrame::test_enter(state.clone())
         .commit_update("a".into(), update, &mut completed)
         .unwrap_or_else(|_| panic!("admitted update fits"));
     assert_ne!(address(&state), original);
@@ -375,7 +375,7 @@ fn indexed_commit_local_admission_failure_refunds_frame_without_mutation() {
         .unwrap();
     let before = memory.observation().0;
     for _ in 0..8 {
-        let frame = PrefixFrame::enter(state.clone());
+        let frame = PrefixFrame::test_enter(state.clone());
         let mut completed =
             AssignmentFrame::enter(state.clone()).unwrap_or_else(|_| panic!("undo frame fits"));
         frame.reserve("a", 0).unwrap();
@@ -389,8 +389,13 @@ fn indexed_commit_local_admission_failure_refunds_frame_without_mutation() {
         ));
         assert_eq!(state.borrow().scalar_parameter("a"), Some("saved"));
         drop(completed);
-        assert_eq!(memory.observation().0, before);
+        assert_eq!(
+            memory.observation().0,
+            before + state.borrow().prefix_capacity_bytes()
+        );
     }
+    drop(state);
+    assert_eq!(memory.observation().0, 0);
 }
 
 fn commit_test_update(state: &SharedState, completed: &mut AssignmentFrame, update: BindingUpdate) {
@@ -403,7 +408,7 @@ fn commit_test_update(state: &SharedState, completed: &mut AssignmentFrame, upda
     completed
         .reserve("a", retained)
         .unwrap_or_else(|_| panic!("undo fits"));
-    let frame = PrefixFrame::enter(state.clone());
+    let frame = PrefixFrame::test_enter(state.clone());
     frame.reserve("a", storage).unwrap();
     frame
         .commit_update("a".into(), update, completed)
@@ -459,9 +464,17 @@ fn completed_local_undo_restores_all_updates_and_refunds_exact_storage() {
         }
         drop(completed);
         assert_eq!(state.borrow().scalar_parameter("a"), Some("old"));
-        assert_eq!(memory.observation().0, before);
+        assert_eq!(
+            memory.observation().0,
+            before + state.borrow().prefix_capacity_bytes()
+        );
     }
     drop(function);
+    assert_eq!(
+        memory.observation().0,
+        state.borrow().prefix_capacity_bytes()
+    );
+    drop(state);
     assert_eq!(memory.observation().0, 0);
 }
 
@@ -572,6 +585,11 @@ fn durable_scalar_preserves_unrelated_local_undo_capacity_until_rollback() {
     assert!(state.borrow().held_local_value("a") < before);
     rollback_with_full_budget(&memory, &state, completed);
     drop(function);
+    assert_eq!(
+        memory.observation().0,
+        state.borrow().prefix_capacity_bytes()
+    );
+    drop(state);
     assert_eq!(memory.observation().0, 0);
 }
 
@@ -588,6 +606,11 @@ fn durable_scalar_preserves_replaced_local_array_until_rollback() {
     durable_scalar(&state);
     rollback_with_full_budget(&memory, &state, completed);
     drop(function);
+    assert_eq!(
+        memory.observation().0,
+        state.borrow().prefix_capacity_bytes()
+    );
+    drop(state);
     assert_eq!(memory.observation().0, 0);
 }
 
@@ -614,5 +637,10 @@ fn kept_assignments_under_an_exhausted_budget_only_shrink_local_tickets() {
     assert_eq!(state.borrow().held_local_value("a"), live);
     drop(filler);
     drop(function);
+    assert_eq!(
+        memory.observation().0,
+        state.borrow().prefix_capacity_bytes()
+    );
+    drop(state);
     assert_eq!(memory.observation().0, 0);
 }

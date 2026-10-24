@@ -3,11 +3,17 @@ use std::{collections::BTreeMap, ops::Deref, rc::Rc};
 /// Original binding model. Indexed values are ordered and sparse; a scalar
 /// assignment to an existing array replaces only element zero.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Binding {
+pub(crate) enum Binding {
     Scalar(String),
     Indexed(Rc<Indexed>),
 }
 impl Binding {
+    pub(super) fn detached(&self) -> Self {
+        match self {
+            Self::Scalar(value) => Self::Scalar(value.clone()),
+            Self::Indexed(values) => Self::Indexed(Rc::new((**values).clone())),
+        }
+    }
     pub fn as_str(&self) -> &str {
         self.scalar().map(String::as_str).unwrap_or("")
     }
@@ -311,6 +317,13 @@ pub(crate) enum BindingUndo {
     },
 }
 impl BindingUndo {
+    pub(super) fn storage_bytes(&self) -> usize {
+        match self {
+            Self::Restore(old) => old.as_ref().map_or(0, Binding::storage_bytes),
+            Self::Element { old, .. } => old.as_ref().map_or(0, String::capacity),
+            Self::Append { .. } => 0,
+        }
+    }
     pub(crate) fn scalar_effect_bytes(&self, value_bytes: usize) -> usize {
         match self {
             Self::Restore(Some(binding @ Binding::Indexed(_))) => value_bytes

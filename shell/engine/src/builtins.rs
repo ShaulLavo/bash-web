@@ -973,7 +973,7 @@ async fn nameref_declaration(
                 .get(key)
                 .or_else(|| {
                     state
-                        .bindings()
+                        .raw_bindings()
                         .get(key)
                         .and_then(crate::state::Binding::scalar)
                 })

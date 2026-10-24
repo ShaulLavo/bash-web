@@ -44,8 +44,8 @@ pub(crate) async fn select(
         ),
         None => None,
     };
-    let scope = state.reference_scope(&name);
-    Ok(Place { name, index, scope })
+    let owner = state.reference_owner(&name);
+    Ok(Place { name, index, owner })
 }
 
 pub(crate) fn syntax(text: &str) -> Result<Reference<'_>, Error> {
@@ -83,7 +83,7 @@ pub(crate) async fn write(
         work.admit_storage(place.name.len().saturating_mul(2).saturating_add(208))?;
         return state
             .borrow_mut()
-            .assign_parameter(place.name.clone(), value)
+            .assign_place_scalar(place.name.clone(), value)
             .map_err(|code| {
                 if code == 1 {
                     Error::Readonly {

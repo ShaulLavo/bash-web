@@ -76,7 +76,11 @@ pub(super) async fn print<'a>(
     for name in names {
         count += 1;
         scan_bytes(name.len(), context, work).await?;
-        if state.borrow().stack_array(name) && !state.borrow().is_nameref(name) {
+        let indexed = matches!(
+            state.borrow().raw_bindings().get(name),
+            Some(crate::state::Binding::Indexed(_))
+        );
+        if (state.borrow().stack_array(name) || indexed) && !state.borrow().is_nameref(name) {
             print_stack_array(name, state, fds, context, work).await?;
             continue;
         }
@@ -296,8 +300,26 @@ async fn print_stack_array(
     write(fds, b"=(", context).await?;
     let utf8 = super::printf::character_locale(state, context, work).await?;
     let printability = Printability::new(utf8)?;
-    for index in 0..count {
-        print_stack_element(name, index, &printability, utf8, state, fds, context, work).await?;
+    let mut previous = None;
+    loop {
+        let next = state
+            .borrow()
+            .array_next(name, previous)
+            .map(|(index, _)| index);
+        let Some(index) = next else { break };
+        print_stack_element(
+            name,
+            index,
+            previous.is_none(),
+            &printability,
+            utf8,
+            state,
+            fds,
+            context,
+            work,
+        )
+        .await?;
+        previous = Some(index);
     }
     write(fds, b")\n", context).await
 }
@@ -305,7 +327,8 @@ async fn print_stack_array(
 #[allow(clippy::too_many_arguments)]
 async fn print_stack_element(
     name: &str,
-    index: usize,
+    index: i64,
+    first: bool,
     printability: &Printability,
     utf8: bool,
     state: &SharedState,
@@ -313,19 +336,15 @@ async fn print_stack_element(
     context: &Context,
     work: &mut Work,
 ) -> Result<(), i32> {
-    let bytes = state
-        .borrow()
-        .array_element(name, index as i64)
-        .ok_or(2)?
-        .len();
+    let bytes = state.borrow().array_element(name, index).ok_or(2)?.len();
     work.admit_storage(bytes + 24).map_err(error_status)?;
     scan_bytes(bytes + 24, context, work).await?;
     let value = state
         .borrow()
-        .array_element(name, index as i64)
+        .array_element(name, index)
         .ok_or(2)?
         .to_owned();
-    let mut line = if index == 0 {
+    let mut line = if first {
         format!("[{index}]")
     } else {
         format!(" [{index}]")

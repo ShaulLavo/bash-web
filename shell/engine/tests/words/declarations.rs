@@ -115,7 +115,7 @@ fn indexed_declarations_reject_without_scalar_projection_or_mutation() {
     for setup in ["a=(zero one)", "a=()", "a=(); a[7]=seven"] {
         let rig = Rig::new(Limits::default());
         assert_eq!(rig.run(setup), 0, "{setup}");
-        let before = rig.shell.state().borrow().bindings()["a"].clone();
+        let before = rig.shell.state().borrow().bindings()["a"].to_string();
         assert_eq!(rig.run("declare -p a"), 2, "{setup}");
         assert!(rig.output.bytes().is_empty(), "{setup}");
         assert_eq!(rig.shell.state().borrow().bindings()["a"], before);
