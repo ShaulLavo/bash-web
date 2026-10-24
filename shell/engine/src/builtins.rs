@@ -134,7 +134,10 @@ pub(crate) async fn run(
             } else {
                 &args[..]
             };
-            if name == "return" && state.borrow().function_calls == 0 {
+            if name == "return"
+                && state.borrow().function_calls == 0
+                && state.borrow().source_calls == 0
+            {
                 return Err(2);
             }
             let code = match args.first() {
@@ -354,7 +357,7 @@ fn error_status(error: Error) -> i32 {
     }
 }
 
-const SHOPT_OPTIONS: [&str; 7] = [
+const SHOPT_OPTIONS: [&str; 8] = [
     "expand_aliases",
     "extdebug",
     "extglob",
@@ -362,6 +365,7 @@ const SHOPT_OPTIONS: [&str; 7] = [
     "lastpipe",
     "nullglob",
     "promptvars",
+    "sourcepath",
 ];
 
 fn shopt_value(state: &State, option: &str) -> Option<bool> {
@@ -373,6 +377,7 @@ fn shopt_value(state: &State, option: &str) -> Option<bool> {
         "inherit_errexit" => Some(state.inherit_errexit),
         "nullglob" => Some(state.nullglob),
         "lastpipe" => Some(state.lastpipe),
+        "sourcepath" => Some(state.sourcepath),
         _ => None,
     }
 }
@@ -405,6 +410,7 @@ async fn set_shopt_option(
         "inherit_errexit" => state.inherit_errexit = enabled,
         "nullglob" => state.nullglob = enabled,
         "lastpipe" => state.lastpipe = enabled,
+        "sourcepath" => state.sourcepath = enabled,
         _ => unreachable!("validated shell option"),
     }
     Ok(())
@@ -464,7 +470,7 @@ async fn shopt(
     let options = if operands.is_empty() {
         SHOPT_OPTIONS.map(Some)
     } else {
-        [None; 7]
+        [None; SHOPT_OPTIONS.len()]
     };
     let mut status = 0;
     // A fixed iterator over known names avoids allocating or copying argv.
