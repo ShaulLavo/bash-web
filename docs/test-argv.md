@@ -23,6 +23,6 @@ The engine uses admitted operator frames rather than recursive futures.
 
 The 605 observations in `scripts/fixtures/shell-test-argv.json` were recorded
 with signed GNU Bash 5.3.15. Native and patched-WASI tests load that fixture.
-The production-Waffle driver is `scripts/test-own-shell-test-argv.ts`, also
-loaded by the existing descriptor test entry point. It batches the matrix in
-one shell session and checks the two exact Oils scripts independently.
+The production-Waffle driver is `scripts/test-own-shell-test-argv.ts`. The
+scoreboard discovers it automatically. It batches the matrix in one shell
+session and checks the two exact Oils scripts independently.

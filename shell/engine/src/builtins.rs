@@ -18,6 +18,7 @@ use crate::{
     state::{SharedState, State},
 };
 use shell_parser::parser::{Word, WordPart};
+use std::borrow::Cow;
 
 /// Bashkit's is_decl_keyword starts with the command's syntax, not the name
 /// produced by expansion. Quoting also prevents declaration-keyword syntax.
@@ -67,6 +68,7 @@ pub(crate) fn assignment_operand(word: &Word) -> bool {
     }) {
         return false;
     }
+    let name = name.strip_suffix('+').unwrap_or(name);
     let mut bytes = name.bytes();
     bytes
         .next()
@@ -103,38 +105,47 @@ fn output_outcome(result: Result<(), printf::PrintFailure>) -> Result<Outcome, i
 pub(crate) async fn run(
     builtin: Builtin,
     name: &str,
-    args: Vec<String>,
-    state: SharedState,
-    fds: FdTable,
-    context: Context,
+    arguments: Cow<'_, [String]>,
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
     work: &mut Work,
 ) -> Result<Outcome, i32> {
+    let args = arguments.as_ref();
     match builtin {
         Builtin::Completion => {
-            return completion::run(name, &args, state, fds, context, work).await;
+            let kind = match name {
+                "compgen" => completion::Kind::Generate,
+                "complete" => completion::Kind::Complete,
+                _ => completion::Kind::Options,
+            };
+            return completion::run(kind, args, state, fds, context, work).await;
         }
         Builtin::Noop => {}
         Builtin::False => return Err(1),
-        Builtin::Test => return test::run(name, &args, &state, &fds, &context, work).await,
-        Builtin::Trap => return trap::run(&args, &state, &fds, &context, work).await,
-        Builtin::Getopts => return getopts::run(&args, &state, &fds, &context, work).await,
+        Builtin::Test => return test::run(name, args, state, fds, context, work).await,
+        Builtin::Trap => return trap::run(args, state, fds, context, work).await,
+        Builtin::Getopts => return getopts::run(args, state, fds, context, work).await,
         Builtin::Alias => {
-            return alias::run(name, &args, &state, &fds, &context, work)
+            return alias::run(name, args, state, fds, context, work)
                 .await
                 .map(Outcome::status);
         }
-        Builtin::Caller => return caller::run(&args, &state, &fds, &context, work).await,
-        Builtin::Shopt => return shopt(&args, &state, &fds, &context, work).await,
+        Builtin::Caller => return caller::run(args, state, fds, context, work).await,
+        Builtin::Shopt => return shopt(args, state, fds, context, work).await,
         Builtin::LoopControl => {
-            return loop_control(name, &args, &fds, &context, work).await;
+            return loop_control(name, args, fds, context, work).await;
         }
         Builtin::ExitReturn => {
             let args = if args.first().is_some_and(|arg| arg == "--") {
                 &args[1..]
             } else {
-                &args[..]
+                args
             };
-            if name == "return" && state.borrow().function_calls == 0 {
+            if name == "return"
+                && state.borrow().function_calls == 0
+                && state.borrow().source_calls == 0
+            {
                 return Err(2);
             }
             let code = match args.first() {
@@ -169,30 +180,30 @@ pub(crate) async fn run(
             });
         }
         Builtin::Echo => {
-            return output_outcome(printf::echo(&args, &state, &fds, &context, work).await);
+            return output_outcome(printf::echo(args, state, fds, context, work).await);
         }
         Builtin::Printf => {
-            return output_outcome(printf::run(&args, &state, &fds, &context, work).await);
+            return output_outcome(printf::run(args, state, fds, context, work).await);
         }
-        Builtin::Read => return read::run(&args, &state, &fds, &context, work).await,
+        Builtin::Read => return read::run(args, state, fds, context, work).await,
         Builtin::Declaration => {
-            return declarations(name, args, &state, &fds, &context, work).await;
+            return declarations(name, args, state, fds, context, work).await;
         }
-        Builtin::Unset => return unset(args, &state, &fds, &context, work).await,
-        Builtin::Cd => return directories::cd(&args, &state, &fds, &context, work).await,
-        Builtin::Pushd => return directories::pushd(&args, &state, &fds, &context, work).await,
-        Builtin::Popd => return directories::popd(&args, &state, &fds, &context, work).await,
-        Builtin::Dirs => return directories::dirs(&args, &state, &fds, &context, work).await,
+        Builtin::Unset => return unset(args, state, fds, context, work).await,
+        Builtin::Cd => return directories::cd(args, state, fds, context, work).await,
+        Builtin::Pushd => return directories::pushd(args, state, fds, context, work).await,
+        Builtin::Popd => return directories::popd(args, state, fds, context, work).await,
+        Builtin::Dirs => return directories::dirs(args, state, fds, context, work).await,
         Builtin::Pwd => {
             let cwd = state.borrow().cwd.clone();
-            write(&fds, format!("{cwd}\n").as_bytes(), &context).await?;
+            write(fds, format!("{cwd}\n").as_bytes(), context).await?;
         }
-        Builtin::Set => return set(args, &state, &context, work).await,
+        Builtin::Set => return set(arguments.into_owned(), state, context, work).await,
         Builtin::Shift => {
             let args = if args.first().is_some_and(|arg| arg == "--") {
                 &args[1..]
             } else {
-                &args[..]
+                args
             };
             let count = match args.first() {
                 None => 1,
@@ -214,7 +225,7 @@ pub(crate) async fn run(
             if !args.is_empty() {
                 return Err(2);
             }
-            context.list_jobs(&fds).await?;
+            context.list_jobs(fds).await?;
         }
         Builtin::Wait => {
             if args.len() > 1 {
@@ -224,7 +235,7 @@ pub(crate) async fn run(
             return Ok(Outcome::status(context.wait_job(id).await?));
         }
         Builtin::Kill => {
-            let (action, selector) = match kill_arguments(&args) {
+            let (action, selector) = match kill_arguments(args) {
                 Ok(value) => value,
                 Err(error) => {
                     if let Some(stderr) = fds.get(2) {
@@ -354,13 +365,14 @@ fn error_status(error: Error) -> i32 {
     }
 }
 
-const SHOPT_OPTIONS: [&str; 6] = [
+const SHOPT_OPTIONS: [&str; 7] = [
     "expand_aliases",
     "extdebug",
     "extglob",
     "inherit_errexit",
     "lastpipe",
     "nullglob",
+    "sourcepath",
 ];
 
 fn shopt_value(state: &State, option: &str) -> Option<bool> {
@@ -371,6 +383,7 @@ fn shopt_value(state: &State, option: &str) -> Option<bool> {
         "inherit_errexit" => Some(state.inherit_errexit),
         "nullglob" => Some(state.nullglob),
         "lastpipe" => Some(state.lastpipe),
+        "sourcepath" => Some(state.sourcepath),
         _ => None,
     }
 }
@@ -402,6 +415,7 @@ async fn set_shopt_option(
         "inherit_errexit" => state.inherit_errexit = enabled,
         "nullglob" => state.nullglob = enabled,
         "lastpipe" => state.lastpipe = enabled,
+        "sourcepath" => state.sourcepath = enabled,
         _ => unreachable!("validated shell option"),
     }
     Ok(())
@@ -461,7 +475,7 @@ async fn shopt(
     let options = if operands.is_empty() {
         SHOPT_OPTIONS.map(Some)
     } else {
-        [None; 6]
+        [None; SHOPT_OPTIONS.len()]
     };
     let mut status = 0;
     // A fixed iterator over known names avoids allocating or copying argv.
@@ -736,13 +750,13 @@ async fn set_short_options(
 
 async fn declarations(
     name: &str,
-    args: Vec<String>,
+    args: &[String],
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
 ) -> Result<Outcome, i32> {
-    let mut args = args.into_iter().peekable();
+    let mut args = args.iter().peekable();
     if name == "local" && state.borrow().function_calls == 0 {
         return Err(1);
     }
@@ -782,10 +796,14 @@ async fn declarations(
         if extended {
             work.admit_storage(arg.len()).map_err(error_status)?;
         }
-        let (key, value) = arg
-            .split_once('=')
-            .map(|(key, value)| (key.to_owned(), Some(value.to_owned())))
-            .unwrap_or((arg, None));
+        let (key, value, append) = match arg.split_once('=') {
+            Some((key, value)) => (
+                key.strip_suffix('+').unwrap_or(key).to_owned(),
+                Some(value.to_owned()),
+                key.ends_with('+'),
+            ),
+            None => (arg.to_owned(), None, false),
+        };
         if !valid_name(&key) {
             if name == "local" {
                 status = 1;
@@ -795,6 +813,16 @@ async fn declarations(
         }
         let local = name == "local"
             || matches!(name, "declare" | "typeset") && state.borrow().in_function_scope();
+        let target = if append && local && !nameref && state.borrow().is_current_local(&key) {
+            declarations::local_append_target(key, state, context, work).await
+        } else {
+            Ok(key)
+        };
+        if target == Err(1) {
+            status = 1;
+            continue;
+        }
+        let key = target?;
         if extended || local {
             let storage = state
                 .borrow()
@@ -802,13 +830,24 @@ async fn declarations(
                 .map_err(error_status)?;
             work.admit_storage(storage).map_err(error_status)?;
         }
+        if nameref && append {
+            return Err(2);
+        }
         if nameref {
             let result = nameref_declaration(&key, value, local, state, context, work).await;
             status |= declaration_status(result)?;
             continue;
         }
+        let value = if append {
+            Some(
+                declarations::append_scalar(&key, value.ok_or(2)?, local, state, context, work)
+                    .await?,
+            )
+        } else {
+            value
+        };
         if let Some(value) = &value
-            && !local
+            && (!local || append && state.borrow().is_current_local(&key))
         {
             State::admit_assignment(state, &key, value.len(), &context.cancel, work)
                 .await
@@ -826,7 +865,7 @@ async fn declarations(
                 .borrow_mut()
                 .declare_case(key.clone(), value, local, case, work)
         } else {
-            apply_declaration(name, &key, value, &mut state.borrow_mut())
+            apply_declaration(name, &key, value, append, &mut state.borrow_mut())
         };
         if declaration_status(result)? == 0 {
             declaration_attributes(&key, exported, readonly, &mut state.borrow_mut())?;
@@ -875,7 +914,7 @@ struct DeclarationOptions {
 
 async fn declaration_options(
     name: &str,
-    args: &mut std::iter::Peekable<std::vec::IntoIter<String>>,
+    args: &mut std::iter::Peekable<std::slice::Iter<'_, String>>,
     context: &Context,
     work: &mut Work,
 ) -> Result<DeclarationOptions, i32> {
@@ -887,7 +926,7 @@ async fn declaration_options(
         if option == "--" {
             break;
         }
-        declaration_option(name, &option, &mut flags, context, work).await?;
+        declaration_option(name, option, &mut flags, context, work).await?;
     }
     Ok(flags)
 }
@@ -969,6 +1008,7 @@ fn apply_declaration(
     name: &str,
     key: &str,
     value: Option<String>,
+    append: bool,
     state: &mut crate::state::State,
 ) -> Result<(), i32> {
     if name == "readonly" {
@@ -977,10 +1017,9 @@ fn apply_declaration(
     if name == "export" {
         return state.export(key.to_owned(), value);
     }
-    if name == "local" {
-        return state.declare_local(key.to_owned(), value);
-    }
-    if matches!(name, "declare" | "typeset") && state.in_function_scope() {
+    let local =
+        name == "local" || matches!(name, "declare" | "typeset") && state.in_function_scope();
+    if local && (!append || !state.is_current_local(key)) {
         return state.declare_local(key.to_owned(), value);
     }
     if let Some(value) = value {
@@ -993,7 +1032,7 @@ fn apply_declaration(
 /// identifiers. Without `-v` a name with no variable unsets a function.
 /// `-n` removes the reference itself without following its target.
 async fn unset(
-    args: Vec<String>,
+    args: &[String],
     state: &SharedState,
     fds: &FdTable,
     context: &Context,

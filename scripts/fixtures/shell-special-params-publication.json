@@ -1,0 +1,75 @@
+{
+  "bash": "5.3.15(1)-release",
+  "cases": [
+    {
+      "name": "circular underscore preserves success",
+      "script": "declare -n x=_; declare -n _=x; true; printf 'status=%s\\n' \"$?\"",
+      "status": 0,
+      "stdout": "status=0\n",
+      "stderr": "/usr/bin/bash: line 1: warning: _: circular name reference\n/usr/bin/bash: line 1: warning: _: circular name reference\n/usr/bin/bash: line 1: warning: _: circular name reference\n"
+    },
+    {
+      "name": "circular underscore does not trigger errexit",
+      "script": "declare -n x=_; declare -n _=x; set -e; : reached; printf 'ok\\n'",
+      "status": 0,
+      "stdout": "ok\n",
+      "stderr": "/usr/bin/bash: line 1: warning: _: circular name reference\n/usr/bin/bash: line 1: warning: _: circular name reference\n/usr/bin/bash: line 1: warning: _: circular name reference\n/usr/bin/bash: line 1: warning: _: circular name reference\n"
+    },
+    {
+      "name": "failed input redirect publishes argument",
+      "script": ": before; : after <missing; printf '[%s]\\n' \"$_\"",
+      "status": 0,
+      "stdout": "[after]\n",
+      "stderr": "/usr/bin/bash: line 1: missing: No such file or directory\n"
+    },
+    {
+      "name": "failed output redirect publishes empty argument",
+      "script": ": before; >missing/file; printf '[%s]\\n' \"$_\"",
+      "status": 0,
+      "stdout": "[]\n",
+      "stderr": "/usr/bin/bash: line 1: missing/file: No such file or directory\n"
+    },
+    {
+      "name": "failed assignment redirect publishes empty argument",
+      "script": ": before; a=value <missing; printf '[%s]\\n' \"$_\"",
+      "status": 0,
+      "stdout": "[]\n",
+      "stderr": "/usr/bin/bash: line 1: missing: No such file or directory\n"
+    },
+    {
+      "name": "failed redirect preserves failure status",
+      "script": ": before; : after <missing; saved=$? last=$_; printf '%s [%s]\\n' \"$saved\" \"$last\"",
+      "status": 0,
+      "stdout": "1 [after]\n",
+      "stderr": "/usr/bin/bash: line 1: missing: No such file or directory\n"
+    },
+    {
+      "name": "nameref publication preserves getopts cursor",
+      "script": "set -- -a -b; getopts ab opt; declare -n _=OPTIND; : 1; getopts ab opt; printf '%s\\n' \"$opt\"",
+      "status": 0,
+      "stdout": "b\n",
+      "stderr": ""
+    },
+    {
+      "name": "publication uses builtin prefix target",
+      "script": "x='_=x'; declare -n _=x; x=temp : last; printf '%s\\n' \"$x\"",
+      "status": 0,
+      "stdout": "_=x\n",
+      "stderr": ""
+    },
+    {
+      "name": "publication uses chained builtin prefix target",
+      "script": "x='_=ref'; declare -n ref=x; declare -n _=ref; x=temp : last; printf '%s\\n' \"$x\"",
+      "status": 0,
+      "stdout": "_=ref\n",
+      "stderr": ""
+    },
+    {
+      "name": "nameref publication keeps numeric OPTIND binding",
+      "script": "set -- -a -b; getopts ab opt; declare -n _=OPTIND; : 1; getopts ab opt; printf \"%s:%s\\n\" \"$opt\" \"$OPTIND\"",
+      "status": 0,
+      "stdout": "b:0\n",
+      "stderr": ""
+    }
+  ]
+}

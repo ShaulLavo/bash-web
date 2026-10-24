@@ -16,8 +16,8 @@ This is a declared safe divergence from Bash 5.3.15's confirmed freed-buffer
 behavior for printf through an IFS nameref. Identical Bash commands produce
 multiple outputs for default, custom and empty prior IFS. These cases assert
 the safe contract, not Bash equality. Stable direct-IFS and ordinary-nameref
-controls remain Bash equality checks. See the retained evidence and parent
-decision in [plan004](../plans/004-own-shell.md#indirect-ifs-review-blocker).
+controls remain Bash equality checks. See the retained evidence in
+[the measurement receipt](evidence/printf-scalar-assignment.json).
 With `x=prefix printf -v x`,
 the existing builtin prefix guard restores the outer value. Bash instead keeps
 the printf assignment. A readonly target returns 1
@@ -51,7 +51,4 @@ removing only Bash source-line annotations. This unit adds no stdout normalizati
 and leaves the frozen path-normalization and stderr policies unchanged. No case,
 fixture, exclusion or deadline changes.
 
-The full replay in that receipt measured `286dd4cd0bc59410bda90348992044812a208dd3`.
-The later warning fix and safe IFS assignment change alter production bytes.
-Their exact-source focused checks and bounded affected frozen-case comparisons
-are separate evidence, not a second full replay or a new score claim.
+The full replay in that receipt measured `286dd4cd0bc59410bda90348992044812a208dd3`. The later warning fix and safe IFS assignment change alter production bytes and were checked only with focused tests and affected frozen cases, not a second full replay.

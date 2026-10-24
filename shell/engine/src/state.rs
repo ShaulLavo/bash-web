@@ -66,6 +66,13 @@ impl IfsMembers {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LocalOrigin {
+    Declaration,
+    FunctionPrefix,
+    PrefixOwner,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct LocalVariable {
     getopts: Option<(GetoptsState, bool)>,
@@ -74,7 +81,7 @@ pub(crate) struct LocalVariable {
     exported: bool,
     case_mapping: Option<CaseMapping>,
     readonly: bool,
-    function_prefix: bool,
+    origin: LocalOrigin,
     storage_base: usize,
     memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
 }
@@ -126,6 +133,7 @@ pub(crate) fn getopts_number(value: &str) -> i32 {
 
 #[derive(Clone, Debug)]
 pub struct StoredFunction {
+    pub(crate) reader: crate::exec::ReaderLocation,
     pub body: Rc<Command>,
     pub(crate) source: crate::exec::Source,
     pub(crate) line: usize,
@@ -163,6 +171,7 @@ pub struct State {
     pub extglob: bool,
     /// Remove unmatched unquoted pathname patterns instead of keeping them.
     pub nullglob: bool,
+    pub sourcepath: bool,
     /// `set -f`: no pathname expansion of unquoted fields.
     pub noglob: bool,
     pub lastpipe: bool,
@@ -176,10 +185,12 @@ pub struct State {
     pub(crate) star_separator: StarSeparator,
     ifs_members: Option<IfsMembers>,
     positional: Vec<String>,
+    positional_set: bool,
     pub(crate) getopts: GetoptsState,
     getopts_numeric: bool,
     locals: Vec<BTreeMap<String, LocalVariable>>,
     pub(crate) function_calls: usize,
+    pub(crate) source_calls: usize,
     call_stack: CallStack,
     memory: Option<crate::exec::StorageBudget>,
     positional_memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
@@ -194,6 +205,7 @@ impl Default for State {
                 ("IFS".into(), " \t\n".into()),
                 ("OPTIND".into(), "1".into()),
                 ("OPTERR".into(), "1".into()),
+                ("_".into(), "bash".into()),
             ]),
             exported: BTreeSet::new(),
             readonly: BTreeSet::new(),
@@ -217,6 +229,7 @@ impl Default for State {
             extdebug: false,
             extglob: false,
             nullglob: false,
+            sourcepath: true,
             noglob: false,
             lastpipe: false,
             monitor: false,
@@ -226,10 +239,12 @@ impl Default for State {
             star_separator: StarSeparator::Live,
             ifs_members: None,
             positional: Vec::new(),
+            positional_set: false,
             getopts: GetoptsState::default(),
             getopts_numeric: true,
             locals: Vec::new(),
             function_calls: 0,
+            source_calls: 0,
             call_stack: CallStack::default(),
             memory: None,
             positional_memory: None,
@@ -238,6 +253,12 @@ impl Default for State {
         }
     }
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AssignmentKind {
+    Explicit,
+    Publication,
+}
+
 impl State {
     /// Ordinary bindings, without special-parameter or nameref resolution.
     pub fn bindings(&self) -> &BTreeMap<String, Binding> {
@@ -279,6 +300,32 @@ impl State {
     pub(crate) fn publish_pipeline_status(&mut self, statuses: Vec<i32>) {
         self.pipestatus = statuses;
     }
+    pub(crate) fn last_argument_needs_admission(&self) -> bool {
+        self.is_nameref("_")
+            || matches!(self.variables.get("_"), Some(Binding::Indexed(_)))
+            || self.prefix_saved("_")
+            || self.assignment_undo.0.strong_count() != 0
+            || matches!(self.star_separator, StarSeparator::Snapshot { .. })
+                && self.ifs_members.is_none()
+    }
+    pub(crate) fn publish_last_argument(&mut self, mut value: String) -> Result<(), Error> {
+        self.exported.remove("_");
+        let name = if self.namerefs.contains_key("_") {
+            Cow::Owned(self.assignment_name("_".into())?)
+        } else {
+            Cow::Borrowed("_")
+        };
+        if self.is_readonly(&name) {
+            return Err(Error::Readonly {
+                name: name.into_owned(),
+                line: None,
+                expansion: false,
+            });
+        }
+        self.normalize_getopts_publication(&name, &mut value);
+        self.assign_resolved_parameter(name, value, AssignmentKind::Publication)
+            .map_err(Error::from)
+    }
     pub(crate) fn last_async(&self) -> Option<&str> {
         self.last_async.as_deref()
     }
@@ -296,8 +343,7 @@ impl State {
             .map(|(key, value)| (key, value.into()))
             .collect();
         self.exported = self.variables.keys().cloned().collect();
-        self.variables.insert("OPTIND".into(), "1".into());
-        self.variables.insert("OPTERR".into(), "1".into());
+        self.initialize_shell_defaults();
         self.variables
             .entry("PATH".into())
             .or_insert_with(|| "/usr/bin:/bin".into());
@@ -305,6 +351,7 @@ impl State {
     /// The browser process adapter keeps the engine's default IFS if absent
     /// from the inherited environment, and exports the resulting startup keys.
     pub fn inherit_environment(&mut self, environment: impl IntoIterator<Item = (String, String)>) {
+        self.variables.remove("_");
         self.variables.remove("OPTIND");
         self.variables.remove("OPTERR");
         self.variables.extend(
@@ -313,6 +360,12 @@ impl State {
                 .map(|(key, value)| (key, value.into())),
         );
         self.exported = self.variables.keys().cloned().collect();
+        self.initialize_shell_defaults();
+    }
+    fn initialize_shell_defaults(&mut self) {
+        self.variables
+            .entry("_".into())
+            .or_insert_with(|| self.shell_name.clone().into());
         self.variables.insert("OPTIND".into(), "1".into());
         self.variables.insert("OPTERR".into(), "1".into());
     }
@@ -421,6 +474,7 @@ impl State {
             extdebug: state.extdebug,
             extglob: state.extglob,
             nullglob: state.nullglob,
+            sourcepath: state.sourcepath,
             noglob: state.noglob,
             lastpipe: state.lastpipe,
             monitor: state.monitor,
@@ -430,9 +484,11 @@ impl State {
             star_separator: state.star_separator,
             ifs_members: state.ifs_members,
             positional,
+            positional_set: state.positional_set,
             getopts: state.getopts,
             getopts_numeric: state.getopts_numeric,
             function_calls: state.function_calls,
+            source_calls: state.source_calls,
             call_stack,
             memory: state.memory.clone(),
             positional_memory,
@@ -602,6 +658,21 @@ impl State {
         }
         self.binding(name)?.next(previous)
     }
+    fn admit_positionals(
+        &self,
+        args: &Vec<String>,
+    ) -> Result<Option<Rc<RefCell<crate::exec::StorageAllocation>>>, i32> {
+        self.memory
+            .as_ref()
+            .map(|memory| {
+                memory
+                    .admit(positional_bytes(args)?)
+                    .map_err(|_| crate::exec::RESOURCE_STATUS)
+            })
+            .transpose()
+            .map(|ticket| ticket.map(|ticket| Rc::new(RefCell::new(ticket))))
+    }
+
     /// Takes ownership of argv already admitted by command expansion.
     pub(crate) fn replace_positional(&mut self, args: Vec<String>) -> Result<(), i32> {
         let bytes = positional_bytes(&args)?;
@@ -618,6 +689,7 @@ impl State {
             )));
         }
         self.positional = args;
+        self.positional_set = true;
         Ok(())
     }
     /// Drop shifted argument strings while retaining the actual Vec capacity.
@@ -987,6 +1059,14 @@ impl State {
     }
     pub fn assign_parameter(&mut self, name: String, value: String) -> Result<(), i32> {
         let name = self.assignment_name(name)?;
+        self.assign_resolved_parameter(Cow::Owned(name), value, AssignmentKind::Explicit)
+    }
+    fn assign_resolved_parameter(
+        &mut self,
+        name: Cow<'_, str>,
+        value: String,
+        kind: AssignmentKind,
+    ) -> Result<(), i32> {
         if self.is_readonly(&name) {
             return Err(1);
         }
@@ -1009,23 +1089,27 @@ impl State {
         if let Some(saved) = self
             .prefixes
             .last_mut()
-            .and_then(|frame| frame.get_mut(&name))
+            .and_then(|frame| frame.get_mut(name.as_ref()))
         {
             let mut binding = saved.clone().unwrap_or_else(|| "".into());
             binding.set_scalar(value.clone());
             *saved = Some(binding);
         }
         let direct_ifs = name == "IFS";
-        self.assign_getopts_index(&name, &value);
-        if name == "OPTIND"
+        if kind == AssignmentKind::Explicit {
+            self.assign_getopts_index(&name, &value);
+        }
+        if kind == AssignmentKind::Explicit
+            && name == "OPTIND"
             && let Some(changes) = changes
         {
             changes.borrow_mut().getopts = Some(self.getopts);
         }
-        self.variables
-            .entry(name)
-            .and_modify(|binding| binding.set_scalar(value.clone()))
-            .or_insert_with(|| value.into());
+        if let Some(binding) = self.variables.get_mut(name.as_ref()) {
+            binding.set_scalar(value);
+        } else {
+            self.variables.insert(name.into_owned(), value.into());
+        }
         if direct_ifs {
             self.refresh_star_separator();
         }
@@ -1087,6 +1171,12 @@ impl State {
     }
     pub(crate) fn getopts_numeric(&self, name: &str) -> bool {
         name == "OPTIND" && self.getopts_numeric
+    }
+    pub(crate) fn normalize_getopts_publication(&self, target: &str, value: &mut String) {
+        if self.getopts_numeric(target) && value.bytes().any(|byte| !byte.is_ascii_digit()) {
+            value.clear();
+            value.push('0');
+        }
     }
     #[cfg(test)]
     pub(crate) fn getopts_publication_budget(&self) -> Option<crate::exec::StorageBudget> {
@@ -1322,6 +1412,9 @@ impl State {
         {
             *saved = None;
         }
+        if let Some(local) = self.locals.last_mut().and_then(|frame| frame.get_mut(name)) {
+            local.origin = LocalOrigin::Declaration;
+        }
         // Removing a current local keeps its saved outer binding but releases
         // its live value charge. Shrinking cannot fail admission.
         self.reserve_local_value(name, 0).map_err(|_| 1)?;
@@ -1343,12 +1436,7 @@ impl State {
             .is_some_and(|frame| frame.contains_key(&name));
         // Temporary environments of function calls are inherited by a bare
         // local declaration, unlike ordinary dynamically visible bindings.
-        let prefix = self
-            .locals
-            .iter()
-            .rev()
-            .find_map(|frame| frame.get(&name))
-            .is_some_and(|binding| binding.function_prefix);
+        let prefix = self.inherits_function_prefix(&name);
         let inherited_bytes = if !already_local && prefix && value.is_none() {
             self.variables.get(&name).map_or(0, Binding::storage_bytes)
         } else {
@@ -1428,6 +1516,14 @@ impl State {
                 })
                 .transpose()?
                 .map(|ticket| Rc::new(RefCell::new(ticket)));
+            let origin = self
+                .locals
+                .iter()
+                .rev()
+                .nth(1)
+                .and_then(|frame| frame.get(name))
+                .filter(|binding| binding.origin == LocalOrigin::FunctionPrefix)
+                .map_or(LocalOrigin::Declaration, |_| LocalOrigin::PrefixOwner);
             let previous = LocalVariable {
                 getopts: (name == "OPTIND").then_some((self.getopts, self.getopts_numeric)),
                 previous: self.variables.remove(name),
@@ -1435,7 +1531,7 @@ impl State {
                 exported: self.exported.contains(name),
                 case_mapping: self.case_attributes.remove(name),
                 readonly: false,
-                function_prefix: false,
+                origin,
                 storage_base,
                 memory,
             };
@@ -2187,6 +2283,59 @@ fn positional_bytes(args: &Vec<String>) -> Result<usize, i32> {
     )
 }
 
+struct SourcePositionals {
+    args: Vec<String>,
+    memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
+}
+
+pub(crate) struct SourceFrame {
+    state: SharedState,
+    positional: Option<SourcePositionals>,
+}
+impl SourceFrame {
+    pub(crate) fn enter(state: SharedState, args: Vec<String>) -> Result<Self, i32> {
+        let mut shell = state.borrow_mut();
+        let positional = if args.is_empty() {
+            None
+        } else {
+            Some(Self::replace(&mut shell, args)?)
+        };
+        shell.positional_set = false;
+        shell.source_calls += 1;
+        drop(shell);
+        Ok(Self { state, positional })
+    }
+
+    pub(crate) fn finish(mut self) {
+        let mut shell = self.state.borrow_mut();
+        if self.positional.is_some() && shell.function_calls == 0 && shell.positional_set {
+            self.positional.take();
+            shell.positional_set = false;
+        }
+    }
+
+    fn replace(shell: &mut State, args: Vec<String>) -> Result<SourcePositionals, i32> {
+        let memory = shell.admit_positionals(&args)?;
+        Ok(SourcePositionals {
+            args: std::mem::replace(&mut shell.positional, args),
+            memory: std::mem::replace(&mut shell.positional_memory, memory),
+        })
+    }
+}
+impl Drop for SourceFrame {
+    fn drop(&mut self) {
+        let mut state = self.state.borrow_mut();
+        state.source_calls -= 1;
+        if self.positional.is_some() {
+            state.positional_set = false;
+        }
+        if let Some(saved) = self.positional.take() {
+            state.positional = saved.args;
+            state.positional_memory = saved.memory;
+        }
+    }
+}
+
 /// No borrow is held over an await. Dropping a cancelled function future restores
 /// the positional/local frame, including when it is nested inside another call.
 pub(crate) struct FunctionFrame {
@@ -2202,16 +2351,7 @@ impl FunctionFrame {
         if s.function_calls >= limit {
             return Err(2);
         }
-        let memory = s
-            .memory
-            .as_ref()
-            .map(|memory| {
-                memory
-                    .admit(positional_bytes(&args)?)
-                    .map_err(|_| crate::exec::RESOURCE_STATUS)
-            })
-            .transpose()?
-            .map(|ticket| Rc::new(RefCell::new(ticket)));
+        let memory = s.admit_positionals(&args)?;
         s.locals.try_reserve(2).map_err(|_| 2)?;
         let positional_memory = std::mem::replace(&mut s.positional_memory, memory);
         let positional = std::mem::replace(&mut s.positional, args);
@@ -2244,7 +2384,7 @@ impl FunctionFrame {
                 .unwrap()
                 .get_mut(&name)
                 .unwrap()
-                .function_prefix = true;
+                .origin = LocalOrigin::FunctionPrefix;
             state.exported.insert(name);
         }
         state.locals.push(BTreeMap::new());
@@ -2263,6 +2403,7 @@ impl Drop for FunctionFrame {
         s.positional = std::mem::take(&mut self.positional);
         s.positional_memory = self.positional_memory.take();
         s.function_calls -= 1;
+        s.positional_set = false;
         if self.traced {
             s.call_stack.pop();
         }
@@ -2366,6 +2507,9 @@ mod tests {
             + 6
             + snapshot_node_bytes::<String>().unwrap_or_else(|_| panic!("node fits"))
             + 9
+            + snapshot_node_bytes::<Binding>().unwrap_or_else(|_| panic!("node fits"))
+            + "_".len()
+            + "bash".len()
             + std::mem::size_of::<i32>();
         let mut child = snapshot_at_exact_limit(&state, bytes);
         child
@@ -2834,6 +2978,7 @@ mod tests {
                     line: 1,
                     body: body.clone(),
                     storage: None,
+                    reader: crate::exec::ReaderLocation::default(),
                 },
             );
             source.variables.insert("v".into(), "caller".into());
@@ -2888,7 +3033,7 @@ mod tests {
                     case_mapping: None,
                     exported: true,
                     readonly: true,
-                    function_prefix: false,
+                    origin: LocalOrigin::Declaration,
                     storage_base: 0,
                     memory: None,
                 },
@@ -2934,7 +3079,7 @@ mod tests {
                         case_mapping: None,
                         exported: false,
                         readonly: false,
-                        function_prefix: false,
+                        origin: LocalOrigin::Declaration,
                         storage_base: 0,
                         memory: None,
                     },
@@ -3289,3 +3434,6 @@ mod tests {
         assert_eq!(state.borrow().case_mapping("x"), CaseMapping::Upper);
     }
 }
+
+#[cfg(test)]
+mod source_tests;

@@ -44,4 +44,4 @@ two Bashkit cases with zero lost cases. The immutable-main control first
 reproduces every committed pass. Only the 14 gained outcome fields and derived
 counts change; historical payloads remain. See the
 [measurement receipt](evidence/regex-groups.json) for exact IDs, identities,
-commands and cleanup ownership. Parent review and hosted acceptance are pending.
+and commands.

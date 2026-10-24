@@ -1,4 +1,3 @@
-import "./test-own-shell-test-argv.ts";
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import { test } from "node:test";
