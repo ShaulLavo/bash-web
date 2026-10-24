@@ -82,7 +82,7 @@ async fn run_body(
     let result = eval::read(
         source,
         evaluation,
-        &filename,
+        Some(&filename),
         state,
         fds.clone(),
         reader_context,

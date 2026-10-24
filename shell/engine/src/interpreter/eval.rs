@@ -1,4 +1,4 @@
-use super::{Context, Descriptors, Flow, Outcome, command_builtin, parse_failure, script_sequence};
+use super::{Context, Descriptors, Flow, Outcome, command_builtin, reader};
 use crate::{
     exec::{JoinedSource, Scope, StorageAllocation},
     executor::Budget,
@@ -85,7 +85,7 @@ async fn join_body(
     if bytes > context.limits().source_bytes {
         return Err(2);
     }
-    // String plus the later Rc<str> copy and both reference-count headers.
+    // Text conversion and allocation headers. Shape::storage admits reader metadata.
     let storage = bytes
         .checked_mul(2)
         .and_then(|bytes| bytes.checked_add(size_of::<usize>() * 4))
@@ -167,7 +167,7 @@ async fn run_body(
         .reader
         .line_offset
         .saturating_add(line.unwrap_or(1).saturating_sub(1));
-    read(source, evaluation, "eval", state, fds, context)
+    read(source, evaluation, None, state, fds, context)
         .await
         .unwrap_or_else(|_| Outcome::status(2))
 }
@@ -252,17 +252,62 @@ impl<'a> Diagnostic<'a> {
     }
 }
 
+enum ReadName {
+    Eval,
+    Source {
+        text: String,
+        _storage: StorageAllocation,
+    },
+}
+
+impl ReadName {
+    fn new(name: Option<&str>, scope: &Scope) -> Result<Self, String> {
+        let Some(name) = name else {
+            return Ok(Self::Eval);
+        };
+        let mut storage = scope
+            .admit_storage(name.len())
+            .map_err(|_| "shell source storage limit exceeded".to_owned())?;
+        let mut text = String::new();
+        text.try_reserve_exact(name.len())
+            .map_err(|_| "shell source storage limit exceeded".to_owned())?;
+        storage
+            .resize(text.capacity())
+            .map_err(|_| "shell source storage limit exceeded".to_owned())?;
+        text.push_str(name);
+        Ok(Self::Source {
+            text,
+            _storage: storage,
+        })
+    }
+}
+
+impl AsRef<str> for ReadName {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Eval => "eval",
+            Self::Source { text, .. } => text,
+        }
+    }
+}
+
 pub(super) async fn read(
     source: JoinedSource,
     evaluation: Scope,
-    reader: &str,
+    reader: Option<&str>,
     state: SharedState,
     fds: Descriptors,
     context: Context,
 ) -> Result<Outcome, String> {
+    let reader = ReadName::new(reader, &evaluation)?;
     let parser = context.parser_budget();
-    let (script, failure) = match parse::eval(source.text(), context.limits().source_bytes, &parser)
-    {
+    let aliases = reader::AliasOptions::snapshot(&state);
+    let (script, failure) = match parse::eval(
+        source.text(),
+        context.limits().source_bytes,
+        &parser,
+        aliases.options(),
+    ) {
         Ok(parsed) => parsed,
         Err(_)
             if matches!(
@@ -272,6 +317,10 @@ pub(super) async fn read(
         {
             context.cancel.cancel();
             return Ok(Outcome::status(130));
+        }
+        Err(error) if matches!(reader, ReadName::Eval) => {
+            let outcome = super::abort_diagnostic(&fds, &context, error.as_bytes(), 2).await;
+            return Ok(Outcome::status(outcome.code));
         }
         Err(message) => return Err(message),
     };
@@ -290,11 +339,12 @@ pub(super) async fn read(
     let mut result = context
         .core
         .executor
-        .spawn(script_sequence(
-            script.commands,
-            script.command_end_lines,
+        .spawn(reader::run(
+            reader::Reader::new(script, failure, aliases, parser),
+            reader,
+            true,
             state,
-            fds.clone(),
+            fds,
             context.clone(),
         ))
         .await;
@@ -302,14 +352,6 @@ pub(super) async fn read(
     // return a status to the caller instead of discarding the caller's line.
     if result.flow == Flow::DiscardReadUnit {
         result.flow = Flow::Normal;
-    }
-    if result.flow == Flow::Normal
-        && let Some(failure) = failure
-    {
-        result = parse_failure(failure, reader, &fds, &context).await;
-        if result.code == 2 && result.flow == Flow::Exit {
-            result.flow = Flow::Normal;
-        }
     }
     Ok(result)
 }
@@ -329,6 +371,26 @@ mod tests {
         task::{Context as TaskContext, Poll},
     };
     const MAX_EXECUTION_DEPTH: usize = 256;
+
+    #[test]
+    fn reader_names_keep_eval_static_and_source_storage_owned_until_drop() {
+        let storage = StorageBudget::new(32);
+        let scope = Scope::new(1024, storage.clone(), StorageBudget::new(1024));
+        let eval = ReadName::new(None, &scope).unwrap();
+        assert_eq!(storage.observation().0, 0);
+        assert_eq!(eval.as_ref(), "eval");
+        let source = ReadName::new(Some("./library"), &scope).unwrap();
+        assert_eq!(source.as_ref(), "./library");
+        assert!(storage.observation().0 >= 9);
+        assert!(ReadName::new(Some(&"x".repeat(33)), &scope).is_err());
+        drop(source);
+        assert_eq!(storage.observation().0, 0);
+        let named_eval = ReadName::new(Some("eval"), &scope).unwrap();
+        assert!(matches!(named_eval, ReadName::Source { .. }));
+        assert!(storage.observation().0 >= 4);
+        drop(named_eval);
+        assert_eq!(storage.observation().0, 0);
+    }
 
     #[test]
     fn storage_growth_is_admitted_atomically_and_refunded_by_the_last_owner() {

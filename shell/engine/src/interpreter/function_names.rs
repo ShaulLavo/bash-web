@@ -27,10 +27,25 @@ pub(super) async fn declare(
         }
         return result;
     }
+    if context
+        .source
+        .retain_root(&context.core.execution_storage)
+        .is_err()
+    {
+        return abort_diagnostic(
+            &fds,
+            &context,
+            b"function source live-memory limit exceeded",
+            2,
+        )
+        .await;
+    }
     state.borrow_mut().define_function(
         function.name,
         StoredFunction {
             body: Rc::new(*function.body),
+            source: context.source.clone(),
+            line,
             storage: context.evaluation.retained(),
             reader: context.reader.clone(),
         },
