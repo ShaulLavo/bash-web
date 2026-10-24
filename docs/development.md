@@ -102,15 +102,9 @@ LAYERS_BASE_REF=$(git rev-parse origin/main) npm run check:layers
 
 `LAYERS_BASE_REF` (or `--base-ref`) must be an immutable full commit SHA. CI fetches complete history and selects the PR base SHA, the pre-push main SHA, or the merge-base with main for another branch's push. The layer job runs independently of the shell, compatibility, and browser jobs, and a layer failure does not skip their coverage.
 
-The checker records production and test-only edges, violations, source locations, and a source digest in `docs/evidence/engine-layers.json`. Neither violation count may increase, and a new violating edge cannot replace an old one at the same count. The check is lexical. It does not resolve Rust aliases or macros and does not prove that optional capabilities compile separately.
+The checker compares production and test-only edges using the immutable base's scanner and policy for both source sets. Neither violation count may increase, and a new violating edge cannot replace an old one at the same count. The check is lexical. It does not resolve Rust aliases or macros and does not prove that optional capabilities compile separately.
 
-After you edit engine sources, refresh and commit the evidence in the same change:
-
-```sh
-LAYERS_BASE_REF=$(git rev-parse origin/main) npm run check:layers -- --record
-```
-
-Recording cannot bypass the committed-HEAD or immutable-target checks. A normal merge can carry unchanged evidence from a parent. The checker verifies that evidence against the parent's sources, rescans the merge, and compares it with the verified parent before it permits a refresh. Changed merge evidence must match exactly. Ordinary source commits with stale evidence are rejected, as are tampered parent or target records. The graph itself is recorded in [ADR 003](adr/003-one-core-shell-and-installable-utilities.md).
+Set `LAYERS_OUTPUT` or `--output` to retain complete base/candidate graphs and comparison evidence. CI uploads this file even when the comparison fails. Do not refresh or commit `docs/evidence/engine-layers.json`; it is historical evidence, not a gate input. The graph is described in [ADR 003](adr/003-one-core-shell-and-installable-utilities.md).
 
 ## Host boundary
 
