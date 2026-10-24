@@ -3198,6 +3198,15 @@ Evidence: [signed-oracle controls](file:///work/reports/wave-20261022/shell/pr85
 [exact parent/native controls](file:///work/reports/wave-20261022/shell/pr85-callstack-slice-composition-fix-r7-evidence/parent-controls.json),
 and [production Waffle observations](file:///work/reports/wave-20261022/shell/pr85-callstack-slice-composition-fix-r7-evidence/new-waffle-controls.json).
 
+
+## Temporary prefix declaration writes
+
+Status: Approved follow-up, observed 2026-10-23 in the assignment/scope lane.
+
+- Bash 5.3.15 runs `x=outer; x=temp export x+=suffix; echo "$x"` with stdout `suffix\n` and status 0. The unchanged production Waffle guest at `e6430b1554de7d2efad092f40751858292cb071d` prints `outer\n` and status 0. Reproduced once in the local declaration-append probe.
+- `state::PrefixFrame::builtin` saves bindings outside `State::prefixes`, and its drop path restores the saved binding after the declaration. Trace `shell/engine/src/state.rs` around `PrefixBindings::Builtin` and `Drop for PrefixFrame`, plus `interpreter.rs` builtin dispatch. A fix must distinguish a declaration write from an ordinary temporary environment; comparing final values is insufficient when the declaration assigns the same value.
+- Keep regular builtin prefixes temporary and function-prefix locals inherited. Add recorded Bash controls for plain assignment and append through export, readonly, declare, local and eval. Pair them with the frozen temp-binding cases. This is separate from scalar declaration += recognition and scope lookup.
+
 ## Invalid nameref target review follow-ups, 2026-10-23
 
 Status: Approved. Owner: VARIABLES declaration/builtin family. These inherited
@@ -3298,6 +3307,45 @@ first, and prints `status=2` for the other two. Bash validates an indirect
 target only after expanding its operand: `r=1; set --; : ${!r:=$(echo E >&2)}`
 prints `E`, then `1: invalid variable name`. Keep that order for indirect
 targets. Do not move it into the direct-target rejection.
+
+## Local append scope-chain follow-ups from PR71 review
+
+Status: Approved. Owner: VARIABLES assignment/scope family. Keep these separate
+from the ordinary failed-operand continuation repair. Independent review at
+`1bf847b7e21afcc3a260dd42244621ec9603cefe` recorded the complete streams in
+`/work/reports/wave-20261022/shell/review71-takeover-r2-evidence/observations.json`
+and `bare-local-observations.json`.
+
+### Mixed-scope reference chains
+
+```sh
+t=one; declare -n s=t; f(){ local t=base; local -n r=s; local r+=two; echo "$r:$s:$t"; declare -p r s; }; f; echo "$t"
+```
+
+Recorded Bash 5.3.15 prints `:base:base`, raw `r="stwo"`, raw `s="t"`, then
+`one`. The reviewed candidate prints `basetwo:basetwo:basetwo`, raw `r="s"`,
+raw `s="t"`, then `one`. Both exit 0. The same mismatch occurs with `declare`
+and `typeset`. This was not a passing original-base case. Trace
+`shell/engine/src/builtins/declarations.rs:local_append_target` and the owning
+scope's reference lookup. Resolve the scope chain without over-resolving an
+alias from another scope. Keep current-only chains, indexed target writes,
+readonly rejection, first-local shadowing, and fatal bounds covered.
+
+### Caller-local unset with a function prefix
+
+```sh
+x=outer; f(){ local x=caller; g; h; echo "$x"; }; g(){ unset x; x=again; }; h(){ local x+=a; echo "$x"; }; x=prefix f; echo "$x"
+```
+
+Recorded Bash 5.3.15 prints `a\nagain\nagain\n`. The reviewed candidate prints
+`againa\nagain\nouter\n`; original base prints `again\nagain\nouter\n`.
+All exit 0. Caller-local record removal predates PR71. Trace
+`shell/engine/src/state.rs:unset` and function-prefix restoration around lines
+1176-1201 at the reviewed pin. Reproduce on the eventual integrated main, then
+fix caller-unset ownership without making a callee's new local propagate prefix
+origin. Pair local/unset/reassignment with normal return, subshell, and
+cancellation controls. Neither follow-up is implemented or claimed as a gain by
+the continuation repair.
 
 ## Completion negative-extglob follow-up, 2026-10-23
 
