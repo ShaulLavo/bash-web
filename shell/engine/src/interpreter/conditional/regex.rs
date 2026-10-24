@@ -1674,11 +1674,29 @@ mod tests {
             assert!(!status("^(((a*|b){2,3})*b)+$", value), "{value:?}");
         }
     }
+    const LARGE_NESTED_GROUP_CASES: [(usize, usize); 6] = [
+        (64, 3072),
+        (48, 4096),
+        (32, 8192),
+        (16, 16384),
+        (4, 65536),
+        (1, 65536),
+    ];
+    fn nested_group_input(groups: usize, length: usize) -> (Pattern, String) {
+        let source = "(".repeat(groups) + "a" + &")".repeat(groups) + "*";
+        (self::pattern(&source), "a".repeat(length))
+    }
+    fn assert_nested_capture_spans(captures: &[Option<(usize, usize)>], length: usize) {
+        assert_eq!(captures[0], Some((0, length)));
+        assert!(
+            captures[1..]
+                .iter()
+                .all(|pair| *pair == Some((length - 1, length)))
+        );
+    }
     // Register snapshots must not copy every capture at each group close.
     fn reconstruction_steps(groups: usize) -> usize {
-        let source = "(".repeat(groups) + "a" + &")".repeat(groups) + "*";
-        let pattern = self::pattern(&source);
-        let value = "a".repeat(256);
+        let (pattern, value) = nested_group_input(groups, 256);
         let budget = 100_000_000;
         let mut work = Work::new(budget, 100_000_000, 16);
         let captures = finish(matches(&pattern, &value, &mut work, &Cancel::new()))
@@ -1692,9 +1710,7 @@ mod tests {
     #[test]
     fn deep_nested_group_captures_fit_default_command_work() {
         for groups in [48, 64] {
-            let source = "(".repeat(groups) + "a" + &")".repeat(groups) + "*";
-            let pattern = self::pattern(&source);
-            let value = "a".repeat(2048);
+            let (pattern, value) = nested_group_input(groups, 2048);
             let mut work = crate::interpreter::command_work(&crate::interpreter::Limits::default());
             let captures = finish(matches(&pattern, &value, &mut work, &Cancel::new()))
                 .unwrap_or_else(|_| panic!("{groups} nested groups exhausted default work"))
@@ -1705,17 +1721,8 @@ mod tests {
     }
     #[test]
     fn larger_nested_group_captures_fit_default_command_work() {
-        for (groups, length) in [
-            (64, 3072),
-            (48, 4096),
-            (32, 8192),
-            (16, 16384),
-            (4, 65536),
-            (1, 65536),
-        ] {
-            let source = "(".repeat(groups) + "a" + &")".repeat(groups) + "*";
-            let pattern = self::pattern(&source);
-            let value = "a".repeat(length);
+        for (groups, length) in LARGE_NESTED_GROUP_CASES {
+            let (pattern, value) = nested_group_input(groups, length);
             let mut work = crate::interpreter::command_work(&crate::interpreter::Limits::default());
             let captures = finish(matches(&pattern, &value, &mut work, &Cancel::new()))
                 .unwrap_or_else(|_| {
@@ -1723,27 +1730,13 @@ mod tests {
                 })
                 .unwrap();
             assert_eq!(captures.len(), groups + 1);
-            assert_eq!(captures[0], Some((0, length)));
-            assert!(
-                captures[1..]
-                    .iter()
-                    .all(|pair| *pair == Some((length - 1, length)))
-            );
+            assert_nested_capture_spans(&captures, length);
         }
     }
     #[test]
     fn ordinary_save_chains_bound_reconstruction_work() {
-        for (groups, length) in [
-            (64, 3072),
-            (48, 4096),
-            (32, 8192),
-            (16, 16384),
-            (4, 65536),
-            (1, 65536),
-        ] {
-            let source = "(".repeat(groups) + "a" + &")".repeat(groups) + "*";
-            let pattern = self::pattern(&source);
-            let value = "a".repeat(length);
+        for (groups, length) in LARGE_NESTED_GROUP_CASES {
+            let (pattern, value) = nested_group_input(groups, length);
             let cancel = Cancel::new();
             let mut work = Work::new(100_000_000, 100_000_000, 16);
             finish(ascii(&pattern, &value, &mut work, &cancel))
@@ -1767,12 +1760,7 @@ mod tests {
                 &graph, start, count, &reachable, span, &mut work, &cancel,
             ))
             .unwrap_or_else(|_| panic!("profile stage failed"));
-            assert_eq!(captures[0], Some((0, length)));
-            assert!(
-                captures[1..]
-                    .iter()
-                    .all(|pair| *pair == Some((length - 1, length)))
-            );
+            assert_nested_capture_spans(&captures, length);
             assert!(reached - work.remaining < length * 5 + nodes.len() * 8);
             eprintln!(
                 "PROFILE groups={groups} n={length} nodes={} kept={} compile={} graph={} scan={} reach={} reconstruction={} total={} storage={}",

@@ -30,6 +30,11 @@ const runner = await createWaffleRunner({
   fixtureDirectory: directory,
   modulePath: resolve(directory, "shell-runtime.wasm"),
 });
+function assertExecution(actual: Awaited<ReturnType<typeof runner>>, status: number) {
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.outputLimit, undefined);
+  assert.equal(actual.status, status);
+}
 const observations: object[] = [];
 after(() => {
   if (process.env.BASH_REGEX_CAPTURES_OUT)
@@ -48,9 +53,7 @@ for (const expected of cases)
       stderrBase64: actual.stderr.toString("base64"),
       crash: actual.crash,
     });
-    assert.equal(actual.crash, undefined);
-    assert.equal(actual.outputLimit, undefined);
-    assert.equal(actual.status, expected.status);
+    assertExecution(actual, expected.status);
     assert.deepEqual(actual.stdout, Buffer.from(expected.stdoutBase64, "base64"));
     if (expected.diagnostic) {
       const recorded = Buffer.from(expected.stderrBase64, "base64").toString();
@@ -67,9 +70,7 @@ if (!process.env.BASH_REGEX_CAPTURES_FIXTURE) {
   ))
     test(`production Waffle capture chains: ${expected.name}`, async () => {
       const actual = await runner(expected.script);
-      assert.equal(actual.crash, undefined);
-      assert.equal(actual.outputLimit, undefined);
-      assert.equal(actual.status, expected.status);
+      assertExecution(actual, expected.status);
       // Avoid constructing a multi-megabyte Buffer diff on a failed large span.
       assert.ok(actual.stdout.equals(Buffer.from(expected.stdoutBase64, "base64")), expected.name);
       assert.deepEqual(actual.stderr, Buffer.from(expected.stderrBase64, "base64"));
@@ -79,9 +80,7 @@ if (!process.env.BASH_REGEX_CAPTURES_FIXTURE) {
   ))
     test(`production Waffle regex status: ${expected.name}`, async () => {
       const actual = await runner(expected.script);
-      assert.equal(actual.crash, undefined);
-      assert.equal(actual.outputLimit, undefined);
-      assert.equal(actual.status, expected.status);
+      assertExecution(actual, expected.status);
       assert.deepEqual(actual.stdout, Buffer.from(expected.stdoutBase64, "base64"));
       assert.equal(actual.stderr.length, 0);
     });
@@ -91,9 +90,7 @@ if (!process.env.BASH_REGEX_CAPTURES_FIXTURE) {
     test(`production Waffle restoration-shape status: ${expected.name}`, async () => {
       const actual = await runner(expected.script);
       const summary = (stdout: Buffer) => stdout.toString().split("<")[0];
-      assert.equal(actual.crash, undefined);
-      assert.equal(actual.outputLimit, undefined);
-      assert.equal(actual.status, expected.status);
+      assertExecution(actual, expected.status);
       assert.equal(summary(actual.stdout), summary(Buffer.from(expected.stdoutBase64, "base64")));
       assert.equal(actual.stderr.length, 0);
     });
