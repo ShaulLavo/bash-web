@@ -346,10 +346,17 @@ mod tests {
         let word = shell_parser::Parser::parse_word_string("${@:+small}");
         let cancel = Cancel::new();
         let mut work = super::super::Work::new(4096, 65536, 1);
-        let result = super::super::fields_admitted(&word, &state, &cancel, 16, 1, 16, &mut work)
-            .now_or_never()
-            .unwrap()
-            .unwrap_or_else(|_| panic!("small expansion succeeds"));
+        let result = super::super::fields(
+            &word,
+            &state,
+            &cancel,
+            super::super::FieldContext::ForList,
+            (16, 1, 16),
+            &mut work,
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap_or_else(|_| panic!("small expansion succeeds"));
         assert_eq!(result, ["small"]);
         assert_eq!(state.borrow().positional()[0].len(), 128 * 1024);
     }

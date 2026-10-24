@@ -2788,9 +2788,16 @@ mod tests {
                 cancel.cancel();
             }
             let mut budget = Work::new(steps, bytes, fields);
-            let expanded = fields_admitted(&token, state, &cancel, 64, fields, raw, &mut budget)
-                .now_or_never()
-                .expect("bounded list expansion must not suspend");
+            let expanded = super::fields(
+                &token,
+                state,
+                &cancel,
+                FieldContext::ForList,
+                (64, fields, raw),
+                &mut budget,
+            )
+            .now_or_never()
+            .expect("bounded list expansion must not suspend");
             assert_list_result(expanded, expected, status, source);
         }
     }
