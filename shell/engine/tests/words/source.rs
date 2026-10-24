@@ -172,18 +172,29 @@ fn noexec_skips_source_before_opening_while_the_paired_control_really_executes()
             fs.clone(),
             Limits::default(),
         );
+        let (output, captured) = capture(4096);
+        let mut descriptors = FdTable::default();
+        descriptors.insert(1, output);
+        shell.set_descriptors(descriptors).unwrap();
+        assert_eq!(rig.finish(shell.start("set -- original tail").unwrap()), 0);
         let source = format!("{name} /home/guest/lib supplied");
+        let arguments = r#"printf '%s:%s:%s\n' "$#" "$1" "$2""#;
         shell.state().borrow_mut().publish_status(7);
         shell.state().borrow_mut().noexec = true;
         assert_eq!(rig.finish(shell.start(&source).unwrap()), 7);
         assert_eq!(fs.opens.get(), 0, "no source open or body read: {name}");
         assert!(!shell.state().borrow().bindings().contains_key("loaded"));
-        assert!(shell.state().borrow().positional().is_empty());
+        assert!(captured.bytes().is_empty());
         shell.state().borrow_mut().noexec = false;
+        assert_eq!(rig.finish(shell.start(arguments).unwrap()), 0);
+        assert_eq!(captured.bytes(), b"2:original:tail\n");
         assert_eq!(rig.finish(shell.start(&source).unwrap()), 9);
         assert_eq!(fs.opens.get(), 1, "positive source dispatch: {name}");
         assert_eq!(shell.state().borrow().bindings()["loaded"], "yes");
-        assert!(shell.state().borrow().positional().is_empty());
+        assert_eq!(rig.finish(shell.start(arguments).unwrap()), 0);
+        assert_eq!(captured.bytes(), b"2:original:tail\n2:original:tail\n");
+        assert_eq!(rig.host.active_count(), 0);
+        assert_eq!(rig.host.retained_count(), 0);
         assert!(shell.shutdown().now_or_never().is_some());
         assert_eq!(rig.ex.drive(64).pending, 0);
     }
