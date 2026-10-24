@@ -2680,6 +2680,34 @@ scored prerequisites. No pathname/noglob, tilde or rematch branch was copied.
 
 The sole integration-review P2 is repaired by rejecting resolved indexed bindings before scalar transformation projection. Nounset ordering and local scalar behavior are unchanged. Seventeen recorded unsupported-family/nounset controls pass on fresh native and Waffle artifacts; these are not scored gains. The initial replay and scoreboard attempts hit the host light queue's cgroup memory ceiling. Their failed logs remain separate from the completed suite-class final evidence, with no guest limit or gate changes.
 
+### Nested array operands in positional alternates
+
+Status: Approved follow-up. Owner: expansion family. Independent PR70 r6
+review at `4c8791dee8ff755b6ed262a3bd56b4dc6b2b26a0` records two
+nonblocking compositions in the existing unsupported general-array operand
+scanner. These are not lost ordinary computed-array slice controls. Do not
+expand this family in the PR70 quality-only repair.
+
+```bash
+a=(zero one two); i=0; set -- yes; printf '<%s>\n' "${@:+${a[@]:i+=1:1}}"; printf '%s\n' "$i"
+```
+
+Reviewed native and production Waffle print `0\n`, rather than the intended
+`<one>\n1\n`.
+
+```bash
+g() { set -- yes; printf '<%s>\n' "${@:+${FUNCNAME[@]:0:2}}"; }; f() { g; }; f
+```
+
+Reviewed native and production Waffle exit 2 without output, rather than
+printing `<g>\n<f>\n`. Both inputs reach the unchanged approved operand
+scanner. Preserve positional laziness, computed-array slicing, arithmetic
+side effects and all existing resource/cancellation limits when this family
+is implemented. These are copied review observations, not fresh oracle
+recordings or scored gains. Evidence:
+`/work/reports/wave-20261022/shell/review70-actual75-integration-r6.md` and
+`review70-actual75-integration-r6-evidence/interaction-probes.json`.
+
 ### Inherited extglob parse-option timing
 
 Status: Approved follow-up in the parser/options family, not PR41 storage scope.
