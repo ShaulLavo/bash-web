@@ -4377,6 +4377,8 @@ mod getopts;
 
 #[path = "words/declarations.rs"]
 mod declarations;
+#[path = "words/help.rs"]
+mod help;
 #[path = "words/select.rs"]
 mod select;
 
