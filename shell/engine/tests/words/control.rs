@@ -376,3 +376,29 @@ fn exec_in_an_unredirected_loop_changes_the_surrounding_descriptor_bindings() {
         "restored\ninner\n",
     );
 }
+
+#[test]
+fn loop_control_accepts_the_option_terminator_and_returns_help_status() {
+    check_output(
+        "for i in 1 2; do break -- 1; echo no; done; echo after:$?; for i in 1 2; do break \" 1 \"; echo no; done; echo blanks:$?; for i in 1; do break --help >/dev/null; echo help:$?; done",
+        "after:0\nblanks:0\nhelp:2\n",
+    );
+}
+
+#[test]
+fn loop_control_terminator_keeps_nested_targets_and_operand_failures() {
+    check_output(
+        "for i in 1 2; do for j in a b; do echo $i$j; continue -- 2; echo no; done; echo no; done; for i in 1 2; do for j in a b; do break -- 2; done; echo no; done; echo status:$?",
+        "1a\n2a\nstatus:0\n",
+    );
+    for operand in ["bad", "--help", "9223372036854775808"] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(
+            rig.run(&format!(
+                "for i in 1; do break -- {operand}; echo no; done; echo no"
+            )),
+            2
+        );
+        assert!(rig.output.bytes().is_empty());
+    }
+}
