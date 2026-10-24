@@ -70,6 +70,7 @@ enum Context {
     Operand,
     /// Quote removal cannot join an arithmetic expansion's dollar to an opener.
     Arithmetic,
+    /// Prompt quote characters are data, not shell quote delimiters.
     Prompt,
 }
 
@@ -111,6 +112,13 @@ impl<'a> Scanner<'a> {
         Self {
             context,
             ..Self::new(source, true, pattern, false)
+        }
+    }
+    pub(super) fn prompt(source: &'a str) -> Self {
+        Self {
+            context: Context::Prompt,
+            case_positionals: true,
+            ..Self::new(source, true, true, false)
         }
     }
     pub(super) fn case_pattern(source: &'a str) -> Self {
@@ -307,6 +315,9 @@ impl<'a> Scanner<'a> {
             }
             Some('!') => {
                 self.take();
+            }
+            Some('\'' | '"') if self.context == Context::Prompt => {
+                return Ok(self.text("$", true));
             }
             Some('\'' | '"' | '@' | '*' | '$') => return Err(2.into()),
             _ => return Ok(self.text("$", self.protected())),
@@ -631,6 +642,9 @@ fn validate_token(token: &str, work: &mut Work) -> Result<(), Error> {
     };
     let name = &body[..name_end];
     let suffix = &body[name_end..];
+    if !indirect && basic_name(name) && suffix.starts_with('@') && suffix.len() == 2 {
+        return Ok(());
+    }
     let operator = suffix.strip_prefix(':').unwrap_or(suffix);
     let trim = suffix.starts_with(['#', '%', '/', '^', ',']);
     let substring =
@@ -650,6 +664,9 @@ fn supported(part: &WordPart, lists: bool) -> bool {
         WordPart::Substring { name, .. } => length_name(name) || name == "@",
         WordPart::Variable(name) => {
             basic_name(name) && (lists || !matches!(name.as_str(), "@" | "*"))
+        }
+        WordPart::Transformation { name, .. } => {
+            basic_name(name) && !matches!(name.as_str(), "@" | "*")
         }
         WordPart::PrefixMatch { prefix, .. } => lists && scalar_name(prefix),
         WordPart::Length(name) => length_operand_name(name),

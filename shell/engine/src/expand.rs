@@ -25,6 +25,7 @@ pub(crate) mod pattern;
 mod positional;
 mod prefix;
 mod printable;
+mod prompt;
 mod replacement;
 mod tilde;
 mod transformation;
@@ -1053,10 +1054,10 @@ impl Expansion<'_> {
                 }
                 let runner = expansion.work.substitutions.clone().ok_or(2)?;
                 crate::ast_copy::admit(commands, expansion.cancel, expansion.work).await?;
-                let mut child =
-                    crate::state::State::snapshot(state, expansion.cancel, expansion.work).await?;
-                child.traps = state.borrow().traps.process_substitution();
-                let child = child.shared();
+                let child = Self::process_child(
+                    crate::state::State::snapshot(state, expansion.cancel, expansion.work).await?,
+                    state,
+                );
                 expansion.work.admit_storage(16)?;
                 let fd = runner
                     .process(commands.clone(), *is_input, child, state, expansion.work)
@@ -1213,12 +1214,12 @@ impl Expansion<'_> {
         Ok(())
     }
 
-    fn part_frame<'a, F>(
+    fn part_frame<'a, T, F>(
         &'a mut self,
         build: impl FnOnce(&'a mut Self) -> F,
-    ) -> crate::exec::ResultFuture<'a, ()>
+    ) -> crate::exec::ResultFuture<'a, T>
     where
-        F: std::future::Future<Output = Result<(), Error>> + 'a,
+        F: std::future::Future<Output = Result<T, Error>> + 'a,
     {
         // Admitted scalar/pattern contexts must charge the actual recursive
         // future before boxing it. Legacy argv retains its separate accounting.
@@ -2892,6 +2893,40 @@ mod tests {
         let state = state.shared();
         assert_list_budgets("${!param_@}", &state, &["param_a"]);
         assert_list_budgets("${@:-unused}", &state, &["a", "b"]);
+    }
+
+    #[test]
+    fn prompt_capture_does_not_charge_output_bytes_twice() {
+        let state = State::default().shared();
+        state
+            .borrow_mut()
+            .assign_parameter("p".into(), "abcd".into())
+            .unwrap();
+        let word =
+            crate::parse::generated_word(r#""${p@P}""#).expect("prompt test word must parse");
+        assert!(word.quoted);
+        assert_eq!(word.parts.len(), 1);
+        let cancel = Cancel::new();
+        for (bytes, accepted) in [(3, false), (4, true)] {
+            let mut work = Work::new(65536, 1024 * 1024, 1);
+            let result = fields(
+                &word,
+                &state,
+                &cancel,
+                FieldContext::ForList,
+                (bytes, 1, bytes),
+                &mut work,
+            )
+            .now_or_never()
+            .expect("short prompt must not suspend");
+            match (accepted, result) {
+                (true, Ok(value)) => assert_eq!(value, ["abcd"]),
+                (false, Err(Error::Status(2))) => (),
+                (_, Ok(value)) => panic!("{bytes}-byte limit returned {value:?}"),
+                (_, Err(Error::Status(status))) => panic!("{bytes}-byte limit returned {status}"),
+                (_, Err(_)) => panic!("{bytes}-byte limit returned a non-status error"),
+            }
+        }
     }
 
     #[test]
