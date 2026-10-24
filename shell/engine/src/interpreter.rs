@@ -75,7 +75,7 @@ pub(crate) enum Flow {
     Normal,
     /// A user-level `exit` completed the executing shell environment.
     Complete,
-    /// The current submission must stop, but the reusable environment stays open.
+    /// The current submission must stop; the root session completes the environment.
     Exit,
     Abort,
     // Unlike isolated errexit, a failed fork aborts the invoking reader even
@@ -870,7 +870,9 @@ impl Session {
                 context.clone(),
             )
             .await;
-            let result = if result.flow == Flow::Complete && !context.cancel.is_cancelled() {
+            let result = if matches!(result.flow, Flow::Complete | Flow::Exit)
+                && !context.cancel.is_cancelled()
+            {
                 context.core.exit_requested.set(true);
                 finish_environment(
                     result,
