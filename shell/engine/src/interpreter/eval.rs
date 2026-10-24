@@ -123,9 +123,9 @@ async fn join_body(
 pub(super) fn run(
     args: Vec<String>,
     line: Option<usize>,
-    state: SharedState,
+    state: &SharedState,
     fds: Descriptors,
-    context: Context,
+    context: &Context,
 ) -> Frame<'static> {
     if context.cancel.is_cancelled() {
         return Either::Left(ready(Outcome::status(130)));
@@ -135,7 +135,7 @@ pub(super) fn run(
     }
     let evaluation = context.evaluation.clone();
     evaluation.reader_frame(
-        |scope| run_body(args, line, state, fds, context, scope),
+        |scope| run_body(args, line, state.clone(), fds, context.clone(), scope),
         Outcome::status,
     )
 }

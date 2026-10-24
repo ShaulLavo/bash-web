@@ -1,10 +1,9 @@
 # Shell workspace
 
-Plan [004](../plans/004-own-shell.md) defines this standalone parser and
-original async engine with a runnable native/WASI CLI. The native fixture
-process host stays separate from the runtime-backed WASI executable. Browser
-process, filesystem, and terminal adapters remain host concerns and are not
-part of this package.
+This page covers the standalone parser and original async engine, with a
+runnable native/WASI CLI. The native fixture process host stays separate from
+the runtime-backed WASI executable. Browser process, filesystem, and terminal
+adapters remain host concerns and are not part of the engine.
 
 ## Parser and provenance
 
@@ -115,8 +114,8 @@ builtins-only cases from the committed GNU bash fixture. It runs the production
 `shell-runtime` guest and the `argv.py`/`printenv.py` fixture guests on Waffle's
 Node runtime; this standalone CLI is no longer its instrument. Each parallel
 runner needs about 1.2 GiB of memory.
-It needs Node 26.7.0, the Rust toolchain, the installed Waffle dependency and
-the [WASI build prerequisites](getting-started.md#build-and-test), but no
+It needs exactly Node 26.12.1 (the oracle's recorded version), the Rust toolchain, the installed Waffle dependency and
+the [WASI build prerequisites](development.md#prerequisites), but no
 installed bash, submodules, corpus downloads or other engines. Set
 `BASH_COMPAT_SKIP_BUILD=1` to reuse the release WASM. The separate CI compatibility
 job does this after its release build. WASI streaming tests and the brotli-11
@@ -124,8 +123,8 @@ job does this after its release build. WASI streaming tests and the brotli-11
 
 See [the comparison method and commands](bash-compatibility.md#own-shell-fixed-scoreboard)
 for exact identities, skips, target-branch checks and baseline updates. The first
-measured baseline is 288/1,682 Oils, 295/1,888 Brush-suite and 445/2,222
-Bashkit-suite. Two freshly nondeterministic oracle cases explain the smaller
+measured baseline was 288/1,682 Oils, 295/1,888 Brush-suite and 445/2,222
+Bashkit-suite. The committed baseline is far higher now; [Status](status.md#compatibility-with-bash) has the current numbers. Two freshly nondeterministic oracle cases explain the smaller
 secondary denominators. Candidate baselines must include every current passing
 case; CI separately rejects any corpus count below the target branch. This CLI establishes no cold-start or browser acceptance result; browser
 verification remains a [separate gate](browser-runtime.md#build-and-verify).

@@ -34,7 +34,7 @@ Explicit compound subscripts such as `a=([5]=value)` and `a+=([5]+=value)` remai
 
 Known bounded follow-ups remain. A negative out-of-range read returns an empty field without Bash's stderr diagnostic. With `set -u`, an unset array count uses the engine's generic unbound-variable status 127 rather than Bash's status 1. Circular indexed nameref writes report status 1 without Bash's warning or successful status. Indexed `unset` still leaves the element intact. Raw custom observations and exact commands are in `/work/reports/bash-web/hill-climb/variables/indexed/residual-probes.ts/.jsonl`; no scored IDs or promised gains are inferred from them. These do not broaden this storage/assignment PR into nameref lifecycle or declaration handling.
 
-The implementation is original local code. `sources.lock.json:shellIndexedArrays` records its classification and checks. The [evidence receipt](evidence/indexed-arrays.json) records frozen gains, exact identities and qualification. Explicit-name `declare -p` and `typeset -p` are a separately serialized follow-up. The Approved [byte-fields item](../plans/004-own-shell.md#word-fields-carry-bytes-not-utf-8-string) lists four proven scored IDs needing raw-byte support. It does not count custom probes as scored failures.
+The implementation is original local code. `sources.lock.json:shellIndexedArrays` records its classification and checks. The [evidence receipt](evidence/indexed-arrays.json) records frozen gains, exact identities and qualification. Explicit-name `declare -p` and `typeset -p` are a separately serialized follow-up. An approved byte-fields follow-up lists four proven scored IDs needing raw-byte support. It does not count custom probes as scored failures.
 
 ## Normal-main integration
 

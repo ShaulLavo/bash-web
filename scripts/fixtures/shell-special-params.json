@@ -1,0 +1,257 @@
+{
+  "bash": "5.3.15(1)-release",
+  "cases": [
+    {
+      "name": "brush-suite:special_parameters:1",
+      "script": "[[ \"$0\" == \"$_\" ]] && echo \"matches on start\"\n",
+      "status": 0,
+      "stdout": "matches on start\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:2",
+      "script": ": one\necho \"[$_]\"\n: two three four\necho \"[$_]\"\necho last_echo_arg\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "[one]\n[four]\nlast_echo_arg\n[last_echo_arg]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:3",
+      "script": "echo seed1 seed2\n:\necho \"after colon: [$_]\"\ntrue\necho \"after true: [$_]\"\necho\necho \"after bare echo: [$_]\"\n",
+      "status": 0,
+      "stdout": "seed1 seed2\nafter colon: [:]\nafter true: [true]\n\nafter bare echo: [echo]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:4",
+      "script": "echo \"seed last\"\necho \"[$_]\"\necho \"arg with spaces\" 'arg-with-dashes' \"arg:with:colons\"\necho \"[$_]\"\necho \"\" trailing\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "seed last\n[seed last]\narg with spaces arg-with-dashes arg:with:colons\n[arg:with:colons]\n trailing\n[trailing]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:5",
+      "script": "echo seed last\n: bu1 bu2 bu3\necho \"[$_]\"\nprintf '%s\\n' pf1 pf2\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "seed last\n[bu3]\npf1\npf2\n[pf2]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:6",
+      "script": "value=world\ndeclare declared=$value\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "[declared=world]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:7",
+      "script": "value=world\nbuiltin echo builtin=$value\necho \"builtin: [$_]\"\ncommand echo command=$value\necho \"command: [$_]\"\n",
+      "status": 0,
+      "stdout": "builtin=world\nbuiltin: [builtin=world]\ncommand=world\ncommand: [command=world]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:10",
+      "script": "f() { :; }\necho seed_last\nf call_a call_b\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "seed_last\n[call_b]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:11",
+      "script": "f() {\n  echo \"entry: [$_]\"\n  echo new_inner\n  echo \"after inner echo: [$_]\"\n}\necho pre_seed\nf call_arg\necho \"after return: [$_]\"\n",
+      "status": 0,
+      "stdout": "pre_seed\nentry: [pre_seed]\nnew_inner\nafter inner echo: [new_inner]\nafter return: [call_arg]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:12",
+      "script": "inner() { echo innerdone; }\nouter() { inner ia ib; }\necho seed\nouter oa ob\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "seed\ninnerdone\n[ob]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:13",
+      "script": "f() { a=1; b=2; }\necho seed_last\nf foo bar\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "seed_last\n[bar]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:14",
+      "script": "echo seed_last\nx=assigned\necho \"after assign: [$_]\"\ny=another\necho \"after second assign: [$_]\"\n: colonarg\necho \"after colon: [$_]\"\n",
+      "status": 0,
+      "stdout": "seed_last\nafter assign: []\nafter second assign: []\nafter colon: [colonarg]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:15",
+      "script": "echo seed_last\nz=$(echo subst_inner)\necho \"after assignment: [$_]\"\n",
+      "status": 0,
+      "stdout": "seed_last\nafter assignment: []\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:16",
+      "script": "echo prev_a prev_b\necho pipe_a pipe_b | cat\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "prev_a prev_b\npipe_a pipe_b\n[prev_b]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:17",
+      "script": "echo prev_a prev_b\necho pipe_a pipe_b | cat | cat\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "prev_a prev_b\npipe_a pipe_b\n[prev_b]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:18",
+      "script": "echo seed_last\ntrue && echo a1 a2\necho \"[$_]\"\ntrue && true t1 t2\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "seed_last\na1 a2\n[a2]\n[t2]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:19",
+      "script": "echo seed_last\nfalse || echo or1 or2\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "seed_last\nor1 or2\n[or2]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:20",
+      "script": "echo seed_last\nnosuchcmd_xyzzy fail_a fail_b\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "seed_last\n[fail_b]\n",
+      "stderr": "/usr/bin/bash: nosuchcmd_xyzzy: command not found\n"
+    },
+    {
+      "name": "brush-suite:special_parameters:21",
+      "script": "echo seed_last\nfor i in 1 2 3; do :; done\necho \"[$_]\"\nfor i in a b c; do echo \"loop $i\"; done\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "seed_last\n[:]\nloop a\nloop b\nloop c\n[loop c]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:22",
+      "script": "echo seed_last\ni=0\nwhile [ $i -lt 2 ]; do echo \"iter $i\"; i=$((i+1)); done\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "seed_last\niter 0\niter 1\n[]]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:23",
+      "script": "echo seed_last\ni=0\nuntil [ $i -ge 2 ]; do i=$((i+1)); done\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "seed_last\n[]]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:24",
+      "script": "echo seed_last\nif true; then echo then_a then_b; fi\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "seed_last\nthen_a then_b\n[then_b]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:25",
+      "script": "echo seed_last\ncase x in\n  x) echo match_a match_b ;;\nesac\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "seed_last\nmatch_a match_b\n[match_b]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:26",
+      "script": "echo seed_last\neval \"echo evaled one two\"\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "seed_last\nevaled one two\n[echo evaled one two]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:28",
+      "script": "echo outer_a outer_b\n(echo inner1 inner2; echo \"sub: [$_]\")\necho \"parent: [$_]\"\n",
+      "status": 0,
+      "stdout": "outer_a outer_b\ninner1 inner2\nsub: [inner2]\nparent: [outer_b]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:29",
+      "script": "echo seed_last\n(:) &\nwait\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "seed_last\n[wait]\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:30",
+      "script": "export _=initial_value\necho first last\n# After commands have run, does _ still have the -x attribute?\ndeclare -p _ | grep -c '^declare -x'\n",
+      "status": 1,
+      "stdout": "first last\n0\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:32",
+      "script": "readonly _=frozen\necho hi there\necho \"[$_]\"\n",
+      "status": 0,
+      "stdout": "hi there\n[frozen]\n",
+      "stderr": "/usr/bin/bash: _: readonly variable\n/usr/bin/bash: _: readonly variable\n/usr/bin/bash: _: readonly variable\n"
+    },
+    {
+      "name": "brush-suite:special_parameters:34",
+      "script": "function myfunc() {\n    echo \"--myfunc called--\"\n\n    echo \"COUNT: $#\"\n    echo \"AT-SIGN VALUE: '$@'\"\n    echo \"STAR VALUE: '$*'\"\n\n    for arg in $@; do\n        echo \"AT-SIGN ELEMENT: '${arg}'\"\n    done\n\n    for arg in $*; do\n        echo \"STAR ELEMENT: '${arg}'\"\n    done\n\n    for arg in \"$@\"; do\n      echo \"DOUBLE-QUOTED AT-SIGN ELEMENT: '${arg}'\"\n    done\n\n    for arg in \"$*\"; do\n      echo \"DOUBLE-QUOTED STAR ELEMENT: '${arg}'\"\n    done\n}\n\nmyfunc\nmyfunc 1\nmyfunc 1 2\nmyfunc \"a b c\" 2\n",
+      "status": 0,
+      "stdout": "--myfunc called--\nCOUNT: 0\nAT-SIGN VALUE: ''\nSTAR VALUE: ''\nDOUBLE-QUOTED STAR ELEMENT: ''\n--myfunc called--\nCOUNT: 1\nAT-SIGN VALUE: '1'\nSTAR VALUE: '1'\nAT-SIGN ELEMENT: '1'\nSTAR ELEMENT: '1'\nDOUBLE-QUOTED AT-SIGN ELEMENT: '1'\nDOUBLE-QUOTED STAR ELEMENT: '1'\n--myfunc called--\nCOUNT: 2\nAT-SIGN VALUE: '1 2'\nSTAR VALUE: '1 2'\nAT-SIGN ELEMENT: '1'\nAT-SIGN ELEMENT: '2'\nSTAR ELEMENT: '1'\nSTAR ELEMENT: '2'\nDOUBLE-QUOTED AT-SIGN ELEMENT: '1'\nDOUBLE-QUOTED AT-SIGN ELEMENT: '2'\nDOUBLE-QUOTED STAR ELEMENT: '1 2'\n--myfunc called--\nCOUNT: 2\nAT-SIGN VALUE: 'a b c 2'\nSTAR VALUE: 'a b c 2'\nAT-SIGN ELEMENT: 'a'\nAT-SIGN ELEMENT: 'b'\nAT-SIGN ELEMENT: 'c'\nAT-SIGN ELEMENT: '2'\nSTAR ELEMENT: 'a'\nSTAR ELEMENT: 'b'\nSTAR ELEMENT: 'c'\nSTAR ELEMENT: '2'\nDOUBLE-QUOTED AT-SIGN ELEMENT: 'a b c'\nDOUBLE-QUOTED AT-SIGN ELEMENT: '2'\nDOUBLE-QUOTED STAR ELEMENT: 'a b c 2'\n",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:special_parameters:35",
+      "script": "echo seed > /dev/null\ncommand -v echo > /dev/null; printf 'command -v: [%s]\\n' \"$_\"\necho seed > /dev/null\nbuiltin > /dev/null; printf 'builtin bare: [%s]\\n' \"$_\"\necho seed > /dev/null\ncommand > /dev/null; printf 'command bare: [%s]\\n' \"$_\"\n",
+      "status": 0,
+      "stdout": "command -v: [echo]\nbuiltin bare: [builtin]\ncommand bare: [command]\n",
+      "stderr": ""
+    },
+    {
+      "name": "prefix and local restoration",
+      "script": ": before; _=prefix echo \"$_\"; echo \"$_\"; f() { local _=local; : inner; echo \"$_\"; }; f call; echo \"$_\"",
+      "status": 0,
+      "stdout": "before\nbefore\ninner\ncall\n",
+      "stderr": ""
+    },
+    {
+      "name": "unset recreated by command completion",
+      "script": ": before; unset _; printf \"[%s]\\n\" \"$_\"; : again; echo \"$_\"",
+      "status": 0,
+      "stdout": "[_]\nagain\n",
+      "stderr": ""
+    },
+    {
+      "name": "readonly publication preserves command status",
+      "script": ": seed; readonly _; : next; echo \"$_\"",
+      "status": 0,
+      "stdout": "seed\n",
+      "stderr": "/usr/bin/bash: _: readonly variable\n/usr/bin/bash: _: readonly variable\n/usr/bin/bash: _: readonly variable\n"
+    },
+    {
+      "name": "nameref publication writes target",
+      "script": "x=hello; declare -n _=x; : after; printf \"[%s]\\n\" \"$x\" \"$_\"",
+      "status": 0,
+      "stdout": "[after]\n[after]\n",
+      "stderr": ""
+    },
+    {
+      "name": "readonly nameref target diagnostic and status",
+      "script": "x=seed; declare -n _=x; readonly x; : next; false final; printf \"status=%s _=%s x=%s\\n\" \"$?\" \"$_\" \"$x\"",
+      "status": 0,
+      "stdout": "status=1 _=_=x x=_=x\n",
+      "stderr": "/usr/bin/bash: x: readonly variable\n/usr/bin/bash: x: readonly variable\n/usr/bin/bash: x: readonly variable\n/usr/bin/bash: x: readonly variable\n"
+    },
+    {
+      "name": "read-underscore-last-argument",
+      "script": "{ read -n3 _; echo \"[$_]:$?\"; read -r tail; echo \"[$tail]:$?\"; } <<<abcdef\n",
+      "status": 0,
+      "stdout": "[_]:0\n[def]:0\n",
+      "stderr": ""
+    }
+  ]
+}

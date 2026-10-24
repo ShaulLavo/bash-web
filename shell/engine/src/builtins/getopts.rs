@@ -282,10 +282,7 @@ fn commit(publication: &mut Publication, state: &mut State) -> Result<Option<Str
             Err(status) => Err(status),
         };
     };
-    if state.getopts_numeric(&target) && value.bytes().any(|byte| !byte.is_ascii_digit()) {
-        value.clear();
-        value.push('0');
-    }
+    state.normalize_getopts_publication(&target, &mut value);
     let result = if publication.name == "OPTIND" {
         state.publish_getopts_index(value)
     } else {
