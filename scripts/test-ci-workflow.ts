@@ -291,3 +291,67 @@ test("browser apt uses the runner's existing HTTPS fallbacks instead of the slow
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("main concurrency is isolated by source while PRs retain latest-head cancellation", () => {
+  const workflow = object(
+    parse(readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8")),
+  );
+  const concurrency = object(workflow.concurrency);
+  assert.match(String(concurrency.group), /github\.event\.pull_request\.number \|\| github\.sha/);
+  assert.equal(concurrency["cancel-in-progress"], "${{ github.event_name == 'pull_request' }}");
+});
+
+test("raw publication and the blocking cheap fold have no dependency cycle or whole-run wait", () => {
+  const workflowJobs = jobs();
+  const raw = object(workflowJobs["own-shell-compatibility"]);
+  const floor = object(workflowJobs["score-floor"]);
+  assert.deepEqual(raw.needs, ["prepare", "native"]);
+  assert.deepEqual(floor.needs, ["prepare", "own-shell-compatibility"]);
+  assert.equal(object(raw.env).BASH_COMPAT_RAW, "1");
+  assert.equal(
+    object(raw.outputs)["raw-artifact-id"],
+    "${{ steps.raw-upload.outputs.artifact-id }}",
+  );
+  assert.ok(Array.isArray(floor.steps));
+  const download = floor.steps
+    .map(object)
+    .find((step) => step.uses === "actions/download-artifact@v4");
+  assert.ok(download);
+  assert.equal(
+    object(download.with)["artifact-ids"],
+    "${{ needs.own-shell-compatibility.outputs.raw-artifact-id }}",
+  );
+  const names = floor.steps.map((step: unknown) => object(step).name);
+  assert.ok(names.indexOf("Upload cumulative main floor") < names.indexOf("Enforce qualification"));
+  assert.doesNotMatch(
+    commands(floor),
+    /bash-compat\.mjs|compat:shell|build:|run.*status.*completed/,
+  );
+  assert.match(commands(floor), /scoreboard-ci\.mjs fold/);
+  assert.match(commands(floor), /scoreboard-ci\.mjs enforce/);
+  const producer = readFileSync(new URL("./bash-compat.mjs", import.meta.url), "utf8");
+  assert.match(producer, /BASH_COMPAT_RAW !== "1"/);
+  assert.doesNotMatch(producer, /requireMembership: true/);
+});
+
+test("read tokens stay out of the replay environment and layer graphs are artifact-only", () => {
+  for (const key of ["own-shell-compatibility", "score-floor"]) {
+    const job = object(jobs()[key]);
+    assert.equal(object(job.permissions).actions, "read");
+    assert.ok(!job.env || !("GH_TOKEN" in object(job.env)));
+  }
+  const raw = object(jobs()["own-shell-compatibility"]);
+  assert.ok(Array.isArray(raw.steps));
+  for (const step of raw.steps.map(object)) {
+    if (!step.env || !("GH_TOKEN" in object(step.env))) continue;
+    assert.equal(step.name, "Bind qualification and resolve PR main floor");
+  }
+  const layer = object(jobs().layers);
+  assert.match(String(object(layer.env).LAYERS_OUTPUT), /runner\.temp/);
+  assert.doesNotMatch(commands(layer), /--record/);
+  assert.ok(Array.isArray(layer.steps));
+  const upload = layer.steps.map(object).find((step) => step.uses === "actions/upload-artifact@v4");
+  assert.ok(upload);
+  assert.equal(upload.if, "always()");
+  assert.equal(object(upload.with)["retention-days"], 90);
+});

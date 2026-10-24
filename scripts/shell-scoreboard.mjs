@@ -115,7 +115,6 @@ export function compareScores(base, next, { requireMembership = false } = {}) {
 }
 
 export function validateScore(oracle, score) {
-  assert.equal(score.engine, "own-shell", "unexpected score engine");
   for (const item of score.cases)
     assert.ok(
       ["pass", "fail", "skip", "timeout", "crash"].includes(item.outcome),

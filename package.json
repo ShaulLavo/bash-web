@@ -96,7 +96,7 @@
     "fuzz:shell-echo:ci": "node scripts/fuzz-shell-echo.ts --replay scripts/fixtures/shell-echo.json",
     "quality:js": "npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates",
     "build:browser:assets": "npm run notices:browser && npm run bundle:browser:assets",
-    "test:ci": "node --test scripts/test-ci-inputs.ts scripts/test-ci-workflow.ts scripts/test-prepare-wasi-tests.ts scripts/test-ci-artifacts.ts scripts/test-ci-notices.ts scripts/test-scoreboard-discovery.mjs",
+    "test:ci": "node --test --test-concurrency=1 scripts/test-ci-inputs.ts scripts/test-ci-workflow.ts scripts/test-prepare-wasi-tests.ts scripts/test-ci-artifacts.ts scripts/test-ci-notices.ts scripts/test-scoreboard-discovery.mjs",
     "prepare:wasi-tests": "node scripts/prepare-wasi-tests.ts .build/ci-native/wasi-tests",
     "typecheck:ci": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/ci-inputs.ts scripts/ci-artifacts.ts scripts/prepare-wasi-tests.ts scripts/test-ci*.ts scripts/test-prepare-wasi-tests.ts",
     "compat:shell:prebuilt": "BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell BASH_COMPAT_UTILITY_DIR=${CARGO_TARGET_DIR:-.build/shell}/wasm32-wasip1/release node scripts/bash-compat.mjs",

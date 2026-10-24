@@ -5,13 +5,20 @@ export const bootstrap = Object.freeze({
   sourceSha: "9fc1cdbd907ab376e61039331b43b379addea754",
   runId: 40105927170,
   attempt: 1,
+  jobId: 120908810986,
+  observationStep: 14,
+  uploadStep: 15,
   artifactId: 12564749101,
   archiveSha256: "2e862e49ee3ed1e2405c4659c9096b0b0227404c6a45f8677619bf36e7b85e21",
   scoreSha256: "25f2e910986a9e56adaef17ca453823b3b8de2d8b1510db513ca30902354d49a",
 });
 
-export function scoreFloor(oracle, score) {
+export function validateOwnScore(oracle, score) {
+  assert.equal(score.engine, "own-shell", "unexpected score engine");
   validateScore(oracle, score);
+}
+function scoreFloor(oracle, score) {
+  validateOwnScore(oracle, score);
   return score.cases
     .filter((item) => item.outcome === "pass")
     .map((item) => item.id)
@@ -40,7 +47,7 @@ export function validateFloor(oracle, floor) {
 }
 export function compareFloor(oracle, floor, score) {
   validateFloor(oracle, floor);
-  validateScore(oracle, score);
+  validateOwnScore(oracle, score);
   const required = new Set(floor.floorIds);
   const cases = score.cases.map((item) => ({
     ...item,
@@ -69,7 +76,7 @@ export function accumulateFloor({ oracle, sourceSha, predecessors, scores, evide
 }
 export function bootstrapFloor(oracle, sourceSha, score) {
   assert.equal(sourceSha, bootstrap.sourceSha, "bootstrap is authorized only at its exact cut");
-  validateScore(oracle, score);
+  validateOwnScore(oracle, score);
   assert.equal(digest(score), bootstrap.scoreSha256, "bootstrap content digest");
   const floorIds = scoreFloor(oracle, score);
   return {
