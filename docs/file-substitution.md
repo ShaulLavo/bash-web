@@ -53,8 +53,7 @@ printf 'x=<%s> y=<%s>\n' "$x" "$y"
 Bash prints `x=<one\ntwo> y=<one>`, with a literal newline inside `x`. The shell
 prints `x=<one\ntwo> y=<>`. Replacing `$(</dev/fd/3)` with
 `$(cat </dev/fd/3)` produces the same difference on production Waffle. Both
-return status 0. Raw observations are retained in
-`/work/reports/bash-web/hill-climb/control/file-substitution/fd-observation.json`.
+return status 0.
 
 This family preserves the shared descriptor helper. Independent reopening of
 regular-file aliases requires a separate runtime/I/O contract; pipes and

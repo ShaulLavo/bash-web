@@ -32,33 +32,14 @@ signal delivery. Errtrace and functrace are not supported.
 
 No event runs a stored action. EXIT, ERR, DEBUG, RETURN and signal execution are
 not implemented. Registering them records and prints the binding only; a shell
-that ends with an EXIT handler does not run it. EXIT execution is approved for a
-later, separately designed family. Diagnostic source-line parity and
-trap-specific syntax-error reporting are also deferred.
+that ends with an EXIT handler does not run it. EXIT execution, diagnostic source-line parity and
+trap-specific syntax-error reporting are not implemented.
 
 The recorded fixture `scripts/fixtures/shell-trap-registration.json` contains local
 GNU Bash 5.3.15 observations for rows whose output cannot depend on an action
 running. Native tests and production-Waffle tests compare status and stdout, and
 require empty stderr when Bash produced none. Nonempty diagnostics are retained
 as evidence, not claimed as exact stderr parity. CI never invokes its host Bash
-as an oracle. Frozen score gains require a separate complete replay and
-independent review; these focused tests alone do not establish a zero-loss gain.
+as an oracle. These focused tests alone do not establish a zero-loss score gain.
 
-The [correction receipt](evidence/trap-registration-repair.json) records 96 focused
-native and production-Waffle checks. It preserves the original 57 observations
-and adds 39 Bash 5.3.15 rows. Historical frozen gains are not a qualification of
-the corrected head. Four historical gains match stdout and status without proving
-trap execution or active signal-ignore behavior. Current-main integration and
-frozen qualification remain with the coordinator.
-
-The nested-parent correction adds 77 local recordings to the prior 96. It covers
-all caught signal numbers, child execution forms, deferred reset on mutation,
-and inherited ignored EXIT ownership. These remain registration-only controls.
-The earlier correction receipt is historical; its nested-parent section records
-the new source and checks without treating old full-score gains as current.
-
-The implicit-ignore correction adds 78 local recordings to the prior 173, with
-all earlier case objects unchanged. Native checks fail 15 of 251 before the
-correction and pass all 251 after it. The matching production-Waffle guest also
-passes 251. Eight focused trap-state tests pass. The receipt keeps the earlier
-checks historical and records the new source and artifact identities separately.
+The [correction receipt](evidence/trap-registration-repair.json) records 96 focused native and production-Waffle checks: the original 57 Bash 5.3.15 observations plus 39 added rows. A nested-parent set adds 77 local recordings (all caught signal numbers, child execution forms, deferred reset on mutation, inherited ignored EXIT ownership), and an implicit-ignore set adds 78 more, 251 in all. Native checks fail 15 of 251 without the implicit-ignore rule and pass all 251 with it. The production-Waffle guest also passes 251, and eight focused trap-state tests pass. All are registration-only controls. Four frozen gains match stdout and status without proving trap execution or active signal-ignore behavior.
