@@ -1433,3 +1433,59 @@ fn source_frame_drop_preserves_durable_write_and_isolated_snapshot() {
     drop(state);
     assert_eq!(memory.observation().0, 0);
 }
+
+fn set_command_hash_path(state: &SharedState, path: &str) {
+    let table = state.borrow().command_hash.clone();
+    let next = finish(table.updated("tool", Some(path), state, &Cancel::new(), &mut work()))
+        .unwrap_or_else(|_| panic!("hash update fits"));
+    state.borrow_mut().command_hash = next;
+}
+
+#[test]
+fn durable_writes_and_command_hash_snapshots_cancel_and_refund_independently() {
+    for cancelled in [false, true] {
+        let limit = 1 << 22;
+        let (memory, state, function) = scoped_state(limit);
+        state.borrow_mut().declare_local("a".into(), None).unwrap();
+        replace(&state, "a", &[&"x".repeat(131_072), "old"]).unwrap();
+        set_command_hash_path(&state, "/parent");
+        let cloned = state.borrow().clone();
+        let (saved, completed) = snapshot_then_replace(&state);
+        let saved = saved.shared();
+        let entry = state.borrow().command_hash.entries()[0].clone();
+        assert!(Rc::ptr_eq(&entry, &cloned.command_hash.entries()[0]));
+        assert!(Rc::ptr_eq(
+            &entry,
+            &saved.borrow().command_hash.entries()[0]
+        ));
+        drop(entry);
+        set_command_hash_path(&saved, "/child");
+        let used = memory.observation().0;
+        let cancel = Cancel::new();
+        let mut fuel = work();
+        check_pending_admission(
+            State::admit_indexed_element(&state, "a", 1, 1, &cancel, &mut fuel),
+            &state,
+            Some(&completed),
+            &cancel,
+            cancelled,
+        );
+        assert_eq!(memory.observation().0, used);
+        assert_eq!(state.borrow().scalar_parameter("a"), Some("temporary"));
+        element(&state, "a", 1, "z").unwrap();
+        let filler = memory.admit(limit - memory.observation().0).unwrap();
+        drop(completed);
+        assert_eq!(state.borrow().array_element("a", 1), Some("z"));
+        assert_eq!(saved.borrow().array_element("a", 1), Some("old"));
+        assert_eq!(cloned.array_element("a", 1), Some("old"));
+        assert_eq!(state.borrow().command_hash.entries()[0].path, "/parent");
+        assert_eq!(saved.borrow().command_hash.entries()[0].path, "/child");
+        assert_eq!(cloned.command_hash.entries()[0].path, "/parent");
+        drop(filler);
+        drop(saved);
+        drop(cloned);
+        drop(function);
+        drop(state);
+        assert_eq!(memory.observation().0, 0);
+    }
+}

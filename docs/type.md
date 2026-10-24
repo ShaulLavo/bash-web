@@ -16,12 +16,28 @@ executable candidates. Explicit slash operands do not consult PATH. Queries do
 not spawn processes. PATH spelling is preserved in type output.
 
 This is a core shell feature, not a command add-on. The core still builds without
-utility add-ons; querying an absent utility fails and executing it returns 127.
-Aliases, command hashes, declaration output, array grammar and generic scope
-changes are outside this unit. `bashkit-suite:type:125` is hash-owned and remains
-a prerequisite failure. Diagnostics use existing descriptors and cancellation;
-Bash execution-coordinate prefixes and exact help prose are not implemented.
-The shared printer's resource diagnostic retains its existing `command:` label.
+utility add-ons. Without an explicit hash entry, querying an absent utility fails;
+executing an absent utility returns 127. Alias, declaration, array grammar and
+generic scope changes are outside this classification unit. Diagnostics use
+existing descriptors and cancellation; Bash execution-coordinate prefixes and
+exact help prose are not implemented. The shared printer's resource diagnostic
+retains its existing `command:` label.
+
+## Explicit command hashes
+
+`hash -p pathname name` stores a literal path. `hash -t name` queries it,
+`hash -d name` deletes it, and `hash -r` clears the table. `hash name` records a
+successful lookup through the runtime's executable registrations. With no
+operands, `hash` lists entries; `hash -l` prints commands that restore them.
+Reusable listings do not yet quote names containing shell-special characters.
+
+Single-match `type` and `command` queries can report these entries. Keywords,
+functions and builtins retain their precedence; all-match queries still inspect
+real PATH candidates. Subshell changes do not alter the parent's table.
+Remembering a path neither grants executable permission nor changes execution
+resolution. Executing a command does not automatically fill the table, and PATH
+assignments do not automatically clear it. Focused frozen observations cover
+hash queries; they do not establish a new accepted compatibility score.
 
 ## Provenance and verification
 
