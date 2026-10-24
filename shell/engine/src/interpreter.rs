@@ -31,6 +31,7 @@ mod select;
 mod source;
 #[cfg(test)]
 mod trap_tests;
+mod traps;
 mod type_builtin;
 
 #[derive(Clone, Debug)]
@@ -267,6 +268,7 @@ struct Core {
     next: Cell<u64>,
     foreground: RefCell<Option<Job>>,
     exit_requested: Cell<bool>,
+    completion: Cell<traps::Completion>,
 }
 #[derive(Clone)]
 pub(crate) struct Context {
@@ -285,6 +287,9 @@ pub(crate) struct Context {
     evaluation: crate::exec::Scope,
     loop_depth: usize,
     ignore_errexit: bool,
+    trap_mask: u8,
+    skip_debug: bool,
+    return_boundary: bool,
 }
 impl Context {
     fn root(
@@ -309,6 +314,9 @@ impl Context {
             compound_child: false,
             loop_depth: 0,
             ignore_errexit: false,
+            trap_mask: 0,
+            skip_debug: false,
+            return_boundary: false,
             evaluation,
         }
     }
@@ -719,6 +727,7 @@ impl Session {
                 next: Cell::new(1),
                 foreground: RefCell::new(None),
                 exit_requested: Cell::new(false),
+                completion: Cell::new(traps::Completion::Open),
             }),
             state,
         }
@@ -757,6 +766,9 @@ impl Session {
         Ok(())
     }
     pub fn start(&self, source: &str) -> Result<JoinHandle<i32>, StartError> {
+        if !matches!(self.core.completion.get(), traps::Completion::Open) {
+            return Err(StartError::Invalid("shell environment is complete".into()));
+        }
         if self.core.foreground.borrow().is_some() {
             return Err(StartError::Invalid(
                 "foreground job is already running".into(),
@@ -817,9 +829,18 @@ impl Session {
                 context.clone(),
             )
             .await;
-            if result.flow == Flow::Exit {
+            let result = if matches!(result.flow, Flow::Exit) && !context.cancel.is_cancelled() {
                 context.core.exit_requested.set(true);
-            }
+                finish_environment(
+                    result,
+                    state.clone(),
+                    context.core.descriptors.clone(),
+                    context.clone(),
+                )
+                .await
+            } else {
+                result
+            };
             let code = context.finish_group(&mut processes, result).await;
             state.borrow_mut().publish_status(code);
             code
@@ -836,6 +857,69 @@ impl Session {
             _allocation: None,
         });
         Ok(join)
+    }
+    /// Complete the executing environment at actual EOF, not after a submission.
+    pub fn finish(&self, status: i32) -> Result<JoinHandle<i32>, StartError> {
+        if self.core.foreground.borrow().is_some() {
+            return Err(StartError::Invalid(
+                "foreground job is already running".into(),
+            ));
+        }
+        let context = Context::root(
+            self.core.clone(),
+            crate::exec::Source::root(""),
+            crate::exec::Scope::new(
+                self.core.limits.source_bytes,
+                self.core.eval_storage.clone(),
+                self.core.execution_storage.clone(),
+            ),
+            Cancel::new(),
+            self.core.host.allocate_group(),
+        );
+        let state = self.state.clone();
+        let fds = self.core.descriptors.clone();
+        // Reserve completion ownership before publishing the task handle.
+        let previous = self.core.completion.replace(traps::Completion::Running);
+        if let traps::Completion::Finished(code) = previous {
+            self.core.completion.set(previous);
+            return Ok(self.core.executor.spawn(async move { code }));
+        }
+        if matches!(previous, traps::Completion::Running) {
+            return Err(StartError::Invalid(
+                "shell completion is already running".into(),
+            ));
+        }
+        let cancel = context.cancel.clone();
+        let signal = context.signal.clone();
+        let group = context.group;
+        let job = self.core.executor.spawn(async move {
+            let _foreground = ForegroundGuard(context.core.clone());
+            let mut processes = ProcessGroup::new(context.core.host.clone(), context.group)
+                .with_signal(context.signal.clone());
+            let result =
+                traps::completing(Outcome::status(status), state.clone(), fds, context.clone())
+                    .await;
+            let code = context.finish_group(&mut processes, result).await;
+            context
+                .core
+                .completion
+                .set(traps::Completion::Finished(code));
+            context.core.exit_requested.set(true);
+            state.borrow_mut().publish_status(code);
+            code
+        });
+        *self.core.foreground.borrow_mut() = Some(Job {
+            label: None,
+            notified: false,
+            owner: Scope::new(0),
+            kind: JobKind::Internal,
+            group,
+            cancel,
+            signal,
+            join: job.clone(),
+            _allocation: None,
+        });
+        Ok(job)
     }
     pub async fn shutdown(&self) {
         self.interrupt();
@@ -1019,6 +1103,24 @@ impl Core {
         id
     }
 }
+async fn finish_environment(
+    result: Outcome,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> Outcome {
+    if !matches!(context.core.completion.get(), traps::Completion::Open) {
+        return result;
+    }
+    context.core.completion.set(traps::Completion::Running);
+    let result = traps::completing(result, state, fds, context.clone()).await;
+    context
+        .core
+        .completion
+        .set(traps::Completion::Finished(result.code));
+    result
+}
+
 struct ForegroundGuard(Rc<Core>);
 impl Drop for ForegroundGuard {
     fn drop(&mut self) {
@@ -1149,15 +1251,26 @@ fn execute(
                             _
                         )
                 );
-            let mut result = command_body(command, state.clone(), fds, context).await;
-            if check_errexit
-                && result.flow == Flow::Normal
-                && result.code != 0
-                && state.borrow().errexit
-            {
-                result.flow = Flow::Abort;
+            match traps::debug(&command, state.clone(), fds.clone(), context.clone()).await {
+                traps::DebugDecision::Execute => {}
+                traps::DebugDecision::Skip => return Outcome::status(0),
+                traps::DebugDecision::Transfer(result) => return result,
             }
-            finish_command(&state, result, preserve)
+            let body_context = Context {
+                skip_debug: false,
+                ..context.clone()
+            };
+            let boundary_fds = Rc::downgrade(&fds);
+            let result = command_body(command, state.clone(), fds, body_context).await;
+            let result = finish_command(&state, result, preserve);
+            traps::failed(
+                result,
+                check_errexit,
+                state,
+                boundary_fds.upgrade(),
+                context,
+            )
+            .await
         },
         Outcome::status,
     )
@@ -1224,17 +1337,6 @@ async fn pipeline_command(
         state.lastpipe && !state.monitor
     };
     let mut work = expansion_work(&context);
-    let children = match pipeline_children(count, &state, &context, &mut work).await {
-        Ok(children) => children,
-        Err(error) => {
-            let outcome = expansion_failure(error.into(), &fds, &context).await;
-            state
-                .borrow_mut()
-                .publish_pipeline_status(vec![outcome.code]);
-            return outcome;
-        }
-    };
-    let mut children = children.into_iter();
     let mut pipes = VecDeque::new();
     for _ in 1..count {
         let pipe = match context.fs().pipe() {
@@ -1257,7 +1359,31 @@ async fn pipeline_command(
         state.borrow_mut().publish_pipeline_status(vec![2]);
         return Outcome::status(2);
     }
+    let pipeline_cancel = context.cancel.child();
     for (index, command) in pipeline.commands.into_iter().enumerate() {
+        let decision = traps::debug(&command, state.clone(), fds.clone(), context.clone()).await;
+        if let traps::DebugDecision::Transfer(result) = decision {
+            pipeline_cancel.cancel();
+            drop(previous);
+            drop(pipes);
+            join_all(tasks).await;
+            return result;
+        }
+        let shared_stage = count == 1 || (share_last && index + 1 == count);
+        let child = if shared_stage {
+            state.clone()
+        } else {
+            match State::snapshot(&state, &context.cancel, &mut work).await {
+                Ok(child) => child.shared(),
+                Err(error) => {
+                    pipeline_cancel.cancel();
+                    drop(previous);
+                    drop(pipes);
+                    join_all(tasks).await;
+                    return expansion_failure(error.into(), &fds, &context).await;
+                }
+            }
+        };
         let mut stage_fds = fds.borrow().clone();
         if let Some(input) = previous.take() {
             stage_fds.insert(0, input);
@@ -1267,12 +1393,6 @@ async fn pipeline_command(
             stage_fds.insert(1, writer);
             previous = Some(reader);
         }
-        let child = if count == 1 {
-            state.clone()
-        } else {
-            children.next().expect("all pipeline state was prepared")
-        };
-        let shared_stage = count == 1 || (share_last && index + 1 == count);
         let stage_context = if shared_stage {
             if pipeline.negated {
                 context.condition()
@@ -1287,6 +1407,12 @@ async fn pipeline_command(
                 child
             }
         };
+        let stage_context = Context {
+            skip_debug: true,
+            cancel: pipeline_cancel.clone(),
+            ignore_errexit: count > 1 || pipeline.negated || context.ignore_errexit,
+            ..stage_context
+        };
         let stage_fds = if count == 1 {
             fds.clone()
         } else {
@@ -1300,6 +1426,7 @@ async fn pipeline_command(
             stage_context,
             parent_scope,
             !shared_stage,
+            matches!(decision, traps::DebugDecision::Skip),
         )));
     }
     drop(fds);
@@ -1336,51 +1463,6 @@ async fn pipeline_command(
     Outcome::status(code)
 }
 
-#[inline(never)]
-fn pipeline_children<'a>(
-    count: usize,
-    state: &'a SharedState,
-    context: &'a Context,
-    work: &'a mut expand::Work,
-) -> eval::Frame<'a, Result<Vec<SharedState>, expand::Error>> {
-    context.evaluation.frame(
-        pipeline_children_body(count, state, context, work),
-        |code| Err(code.into()),
-    )
-}
-
-async fn pipeline_children_body(
-    count: usize,
-    state: &SharedState,
-    context: &Context,
-    work: &mut expand::Work,
-) -> Result<Vec<SharedState>, expand::Error> {
-    let mut children = Vec::new();
-    if count == 1 {
-        return Ok(children);
-    }
-    work.admit_storage(
-        count
-            .checked_mul(std::mem::size_of::<SharedState>())
-            .ok_or(2)?,
-    )?;
-    children.try_reserve_exact(count).map_err(|_| 2)?;
-    let share_last = {
-        let state = state.borrow();
-        state.lastpipe && !state.monitor
-    };
-    for index in 0..count {
-        children.push(if share_last && index + 1 == count {
-            state.clone()
-        } else {
-            State::snapshot(state, &context.cancel, work)
-                .await?
-                .shared()
-        });
-    }
-    Ok(children)
-}
-
 async fn pipeline_stage(
     command: Command,
     state: SharedState,
@@ -1388,9 +1470,22 @@ async fn pipeline_stage(
     context: Context,
     parent_scope: Scope,
     isolated: bool,
+    skip: bool,
 ) -> Outcome {
-    let result = execute(command, state, fds, context.clone()).await;
     if isolated {
+        traps::inherit(&state);
+    }
+    let completion_fds = traps::needs_completion_descriptors(&command, &state).then(|| fds.clone());
+    let mut result = if skip {
+        drop(fds);
+        Outcome::status(0)
+    } else {
+        execute(command, state.clone(), fds, context.clone()).await
+    };
+    if isolated {
+        if let Some(fds) = completion_fds {
+            result = traps::completing(result, state, fds, context.clone()).await;
+        }
         context.finish_scope(parent_scope).await;
     }
     result
@@ -2028,6 +2123,7 @@ async fn subshell(
     let child_fds = Rc::new(RefCell::new(fds.borrow().clone()));
     drop(fds);
     let child = context.core.executor.spawn(async move {
+        traps::inherit(&child);
         work.substitutions = Some(Substitutions {
             context: child_context.clone(),
             fds: child_fds.clone(),
@@ -2042,7 +2138,8 @@ async fn subshell(
                         compound_child: false,
                         ..child_context.clone()
                     };
-                    sequence(commands, child, fds, body_context).await
+                    let result = sequence(commands, child.clone(), fds.clone(), body_context).await;
+                    traps::completing(result, child, fds, child_context.clone()).await
                 }
                 Err(outcome) => outcome,
             };
@@ -2236,13 +2333,18 @@ async fn launch_background(
         evaluation: context.evaluation.new_task(),
         loop_depth: 0,
         ignore_errexit: context.ignore_errexit,
+        trap_mask: context.trap_mask,
+        skip_debug: false,
+        return_boundary: false,
     };
     let fds = Rc::new(RefCell::new(fds.borrow().clone()));
     let parent_scope = context.scope.clone();
     let join = context.core.executor.spawn(async move {
         let mut processes = ProcessGroup::new(child_context.core.host.clone(), group)
             .with_signal(child_context.signal.clone());
-        let result = execute(command, child, fds, child_context.clone()).await;
+        traps::inherit(&child);
+        let result = execute(command, child.clone(), fds.clone(), child_context.clone()).await;
+        let result = traps::completing(result, child, fds, child_context.clone()).await;
         child_context.finish_scope(parent_scope).await;
         child_context.finish_group(&mut processes, result).await
     });
@@ -2421,7 +2523,9 @@ impl Substitutions {
             let mut processes = ProcessGroup::new(context.core.host.clone(), group)
                 .with_signal(context.signal.clone());
             let body = async {
-                let result = sequence(commands, child, fds, context.clone()).await;
+                traps::inherit(&child);
+                let result = sequence(commands, child.clone(), fds.clone(), context.clone()).await;
+                let result = traps::completing(result, child, fds, context.clone()).await;
                 // Capturing waits for actual stdout EOF, not every background
                 // job: redirected descendants may keep running after EOF.
                 if context.cancel.run(captured.cancelled()).await.is_err() {
@@ -2565,7 +2669,9 @@ impl Substitutions {
             let mut processes = ProcessGroup::new(context.core.host.clone(), group)
                 .with_signal(context.signal.clone());
             let body = async {
-                let result = sequence(commands, child, fds, context.clone()).await;
+                traps::inherit(&child);
+                let result = sequence(commands, child.clone(), fds.clone(), context.clone()).await;
+                let result = traps::completing(result, child, fds, context.clone()).await;
                 let _ = context.wait_jobs(None, true).await;
                 context.finish_scope(parent_scope).await;
                 context.finish_group(&mut processes, result).await
@@ -3369,6 +3475,7 @@ async fn dispatch_arguments(
         let context = Context {
             source: body.source.clone(),
             loop_depth: 0,
+            return_boundary: true,
             reader: body.reader.clone(),
             evaluation: context
                 .evaluation
@@ -3389,7 +3496,18 @@ async fn dispatch_arguments(
                 let _frame = frame;
                 let _call_storage = call_storage;
                 let _allocation = allocation;
-                execute(body.body.as_ref().clone(), state, fds, context).await
+                let _traps = match traps::FunctionScope::enter(&state, &context) {
+                    Ok(scope) => scope,
+                    Err(code) => return Outcome::status(code),
+                };
+                let result = execute(
+                    body.body.as_ref().clone(),
+                    state.clone(),
+                    fds.clone(),
+                    context.clone(),
+                )
+                .await;
+                traps::returning(result, state, fds, context).await
             },
             Outcome::status,
         );
@@ -4190,6 +4308,9 @@ mod scope_tests {
             compound_child: false,
             loop_depth: 0,
             ignore_errexit: false,
+            trap_mask: 0,
+            skip_debug: false,
+            return_boundary: false,
         };
         (session.state(), session.core.descriptors.clone(), context)
     }

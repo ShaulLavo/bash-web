@@ -69,6 +69,7 @@ async fn run_body(
     let filename = args.remove(0);
     let reader_context = Context {
         reader,
+        return_boundary: true,
         ..context.clone()
     };
     let frame = match SourceFrame::enter(state.clone(), args) {
@@ -83,16 +84,17 @@ async fn run_body(
         source,
         evaluation,
         Some(&filename),
-        state,
+        state.clone(),
         fds.clone(),
-        reader_context,
+        reader_context.clone(),
     )
     .await;
-    frame.finish();
     let mut result = match result {
         Ok(result) => result,
         Err(message) => return diagnostic.failure(&[name, &filename], &message, 2).await,
     };
+    result = super::traps::returning(result, state, fds.clone(), reader_context).await;
+    frame.finish();
     if result.flow == Flow::Return {
         result.flow = Flow::Normal;
     }

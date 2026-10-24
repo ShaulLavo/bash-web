@@ -1,5 +1,5 @@
 //! Original retained trap bindings. Inherited handlers are query-only until mutation.
-//! Bindings are registration state only: no event runs a stored action.
+//! Execution visibility is separate from the query-visible inherited bindings.
 use crate::exec::StorageAllocation;
 use std::rc::Rc;
 
@@ -19,6 +19,7 @@ pub(crate) enum Binding {
 pub(crate) struct Traps {
     bindings: [Option<Binding>; SLOTS],
     inherited: bool,
+    traced: [bool; 3],
     exit_inherited: bool,
     implicit_ignores: [bool; 2],
 }
@@ -27,6 +28,7 @@ impl Default for Traps {
         Self {
             bindings: std::array::from_fn(|_| None),
             inherited: false,
+            traced: [false; 3],
             exit_inherited: false,
             implicit_ignores: [false; 2],
         }
@@ -42,6 +44,32 @@ impl Traps {
     }
     pub(crate) fn get(&self, signal: usize) -> Option<&Binding> {
         self.bindings[signal].as_ref()
+    }
+    pub(crate) fn executable(&self, signal: usize) -> Option<&Binding> {
+        if signal == 0 && self.exit_inherited {
+            return None;
+        }
+        if self.inherited && (signal < SIGNAL_SLOTS || !self.traced[signal - SIGNAL_SLOTS]) {
+            return None;
+        }
+        self.get(signal)
+    }
+    pub(crate) fn inherit_execution(&mut self, debug: bool, err: bool) {
+        self.traced = [debug, err, debug];
+    }
+    pub(crate) fn function_scope(&mut self, debug: bool, err: bool) {
+        for (signal, keep) in [(65, debug), (66, err), (67, debug)] {
+            if !keep {
+                self.bindings[signal] = None;
+            }
+        }
+    }
+    pub(crate) fn restore_function(&mut self, saved: Self) {
+        self.bindings[65] = saved.bindings[65].clone();
+        self.bindings[67] = saved.bindings[67].clone();
+        if self.bindings[66].is_none() {
+            self.bindings[66] = saved.bindings[66].clone();
+        }
     }
     pub(crate) fn prepare_mutation(&mut self) {
         if self.inherited {
@@ -89,7 +117,11 @@ impl Traps {
     }
     fn clear_handlers(&mut self) {
         self.clear_signal_handlers();
-        self.bindings[SIGNAL_SLOTS..].fill(None);
+        for index in 0..3 {
+            if !self.traced[index] {
+                self.bindings[SIGNAL_SLOTS + index] = None;
+            }
+        }
     }
     fn clear_signal_handlers(&mut self) {
         for binding in &mut self.bindings[..SIGNAL_SLOTS] {

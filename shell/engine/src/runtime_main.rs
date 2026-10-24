@@ -79,6 +79,10 @@ mod guest {
         let input_cancel = editor_cancel.clone();
         let root = executor.spawn(async move {
             let result = run(shell.clone(), input, output, errors, command, input_cancel).await;
+            let result = match shell.finish(result) {
+                Ok(job) => job.await,
+                Err(error) => error.status(),
+            };
             set_phase(0);
             shell.shutdown().await;
             result

@@ -168,6 +168,9 @@ impl Rig {
             parameter_error_status: 127,
             loop_depth: 0,
             ignore_errexit: false,
+            trap_mask: 0,
+            skip_debug: false,
+            return_boundary: false,
             compound_child: false,
             core,
         };

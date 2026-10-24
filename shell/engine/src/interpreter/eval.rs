@@ -117,6 +117,33 @@ async fn join_body(
     Ok(JoinedSource::new(source, storage))
 }
 
+/// Trap text is already retained, but its reader copy and parse shape need admission.
+pub(super) fn trap_source(text: &str, scope: &Scope, limit: usize) -> Result<JoinedSource, i32> {
+    if text.len() > limit {
+        return Err(crate::exec::RESOURCE_STATUS);
+    }
+    let mut shape = Shape {
+        bytes: 0,
+        syntax: 0,
+    };
+    for ch in text.chars() {
+        shape.character(ch);
+    }
+    let bytes = shape
+        .storage()?
+        .checked_add(text.len().saturating_mul(2))
+        .ok_or(crate::exec::RESOURCE_STATUS)?;
+    let storage = scope
+        .admit_storage(bytes)
+        .map_err(|_| crate::exec::RESOURCE_STATUS)?;
+    let mut source = String::new();
+    source
+        .try_reserve_exact(text.len())
+        .map_err(|_| crate::exec::RESOURCE_STATUS)?;
+    source.push_str(text);
+    Ok(JoinedSource::new(source, storage))
+}
+
 /// Read admitted eval text in the current shell. Complete earlier lines and
 /// the caller's return/exit behavior survive a later syntax error.
 #[inline(never)]

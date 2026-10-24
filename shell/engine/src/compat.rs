@@ -565,6 +565,20 @@ pub fn standalone(install: impl FnOnce(&InProcessHost, &MemoryFs, Rc<dyn FileSys
             session.interrupt();
         }
     };
+    let completion = session
+        .finish(code)
+        .expect("foreground submission finished");
+    let code = loop {
+        executor.drive(256);
+        drain(&terminal, &mut output, &session);
+        drain(&diagnostics, &mut errors, &session);
+        if completion.is_finished() {
+            break completion.now_or_never().unwrap();
+        }
+        if !executor.drive(0).runnable {
+            session.interrupt();
+        }
+    };
     let shutdown = session.shutdown();
     futures::pin_mut!(shutdown);
     while shutdown.as_mut().now_or_never().is_none() {
