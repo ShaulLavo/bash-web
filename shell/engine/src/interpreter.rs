@@ -82,6 +82,9 @@ pub(crate) enum Flow {
     Continue(usize),
     DiscardReadUnit,
     Resource,
+    // Redirect setup failed before a compound body could execute. The command
+    // boundary classifies ERR/errexit once, independently of body eligibility.
+    RedirectFailed,
 }
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Outcome {
@@ -388,6 +391,7 @@ impl Context {
     fn isolated(&self) -> Self {
         Self {
             loop_depth: 0,
+            trap_mask: traps::child_mask(self.trap_mask),
             scope: Scope::new(self.core.allocate_id()),
             evaluation: self.evaluation.new_task(),
             ..self.clone()
@@ -1262,10 +1266,16 @@ fn execute(
             };
             let boundary_fds = Rc::downgrade(&fds);
             let result = command_body(command, state.clone(), fds, body_context).await;
+            let setup_failed = result.flow == Flow::RedirectFailed;
+            let result = if setup_failed {
+                Outcome::status(result.code)
+            } else {
+                result
+            };
             let result = finish_command(&state, result, preserve);
             traps::failed(
                 result,
-                check_errexit,
+                check_errexit || setup_failed && !context.ignore_errexit,
                 state,
                 boundary_fds.upgrade(),
                 context,
@@ -1325,10 +1335,10 @@ async fn pipeline_command(
     pipeline: Pipeline,
     state: SharedState,
     fds: Descriptors,
-    context: Context,
+    ctx: Context,
 ) -> Outcome {
     let count = pipeline.commands.len();
-    if count == 0 || count > context.limits().pipeline_stages {
+    if count == 0 || count > ctx.limits().pipeline_stages {
         state.borrow_mut().publish_pipeline_status(vec![2]);
         return Outcome::status(2);
     }
@@ -1336,19 +1346,19 @@ async fn pipeline_command(
         let state = state.borrow();
         state.lastpipe && !state.monitor
     };
-    let mut work = expansion_work(&context);
+    let mut work = expansion_work(&ctx);
     let mut pipes = VecDeque::new();
     for _ in 1..count {
-        let pipe = match context.fs().pipe() {
+        let pipe = match ctx.fs().pipe() {
             Ok(pipe) => pipe,
             Err(error) => return Outcome::status(error.status()),
         };
         pipes.push_back(pipe);
     }
-    let mut previous = None;
+    let mut input = None;
     let mut tasks = Vec::new();
     // All stage task/queue metadata is admitted before the first launch.
-    let _tasks_allocation = match admit_task_metadata::<JoinHandle<Outcome>>(&context, count) {
+    let _tasks_allocation = match admit_task_metadata::<JoinHandle<Outcome>>(&ctx, count) {
         Ok(allocation) => allocation,
         Err(_) => {
             state.borrow_mut().publish_pipeline_status(vec![2]);
@@ -1359,78 +1369,75 @@ async fn pipeline_command(
         state.borrow_mut().publish_pipeline_status(vec![2]);
         return Outcome::status(2);
     }
-    let pipeline_cancel = context.cancel.child();
+    let cancel = ctx.cancel.child();
     for (index, command) in pipeline.commands.into_iter().enumerate() {
-        let decision = traps::debug(&command, state.clone(), fds.clone(), context.clone()).await;
+        let decision = traps::debug(&command, state.clone(), fds.clone(), ctx.clone()).await;
         if let traps::DebugDecision::Transfer(result) = decision {
-            pipeline_cancel.cancel();
-            drop(previous);
+            cancel.cancel();
+            drop(input);
             drop(pipes);
             join_all(tasks).await;
             return result;
         }
         let shared_stage = count == 1 || (share_last && index + 1 == count);
         let child = if shared_stage {
-            state.clone()
+            Ok(state.clone())
         } else {
-            match State::snapshot(&state, &context.cancel, &mut work).await {
-                Ok(child) => child.shared(),
-                Err(error) => {
-                    pipeline_cancel.cancel();
-                    drop(previous);
-                    drop(pipes);
-                    join_all(tasks).await;
-                    return expansion_failure(error.into(), &fds, &context).await;
-                }
-            }
+            State::snapshot(&state, &ctx.cancel, &mut work)
+                .await
+                .map(|child| child.shared())
+        };
+        let child = match child {
+            Ok(child) => child,
+            Err(err) => return launch_failed(err, (cancel, input, pipes, tasks), &fds, &ctx).await,
         };
         let mut stage_fds = fds.borrow().clone();
-        if let Some(input) = previous.take() {
+        if let Some(input) = input.take() {
             stage_fds.insert(0, input);
         }
         if index + 1 < count {
             let (reader, writer) = pipes.pop_front().expect("reserved pipeline pipe");
             stage_fds.insert(1, writer);
-            previous = Some(reader);
+            input = Some(reader);
         }
-        let stage_context = if shared_stage {
+        let stage_ctx = if shared_stage {
             if pipeline.negated {
-                context.condition()
+                ctx.condition()
             } else {
-                context.clone()
+                ctx.clone()
             }
         } else {
-            let child = context.isolated_command(&command);
+            let child = ctx.isolated_command(&command);
             if index + 1 < count || pipeline.negated {
                 child.condition()
             } else {
                 child
             }
         };
-        let stage_context = Context {
+        let stage_ctx = Context {
             skip_debug: true,
-            cancel: pipeline_cancel.clone(),
-            ignore_errexit: count > 1 || pipeline.negated || context.ignore_errexit,
-            ..stage_context
+            cancel: cancel.clone(),
+            ignore_errexit: count > 1 || pipeline.negated || ctx.ignore_errexit,
+            ..stage_ctx
         };
         let stage_fds = if count == 1 {
             fds.clone()
         } else {
             Rc::new(RefCell::new(stage_fds))
         };
-        let parent_scope = context.scope.clone();
-        tasks.push(context.core.executor.spawn(pipeline_stage(
+        let parent_scope = ctx.scope.clone();
+        tasks.push(ctx.core.executor.spawn(pipeline_stage(
             command,
             child,
             stage_fds,
-            stage_context,
+            stage_ctx,
             parent_scope,
             !shared_stage,
             matches!(decision, traps::DebugDecision::Skip),
         )));
     }
     drop(fds);
-    drop(previous);
+    drop(input);
     let results = join_all(tasks).await;
     let codes: Vec<_> = results.iter().map(|r| r.code).collect();
     let mut code = if state.borrow().pipefail {
@@ -1457,10 +1464,28 @@ async fn pipeline_command(
     if pipeline.negated {
         code = i32::from(code == 0);
     }
-    if context.cancel.is_cancelled() {
+    if ctx.cancel.is_cancelled() {
         code = 130;
     }
     Outcome::status(code)
+}
+
+async fn launch_failed(
+    error: expand::Error,
+    (cancel, input, pipes, tasks): (
+        Cancel,
+        Option<io::Endpoint>,
+        VecDeque<(io::Endpoint, io::Endpoint)>,
+        Vec<JoinHandle<Outcome>>,
+    ),
+    fds: &Descriptors,
+    context: &Context,
+) -> Outcome {
+    cancel.cancel();
+    drop(input);
+    drop(pipes);
+    join_all(tasks).await;
+    expansion_failure(error.into(), fds, context).await
 }
 
 async fn pipeline_stage(
@@ -1563,14 +1588,8 @@ fn command_redirects<'a>(
                 Ok(fds) => Ok(fds),
                 Err(error) => {
                     let mut outcome = expansion_failure(error, &original_fds, context).await;
-                    // Setup failure is a command failure even when its compound
-                    // body's statuses have their own errexit rules.
-                    if outcome.flow == Flow::Normal
-                        && outcome.code != 0
-                        && !context.ignore_errexit
-                        && state.borrow().errexit
-                    {
-                        outcome.flow = Flow::Abort;
+                    if outcome.flow == Flow::Normal && outcome.code != 0 {
+                        outcome.flow = Flow::RedirectFailed;
                     }
                     Err(outcome)
                 }
@@ -1689,6 +1708,7 @@ fn loop_sequence<'a>(
 ) -> eval::Frame<'a> {
     if let [Command::Compound(CompoundCommand::Arithmetic(source), redirs)] = commands
         && redirs.is_empty()
+        && !traps::debug_active(state, context)
     {
         return loop_arithmetic(source, state, fds, context, cache);
     }
@@ -1780,18 +1800,18 @@ fn loop_arithmetic<'a>(
                 }
                 None => arithmetic_command(source, state, &fds, &context, &mut work).await,
             };
-            let mut result = finish_command(state, result, false);
-            if result.flow == Flow::Normal
-                && result.code != 0
-                && state.borrow().errexit
-                && !context.ignore_errexit
-            {
-                result.flow = Flow::Abort;
-            }
+            let result = finish_command(state, result, false);
             if context.cancel.is_cancelled() {
                 return Outcome::status(130);
             }
-            result
+            traps::failed(
+                result,
+                !context.ignore_errexit,
+                state.clone(),
+                Some(fds),
+                context,
+            )
+            .await
         },
         Outcome::status,
     )
@@ -2333,7 +2353,7 @@ async fn launch_background(
         evaluation: context.evaluation.new_task(),
         loop_depth: 0,
         ignore_errexit: context.ignore_errexit,
-        trap_mask: context.trap_mask,
+        trap_mask: traps::child_mask(context.trap_mask),
         skip_debug: false,
         return_boundary: false,
     };
@@ -3500,6 +3520,11 @@ async fn dispatch_arguments(
                     Ok(scope) => scope,
                     Err(code) => return Outcome::status(code),
                 };
+                match traps::function_entry(state.clone(), fds.clone(), context.clone()).await {
+                    traps::DebugDecision::Execute => {}
+                    traps::DebugDecision::Skip => return Outcome::status(0),
+                    traps::DebugDecision::Transfer(result) => return result,
+                }
                 let result = execute(
                     body.body.as_ref().clone(),
                     state.clone(),

@@ -3,25 +3,25 @@
 ## Caller usage
 
 ```rust
-// Sketch. Planning is synchronous; only an executable action gets a reader.
-let plan = traps::before(&command, &state, &context)?;
-let decision = traps::enter(plan, &state, &fds, &context).await;
-let outcome = execute_or_transfer(decision, command, ...).await;
-let outcome = traps::after(outcome, failure_policy, ...).await;
-// Function/source owners call returning(...) before their existing frame restores.
-// Each isolated supervisor calls completing(...) before releasing its descriptors.
+match traps::debug(&command, state.clone(), fds.clone(), context.clone()).await {
+    DebugDecision::Execute => {},
+    DebugDecision::Skip => return Outcome::status(0),
+    DebugDecision::Transfer(result) => return result,
+}
+let result = command_body(command, ...).await;
+let result = traps::failed(result, eligible_failure, ...).await;
+// Function/source owners call returning(...) before their frame restores.
+// Isolated supervisors call completing(...) before releasing descriptors.
 // Persistent embedders call Session::finish(status) at actual EOF, not per start().
 ```
 
 Status: accepted by parent for implementation. This replaces the
-incorrect root-only EXIT rule in the first draft. The stored bindings currently
-execute no actions. The study's 173 candidates and 130–170 estimate are not gains.
+incorrect root-only EXIT rule in the first draft. At the study base, stored bindings executed no actions. This draft now dispatches them. The study's 173 candidates and 130–170 estimate are not gains.
 
 ## Ownership and transitions
 
 Use a private `interpreter/traps.rs` module, the existing `Outcome`/`Flow`, and a
-small event mask and outer-command DEBUG marker in `Context`. A synchronous
-plan captures `Rc<Action>`
+small event mask and outer-command DEBUG marker in `Context`. Synchronous dispatch planning captures `Rc<Action>`
 only for an executable binding. No handler action, saved status vector, or trap
 reader belongs in the ordinary command future. Registration retains action
 storage; dispatch never clones a value-level `State`. Isolated children continue
@@ -37,8 +37,8 @@ to use admitted `State::snapshot`; `SharedState` clones only share a handle.
 | actual EOF | Add idempotent `Session::finish(status)`. Explicit exit and terminating fatal outcomes use the same completion owner; reject later submissions. Migrate runtime `-c`, both interactive EOF paths and compat together. Keep executor/drains alive until completion finishes, then shutdown. |
 | child completion | Subshell, background, isolated pipeline, command/process substitution owners finish language execution and EXIT before fd release, capture-EOF wait, scope/group reap. Release writers before waiting for capture EOF. |
 
-Minimal private choices are `Event`, `Mask`, `DebugDecision`, a captured action
-plan and a completion gate owned by Core for the root or its child supervisor.
+Minimal private choices are `Event`, `Mask`, `DebugDecision`, a retained action
+reader and a completion gate owned by Core for the root or its child supervisor.
 Keep policy in that module, with no
 public event bus, general lifecycle framework, signal synthesis or async Drop.
 
@@ -46,8 +46,7 @@ Before handler evaluation publish trigger `$?` and the original complete
 `PIPESTATUS`. Admit its saved copy only on the action path. Normal completion
 restores both; explicit return/exit transfers preserve deliberate flow/status.
 Capture the action before running it, so replacing/resetting that binding changes
-future events only. Mask same-kind reentry in the executing context. Function
-trap restoration and status restoration must survive a dropped handler future.
+future events only. Mask same-kind reentry in the executing context. Function trap restoration and status restoration survive cancellation. Dropping a reader wait cancels its owned task and descendants; restoration/refunds finish when the executor retires them. Drop evaluates no user code.
 
 Admission before dispatch covers source/parse/reader/task storage, saved status
 capacity and dispatch-owned descriptor references. Failure at entry performs no
@@ -66,30 +65,17 @@ Direct anchors at `9fc1cdb`: `interpreter.rs:1119-1161` owns command/errexit;
 `interpreter.rs:3276-3404` function-frame lifetime. Completion ownership and the
 small planning API above are design inferences, not existing implementation.
 
-The first executable scaffold is `shell/engine/tests/trap_lifecycle.rs`, copied
+The frozen acceptance matrix is `shell/engine/tests/trap_lifecycle.rs`, copied
 from unchanged frozen oracle rows, not a new Bash recording. It spans Oils EXIT,
 Brush child EXIT/query/background/DEBUG, and Bashkit ERR suppression plus live
-function/source RETURN. All witnesses are ordinary active tests, including missing behavior. Passing
-suppression controls stay on.
-Next causal checks cover handler-replaces-handler, nested return/exit, lastpipe,
+function/source RETURN. All witnesses are ordinary active tests, including the two expansion-dependent RETURN failures. Passing suppression controls stay on. The real-Waffle runner reads these same frozen IDs, rather than defining another matrix. Causal unit checks cover handler-replaces-handler, nested return/exit, lastpipe,
 original PIPESTATUS, pre-entry admission failure, cancellation while blocked,
 post-side-effect resource failure, snapshot isolation and final refunds.
 
-Unknowns to freeze before claiming support: cross-kind reentry, children created
-inside handlers, nested trap mutation/explicit RETURN transfers, top-level
-extdebug status 2, EXIT visibility after function unwind, and noexec. The current
-engine has no noexec execution gate. Do not infer these answers from the small
-matrix or claim Bash command/location metadata already exists.
+Bounded evidence now covers handler failure under `-e`, function-entry and for-header DEBUG, extdebug Skip/Return, nested child EXIT, handler replacement, original PIPESTATUS, entry refusal, late resource failure, cancellation, lastpipe and refunds. Signal delivery and LINENO are not implemented here; noexec still has no execution gate. Arithmetic-for/select DEBUG sites, broader cross-kind reentry and remaining RETURN-transfer combinations are not qualified by this matrix. `${FUNCNAME[0]:-...}` currently fails outside traps too, so its two frozen RETURN cases remain active and red pending the variable/expansion dependency.
 
 ## Coordinated touch set
 
-This draft touches only this note and the new integration test file. Planned
-source regions are Context/command dispatch/failure policy/function calls/child
-supervisors in `interpreter.rs`, `interpreter/source.rs`, `interpreter/eval.rs`,
-`state/traps.rs`, `runtime_main.rs` and `compat.rs`. Reuse the existing
-State status/PIPESTATUS accessors; no new State/Snapshot fields, initializers or
-clone-caller changes are planned. Variable lookup/storage/prefix,
-assignment helpers, bindings and typed references remain with their owner.
-Package/locks/versions, fixture identity, CI and generated evidence are untouched.
-EOF callers must migrate together; separate handler fixes and root-only EXIT
-are rejected because they leave a wrong owner at real termination.
+Actual trap-owned changes are Context/dispatch/failure policy/function calls/child supervisors and Core/Session completion in `interpreter.rs`; new `interpreter/traps.rs`; `interpreter/control.rs`, `interpreter/source.rs`, `interpreter/eval.rs`, `state/traps.rs`, `runtime_main.rs` and `compat.rs`. Context initializers in `interpreter/command_builtin/tests.rs` changed only for the event fields. `parser/print_cmd.rs` adds a bounded for-header printer through `parser/mod.rs`. New native and real-Waffle tests cover the contract, with one adapter cleanup control in `runtime/tests.rs`.
+
+Existing State status/PIPESTATUS accessors suffice. No State/Snapshot fields, initializers, signatures or clone callers changed. Variable lookup/storage/prefix, assignment helpers, bindings and typed references remain with their owner. Package/locks/versions, fixture identity, CI and generated evidence are untouched. EOF callers migrated together. Separate handler fixes and root-only EXIT were rejected because they leave a wrong owner at real termination.

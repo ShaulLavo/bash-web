@@ -57,18 +57,20 @@ impl Traps {
     pub(crate) fn inherit_execution(&mut self, debug: bool, err: bool) {
         self.traced = [debug, err, debug];
     }
-    pub(crate) fn function_scope(&mut self, debug: bool, err: bool) {
+    pub(crate) fn function_scope(&mut self, debug: bool, err: bool) -> [Option<Binding>; 3] {
+        let saved = std::array::from_fn(|index| self.bindings[SIGNAL_SLOTS + index].clone());
         for (signal, keep) in [(65, debug), (66, err), (67, debug)] {
             if !keep {
                 self.bindings[signal] = None;
             }
         }
+        saved
     }
-    pub(crate) fn restore_function(&mut self, saved: Self) {
-        self.bindings[65] = saved.bindings[65].clone();
-        self.bindings[67] = saved.bindings[67].clone();
+    pub(crate) fn restore_function(&mut self, [debug, err, returning]: [Option<Binding>; 3]) {
+        self.bindings[65] = debug;
+        self.bindings[67] = returning;
         if self.bindings[66].is_none() {
-            self.bindings[66] = saved.bindings[66].clone();
+            self.bindings[66] = err;
         }
     }
     pub(crate) fn prepare_mutation(&mut self) {

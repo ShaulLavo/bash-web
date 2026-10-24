@@ -202,7 +202,10 @@ fn late_resource_failure_preserves_completed_handler_effects() {
     assert_eq!(shell.state().borrow().scalar_parameter("seen"), Some("1"));
     drop(held);
     assert_eq!(
-        complete(&executor, shell.start("trap - ERR; unset seen").unwrap()),
+        complete(
+            &executor,
+            shell.start("trap - ERR; unset seen; unset -f f").unwrap()
+        ),
         0
     );
     assert_eq!(shell.core.eval_storage.observation().0, 0);
@@ -238,7 +241,7 @@ fn dropping_handler_wait_cancels_reader_and_restores_status_before_reuse() {
         complete(
             &executor,
             shell
-                .start("trap 'seen=1; while :; do :; done' ERR; false || true")
+                .start("f() { while :; do :; done; }; trap 'seen=1; f' ERR; false || true")
                 .unwrap()
         ),
         0
@@ -264,10 +267,123 @@ fn dropping_handler_wait_cancels_reader_and_restores_status_before_reuse() {
     assert_eq!(shell.state().borrow().status(), 7);
     assert_eq!(shell.core.eval_storage.observation().0, 0);
     assert_eq!(
-        complete(&executor, shell.start("trap - ERR; unset seen").unwrap()),
+        complete(
+            &executor,
+            shell.start("trap - ERR; unset seen; unset -f f").unwrap()
+        ),
         0
     );
     assert_eq!(shell.core.execution_storage.observation().0, 0);
     assert!(output.bytes().is_empty());
     assert!(before > 0);
+}
+
+#[test]
+fn extdebug_skip_and_function_return_transfer_do_not_execute_the_command() {
+    let (shell, executor, output) = session();
+    assert_eq!(
+        complete(
+            &executor,
+            shell
+                .start("shopt -s extdebug; trap 'false' DEBUG")
+                .unwrap()
+        ),
+        0
+    );
+    assert_eq!(
+        complete(&executor, shell.start("seen=1; echo BAD").unwrap()),
+        0
+    );
+    assert!(shell.state().borrow().scalar_parameter("seen").is_none());
+    assert!(output.bytes().is_empty());
+    shell.state().borrow_mut().traps.set(65, None);
+    let source = "f() { trap '(exit 2)' DEBUG; seen=1; echo BAD; }; f; echo after:$?";
+    assert_eq!(complete(&executor, shell.start(source).unwrap()), 0);
+    assert!(shell.state().borrow().scalar_parameter("seen").is_none());
+    assert_eq!(output.bytes(), b"after:2\n");
+}
+
+#[test]
+fn compound_setup_failure_uses_err_policy_with_or_without_errexit() {
+    let (shell, executor, output) = session();
+    assert_eq!(
+        complete(
+            &executor,
+            shell
+                .start("trap 'seen=1; echo err' ERR; { :; } > /; echo done")
+                .unwrap()
+        ),
+        0
+    );
+    assert_eq!(shell.state().borrow().scalar_parameter("seen"), Some("1"));
+    assert!(
+        String::from_utf8(output.bytes())
+            .unwrap()
+            .ends_with("err\ndone\n")
+    );
+    assert_eq!(
+        complete(
+            &executor,
+            shell
+                .start("unset seen; set -e; trap 'echo exit' EXIT; { :; } > /; echo BAD")
+                .unwrap()
+        ),
+        1
+    );
+    assert_eq!(shell.state().borrow().scalar_parameter("seen"), Some("1"));
+    assert!(shell.exit_requested());
+    assert!(
+        String::from_utf8(output.bytes())
+            .unwrap()
+            .ends_with("err\nexit\n")
+    );
+}
+
+#[test]
+fn lastpipe_is_shared_and_isolated_child_actions_do_not_mutate_parent() {
+    let (shell, executor, output) = session();
+    let source = "shopt -s lastpipe; trap 'echo parent' EXIT; : | trap 'echo last' EXIT; (trap 'echo child' EXIT; seen=child); trap -p EXIT";
+    assert_eq!(complete(&executor, shell.start(source).unwrap()), 0);
+    assert!(shell.state().borrow().scalar_parameter("seen").is_none());
+    assert_eq!(output.bytes(), b"child\ntrap -- 'echo last' EXIT\n");
+    assert_eq!(complete(&executor, shell.finish(0).unwrap()), 0);
+    assert_eq!(output.bytes(), b"child\ntrap -- 'echo last' EXIT\nlast\n");
+}
+
+#[test]
+fn handler_failures_obey_errexit_but_same_kind_does_not_recurse() {
+    let (shell, executor, output) = session();
+    let source = "trap 'echo err; false; echo tail' ERR; false; set -e; false; echo BAD";
+    assert_eq!(complete(&executor, shell.start(source).unwrap()), 1);
+    assert_eq!(output.bytes(), b"err\ntail\nerr\n");
+    assert!(shell.exit_requested());
+}
+
+#[test]
+fn child_exit_registered_inside_parent_exit_still_has_its_own_completion() {
+    let (shell, executor, output) = session();
+    let source = "trap '(trap \"echo child\" EXIT); echo parent' EXIT; exit";
+    assert_eq!(complete(&executor, shell.start(source).unwrap()), 0);
+    assert_eq!(output.bytes(), b"child\nparent\n");
+}
+
+#[test]
+fn optimized_arithmetic_loop_body_keeps_err_and_debug_boundaries() {
+    let (shell, executor, output) = session();
+    let source = "trap 'echo err' ERR; for i in 1; do ((0)); done; trap - ERR; trap 'echo debug' DEBUG; for i in 1; do ((1)); done; trap - DEBUG";
+    assert_eq!(complete(&executor, shell.start(source).unwrap()), 0);
+    assert_eq!(output.bytes(), b"err\ndebug\ndebug\ndebug\n");
+}
+
+#[test]
+fn explicit_handler_exit_keeps_its_status_and_pipeline_instead_of_restoring_trigger() {
+    let (shell, executor, output) = session();
+    assert_eq!(
+        complete(&executor, shell.start("trap 'exit 9' EXIT; false").unwrap()),
+        1
+    );
+    assert_eq!(complete(&executor, shell.finish(1).unwrap()), 9);
+    assert_eq!(shell.state().borrow().status(), 9);
+    assert_eq!(shell.state().borrow().pipeline_status(), &[9]);
+    assert!(output.bytes().is_empty());
 }

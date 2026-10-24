@@ -369,3 +369,13 @@ fn for_header_debug_runs_before_each_iteration() {
         "[debug: for i in 1 2]\n[debug: echo \"iter $i\"]\niter 1\n[debug: for i in 1 2]\n[debug: echo \"iter $i\"]\niter 2\n",
     );
 }
+
+#[test]
+fn extdebug_repeats_function_entry_before_its_body() {
+    check(
+        "brush-suite:options/extdebug:1",
+        "shopt -s extdebug\ntrap 'echo \"[debug: $BASH_COMMAND]\"' DEBUG\nmyfunc() {\n  echo \"in func\"\n}\necho \"before\"\nmyfunc\necho \"after\"\n",
+        0,
+        "[debug: echo \"before\"]\nbefore\n[debug: myfunc]\n[debug: myfunc]\n[debug: echo \"in func\"]\nin func\n[debug: echo \"after\"]\nafter\n",
+    );
+}

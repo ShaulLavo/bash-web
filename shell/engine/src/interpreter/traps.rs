@@ -1,6 +1,6 @@
 //! Trap execution owns admission, status restoration and boundary-local visibility.
 use super::*;
-use crate::state::traps::{Binding, Traps};
+use crate::state::traps::Binding;
 use futures::future::{AbortHandle, Abortable, Either, ready};
 
 #[derive(Clone, Copy)]
@@ -67,25 +67,27 @@ impl Status {
 }
 impl Drop for Status {
     fn drop(&mut self) {
+        let Some(pipeline) = self.pipeline.take() else {
+            return;
+        };
         let mut state = self.state.borrow_mut();
         state.publish_status(self.code);
-        state.publish_pipeline_status(self.pipeline.take().unwrap());
+        state.publish_pipeline_status(pipeline);
     }
 }
 
 pub(super) struct FunctionScope {
     state: SharedState,
-    saved: Option<Traps>,
+    saved: Option<[Option<Binding>; 3]>,
     _allocation: crate::exec::Allocation,
 }
 impl FunctionScope {
     pub(super) fn enter(state: &SharedState, context: &Context) -> Result<Self, i32> {
         let allocation = context.evaluation.admit_execution(size_of::<Self>())?;
         let mut shell = state.borrow_mut();
-        let saved = shell.traps.clone();
         let debug = shell.functrace || shell.extdebug;
         let err = shell.errtrace;
-        shell.traps.function_scope(debug, err);
+        let saved = shell.traps.function_scope(debug, err);
         Ok(Self {
             state: state.clone(),
             saved: Some(saved),
@@ -100,6 +102,10 @@ impl Drop for FunctionScope {
             .traps
             .restore_function(self.saved.take().unwrap());
     }
+}
+
+pub(super) fn child_mask(mask: u8) -> u8 {
+    mask & !Event::Exit.bit()
 }
 
 pub(super) fn inherit(state: &SharedState) {
@@ -128,6 +134,10 @@ pub(super) fn run(
         Ok(scope) => scope,
         Err(code) => return Either::Left(ready(Outcome::status(code))),
     };
+    let allocation = match admit_task_metadata::<JoinHandle<Outcome>>(&context, 1) {
+        Ok(allocation) => allocation,
+        Err(error) => return Either::Left(ready(Outcome::status(admission_status(error)))),
+    };
     let plan = prepare(&action.text, &state, &context, &scope);
     let (source, reader, status) = match plan {
         Ok(plan) => plan,
@@ -137,17 +147,22 @@ pub(super) fn run(
         source,
         evaluation: scope.clone(),
         trap_mask: context.trap_mask | event.bit(),
-        // The handler's own failing commands do not apply the caller's -e.
-        ignore_errexit: true,
         skip_debug: false,
+        cancel: context.cancel.child(),
         ..context
     };
     let executor = context.core.executor.clone();
+    let cancel = context.cancel.clone();
     let task = scope.frame(
         async move {
-            let _status = status;
+            let _allocation = allocation;
+            let mut status = status;
             let _action = action;
-            reader::run(reader, "trap", true, state, fds, context).await
+            let result = reader::run(reader, "trap", true, state, fds, context).await;
+            if matches!(result.flow, Flow::Exit | Flow::Return) {
+                status.pipeline.take();
+            }
+            result
         },
         Outcome::status,
     );
@@ -155,17 +170,23 @@ pub(super) fn run(
         return Either::Left(result);
     }
     let (abort, registration) = AbortHandle::new_pair();
-    let guard = ReaderWait(abort);
+    let guard = ReaderWait {
+        abort,
+        cancel,
+        armed: true,
+    };
     scope.frame(
         async move {
-            let _guard = guard;
-            executor
+            let mut guard = guard;
+            let result = executor
                 .spawn(async move {
                     Abortable::new(task, registration)
                         .await
                         .unwrap_or_else(|_| Outcome::status(130))
                 })
-                .await
+                .await;
+            guard.armed = false;
+            result
         },
         Outcome::status,
     )
@@ -173,10 +194,18 @@ pub(super) fn run(
 
 // Dropping a wait never leaves user code running on a detached reader task.
 // The task owns status restoration until its canceled future is retired.
-struct ReaderWait(AbortHandle);
+struct ReaderWait {
+    abort: AbortHandle,
+    cancel: Cancel,
+    armed: bool,
+}
 impl Drop for ReaderWait {
     fn drop(&mut self) {
-        self.0.abort();
+        if !self.armed {
+            return;
+        }
+        self.cancel.cancel();
+        self.abort.abort();
     }
 }
 
@@ -210,7 +239,7 @@ fn prepare(
     ))
 }
 
-fn debug_active(state: &SharedState, context: &Context) -> bool {
+pub(super) fn debug_active(state: &SharedState, context: &Context) -> bool {
     !context.skip_debug
         && context.trap_mask & Event::Debug.bit() == 0
         && matches!(
@@ -282,6 +311,22 @@ fn planned_debug(
     })
 }
 
+pub(super) fn function_entry(
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> eval::Frame<'static, DebugDecision> {
+    if !debug_active(&state, &context) {
+        return Either::Left(ready(DebugDecision::Execute));
+    }
+    let extdebug = state.borrow().extdebug;
+    let handler = run(Event::Debug, state, fds, context.clone());
+    context.evaluation.frame(
+        async move { debug_decision(handler.await, extdebug, context.return_boundary) },
+        |code| DebugDecision::Transfer(Outcome::status(code)),
+    )
+}
+
 async fn debug_body(
     text: String,
     state: SharedState,
@@ -308,10 +353,14 @@ async fn debug_body(
     }
     let extdebug = state.borrow().extdebug;
     let result = run(Event::Debug, state, fds, context.clone()).await;
+    debug_decision(result, extdebug, context.return_boundary)
+}
+
+fn debug_decision(result: Outcome, extdebug: bool, return_boundary: bool) -> DebugDecision {
     if result.flow != Flow::Normal {
         return DebugDecision::Transfer(result);
     }
-    if extdebug && result.code == 2 && context.return_boundary {
+    if extdebug && result.code == 2 && return_boundary {
         return DebugDecision::Transfer(Outcome {
             code: result.code,
             flow: Flow::Return,

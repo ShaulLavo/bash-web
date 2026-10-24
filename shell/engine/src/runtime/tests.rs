@@ -3736,3 +3736,22 @@ fn runtime_permissions_keep_supported_denial_separate_from_unknown_bits() {
     assert_eq!(metadata.uid, None);
     assert_eq!(metadata.owned_by_effective_uid, None);
 }
+
+#[test]
+fn trap_registration_does_not_keep_failed_pipeline_writer_past_cleanup_fence() {
+    let (executor, fake, runtime) = setup();
+    fake.outcomes
+        .borrow_mut()
+        .insert("/startup-tool".into(), WaitResult::StartFailed(44));
+    let session = runtime_session(&executor, &runtime);
+    let command = "trap 'echo BAD' ERR; /startup-tool 2>&1 | runtime-cat; echo done";
+    assert_eq!(
+        finish(&executor, &runtime, session.start(command).unwrap()),
+        0
+    );
+    assert_eq!(
+        fake.output.bytes(),
+        b"/usr/bin/bash: /startup-tool: No such file or directory\ndone\n"
+    );
+    shutdown_session(&executor, &runtime, &fake, session);
+}
