@@ -107,6 +107,8 @@ Cause: `mapfile` replaces the array through builtin side effects that remove the
 
 ## Own-shell fixed scoreboard
 
+The numbers in this section are dated measurements, kept as history. For the current committed baseline and the command that prints it, see [Status](status.md#compatibility-with-bash).
+
 `own-shell` is the package's only default engine. Since 2026-10-18 its frozen
 replay runs the production `shell-runtime` guest on Waffle's Node runtime (see
 [the replay instrument transition](#replay-instrument-transition)); earlier
@@ -222,7 +224,7 @@ suite) on the old runner and **948 / 956 / 1,339** on the real runtime, with 10
 cases lost and 6 gained. Every changed case is classified in
 [the receipt](evidence/own-shell-instrument-migration.json) with Bash's output, the
 old runner's and the real runtime's: **10** are real-runtime differences from Bash,
-each an Approved item in [plan 004](../plans/004-own-shell.md#follow-up-real-runtime-scoreboard-differences),
+each an approved item recorded in that receipt,
 and **6** were fake-host artifacts.
 
 | Case | Change | Class | Reason |
@@ -306,7 +308,7 @@ for scoring. Oils keeps its subject categories; the secondary corpora use their
 source file paths as categories. All skipped cases stay in the fixture and in the
 result. The exact scored denominator is `total - skipped` in each count group.
 
-CI uses Node 26.7.0 and Waffle's Node runtime to run only those selected cases
+CI uses Node 26.12.1 and Waffle's Node runtime to run only those selected cases
 against the release `shell-runtime` guest. Each case gets a fresh Runtime and
 filesystem with the working directory, `/dev`, `/bin`, `/usr/bin` and
 `/usr/local/bin`, and the two fixture programs as separate guests on Waffle's

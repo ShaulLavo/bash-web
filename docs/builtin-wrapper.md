@@ -32,8 +32,7 @@ no executable interpreter handler is rejected without host access. Existing
 `eval`, `let` and declaration limitations are unchanged. Bash's `--help` text is
 not implemented by this wrapper.
 
-Execution-diagnostic provenance is deferred to a separate Approved family in
-[plan004](../plans/004-own-shell.md#builtin-diagnostic-coordinates-later-family).
+Execution-diagnostic provenance is deferred to a separate approved family of work.
 This extraction selects dispatch and the local R2 status policy from
 `c97110ea..9064cab`, excluding the later parser, printer, function and substitution
 coordinate changes. Existing command diagnostic writers stay unchanged, including
