@@ -2080,6 +2080,23 @@
     "documentation": "docs/declaration-printing.md",
     "qualification": "Targeted production-Waffle evidence only at this checkpoint. Parent owns independent review, serialized main integration, full frozen replay and baseline recomputation."
   },
+  "shellDeclarationAppend": {
+    "classification": "Original Rust scalar declaration append adapter and scope-aware state view. GNU Bash is a behavior oracle; no upstream implementation copied or adapted.",
+    "oracle": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "implementationDestinations": [
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/declarations.rs",
+      "shell/engine/src/state/declarations.rs",
+      "shell/engine/src/state.rs"
+    ],
+    "testDestinations": [
+      "shell/engine/tests/words/declarations.rs",
+      "scripts/test-own-shell-declarations.ts",
+      "scripts/fixtures/shell-declaration-append.json",
+      "scripts/fixtures/shell-declaration-append-scope.json"
+    ],
+    "strategy": "Recognize scalar += declaration words without splitting their RHS. Resolve current local namerefs before selecting the target scope. Read only the current local or inherited function-prefix value for a local append; ordinary declarations read the visible scalar target. Admit and cooperatively scan before state-owned assignment for repeated locals, preserving indexed element zero and raw references. Record prefix-owner provenance separately from ordinary locals. Compound array declarations and explicit -n appends remain separate work."
+  },
   "shellTilde": {
     "classification": "Original HOME-only tilde adapter and controls. GNU Bash 5.3.15 is a behavior oracle; no upstream implementation copied or adapted.",
     "baseRevision": "93fdf762f2a694427440d07156c7a8c458ecc995",
@@ -2137,6 +2154,71 @@
       "PIPE trap/disposition behavior",
       "Existing closed-descriptor diagnostic and Bash diagnostic line-prefix mismatches retained as strict pending reproductions"
     ]
+  },
+  "shellLastArgument": {
+    "classification": "Original command-completion adapter. GNU Bash 5.3.15 is a behavior oracle; no upstream implementation copied or adapted. Thirty fixture scripts are adapted from the frozen Brush corpus.",
+    "baseRevision": "e6430b1554de7d2efad092f40751858292cb071d",
+    "implementationDestinations": [
+      "shell/engine/src/interpreter.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/declarations.rs",
+      "shell/engine/src/builtins/getopts.rs",
+      "shell/engine/src/interpreter/eval.rs"
+    ],
+    "testDestinations": [
+      "scripts/test-own-shell-special-params.ts",
+      "scripts/fixtures/shell-special-params.json",
+      "shell/engine/src/state/bindings_tests.rs",
+      "shell/engine/tests/words/read_count.rs",
+      "shell/engine/tests/words/getopts.rs",
+      "shell/engine/tests/words/declarations.rs",
+      "scripts/fixtures/shell-special-params-publication.json"
+    ],
+    "testSources": [
+      {
+        "repository": "https://github.com/reubeno/brush",
+        "revision": "4cfba081f2f8bcda8150010a57203d020f14f0cc",
+        "path": "brush-shell/tests/cases/compat/special_parameters.yaml",
+        "sha256": "cb564f8142f6a22417050a1e5adba9a8ca1afd5f813a17423ea687cacccab8fc",
+        "license": "MIT",
+        "caseIds": [
+          "brush-suite:special_parameters:1",
+          "brush-suite:special_parameters:2",
+          "brush-suite:special_parameters:3",
+          "brush-suite:special_parameters:4",
+          "brush-suite:special_parameters:5",
+          "brush-suite:special_parameters:6",
+          "brush-suite:special_parameters:7",
+          "brush-suite:special_parameters:10",
+          "brush-suite:special_parameters:11",
+          "brush-suite:special_parameters:12",
+          "brush-suite:special_parameters:13",
+          "brush-suite:special_parameters:14",
+          "brush-suite:special_parameters:15",
+          "brush-suite:special_parameters:16",
+          "brush-suite:special_parameters:17",
+          "brush-suite:special_parameters:18",
+          "brush-suite:special_parameters:19",
+          "brush-suite:special_parameters:20",
+          "brush-suite:special_parameters:21",
+          "brush-suite:special_parameters:22",
+          "brush-suite:special_parameters:23",
+          "brush-suite:special_parameters:24",
+          "brush-suite:special_parameters:25",
+          "brush-suite:special_parameters:26",
+          "brush-suite:special_parameters:28",
+          "brush-suite:special_parameters:29",
+          "brush-suite:special_parameters:30",
+          "brush-suite:special_parameters:32",
+          "brush-suite:special_parameters:34",
+          "brush-suite:special_parameters:35"
+        ]
+      }
+    ],
+    "strategy": "Retain the admitted expanded last argument, then publish it through ordinary binding storage after dispatch. Builtin prefix frames remain active until publication reaches their temporary nameref targets, then restore the caller bindings. Automatic publication uses the existing numeric OPTIND publication policy without applying explicit-assignment cursor resets. External dispatch clones its retained command name once for argv and borrows the original for diagnostics. Assignment-only commands publish an empty value. Preserve internal dispatch errors, terminal cancellation and resource outcomes, pipeline/subshell isolation, readonly target diagnostics and export clearing. Startup uses the actual shell name unless the environment supplied _. No runtime facts or command add-ons are introduced.",
+    "oracle": "Local GNU Bash 5.3.15(1)-release observations. CI replays the recording through production Waffle, without invoking host Bash. Frozen oracle, baseline, exclusions and scoring are unchanged.",
+    "deferred": "Other special parameters and well-known variables, including BASHPID, UID, EUID and LINENO."
   },
   "shellCompletion": {
     "repository": "https://github.com/everruns/bashkit",
