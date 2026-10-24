@@ -3426,3 +3426,42 @@ offsets only under an independently assigned bounded family owner. Preserve
 retained-source ownership, parser admission and cancellation. Late extdebug
 argument initialization and indexed compound initializers remain with their
 existing owners and are not duplicated here.
+
+
+## Source call-stack and eval-prefix composition follow-ups, 2026-10-24
+
+Status: Approved, separate from PR91's negative-pattern integration. Owners:
+BUILTINS source/call-stack and eval-prefix families. No repair is included here.
+
+A function defined by a sourced file retains its source text but reports the
+shell name in BASH_SOURCE. Minimal exact probe:
+
+```bash
+printf '%s\n' 'f() { printf "%s|%s\n" "${FUNCNAME[*]}" "${BASH_SOURCE[*]}"; }' > lib
+. ./lib; f
+```
+
+GNU Bash 5.3.15 prints `f|./lib\n`. Exact actual main69
+`d61989ad342a47545c73cb665781f9c8cf971015` and PR91 integration
+`2a60ff0aac80045404a6c55343c3eed2c80203d7` print `f|bash\n`.
+All return 0 with empty stderr. A positive-pattern counterpart and the full
+source/negative-pattern/array-slicing probe isolate the same filename gap.
+`state/call_stack.rs:277` fills CallSite.source from state.shell_name, while
+`interpreter/function_names.rs:47-50` retains the function's source and reader.
+Carry the real definition filename through the admitted call frame in its owning
+family. Preserve frame/storage accounting, cancellation and retained ownership.
+
+Prefix assignments before eval remain explicitly unsupported. For example,
+`f() { local value=axc; value=abc eval 'echo eval:$value'; printf 'eval-status:%s|value:%s\n' "$?" "$value"; }; f`
+prints `eval:abc\neval-status:0|value:axc\n` in Bash 5.3.15, but both exact
+main69 and the integration print `eval-status:2|value:axc\n`. The rejection at
+`interpreter.rs:3123-3124` and native `command_metadata.rs:146` assertion are
+unchanged. Implement this separately without removing that existing guard before
+its supported replacement is independently qualified.
+
+Evidence and exact recorded streams/statuses are in
+`/work/reports/wave-20261022/shell/pr91-actual69-integration-r3-reboot-evidence/`:
+`interaction-records.json`, `diagnosis-records.json`, and
+`prefix-diagnosis-records.json`. The initial strict oracle comparison remains a
+recorded failure, not a waived check or a claimed Bash-compatible pass. N1's
+completion group/slash boundary stays with its existing separate owner.
