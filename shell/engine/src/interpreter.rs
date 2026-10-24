@@ -27,6 +27,7 @@ mod file_substitution;
 mod function_names;
 mod indexed;
 pub(crate) mod integer;
+mod reader;
 mod select;
 #[cfg(test)]
 mod trap_tests;
@@ -745,14 +746,20 @@ impl Session {
             self.core.execution_storage.clone(),
         );
         let parser = evaluation.parser_budget(Some(Rc::new(move || parser_cancel.probe_now())));
-        let (script, failure) = parse::script(source, self.core.limits.source_bytes, &parser)
-            .map_err(|error| {
-                if error == "request cancelled" {
-                    StartError::Interrupted
-                } else {
-                    StartError::Invalid(error)
-                }
-            })?;
+        let aliases = reader::AliasOptions::snapshot(&self.state);
+        let (script, failure) = parse::script(
+            source,
+            self.core.limits.source_bytes,
+            &parser,
+            aliases.options(),
+        )
+        .map_err(|error| {
+            if error == "request cancelled" {
+                StartError::Interrupted
+            } else {
+                StartError::Invalid(error)
+            }
+        })?;
         if script.commands.is_empty()
             && let Some(ParseFailure::Syntax { message, .. }) = failure.as_ref()
         {
@@ -782,19 +789,14 @@ impl Session {
             let _foreground = ForegroundGuard(context.core.clone());
             let mut processes = ProcessGroup::new(context.core.host.clone(), group)
                 .with_signal(context.signal.clone());
-            let mut result = script_sequence(
-                script.commands,
-                script.command_end_lines,
+            let result = reader::run(
+                reader::Reader::new(script, failure, aliases, parser),
+                "-c",
                 state.clone(),
                 context.core.descriptors.clone(),
                 context.clone(),
             )
             .await;
-            if matches!(result.flow, Flow::Normal | Flow::DiscardReadUnit)
-                && let Some(failure) = failure
-            {
-                result = parse_failure(failure, "-c", &context.core.descriptors, &context).await;
-            }
             if result.flow == Flow::Exit {
                 context.core.exit_requested.set(true);
             }
@@ -1043,51 +1045,6 @@ async fn parse_failure(
         code: 2,
         flow: Flow::Exit,
     }
-}
-
-async fn script_sequence(
-    commands: Vec<Command>,
-    command_end_lines: Vec<usize>,
-    state: SharedState,
-    fds: Descriptors,
-    context: Context,
-) -> Outcome {
-    let mut result = Outcome::status(0);
-    let mut discarded_line = None;
-    // The parser groups each top-level read unit through its terminating
-    // newline. Arithmetic expansion errors unwind functions and compound
-    // commands in that unit, then Bash's reader accepts the next one.
-    for (index, command) in commands.into_iter().enumerate() {
-        let end_line = command_end_lines.get(index).copied();
-        if discarded_line.is_some_and(|line| end_line.is_some_and(|end| end <= line)) {
-            continue;
-        }
-        result = execute(command, state.clone(), fds.clone(), context.clone()).await;
-        if result.flow == Flow::SpawnFailed {
-            return result;
-        }
-        if context.cancel.is_cancelled() {
-            return Outcome::status(130);
-        }
-        if result.flow == Flow::Resource {
-            return abort_diagnostic(
-                &fds,
-                &context,
-                b"shell live-execution memory limit exceeded",
-                2,
-            )
-            .await;
-        }
-        if result.flow == Flow::DiscardReadUnit {
-            discarded_line = end_line;
-        } else if matches!(
-            result.flow,
-            Flow::Exit | Flow::Abort | Flow::SpawnFailed | Flow::Return
-        ) {
-            break;
-        }
-    }
-    result
 }
 
 fn sequence(
@@ -3088,8 +3045,18 @@ async fn dispatch_simple_command_body(
                 .await);
             }
         };
+        let trace_bytes = context
+            .limits()
+            .source_bytes
+            .saturating_add(context.limits().expansion_bytes);
+        let mut trace_work = expand::Work::new(trace_bytes, trace_bytes, 0);
+        frame
+            .trace(name, line.unwrap_or(1), &context.cancel, &mut trace_work)
+            .await
+            .map_err(admission_status)?;
         frame.prefixes(assigned)?;
         let context = Context {
+            source: body.source.clone(),
             loop_depth: 0,
             evaluation: context
                 .evaluation
@@ -4927,14 +4894,14 @@ mod function_measurements {
         assert_eq!(
             finish(
                 session
-                    .start("small() { local x=small; :; }; small")
+                    .start("small() { local x=small; :; }; small; unset -f small")
                     .unwrap()
             ),
             0
         );
         assert_eq!(session.core.execution_storage.observation().0, held);
         release.cancel();
-        assert_eq!(finish(session.start("wait").unwrap()), 0);
+        assert_eq!(finish(session.start("wait; unset -f hold").unwrap()), 0);
         assert_eq!(ex.drive(64).pending, 0);
         assert_eq!(host.active_count(), 0);
         assert_eq!(host.retained_count(), 0);
@@ -5037,12 +5004,22 @@ mod function_measurements {
         assert_eq!(finish_review(&ex, session.start("seen=0; g() { local x=$payload; seen=$((seen+1)); }; f() { shift; g; }; f \"$payload\"").unwrap()), 0);
         assert_eq!(session.state.borrow().bindings()["seen"], "1");
         assert!(session.state.borrow().positional().is_empty());
-        assert_eq!(session.core.execution_storage.observation().0, 0);
+        let source_bytes = session.state.borrow().functions()["f"]
+            .source
+            .retained()
+            .unwrap()
+            .bytes();
+        assert_eq!(session.core.execution_storage.observation().0, source_bytes);
         assert_eq!(
             finish_review(&ex, session.start("f \"$payload\"").unwrap()),
             0
         );
         assert_eq!(session.state.borrow().bindings()["seen"], "2");
+        assert_eq!(session.core.execution_storage.observation().0, source_bytes);
+        assert_eq!(
+            finish_review(&ex, session.start("unset -f f g").unwrap()),
+            0
+        );
         assert_eq!(session.core.execution_storage.observation().0, 0);
         assert_eq!(ex.drive(64).pending, 0);
     }
@@ -5181,7 +5158,7 @@ mod function_measurements {
             assert!(!session.state.borrow().bindings().contains_key("continued"));
             pressure.borrow_mut().take();
             assert_eq!(
-                finish_review(&ex, session.start("recovered=yes").unwrap()),
+                finish_review(&ex, session.start("recovered=yes; unset -f f").unwrap()),
                 0
             );
             assert!(!session.state.borrow().bindings().contains_key("saved"));
@@ -5225,7 +5202,14 @@ mod function_measurements {
                 assert!(state.positional().is_empty());
                 let sample = crate::executor::observation::stack_observation();
                 let (live, peak) = session.core.execution_storage.observation();
-                assert_eq!(live, 0, "all call/frame payload tickets refunded");
+                let reader_bytes = state.functions()["f"].source.retained().unwrap().bytes();
+                assert_eq!(
+                    live, reader_bytes,
+                    "only the stored definition's reader survives"
+                );
+                drop(state);
+                assert_eq!(finish_review(&ex, session.start("unset -f f").unwrap()), 0);
+                assert_eq!(session.core.execution_storage.observation().0, 0);
                 assert_eq!(sample.calls, goal);
                 assert!(sample.poll_bytes > 0 && sample.drop_bytes > 0);
                 println!(

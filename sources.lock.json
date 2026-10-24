@@ -717,6 +717,23 @@
         ],
         "change": "Retain typed file-read substitution eligibility and lexical backtick origins through quote and scalar assignment transformations. Keep legacy numeric redirect and trailing-input distinctions, escaped newlines and mixed-quote backticks. Traverse and print the dedicated AST variant.",
         "reason": "GNU Bash 5.3.15 treats one input-only command as a parent-side file capture, while specific backtick spellings disable the shortcut. No upstream test removed."
+      },
+      {
+        "paths": [
+          "shell/parser/src/parser/mod.rs",
+          "shell/parser/src/parser/lexer.rs",
+          "shell/parser/tests/aliases.rs"
+        ],
+        "change": "Read source suffixes with original offsets and retain alias recursion guards through the final token. Enable plain-word tracking before the first alias-aware token.",
+        "reason": "The engine re-reads future input after alias definitions change. Aliases remain lexical parser substitutions, recursive aliases terminate, and diagnostics keep original source lines."
+      },
+      {
+        "paths": [
+          "shell/parser/src/parser/mod.rs",
+          "shell/parser/tests/aliases.rs"
+        ],
+        "change": "Add a recovering single-read-unit entry point with an original-source continuation and no full-source AST copy. Preserve compound, multiline quote, heredoc, recovery and shared execution-budget handling.",
+        "reason": "Alias changes must re-read only the next complete input unit instead of charging and copying every remaining alias expansion on each change."
       }
     ],
     "removedUpstreamTests": [

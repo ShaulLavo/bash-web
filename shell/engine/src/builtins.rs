@@ -1,4 +1,6 @@
 //! Bash builtins. External commands are installed by the embedding runtime.
+mod alias;
+mod caller;
 mod completion;
 mod declarations;
 mod directories;
@@ -116,6 +118,12 @@ pub(crate) async fn run(
         Builtin::Test => return test::run(name, &args, &state, &fds, &context, work).await,
         Builtin::Trap => return trap::run(&args, &state, &fds, &context, work).await,
         Builtin::Getopts => return getopts::run(&args, &state, &fds, &context, work).await,
+        Builtin::Alias => {
+            return alias::run(name, &args, &state, &fds, &context, work)
+                .await
+                .map(Outcome::status);
+        }
+        Builtin::Caller => return caller::run(&args, &state, &fds, &context, work).await,
         Builtin::Shopt => return shopt(&args, &state, &fds, &context, work).await,
         Builtin::LoopControl => {
             return loop_control(name, &args, &fds, &context, work).await;
@@ -346,11 +354,20 @@ fn error_status(error: Error) -> i32 {
     }
 }
 
-const SHOPT_OPTIONS: [&str; 4] = ["extglob", "inherit_errexit", "lastpipe", "nullglob"];
+const SHOPT_OPTIONS: [&str; 6] = [
+    "expand_aliases",
+    "extdebug",
+    "extglob",
+    "inherit_errexit",
+    "lastpipe",
+    "nullglob",
+];
 
 fn shopt_value(state: &State, option: &str) -> Option<bool> {
     match option {
+        "expand_aliases" => Some(state.expand_aliases),
         "extglob" => Some(state.extglob),
+        "extdebug" => Some(state.extdebug),
         "inherit_errexit" => Some(state.inherit_errexit),
         "nullglob" => Some(state.nullglob),
         "lastpipe" => Some(state.lastpipe),
@@ -361,6 +378,35 @@ fn shopt_value(state: &State, option: &str) -> Option<bool> {
 /// Original streaming shopt adapter. Only options with actual state/consumers
 /// are accepted; unknown names fail rather than pretending to enable a feature.
 /// Extended-pattern matching itself may still reject unsupported syntax with 2.
+async fn set_shopt_option(
+    option: &str,
+    enabled: bool,
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    if option == "extdebug" && enabled {
+        State::initialize_arguments(state, &context.cancel, work)
+            .await
+            .map_err(error_status)?;
+    }
+    let mut state = state.borrow_mut();
+    match option {
+        "expand_aliases" => state.expand_aliases = enabled,
+        "extglob" => state.extglob = enabled,
+        "extdebug" => {
+            state.extdebug = enabled;
+            state.functrace = enabled;
+            state.errtrace = enabled;
+        }
+        "inherit_errexit" => state.inherit_errexit = enabled,
+        "nullglob" => state.nullglob = enabled,
+        "lastpipe" => state.lastpipe = enabled,
+        _ => unreachable!("validated shell option"),
+    }
+    Ok(())
+}
+
 async fn shopt(
     args: &[String],
     state: &SharedState,
@@ -415,7 +461,7 @@ async fn shopt(
     let options = if operands.is_empty() {
         SHOPT_OPTIONS.map(Some)
     } else {
-        [None; 4]
+        [None; 6]
     };
     let mut status = 0;
     // A fixed iterator over known names avoids allocating or copying argv.
@@ -442,14 +488,7 @@ async fn shopt(
             continue;
         };
         if !operands.is_empty() && (set || unset) {
-            let mut state = state.borrow_mut();
-            match option {
-                "extglob" => state.extglob = set,
-                "inherit_errexit" => state.inherit_errexit = set,
-                "nullglob" => state.nullglob = set,
-                "lastpipe" => state.lastpipe = set,
-                _ => unreachable!("validated shell option"),
-            }
+            set_shopt_option(option, set, state, context, work).await?;
             continue;
         }
         if !operands.is_empty() && !enabled {
@@ -599,6 +638,8 @@ async fn set(
             errexit: state.errexit,
             monitor: state.monitor,
             noglob: state.noglob,
+            functrace: state.functrace,
+            errtrace: state.errtrace,
         }
     };
     let mut index = 0;
@@ -639,11 +680,15 @@ async fn set(
     state.errexit = flags.errexit;
     state.monitor = flags.monitor;
     state.noglob = flags.noglob;
+    state.functrace = flags.functrace;
+    state.errtrace = flags.errtrace;
     Ok(Outcome::status(0))
 }
 
 /// `set` options staged until every argument has been validated.
 struct SetFlags {
+    functrace: bool,
+    errtrace: bool,
     nounset: bool,
     pipefail: bool,
     errexit: bool,
@@ -658,6 +703,8 @@ fn set_option(option: &str, enabled: bool, flags: &mut SetFlags) -> Result<(), i
         "errexit" => flags.errexit = enabled,
         "monitor" => flags.monitor = enabled,
         "noglob" => flags.noglob = enabled,
+        "functrace" => flags.functrace = enabled,
+        "errtrace" => flags.errtrace = enabled,
         _ => return Err(2),
     }
     Ok(())
@@ -679,6 +726,8 @@ async fn set_short_options(
             b'e' => flags.errexit = enabled,
             b'm' => flags.monitor = enabled,
             b'f' => flags.noglob = enabled,
+            b'T' => flags.functrace = enabled,
+            b'E' => flags.errtrace = enabled,
             _ => return Err(2),
         }
     }
@@ -699,12 +748,16 @@ async fn declarations(
     }
     let DeclarationOptions {
         print,
+        function_names,
         nameref,
         readonly,
         exported,
         case,
         integer,
     } = declaration_options(name, &mut args, context, work).await?;
+    if function_names {
+        return declarations::function_names(args, state, fds, context, work).await;
+    }
     if print {
         return declarations::print(name, args, state, fds, context, work).await;
     }
@@ -832,6 +885,7 @@ fn declaration_attributes(
 #[derive(Default)]
 struct DeclarationOptions {
     print: bool,
+    function_names: bool,
     nameref: bool,
     readonly: bool,
     exported: bool,
@@ -872,6 +926,7 @@ async fn declaration_option(
             .map_err(error_status)?;
         match flag {
             b'p' if enabled && name != "local" => flags.print = true,
+            b'F' if enabled && name != "local" => flags.function_names = true,
             b'n' if enabled => flags.nameref = true,
             b'r' if enabled => flags.readonly = true,
             b'x' if enabled => flags.exported = true,

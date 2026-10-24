@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "e4e1ce3ce4214a66c3e37bff4b054b7fafa76174bcd912209e2ad7abd2cd3009",
+    "engineSourceSha256": "b111a1aa9cc6098b5fb58e72b9d5a5bef4908ad7d1a11fc2f823df8233162009",
     "binaryBuild": null
   },
   "contract": {
@@ -169,6 +169,8 @@
       "kind": "layer",
       "files": [
         "shell/engine/src/builtins.rs",
+        "shell/engine/src/builtins/alias.rs",
+        "shell/engine/src/builtins/caller.rs",
         "shell/engine/src/builtins/completion.rs",
         "shell/engine/src/builtins/completion/generate.rs",
         "shell/engine/src/builtins/completion/generate/filesystem.rs",
@@ -257,6 +259,7 @@
         "shell/engine/src/interpreter/function_names.rs",
         "shell/engine/src/interpreter/indexed.rs",
         "shell/engine/src/interpreter/integer.rs",
+        "shell/engine/src/interpreter/reader.rs",
         "shell/engine/src/interpreter/select.rs",
         "shell/engine/src/interpreter/trap_tests.rs",
         "shell/engine/src/interpreter/type_builtin.rs"
@@ -319,8 +322,10 @@
       "kind": "layer",
       "files": [
         "shell/engine/src/state.rs",
+        "shell/engine/src/state/aliases.rs",
         "shell/engine/src/state/binding.rs",
         "shell/engine/src/state/bindings_tests.rs",
+        "shell/engine/src/state/call_stack.rs",
         "shell/engine/src/state/case.rs",
         "shell/engine/src/state/case_attributes.rs",
         "shell/engine/src/state/completion.rs",
@@ -407,7 +412,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 11,
+        "line": 13,
         "column": 16
       }
     },
@@ -417,7 +422,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 812,
+        "line": 865,
         "column": 25
       }
     },
@@ -427,7 +432,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 12,
+        "line": 14,
         "column": 5
       }
     },
@@ -437,7 +442,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 13,
+        "line": 15,
         "column": 14
       }
     },
@@ -447,7 +452,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 14,
+        "line": 16,
         "column": 19
       }
     },
@@ -457,7 +462,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 15,
+        "line": 17,
         "column": 10
       }
     },
@@ -477,7 +482,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 16,
+        "line": 18,
         "column": 13
       }
     },
@@ -587,7 +592,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 1628,
+        "line": 1585,
         "column": 33
       }
     },
@@ -617,7 +622,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 92,
+        "line": 93,
         "column": 30
       }
     },
@@ -927,7 +932,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter/function_names.rs",
-        "line": 207,
+        "line": 222,
         "column": 20
       }
     },
@@ -937,7 +942,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3837,
+        "line": 3804,
         "column": 25
       }
     },
@@ -947,7 +952,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 5210,
+        "line": 5187,
         "column": 17
       }
     },
@@ -967,7 +972,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3823,
+        "line": 3790,
         "column": 17
       }
     },
@@ -977,7 +982,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3823,
+        "line": 3790,
         "column": 31
       }
     },
@@ -1077,7 +1082,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 995,
+        "line": 1098,
         "column": 63
       }
     },
@@ -1087,7 +1092,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 2125,
+        "line": 2234,
         "column": 9
       }
     }
