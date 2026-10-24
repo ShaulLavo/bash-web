@@ -149,19 +149,28 @@ impl Rig {
         line: Option<usize>,
     ) -> JoinHandle<Result<Outcome, i32>> {
         let context = self.context(cancel);
-        let prepared = PreparedCommand {
+        let execution = PreparedExecution {
             line,
-            argv,
             assigned: Vec::new(),
-            fds: self.session.core.descriptors.clone(),
+            fds: Some(self.session.core.descriptors.clone()),
             work: expand::Work::new(steps, 0, 0),
         };
-        self.executor.spawn(dispatch_simple_command(
-            prepared,
-            self.session.state.clone(),
-            context,
-            WeakStderr::Closed,
-        ))
+        let state = self.session.state.clone();
+        self.executor.spawn(async move {
+            let argv = Cell::new(argv);
+            let builtin_prefix = Cell::new(None);
+            let mut execution = Ok(execution);
+            dispatch_simple_command(
+                &argv,
+                &mut None,
+                &builtin_prefix,
+                &mut execution,
+                &state,
+                &context,
+                WeakStderr::Closed,
+            )
+            .await
+        })
     }
     fn context(&self, cancel: Cancel) -> Context {
         let core = self.session.core.clone();
