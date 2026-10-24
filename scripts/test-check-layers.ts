@@ -493,6 +493,10 @@ function withRepo(
     git(["init", "-q"]);
     git(["config", "user.name", "Layer fixture"]);
     git(["config", "user.email", "layer-fixture@example.invalid"]);
+    put(
+      "scripts/check-layers.ts",
+      readFileSync(new URL("./check-layers.ts", import.meta.url), "utf8"),
+    );
     put("shell/engine/src/state.rs", "use crate::exec::Frame;\n");
     mkdirSync(resolve(root, "docs/evidence"), { recursive: true });
     body(root, git, put);
@@ -542,293 +546,74 @@ test("fixture commits do not start automatic maintenance writers", () => {
   });
 });
 
-test("record is explicit, evidence is exact, source digest is stable across commits", () => {
+test("actual sources ignore absent, stale and fabricated JSON without writing it", () => {
   withRepo((root, git, put) => {
-    const initial = commit(git);
-    assert.throws(() => checkLayers(root), /missing layer evidence/);
-    const recorded = checkLayers(root, { record: true, baseRef: initial });
-    assert.deepEqual(checkLayers(root), recorded);
-    commit(git);
-    assert.deepEqual(checkLayers(root), recorded);
-    put("shell/engine/src/state.rs", "// source-only edit\nuse crate::exec::Frame;\n");
-    assert.throws(() => checkLayers(root), /stale or edited/);
-    const refreshed = checkLayers(root, { record: true });
-    assert.notEqual(refreshed.identity.engineSourceSha256, recorded.identity.engineSourceSha256);
-    assert.deepEqual(checkLayers(root), refreshed);
-  });
-});
-
-function mergeSourceChange(
-  git: (args: string[]) => string,
-  put: (path: string, contents: string) => void,
-  source: string,
-) {
-  const fork = commit(git);
-  git(["checkout", "-qb", "upstream"]);
-  put("shell/engine/src/state.rs", source);
-  const upstream = commit(git);
-  git(["checkout", "-qb", "layers", fork]);
-  return upstream;
-}
-
-test("normal merges refresh inherited evidence against verified parent and immutable target sources", () => {
-  withRepo((root, git, put) => {
-    const upstream = mergeSourceChange(git, put, "// merged source\nuse crate::exec::Frame;\n");
-    const recorded = checkLayers(root, { record: true });
-    const recordedRef = commit(git);
-    git(["-c", "commit.gpgsign=false", "merge", "--no-edit", upstream]);
-    assert.throws(() => checkLayers(root), /stale or edited/);
-    const refreshed = checkLayers(root, { record: true, baseRef: upstream });
-    assert.notEqual(refreshed.identity.engineSourceSha256, recorded.identity.engineSourceSha256);
-    assert.deepEqual(checkLayers(root, { baseRef: recordedRef }), refreshed);
-    // The same verified merge may be used as an immutable target before refresh is committed.
-    const mergedRef = git(["rev-parse", "HEAD"]);
-    assert.deepEqual(checkLayers(root, { baseRef: mergedRef }), refreshed);
-    commit(git);
-    assert.deepEqual(checkLayers(root, { baseRef: upstream }), refreshed);
-  });
-});
-
-test("merged-source reductions ratchet HEAD and immutable merge targets, not stale parent counts", () => {
-  withRepo((root, git, put) => {
-    const violating = "crate::expand::run();\n";
-    put("shell/engine/src/state.rs", violating);
-    const upstream = mergeSourceChange(git, put, "use crate::exec::Frame;\n");
-    const old = checkLayers(root, { record: true });
-    assert.equal(old.counts.production.violations, 1);
-    commit(git);
-    git(["-c", "commit.gpgsign=false", "merge", "--no-edit", upstream]);
-    const mergedRef = git(["rev-parse", "HEAD"]);
-    const reduced = checkLayers(root, { record: true });
-    assert.equal(reduced.counts.production.violations, 0);
-    put("shell/engine/src/state.rs", violating);
-    put(evidencePath, JSON.stringify(scan({ "state.rs": violating })));
-    assert.throws(
-      () => checkLayers(root, { record: true }),
-      /committed HEAD: production violations increased/,
+    const baseRef = commit(git);
+    const before = checkLayers(root, { baseRef });
+    put(evidencePath, '{"counts":{"violations":999}}');
+    put("shell/engine/src/state.rs", "// harmless source edit\nuse crate::exec::Frame;\n");
+    const next = checkLayers(root, { baseRef });
+    assert.equal(next.counts.violations, before.counts.violations);
+    assert.equal(
+      readFileSync(resolve(root, evidencePath), "utf8"),
+      '{"counts":{"violations":999}}',
     );
-    commit(git); // Candidate makes its raised evidence exact; immutable merge target must still reject it.
+    assert.notEqual(next.identity.engineSourceSha256, before.identity.engineSourceSha256);
+  });
+});
+
+test("candidate scanner/policy edits cannot hide source growth, with failure evidence", () => {
+  withRepo((root, git, put) => {
+    const baseRef = commit(git);
+    put(
+      "scripts/check-layers.ts",
+      "export function scanSources() { throw new Error('candidate scanner ran') }",
+    );
+    put("shell/engine/src/state.rs", "crate::expand::run();");
+    put(evidencePath, "{}");
     assert.throws(
-      () => checkLayers(root, { record: true, baseRef: mergedRef }),
+      () => checkLayers(root, { baseRef, output: "layers.json" }),
       /immutable target: production violations increased/,
     );
+    const evidence = JSON.parse(readFileSync(resolve(root, "layers.json"), "utf8"));
+    assert.equal(evidence.ok, false);
+    assert.equal(evidence.base.counts.violations, 0);
+    assert.equal(evidence.candidate.counts.violations, 1);
+    assert.equal(evidence.baseRef, baseRef);
   });
 });
 
-test("merge inheritance cannot hide new violations or edited evidence", () => {
-  for (const tamper of ["source", "counts", "identity", "parent"]) {
-    withRepo((root, git, put) => {
-      const source =
-        tamper === "source" ? "crate::expand::run();\n" : "// upstream\nuse crate::exec::Frame;\n";
-      const upstream = mergeSourceChange(git, put, source);
-      const evidence = checkLayers(root, { record: true });
-      if (tamper === "parent") {
-        evidence.counts.production.violations = 100;
-        put(evidencePath, JSON.stringify(evidence));
-      }
-      commit(git);
-      git(["-c", "commit.gpgsign=false", "merge", "--no-edit", upstream]);
-      if (tamper === "counts" || tamper === "identity") {
-        if (tamper === "counts") evidence.counts.production.violations = 100;
-        else evidence.identity.engineSourceSha256 = "0".repeat(64);
-        put(evidencePath, JSON.stringify(evidence));
-        git(["add", evidencePath]);
-        git(["-c", "commit.gpgsign=false", "commit", "--amend", "--no-edit", "-q"]);
-      }
-      for (const record of [false, true]) {
-        assert.throws(
-          () => checkLayers(root, { record, baseRef: upstream }),
-          tamper === "source"
-            ? /production violations increased/
-            : /committed layer evidence does not match/,
-        );
-      }
-    });
-  }
-});
-
-test("ordinary source commits with stale evidence still fail closed", () => {
+test("committed sources and merges are scanned without inherited snapshot repair", () => {
   withRepo((root, git, put) => {
+    const baseRef = commit(git);
+    put("shell/engine/src/state.rs", "// source commit without JSON\nuse crate::exec::Frame;");
+    const target = commit(git);
+    assert.equal(checkLayers(root, { baseRef: target }).counts.violations, 0);
+    put("shell/engine/src/state.rs", "crate::expand::run();");
     commit(git);
-    checkLayers(root, { record: true });
-    commit(git);
-    put("shell/engine/src/state.rs", "// ordinary stale commit\nuse crate::exec::Frame;\n");
-    const staleRef = commit(git);
-    for (const record of [false, true])
-      assert.throws(
-        () => checkLayers(root, { record, baseRef: staleRef }),
-        /committed layer evidence does not match/,
-      );
+    assert.throws(() => checkLayers(root, { baseRef }), /increased/);
   });
 });
 
-test("raising working evidence cannot hide growth against committed HEAD, even with --record", () => {
+test("inventory and immutable references fail closed", () => {
   withRepo((root, git, put) => {
-    commit(git);
-    checkLayers(root, { record: true });
-    commit(git);
-    put("shell/engine/src/state.rs", "crate::expand::run();\n");
-    put(evidencePath, JSON.stringify(scan({ "state.rs": "crate::expand::run();\n" })));
-    assert.throws(() => checkLayers(root), /committed HEAD: production violations increased/);
-    assert.throws(
-      () => checkLayers(root, { record: true }),
-      /committed HEAD: production violations increased/,
-    );
-  });
-});
-
-test("immutable target rejects a committed raised candidate baseline; missing first-baseline JSON is not a bypass", () => {
-  withRepo((root, git, put) => {
-    const firstBase = commit(git); // Target intentionally has no evidence yet.
-    checkLayers(root, { record: true });
-    const recordedBase = commit(git);
-    const changed = "crate::expand::run();\n";
-    put("shell/engine/src/state.rs", changed);
-    put(evidencePath, JSON.stringify(scan({ "state.rs": changed })));
-    commit(git); // A malicious candidate raises both its source and current JSON.
-    checkLayers(root); // Exact current evidence alone cannot protect the target.
-    for (const baseRef of [firstBase, recordedBase]) {
-      assert.throws(
-        () => checkLayers(root, { baseRef }),
-        /immutable target: production violations increased/,
-      );
-      assert.throws(
-        () => checkLayers(root, { baseRef, record: true }),
-        /immutable target: production violations increased/,
-      );
-    }
-  });
-});
-
-test("deliberate policy evolution verifies older evidence using its own policy and permits real reductions", () => {
-  withRepo((root, git, put) => {
-    const standard = scan({ "state.rs": "use crate::exec::Frame;\n" });
-    const prior = scanSources(
-      [{ path: "shell/engine/src/state.rs", source: "use crate::exec::Frame;\n" }],
-      {
-        allowedGraph: { ...allowedGraph, state: [] },
-        testFixtureEdges,
-        compositionRoots,
-        rootInlineModules: standard.rootInlineModules,
-        rootReexports: standard.rootReexports,
-      },
-    );
-    assert.equal(prior.counts.production.violations, 1);
-    put(evidencePath, JSON.stringify(prior));
-    const priorRef = commit(git);
-    const current = checkLayers(root, { record: true, baseRef: priorRef });
-    assert.equal(current.counts.violations, 0);
-    assert.deepEqual(checkLayers(root, { baseRef: priorRef }), current);
-  });
-});
-
-test("immutable evidence retains and verifies its explicit test fixture policy", () => {
-  withRepo((root, git, put) => {
-    const source = "#[cfg(test)] fn fixture() { crate::interpreter::fixture(); }\n";
-    rmSync(resolve(root, "shell/engine/src/state.rs"));
-    put("shell/engine/src/runtime.rs", source);
-    const standard = scan({ "runtime.rs": source });
-    const prior = scanSources([{ path: "shell/engine/src/runtime.rs", source }], {
-      allowedGraph,
-      testFixtureEdges: {},
-      compositionRoots,
-      rootInlineModules: standard.rootInlineModules,
-      rootReexports: standard.rootReexports,
-    });
-    assert.equal(prior.counts.testOnly.violations, 1);
-    put(evidencePath, JSON.stringify(prior));
-    const priorRef = commit(git);
-    const current = checkLayers(root, { record: true, baseRef: priorRef });
-    assert.equal(current.counts.testOnly.edges, 1);
-    assert.equal(current.counts.testOnly.violations, 0);
-    assert.deepEqual(checkLayers(root, { baseRef: priorRef }), current);
-    commit(git);
-    const tampered = structuredClone(current);
-    tampered.testFixtureEdges = {};
-    put(evidencePath, JSON.stringify(tampered));
-    const tamperedRef = commit(git);
-    assert.throws(
-      () => checkLayers(root, { baseRef: tamperedRef }),
-      /committed layer evidence does not match/,
-    );
-  });
-});
-
-test("target JSON numbers are verified against immutable source, not trusted", () => {
-  withRepo((root, git, put) => {
-    commit(git);
-    const evidence = checkLayers(root, { record: true });
-    const tampered = structuredClone(evidence);
-    tampered.counts.production.violations = 100;
-    put(evidencePath, JSON.stringify(tampered));
-    const badBase = commit(git);
-    assert.throws(
-      () => checkLayers(root, { baseRef: badBase }),
-      /committed layer evidence does not match/,
-    );
-    // A valid candidate HEAD does not make a malformed older immutable target trustworthy.
-    put(evidencePath, JSON.stringify(evidence));
-    commit(git);
-    for (const record of [false, true])
-      assert.throws(
-        () => checkLayers(root, { record, baseRef: badBase }),
-        /LAYERS_BASE_REF: committed layer evidence does not match/,
-      );
-  });
-});
-
-test("record rejects unknown modules/targets; target references fail closed", () => {
-  withRepo((root, git, put) => {
-    commit(git);
+    const baseRef = commit(git);
     put("shell/engine/src/state.rs", "crate::new_feature::run();");
-    assert.throws(() => checkLayers(root, { record: true }), /unknown rooted target/);
+    assert.throws(() => checkLayers(root, { baseRef }), /unknown rooted target/);
     put("shell/engine/src/new_feature.rs", "");
-    assert.throws(() => checkLayers(root, { record: true }), /inventory\/scanner issues/);
-    rmSync(resolve(root, "shell/engine/src/new_feature.rs"));
-    put("shell/engine/src/state.rs", "");
+    assert.throws(() => checkLayers(root, { baseRef }), /inventory\/scanner issues/);
     assert.throws(() => checkLayers(root, { baseRef: "a".repeat(40) }), /Command failed/);
     assert.throws(() => checkLayers(root, { baseRef: "HEAD" }), /full commit SHA/);
   });
 });
 
-test("CLI options accept an immutable flag/environment ref and reject ambiguous inputs", () => {
-  const ref = "a".repeat(40);
-  assert.deepEqual(optionsFor(["--record", "--base-ref", ref], {}), { record: true, baseRef: ref });
-  assert.deepEqual(optionsFor([], { LAYERS_BASE_REF: ref }), { record: false, baseRef: ref });
-  assert.deepEqual(optionsFor(["--base-ref", "b".repeat(40)], { LAYERS_BASE_REF: ref }), {
-    record: false,
-    baseRef: "b".repeat(40),
+test("CLI accepts immutable base and artifact path, never source-tree recording", () => {
+  const baseRef = "a".repeat(40);
+  assert.deepEqual(optionsFor(["--base-ref", baseRef, "--output", "layers.json"], {}), {
+    baseRef,
+    output: "layers.json",
   });
-  for (const args of [
-    ["--base-ref"],
-    ["--base-ref", "--record"],
-    ["--wat"],
-    ["--base-ref", "main"],
-  ])
+  assert.deepEqual(optionsFor([], { LAYERS_BASE_REF: baseRef }), { baseRef, output: undefined });
+  for (const args of [["--record"], ["--base-ref"], ["--output"], ["--base-ref", "HEAD"]])
     assert.throws(() => optionsFor(args, {}));
-  assert.throws(() => optionsFor([], { LAYERS_BASE_REF: "" }), /full commit SHA/);
-});
-
-test("the initial production baseline is three real unique edges, with tests counted separately", () => {
-  const evidence = scan({
-    "state.rs": "use crate::expand::{Error, Work}; crate::interpreter::eval::StorageBudget;",
-    "ast_copy.rs": "use crate::expand::Work;",
-    "executor.rs": "#[cfg(test)] crate::interpreter::eval::measure();",
-  });
-  assert.deepEqual(
-    evidence.violations.map((edge) => `${edge.scope}:${edge.source}->${edge.target}`),
-    [
-      "production:ast_copy->expand",
-      "production:state->expand",
-      "production:state->interpreter",
-      "testOnly:executor->interpreter",
-    ],
-  );
-});
-
-test("repository evidence matches its current source without requiring violations to remain", () => {
-  const root = resolve(import.meta.dirname, "..");
-  const evidence = checkLayers(root);
-  const stored: unknown = JSON.parse(readFileSync(resolve(root, evidencePath), "utf8"));
-  assert.deepEqual(stored, evidence);
 });

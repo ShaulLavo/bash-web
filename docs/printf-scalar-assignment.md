@@ -51,7 +51,4 @@ removing only Bash source-line annotations. This unit adds no stdout normalizati
 and leaves the frozen path-normalization and stderr policies unchanged. No case,
 fixture, exclusion or deadline changes.
 
-The full replay in that receipt measured `286dd4cd0bc59410bda90348992044812a208dd3`.
-The later warning fix and safe IFS assignment change alter production bytes.
-Their exact-source focused checks and bounded affected frozen-case comparisons
-are separate evidence, not a second full replay or a new score claim.
+The full replay in that receipt measured `286dd4cd0bc59410bda90348992044812a208dd3`. The later warning fix and safe IFS assignment change alter production bytes and were checked only with focused tests and affected frozen cases, not a second full replay.

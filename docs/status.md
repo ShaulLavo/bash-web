@@ -5,7 +5,7 @@ bash-web is experimental and pre-1.0. The package version is `0.0.x`, `package.j
 ## Platforms
 
 - **Native engine build and tests** (`npm run test:rust`): run on macOS arm64 (1,657 tests passed at `a745a96`) and Linux (CI, `ubuntu-latest`). Windows is not verified.
-- **WASI guests, size gate, frozen score replay:** run on Linux (CI). macOS and Windows are not verified. The wasi-sdk fallback path in `scripts/wasi-build.ts` is a Linux x86_64 path on the maintainer's machine (always set `WASI_SDK_PATH`), and the libc rebuild needs `setsid`, `flock`, and GNU `timeout`.
+- **WASI guests, size gate, frozen score replay:** run on Linux (CI). macOS and Windows are not verified. Set `WASI_SDK_PATH` to your wasi-sdk 34.0 directory, because the default in `scripts/wasi-build.ts` fits only one Linux layout. The the libc rebuild needs `setsid`, `flock`, and GNU `timeout`.
 - **Browser embedding:** Chromium and Firefox through Playwright in CI. Safari is not verified, and Chromium and Firefox results say nothing about it.
 - **Browser requirements:** a secure context, cross-origin isolation because the terminal uses `SharedArrayBuffer`, and WASM served as `application/wasm`.
 - **Demo terminal renderer:** WebGPU, with a Canvas fallback when WebGPU exposes no adapter.

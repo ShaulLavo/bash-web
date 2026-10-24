@@ -4,4 +4,5 @@ Working notes, not user documentation. Nothing here is linked from the README or
 
 Contents:
 
+- `bash-compatibility-history.md`: the Brush/Bashkit/just-bash comparison and the dated steps of the own-shell score, split out of `docs/bash-compatibility.md`.
 - `extraction/brush-web-commit-map.txt`: old-to-new commit hashes from when the shell history was extracted from `brush-web`.
