@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "6b9d24e569e9dffe4740e87404ab886345b25bf29330d110142f7c63325fb6dc",
+    "engineSourceSha256": "770095348af03ea63981addaffe8b48eb1549226ce3d00980a8f6dbd5311b8c4",
     "binaryBuild": null
   },
   "contract": {
@@ -181,6 +181,7 @@
         "shell/engine/src/builtins/directories/tests.rs",
         "shell/engine/src/builtins/getopts.rs",
         "shell/engine/src/builtins/getopts/tests.rs",
+        "shell/engine/src/builtins/help.rs",
         "shell/engine/src/builtins/printf.rs",
         "shell/engine/src/builtins/printf/fields.rs",
         "shell/engine/src/builtins/printf/quoting.rs",
@@ -410,7 +411,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 13,
+        "line": 14,
         "column": 16
       }
     },
@@ -420,7 +421,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 846,
+        "line": 848,
         "column": 25
       }
     },
@@ -430,7 +431,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 14,
+        "line": 15,
         "column": 5
       }
     },
@@ -440,7 +441,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 15,
+        "line": 16,
         "column": 14
       }
     },
@@ -450,7 +451,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 16,
+        "line": 17,
         "column": 19
       }
     },
@@ -460,7 +461,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 17,
+        "line": 18,
         "column": 10
       }
     },
@@ -480,7 +481,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 18,
+        "line": 19,
         "column": 13
       }
     },
