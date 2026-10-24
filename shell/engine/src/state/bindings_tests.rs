@@ -411,7 +411,7 @@ fn commit_test_update(state: &SharedState, completed: &mut AssignmentFrame, upda
 }
 
 #[test]
-fn completed_undo_is_excluded_from_snapshots_and_state_clones() {
+fn completed_undo_is_excluded_from_admitted_snapshots() {
     let state = State::default().shared();
     state
         .borrow_mut()
@@ -431,7 +431,6 @@ fn completed_undo_is_excluded_from_snapshots_and_state_clones() {
     let mut child = finish(State::snapshot(&state, &Cancel::new(), &mut work))
         .unwrap_or_else(|_| panic!("snapshot fits"));
     assert!(child.assignment_undo.0.upgrade().is_none());
-    assert!(state.borrow().clone().assignment_undo.0.upgrade().is_none());
     child.assign_parameter("a".into(), "child".into()).unwrap();
     drop(child);
     drop(completed);

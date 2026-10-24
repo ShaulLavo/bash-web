@@ -451,13 +451,15 @@ async fn unary_value(
             for _ in operand.bytes() {
                 step(context, work).await?;
             }
-            if !super::valid_name(operand) {
-                return Ok(false);
-            }
-            State::admit_scalar_access(state, operand, &context.cancel, work)
-                .await
-                .map_err(error_status)?;
-            Ok(state.borrow().scalar_is_set(operand))
+            crate::expand::references::is_set(
+                operand,
+                state,
+                &context.cancel,
+                context.limits().expansion_bytes,
+                work,
+            )
+            .await
+            .map_err(error_status)
         }
         "-R" => {
             for _ in operand.bytes() {

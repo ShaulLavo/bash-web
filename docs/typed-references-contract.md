@@ -1,6 +1,6 @@
 # Typed references, step 1
 
-Approved work; this contract awaits parent design review before resolver implementation.
+Approved for bounded Step 1 implementation after parent review on 2026-10-24.
 Scope: indexed references through namerefs, arithmetic, `unset` and `test -v`.
 Attributes, associative arrays and input-array builtins follow separately.
 

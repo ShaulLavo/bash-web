@@ -23,10 +23,12 @@ mod declarations;
 use call_stack::CallStack;
 pub(crate) use declarations::DeclarationView;
 mod binding;
+mod references;
 pub use binding::Binding;
 use binding::BindingUndo;
 pub(crate) use binding::BindingUpdate;
 pub(crate) use binding::Indexed;
+pub(crate) use references::{Place, Reference};
 
 pub type SharedState = Rc<RefCell<State>>;
 
@@ -140,7 +142,7 @@ pub struct StoredFunction {
     pub(crate) storage: Option<crate::exec::RetainedStorage>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct State {
     pub shell_name: String,
     variables: BTreeMap<String, Binding>,
@@ -2143,7 +2145,7 @@ impl PrefixFrame {
         let mut state = self.state.borrow_mut();
         assert!(matches!(self.bindings, PrefixBindings::Expansion));
         assert!(state.prefixes.last().unwrap().is_empty());
-        let name = state.assignment_name(name).map_err(Error::from)?;
+        // The feature layer already selected this binding at its operation phase.
         if state.is_readonly(&name) {
             return Err(Error::Readonly {
                 name,

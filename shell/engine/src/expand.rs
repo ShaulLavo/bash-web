@@ -5,7 +5,7 @@
 //! also expand pathname patterns through the shell filesystem.
 use crate::{
     executor::Cancel,
-    state::{SharedState, State},
+    state::{Reference, SharedState, State},
 };
 use futures::FutureExt;
 use shell_parser::parser::{ParameterOp, Word, WordPart};
@@ -24,6 +24,7 @@ mod operand;
 pub(crate) mod pattern;
 mod positional;
 mod printable;
+pub(crate) mod references;
 mod replacement;
 mod tilde;
 mod transformation;
@@ -1150,6 +1151,39 @@ impl Expansion<'_> {
         quoted: bool,
         scalar: bool,
     ) -> Result<(), Error> {
+        if Reference::parse(name).is_some_and(|reference| {
+            state
+                .borrow()
+                .reference(reference)
+                .is_ok_and(|target| target.subscript.is_some())
+        }) {
+            let place = references::select(
+                references::syntax(name)?,
+                state,
+                self.cancel,
+                self.raw_remaining,
+                self.work,
+            )
+            .await?;
+            let value =
+                references::read(&place, state, self.cancel, self.raw_remaining, self.work).await?;
+            if value.is_none() && state.borrow().nounset {
+                self.work.admit_storage(name.len().saturating_add(128))?;
+                return Err(Error::Unbound {
+                    name: name.to_owned(),
+                    line: None,
+                });
+            }
+            self.ifs = None;
+            self.ifs_changed = true;
+            return self
+                .segment(
+                    value.as_deref().unwrap_or(""),
+                    Protection::expansion(scalar || quoted, state),
+                    scalar || quoted,
+                )
+                .await;
+        }
         self.require_bound(name, state).await?;
         let max = self.snapshot_max();
         let value = {

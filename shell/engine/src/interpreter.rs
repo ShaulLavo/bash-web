@@ -3798,7 +3798,15 @@ async fn assignments_body(
     let mut budget = Budget::default();
     for assignment in assignments {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-        let indexed = assignment.index.is_some()
+        let element_reference = state
+            .borrow()
+            .reference(crate::state::Reference {
+                name: &assignment.name,
+                subscript: None,
+            })
+            .is_ok_and(|r| r.subscript.is_some());
+        let indexed = element_reference
+            || assignment.index.is_some()
             || assignment.append
             || matches!(assignment.value, AssignmentValue::Array(_))
             || (commit
