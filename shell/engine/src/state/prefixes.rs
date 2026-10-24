@@ -199,3 +199,41 @@ impl Prefixes {
         self.slots.len() * std::mem::size_of::<Slot>()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{exec::StorageBudget, state::PrefixFrame};
+
+    #[test]
+    fn typed_reference_prefix_first_use_admission_refuses_before_mutation() {
+        let bytes = std::mem::size_of::<Slot>();
+        let memory = StorageBudget::new(bytes);
+        let state = State::with_memory(memory.clone()).shared();
+        state
+            .borrow_mut()
+            .assign_parameter("IFS".into(), "".into())
+            .unwrap();
+        let mut refused = Work::new(100, bytes - 1, 0);
+        assert!(matches!(
+            PrefixFrame::enter(state.clone(), &mut refused),
+            Err(Error::Status(2))
+        ));
+        assert_eq!(refused.storage_remaining, bytes - 1);
+        assert!(state.borrow().prefixes.is_empty());
+        assert_eq!(state.borrow().prefix_capacity_bytes(), 0);
+        assert_eq!(state.borrow().scalar_parameter("IFS"), Some(""));
+        assert_eq!(memory.observation().0, 0);
+
+        let mut admitted = Work::new(100, bytes, 0);
+        let frame = PrefixFrame::enter(state.clone(), &mut admitted)
+            .unwrap_or_else(|_| panic!("exact slot capacity fits"));
+        assert_eq!(admitted.storage_remaining, 0);
+        assert_eq!(memory.observation().0, bytes);
+        drop(frame);
+        assert_eq!(memory.observation().0, bytes);
+        assert_eq!(state.borrow().scalar_parameter("IFS"), Some(""));
+        drop(state);
+        assert_eq!(memory.observation().0, 0);
+    }
+}

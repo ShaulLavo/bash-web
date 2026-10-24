@@ -2773,8 +2773,9 @@ fn deferred_list_separators_keep_raw_output_and_field_bounds() {
         expansion_bytes: 8,
         ..Limits::default()
     });
+    rig.variable("IFS", "");
     assert_eq!(
-        rig.run(r#"f() { IFS=; args "$@"${IFS:= }; }; f '' '' '' '' '' '' '' '' '' ''"#),
+        rig.run(r#"f() { args "$@"${IFS:= }; }; f '' '' '' '' '' '' '' '' '' ''"#),
         2
     );
     assert!(rig.calls.borrow().is_empty());
@@ -2784,10 +2785,8 @@ fn deferred_list_separators_keep_raw_output_and_field_bounds() {
             expansion_bytes: bytes,
             ..Limits::default()
         });
-        assert_eq!(
-            rig.run(r#"f() { IFS=; args "$@"${IFS:=:}; }; f aa bb"#),
-            status
-        );
+        rig.variable("IFS", "");
+        assert_eq!(rig.run(r#"f() { args "$@"${IFS:=:}; }; f aa bb"#), status);
         if status == 0 {
             assert_eq!(*rig.calls.borrow(), &[vec!["aa bb"]]);
         } else {
@@ -2798,7 +2797,8 @@ fn deferred_list_separators_keep_raw_output_and_field_bounds() {
         arguments: 3,
         ..Limits::default()
     });
-    assert_eq!(rig.run(r#"f() { IFS=; args $@${IFS:=:}; }; f a:b c:d"#), 2);
+    rig.variable("IFS", "");
+    assert_eq!(rig.run(r#"f() { args $@${IFS:=:}; }; f a:b c:d"#), 2);
     assert!(rig.calls.borrow().is_empty());
 }
 
