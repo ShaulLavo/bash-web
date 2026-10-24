@@ -4400,3 +4400,6 @@ mod aliases;
 
 #[path = "words/array_slicing.rs"]
 mod array_slicing;
+
+#[path = "words/enable.rs"]
+mod enable;
