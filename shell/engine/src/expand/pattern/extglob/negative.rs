@@ -104,7 +104,19 @@ async fn flags(count: usize, work: &mut Work, cancel: &Cancel) -> Result<Vec<boo
     Ok(flags)
 }
 
-pub(super) async fn matches(
+pub(super) fn matches<'a>(
+    pattern: &'a Pattern,
+    code: &'a [Instruction],
+    value: &'a str,
+    work: &'a mut Work,
+    cancel: &'a Cancel,
+) -> crate::exec::ResultFuture<'a, bool> {
+    // Keep the complement machine out of every enclosing expansion future,
+    // including recursive scalar operands that never select this branch.
+    work.frame(move |work| run(pattern, code, value, work, cancel))
+}
+
+async fn run(
     pattern: &Pattern,
     code: &[Instruction],
     value: &str,
@@ -166,6 +178,62 @@ pub(super) async fn matches(
 mod tests {
     use super::*;
     use futures::FutureExt;
+
+    #[test]
+    fn negative_frame_is_admitted_before_polling() {
+        let pattern = Pattern::default();
+        let code = [Instruction::Accept];
+        let cancel = Cancel::new();
+        let mut probe = Work::new(100, 0, 1);
+        let bytes = std::mem::size_of_val(&run(&pattern, &code, "", &mut probe, &cancel));
+        let mut denied = Work::new(100, bytes - 1, 1);
+        assert!(matches!(
+            matches(&pattern, &code, "", &mut denied, &cancel).now_or_never(),
+            Some(Err(Error::Status(2)))
+        ));
+        assert_eq!(denied.storage_left(), bytes - 1);
+        assert_eq!(denied.remaining, 100);
+        let mut exact = Work::new(100, bytes, 1);
+        let frame = matches(&pattern, &code, "", &mut exact, &cancel);
+        drop(frame);
+        assert_eq!(exact.storage_left(), 0);
+        assert_eq!(exact.remaining, 100);
+    }
+
+    #[test]
+    fn negative_frame_refunds_execution_on_completion_cancellation_and_drop() {
+        let scope = crate::exec::Scope::new(
+            1024,
+            crate::exec::StorageBudget::new(1024),
+            crate::exec::StorageBudget::new(65536),
+        );
+        let pattern = Pattern::default();
+        let code = [Instruction::Accept];
+        let cancel = Cancel::new();
+        let mut work = Work::new(100000, 100000, 1).with_frame_scope(scope.clone());
+        assert!(matches!(
+            matches(&pattern, &code, "", &mut work, &cancel).now_or_never(),
+            Some(Ok(true))
+        ));
+        assert_eq!(scope.execution_available(), 65536);
+        let value = "a".repeat(256);
+        let mut pending = Box::pin(matches(&pattern, &code, &value, &mut work, &cancel));
+        assert!(pending.as_mut().now_or_never().is_none());
+        assert!(scope.execution_available() < 65536);
+        cancel.cancel();
+        assert!(matches!(
+            pending.as_mut().now_or_never(),
+            Some(Err(Error::Status(130)))
+        ));
+        drop(pending);
+        assert_eq!(scope.execution_available(), 65536);
+        let cancel = Cancel::new();
+        let mut pending = Box::pin(matches(&pattern, &code, &value, &mut work, &cancel));
+        assert!(pending.as_mut().now_or_never().is_none());
+        assert!(scope.execution_available() < 65536);
+        drop(pending);
+        assert_eq!(scope.execution_available(), 65536);
+    }
 
     #[test]
     fn relation_storage_is_admitted_before_initialization() {
