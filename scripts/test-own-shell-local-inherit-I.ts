@@ -4,6 +4,7 @@ import { after, test } from "node:test";
 import { resolve } from "node:path";
 import { liveNodeWorkers } from "./node-worker-host.ts";
 import { assertReaderOutput } from "./recorded-bash.ts";
+import { assertShellControlOutput } from "./shell-fixture-runner.ts";
 import { createWaffleRunner } from "./waffle-compat.ts";
 
 type OracleCase = {
@@ -59,10 +60,7 @@ const ownershipControls = [
 for (const control of ownershipControls) {
   test(`local inheritance ownership: ${control.name}`, async () => {
     const actual = await run(control.code);
-    assert.equal(actual.crash, undefined);
-    assert.equal(actual.outputLimit, undefined);
-    assert.equal(actual.status, 0);
-    assert.equal(actual.stdout.toString(), control.stdout);
+    assertShellControlOutput(actual, control);
   });
 }
 after(() => assert.equal(liveNodeWorkers(), 0));

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { recordedBashTests } from "./recorded-bash-tests.ts";
-import { createShellFixtureRunner } from "./shell-fixture-runner.ts";
+import { assertShellControlOutput, createShellFixtureRunner } from "./shell-fixture-runner.ts";
 
 await recordedBashTests("enable", new URL("fixtures/shell-enable.json", import.meta.url));
 
@@ -61,10 +61,7 @@ const controls = [
 for (const control of controls)
   test(`production Waffle enable: ${control.name}`, async () => {
     const actual = await run(control.code);
-    assert.equal(actual.crash, undefined);
-    assert.equal(actual.outputLimit, undefined);
-    assert.equal(actual.status, 0);
-    assert.equal(actual.stdout.toString(), control.stdout);
+    assertShellControlOutput(actual, control);
   });
 
 test("production Waffle enable remains a core feature without utility add-ons", async () => {
