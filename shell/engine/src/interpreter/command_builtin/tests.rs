@@ -148,29 +148,7 @@ impl Rig {
         cancel: Cancel,
         line: Option<usize>,
     ) -> JoinHandle<Result<Outcome, i32>> {
-        let core = self.session.core.clone();
-        let group = self.host.allocate_group();
-        let signal = Rc::new(Cell::new(None));
-        let context = Context {
-            evaluation: crate::exec::Scope::new(
-                core.limits.source_bytes,
-                core.eval_storage.clone(),
-                core.execution_storage.clone(),
-            ),
-            source: crate::exec::Source::root(""),
-            reader: crate::exec::ReaderLocation::default(),
-            scope: Scope::new(0),
-            group,
-            invocation_group: group,
-            signal: signal.clone(),
-            lifetime: (cancel.clone(), signal),
-            cancel,
-            parameter_error_status: 127,
-            loop_depth: 0,
-            ignore_errexit: false,
-            compound_child: false,
-            core,
-        };
+        let context = self.context(cancel);
         let execution = PreparedExecution {
             line,
             assigned: Vec::new(),
@@ -218,13 +196,6 @@ impl Rig {
             compound_child: false,
             core,
         }
-    }
-    fn block_output(&self, descriptor: u32) -> Endpoint {
-        let (reader, writer) = full_pipe();
-        let mut fds = self.session.core.descriptors.borrow().clone();
-        fds.insert(descriptor, writer);
-        self.session.set_descriptors(fds).unwrap();
-        reader
     }
     fn path(&self, value: &str) {
         self.session
@@ -522,27 +493,13 @@ fn builtin_wrapper_blocked_diagnostic_cancellation_releases_all_frames() {
     rig.shutdown();
 }
 
-fn full_pipe() -> (Endpoint, Endpoint) {
-    let (reader, writer) = io::pipe();
-    assert_eq!(
-        writer.write(&vec![0; io::PIPE_CAPACITY]).now_or_never(),
-        Some(Ok(io::PIPE_CAPACITY))
-    );
-    (reader, writer)
-}
-
 #[test]
 fn builtin_wrapper_usage_diagnostic_cancellation_and_broken_pipe() {
     let rig = Rig::new(Limits::default());
     let before = rig.session.core.execution_storage.observation().0;
-    let reader = rig.block_output(2);
+    let reader = block_output(&rig, 2);
     let job = rig.session.start("a=temporary builtin -z").unwrap();
-    rig.executor.drive(1024);
-    assert!(!job.is_finished());
-    rig.session.interrupt();
-    assert_eq!(finish(&rig.executor, job), 130);
-    assert_eq!(rig.session.core.execution_storage.observation().0, before);
-    assert!(!rig.session.state.borrow().bindings().contains_key("a"));
+    cancel_prefix_and_refund(&rig, job, before);
     drop(reader);
     assert_eq!(rig.run("builtin -z"), 141);
     assert_eq!(rig.host.requests.get(), 0);
@@ -654,7 +611,7 @@ fn timed_function_declaration_output_releases_storage_on_cancel_and_drop() {
         let before = rig.session.core.execution_storage.observation().0;
         let storage = rig.session.core.execution_storage.clone();
         let state = rig.session.state.clone();
-        let reader = rig.block_output(1);
+        let reader = block_output(&rig, 1);
         let job = rig.session.start("a=temporary declare -f f").unwrap();
         rig.executor.drive(1024);
         assert!(!job.is_finished(), "function output must backpressure");
@@ -725,7 +682,7 @@ fn check_timing_exit(format: Option<&str>, source: &str, ending: TimingEnd) {
     let storage = rig.session.core.execution_storage.clone();
     let before = storage.observation().0;
     let executor = rig.executor.clone();
-    let reader = rig.block_output(2);
+    let reader = block_output(&rig, 2);
     let job = rig.session.start(source).unwrap();
     executor.drive(4096);
     assert!(!job.is_finished(), "report must backpressure: {format:?}");
