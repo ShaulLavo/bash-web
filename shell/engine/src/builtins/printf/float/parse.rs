@@ -207,8 +207,7 @@ async fn convert(
     let order = if hexadecimal {
         numerator.bits().saturating_add(exponent)
     } else {
-        ((f64::from(numerator.bits()) * std::f64::consts::LOG10_2) as i32)
-            .saturating_add(exponent)
+        ((f64::from(numerator.bits()) * std::f64::consts::LOG10_2) as i32).saturating_add(exponent)
     };
     let bound = if hexadecimal { 16_500 } else { 5_000 };
     if order > bound {
