@@ -24,7 +24,7 @@ bash-web is not on npm. Use it from a checkout of the repository.
 Waffle is not on npm. bash-web needs this exact commit of [ShaulLavo/waffle](https://github.com/ShaulLavo/waffle), the one `peerDependencies.waffle` names in `package.json`:
 
 ```text
-b20fad173ebaa225cb87c51776f35edaaafd4a40
+250967060c0268950266fc5afb85be2170fb8ed3
 ```
 
 It is Waffle `0.0.67`. A different revision is not supported. Waffle's own docs install it as a Git dependency and trust its build step, because its `prepare` script builds the Node entry points and runs on Bun. In your app's `package.json`:
@@ -32,7 +32,7 @@ It is Waffle `0.0.67`. A different revision is not supported. Waffle's own docs 
 ```json
 {
   "dependencies": {
-    "waffle": "github:ShaulLavo/waffle#b20fad173ebaa225cb87c51776f35edaaafd4a40"
+    "waffle": "github:ShaulLavo/waffle#250967060c0268950266fc5afb85be2170fb8ed3"
   },
   "trustedDependencies": ["waffle"]
 }
