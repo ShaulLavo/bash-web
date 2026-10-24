@@ -75,7 +75,7 @@ async fn report(
     fds: &Descriptors,
     context: &Context,
 ) -> Result<(), Error> {
-    let mut work = expansion_work(context.limits());
+    let mut work = expansion_work(context);
     let format = if posix {
         Some(POSIX_FORMAT.to_owned())
     } else {

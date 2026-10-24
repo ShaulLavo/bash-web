@@ -44,7 +44,16 @@ fn script_and_eval_delegate_recovery_ast_lines_and_error_kinds() {
         .with_strict_substitution_bodies()
         .parse_recovering();
         for entry in [script, eval] {
-            let (actual, actual_failure) = entry(source, source.len(), &budget(u64::MAX)).unwrap();
+            let (actual, actual_failure) = entry(
+                source,
+                source.len(),
+                &budget(u64::MAX),
+                ParseOptions {
+                    extglob: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
             assert_eq!(
                 serde_json::to_value(actual.commands).unwrap(),
                 serde_json::to_value(&expected.commands).unwrap(),
@@ -78,10 +87,12 @@ fn script_and_eval_delegate_recovery_ast_lines_and_error_kinds() {
 #[test]
 fn reader_source_limit_counts_bytes_and_precedes_budget_probe() {
     for entry in [script, eval] {
-        assert!(entry("é", 2, &budget(u64::MAX)).is_ok());
+        assert!(entry("é", 2, &budget(u64::MAX), ParseOptions::default()).is_ok());
         let cancelled = budget(u64::MAX).with_cancellation_probe(Rc::new(|| true));
         assert_eq!(
-            entry("é", 1, &cancelled).err().unwrap(),
+            entry("é", 1, &cancelled, ParseOptions::default())
+                .err()
+                .unwrap(),
             "shell source limit exceeded"
         );
         assert_eq!(cancelled.check(), Err(LimitExceeded::Cancelled));
@@ -92,16 +103,28 @@ fn reader_source_limit_counts_bytes_and_precedes_budget_probe() {
 fn reader_preserves_shared_sticky_work_failure_and_cancellation() {
     for entry in [script, eval] {
         let exhausted = budget(0);
-        let error = entry("printf $(printf nested)", 100, &exhausted)
-            .err()
-            .unwrap();
+        let error = entry(
+            "printf $(printf nested)",
+            100,
+            &exhausted,
+            ParseOptions::default(),
+        )
+        .err()
+        .unwrap();
         let failure = exhausted.check().unwrap_err();
         assert!(matches!(failure, LimitExceeded::WorkUnits { .. }));
         assert_eq!(error, failure.to_string());
-        assert_eq!(eval("", 100, &exhausted).err().unwrap(), error);
+        assert_eq!(
+            eval("", 100, &exhausted, ParseOptions::default())
+                .err()
+                .unwrap(),
+            error
+        );
         let cancelled = budget(u64::MAX).with_cancellation_probe(Rc::new(|| true));
         assert_eq!(
-            entry("printf ok", 100, &cancelled).err().unwrap(),
+            entry("printf ok", 100, &cancelled, ParseOptions::default())
+                .err()
+                .unwrap(),
             "request cancelled"
         );
         assert_eq!(cancelled.clone().check(), Err(LimitExceeded::Cancelled));
@@ -275,7 +298,13 @@ fn reader_budget_admission_matches_old_call_at_every_work_boundary() {
         for entry in [script, eval] {
             let actual_budget = budget(fuel);
             assert_eq!(
-                entry(source, source.len(), &actual_budget).map(|_| ()),
+                entry(
+                    source,
+                    source.len(),
+                    &actual_budget,
+                    ParseOptions::default()
+                )
+                .map(|_| ()),
                 expected,
                 "fuel={fuel}",
             );

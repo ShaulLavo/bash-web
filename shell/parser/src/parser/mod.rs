@@ -206,7 +206,22 @@ impl<'a> Parser<'a> {
         timeout: Option<Duration>,
         options: ParseOptions,
     ) -> Self {
+        Self::at_position(input, max_depth, max_fuel, timeout, options, Position::new())
+    }
+
+    /// Re-read a source suffix without rebasing AST spans or diagnostic lines.
+    /// The position must identify a UTF-8 boundary in the original input.
+    pub fn at_position(
+        input: &'a str,
+        max_depth: usize,
+        max_fuel: usize,
+        timeout: Option<Duration>,
+        options: ParseOptions,
+        position: Position,
+    ) -> Self {
         let mut lexer = Lexer::with_max_subst_depth(input, max_depth.min(HARD_MAX_AST_DEPTH));
+        lexer.start_at(position);
+        lexer.set_track_plain(options.aliases.is_some());
         lexer.set_extglob_bang(options.extglob);
         lexer.set_capture_raw(true);
         let spanned = lexer.next_spanned_token();
@@ -244,10 +259,10 @@ impl<'a> Parser<'a> {
             current_plain,
             current_after_blank: false,
             prev_token_end: usize::MAX,
-            last_token_line: 1,
+            last_token_line: position.line,
             top_level_list: false,
             top_starts: Vec::new(),
-            failed_command_start: (0, 1),
+            failed_command_start: (position.offset, position.line),
         };
         parser.charge_literal_escapes();
         parser
@@ -887,7 +902,7 @@ impl<'a> Parser<'a> {
     fn parse_inner(&mut self) -> Result<Script> {
         let mut commands = Vec::new();
         let start_span = self.current_span;
-        self.parse_script_into(&mut commands)?;
+        self.parse_script_into(&mut commands, false)?;
         Ok(self.finish_script(commands, start_span))
     }
 
@@ -907,9 +922,24 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_recovering(mut self) -> (Script, Option<Error>) {
+        let (script, error, _) = self.parse_recovering_input(false);
+        (script, error)
+    }
+
+    /// Parse one complete top-level read unit, including multiline compounds
+    /// and here-documents. The caller retains the original source; this AST
+    /// does not copy it. Resume at the returned original-source position.
+    pub fn parse_read_unit_recovering(mut self) -> (Script, Option<Error>, Option<Position>) {
+        self.parse_recovering_input(true)
+    }
+
+    fn parse_recovering_input(
+        &mut self,
+        read_unit: bool,
+    ) -> (Script, Option<Error>, Option<Position>) {
         let mut commands = Vec::new();
         let start_span = self.current_span;
-        let result = self.parse_script_into(&mut commands);
+        let result = self.parse_script_into(&mut commands, read_unit);
         let end_span = self.current_span;
         let (keep, err) = match result {
             Ok(()) => (commands.len(), None),
@@ -949,27 +979,44 @@ impl<'a> Parser<'a> {
             command_starts.truncate(keep);
             command_starts.push(rest);
         }
+        // A heredoc's reinjected newline starts on its command line but ends
+        // after its body. Resume after the consumed delimiter, never in the body.
+        let next = (err.is_none() && self.current_token.is_some())
+            .then_some(self.current_span.end);
         (
             Script {
                 commands,
                 span: start_span.merge(end_span),
                 trailing_error: None,
                 command_end_lines,
-                source: Some(Arc::from(self.input)),
+                source: (!read_unit).then(|| Arc::from(self.input)),
                 command_starts,
             },
             err,
+            next,
         )
     }
 
     /// Top-level command loop. Each command is stored with the line its
     /// terminator (newline, `;`, `&` or EOF) sits on.
     // THREAT[TM-DOS-044]: on the recursive path; bookkeeping is out of line.
-    fn parse_script_into(&mut self, commands: &mut Vec<(Command, usize)>) -> Result<()> {
+    fn parse_script_into(
+        &mut self,
+        commands: &mut Vec<(Command, usize)>,
+        read_unit: bool,
+    ) -> Result<()> {
         self.check_error_token()?;
         while let Some(start) = self.next_script_command()? {
             let parsed = self.parse_command_list()?;
             self.end_script_command(commands, parsed, start)?;
+            // Injected alias newlines have zero-width source spans. Keep
+            // their remaining replacement text in this parser.
+            if read_unit
+                && matches!(self.current_token, Some(tokens::Token::Newline))
+                && self.current_span.start.offset != self.current_span.end.offset
+            {
+                break;
+            }
         }
         self.take_script_deferred_error()
     }
@@ -4583,7 +4630,7 @@ impl<'a> Parser<'a> {
                     inner_parser.started_at = self.started_at;
                     let mut commands = Vec::new();
                     let result = inner_parser
-                        .parse_script_into(&mut commands)
+                        .parse_script_into(&mut commands, false)
                         .map(|()| commands.into_iter().map(|(cmd, _)| cmd).collect::<Vec<_>>());
                     let raw = Some(format!(
                         "{}({cmd_src}){}",

@@ -4,15 +4,46 @@ use super::{diagnose, endpoint, error_status, printf};
 use crate::{
     expand::{Ifs, Work},
     interpreter::{Context, Outcome},
-    io::{Endpoint, FdTable},
+    io::{DescriptorKind, Endpoint, FdTable},
     state::{SharedState, State},
 };
+
+#[derive(Clone, Copy, Default)]
+enum Count {
+    #[default]
+    Line,
+    AtMost(usize),
+    Exactly(usize),
+}
+
+impl Count {
+    fn maximum(self) -> usize {
+        match self {
+            Self::Line => usize::MAX,
+            Self::AtMost(count) | Self::Exactly(count) => count,
+        }
+    }
+
+    fn with_maximum(self, count: usize) -> Self {
+        if self.exact() {
+            return Self::Exactly(count);
+        }
+        Self::AtMost(count)
+    }
+
+    fn exact(self) -> bool {
+        matches!(self, Self::Exactly(_))
+    }
+}
 
 #[derive(Default)]
 struct Options<'a> {
     fd: u32,
     raw: bool,
-    count: Option<usize>,
+    count: Count,
+    delimiter: Option<u8>,
+    prompt: Option<&'a str>,
+    silent: bool,
     names: &'a [String],
 }
 
@@ -56,7 +87,11 @@ async fn option_word<'a>(
             options.raw = true;
             continue;
         }
-        if !matches!(flag, b'n' | b'u') {
+        if flag == b's' {
+            options.silent = true;
+            continue;
+        }
+        if !matches!(flag, b'n' | b'N' | b'u' | b'd' | b'p') {
             return Err(2);
         }
         let value = if index + 1 < arg.len() {
@@ -64,16 +99,35 @@ async fn option_word<'a>(
         } else {
             iter.next().map(String::as_str).ok_or(2)?
         };
-        if flag == b'n' {
-            options.count = Some(count(value, context, work).await?);
-            return Ok(());
+        return option_value(flag, value, options, context, work).await;
+    }
+    Ok(())
+}
+
+async fn option_value<'a>(
+    flag: u8,
+    value: &'a str,
+    options: &mut Options<'a>,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    match flag {
+        b'n' => {
+            options.count = options
+                .count
+                .with_maximum(count(value, context, work).await?)
         }
-        options.fd = value
-            .parse::<i64>()
-            .ok()
-            .and_then(|fd| u32::try_from(fd).ok())
-            .ok_or(2)?;
-        return Ok(());
+        b'N' => options.count = Count::Exactly(count(value, context, work).await?),
+        b'd' => options.delimiter = Some(value.bytes().next().unwrap_or(0)),
+        b'p' => options.prompt = Some(value),
+        b'u' => {
+            options.fd = value
+                .parse::<i64>()
+                .ok()
+                .and_then(|fd| u32::try_from(fd).ok())
+                .ok_or(1)?;
+        }
+        _ => return Err(2),
     }
     Ok(())
 }
@@ -117,7 +171,31 @@ pub(super) async fn run(
         validate_name(name, fds, context, work).await?;
     }
     let input = endpoint(fds, options.fd)?;
+    prepare_terminal(&options, &input, fds, context).await?;
     read_record(&options, &input, state, fds, context, work).await
+}
+
+async fn prepare_terminal(
+    options: &Options<'_>,
+    input: &Endpoint,
+    fds: &FdTable,
+    context: &Context,
+) -> Result<(), i32> {
+    if options.count.maximum() == 0 || (options.prompt.is_none() && !options.silent) {
+        return Ok(());
+    }
+    if input.descriptor_kind().map_err(|error| error.status())? != DescriptorKind::Terminal {
+        return Ok(());
+    }
+    if options.silent {
+        return Err(2);
+    }
+    if let Some(prompt) = options.prompt
+        && diagnose(fds, prompt, context).await == Err(130)
+    {
+        return Err(130);
+    }
+    Ok(())
 }
 
 async fn validate_name(
@@ -178,7 +256,11 @@ async fn assign(
     for (index, name) in options.names.iter().enumerate() {
         validate_name(name, fds, context, work).await?;
         let last = index + 1 == options.names.len();
-        let value = fields.value(last, context, work).await?;
+        let value = match (options.count.exact(), index) {
+            (true, 0) => text,
+            (true, _) => "",
+            (false, _) => fields.value(last, context, work).await?,
+        };
         assign_value(name, value, state, context, work)
             .await
             .map_err(|status| destination_status(status, last))?;
@@ -197,6 +279,7 @@ fn destination_status(status: i32, last: bool) -> i32 {
 
 struct Reader {
     remaining: usize,
+    delimiter: Option<u8>,
     raw: bool,
     escaped: bool,
     utf8: bool,
@@ -218,12 +301,13 @@ async fn read_record(
     context: &Context,
     work: &mut Work,
 ) -> Result<Outcome, i32> {
-    let count = options.count.unwrap_or(usize::MAX);
-    let utf8 = options.count.is_some() && printf::character_locale(state, context, work).await?;
+    let count = options.count.maximum();
+    let utf8 = !matches!(options.count, Count::Line)
+        && printf::character_locale(state, context, work).await?;
     let ifs = Ifs::new(state, &context.cancel, usize::MAX, work)
         .await
         .map_err(error_status)?;
-    let trim = if options.names.is_empty() {
+    let trim = if options.names.is_empty() || options.count.exact() {
         [false; 3]
     } else {
         [ifs.contains(' '), ifs.contains('\t'), ifs.contains('\n')]
@@ -237,6 +321,7 @@ async fn read_record(
     let _storage = context.admit_builtin_buffer(storage_bytes)?;
     let mut reader = Reader {
         remaining: count,
+        delimiter: (!options.count.exact()).then_some(options.delimiter.unwrap_or(b'\n')),
         raw: options.raw,
         escaped: false,
         utf8,
@@ -282,7 +367,9 @@ async fn read_record(
 impl Reader {
     fn byte(&mut self, byte: u8) -> Result<bool, i32> {
         if byte == 0 {
-            return Ok(false);
+            let delimiter = self.delimiter == Some(0) && !self.escaped;
+            self.escaped = false;
+            return Ok(delimiter);
         }
         if self.pending_len != 0 {
             return self.character_byte(byte);
@@ -295,7 +382,7 @@ impl Reader {
             self.escaped = false;
             return Ok(false);
         }
-        if byte == b'\n' {
+        if self.delimiter == Some(byte) && !self.escaped {
             return Ok(true);
         }
         self.character_byte(byte)

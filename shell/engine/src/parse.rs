@@ -1,14 +1,14 @@
-//! Original internal context adapters over the unchanged shell parser.
+//! Internal context adapters over the shell parser.
 //!
 //! Entry points encode today's grammar/options and resource policy, not new
-//! capabilities. No shell options or capability filters are added here: readers
+//! capabilities. Callers supply lexical options without exposing shell state: readers
 //! stay lenient at top level and strict in substitution bodies. Expansion callers
 //! still admit work/storage and choose when lazy text becomes active; this layer
 //! neither pre-parses inactive operands nor translates expansion errors.
 use shell_parser::{
     Parser,
     limits::{ExecutionBudget, ExecutionLimits},
-    parser::{Command, Lexer, ParseOptions, SpannedToken, Word, WordPart},
+    parser::{Command, Lexer, ParseOptions, Position, SpannedToken, Word, WordPart},
 };
 
 // Scalar operands are reparsed inside nested expansion futures, unlike scripts
@@ -21,19 +21,13 @@ pub(crate) fn script(
     source: &str,
     source_bytes: usize,
     budget: &ExecutionBudget,
+    options: ParseOptions,
 ) -> Result<(ParsedScript, Option<ParseFailure>), String> {
-    reader(source, source_bytes, budget)
+    reader(source, source_bytes, budget, options, Position::new())
 }
 
-/// Joined eval arguments, admitted and retained by the eval reader. Keep this
-/// distinct from script entry even though their grammar is currently identical.
-pub(crate) fn eval(
-    source: &str,
-    source_bytes: usize,
-    budget: &ExecutionBudget,
-) -> Result<(ParsedScript, Option<ParseFailure>), String> {
-    reader(source, source_bytes, budget)
-}
+/// Joined eval arguments use the script reader's grammar and lexical options.
+pub(crate) use script as eval;
 
 /// Where parsing stopped. Bash reads and runs a script one complete line at
 /// a time, so the commands on earlier lines still run first.
@@ -47,33 +41,69 @@ pub(crate) enum ParseFailure {
 pub(crate) struct ParsedScript {
     pub(crate) commands: Vec<Command>,
     pub(crate) command_end_lines: Vec<usize>,
+    pub(crate) command_starts: Vec<(usize, usize)>,
 }
 
 /// Parse shell source the way the script reader and `eval` do. Resource
 /// limits are errors; a syntax error keeps the complete lines before it.
-fn reader(
+pub(crate) fn reader(
     source: &str,
     source_bytes: usize,
     budget: &shell_parser::limits::ExecutionBudget,
+    options: ParseOptions,
+    position: Position,
 ) -> Result<(ParsedScript, Option<ParseFailure>), String> {
+    let (script, error) =
+        parser(source, source_bytes, budget, options, position)?.parse_recovering();
+    recovered(script, error, budget)
+}
+
+/// Re-read only the next complete read unit with the current alias table.
+/// AST offsets remain relative to the caller-owned original source.
+pub(crate) fn read_unit(
+    source: &str,
+    source_bytes: usize,
+    budget: &ExecutionBudget,
+    options: ParseOptions,
+    position: Position,
+) -> Result<(ParsedScript, Option<ParseFailure>, Option<Position>), String> {
+    let (script, error, next) =
+        parser(source, source_bytes, budget, options, position)?.parse_read_unit_recovering();
+    let (script, failure) = recovered(script, error, budget)?;
+    Ok((script, failure, next))
+}
+
+fn parser<'a>(
+    source: &'a str,
+    source_bytes: usize,
+    budget: &ExecutionBudget,
+    options: ParseOptions,
+    position: Position,
+) -> Result<Parser<'a>, String> {
     if source.len() > source_bytes {
         return Err("shell source limit exceeded".into());
     }
-    let parser_limits = shell_parser::limits::ExecutionLimits {
+    let limits = ExecutionLimits {
         max_input_bytes: source_bytes,
         ..Default::default()
     };
-    let (script, error) = Parser::with_limits_and_timeout(
+    Ok(Parser::at_position(
         source,
-        parser_limits.max_ast_depth,
-        parser_limits.max_parser_operations,
-        Some(parser_limits.parser_timeout),
+        limits.max_ast_depth,
+        limits.max_parser_operations,
+        Some(limits.parser_timeout),
+        options,
+        position,
     )
     .with_execution_budget(budget.clone())
-    // The whole script is parsed before aliases it defines exist, so the
-    // top level stays lenient; substitution bodies get bash's grammar.
-    .with_strict_substitution_bodies()
-    .parse_recovering();
+    .with_strict_substitution_bodies())
+}
+
+fn recovered(
+    script: shell_parser::parser::Script,
+    error: Option<shell_parser::Error>,
+    budget: &ExecutionBudget,
+) -> Result<(ParsedScript, Option<ParseFailure>), String> {
     budget.check().map_err(|error| error.to_string())?;
     let failure = match error {
         None => None,
@@ -87,6 +117,7 @@ fn reader(
         ParsedScript {
             commands: script.commands,
             command_end_lines: script.command_end_lines,
+            command_starts: script.command_starts,
         },
         failure,
     ))

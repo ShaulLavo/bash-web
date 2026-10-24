@@ -26,7 +26,9 @@ pub(crate) mod eval;
 mod file_substitution;
 mod function_names;
 mod indexed;
+mod reader;
 mod select;
+mod source;
 mod timing;
 #[cfg(test)]
 mod trap_tests;
@@ -273,6 +275,7 @@ struct Core {
 pub(crate) struct Context {
     core: Rc<Core>,
     source: crate::exec::Source,
+    reader: crate::exec::ReaderLocation,
     pub cancel: Cancel,
     // The invoking foreground/background command, independent of nested scopes.
     lifetime: (Cancel, Rc<Cell<Option<i32>>>),
@@ -292,11 +295,50 @@ pub(crate) struct RenderedFunction {
 }
 
 impl Context {
+    fn root(
+        core: Rc<Core>,
+        source: crate::exec::Source,
+        evaluation: crate::exec::Scope,
+        cancel: Cancel,
+        group: GroupId,
+    ) -> Self {
+        let signal = Rc::new(Cell::new(None));
+        Self {
+            core,
+            source,
+            reader: crate::exec::ReaderLocation::default(),
+            lifetime: (cancel.clone(), signal.clone()),
+            cancel,
+            signal,
+            group,
+            invocation_group: group,
+            scope: Scope::new(0),
+            parameter_error_status: 127,
+            compound_child: false,
+            loop_depth: 0,
+            ignore_errexit: false,
+            evaluation,
+        }
+    }
+
     fn stop_signal(&self) -> i32 {
         self.signal.get().unwrap_or(2)
     }
     fn cancel_status(&self) -> i32 {
         128 + self.stop_signal()
+    }
+    /// Runtime executable registration is authoritative; never infer X_OK from open.
+    pub(crate) async fn executable_path(&self, path: String, cwd: String) -> Result<bool, i32> {
+        match self
+            .cancel
+            .run(self.core.host.access(path, cwd))
+            .await
+            .map_err(|_| self.cancel_status())?
+        {
+            Ok(()) => Ok(true),
+            Err(ProcessError::Runtime(2 | 31 | 44 | 54)) => Ok(false),
+            Err(_) => Err(2),
+        }
     }
     pub(crate) fn fs(&self) -> &dyn FileSystem {
         self.core.fs.as_ref()
@@ -773,56 +815,49 @@ impl Session {
             self.core.execution_storage.clone(),
         );
         let parser = evaluation.parser_budget(Some(Rc::new(move || parser_cancel.probe_now())));
-        let (script, failure) = parse::script(source, self.core.limits.source_bytes, &parser)
-            .map_err(|error| {
-                if error == "request cancelled" {
-                    StartError::Interrupted
-                } else {
-                    StartError::Invalid(error)
-                }
-            })?;
+        let aliases = reader::AliasOptions::snapshot(&self.state);
+        let (script, failure) = parse::script(
+            source,
+            self.core.limits.source_bytes,
+            &parser,
+            aliases.options(),
+        )
+        .map_err(|error| {
+            if error == "request cancelled" {
+                StartError::Interrupted
+            } else {
+                StartError::Invalid(error)
+            }
+        })?;
         if script.commands.is_empty()
             && let Some(ParseFailure::Syntax { message, .. }) = failure.as_ref()
         {
             return Err(StartError::Invalid(message.clone()));
         }
         let group = self.core.host.allocate_group();
-        let foreground_cancel = cancel.clone();
-        let signal = Rc::new(Cell::new(None));
-        let foreground_signal = signal.clone();
-        let context = Context {
-            core: self.core.clone(),
-            source: crate::exec::Source::root(source),
-            lifetime: (cancel.clone(), signal.clone()),
-            cancel,
-            signal,
-            group,
-            invocation_group: group,
-            scope: Scope::new(0),
-            parameter_error_status: 127,
-            compound_child: false,
-            loop_depth: 0,
-            ignore_errexit: false,
+        let context = Context::root(
+            self.core.clone(),
+            crate::exec::Source::root(source),
             evaluation,
-        };
+            cancel,
+            group,
+        );
+        let foreground_cancel = context.cancel.clone();
+        let foreground_signal = context.signal.clone();
         let state = self.state.clone();
         let join = self.core.executor.spawn(async move {
             let _foreground = ForegroundGuard(context.core.clone());
             let mut processes = ProcessGroup::new(context.core.host.clone(), group)
                 .with_signal(context.signal.clone());
-            let mut result = script_sequence(
-                script.commands,
-                script.command_end_lines,
+            let result = reader::run(
+                reader::Reader::new(script, failure, aliases, parser),
+                "-c",
+                false,
                 state.clone(),
                 context.core.descriptors.clone(),
                 context.clone(),
             )
             .await;
-            if matches!(result.flow, Flow::Normal | Flow::DiscardReadUnit)
-                && let Some(failure) = failure
-            {
-                result = parse_failure(failure, "-c", &context.core.descriptors, &context).await;
-            }
             if result.flow == Flow::Exit {
                 context.core.exit_requested.set(true);
             }
@@ -1042,7 +1077,7 @@ async fn parse_failure(
 ) -> Outcome {
     let (message, line) = match failure {
         ParseFailure::Word(line) => {
-            let mut work = expansion_work(context.limits());
+            let mut work = expansion_work(context);
             let error = work
                 .admit_storage(256)
                 .err()
@@ -1071,51 +1106,6 @@ async fn parse_failure(
         code: 2,
         flow: Flow::Exit,
     }
-}
-
-async fn script_sequence(
-    commands: Vec<Command>,
-    command_end_lines: Vec<usize>,
-    state: SharedState,
-    fds: Descriptors,
-    context: Context,
-) -> Outcome {
-    let mut result = Outcome::status(0);
-    let mut discarded_line = None;
-    // The parser groups each top-level read unit through its terminating
-    // newline. Arithmetic expansion errors unwind functions and compound
-    // commands in that unit, then Bash's reader accepts the next one.
-    for (index, command) in commands.into_iter().enumerate() {
-        let end_line = command_end_lines.get(index).copied();
-        if discarded_line.is_some_and(|line| end_line.is_some_and(|end| end <= line)) {
-            continue;
-        }
-        result = execute(command, state.clone(), fds.clone(), context.clone()).await;
-        if result.flow == Flow::SpawnFailed {
-            return result;
-        }
-        if context.cancel.is_cancelled() {
-            return Outcome::status(130);
-        }
-        if result.flow == Flow::Resource {
-            return abort_diagnostic(
-                &fds,
-                &context,
-                b"shell live-execution memory limit exceeded",
-                2,
-            )
-            .await;
-        }
-        if result.flow == Flow::DiscardReadUnit {
-            discarded_line = end_line;
-        } else if matches!(
-            result.flow,
-            Flow::Exit | Flow::Abort | Flow::SpawnFailed | Flow::Return
-        ) {
-            break;
-        }
-    }
-    result
 }
 
 fn sequence(
@@ -1290,7 +1280,7 @@ async fn pipeline_command(
         let state = state.borrow();
         state.lastpipe && !state.monitor
     };
-    let mut work = expansion_work(context.limits());
+    let mut work = expansion_work(&context);
     let children = match pipeline_children(count, &state, &context, &mut work).await {
         Ok(children) => children,
         Err(error) => {
@@ -1669,7 +1659,7 @@ fn loop_sequence<'a>(
         async move {
             // The prior iteration's copy is gone. Admit this retained AST
             // copy against fresh command storage, never elapsed loop work.
-            let mut work = expansion_work(context.limits());
+            let mut work = expansion_work(context);
             if let Err(error) = crate::ast_copy::admit(commands, &context.cancel, &mut work).await {
                 return expansion_failure(error.into(), fds, context).await;
             }
@@ -1704,7 +1694,7 @@ async fn cache_loop_arithmetic<'a>(
         .evaluation
         .admit_storage(arithmetic::Program::retained_bytes(source))
         .ok()?;
-    let mut work = expansion_work(context.limits());
+    let mut work = expansion_work(context);
     let program = match arithmetic::Program::compile(source, &mut work, &context.cancel).await {
         Ok(program) => program,
         Err(_) => return None,
@@ -2077,7 +2067,7 @@ async fn subshell(
     fds: Descriptors,
     context: Context,
 ) -> Outcome {
-    let mut work = expansion_work(context.limits());
+    let mut work = expansion_work(&context);
     let _task_allocation = match admit_task_metadata::<()>(&context, 1) {
         Ok(allocation) => allocation,
         Err(error) => return expansion_failure(error.into(), &fds, &context).await,
@@ -2240,7 +2230,7 @@ async fn launch_background(
     if !context.core.has_job_capacity() {
         return Outcome::status(2);
     }
-    let mut work = expansion_work(context.limits());
+    let mut work = expansion_work(context);
     let child = match State::snapshot(state, &context.cancel, &mut work).await {
         Ok(child) => child.shared(),
         Err(error) => return expansion_failure(error.into(), fds, context).await,
@@ -2294,6 +2284,7 @@ async fn launch_background(
     let child_context = Context {
         core: context.core.clone(),
         source: context.source.clone(),
+        reader: context.reader.clone(),
         lifetime: (cancel.clone(), signal.clone()),
         cancel: cancel.clone(),
         signal: signal.clone(),
@@ -2381,7 +2372,8 @@ fn admission_status(error: expand::Error) -> i32 {
         _ => 2,
     }
 }
-fn expansion_work(limits: &Limits) -> expand::Work {
+fn expansion_work(context: &Context) -> expand::Work {
+    let limits = context.limits();
     expand::Work::new(
         limits
             .source_bytes
@@ -2390,11 +2382,12 @@ fn expansion_work(limits: &Limits) -> expand::Work {
         limits.expansion_bytes,
         limits.arguments,
     )
+    .with_frame_scope(context.evaluation.clone())
 }
 /// Expansion work that can run command substitutions with `fds` (the
 /// descriptors in effect before the command's own redirections).
 fn substitution_work(context: &Context, fds: &Descriptors) -> expand::Work {
-    let mut work = expansion_work(context.limits());
+    let mut work = expansion_work(context);
     work.substitutions = Some(Substitutions {
         context: context.clone(),
         fds: fds.clone(),
@@ -2849,9 +2842,12 @@ async fn prepare_simple_command_body(
         &simple.name,
         state,
         &context.cancel,
-        context.limits().expansion_bytes,
-        context.limits().arguments - assignment_count,
-        context.limits().expansion_bytes,
+        expand::FieldContext::Argv,
+        (
+            context.limits().expansion_bytes,
+            context.limits().arguments - assignment_count,
+            context.limits().expansion_bytes,
+        ),
         &mut work,
     )
     .await?;
@@ -2885,9 +2881,12 @@ async fn prepare_simple_command_body(
                 &word,
                 state,
                 &context.cancel,
-                remaining_bytes,
-                remaining_words,
-                context.limits().expansion_bytes,
+                expand::FieldContext::Argv,
+                (
+                    remaining_bytes,
+                    remaining_words,
+                    context.limits().expansion_bytes,
+                ),
                 &mut work,
             )
             .await?
@@ -3127,9 +3126,20 @@ async fn dispatch_simple_command_body(
                 .await);
             }
         };
+        let trace_bytes = context
+            .limits()
+            .source_bytes
+            .saturating_add(context.limits().expansion_bytes);
+        let mut trace_work = expand::Work::new(trace_bytes, trace_bytes, 0);
+        frame
+            .trace(name, line.unwrap_or(1), &context.cancel, &mut trace_work)
+            .await
+            .map_err(admission_status)?;
         frame.prefixes(assigned)?;
         let context = Context {
+            source: body.source.clone(),
             loop_depth: 0,
+            reader: body.reader.clone(),
             evaluation: context
                 .evaluation
                 .function_body()
@@ -3174,7 +3184,13 @@ async fn dispatch_simple_command_body(
         if !assigned.is_empty() {
             return Err(2);
         }
-        return Ok(eval::run(args, state, fds, context).await);
+        return Ok(eval::run(args, line, state, fds, context).await);
+    }
+    if handler == Some(commands::Handler::Source) {
+        let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
+            .await
+            .map_err(admission_status)?;
+        return Ok(source::run(&name, args, line, state, fds, context).await);
     }
     if handler == Some(commands::Handler::Type) {
         let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
@@ -3186,6 +3202,13 @@ async fn dispatch_simple_command_body(
         let _frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, &mut work)
             .await
             .map_err(admission_status)?;
+        if builtin == commands::Builtin::Completion && name == "compgen" {
+            work.substitutions = Some(Substitutions {
+                context: context.clone(),
+                fds: fds.clone(),
+                process_fds: None,
+            });
+        }
         let bindings = fds.borrow().clone();
         return builtins::run(builtin, &name, args, state, bindings, context, &mut work).await;
     }
@@ -3547,6 +3570,11 @@ async fn assignments_body(
         if commit {
             completed.reserve(&assignment.name, retained)?;
         }
+        let value = if commit {
+            state.borrow().case_value(&assignment.name, value)?
+        } else {
+            value
+        };
         let assignment_name = assignment.name.clone();
         if let Err(name) = frame.set(assignment.name, value) {
             if let Some(fds) = function_diagnostics {
@@ -3863,6 +3891,7 @@ mod scope_tests {
             ),
             core: session.core.clone(),
             source: crate::exec::Source::root(""),
+            reader: crate::exec::ReaderLocation::default(),
             lifetime: (Cancel::new(), Rc::new(Cell::new(None))),
             cancel: Cancel::new(),
             signal: Rc::new(Cell::new(None)),
@@ -3889,6 +3918,17 @@ mod scope_tests {
 
     #[test]
     fn counted_read_retains_and_refunds_its_buffer_on_pending_cancellation() {
+        for option in [
+            "-n2147483647",
+            "-N2147483647",
+            "-rn2147483647",
+            "-rN2147483647",
+        ] {
+            check_pending_read_cancellation(option);
+        }
+    }
+
+    fn check_pending_read_cancellation(option: &str) {
         let (state, _fds, context) = replay_context();
         let limit = context.limits().execution_bytes;
         let (reader, writer) = io::pipe();
@@ -3898,7 +3938,7 @@ mod scope_tests {
         let mut future = Box::pin(builtins::run(
             commands::Builtin::Read,
             "read",
-            vec!["-n2147483647".into(), "value".into()],
+            vec![option.into(), "value".into()],
             state.clone(),
             fds,
             context.clone(),
@@ -4369,28 +4409,18 @@ mod residual_review_tests {
         }
         fn context(&self) -> Context {
             let core = self.session().core.clone();
-            let cancel = Cancel::new();
-            let signal = Rc::new(Cell::new(None));
-            let group = self.host.allocate_group();
-            Context {
-                evaluation: crate::exec::Scope::new(
-                    core.limits.source_bytes,
-                    core.eval_storage.clone(),
-                    core.execution_storage.clone(),
-                ),
+            let evaluation = crate::exec::Scope::new(
+                core.limits.source_bytes,
+                core.eval_storage.clone(),
+                core.execution_storage.clone(),
+            );
+            Context::root(
                 core,
-                source: crate::exec::Source::root(""),
-                lifetime: (cancel.clone(), signal.clone()),
-                cancel,
-                signal,
-                group,
-                invocation_group: group,
-                scope: Scope::new(0),
-                parameter_error_status: 127,
-                compound_child: false,
-                loop_depth: 0,
-                ignore_errexit: false,
-            }
+                crate::exec::Source::root(""),
+                evaluation,
+                Cancel::new(),
+                self.host.allocate_group(),
+            )
         }
         fn shutdown(mut self) {
             let session = self.session.take().unwrap();
@@ -4889,14 +4919,14 @@ mod function_measurements {
         assert_eq!(
             finish(
                 session
-                    .start("small() { local x=small; :; }; small")
+                    .start("small() { local x=small; :; }; small; unset -f small")
                     .unwrap()
             ),
             0
         );
         assert_eq!(session.core.execution_storage.observation().0, held);
         release.cancel();
-        assert_eq!(finish(session.start("wait").unwrap()), 0);
+        assert_eq!(finish(session.start("wait; unset -f hold").unwrap()), 0);
         assert_eq!(ex.drive(64).pending, 0);
         assert_eq!(host.active_count(), 0);
         assert_eq!(host.retained_count(), 0);
@@ -4999,12 +5029,22 @@ mod function_measurements {
         assert_eq!(finish_review(&ex, session.start("seen=0; g() { local x=$payload; seen=$((seen+1)); }; f() { shift; g; }; f \"$payload\"").unwrap()), 0);
         assert_eq!(session.state.borrow().bindings()["seen"], "1");
         assert!(session.state.borrow().positional().is_empty());
-        assert_eq!(session.core.execution_storage.observation().0, 0);
+        let source_bytes = session.state.borrow().functions()["f"]
+            .source
+            .retained()
+            .unwrap()
+            .bytes();
+        assert_eq!(session.core.execution_storage.observation().0, source_bytes);
         assert_eq!(
             finish_review(&ex, session.start("f \"$payload\"").unwrap()),
             0
         );
         assert_eq!(session.state.borrow().bindings()["seen"], "2");
+        assert_eq!(session.core.execution_storage.observation().0, source_bytes);
+        assert_eq!(
+            finish_review(&ex, session.start("unset -f f g").unwrap()),
+            0
+        );
         assert_eq!(session.core.execution_storage.observation().0, 0);
         assert_eq!(ex.drive(64).pending, 0);
     }
@@ -5143,7 +5183,7 @@ mod function_measurements {
             assert!(!session.state.borrow().bindings().contains_key("continued"));
             pressure.borrow_mut().take();
             assert_eq!(
-                finish_review(&ex, session.start("recovered=yes").unwrap()),
+                finish_review(&ex, session.start("recovered=yes; unset -f f").unwrap()),
                 0
             );
             assert!(!session.state.borrow().bindings().contains_key("saved"));
@@ -5187,7 +5227,14 @@ mod function_measurements {
                 assert!(state.positional().is_empty());
                 let sample = crate::executor::observation::stack_observation();
                 let (live, peak) = session.core.execution_storage.observation();
-                assert_eq!(live, 0, "all call/frame payload tickets refunded");
+                let reader_bytes = state.functions()["f"].source.retained().unwrap().bytes();
+                assert_eq!(
+                    live, reader_bytes,
+                    "only the stored definition's reader survives"
+                );
+                drop(state);
+                assert_eq!(finish_review(&ex, session.start("unset -f f").unwrap()), 0);
+                assert_eq!(session.core.execution_storage.observation().0, 0);
                 assert_eq!(sample.calls, goal);
                 assert!(sample.poll_bytes > 0 && sample.drop_bytes > 0);
                 println!(
