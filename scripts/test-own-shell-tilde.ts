@@ -63,13 +63,8 @@ const boundaries = [
     status: 0,
     reason: "unset HOME requires an account lookup contract",
   },
-  {
-    script: "HOME=/home/tt; unset v; printf '<%s>\\n' ${v:-~}",
-    stdout: "",
-    status: 2,
-    reason: "lazy parameter operands are not word literals",
-  },
 ];
+const operandCases = ["HOME=/home/tt; unset v; printf '<%s>\\n' ${v:-~}"];
 const integratedCases = [
   "HOME=/home/tt; a=foo:~:~/src; printf '<%s>\\n' \"$a\"; a+=:~; printf '<%s>\\n' \"$a\"",
   "HOME=/one; a=prefix:~:~/tail; printf '<%s>\\n' \"$a\"",
@@ -90,6 +85,7 @@ const fixturePath = new URL("fixtures/shell-tilde.json", import.meta.url);
 const recordPath = process.env.BASH_TILDE_RECORD;
 const scripts = cases.concat(
   boundaries.map((entry) => entry.script),
+  operandCases,
   integratedCases,
 );
 const bashVersion = "5.3.15(1)-release";

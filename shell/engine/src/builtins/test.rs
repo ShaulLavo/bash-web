@@ -102,47 +102,86 @@ async fn step(context: &Context, work: &mut Work) -> Result<(), i32> {
 }
 
 async fn evaluate<'a>(
-    mut args: &'a [String],
+    args: &'a [String],
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
 ) -> Result<bool, Failure<'a>> {
+    let first = args.first().map(String::as_str).unwrap_or_default();
+    if let Some(value) = small_expression(args, first, state, fds, context, work).await? {
+        return Ok(value);
+    }
+    expression(args, state, fds, context, work).await
+}
+
+async fn small_expression<'a>(
+    args: &'a [String],
+    first: &str,
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<Option<bool>, Failure<'a>> {
     // Bash gives 0..4 operands special rules before its expression grammar.
     // In particular `test ! = !` is equality, and `test '(' '!' ')'`
     // tests the nonempty string `!`, not an incomplete negation expression.
-    let mut negate = false;
-    loop {
-        step(context, work).await?;
-        let value = match args.len() {
-            0 => false,
-            1 => !args[0].is_empty(),
-            2 if args[0] == "!" => args[1].is_empty(),
-            2 => {
-                if !is_unary(&args[0]) {
-                    return Err(Failure::Unary(&args[0]));
-                }
-                predicate(&args[0], &args[1], state, fds, context, work).await?
-            }
-            3 if is_binary(&args[1]) => {
-                binary(&args[0], &args[1], &args[2], state, fds, context, work).await?
-            }
-            3 if args[1] == "-a" => !args[0].is_empty() && !args[2].is_empty(),
-            3 if args[1] == "-o" => !args[0].is_empty() || !args[2].is_empty(),
-            3 | 4 if args[0] == "!" => {
-                negate = !negate;
-                args = &args[1..];
-                continue;
-            }
-            3 | 4 if args[0] == "(" && args[args.len() - 1] == ")" => {
-                args = &args[1..args.len() - 1];
-                continue;
-            }
-            3 => return Err(Failure::Binary(&args[1])),
-            _ => expression(args, state, fds, context, work).await?,
-        };
-        return Ok(value ^ negate);
+    step(context, work).await?;
+    let value = match args.len() {
+        0 => false,
+        // Bash 5.3's one-argument subgroup uses the first original operand.
+        1 => !first.is_empty(),
+        2 => two_arguments(args, state, fds, context, work).await?,
+        3 => three_arguments(args, state, fds, context, work).await?,
+        4 if args[0] == "!" => !three_arguments(&args[1..], state, fds, context, work).await?,
+        4 if args[0] == "(" && args[3] == ")" => {
+            two_arguments(&args[1..3], state, fds, context, work).await?
+        }
+        _ => return Ok(None),
+    };
+    Ok(Some(value))
+}
+
+async fn two_arguments<'a>(
+    args: &'a [String],
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<bool, Failure<'a>> {
+    step(context, work).await?;
+    if args[0] == "!" {
+        return Ok(args[1].is_empty());
     }
+    if !is_unary(&args[0]) {
+        return Err(Failure::Unary(&args[0]));
+    }
+    predicate(&args[0], &args[1], state, fds, context, work).await
+}
+
+async fn three_arguments<'a>(
+    args: &'a [String],
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<bool, Failure<'a>> {
+    step(context, work).await?;
+    if is_binary(&args[1]) {
+        return binary(&args[0], &args[1], &args[2], state, fds, context, work).await;
+    }
+    match args[1].as_str() {
+        "-a" => return Ok(!args[0].is_empty() && !args[2].is_empty()),
+        "-o" => return Ok(!args[0].is_empty() || !args[2].is_empty()),
+        _ => {}
+    }
+    if args[0] == "!" {
+        return Ok(!two_arguments(&args[1..], state, fds, context, work).await?);
+    }
+    if args[0] == "(" && args[2] == ")" {
+        return Ok(!args[1].is_empty());
+    }
+    Err(Failure::Binary(&args[1]))
 }
 
 #[derive(Clone, Copy)]
@@ -200,82 +239,22 @@ async fn expression<'a>(
     let mut value = false;
     while index < args.len() {
         step(context, work).await?;
-        let token = args[index].as_str();
         if need_value {
-            // Binary recognition takes priority even when the left operand
-            // looks like a unary operator, negation or opening parenthesis.
-            if index + 2 < args.len() && is_binary(&args[index + 1]) {
-                value = binary(
-                    token,
-                    &args[index + 1],
-                    &args[index + 2],
-                    state,
-                    fds,
-                    context,
-                    work,
-                )
-                .await?;
-                index += 3;
-            } else if token == "!" {
-                push(&mut operators, Operator::Not, work)?;
-                index += 1;
+            let Some(next) =
+                term(args, &mut index, &mut operators, state, fds, context, work).await?
+            else {
                 continue;
-            } else if token == "(" && args.get(index + 2).is_some_and(|arg| arg == ")") {
-                value = !args[index + 1].is_empty();
-                index += 3;
-            } else if token == "(" {
-                push(&mut operators, Operator::Open, work)?;
-                index += 1;
-                continue;
-            } else if is_unary(token) && index + 1 < args.len() {
-                let operand = &args[index + 1];
-                value = predicate(token, operand, state, fds, context, work).await?;
-                index += 2;
-            } else {
-                value = !token.is_empty();
-                index += 1;
-            }
+            };
+            value = next;
             need_value = false;
-            while matches!(operators.last(), Some(Operator::Not)) {
-                step(context, work).await?;
-                operators.pop();
-                value = !value;
-            }
+            apply_negations(&mut operators, &mut value, context, work).await?;
             continue;
         }
-        if token == ")" {
-            loop {
-                step(context, work).await?;
-                match operators.pop() {
-                    Some(Operator::Open) => break,
-                    Some(operator) => value = operator.apply(value),
-                    None => return Err(Failure::TooMany),
-                }
-            }
-            while matches!(operators.last(), Some(Operator::Not)) {
-                step(context, work).await?;
-                operators.pop();
-                value = !value;
-            }
+        if args[index] == ")" {
+            close_group(&mut operators, &mut value, context, work).await?;
+            apply_negations(&mut operators, &mut value, context, work).await?;
         } else {
-            let precedence = match token {
-                "-a" => 2,
-                "-o" => 1,
-                _ => return Err(Failure::TooMany),
-            };
-            while operators
-                .last()
-                .is_some_and(|op| op.precedence() >= precedence)
-            {
-                step(context, work).await?;
-                value = operators.pop().unwrap().apply(value);
-            }
-            let operator = if token == "-a" {
-                Operator::And(value)
-            } else {
-                Operator::Or(value)
-            };
-            push(&mut operators, operator, work)?;
+            connect(&args[index], &mut operators, &mut value, context, work).await?;
             need_value = true;
         }
         index += 1;
@@ -293,6 +272,144 @@ async fn expression<'a>(
     // Deliberately evaluate both sides of -a/-o. Bash test diagnoses bad
     // integers even on a logically unselected side; [[ ]] does short circuit.
     Ok(value)
+}
+
+async fn term<'a>(
+    args: &'a [String],
+    index: &mut usize,
+    operators: &mut Vec<Operator>,
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<Option<bool>, Failure<'a>> {
+    let first = args[0].as_str();
+    let args = &args[*index..];
+    let token = args[0].as_str();
+    if token == "!" {
+        push(operators, Operator::Not, work)?;
+        *index += 1;
+        return Ok(None);
+    }
+    if token == "(" {
+        if let Some((value, consumed)) =
+            grouped_term(args, first, state, fds, context, work).await?
+        {
+            *index += consumed;
+            return Ok(Some(value));
+        }
+        push(operators, Operator::Open, work)?;
+        *index += 1;
+        return Ok(None);
+    }
+    if args.len() >= 3 && is_binary(&args[1]) {
+        let value = binary(token, &args[1], &args[2], state, fds, context, work).await?;
+        *index += 3;
+        return Ok(Some(value));
+    }
+    if is_unary(token) && args.len() >= 2 {
+        let value = predicate(token, &args[1], state, fds, context, work).await?;
+        *index += 2;
+        return Ok(Some(value));
+    }
+    *index += 1;
+    Ok(Some(!token.is_empty()))
+}
+
+async fn grouped_term<'a>(
+    args: &'a [String],
+    first: &str,
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<Option<(bool, usize)>, Failure<'a>> {
+    let Some(count) = small_group_len(args, context, work).await? else {
+        return Ok(None);
+    };
+    let value = small_expression(&args[1..count + 1], first, state, fds, context, work).await?;
+    Ok(value.map(|value| (value, count + 2)))
+}
+
+async fn small_group_len(
+    args: &[String],
+    context: &Context,
+    work: &mut Work,
+) -> Result<Option<usize>, i32> {
+    let mut depth = 1;
+    for count in 1..=4 {
+        let Some(token) = args.get(count + 1) else {
+            return Ok(None);
+        };
+        step(context, work).await?;
+        match token.as_str() {
+            ")" => depth -= 1,
+            "(" => depth += 1,
+            _ => {}
+        }
+        if depth == 0 {
+            return Ok(Some(count));
+        }
+    }
+    Ok(None)
+}
+
+async fn apply_negations(
+    operators: &mut Vec<Operator>,
+    value: &mut bool,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    while matches!(operators.last(), Some(Operator::Not)) {
+        step(context, work).await?;
+        operators.pop();
+        *value = !*value;
+    }
+    Ok(())
+}
+
+async fn close_group<'a>(
+    operators: &mut Vec<Operator>,
+    value: &mut bool,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), Failure<'a>> {
+    loop {
+        step(context, work).await?;
+        match operators.pop() {
+            Some(Operator::Open) => return Ok(()),
+            Some(operator) => *value = operator.apply(*value),
+            None => return Err(Failure::TooMany),
+        }
+    }
+}
+
+async fn connect<'a>(
+    token: &str,
+    operators: &mut Vec<Operator>,
+    value: &mut bool,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), Failure<'a>> {
+    let precedence = match token {
+        "-a" => 2,
+        "-o" => 1,
+        _ => return Err(Failure::TooMany),
+    };
+    while operators
+        .last()
+        .is_some_and(|op| op.precedence() >= precedence)
+    {
+        step(context, work).await?;
+        *value = operators.pop().unwrap().apply(*value);
+    }
+    let operator = if token == "-a" {
+        Operator::And(*value)
+    } else {
+        Operator::Or(*value)
+    };
+    push(operators, operator, work)?;
+    Ok(())
 }
 
 pub(crate) fn is_unary(operator: &str) -> bool {

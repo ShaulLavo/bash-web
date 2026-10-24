@@ -4415,3 +4415,6 @@ mod array_slicing;
 
 #[path = "words/pipeline_status.rs"]
 mod pipeline_status;
+
+#[path = "words/command_hash.rs"]
+mod command_hash;
