@@ -28,6 +28,7 @@ mod function_names;
 mod indexed;
 mod reader;
 mod select;
+mod source;
 #[cfg(test)]
 mod trap_tests;
 mod type_builtin;
@@ -271,6 +272,7 @@ struct Core {
 pub(crate) struct Context {
     core: Rc<Core>,
     source: crate::exec::Source,
+    reader: crate::exec::ReaderLocation,
     pub cancel: Cancel,
     // The invoking foreground/background command, independent of nested scopes.
     lifetime: (Cancel, Rc<Cell<Option<i32>>>),
@@ -285,6 +287,32 @@ pub(crate) struct Context {
     ignore_errexit: bool,
 }
 impl Context {
+    fn root(
+        core: Rc<Core>,
+        source: crate::exec::Source,
+        evaluation: crate::exec::Scope,
+        cancel: Cancel,
+        group: GroupId,
+    ) -> Self {
+        let signal = Rc::new(Cell::new(None));
+        Self {
+            core,
+            source,
+            reader: crate::exec::ReaderLocation::default(),
+            lifetime: (cancel.clone(), signal.clone()),
+            cancel,
+            signal,
+            group,
+            invocation_group: group,
+            scope: Scope::new(0),
+            parameter_error_status: 127,
+            compound_child: false,
+            loop_depth: 0,
+            ignore_errexit: false,
+            evaluation,
+        }
+    }
+
     fn stop_signal(&self) -> i32 {
         self.signal.get().unwrap_or(2)
     }
@@ -766,24 +794,15 @@ impl Session {
             return Err(StartError::Invalid(message.clone()));
         }
         let group = self.core.host.allocate_group();
-        let foreground_cancel = cancel.clone();
-        let signal = Rc::new(Cell::new(None));
-        let foreground_signal = signal.clone();
-        let context = Context {
-            core: self.core.clone(),
-            source: crate::exec::Source::root(source),
-            lifetime: (cancel.clone(), signal.clone()),
-            cancel,
-            signal,
-            group,
-            invocation_group: group,
-            scope: Scope::new(0),
-            parameter_error_status: 127,
-            compound_child: false,
-            loop_depth: 0,
-            ignore_errexit: false,
+        let context = Context::root(
+            self.core.clone(),
+            crate::exec::Source::root(source),
             evaluation,
-        };
+            cancel,
+            group,
+        );
+        let foreground_cancel = context.cancel.clone();
+        let foreground_signal = context.signal.clone();
         let state = self.state.clone();
         let join = self.core.executor.spawn(async move {
             let _foreground = ForegroundGuard(context.core.clone());
@@ -792,6 +811,7 @@ impl Session {
             let result = reader::run(
                 reader::Reader::new(script, failure, aliases, parser),
                 "-c",
+                false,
                 state.clone(),
                 context.core.descriptors.clone(),
                 context.clone(),
@@ -2204,6 +2224,7 @@ async fn launch_background(
     let child_context = Context {
         core: context.core.clone(),
         source: context.source.clone(),
+        reader: context.reader.clone(),
         lifetime: (cancel.clone(), signal.clone()),
         cancel: cancel.clone(),
         signal: signal.clone(),
@@ -3348,6 +3369,7 @@ async fn dispatch_arguments(
         let context = Context {
             source: body.source.clone(),
             loop_depth: 0,
+            reader: body.reader.clone(),
             evaluation: context
                 .evaluation
                 .function_body()
@@ -3396,7 +3418,25 @@ async fn dispatch_arguments(
         }
         let arguments =
             take_command_arguments(argv, last_storage, argument_offset, context).await?;
-        return Ok(eval::run(arguments, state, fds, context).await);
+        return Ok(eval::run(arguments, line, state, fds, context).await);
+    }
+    if handler == Some(commands::Handler::Source) {
+        let frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, work)
+            .await
+            .map_err(admission_status)?;
+        let arguments =
+            take_command_arguments(argv, last_storage, argument_offset, context).await?;
+        let result = source::run(
+            &argv[argument_offset - 1],
+            arguments,
+            line,
+            state,
+            fds,
+            context,
+        )
+        .await;
+        builtin_prefix.set(Some(frame));
+        return Ok(result);
     }
     if handler == Some(commands::Handler::Type) {
         let frame = PrefixFrame::builtin(state.clone(), &assigned, &context.cancel, work)
@@ -4139,6 +4179,7 @@ mod scope_tests {
             ),
             core: session.core.clone(),
             source: crate::exec::Source::root(""),
+            reader: crate::exec::ReaderLocation::default(),
             lifetime: (Cancel::new(), Rc::new(Cell::new(None))),
             cancel: Cancel::new(),
             signal: Rc::new(Cell::new(None)),
@@ -4684,28 +4725,18 @@ mod residual_review_tests {
         }
         fn context(&self) -> Context {
             let core = self.session().core.clone();
-            let cancel = Cancel::new();
-            let signal = Rc::new(Cell::new(None));
-            let group = self.host.allocate_group();
-            Context {
-                evaluation: crate::exec::Scope::new(
-                    core.limits.source_bytes,
-                    core.eval_storage.clone(),
-                    core.execution_storage.clone(),
-                ),
+            let evaluation = crate::exec::Scope::new(
+                core.limits.source_bytes,
+                core.eval_storage.clone(),
+                core.execution_storage.clone(),
+            );
+            Context::root(
                 core,
-                source: crate::exec::Source::root(""),
-                lifetime: (cancel.clone(), signal.clone()),
-                cancel,
-                signal,
-                group,
-                invocation_group: group,
-                scope: Scope::new(0),
-                parameter_error_status: 127,
-                compound_child: false,
-                loop_depth: 0,
-                ignore_errexit: false,
-            }
+                crate::exec::Source::root(""),
+                evaluation,
+                Cancel::new(),
+                self.host.allocate_group(),
+            )
         }
         fn shutdown(mut self) {
             let session = self.session.take().unwrap();

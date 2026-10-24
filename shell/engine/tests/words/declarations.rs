@@ -119,9 +119,7 @@ fn last_argument_publication_uses_builtin_prefix_target_before_restore() {
         ),
         (r#"x=outer; x=temp : last; printf '%s\n' "$x""#, "outer\n"),
     ] {
-        let rig = Rig::new(Limits::default());
-        assert_eq!(rig.run(source), 0, "{source}");
-        assert_eq!(rig.output.bytes(), expected.as_bytes(), "{source}");
+        check_output(source, expected);
     }
 }
 

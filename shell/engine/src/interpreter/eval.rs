@@ -1,4 +1,4 @@
-use super::{Context, Descriptors, Flow, Outcome, reader};
+use super::{Context, Descriptors, Flow, Outcome, command_builtin, reader};
 use crate::{
     exec::{JoinedSource, Scope, StorageAllocation},
     executor::Budget,
@@ -63,7 +63,7 @@ impl Shape {
 }
 
 #[inline(never)]
-fn join<'a>(
+pub(super) fn join<'a>(
     args: Vec<String>,
     scope: &'a Scope,
     context: &'a Context,
@@ -122,6 +122,7 @@ async fn join_body(
 #[inline(never)]
 pub(super) fn run(
     args: Vec<String>,
+    line: Option<usize>,
     state: &SharedState,
     fds: Descriptors,
     context: &Context,
@@ -132,34 +133,173 @@ pub(super) fn run(
     if args.is_empty() || args.len() == 1 && args[0].is_empty() {
         return Either::Left(ready(Outcome::status(0)));
     }
-    let evaluation = match context.evaluation.enter() {
-        Ok(scope) => scope,
-        Err(code) => return Either::Left(ready(Outcome::status(code))),
-    };
-
-    evaluation.frame(
-        run_body(
-            args,
-            state.clone(),
-            fds,
-            context.clone(),
-            evaluation.clone(),
-        ),
+    let evaluation = context.evaluation.clone();
+    evaluation.reader_frame(
+        |scope| run_body(args, line, state.clone(), fds, context.clone(), scope),
         Outcome::status,
     )
 }
 
 async fn run_body(
-    args: Vec<String>,
+    mut args: Vec<String>,
+    line: Option<usize>,
     state: SharedState,
     fds: Descriptors,
     context: Context,
     evaluation: Scope,
 ) -> Outcome {
+    if args.first().is_some_and(|arg| arg == "--") {
+        args.remove(0);
+    } else if args
+        .first()
+        .is_some_and(|arg| arg.starts_with('-') && arg != "-")
+    {
+        return Diagnostic::new("eval", line, &fds, &context)
+            .usage(args.first().map(String::as_str))
+            .await;
+    }
     let source = match join(args, &evaluation, &context).await {
         Ok(source) => source,
         Err(code) => return Outcome::status(code),
     };
+    let mut context = context;
+    context.reader.line_offset = context
+        .reader
+        .line_offset
+        .saturating_add(line.unwrap_or(1).saturating_sub(1));
+    read(source, evaluation, None, state, fds, context)
+        .await
+        .unwrap_or_else(|_| Outcome::status(2))
+}
+
+pub(super) struct Diagnostic<'a> {
+    name: &'a str,
+    line: Option<usize>,
+    fds: &'a Descriptors,
+    context: &'a Context,
+}
+
+impl<'a> Diagnostic<'a> {
+    pub(super) fn new(
+        name: &'a str,
+        line: Option<usize>,
+        fds: &'a Descriptors,
+        context: &'a Context,
+    ) -> Self {
+        Self {
+            name,
+            line: line.map(|line| line.saturating_add(context.reader.line_offset)),
+            fds,
+            context,
+        }
+    }
+
+    async fn write(&self, bytes: &[u8]) -> Result<(), i32> {
+        command_builtin::diagnostic(self.fds, self.context, bytes).await
+    }
+
+    async fn prefix(&self) -> Result<(), i32> {
+        let filename = self.context.reader.filename().unwrap_or("/usr/bin/bash");
+        self.write(filename.as_bytes()).await?;
+        self.write(b": ").await?;
+        if let Some(line) = self.line {
+            self.write(b"line ").await?;
+            self.write(line.to_string().as_bytes()).await?;
+            self.write(b": ").await?;
+        }
+        Ok(())
+    }
+
+    pub(super) async fn failure(&self, subjects: &[&str], reason: &str, code: i32) -> Outcome {
+        let result = async {
+            self.prefix().await?;
+            for subject in subjects {
+                self.write(subject.as_bytes()).await?;
+                self.write(b": ").await?;
+            }
+            self.write(reason.as_bytes()).await?;
+            self.write(b"\n").await
+        }
+        .await;
+        Outcome::status(result.err().unwrap_or(code))
+    }
+
+    pub(super) async fn usage(&self, option: Option<&str>) -> Outcome {
+        let result = self.usage_body(option).await;
+        Outcome::status(result.err().unwrap_or(2))
+    }
+
+    async fn usage_body(&self, option: Option<&str>) -> Result<(), i32> {
+        self.prefix().await?;
+        self.write(self.name.as_bytes()).await?;
+        self.write(b": ").await?;
+        if let Some(option) = option {
+            self.write(&option.as_bytes()[..2.min(option.len())])
+                .await?;
+            self.write(b": invalid option\n").await?;
+        } else {
+            self.write(b"filename argument required\n").await?;
+        }
+        self.write(self.name.as_bytes()).await?;
+        self.write(b": usage: ").await?;
+        self.write(self.name.as_bytes()).await?;
+        self.write(if self.name == "eval" {
+            b" [arg ...]\n"
+        } else {
+            b" [-p path] filename [arguments]\n"
+        })
+        .await
+    }
+}
+
+enum ReadName {
+    Eval,
+    Source {
+        text: String,
+        _storage: StorageAllocation,
+    },
+}
+
+impl ReadName {
+    fn new(name: Option<&str>, scope: &Scope) -> Result<Self, String> {
+        let Some(name) = name else {
+            return Ok(Self::Eval);
+        };
+        let mut storage = scope
+            .admit_storage(name.len())
+            .map_err(|_| "shell source storage limit exceeded".to_owned())?;
+        let mut text = String::new();
+        text.try_reserve_exact(name.len())
+            .map_err(|_| "shell source storage limit exceeded".to_owned())?;
+        storage
+            .resize(text.capacity())
+            .map_err(|_| "shell source storage limit exceeded".to_owned())?;
+        text.push_str(name);
+        Ok(Self::Source {
+            text,
+            _storage: storage,
+        })
+    }
+}
+
+impl AsRef<str> for ReadName {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Eval => "eval",
+            Self::Source { text, .. } => text,
+        }
+    }
+}
+
+pub(super) async fn read(
+    source: JoinedSource,
+    evaluation: Scope,
+    reader: Option<&str>,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> Result<Outcome, String> {
+    let reader = ReadName::new(reader, &evaluation)?;
     let parser = context.parser_budget();
     let aliases = reader::AliasOptions::snapshot(&state);
     let (script, failure) = match parse::eval(
@@ -176,15 +316,16 @@ async fn run_body(
             ) =>
         {
             context.cancel.cancel();
-            return Outcome::status(130);
+            return Ok(Outcome::status(130));
         }
-        Err(error) => {
+        Err(error) if matches!(reader, ReadName::Eval) => {
             let outcome = super::abort_diagnostic(&fds, &context, error.as_bytes(), 2).await;
-            return Outcome::status(outcome.code);
+            return Ok(Outcome::status(outcome.code));
         }
+        Err(message) => return Err(message),
     };
     if context.cancel.is_cancelled() {
-        return Outcome::status(130);
+        return Ok(Outcome::status(130));
     }
     let source = source.retain();
     let context = Context {
@@ -194,13 +335,14 @@ async fn run_body(
     };
     // A joined reader task breaks the recursive poll/drop chain. Keep the
     // caller's shell and evaluation scopes, including both depth counters.
-    // Shape already admitted this reader's fixed executor/queue metadata.
+    // The source owner already admitted this reader's fixed executor/queue metadata.
     let mut result = context
         .core
         .executor
         .spawn(reader::run(
             reader::Reader::new(script, failure, aliases, parser),
-            "eval",
+            reader,
+            true,
             state,
             fds,
             context.clone(),
@@ -211,7 +353,7 @@ async fn run_body(
     if result.flow == Flow::DiscardReadUnit {
         result.flow = Flow::Normal;
     }
-    result
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -229,6 +371,26 @@ mod tests {
         task::{Context as TaskContext, Poll},
     };
     const MAX_EXECUTION_DEPTH: usize = 256;
+
+    #[test]
+    fn reader_names_keep_eval_static_and_source_storage_owned_until_drop() {
+        let storage = StorageBudget::new(32);
+        let scope = Scope::new(1024, storage.clone(), StorageBudget::new(1024));
+        let eval = ReadName::new(None, &scope).unwrap();
+        assert_eq!(storage.observation().0, 0);
+        assert_eq!(eval.as_ref(), "eval");
+        let source = ReadName::new(Some("./library"), &scope).unwrap();
+        assert_eq!(source.as_ref(), "./library");
+        assert!(storage.observation().0 >= 9);
+        assert!(ReadName::new(Some(&"x".repeat(33)), &scope).is_err());
+        drop(source);
+        assert_eq!(storage.observation().0, 0);
+        let named_eval = ReadName::new(Some("eval"), &scope).unwrap();
+        assert!(matches!(named_eval, ReadName::Source { .. }));
+        assert!(storage.observation().0 >= 4);
+        drop(named_eval);
+        assert_eq!(storage.observation().0, 0);
+    }
 
     #[test]
     fn storage_growth_is_admitted_atomically_and_refunded_by_the_last_owner() {

@@ -14,9 +14,7 @@ const runner = await releaseShellRunner();
 for (const item of fixture.cases)
   test(`production Waffle special parameter: ${item.name}`, async () => {
     const actual = await runner(item.script);
-    assert.equal(actual.crash, undefined);
-    assert.equal(actual.status, item.status);
-    assert.equal(actual.stdout.toString(), item.stdout);
+    assertResult(actual, item);
     assert.equal(actual.stderr.toString().replaceAll(/: line \d+:/g, ":"), item.stderr);
   });
 
@@ -27,12 +25,28 @@ assert.equal(publication.bash, fixture.bash);
 for (const item of publication.cases)
   test(`production Waffle last-argument publication: ${item.name}`, async () => {
     const actual = await runner(item.script);
-    assert.equal(actual.crash, undefined);
-    assert.equal(actual.status, item.status);
-    assert.equal(actual.stdout.toString(), item.stdout);
+    assertResult(actual, item);
     if (item.name.startsWith("circular"))
       assert.equal(
         actual.stderr.toString().replaceAll(/: line \d+:/g, ":"),
         item.stderr.replaceAll(/: line \d+:/g, ":"),
       );
   });
+
+function assertResult(
+  actual: Awaited<ReturnType<typeof runner>>,
+  expected: Pick<(typeof fixture.cases)[number], "status" | "stdout">,
+) {
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.status, expected.status);
+  assert.equal(actual.stdout.toString(), expected.stdout);
+}
+
+test("special parameter assertion rejects each changed result field", async () => {
+  const actual = await runner(":");
+  const expected = { status: 0, stdout: "" };
+  assertResult(actual, expected);
+  assert.throws(() => assertResult({ ...actual, status: 2 }, expected));
+  assert.throws(() => assertResult({ ...actual, stdout: Buffer.from("changed") }, expected));
+  assert.throws(() => assertResult({ ...actual, crash: "injected assertion control" }, expected));
+});

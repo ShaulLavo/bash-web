@@ -12,21 +12,18 @@ use crate::{
         completion::{Spec, StoredSpec, Target},
     },
 };
-use options::{ACTIONS, Arguments, Kind, OPTIONS, TEXT_FLAGS};
+pub(super) use options::Kind;
+use options::{ACTIONS, Arguments, OPTIONS, TEXT_FLAGS};
 
 pub(super) async fn run(
-    name: &str,
+    kind: Kind,
     args: &[String],
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
 ) -> Result<Outcome, i32> {
-    let kind = match name {
-        "compgen" => Kind::Generate,
-        "complete" => Kind::Complete,
-        _ => Kind::Options,
-    };
+    let name = kind.name();
     for arg in args {
         scan_bytes(arg.len(), context, work).await?;
     }
