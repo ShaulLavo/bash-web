@@ -69,6 +69,7 @@ impl Expansion<'_> {
             // Array-backed targets stay outside this scalar adapter.
             if target == "PIPESTATUS"
                 || !operand::scalar_name(target)
+                || s.stack_array(target)
                 || matches!(s.binding(target), Some(Binding::Indexed(_)))
             {
                 return Err(2.into());

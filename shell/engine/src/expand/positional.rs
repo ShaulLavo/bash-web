@@ -118,7 +118,8 @@ impl Expansion<'_> {
         state: &SharedState,
     ) -> Result<(), Error> {
         let state = state.borrow();
-        let present = matches!(state.binding(name), Some(crate::state::Binding::Indexed(_)))
+        let present = state.stack_array(name)
+            || matches!(state.binding(name), Some(crate::state::Binding::Indexed(_)))
             || index.map_or_else(
                 || state.binding(name).is_some(),
                 |index| state.array_element(name, index).is_some(),

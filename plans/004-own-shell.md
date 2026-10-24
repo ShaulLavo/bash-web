@@ -2949,15 +2949,226 @@ identifier rejection. No new frozen case, exclusion or oracle change is authoriz
 
 ### Alias runtime prerequisite
 
-Status: Approved. The parser's injected-alias function-name and print controls pass,
-but this base has no `alias` builtin and rejects `shopt -s expand_aliases`. End-to-end
-alias declaration controls therefore remain strict pending comparisons under
-`npm run test:shell:function-names:aliases-pending`, using
-`scripts/fixtures/shell-function-names-aliases-pending.json`. Their exact failures
-are retained in the function-name report's `verify6.log` and `aliases-pending.log`.
-This is a separate builtin prerequisite, not permission to add alias, shopt or
-function-name grammar in the literal-name validation change. Keep parser alias
-coverage and reuse its raw-token provenance when runtime aliases are implemented.
+Status: Implemented in PR #75. The core now has `alias`, `unalias` and
+`shopt -s expand_aliases`. The two end-to-end function-name alias controls
+now run in the blocking `test:shell:scoreboard` function-name test. Their
+Bash 5.3.15 recordings moved into `scripts/fixtures/shell-function-names.json`.
+Parser raw-token provenance still owns literal function-name recognition.
+The separate escaped and quoted POSIX-name grammar prerequisite above remains.
+
+### Alias review follow-ups, 2026-10-23
+
+Status: Approved. Owner: parser/interpreter alias family. PR #75 review r2
+covers source `5156b40fe27d22eb59bb497e1a6a24fd60c89f5a` plus baseline-only
+`0378ec3`. Repro scripts, Bash 5.3.15 observations and native/production-Waffle
+results are under `/work/reports/wave-20261022/shell/review75-r2-evidence/`
+and sibling `review75-r1-evidence/`. These gaps need separate bounded controls.
+The reader-budget and alias-printing blockers are fixed in PR #75, not deferred.
+
+- Alias-definition table-copy cost, confirmed by review r4 at `2ccb34a`.
+  Release native definitions at 4k/8k/16k/32k took 1.04/4.21/15.62/61.21
+  seconds on the PC, with the same cost when expansion was disabled.
+  PR #75's r5 repair gives the reader a revision stamp rather than a retained
+  alias table. Unique tables update in place; genuine snapshots retain their
+  admitted immutable versions and require a charged, separately admitted copy.
+  Geometric table growth admits both old and new storage before allocation.
+  Deterministic pointer, cumulative-work, snapshot, rejection, refund and
+  cancellation controls accompany the same-artifact native/production-Waffle
+  scaling recordings. Evidence and current qualification are in
+  `/work/reports/wave-20261022/shell/builtins-alias-table-cost-fix-r5.md`.
+  This does not change the read-unit or function-definition timing contract.
+- Command-substitution alias timing, finding 4. After `alias x='echo YES'`,
+  `echo "${v:-$(x)}"`, `: "${v:=$(x)}"` and `${v:-\`x\`}` run `x` in Bash,
+  but our lazy substitution parsers receive no aliases. Arithmetic substitution
+  has the same gap. Direct substitutions retain definition-time aliases:
+  `alias xx='echo OLD'`, `f() { echo "$(xx)"; }`, `alias xx='echo NEW'`, `f`
+  on separate lines prints NEW in Bash and OLD here. An alias defined inside
+  a substitution also does not reach its next line. Trace `parse.rs` lazy-body
+  adapters and substitution execution. Preserve inactive operands and function
+  definition-time expansion outside substitutions.
+- Interactive default, finding 5. `runtime_main.rs` starts the editor without
+  enabling `expand_aliases`. Start an interactive terminal, enter
+  `alias ll='echo YES'`, then `ll` on the next input. Bash prints YES without
+  an explicit `shopt -s expand_aliases`; ours reports command not found.
+  Add interactive real-runtime coverage before setting the interactive default.
+  Keep noninteractive `-c` default-off.
+- Trailing-blank chaining, finding 7. After `alias p='echo ' x=YES`,
+  `p 'x' x` prints `x YES` in Bash and `x x` here. Escaped words also consume
+  the parser's next-word flag too soon. Preserve the flag across such words.
+- Keyword aliases, finding 7. After `alias n='!'`, `n false; echo $?` prints
+  0 in Bash and 127 here. After `alias DO=do`,
+  `for x in yes; DO echo $x; done` prints yes in Bash and fails grammar here.
+  Alias expansion must precede keyword recognition at these grammar positions.
+- Alias-value newlines, finding 7. `alias a=$'alias b=echo\nb yes'` followed
+  by `a` introduces a new Bash read unit inside the alias replacement.
+  The original-source continuation alone cannot represent that boundary.
+  Review r4 also reproduced a here-doc entirely inside an alias value:
+  `shopt -s expand_aliases`, `alias h=$'read -r a <<E\nfrom alias\nE'`,
+  `h`, `echo "[$a]"`, `echo next`, each on its own line. Bash 5.3.15 prints
+  `[from alias]\nnext\n`, status 0. Source `2ccb34a` prints
+  `[echo "[]"]\nnext\n`, status 0: the next source line becomes the here-doc
+  body and never executes. The exact probe and results are in
+  `review75-opus-refusal-r4-evidence/probes2.json` under the wave shell reports.
+  Fix the replacement-text/source continuation boundary with a recorded control
+  in a separate bounded parser change; do not fold it into table ownership.
+- Alias queries and order, finding 7. `alias é=one z=two; alias -p` lists é
+  before z in Bash's signed-byte ordering, unlike our Rust string ordering.
+  `type x` and `command -v x` also omit aliases. Add recorded query and sorting
+  controls, then repair the builtin/query paths without changing PATH lookup.
+
+
+## Call-stack introspection follow-ups from PR85 review, 2026-10-23
+
+Status: Approved. Owner: BUILTINS, separate from the bounded FUNCNAME lifecycle
+and slot-growth repair. Reviewed source is
+`48b03b89dc7de89a78bcb983bd4e64eef1a4fb20`. These were not passing base
+controls and are not charged to the repair as new regressions.
+
+Reproduce through `releaseShellRunner` after the pinned toolchain setup and
+`npm run build:shell && npm run build:node-harness`. Exact Bash 5.3.15
+recordings and production-Waffle observations, including stderr and exit status,
+are retained under `/work/reports/wave-20261022/shell/review85-takeover-r1-evidence/`
+in `bash-recordings.json` and `waffle-probes.json`. The following commands each
+reproduced once in independent review. Expected and observed stdout use JSON
+escaping. Final numbers are Bash/Waffle exit statuses.
+
+```bash
+g(){ :; }; f(){ :; }; declare -F
+```
+Expected `"declare -f f\ndeclare -f g\n"`; observed `""`; statuses 0/0.
+
+```bash
+g(){ :; }; f(){ :; }; declare -Fp f g
+```
+Expected `"declare -f f\ndeclare -f g\n"`; observed `"f\ng\n"`; statuses 0/0.
+
+```bash
+set -- root; f(){ shopt -s extdebug; g x; }; g(){ echo "${BASH_ARGC[*]}:${BASH_ARGV[*]}"; }; f a b; echo "${BASH_ARGC[*]}:${BASH_ARGV[*]}"
+```
+Expected `"1 2:x b a\n2:b a\n"`; observed `"1:x\n1:root\n"`; statuses 0/0.
+
+```bash
+shopt -s extdebug; f(){ echo "$((BASH_ARGC[0])):$((BASH_LINENO[0]))"; }; f a b
+```
+Expected `"2:1\n"`; observed `""`; statuses 0/2.
+
+```bash
+set -TE; echo "$-"; set +TE; echo "$-"
+```
+Expected `"hBETc\nhBc\n"`; observed `"\n\n"`; statuses 0/0.
+
+```bash
+g(){ caller " 0"; echo s:$?; caller "0 "; echo s:$?; }; f(){ g; }; f
+```
+Expected `"1 f bash\ns:0\n1 f bash\ns:0\n"`; observed `"s:2\ns:2\n"`; statuses 0/0.
+
+```bash
+f(){ caller >&-; echo status:$?; }; f
+```
+Expected `"status:0\n"`; observed `"status:1\n"`; statuses 0/0.
+
+Inspect `builtins/declarations.rs::function_names` for listing and `-Fp`
+formatting, `state/call_stack.rs::initialize_arguments` for extdebug enabled
+inside an active call, arithmetic's indexed-binding reader, option flag
+expansion, and `builtins/caller.rs` for whitespace and closed-output status.
+Do not repair these by inventing runtime facts or changing frozen membership.
+The inherited ordinary local-array mismatch is also outside this repair; its
+exact `normal-array-assignment` record stays in the same evidence.
+
+### Four additional inherited reproducers from approved PR85 review
+
+Status: Approved follow-up, not implemented in PR85. Owner: BUILTINS for
+function-name dispatch and special-array unset; VARIABLES for local unbind and
+ordinary sparse-array behavior. Independent Opus review approved
+`a4be47129e830634ee9da2fd19c94a69c84083d3`, production `7bfe246`, after the
+provider safety refusal. Each case also fails on main `750fb65`; none is a new
+integration regression. Keep every earlier follow-up above.
+
+Evidence: [approved review](file:///work/reports/wave-20261022/shell/review85-opus-refusal-r3.md),
+[exact Bash recordings](file:///work/reports/wave-20261022/shell/review85-takeover-r2-evidence/bash-recordings.json),
+and [native head/main observations](file:///work/reports/wave-20261022/shell/review85-opus-refusal-r3-evidence/native-control.json).
+Bash is 5.3.15, binary SHA-256
+`575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5`.
+Run the exact script through `releaseShellRunner` as above for production Waffle.
+Observed and expected stdout below use JSON escaping; statuses are final shell
+exit statuses, not the status printed by the script. Native control evidence
+compares stdout/status only and does not establish diagnostic parity.
+The current Node 26.12.1/Bun 1.4.4 integration reproduced all four approved-head
+outputs and statuses, with empty observed stderr for each. Exact current Waffle
+observations are in [the integration probes](file:///work/reports/wave-20261022/shell/pr85-integrate-current-runtime-after-review-evidence/waffle-probes.json).
+
+#### `function-F-plus-case`
+
+```bash
+f(){ :; }; declare -Fu f; declare -F f; x=a; declare -u x; x=b; echo "$x"
+```
+Expected stdout "f\nB\n"; status 0.
+Observed approved-head stdout "f\nf\nB\n"; status 0.
+Observed main `750fb65` stdout "B\n"; status 0.
+Expected stderr "".
+
+#### `unset-FUNCNAME-index`
+
+```bash
+f(){ unset "FUNCNAME[0]"; echo "s:$?:${FUNCNAME[*]}"; }; f; g(){ echo "${FUNCNAME[*]}"; }; g
+```
+Expected stdout "s:0:\ng\n"; status 0.
+Observed approved-head stdout "s:0:f\ng\n"; status 0.
+Observed main `750fb65` stdout "s:0:\n\n"; status 0.
+Expected stderr "".
+
+#### `unset-local-active`
+
+```bash
+f(){ local FUNCNAME=local; unset FUNCNAME; FUNCNAME=ordinary; echo "$FUNCNAME"; }; f; g(){ echo "later:${FUNCNAME[*]}"; }; g; echo "root:$FUNCNAME"
+```
+Expected stdout "ordinary\nlater:ordinary\nroot:ordinary\n"; status 0.
+Observed approved-head stdout "ordinary\nlater:\nroot:\n"; status 0.
+Observed main `750fb65` stdout "ordinary\nlater:\nroot:\n"; status 0.
+Expected stderr "bash: line 1: local: FUNCNAME: variable may not be assigned value\n".
+
+#### `negative-sparse-ordinary`
+
+```bash
+unset FUNCNAME; FUNCNAME=(a b); f(){ echo "${FUNCNAME[-1]}:${#FUNCNAME[@]}:${!FUNCNAME[@]}"; }; f
+```
+Expected stdout "b:3:0 1 2\n"; status 0.
+Observed approved-head stdout "b:2:0 1\n"; status 0.
+Observed main `750fb65` stdout "b:2:0 1\n"; status 0.
+Expected stderr "".
+
+Do not implement these rare cases in this integration or change the oracle,
+recordings, scored membership, skips, environment, or limits to make them pass.
+
+### Additional observations in the existing ordinary-array follow-ups
+
+Status: Approved follow-up, not implemented by the PR85 call-stack slice repair.
+Owner: VARIABLES. The signed Arch Bash 5.3.15 binary has SHA-256
+`575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5`.
+The following controls differ from that frozen oracle identically on parent
+`54a553db5b61051f9c30e93c2fd325d7d3c6a033` and the r7 repair source.
+They extend the ordinary sparse/deactivated and local-array follow-ups above,
+not the active computed-array slice fix.
+
+```bash
+unset FUNCNAME; FUNCNAME=(a b c); f(){ printf "<%s>\n" "${FUNCNAME[@]:1:2}" "${FUNCNAME[*]: -1}"; }; f
+```
+
+Expected stdout "<a>\n<b>\n<c>\n"; observed "<b>\n<c>\n<c>\n".
+Both statuses are 0 and both stderr streams are empty. Do not substitute the
+reviewer's installed Bash 5.3.20 observation for the frozen 5.3.15 result.
+
+```bash
+f(){ local -a s=(a b c); printf "<%s>\n" "${s[@]:1}"; }; f
+```
+
+Expected stdout "<b>\n<c>\n"; observed "<>\n". Both statuses are 0 and both
+stderr streams are empty. Inspect the existing local-array declaration path,
+not the computed-array slice bounds.
+
+Evidence: [signed-oracle controls](file:///work/reports/wave-20261022/shell/pr85-callstack-slice-composition-fix-r7-evidence/oracle-controls.json),
+[exact parent/native controls](file:///work/reports/wave-20261022/shell/pr85-callstack-slice-composition-fix-r7-evidence/parent-controls.json),
+and [production Waffle observations](file:///work/reports/wave-20261022/shell/pr85-callstack-slice-composition-fix-r7-evidence/new-waffle-controls.json).
 
 ## Invalid nameref target review follow-ups, 2026-10-23
 
@@ -3140,3 +3351,27 @@ GNU Bash 5.3.15 prints `.zz_a\nzz_a\nstatus:0\n`. Reviewed source prints
 `zz_a\nstatus:0\n`. Treat explicitly dotted alternatives as eligible when
 excluding hidden entries. Keep implicit hidden-name exclusion and ordinary
 argv matching unchanged. Add nested and suffix controls before the fix.
+
+## Explicit command hash review follow-ups, 2026-10-24
+
+Status: Approved, deferred beyond PR88 integration. Preserve the immutable AVL,
+shared snapshot ownership, no-allocation queries and proved listing reservation.
+The reviewed repair does not add automatic hashing or execution through entries.
+
+- Reusable listing names. `hash -p /kept 'a b'; hash -l` writes the name without
+  shell quoting. Add frozen Bash 5.3.15 controls for whitespace, quotes, leading
+  options and empty names before repairing reusable output. Keep insertion order
+  and the one admitted listing buffer. See `review88-kimi-hash-cost-r3.md` and
+  `review88-listing-work-r6.md` under the wave shell reports.
+- Diagnostics. `hash non-existent-program` lacks Bash's shell and line prefix.
+  The options error arm also prints usage on work exhaustion. Keep these in the
+  builtin diagnostic-coordinate family. Recorded fixture tests compare stdout
+  and status, not stderr parity. See `review88-command-hash-r1.md` and
+  `review88-hash-cost-sol-r4.md` for the saved observations and classifications.
+- Directory registration. Investigate `mkdir adir; hash -p adir z1; hash -t z1`
+  only after recording an actual Bash 5.3.15 comparison. The prior Kimi comment
+  did not establish a saved oracle mismatch. Do not assert one or change runtime
+  executable facts on that basis.
+- Alias queries remain the existing PR75 follow-up above. Lexical alias
+  expansion and hash-query precedence are separate paths. Do not implement
+  alias introspection or redirect execution through hash entries in this merge.

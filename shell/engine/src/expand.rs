@@ -10,6 +10,7 @@ use crate::{
 use futures::FutureExt;
 use shell_parser::parser::{ParameterOp, Word, WordPart};
 
+mod array_slice;
 mod braces;
 use crate::state::CaseLocale as Locale;
 mod case_pattern;
@@ -1060,18 +1061,10 @@ impl Expansion<'_> {
                 length,
             } = part
             {
-                if name == "@" {
-                    return expansion
-                        .positional_substring(offset, length.as_deref(), state, quoted, scalar)
-                        .await
-                        .map_err(Error::in_expansion);
-                }
-                let result = expansion
-                    .substring(name, offset, length.as_deref(), state, scalar || quoted)
-                    .await;
-                expansion.ifs = None;
-                expansion.ifs_changed = true;
-                return result.map_err(Error::in_expansion);
+                return expansion
+                    .substring_part(name, offset, length.as_deref(), state, quoted, scalar)
+                    .await
+                    .map_err(Error::in_expansion);
             }
             if matches!(part, WordPart::ArrayIndices { .. }) {
                 return expansion.elements(part, state, quoted, scalar).await;
@@ -1284,13 +1277,43 @@ impl Expansion<'_> {
             }
         }
     }
-    async fn substring(
+    async fn substring_part(
         &mut self,
         name: &str,
         offset: &str,
         length: Option<&str>,
         state: &SharedState,
+        quoted: bool,
+        scalar: bool,
+    ) -> Result<(), Error> {
+        if name == "@" {
+            return self
+                .positional_substring(offset, length, state, quoted, scalar)
+                .await;
+        }
+        if let Some((array, index)) = indexed_name(name)
+            && matches!(index, "@" | "*")
+        {
+            return self
+                .array_substring(array, index == "@", (offset, length), state, quoted, scalar)
+                .await;
+        }
+        let result = self
+            .substring(name, (offset, length), state, scalar || quoted, false)
+            .await;
+        self.ifs = None;
+        self.ifs_changed = true;
+        result
+    }
+    /// `null_field` marks a quoted `[@]` reference, where an out-of-range
+    /// start yields no word, like an empty `"$@"`.
+    async fn substring(
+        &mut self,
+        name: &str,
+        (offset, length): (&str, Option<&str>),
+        state: &SharedState,
         protected: bool,
+        null_field: bool,
     ) -> Result<(), Error> {
         if !operand::length_name(name) {
             return Err(2.into());
@@ -1340,6 +1363,11 @@ impl Expansion<'_> {
             usize::try_from(offset).ok().filter(|&n| n <= count)
         };
         let Some(start) = start else {
+            if null_field {
+                self.element_layout(ListSource::Array, true, state, true, false)
+                    .await?;
+                return Ok(());
+            }
             return self.empty_expansion(protected, state).await;
         };
         let end = if let Some(length) = length {
@@ -1911,7 +1939,7 @@ impl Expansion<'_> {
         quoted: bool,
         scalar: bool,
     ) -> Result<(), Error> {
-        if let WordPart::ArrayIndices { name, .. } = part {
+        if let WordPart::ArrayIndices { name, .. } | WordPart::ArrayAccess { name, .. } = part {
             State::admit_scalar_access(state, name, self.cancel, self.work).await?;
         }
         let (count, at) = {
@@ -1934,38 +1962,14 @@ impl Expansion<'_> {
             return Err(2.into());
         }
         self.elements_remaining -= count;
-        let ifs_separator = self.ifs_separator(state).await?;
-        let star_separator = if at {
-            ifs_separator
-        } else {
-            self.positional_star_separator(state).await?
+        let source = match part {
+            WordPart::Variable(_) => ListSource::Positional,
+            WordPart::ArrayIndices { .. } => ListSource::Indices,
+            _ => ListSource::Array,
         };
-        let indices_space_join = !scalar
-            && !quoted
-            && matches!(part, WordPart::ArrayIndices { star: true, .. })
-            && ifs_separator.is_none();
-        let list = !scalar && (at || !quoted && !indices_space_join);
-        self.segments.needs_split |= list || indices_space_join;
-        // An initially empty IFS selects Bash's list-word space path. A
-        // nonempty reference IFS whose target later becomes empty does not.
-        let reference_ifs = state.borrow().is_nameref("IFS");
-        self.segments.list_word |= list && (at || !reference_ifs || star_separator.is_none());
-        self.segments.split_space |= !scalar
-            && !quoted
-            && !at
-            && matches!(part, WordPart::Variable(_))
-            && star_separator.is_none();
-        let separator = if scalar && at || indices_space_join {
-            Some(' ')
-        } else if list {
-            ifs_separator.or(Some(' '))
-        } else {
-            star_separator
-        };
-        // Quoted '*' and every scalar context keep one field even for no values.
-        if scalar || (quoted && !at) {
-            self.segments.empty(self.work)?;
-        }
+        let (list, separator) = self
+            .element_layout(source, at, state, quoted, scalar)
+            .await?;
         let protection = Protection::expansion(quoted || scalar, state);
         let mut array_index = None;
         for index in 0..count {
@@ -1985,6 +1989,49 @@ impl Expansion<'_> {
             self.segment(&value, protection, quoted || scalar).await?;
         }
         Ok(())
+    }
+    async fn element_layout(
+        &mut self,
+        source: ListSource,
+        at: bool,
+        state: &SharedState,
+        quoted: bool,
+        scalar: bool,
+    ) -> Result<(bool, Option<char>), Error> {
+        let ifs_separator = self.ifs_separator(state).await?;
+        let star_separator = if at {
+            ifs_separator
+        } else {
+            self.positional_star_separator(state).await?
+        };
+        let indices_space_join = !scalar
+            && !quoted
+            && matches!(source, ListSource::Indices)
+            && !at
+            && ifs_separator.is_none();
+        let list = !scalar && (at || !quoted && !indices_space_join);
+        self.segments.needs_split |= list || indices_space_join;
+        // An initially empty IFS selects Bash's list-word space path. A
+        // nonempty reference IFS whose target later becomes empty does not.
+        let reference_ifs = state.borrow().is_nameref("IFS");
+        self.segments.list_word |= list && (at || !reference_ifs || star_separator.is_none());
+        self.segments.split_space |= !scalar
+            && !quoted
+            && !at
+            && matches!(source, ListSource::Positional)
+            && star_separator.is_none();
+        let separator = if scalar && at || indices_space_join {
+            Some(' ')
+        } else if list {
+            ifs_separator.or(Some(' '))
+        } else {
+            star_separator
+        };
+        // Quoted '*' and every scalar context keep one field even for no values.
+        if scalar || (quoted && !at) {
+            self.segments.empty(self.work)?;
+        }
+        Ok((list, separator))
     }
     async fn element_boundary(
         &mut self,
@@ -2006,6 +2053,12 @@ impl Expansion<'_> {
         }
         self.separator(separator, protected).await
     }
+}
+
+enum ListSource {
+    Positional,
+    Indices,
+    Array,
 }
 
 fn case_mode(operator: &ParameterOp) -> Option<(bool, bool)> {
