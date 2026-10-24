@@ -9,6 +9,7 @@ import {
   type RuntimeRootOptions,
   type WorkerLaunchOptions,
 } from "waffle/browser/process-broker";
+import { createProcessIdentity } from "waffle/browser/process-context";
 import { ExecutableRegistry } from "waffle/proc/registry";
 import { ProcessTable } from "waffle/proc/table";
 import type { ChildExitEvent, ProcessContext } from "waffle/proc/types";
@@ -550,7 +551,7 @@ for (const mode of ["host-policy", "host-default", "post-start", "exit126", "exi
             return { terminate: () => options.cleanup?.() };
           },
         } as unknown as ProcessService;
-        return adapter(context, service);
+        return adapter({ ...context, identity: createProcessIdentity(context) }, service);
       },
     });
     try {
@@ -656,7 +657,7 @@ test("the shell adapter forwards source admission instrumentation to the worker 
       interruptible,
       request: { argv: ["/bin/test-spin"], env: {}, cwd: "/home/guest" },
     } as unknown as ProcessContext;
-    await adapter(context, service);
+    await adapter({ ...context, identity: createProcessIdentity({ pid, parentPid: 0 }) }, service);
     const launched = launches[0];
     assert.equal(launched?.request.interruptible, interruptible);
     assert.equal(launched?.request.module, module);
@@ -757,11 +758,14 @@ test("facade disposal joins its adapter child cleanup behind a held fence, not a
     } as unknown as ProcessService;
     await host.adapters.get("bash-web:preview1")!(
       {
-        pid,
-        module: rootRequest.module,
-        interruptible: false,
-        request,
-      } as unknown as ProcessContext,
+        ...({
+          pid,
+          module: rootRequest.module,
+          interruptible: false,
+          request,
+        } as unknown as ProcessContext),
+        identity: createProcessIdentity({ pid, parentPid: shell.process.pid }),
+      },
       childService,
     );
     const kill = host.service.killJob.bind(host.service);

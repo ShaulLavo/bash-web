@@ -4404,3 +4404,6 @@ mod aliases;
 
 #[path = "words/array_slicing.rs"]
 mod array_slicing;
+
+#[path = "words/command_hash.rs"]
+mod command_hash;
