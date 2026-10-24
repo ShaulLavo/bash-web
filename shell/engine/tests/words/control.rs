@@ -376,3 +376,50 @@ fn exec_in_an_unredirected_loop_changes_the_surrounding_descriptor_bindings() {
         "restored\ninner\n",
     );
 }
+
+#[test]
+fn noexec_skips_execution_and_persists_across_submitted_read_units() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("x=before; set -n; x=after; args BAD; echo BAD"), 0);
+    assert_eq!(rig.value("x").as_deref(), Some("before"));
+    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.run("set +n; echo BAD"), 0);
+    assert!(rig.output.bytes().is_empty());
+    assert!(rig.errors.bytes().is_empty());
+    assert!(rig.shell.state().borrow().noexec);
+}
+
+#[test]
+fn noexec_still_reports_syntax_errors() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("set -n\nif true; then\n"), 2);
+    assert!(rig.output.bytes().is_empty());
+    assert!(!rig.errors.bytes().is_empty());
+}
+
+#[test]
+fn interactive_shells_ignore_both_noexec_option_spellings() {
+    let rig = Rig::new(Limits::default());
+    rig.shell.state().borrow_mut().interactive = true;
+    assert_eq!(rig.run("set -n; echo first; set -o noexec; echo second"), 0);
+    assert_eq!(rig.output.bytes(), b"first\nsecond\n");
+    assert!(!rig.shell.state().borrow().noexec);
+    assert!(rig.errors.bytes().is_empty());
+}
+
+#[test]
+fn interactive_background_jobs_honor_noexec_but_foreground_children_do_not() {
+    let rig = Rig::new(Limits::default());
+    rig.shell.state().borrow_mut().interactive = true;
+    let script = "{ set -n; echo BAD; } & wait; (set -n; echo BAD) & wait; (set -n; echo subshell); true | { set -n; echo pipe; }; echo parent";
+    assert_eq!(rig.run(script), 0);
+    assert_eq!(rig.output.bytes(), b"subshell\npipe\nparent\n");
+    assert!(!rig.shell.state().borrow().noexec);
+}
+
+#[test]
+fn noexec_leaves_the_last_executed_status() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("! set -n; echo BAD"), 1);
+    assert!(rig.output.bytes().is_empty());
+}
