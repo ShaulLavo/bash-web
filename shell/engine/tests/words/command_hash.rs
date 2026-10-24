@@ -2,14 +2,9 @@ use super::*;
 
 #[test]
 fn command_hash_frozen_bash_recordings() {
-    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+    let fixture = recorded_bash_fixture(include_str!(
         "../../../../scripts/fixtures/shell-command-hash.json"
-    ))
-    .unwrap();
-    assert_eq!(
-        fixture["bash"],
-        "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)"
-    );
+    ));
     for case in fixture["cases"].as_array().unwrap() {
         let rig = Rig::new(Limits::default());
         assert_eq!(
@@ -87,4 +82,16 @@ fn command_hash_queries_do_not_change_existing_prefix_path_search() {
         b"missing=1\n/home/guest/args\nmissing=1\n/home/guest/args\n"
     );
     assert_eq!(rig.value("PATH").as_deref(), Some("/home/guest"));
+}
+
+#[test]
+#[should_panic(expected = "assertion `left == right` failed")]
+fn command_hash_recording_rejects_an_unpinned_bash_version() {
+    recorded_bash_fixture(r#"{"bash":"not the pinned Bash","cases":[]}"#);
+}
+
+#[test]
+#[should_panic(expected = "called `Result::unwrap()`")]
+fn command_hash_recording_rejects_malformed_json() {
+    recorded_bash_fixture("{");
 }
