@@ -245,7 +245,7 @@ async fn record_arguments(
 impl FunctionFrame {
     pub(crate) async fn trace(
         &mut self,
-        name: String,
+        name: &str,
         line: usize,
         cancel: &Cancel,
         work: &mut Work,
@@ -273,7 +273,7 @@ impl FunctionFrame {
             .call_stack
             .reserve(memory.as_ref(), true, arguments.is_some())?;
         let frame = Rc::new(CallSite {
-            name,
+            name: name.to_owned(),
             source: state.shell_name.clone(),
             line: line.to_string(),
             arguments: arguments.is_some(),
@@ -306,7 +306,7 @@ mod tests {
     fn enter(state: &SharedState, name: &str, args: Vec<String>, line: usize) -> FunctionFrame {
         let mut frame = FunctionFrame::enter(state.clone(), args, 64)
             .unwrap_or_else(|_| panic!("stack operation failed"));
-        finish(frame.trace(name.into(), line, &Cancel::new(), &mut work()))
+        finish(frame.trace(name, line, &Cancel::new(), &mut work()))
             .unwrap_or_else(|_| panic!("stack operation failed"));
         frame
     }
@@ -417,7 +417,8 @@ mod tests {
             .unwrap_or_else(|_| panic!("stack operation failed"));
         let cancel = Cancel::new();
         let mut work = work();
-        let mut trace = Box::pin(frame.trace("x".repeat(128 * 1024), 1, &cancel, &mut work));
+        let name = "x".repeat(128 * 1024);
+        let mut trace = Box::pin(frame.trace(&name, 1, &cancel, &mut work));
         assert!(trace.as_mut().now_or_never().is_none());
         cancel.cancel();
         assert!(finish(trace).is_err());
@@ -428,7 +429,7 @@ mod tests {
         let state = State::with_memory(memory.clone()).shared();
         let mut frame = FunctionFrame::enter(state.clone(), Vec::new(), 64)
             .unwrap_or_else(|_| panic!("stack operation failed"));
-        assert!(finish(frame.trace("f".into(), 1, &Cancel::new(), &mut self::work())).is_err());
+        assert!(finish(frame.trace("f", 1, &Cancel::new(), &mut self::work())).is_err());
         assert_eq!(state.borrow().array_count("FUNCNAME"), 0);
         drop(frame);
         assert_eq!(memory.observation().0, 0);
@@ -478,7 +479,7 @@ mod tests {
             let arguments = state.borrow().call_stack.arguments.capacity();
             let mut frame = FunctionFrame::enter(state.clone(), vec!["x".into()], 2048)
                 .unwrap_or_else(|_| panic!("call fits"));
-            finish(frame.trace("f".into(), 1, &Cancel::new(), &mut work()))
+            finish(frame.trace("f", 1, &Cancel::new(), &mut work()))
                 .unwrap_or_else(|_| panic!("trace fits"));
             let stack = &state.borrow().call_stack;
             growths.0 += usize::from(stack.frames.capacity() != capacity);

@@ -5,6 +5,8 @@ The shell's core pattern matcher supports `!(pattern|alternative)` in `[[ ]]`,
 alternatives matches that whole substring. Prefixes, suffixes, nested groups,
 empty matches, quoting, and positive repetition use the same character-boundary
 rules as other full patterns.
+Completion patterns with slashes inside an active group remain a separate
+pathname-component follow-up; ordinary component splitting is unchanged.
 
 The compiler adds a complement instruction to its existing epsilon-NFA. Each
 negative group has a detached body. The matcher computes body acceptance at input

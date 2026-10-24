@@ -1,16 +1,69 @@
 use super::{
-    Context, FdTable, Outcome, SharedState, Work, diagnose, error_status, scan_bytes, write,
+    Context, FdTable, Outcome, SharedState, State, Work, diagnose, error_status, scan_bytes, write,
 };
-use crate::{expand::Printability, state::DeclarationView};
+use crate::{
+    expand::Printability,
+    state::{DeclarationView, ScalarResolution},
+};
+
+pub(super) async fn local_append_target(
+    name: String,
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Result<String, i32> {
+    State::admit_scalar_access(state, &name, &context.cancel, work)
+        .await
+        .map_err(error_status)?;
+    let state = state.borrow();
+    let ScalarResolution::Target(target) = state.resolve_scalar_target(&name) else {
+        return Err(1);
+    };
+    if target != name {
+        work.admit_storage(target.len()).map_err(error_status)?;
+    }
+    state.assignment_name(name)
+}
+
+pub(super) async fn append_scalar(
+    name: &str,
+    value: String,
+    local: bool,
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Result<String, i32> {
+    if !local {
+        State::admit_scalar_access(state, name, &context.cancel, work)
+            .await
+            .map_err(error_status)?;
+    }
+    let bytes = state
+        .borrow()
+        .declaration_append_base(name, local)
+        .map_or(0, str::len);
+    scan_bytes(bytes, context, work).await?;
+    let state = state.borrow();
+    let old = state.declaration_append_base(name, local).unwrap_or("");
+    let bytes = old.len().checked_add(value.len()).ok_or(2)?;
+    if bytes > context.limits().expansion_bytes {
+        return Err(2);
+    }
+    work.admit_storage(bytes).map_err(error_status)?;
+    let mut joined = String::with_capacity(bytes);
+    joined.push_str(old);
+    joined.push_str(&value);
+    Ok(joined)
+}
 
 struct DeclarationSnapshot {
     value: Option<String>,
     attributes: [bool; 5],
 }
 
-pub(super) async fn print(
+pub(super) async fn print<'a>(
     builtin: &str,
-    names: impl Iterator<Item = String>,
+    names: impl Iterator<Item = &'a String>,
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
@@ -23,19 +76,19 @@ pub(super) async fn print(
     for name in names {
         count += 1;
         scan_bytes(name.len(), context, work).await?;
-        if state.borrow().stack_array(&name) && !state.borrow().is_nameref(&name) {
-            print_stack_array(&name, state, fds, context, work).await?;
+        if state.borrow().stack_array(name) && !state.borrow().is_nameref(name) {
+            print_stack_array(name, state, fds, context, work).await?;
             continue;
         }
         let Some(DeclarationSnapshot { value, attributes }) =
-            snapshot(&name, state, context, work).await?
+            snapshot(name, state, context, work).await?
         else {
-            missing(builtin, &name, fds, context, work).await?;
+            missing(builtin, name, fds, context, work).await?;
             status = 1;
             continue;
         };
         let line = render(
-            &name,
+            name,
             value.as_deref(),
             attributes,
             utf8,
@@ -287,8 +340,8 @@ async fn print_stack_element(
     Ok(())
 }
 
-pub(super) async fn function_names(
-    names: impl Iterator<Item = String>,
+pub(super) async fn function_names<'a>(
+    names: impl Iterator<Item = &'a String>,
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
@@ -300,7 +353,7 @@ pub(super) async fn function_names(
         let Some(line) = state
             .borrow()
             .functions()
-            .get(&name)
+            .get(name)
             .map(|function| function.line)
         else {
             status = 1;

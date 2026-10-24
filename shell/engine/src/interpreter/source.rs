@@ -5,23 +5,23 @@ use crate::{
     state::{SharedState, SourceFrame, absolute},
 };
 
-pub(super) fn run(
-    name: &str,
+pub(super) fn run<'a>(
+    name: &'a str,
     args: Vec<String>,
     line: Option<usize>,
-    state: SharedState,
+    state: &SharedState,
     fds: Descriptors,
-    context: Context,
-) -> eval::Frame<'static> {
+    context: &Context,
+) -> eval::Frame<'a> {
     let evaluation = context.evaluation.clone();
     evaluation.reader_frame(
-        |scope| run_body(name.to_owned(), args, line, state, fds, context, scope),
+        |scope| run_body(name, args, line, state.clone(), fds, context.clone(), scope),
         Outcome::status,
     )
 }
 
 async fn run_body(
-    name: String,
+    name: &str,
     mut args: Vec<String>,
     line: Option<usize>,
     state: SharedState,
@@ -29,7 +29,7 @@ async fn run_body(
     context: Context,
     evaluation: Scope,
 ) -> Outcome {
-    let diagnostic = eval::Diagnostic::new(&name, line, &fds, &context);
+    let diagnostic = eval::Diagnostic::new(name, line, &fds, &context);
     let options_ended = args.first().is_some_and(|arg| arg == "--");
     if options_ended {
         args.remove(0);
@@ -49,7 +49,7 @@ async fn run_body(
         Ok(reader) => reader,
         Err(code) => {
             return diagnostic
-                .failure(&[&name, filename], STORAGE_LIMIT, code)
+                .failure(&[name, filename], STORAGE_LIMIT, code)
                 .await;
         }
     };
@@ -59,11 +59,11 @@ async fn run_body(
         Err(ReadError::Io(error)) => {
             let code = error.status();
             return diagnostic
-                .failure(&[&name, filename], &io_message(error), code)
+                .failure(&[name, filename], &io_message(error), code)
                 .await;
         }
         Err(ReadError::Refused(message)) => {
-            return diagnostic.failure(&[&name, filename], message, 2).await;
+            return diagnostic.failure(&[name, filename], message, 2).await;
         }
     };
     let filename = args.remove(0);
@@ -75,7 +75,7 @@ async fn run_body(
         Ok(frame) => frame,
         Err(code) => {
             return diagnostic
-                .failure(&[&name, &filename], STORAGE_LIMIT, code)
+                .failure(&[name, &filename], STORAGE_LIMIT, code)
                 .await;
         }
     };
@@ -91,7 +91,7 @@ async fn run_body(
     frame.finish();
     let mut result = match result {
         Ok(result) => result,
-        Err(message) => return diagnostic.failure(&[&name, &filename], &message, 2).await,
+        Err(message) => return diagnostic.failure(&[name, &filename], &message, 2).await,
     };
     if result.flow == Flow::Return {
         result.flow = Flow::Normal;

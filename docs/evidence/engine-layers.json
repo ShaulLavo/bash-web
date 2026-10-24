@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "39452a26dc64b95a55bb70601288a5b87593af9a2089dcb0a06713ad1b106cde",
+    "engineSourceSha256": "837c005c9843426e9c0bf3de791cfba1c67db8eae8c96203d7364293170a74c5",
     "binaryBuild": null
   },
   "contract": {
@@ -236,7 +236,6 @@
         "shell/engine/src/expand/pattern.rs",
         "shell/engine/src/expand/pattern/classes.rs",
         "shell/engine/src/expand/pattern/extglob.rs",
-        "shell/engine/src/expand/pattern/extglob/negative.rs",
         "shell/engine/src/expand/positional.rs",
         "shell/engine/src/expand/printable.rs",
         "shell/engine/src/expand/replacement.rs",
@@ -423,7 +422,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 852,
+        "line": 885,
         "column": 25
       }
     },
@@ -593,7 +592,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 1604,
+        "line": 1605,
         "column": 33
       }
     },
@@ -943,7 +942,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3826,
+        "line": 4175,
         "column": 25
       }
     },
@@ -953,7 +952,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 5151,
+        "line": 5528,
         "column": 17
       }
     },
@@ -973,7 +972,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3812,
+        "line": 4161,
         "column": 17
       }
     },
@@ -983,7 +982,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3812,
+        "line": 4161,
         "column": 31
       }
     },
@@ -1003,7 +1002,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/io.rs",
-        "line": 1060,
+        "line": 1061,
         "column": 9
       }
     },
@@ -1083,7 +1082,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 1118,
+        "line": 1182,
         "column": 63
       }
     },
@@ -1093,7 +1092,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 2291,
+        "line": 2361,
         "column": 9
       }
     }
