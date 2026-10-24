@@ -337,7 +337,7 @@ test("raw publication and the blocking cheap fold have no dependency cycle or wh
   const floor = object(workflowJobs["score-floor"]);
   assert.deepEqual(raw.needs, ["prepare", "native"]);
   assert.deepEqual(floor.needs, ["prepare", "own-shell-compatibility"]);
-  assert.equal(object(raw.env).BASH_COMPAT_RAW, "1");
+  assert.ok(!("BASH_COMPAT_RAW" in object(raw.env)));
   assert.equal(
     object(raw.outputs)["raw-artifact-id"],
     "${{ steps.raw-upload.outputs.artifact-id }}",
@@ -362,6 +362,26 @@ test("raw publication and the blocking cheap fold have no dependency cycle or wh
   const producer = readFileSync(new URL("./bash-compat.mjs", import.meta.url), "utf8");
   assert.match(producer, /BASH_COMPAT_RAW !== "1"/);
   assert.doesNotMatch(producer, /requireMembership: true/);
+});
+
+test("raw mode belongs only to observation, never scorer or lifecycle test environments", () => {
+  const workflow = object(
+    parse(readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8")),
+  );
+  assert.ok(!workflow.env || !("BASH_COMPAT_RAW" in object(workflow.env)));
+  const workflowJobs = object(workflow.jobs);
+  for (const [id, value] of Object.entries(workflowJobs)) {
+    const job = object(value);
+    assert.ok(!job.env || !("BASH_COMPAT_RAW" in object(job.env)), `${id} leaks raw mode`);
+  }
+  const raw = object(workflowJobs["own-shell-compatibility"]);
+  assert.ok(Array.isArray(raw.steps));
+  const owners = raw.steps
+    .map(object)
+    .filter((step) => step.env && "BASH_COMPAT_RAW" in object(step.env));
+  assert.equal(owners.length, 1);
+  assert.equal(owners[0].name, "Observe compatibility with the same-job node build");
+  assert.equal(object(owners[0].env).BASH_COMPAT_RAW, "1");
 });
 
 test("read tokens stay out of the replay environment and layer graphs are artifact-only", () => {

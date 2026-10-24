@@ -245,7 +245,6 @@ jobs:
       BASH_COMPAT_JOBS: 4
       BASH_COMPAT_SKIP_BUILD: "1"
       BASH_COMPAT_RECORD: "0"
-      BASH_COMPAT_RAW: "1"
       BASH_COMPAT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - uses: actions/checkout@v4
@@ -297,6 +296,7 @@ jobs:
       - name: Observe compatibility with the same-job node build
         run: node scripts/diagnose-compat.ts "${{ runner.temp }}/own-shell-diagnostics" -- npm run compat:shell:prebuilt
         env:
+          BASH_COMPAT_RAW: "1"
           BASH_COMPAT_OUT: ${{ runner.temp }}/own-shell-current.json
           BASH_COMPAT_SCRATCH: ${{ runner.temp }}
       - name: Seal complete raw score
