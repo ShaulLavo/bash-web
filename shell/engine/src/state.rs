@@ -143,6 +143,8 @@ pub struct State {
     namerefs: BTreeMap<String, String>,
     pub cwd: String,
     directories: DirectoryStack,
+    aliases: Aliases,
+    pub expand_aliases: bool,
     pub(crate) completions: completion::CompletionTable,
     /// Function bodies are immutable. Isolated shells copy bindings, not ASTs.
     functions: BTreeMap<String, StoredFunction>,
@@ -199,6 +201,8 @@ impl Default for State {
             namerefs: BTreeMap::new(),
             cwd: "/home/guest".into(),
             directories: DirectoryStack::default(),
+            aliases: Aliases::default(),
+            expand_aliases: false,
             completions: completion::CompletionTable::default(),
             functions: BTreeMap::new(),
             traps: traps::Traps::default(),
@@ -401,6 +405,8 @@ impl State {
             namerefs,
             cwd,
             directories,
+            aliases: state.aliases.clone(),
+            expand_aliases: state.expand_aliases,
             completions: state.completions.clone(),
             functions,
             traps: state.traps.inherited(),
@@ -2289,6 +2295,8 @@ pub fn absolute(cwd: &str, path: &str) -> String {
     format!("/{}", components.join("/"))
 }
 
+mod aliases;
+pub(crate) use aliases::Aliases;
 mod directory_stack;
 use directory_stack::DirectoryStack;
 

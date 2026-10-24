@@ -2949,15 +2949,72 @@ identifier rejection. No new frozen case, exclusion or oracle change is authoriz
 
 ### Alias runtime prerequisite
 
-Status: Approved. The parser's injected-alias function-name and print controls pass,
-but this base has no `alias` builtin and rejects `shopt -s expand_aliases`. End-to-end
-alias declaration controls therefore remain strict pending comparisons under
-`npm run test:shell:function-names:aliases-pending`, using
-`scripts/fixtures/shell-function-names-aliases-pending.json`. Their exact failures
-are retained in the function-name report's `verify6.log` and `aliases-pending.log`.
-This is a separate builtin prerequisite, not permission to add alias, shopt or
-function-name grammar in the literal-name validation change. Keep parser alias
-coverage and reuse its raw-token provenance when runtime aliases are implemented.
+Status: Implemented in PR #75. The core now has `alias`, `unalias` and
+`shopt -s expand_aliases`. The two end-to-end function-name alias controls
+now run in the blocking `test:shell:scoreboard` function-name test. Their
+Bash 5.3.15 recordings moved into `scripts/fixtures/shell-function-names.json`.
+Parser raw-token provenance still owns literal function-name recognition.
+The separate escaped and quoted POSIX-name grammar prerequisite above remains.
+
+### Alias review follow-ups, 2026-10-23
+
+Status: Approved. Owner: parser/interpreter alias family. PR #75 review r2
+covers source `5156b40fe27d22eb59bb497e1a6a24fd60c89f5a` plus baseline-only
+`0378ec3`. Repro scripts, Bash 5.3.15 observations and native/production-Waffle
+results are under `/work/reports/wave-20261022/shell/review75-r2-evidence/`
+and sibling `review75-r1-evidence/`. These gaps need separate bounded controls.
+The reader-budget and alias-printing blockers are fixed in PR #75, not deferred.
+
+- Alias-definition table-copy cost, confirmed by review r4 at `2ccb34a`.
+  Release native definitions at 4k/8k/16k/32k took 1.04/4.21/15.62/61.21
+  seconds on the PC, with the same cost when expansion was disabled.
+  PR #75's r5 repair gives the reader a revision stamp rather than a retained
+  alias table. Unique tables update in place; genuine snapshots retain their
+  admitted immutable versions and require a charged, separately admitted copy.
+  Geometric table growth admits both old and new storage before allocation.
+  Deterministic pointer, cumulative-work, snapshot, rejection, refund and
+  cancellation controls accompany the same-artifact native/production-Waffle
+  scaling recordings. Evidence and current qualification are in
+  `/work/reports/wave-20261022/shell/builtins-alias-table-cost-fix-r5.md`.
+  This does not change the read-unit or function-definition timing contract.
+- Command-substitution alias timing, finding 4. After `alias x='echo YES'`,
+  `echo "${v:-$(x)}"`, `: "${v:=$(x)}"` and `${v:-\`x\`}` run `x` in Bash,
+  but our lazy substitution parsers receive no aliases. Arithmetic substitution
+  has the same gap. Direct substitutions retain definition-time aliases:
+  `alias xx='echo OLD'`, `f() { echo "$(xx)"; }`, `alias xx='echo NEW'`, `f`
+  on separate lines prints NEW in Bash and OLD here. An alias defined inside
+  a substitution also does not reach its next line. Trace `parse.rs` lazy-body
+  adapters and substitution execution. Preserve inactive operands and function
+  definition-time expansion outside substitutions.
+- Interactive default, finding 5. `runtime_main.rs` starts the editor without
+  enabling `expand_aliases`. Start an interactive terminal, enter
+  `alias ll='echo YES'`, then `ll` on the next input. Bash prints YES without
+  an explicit `shopt -s expand_aliases`; ours reports command not found.
+  Add interactive real-runtime coverage before setting the interactive default.
+  Keep noninteractive `-c` default-off.
+- Trailing-blank chaining, finding 7. After `alias p='echo ' x=YES`,
+  `p 'x' x` prints `x YES` in Bash and `x x` here. Escaped words also consume
+  the parser's next-word flag too soon. Preserve the flag across such words.
+- Keyword aliases, finding 7. After `alias n='!'`, `n false; echo $?` prints
+  0 in Bash and 127 here. After `alias DO=do`,
+  `for x in yes; DO echo $x; done` prints yes in Bash and fails grammar here.
+  Alias expansion must precede keyword recognition at these grammar positions.
+- Alias-value newlines, finding 7. `alias a=$'alias b=echo\nb yes'` followed
+  by `a` introduces a new Bash read unit inside the alias replacement.
+  The original-source continuation alone cannot represent that boundary.
+  Review r4 also reproduced a here-doc entirely inside an alias value:
+  `shopt -s expand_aliases`, `alias h=$'read -r a <<E\nfrom alias\nE'`,
+  `h`, `echo "[$a]"`, `echo next`, each on its own line. Bash 5.3.15 prints
+  `[from alias]\nnext\n`, status 0. Source `2ccb34a` prints
+  `[echo "[]"]\nnext\n`, status 0: the next source line becomes the here-doc
+  body and never executes. The exact probe and results are in
+  `review75-opus-refusal-r4-evidence/probes2.json` under the wave shell reports.
+  Fix the replacement-text/source continuation boundary with a recorded control
+  in a separate bounded parser change; do not fold it into table ownership.
+- Alias queries and order, finding 7. `alias é=one z=two; alias -p` lists é
+  before z in Bash's signed-byte ordering, unlike our Rust string ordering.
+  `type x` and `command -v x` also omit aliases. Add recorded query and sorting
+  controls, then repair the builtin/query paths without changing PATH lookup.
 
 
 ## Call-stack introspection follow-ups from PR85 review, 2026-10-23
