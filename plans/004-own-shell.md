@@ -2410,6 +2410,32 @@ or case attributes, `@P` or indirect names. See
 [the behavior notes](../docs/parameter-transformation.md) and
 [the receipt](../docs/evidence/parameter-transformation.json).
 
+## Follow-up: `@P` prompt expansion corners, 2026-10-24
+
+Status: Approved. These are corners found in the review of PR #73 (scalar `${p@P}`). They
+are not scored cases yet. Each expected value below is a GNU Bash 5.3.15
+recording in `/work/reports/wave-20261022/shell/review73-takeover-r1-evidence/neighbor-oracle.json`,
+made before the host moved to 5.3.20. The "ours" values were observed at PR #73 head
+`e7e17257`. Fix them in `expand/prompt.rs`. Keep the prompt work in its own
+boxed frame (`Expansion::prompt`), outside the recursive `part` poll.
+
+- Errors inside prompt expansion must not abort. Bash prints the diagnostic, keeps
+  the unexpanded text and returns 0.
+  - `p='${missing:?oops}'; printf '<%s>\n' "${p@P}"; printf 'after=%s\n' "$?"`
+    gives `<${missing:?oops}>` and `after=0`. Ours exits 127.
+  - The same happens for `p='$((1/0))'` (ours exits 1).
+  - It also happens for `p='$missing'; set -u` (Bash `<$missing>`, `after=0`; ours exits 127).
+  - With `p='${x:=before}${missing:?oops}'`, the `x=before` assignment survives.
+- `$?` from a prompt command substitution must not leak:
+  `p='$(false)'; true; printf '<%s>\n' "${p@P}" "$?"` gives `<>` and `<0>`. Ours gives `<1>`.
+- `\D{...}` literal text must not be reparsed: `p='\D{plain$HOME}'` gives `<plain$HOME>`.
+  Ours gives `<plain/home/user>`. The cause is in `prompt.rs`, where the format text is pushed unprotected.
+- `\}` must keep its backslash: `p='\}'` gives `<\}>`. Ours gives `<}>`, because of the
+  operand `}` escape rule in `operand.rs`.
+- Unrecorded source differences, which need a 5.3.15 recording before any change: `\w`/`\W` read
+  `state.cwd`, while Bash reads `$PWD`. `\u`/`\h` read `USER`/`HOSTNAME`, while Bash uses
+  getpwuid/gethostname.
+
 ## Follow-up: all-zero and overflowing digit parameters, 2026-10-22
 
 Status: Approved. Fix this in the direct parameter adapter, not in indirection.
@@ -3685,6 +3711,40 @@ Evidence and exact recorded streams/statuses are in
 `prefix-diagnosis-records.json`. The initial strict oracle comparison remains a
 recorded failure, not a waived check or a claimed Bash-compatible pass. N1's
 completion group/slash boundary stays with its existing separate owner.
+
+## Sourced function BASH_SOURCE filename, 2026-10-24
+
+Status: Approved follow-up. Owner: source/call-stack family. No semantic repair
+is included in PR73's bounded integration.
+
+The exact actual-main `d61989ad342a47545c73cb665781f9c8cf971015` production release
+on Waffle prints `source=7\n<later:f:bash>\n` for this probe:
+
+```bash
+p='$1'
+printf '%s\n' 'f() { printf "<%s:%s:%s>\n" "$1" "${FUNCNAME[0]}" "${BASH_SOURCE[0]}"; }; return 7' > lib
+. ./lib sourced
+printf 'source=%s\n' "$?"
+f later
+unset -f f
+```
+
+PR73's integrated production release prints the same output when the first
+`printf` argument in `f` is `${p@P}`. There is no crash or stderr, and status is
+zero on both. This preserves actual-main behavior; it does not establish GNU
+Bash correctness. A supplemental expectation of `./lib` failed. No new Bash
+oracle recording was made.
+
+`state/call_stack.rs:278` initializes `CallSite.source` from `state.shell_name`.
+`interpreter.rs:3074-3081` traces the function before installing its retained
+`body.reader` in the execution context. Both files retain those main behaviors.
+A separate owner should first record the exact supported Bash result, then
+repair filename attribution without changing retained-reader/source ownership,
+call-site offsets, cancellation, storage admission or last-owner refunds.
+Evidence and paired release reproductions are in
+`/work/reports/wave-20261022/shell/pr73-actual69-integration-r1-evidence/` under
+`source-location-main.json`, `interactions-source.mjs`, `waffle-interactions.log`
+and `attempt3/waffle-interactions.log`.
 
 ## Interactive bare-function noexec follow-up from PR66 review, 2026-10-24
 
