@@ -58,3 +58,27 @@ fn printf_valid_unimplemented_conversions_keep_unsupported_status() {
         );
     }
 }
+
+#[test]
+fn printf_invalid_format_merged_diagnostics_precede_buffered_prefix() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("printf 'prefix%z' 42 2>&1"), 1);
+    assert_eq!(
+        rig.output.bytes(),
+        b"/usr/bin/bash: printf: `%z': missing format character\nprefix"
+    );
+    assert!(rig.errors.bytes().is_empty());
+}
+
+#[test]
+fn printf_invalid_format_broken_diagnostic_pipe_preserves_signal_status() {
+    let rig = Rig::new(Limits::default());
+    let (reader, writer) = shell_engine::io::pipe();
+    drop(reader);
+    let mut fds = super::FdTable::default();
+    fds.insert(0, super::Endpoint::null());
+    fds.insert(1, super::Endpoint::null());
+    fds.insert(2, writer);
+    rig.shell.set_descriptors(fds).unwrap();
+    assert_eq!(rig.run("printf '%z' 42"), 141);
+}

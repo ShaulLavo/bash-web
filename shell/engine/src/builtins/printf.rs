@@ -647,14 +647,52 @@ async fn conversion(
         }
         return Ok(stop);
     }
+    let start = *offset - 1;
     if let Some(field) = Field::parse(input, offset, printer).await? {
         return field.print(args, printer).await;
     }
-    printer
-        .emit(2, b"/usr/bin/bash: printf: unsupported format conversion\n")
-        .await?;
-    args.status = 2;
+    args.status = rejected_conversion(input, start, offset, printer).await?;
     Ok(true)
+}
+
+async fn rejected_conversion(
+    input: &[u8],
+    start: usize,
+    offset: &mut usize,
+    printer: &mut Printer<'_>,
+) -> Result<i32, PrintFailure> {
+    while input
+        .get(*offset)
+        .is_some_and(|byte| b"hlLjzt".contains(byte))
+    {
+        printer.scan(1).await?;
+        *offset += 1;
+    }
+    if input
+        .get(*offset)
+        .is_some_and(|byte| b"sbcdiuoxXqQnaAeEfFgG(".contains(byte))
+    {
+        printer
+            .emit(2, b"/usr/bin/bash: printf: unsupported format conversion\n")
+            .await?;
+        return Ok(2);
+    }
+    let (token, diagnostic): (&[u8], &[u8]) = match input.get(*offset) {
+        Some(_) => {
+            printer.scan(1).await?;
+            (
+                &input[*offset..*offset + 1],
+                b"': invalid format character\n",
+            )
+        }
+        None => (&input[start..*offset], b"': missing format character\n"),
+    };
+    printer
+        .usage_diagnostic(b"/usr/bin/bash: printf: `")
+        .await?;
+    printer.usage_diagnostic(token).await?;
+    printer.usage_diagnostic(diagnostic).await?;
+    Ok(1)
 }
 
 #[derive(Clone, Copy, PartialEq)]
