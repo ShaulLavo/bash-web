@@ -36,3 +36,25 @@ fn pipeline_status_ordinary_negated_and_isolated_commands_keep_real_codes() {
     );
     check_output("false | true; echo $(echo ${PIPESTATUS[@]})", "1 0\n");
 }
+
+#[test]
+fn pipeline_status_declaration_preserves_active_attributes() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../scripts/cases/pipeline-status-attributes.json"
+    ))
+    .unwrap();
+    for item in fixture["cases"].as_array().unwrap() {
+        let rig = Rig::new(Limits::default());
+        let code = item["code"].as_str().unwrap();
+        assert_eq!(
+            rig.run(code),
+            item["status"].as_i64().unwrap() as i32,
+            "{code}"
+        );
+        assert_eq!(
+            rig.output.bytes(),
+            item["stdout"].as_str().unwrap().as_bytes(),
+            "{code}"
+        );
+    }
+}

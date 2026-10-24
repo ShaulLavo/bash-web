@@ -5375,6 +5375,82 @@ mod function_measurements {
     }
 
     #[test]
+    fn pipeline_status_printer_cancellation_releases_snapshot_and_borrow() {
+        let ex = Executor::new();
+        let host = crate::process::InProcessHost::new(ex.clone());
+        let session = Session::new(
+            ex.clone(),
+            Rc::new(host.clone()),
+            Rc::new(io::MemoryFs::new(1024)),
+            Limits::default(),
+        );
+        let (reader, writer) = io::pipe();
+        let filler = vec![b'!'; io::PIPE_CAPACITY];
+        assert_eq!(writer.write(&filler).now_or_never(), Some(Ok(filler.len())));
+        let mut fds = FdTable::default();
+        fds.insert(1, writer);
+        fds.insert(2, io::Endpoint::null());
+        session.set_descriptors(fds).unwrap();
+        assert_eq!(
+            finish_review(
+                &ex,
+                session
+                    .start("export PIPESTATUS; readonly PIPESTATUS; false | true")
+                    .unwrap(),
+            ),
+            0
+        );
+        let job = session.start("declare -p PIPESTATUS").unwrap();
+        let mut parked = false;
+        for _ in 0..100_000 {
+            let turn = ex.drive(1);
+            if !turn.runnable && !job.is_finished() {
+                parked = true;
+                break;
+            }
+        }
+        assert!(parked, "declaration must block behind the full pipe");
+        {
+            let state = session.state.try_borrow_mut().unwrap();
+            assert_eq!(state.pipeline_status(), [1, 0]);
+            let view = state.declaration("PIPESTATUS").unwrap().unwrap();
+            assert!(view.readonly && view.exported);
+        }
+        assert!(session.core.execution_storage.observation().0 >= 13);
+        session.interrupt();
+        assert_eq!(finish_review(&ex, job), 130);
+        assert_eq!(session.core.execution_storage.observation().0, 0);
+        let mut actual = vec![0; filler.len()];
+        assert_eq!(
+            reader.read(&mut actual).now_or_never(),
+            Some(Ok(filler.len()))
+        );
+        assert_eq!(actual, filler);
+        let (out, output) = io::capture(4096);
+        let mut fds = FdTable::default();
+        fds.insert(1, out);
+        fds.insert(2, io::Endpoint::null());
+        session.set_descriptors(fds).unwrap();
+        assert_eq!(
+            finish_review(
+                &ex,
+                session
+                    .start("false | true; declare -p PIPESTATUS")
+                    .unwrap()
+            ),
+            0
+        );
+        assert_eq!(
+            output.bytes(),
+            b"declare -arx PIPESTATUS=([0]=\"1\" [1]=\"0\")\n"
+        );
+        assert_eq!(session.core.execution_storage.observation().0, 0);
+        assert_eq!(host.active_count(), 0);
+        assert_eq!(host.retained_count(), 0);
+        assert_eq!(ex.drive(64).pending, 0);
+    }
+
+    #[test]
     fn review_resource_pipeline_publishes_stage_codes_before_unwinding_and_recovers() {
         for (lastpipe, failed_first, negated) in [
             (false, false, false),

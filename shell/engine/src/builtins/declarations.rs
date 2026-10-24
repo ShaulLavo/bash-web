@@ -126,28 +126,25 @@ async fn snapshot(
         .map_or(0, str::len);
     scan_bytes(bytes, context, work).await?;
     let state = state.borrow();
-    let Some(DeclarationView {
-        value,
-        nameref,
-        readonly,
-        exported,
-        case,
-    }) = state.declaration(name).map_err(|()| 2)?
-    else {
+    let Some(view) = state.declaration(name).map_err(|()| 2)? else {
         return Ok(None);
     };
-    work.admit_storage(value.map_or(0, str::len))
+    work.admit_storage(view.value.map_or(0, str::len))
         .map_err(error_status)?;
     Ok(Some(DeclarationSnapshot {
-        value: value.map(str::to_owned),
-        attributes: [
-            nameref,
-            readonly,
-            exported,
-            case == crate::state::CaseMapping::Lower,
-            case == crate::state::CaseMapping::Upper,
-        ],
+        value: view.value.map(str::to_owned),
+        attributes: declaration_attributes(view),
     }))
+}
+
+fn declaration_attributes(view: DeclarationView<'_>) -> [bool; 5] {
+    [
+        view.nameref,
+        view.readonly,
+        view.exported,
+        view.case == crate::state::CaseMapping::Lower,
+        view.case == crate::state::CaseMapping::Upper,
+    ]
 }
 
 async fn missing(
@@ -287,11 +284,26 @@ async fn print_pipeline_status(
         .pipeline_status()
         .len()
         .checked_mul(std::mem::size_of::<i32>())
+        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<[bool; 5]>()))
         .ok_or(2)?;
     work.admit_storage(bytes).map_err(error_status)?;
     scan_bytes(bytes, context, work).await?;
-    let statuses = state.borrow().pipeline_status().to_vec();
-    write(fds, b"declare -a PIPESTATUS=(", context).await?;
+    let (statuses, attributes) = {
+        let state = state.borrow();
+        let attributes = state
+            .declaration("PIPESTATUS")
+            .map_err(|()| 2)?
+            .map(declaration_attributes)
+            .unwrap_or([false; 5]);
+        (state.pipeline_status().to_vec(), attributes)
+    };
+    write(fds, b"declare -a", context).await?;
+    for (set, flag) in attributes.into_iter().zip([b'n', b'r', b'x', b'l', b'u']) {
+        if set {
+            write(fds, &[flag], context).await?;
+        }
+    }
+    write(fds, b" PIPESTATUS=(", context).await?;
     for (index, code) in statuses.iter().enumerate() {
         work.admit_storage(48).map_err(error_status)?;
         scan_bytes(48, context, work).await?;
