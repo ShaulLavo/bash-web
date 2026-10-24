@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "837c005c9843426e9c0bf3de791cfba1c67db8eae8c96203d7364293170a74c5",
+    "engineSourceSha256": "3ad09810411a927e24ff517a1ef58dc9034c3e0ad894b5ce2324c814264cd5e3",
     "binaryBuild": null
   },
   "contract": {
@@ -237,6 +237,7 @@
         "shell/engine/src/expand/pattern/classes.rs",
         "shell/engine/src/expand/pattern/extglob.rs",
         "shell/engine/src/expand/positional.rs",
+        "shell/engine/src/expand/prefix.rs",
         "shell/engine/src/expand/printable.rs",
         "shell/engine/src/expand/replacement.rs",
         "shell/engine/src/expand/tilde.rs",
@@ -502,7 +503,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 1038,
+        "line": 1055,
         "column": 29
       }
     },
@@ -512,7 +513,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 1012,
+        "line": 1029,
         "column": 17
       }
     },
@@ -522,7 +523,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 34,
+        "line": 35,
         "column": 30
       }
     },
@@ -542,7 +543,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 64,
+        "line": 65,
         "column": 38
       }
     },
@@ -562,7 +563,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 1268,
+        "line": 1329,
         "column": 15
       }
     },
@@ -872,7 +873,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 2769,
+        "line": 2917,
         "column": 25
       }
     },
@@ -922,7 +923,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/expand.rs",
-        "line": 2995,
+        "line": 3143,
         "column": 21
       }
     },
