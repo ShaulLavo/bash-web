@@ -66,6 +66,13 @@ impl IfsMembers {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LocalOrigin {
+    Declaration,
+    FunctionPrefix,
+    PrefixOwner,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct LocalVariable {
     getopts: Option<(GetoptsState, bool)>,
@@ -74,7 +81,7 @@ pub(crate) struct LocalVariable {
     exported: bool,
     case_mapping: Option<CaseMapping>,
     readonly: bool,
-    function_prefix: bool,
+    origin: LocalOrigin,
     storage_base: usize,
     memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
 }
@@ -1405,6 +1412,9 @@ impl State {
         {
             *saved = None;
         }
+        if let Some(local) = self.locals.last_mut().and_then(|frame| frame.get_mut(name)) {
+            local.origin = LocalOrigin::Declaration;
+        }
         // Removing a current local keeps its saved outer binding but releases
         // its live value charge. Shrinking cannot fail admission.
         self.reserve_local_value(name, 0).map_err(|_| 1)?;
@@ -1426,12 +1436,7 @@ impl State {
             .is_some_and(|frame| frame.contains_key(&name));
         // Temporary environments of function calls are inherited by a bare
         // local declaration, unlike ordinary dynamically visible bindings.
-        let prefix = self
-            .locals
-            .iter()
-            .rev()
-            .find_map(|frame| frame.get(&name))
-            .is_some_and(|binding| binding.function_prefix);
+        let prefix = self.inherits_function_prefix(&name);
         let inherited_bytes = if !already_local && prefix && value.is_none() {
             self.variables.get(&name).map_or(0, Binding::storage_bytes)
         } else {
@@ -1511,6 +1516,14 @@ impl State {
                 })
                 .transpose()?
                 .map(|ticket| Rc::new(RefCell::new(ticket)));
+            let origin = self
+                .locals
+                .iter()
+                .rev()
+                .nth(1)
+                .and_then(|frame| frame.get(name))
+                .filter(|binding| binding.origin == LocalOrigin::FunctionPrefix)
+                .map_or(LocalOrigin::Declaration, |_| LocalOrigin::PrefixOwner);
             let previous = LocalVariable {
                 getopts: (name == "OPTIND").then_some((self.getopts, self.getopts_numeric)),
                 previous: self.variables.remove(name),
@@ -1518,7 +1531,7 @@ impl State {
                 exported: self.exported.contains(name),
                 case_mapping: self.case_attributes.remove(name),
                 readonly: false,
-                function_prefix: false,
+                origin,
                 storage_base,
                 memory,
             };
@@ -2371,7 +2384,7 @@ impl FunctionFrame {
                 .unwrap()
                 .get_mut(&name)
                 .unwrap()
-                .function_prefix = true;
+                .origin = LocalOrigin::FunctionPrefix;
             state.exported.insert(name);
         }
         state.locals.push(BTreeMap::new());
@@ -3020,7 +3033,7 @@ mod tests {
                     case_mapping: None,
                     exported: true,
                     readonly: true,
-                    function_prefix: false,
+                    origin: LocalOrigin::Declaration,
                     storage_base: 0,
                     memory: None,
                 },
@@ -3066,7 +3079,7 @@ mod tests {
                         case_mapping: None,
                         exported: false,
                         readonly: false,
-                        function_prefix: false,
+                        origin: LocalOrigin::Declaration,
                         storage_base: 0,
                         memory: None,
                     },
