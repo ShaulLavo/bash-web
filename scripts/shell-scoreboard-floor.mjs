@@ -27,7 +27,7 @@ function scoreFloor(oracle, score) {
 export function validateFloor(oracle, floor) {
   assert.equal(floor.schema, 1, "unsupported floor schema");
   assert.equal(floor.kind, "main-floor");
-  assert.match(floor.sourceSha, /^[a-f0-9]{40}$/);
+  assert.match(floor.sourceSha, /^[a-f0-9]{40}$/, "invalid floor source SHA");
   assert.deepEqual(floor.identity, oracle.identity, "floor identity changed");
   assert.ok(Array.isArray(floor.floorIds), "missing floor IDs");
   assert.deepEqual(
@@ -64,7 +64,7 @@ export function accumulateFloor({ oracle, sourceSha, predecessors, scores, evide
   }
   for (const score of scores) for (const id of scoreFloor(oracle, score)) ids.add(id);
   const floorIds = Array.from(ids).sort();
-  return {
+  return validateFloor(oracle, {
     schema: 1,
     kind: "main-floor",
     sourceSha,
@@ -72,7 +72,7 @@ export function accumulateFloor({ oracle, sourceSha, predecessors, scores, evide
     floorSha256: digest(floorIds),
     floorIds,
     evidence,
-  };
+  });
 }
 export function bootstrapFloor(oracle, sourceSha, score) {
   assert.equal(sourceSha, bootstrap.sourceSha, "bootstrap is authorized only at its exact cut");

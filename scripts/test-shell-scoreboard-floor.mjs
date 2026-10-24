@@ -7,7 +7,7 @@ import {
   compareFloor,
   validateFloor,
 } from "./shell-scoreboard-floor.mjs";
-import { digest, validateScore } from "./shell-scoreboard.mjs";
+import { digest, summarize, validateScore } from "./shell-scoreboard.mjs";
 
 import { scoreboardFixture } from "./shell-scoreboard-test-fixture.mjs";
 
@@ -30,6 +30,7 @@ test("all same-SHA attempts union; a regression cannot lower the floor", () => {
     predecessors: [floor(["a"])],
     scores: [score(["a", "x"]), score(["a", "y"]), score(["y"])],
   });
+  assert.equal(validateFloor(oracle, result), result);
   assert.deepEqual(result.floorIds, ["a", "x", "y"]);
   assert.equal(compareFloor(oracle, result, score(["a", "y"])).ok, false);
 });
@@ -48,16 +49,31 @@ test("unknown outcomes, duplicates, incomplete scores and malformed membership f
   assert.throws(() => validateScore(oracle, bad), /invalid case outcome/);
   const duplicate = score(["a"]);
   duplicate.cases[1] = duplicate.cases[0];
-  assert.throws(() => validateScore(oracle, duplicate));
+  duplicate.counts = summarize(duplicate);
+  assert.throws(() => validateScore(oracle, duplicate), /duplicate result case/);
   const partial = score(["a"]);
   partial.cases.pop();
-  assert.throws(() => validateScore(oracle, partial));
+  partial.counts = summarize(partial);
+  assert.throws(() => validateScore(oracle, partial), /result case count changed/);
   assert.throws(() => validateFloor(oracle, floor(["a", "a"])));
   assert.throws(() => validateFloor(oracle, floor(["unknown"])));
   assert.throws(
     () => accumulateFloor({ oracle, sourceSha: "a".repeat(40), predecessors: [], scores: [] }),
     /predecessor/,
   );
+});
+test("accumulation rejects missing or malformed source SHAs", () => {
+  for (const sourceSha of [undefined, "bad", 42])
+    assert.throws(
+      () =>
+        accumulateFloor({
+          oracle,
+          sourceSha,
+          predecessors: [floor(["a"])],
+          scores: [score(["a", "x"])],
+        }),
+      /invalid floor source SHA/,
+    );
 });
 test("bootstrap cannot authorize a later or weaker source", () => {
   assert.throws(() => bootstrapFloor(oracle, "a".repeat(40), score(["a"])), /exact cut/);
