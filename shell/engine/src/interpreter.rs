@@ -1136,7 +1136,16 @@ fn execute(
             if context.cancel.is_cancelled() {
                 return Outcome::status(130);
             }
-            let preserve = matches!(command, Command::Pipeline(_) | Command::List(_));
+            let preserve = matches!(
+                command,
+                Command::Pipeline(_)
+                    | Command::List(_)
+                    | Command::Function(_)
+                    | Command::Compound(
+                        CompoundCommand::BraceGroup(_) | CompoundCommand::Case(_),
+                        _
+                    )
+            );
             let check_errexit = !context.ignore_errexit
                 && matches!(
                     &command,
