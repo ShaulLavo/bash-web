@@ -165,7 +165,7 @@ async fn shell_classifications(
     if found && !options.all {
         return Ok(true);
     }
-    if command.is_some_and(commands::Command::query_builtin) {
+    if commands::enabled(name, state.borrow().disabled_builtins) {
         classification(name, "builtin", options.mode, fds, context).await?;
         found = true;
     }

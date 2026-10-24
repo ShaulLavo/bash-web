@@ -21,10 +21,10 @@ fn baseline(names: &[&'static str]) -> Vec<&'static str> {
 
 const BUILTINS: &[&str] = &[
     ".", ":", "[", "break", "builtin", "cd", "command", "compgen", "complete", "compopt",
-    "continue", "declare", "dirs", "echo", "eval", "exec", "exit", "export", "false", "getopts",
-    "caller", "jobs", "kill", "let", "local", "popd", "printf", "pushd", "pwd", "read", "readonly",
-    "return", "set", "shift", "shopt", "source", "alias", "unalias", "test", "trap", "true",
-    "type", "typeset", "unset", "wait",
+    "continue", "declare", "dirs", "echo", "enable", "eval", "exec", "exit", "export", "false",
+    "getopts", "caller", "jobs", "kill", "let", "local", "popd", "printf", "pushd", "pwd", "read",
+    "readonly", "return", "set", "shift", "shopt", "source", "alias", "unalias", "test", "trap",
+    "true", "type", "typeset", "unset", "wait",
 ];
 
 #[test]
@@ -63,7 +63,7 @@ fn builtin_dispatch_covers_the_current_builtin_arms_not_the_old_is_builtin_set()
             ":", "true", "false", "echo", "printf", "read", "getopts", "caller", "trap", "export",
             "local", "readonly", "declare", "typeset", "cd", "pwd", "pushd", "popd", "dirs", "set",
             "shift", "shopt", "alias", "unalias", "exit", "return", "jobs", "wait", "kill",
-            "unset", "test", "[", "break", "continue", "compgen", "complete", "compopt"
+            "unset", "test", "[", "break", "continue", "compgen", "complete", "compopt", "enable"
         ])
     );
     // `command` was recognized by is_builtin but never had a builtins::run arm.
@@ -132,4 +132,26 @@ fn external_utilities_are_not_shell_commands() {
     for name in ["cat", "grep", "mkdir", "seq"] {
         assert!(lookup(name).is_none());
     }
+}
+
+#[test]
+fn enable_registry_masks_only_supported_builtin_slots() {
+    let mut disabled = 0;
+    for command in COMMANDS.iter().filter(|command| command.query_builtin()) {
+        assert_eq!(enabled_handler(command.name, disabled), command.handler());
+        assert!(set_enabled(command.name, &mut disabled, false));
+        assert!(!enabled(command.name, disabled));
+        assert_eq!(enabled_handler(command.name, disabled), None);
+    }
+    let before = disabled;
+    for unsupported in ["times", "cat", "if", "time", "unknown"] {
+        assert!(!set_enabled(unsupported, &mut disabled, true));
+        assert!(!enabled(unsupported, disabled));
+        assert_eq!(disabled, before);
+    }
+    for command in COMMANDS.iter().filter(|command| command.query_builtin()) {
+        assert!(set_enabled(command.name, &mut disabled, true));
+        assert_eq!(enabled_handler(command.name, disabled), command.handler());
+    }
+    assert_eq!(disabled, 0);
 }

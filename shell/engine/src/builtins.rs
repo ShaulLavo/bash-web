@@ -4,6 +4,7 @@ mod caller;
 mod completion;
 mod declarations;
 mod directories;
+mod enable;
 mod getopts;
 mod printf;
 mod read;
@@ -113,6 +114,11 @@ pub(crate) async fn run(
     match builtin {
         Builtin::Completion => {
             return completion::run(name, &args, state, fds, context, work).await;
+        }
+        Builtin::Enable => {
+            return enable::run(&args, &state, &fds, &context, work)
+                .await
+                .map(Outcome::status);
         }
         Builtin::Noop => {}
         Builtin::False => return Err(1),
