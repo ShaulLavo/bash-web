@@ -32,7 +32,6 @@ for (const { id, script, status, stdout } of fixture.cases)
 for (const operand of [
   "ref=",
   "ref",
-  "ref=array[0]",
   "ref=array[",
   "ref=array]",
   "ref=PIPESTATUS",

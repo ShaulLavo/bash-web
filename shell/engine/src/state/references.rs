@@ -316,27 +316,13 @@ fn amend_inverses(
 
 #[cfg(test)]
 mod tests {
+    use super::super::bindings_tests::finish;
     use super::*;
     use crate::{
         exec::{StorageBudget, Work},
         executor::Cancel,
     };
-    use futures::{FutureExt, task::noop_waker};
-    use std::{
-        future::Future,
-        task::{Context, Poll},
-    };
-    fn finish<T>(future: impl Future<Output = T>) -> T {
-        let mut future = Box::pin(future);
-        let waker = noop_waker();
-        let mut context = Context::from_waker(&waker);
-        for _ in 0..100_000 {
-            if let Poll::Ready(value) = future.as_mut().poll(&mut context) {
-                return value;
-            }
-        }
-        panic!("bounded reference work did not finish")
-    }
+    use futures::FutureExt;
     #[test]
     fn typed_reference_prefix_capacity_is_retained_until_state_drop() {
         let memory = StorageBudget::new(65_536);

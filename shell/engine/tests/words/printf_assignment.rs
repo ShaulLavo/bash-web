@@ -154,7 +154,7 @@ fn printf_assignment_nul_truncated_locals_keep_only_their_stored_capacity() {
         let state = rig.shell.state();
         let state = state.borrow();
         let value = &state.bindings()[name];
-        (value.len(), value.scalar().unwrap().capacity())
+        (value.len(), state.bindings().scalar_capacity(name).unwrap())
     });
     assert_eq!(sizes, [(1, 1), (0, 0)]);
     rig.shell.interrupt();

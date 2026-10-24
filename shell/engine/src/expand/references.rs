@@ -32,20 +32,46 @@ pub(crate) async fn select(
         )
     };
     let index = match subscript {
-        Some(subscript) => Some(arithmetic::evaluate(&subscript, state, cancel, max, work).await?),
+        Some(ref subscript) => {
+            Some(arithmetic::evaluate(subscript, state, cancel, max, work).await?)
+        }
         None => None,
     };
     let state = state.borrow();
     let index = match index {
-        Some(index) => Some(
-            state
-                .place_index(&name, index)
-                .ok_or_else(|| Error::Status(1))?,
-        ),
+        Some(index) => Some(resolve_index(
+            &state,
+            &name,
+            index,
+            subscript.as_deref(),
+            work,
+        )?),
         None => None,
     };
     let owner = state.reference_owner(&name);
     Ok(Place { name, index, owner })
+}
+
+fn resolve_index(
+    state: &State,
+    name: &str,
+    index: i64,
+    subscript: Option<&str>,
+    work: &mut Work,
+) -> Result<i64, Error> {
+    if let Some(index) = state.place_index(name, index) {
+        return Ok(index);
+    }
+    let subscript = subscript.unwrap_or("0");
+    work.admit_storage(
+        name.len()
+            .saturating_add(subscript.len())
+            .saturating_add(160),
+    )?;
+    Err(Error::BadArraySubscript {
+        name: format!("{name}[{subscript}]"),
+        line: None,
+    })
 }
 
 pub(crate) fn syntax(text: &str) -> Result<Reference<'_>, Error> {
@@ -79,7 +105,7 @@ pub(crate) async fn write(
     work: &mut Work,
 ) -> Result<(), Error> {
     if place.index.is_none() {
-        State::admit_assignment(state, &place.name, value.len(), cancel, work).await?;
+        State::admit_place_assignment(state, &place.name, value.len(), cancel, work).await?;
         work.admit_storage(place.name.len().saturating_mul(2).saturating_add(208))?;
         return state
             .borrow_mut()

@@ -1,5 +1,4 @@
 //! Prefix capacity belongs to State; amendment payloads belong to active slots.
-#[cfg(test)]
 use super::Binding;
 use super::{State, references::SavedBinding};
 use crate::exec::{Error, StorageAllocation, Work};
@@ -34,6 +33,7 @@ impl Prefixes {
     pub(super) fn len(&self) -> usize {
         self.len
     }
+    #[cfg(test)]
     pub(super) fn is_empty(&self) -> bool {
         self.len == 0
     }
@@ -95,6 +95,27 @@ impl Prefixes {
     pub(super) fn release_popped(&mut self) {
         self.slots[self.len].amendments = None;
     }
+    pub(super) fn reserve_last_effect(
+        &mut self,
+        name: &str,
+        owner: super::references::Owner,
+        bytes: usize,
+    ) -> Result<(), i32> {
+        let Some(slot) = self.slots[..self.len].last_mut() else {
+            return Ok(());
+        };
+        if !slot
+            .saved
+            .get(name)
+            .is_some_and(|saved| saved.owner == owner)
+        {
+            return Ok(());
+        }
+        if let Some(memory) = &mut slot.amendments {
+            memory.grow(bytes)?;
+        }
+        Ok(())
+    }
     pub(super) fn reserve_effect(
         &mut self,
         name: &str,
@@ -115,33 +136,30 @@ impl Prefixes {
         }
         Ok(())
     }
+    fn matching_values<'a>(
+        &'a mut self,
+        name: &'a str,
+        owner: super::references::Owner,
+    ) -> impl Iterator<Item = &'a mut Option<Binding>> {
+        self.slots[..self.len]
+            .iter_mut()
+            .filter_map(move |slot| slot.saved.get_mut(name))
+            .filter(move |saved| saved.owner == owner)
+            .map(|saved| &mut saved.value)
+    }
     pub(super) fn amend(
         &mut self,
         name: &str,
         owner: super::references::Owner,
         update: &super::BindingUpdate,
     ) {
-        for slot in &mut self.slots[..self.len] {
-            let Some(saved) = slot
-                .saved
-                .get_mut(name)
-                .filter(|saved| saved.owner == owner)
-            else {
-                continue;
-            };
-            saved.value = update.image(saved.value.as_ref());
+        for value in self.matching_values(name, owner) {
+            *value = update.image(value.as_ref());
         }
     }
     pub(super) fn clear(&mut self, name: &str, owner: super::references::Owner) {
-        for slot in &mut self.slots[..self.len] {
-            let Some(saved) = slot
-                .saved
-                .get_mut(name)
-                .filter(|saved| saved.owner == owner)
-            else {
-                continue;
-            };
-            saved.value = None;
+        for value in self.matching_values(name, owner) {
+            *value = None;
         }
     }
     pub(super) fn from_snapshot(saved: Vec<Saved>, state: &State) -> Result<Self, Error> {

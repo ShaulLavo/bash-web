@@ -1106,7 +1106,9 @@ async fn unset(
                 }
             } else {
                 admit_unset_target(&place.name, state, context, work).await?;
-                state.borrow_mut().unset_variable(&place.name)
+                state
+                    .borrow_mut()
+                    .unset_selected(&place.name, name == "IFS")
             }
         };
         match removed {

@@ -215,42 +215,8 @@ fn explicit_subscript(word: &Word) -> bool {
     let Some(raw) = word.raw.as_deref().filter(|raw| raw.starts_with('[')) else {
         return false;
     };
-    let mut quote = None;
-    let mut escaped = false;
-    let mut depth = 0usize;
-    for (offset, ch) in raw.char_indices() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        if ch == '\\' && quote != Some('\'') {
-            escaped = true;
-            continue;
-        }
-        if quote == Some(ch) {
-            quote = None;
-            continue;
-        }
-        if quote.is_some() {
-            continue;
-        }
-        if matches!(ch, '\'' | '"') {
-            quote = Some(ch);
-            continue;
-        }
-        if ch == '[' {
-            depth += 1;
-            continue;
-        }
-        if ch != ']' {
-            continue;
-        }
-        depth -= 1;
-        if depth != 0 {
-            continue;
-        }
-        let suffix = &raw[offset + 1..];
-        return suffix.starts_with('=') || suffix.starts_with("+=");
-    }
-    false
+    Reference::end(raw, 0).is_some_and(|end| {
+        let suffix = &raw[end..];
+        suffix.starts_with('=') || suffix.starts_with("+=")
+    })
 }

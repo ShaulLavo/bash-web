@@ -55,6 +55,9 @@ impl<'a> Bindings<'a> {
             .get(name)
             .map(|binding| BindingValue::borrowed(binding.as_str()))
     }
+    pub fn scalar_capacity(&self, name: &str) -> Option<usize> {
+        self.0.get(name)?.scalar().map(String::capacity)
+    }
     pub fn contains_key(&self, name: &str) -> bool {
         self.0.contains_key(name)
     }

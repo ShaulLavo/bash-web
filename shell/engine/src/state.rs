@@ -1018,6 +1018,34 @@ impl State {
             .admit_assignment_storage(name, value_bytes, work)?;
         snapshot_steps(bytes, cancel, work).await
     }
+    pub(crate) async fn admit_place_assignment(
+        state: &SharedState,
+        name: &str,
+        value_bytes: usize,
+        cancel: &Cancel,
+        work: &mut Work,
+    ) -> Result<(), Error> {
+        work.checkpoint(cancel).await?;
+        let bytes = {
+            let state = state.borrow();
+            let bytes = state.scalar_write_copy_bytes_at(name);
+            work.admit_storage(
+                bytes
+                    .saturating_add(value_bytes)
+                    .saturating_add(name.len().saturating_mul(2)),
+            )?;
+            work.admit_storage(snapshot_node_bytes::<Binding>()?)?;
+            if let Some(changes) = state.assignment_undo.0.upgrade() {
+                work.admit_storage(changes.borrow().scalar_effect_bytes(
+                    name,
+                    value_bytes,
+                    state.reference_owner(name),
+                ))?;
+            }
+            bytes
+        };
+        snapshot_steps(bytes, cancel, work).await
+    }
     pub(crate) fn admit_assignment_storage(
         &self,
         name: &str,
@@ -1029,7 +1057,11 @@ impl State {
         };
         work.admit_storage(self.scalar_write_copy_bytes(name)?)?;
         if let Some(changes) = self.assignment_undo.0.upgrade() {
-            work.admit_storage(changes.borrow().scalar_effect_bytes(target, value_bytes))?;
+            work.admit_storage(changes.borrow().scalar_effect_bytes(
+                target,
+                value_bytes,
+                self.reference_owner(target),
+            ))?;
         }
         if target == name {
             return Ok(());
@@ -1050,6 +1082,9 @@ impl State {
         let ScalarResolution::Target(target) = self.resolve_scalar_target(name) else {
             return Err(1);
         };
+        Ok(self.scalar_write_copy_bytes_at(target))
+    }
+    fn scalar_write_copy_bytes_at(&self, target: &str) -> usize {
         let live = self
             .variables
             .get(target)
@@ -1066,7 +1101,7 @@ impl State {
             .map_or(0, |value| {
                 value.storage_bytes().saturating_add(Binding::node_bytes())
             });
-        Ok(live.saturating_add(saved))
+        live.saturating_add(saved)
     }
     pub(crate) fn prefix_saved(&self, name: &str) -> bool {
         self.prefixes
@@ -1090,25 +1125,53 @@ impl State {
             return Err(1);
         }
         let value = self.case_value(&name, value)?;
+        let owner = self.reference_owner(&name);
         let changes = self.assignment_undo.0.upgrade();
-        if let Some(changes) = &changes {
-            let mut changes = changes.borrow_mut();
-            let bytes = changes.scalar_effect_bytes(&name, value.len());
+        let journal_bytes = changes.as_ref().map_or(0, |changes| {
             changes
-                .grow(bytes)
-                .map_err(|_| crate::exec::RESOURCE_STATUS)?;
-        }
-        self.reserve_local_value(
-            &name,
-            self.scalar_assignment_value_bytes(&name, value.len()),
+                .borrow()
+                .scalar_effect_bytes(&name, value.len(), owner)
+        });
+        let prefix_bytes = self
+            .prefixes
+            .last()
+            .and_then(|saved| saved.get(name.as_ref()))
+            .filter(|saved| saved.owner == owner)
+            .map_or(0, |saved| {
+                saved
+                    .value
+                    .as_ref()
+                    .map_or(0, Binding::storage_bytes)
+                    .saturating_add(value.len())
+                    .saturating_add(Binding::node_bytes())
+            });
+        let held = self.scalar_assignment_value_bytes(&name, value.len());
+        let local_growth = self.getopts_local_growth(&name, held)?;
+        let reservation = self.admit_temporary(
+            journal_bytes
+                .saturating_add(prefix_bytes)
+                .saturating_add(local_growth),
         )?;
+        drop(reservation);
         if let Some(changes) = &changes {
-            changes.borrow_mut().scalar_effect(&name, &value);
+            changes
+                .borrow_mut()
+                .grow(journal_bytes)
+                .unwrap_or_else(|_| panic!("aggregate scalar journal admission"));
+        }
+        self.prefixes
+            .reserve_last_effect(&name, owner, prefix_bytes)
+            .expect("aggregate scalar prefix admission");
+        self.reserve_local_value(&name, held)
+            .expect("aggregate scalar local admission");
+        if let Some(changes) = &changes {
+            changes.borrow_mut().scalar_effect(&name, &value, owner);
         }
         if let Some(saved) = self
             .prefixes
             .last_mut()
             .and_then(|frame| frame.get_mut(name.as_ref()))
+            .filter(|saved| saved.owner == owner)
         {
             let mut binding = saved.value.clone().unwrap_or_else(|| "".into());
             binding.set_scalar(value.clone());
@@ -1359,7 +1422,10 @@ impl State {
             ScalarResolution::Target(name) => name.to_owned(),
             ScalarResolution::Cycle | ScalarResolution::DepthExceeded => return Err(1),
         };
-        let removed = self.unset_binding(&name)?;
+        self.unset_selected(&name, explicit_ifs)
+    }
+    pub(crate) fn unset_selected(&mut self, name: &str, explicit_ifs: bool) -> Result<bool, i32> {
+        let removed = self.unset_binding(name)?;
         if explicit_ifs {
             self.refresh_star_separator();
         }
@@ -1963,16 +2029,25 @@ impl AssignmentChanges {
         }
         Ok(())
     }
-    fn scalar_effect_bytes(&self, name: &str, value_bytes: usize) -> usize {
+    fn scalar_effect_bytes(
+        &self,
+        name: &str,
+        value_bytes: usize,
+        owner: references::Owner,
+    ) -> usize {
         self.undo
             .iter()
-            .filter(|(target, _, _)| target == name)
+            .filter(|(target, _, saved)| target == name && *saved == owner)
             .fold(0usize, |bytes, (_, undo, _)| {
                 bytes.saturating_add(undo.scalar_effect_bytes(value_bytes))
             })
     }
-    fn scalar_effect(&mut self, name: &str, value: &str) {
-        for (_, undo, _) in self.undo.iter_mut().filter(|(target, _, _)| target == name) {
+    fn scalar_effect(&mut self, name: &str, value: &str, owner: references::Owner) {
+        for (_, undo, _) in self
+            .undo
+            .iter_mut()
+            .filter(|(target, _, saved)| target == name && *saved == owner)
+        {
             undo.scalar_effect(value);
         }
     }
@@ -2020,7 +2095,10 @@ impl State {
         if let BindingUndo::Restore(old) = undo {
             match old {
                 Some(old) => {
-                    self.variables.insert(name.to_owned(), old);
+                    *self
+                        .variables
+                        .get_mut(name)
+                        .expect("live rollback slot survives durable unset") = old;
                 }
                 None => {
                     self.variables.remove(name);
@@ -3505,12 +3583,7 @@ mod tests {
         );
         assert_eq!(state.borrow().parameter("x").len(), 100);
         drop(outer);
-        assert_eq!(
-            memory.observation().0,
-            state.borrow().prefix_capacity_bytes()
-        );
-        drop(state);
-        assert_eq!(memory.observation().0, 0);
+        bindings_tests::assert_state_drop_refunds(&memory, state);
     }
 
     #[test]
@@ -3537,12 +3610,7 @@ mod tests {
             before + state.borrow().prefix_capacity_bytes()
         );
         drop(outer);
-        assert_eq!(
-            memory.observation().0,
-            state.borrow().prefix_capacity_bytes()
-        );
-        drop(state);
-        assert_eq!(memory.observation().0, 0);
+        bindings_tests::assert_state_drop_refunds(&memory, state);
     }
     #[test]
     fn review_readonly_local_redeclaration_keeps_original_value_and_memory_ticket() {
