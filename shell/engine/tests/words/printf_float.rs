@@ -1,6 +1,46 @@
 use super::{Limits, Rig, printf};
 
 #[test]
+fn printf_float_decimal_order_overflow_is_range_error() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("printf '[%g|%g]' 9e2147483647 1e2147483647"), 1);
+    assert_eq!(rig.output.bytes(), b"[inf|inf]");
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: printf: 9e2147483647: Numerical result out of range\n/usr/bin/bash: printf: 1e2147483647: Numerical result out of range\n"
+    );
+}
+
+#[test]
+fn printf_float_no_conversion_negative_zero_is_unsigned() {
+    for (value, expected, status, expected_errors) in [
+        (
+            "-",
+            "0.000000",
+            1,
+            "/usr/bin/bash: printf: -: invalid number\n",
+        ),
+        (
+            "-.",
+            "0.000000",
+            1,
+            "/usr/bin/bash: printf: -.: invalid number\n",
+        ),
+        ("-0", "-0.000000", 0, ""),
+    ] {
+        let rig = Rig::new(Limits::default());
+        rig.variable("number", value);
+        assert_eq!(rig.run("printf '[%f]' \"$number\""), status, "{value}");
+        assert_eq!(
+            rig.output.bytes(),
+            format!("[{expected}]").as_bytes(),
+            "{value}"
+        );
+        assert_eq!(rig.errors.bytes(), expected_errors.as_bytes(), "{value}");
+    }
+}
+
+#[test]
 fn printf_float_matches_recorded_bash() {
     let fixture: serde_json::Value = serde_json::from_str(include_str!(
         "../../../../scripts/fixtures/shell-printf-float.json"
