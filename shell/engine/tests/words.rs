@@ -2160,8 +2160,11 @@ fn scalar_operators_work_in_assignments_declarations_command_names_and_redirects
 
 #[test]
 fn selected_unsupported_operands_and_operator_targets_fail_without_dispatch() {
+    check(
+        r#"args ${u:-$@}; set -- a "b c"; args ${u:-$@}; args "${u:-$@}""#,
+        &[&[], &["a", "b", "c"], &["a", "b c"]],
+    );
     for source in [
-        "args ${u:-$@}",
         "args ${u:-${PIPESTATUS[@]}}",
         "args ${a[0]-x}",
         "args ${1-x}",
@@ -2960,11 +2963,10 @@ fn assignment_and_error_operands_are_lazy_including_unsupported_syntax() {
     assert_eq!(*rig.calls.borrow(), &[vec!["diagnostic"]]);
     assert_eq!(rig.errors.bytes(), b"/usr/bin/bash: line 1: u: failure\n");
     assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
-    let source = "args ${u:=$@}";
-    let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run(source), 2, "{source}");
-    assert!(rig.calls.borrow().is_empty());
-    assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
+    check(
+        r#"args ${u:=$@}; args "${u+x}" "$u"; set -- a "b c"; unset u; args "${u:=$@}" "$u""#,
+        &[&[], &["x", ""], &["a b c", "a b c"]],
+    );
 }
 
 #[test]
@@ -4041,6 +4043,8 @@ mod transformation;
 mod printf_escaped_fields;
 #[path = "words/printf_fields.rs"]
 mod printf_fields;
+#[path = "words/printf_float.rs"]
+mod printf_float;
 #[path = "words/printf_integers.rs"]
 mod printf_integers;
 #[path = "words/printf_unsigned.rs"]
@@ -4386,6 +4390,8 @@ mod getopts;
 
 #[path = "words/declarations.rs"]
 mod declarations;
+#[path = "words/local_inherit.rs"]
+mod local_inherit;
 #[path = "words/select.rs"]
 mod select;
 

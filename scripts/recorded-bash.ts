@@ -106,7 +106,10 @@ function recordReader(script: string, env: NodeJS.ProcessEnv): ReaderCase {
   }
 }
 
-export function assertReaderOutput(actual: WaffleCaseResult, expected: ReaderCase) {
+export function assertReaderOutput(
+  actual: WaffleCaseResult,
+  expected: Pick<ReaderCase, "status" | "stdout">,
+) {
   assert.equal(actual.crash, undefined);
   assert.equal(actual.outputLimit, undefined);
   assert.equal(actual.status, expected.status);

@@ -662,6 +662,7 @@ async fn set(
             errexit: state.errexit,
             monitor: state.monitor,
             noglob: state.noglob,
+            noexec: state.noexec,
             functrace: state.functrace,
             errtrace: state.errtrace,
         }
@@ -704,6 +705,7 @@ async fn set(
     state.errexit = flags.errexit;
     state.monitor = flags.monitor;
     state.noglob = flags.noglob;
+    state.noexec = flags.noexec && !state.interactive;
     state.functrace = flags.functrace;
     state.errtrace = flags.errtrace;
     Ok(Outcome::status(0))
@@ -718,6 +720,7 @@ struct SetFlags {
     errexit: bool,
     monitor: bool,
     noglob: bool,
+    noexec: bool,
 }
 
 fn set_option(option: &str, enabled: bool, flags: &mut SetFlags) -> Result<(), i32> {
@@ -727,6 +730,7 @@ fn set_option(option: &str, enabled: bool, flags: &mut SetFlags) -> Result<(), i
         "errexit" => flags.errexit = enabled,
         "monitor" => flags.monitor = enabled,
         "noglob" => flags.noglob = enabled,
+        "noexec" => flags.noexec = enabled,
         "functrace" => flags.functrace = enabled,
         "errtrace" => flags.errtrace = enabled,
         _ => return Err(2),
@@ -750,6 +754,7 @@ async fn set_short_options(
             b'e' => flags.errexit = enabled,
             b'm' => flags.monitor = enabled,
             b'f' => flags.noglob = enabled,
+            b'n' => flags.noexec = enabled,
             b'T' => flags.functrace = enabled,
             b'E' => flags.errtrace = enabled,
             _ => return Err(2),
@@ -773,6 +778,7 @@ async fn declarations(
     let DeclarationOptions {
         print,
         function_names,
+        inherit,
         nameref,
         readonly,
         exported,
@@ -783,6 +789,9 @@ async fn declarations(
     }
     if print {
         return declarations::print(name, args, state, fds, context, work).await;
+    }
+    if inherit && (nameref || case.specified()) {
+        return Err(2);
     }
     if nameref && (readonly || exported || case.specified()) {
         return Err(2);
@@ -823,11 +832,12 @@ async fn declarations(
         }
         let local = name == "local"
             || matches!(name, "declare" | "typeset") && state.borrow().in_function_scope();
-        let target = if append && local && !nameref && state.borrow().is_current_local(&key) {
-            declarations::local_append_target(key, state, context, work).await
-        } else {
-            Ok(key)
-        };
+        let target =
+            if append && local && !nameref && !inherit && state.borrow().is_current_local(&key) {
+                declarations::local_append_target(key, state, context, work).await
+            } else {
+                Ok(key)
+            };
         if target == Err(1) {
             status = 1;
             continue;
@@ -850,8 +860,16 @@ async fn declarations(
         }
         let value = if append {
             Some(
-                declarations::append_scalar(&key, value.ok_or(2)?, local, state, context, work)
-                    .await?,
+                declarations::append_scalar(
+                    &key,
+                    value.ok_or(2)?,
+                    local,
+                    inherit,
+                    state,
+                    context,
+                    work,
+                )
+                .await?,
             )
         } else {
             value
@@ -870,7 +888,18 @@ async fn declarations(
         } else {
             key
         };
-        let result = if case.specified() {
+        if inherit && value.is_none() && !state.borrow().is_current_local(&key) {
+            let bytes = state
+                .borrow()
+                .declaration_append_base(&key, true, true)
+                .map_or(0, str::len);
+            scan_bytes(bytes, context, work).await?;
+        }
+        let result = if inherit {
+            state
+                .borrow_mut()
+                .declare_inherited_local(key.clone(), value, work)
+        } else if case.specified() {
             state
                 .borrow_mut()
                 .declare_case(key.clone(), value, local, case, work)
@@ -916,6 +945,7 @@ fn declaration_attributes(
 struct DeclarationOptions {
     print: bool,
     function_names: bool,
+    inherit: bool,
     nameref: bool,
     readonly: bool,
     exported: bool,
@@ -956,6 +986,7 @@ async fn declaration_option(
         match flag {
             b'p' if enabled && name != "local" => flags.print = true,
             b'F' if enabled && name != "local" => flags.function_names = true,
+            b'I' if enabled && name == "local" => flags.inherit = true,
             b'n' if enabled => flags.nameref = true,
             b'r' if enabled => flags.readonly = true,
             b'x' if enabled => flags.exported = true,
