@@ -5463,7 +5463,7 @@ mod function_measurements {
         {
             let state = session.state.try_borrow_mut().unwrap();
             assert_eq!(state.pipeline_status(), [1, 0]);
-            let view = state.declaration("PIPESTATUS").unwrap().unwrap();
+            let view = state.declaration("PIPESTATUS").unwrap();
             assert!(view.readonly && view.exported);
         }
         assert!(session.core.execution_storage.observation().0 >= 13);
