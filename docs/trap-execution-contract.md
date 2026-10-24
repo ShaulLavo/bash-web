@@ -2,143 +2,92 @@
 
 ## Caller usage
 
-Trap execution is one lifecycle seam around the existing command reader. The
-caller should not decide whether a trap is suppressed, which status wins, or
-whether a nested scope owns `EXIT`:
-
 ```rust
-let command = lifecycle.before_command(command, &context)?;
-let outcome = command_body(command, state.clone(), fds, context.clone()).await;
-let outcome = lifecycle.after_command(outcome, &state, &context).await?;
+// Sketch. Planning is synchronous; only an executable action gets a reader.
+let plan = traps::before(&command, &state, &context)?;
+let decision = traps::enter(plan, &state, &fds, &context).await;
+let outcome = execute_or_transfer(decision, command, ...).await;
+let outcome = traps::after(outcome, failure_policy, ...).await;
+// Function/source owners call returning(...) before their existing frame restores.
+// Each isolated supervisor calls completing(...) before releasing its descriptors.
+// Persistent embedders call Session::finish(status) at actual EOF, not per start().
 ```
 
-The function and source callers use the same owner, while their frames are
-still live:
+Status: awaiting parent acceptance before bulk handler code. This replaces the
+incorrect root-only EXIT rule in the first draft. The stored bindings currently
+execute no actions. The study's 173 candidates and 130–170 estimate are not gains.
 
-```rust
-let outcome = execute_function_body(...).await;
-let outcome = lifecycle.leave_boundary(Boundary::Function, outcome, ...).await?;
-drop(function_frame);
-```
+## Ownership and transitions
 
-The root reader is the only session owner:
+Use a private `interpreter/traps.rs` module, the existing `Outcome`/`Flow`, and a
+small event mask copied in `Context`. A synchronous plan captures `Rc<Action>`
+only for an executable binding. No handler action, saved status vector, or trap
+reader belongs in the ordinary command future. Registration retains action
+storage; dispatch never clones a value-level `State`. Isolated children continue
+to use admitted `State::snapshot`; `SharedState` clones only share a handle.
 
-```rust
-let outcome = reader::run(...).await;
-let outcome = lifecycle.finish_session(outcome, ...).await?;
-```
+| Boundary | Contract |
+|---|---|
+| DEBUG | Before eligible simple, arithmetic/test and frozen loop sites. A pipeline emits each outer stage event in its parent launcher, using parent FDs before expansion/dispatch. An already-run marker applies only to that outer command, not nested bodies. |
+| DEBUG result | Normal mode ignores ordinary handler status. Under extdebug, nonzero means Skip; status 2 requests return only at an active function/source boundary. Explicit exit transfers. Represent Execute/Skip/Transfer, not an integer convention at callers. |
+| ERR | Ordinary nonzero failure uses the same structural eligibility as errexit, including conditions, negation, AND/OR lists and pipeline stages, even with `-e` off. Dispatch ERR before applying the captured errexit decision. Redirect/setup failure shares that classifier. Avoid aggregate/stage duplicates. |
+| RETURN | Function/source completion runs while locals, positionals and call stack remain live, before the existing restore/drop. Eval completion alone is not RETURN. Restore scoped DEBUG/RETURN bindings; ERR changes use the function-scope merge policy frozen by `trap-scope:81`. |
+| EXIT | Once per executing shell environment. Inherited parent EXIT stays query-only; a child-installed handler runs at that child's completion. Open → Running → Finished prevents nested exit and later EOF from repeating the event. Shared lastpipe is not another environment. |
+| actual EOF | Add idempotent `Session::finish(status)`. Explicit exit and terminating fatal outcomes use the same completion owner; reject later submissions. Migrate runtime `-c`, both interactive EOF paths and compat together. Keep executor/drains alive until completion finishes, then shutdown. |
+| child completion | Subshell, background, isolated pipeline, command/process substitution owners finish language execution and EXIT before fd release, capture-EOF wait, scope/group reap. Release writers before waiting for capture EOF. |
 
-These calls are the proposed touch points. Ordinary commands with no matching
-trap take the value-only path; only a matching action enters nested evaluation.
+Minimal private choices are `Event`, `Mask`, `DebugDecision`, a captured action
+plan and an environment completion gate. Keep policy in that module, with no
+public event bus, general lifecycle framework, signal synthesis or async Drop.
 
-## Problem and evidence
+Before handler evaluation publish trigger `$?` and the original complete
+`PIPESTATUS`. Admit its saved copy only on the action path. Normal completion
+restores both; explicit return/exit transfers preserve deliberate flow/status.
+Capture the action before running it, so replacing/resetting that binding changes
+future events only. Mask same-kind reentry in the executing context. Function
+trap restoration and status restoration must survive a dropped handler future.
 
-Main stores trap bindings and inherited snapshots, but action lookup is used by
-the printing/query path only. The command path currently checks `ignore_errexit`
-and `state.errexit` in `execute`, while function/source restoration is owned by
-`FunctionFrame` and `SourceFrame`. Adding four unrelated fixes would duplicate
-those policies and make status, cancellation, and snapshot behavior drift.
+Admission before dispatch covers source/parse/reader/task storage, saved status
+capacity and dispatch-owned descriptor references. Failure at entry performs no
+handler side effects and returns typed Resource. This is not a transaction for
+the whole handler: later resource failure preserves completed user side effects,
+but unwinds structural frames and refunds owned storage. Cancellation admits no
+new handler and never evaluates user code during Drop; existing owners still
+cancel, close, drain and reap. No whole-handler rollback is promised.
 
-The design is grounded in main `9fc1cdbd907ab376e61039331b43b379addea754`.
-`interpreter.rs:1119-1161` is the command boundary and applies errexit after
-`command_body`; `interpreter.rs:1270-1303` creates pipeline-stage contexts;
-`interpreter.rs:2003-2062` snapshots and cancels subshells;
-`interpreter.rs:800-825` owns the root exit request. `state.rs:465-474` copies
-`traps.inherited()` into snapshots. `state/traps.rs:1-2` explicitly records
-that bindings are registration-only, and `:46-63` makes inherited mutation
-copy-on-write. `interpreter.rs:3276-3404` keeps the function frame live until
-its body outcome is known; `interpreter/source.rs:74-99` restores source state
-before normalizing `return`. The study found 173 potential trap cases and
-estimated 130–170 eventual cases; those are opportunity estimates, not gains.
+## Evidence and acceptance
 
-## Contract
+Direct anchors at `9fc1cdb`: `interpreter.rs:1119-1161` owns command/errexit;
+`:1270-1303` pipeline contexts; `:2003-2062` subshell snapshots;
+`:800-825` submission completion; `state.rs:465-474` inherited trap snapshots;
+`state/traps.rs:35-96` visibility/reset; `interpreter/source.rs:74-99` restore;
+`interpreter.rs:3276-3404` function-frame lifetime. Completion ownership and the
+small planning API above are design inferences, not existing implementation.
 
-`TrapLifecycle` owns four policies: DEBUG eligibility, ERR suppression,
-function/source RETURN ordering, and root-only EXIT-once. It receives the
-existing `Context`, `State`, `Outcome`, reader location, and descriptors; it
-does not own process signals or rewrite the executor.
+The first executable scaffold is `shell/engine/tests/trap_lifecycle.rs`, copied
+from unchanged frozen oracle rows, not a new Bash recording. It spans Oils EXIT,
+Brush child EXIT/query/background/DEBUG, and Bashkit ERR suppression plus live
+function/source RETURN. Missing behavior is explicitly ignored pending this
+contract and can be run with `--ignored`; passing suppression controls stay on.
+Next causal checks cover handler-replaces-handler, nested return/exit, lastpipe,
+original PIPESTATUS, pre-entry admission failure, cancellation while blocked,
+post-side-effect resource failure, snapshot isolation and final refunds.
 
-- DEBUG runs only at the command sites frozen by the cross-family matrix. It
-  runs before the target command body, is skipped after cancellation, and is
-  suppressed while the same DEBUG action is running.
-- ERR is considered only for a normal, status-bearing non-zero outcome. Its
-  suppression bit is derived from the same `ignore_errexit`/condition/pipeline
-  context that controls errexit; the implementation must not maintain a second
-  hand-written suppression tree. Capture the errexit decision before running
-  ERR, then apply it after ERR returns.
-- A normal handler status never replaces the triggering command, pipeline, or
-  boundary status. Before dispatch, publish the trigger status; after dispatch,
-  restore the trigger status and the complete pipeline vector. Explicit
-  `return` or `exit` from a handler changes control flow deliberately and
-  bypasses re-entry of the same boundary.
-- RETURN dispatches while the function or source frame is live. The handler
-  sees that frame's positional/stack view; frame drop still restores locals,
-  positionals, call-stack entries, and retained allocations. Nested function
-  returns produce nested RETURN events; a source boundary is separate.
-- EXIT is dispatched once by the root session owner, after the root reader has
-  its final outcome and before final group completion. Child snapshots may
-  retain/query EXIT registration, but child completion does not fire the root
-  EXIT event. Cancellation skips new trap work and preserves the existing
-  cancellation status.
-- Each dispatch captures an `Rc<Action>` before evaluating its text. A handler
-  that changes its own trap changes future events only. A value-level
-  suppression mask prevents same-event recursion; it is copied in `Context` and
-  adds no heap object to the no-handler path.
-- Action storage remains registration-owned. Dispatch admits nested evaluation
-  before side effects; failed admission runs no partial handler and returns a
-  typed resource outcome. Temporary execution allocations refund on drop.
-  `Rc<Action>` storage refunds only after the final parent/child reference is
-  gone, preserving the existing `state/traps.rs:239-257` behavior.
-- Snapshot visibility is the existing trap snapshot policy, not a new shared
-  event queue. Functions and sources use their live state; isolated children
-  use the copied, inherited trap set; process-substitution resets remain the
-  rules already encoded in `Traps::process_substitution`.
+Unknowns to freeze before claiming support: cross-kind reentry, children created
+inside handlers, nested trap mutation/explicit RETURN transfers, top-level
+extdebug status 2, EXIT visibility after function unwind, and noexec. The current
+engine has no noexec execution gate. Do not infer these answers from the small
+matrix or claim Bash command/location metadata already exists.
 
-The minimal domain shape is:
+## Coordinated touch set
 
-```rust
-enum TrapEvent { Debug, Err, Return, Exit }
-enum Boundary { Function, Source }
-struct TrapMask(u8); // value copied in Context
-struct Trigger { event: TrapEvent, status: i32, pipeline: PipelineStatus }
-struct TrapResult { outcome: Outcome, explicit_flow: bool }
-```
-
-The public seam is four methods, not a public trap storage schema. `TrapResult`
-keeps handler control flow distinct from ordinary handler status, so the
-interpreter can preserve the original trigger without guessing from an integer.
-
-## Frozen causal acceptance scaffold
-
-Freeze scripts and expected traces across Oils, Brush, and Bashkit before bulk
-implementation. Every row must record stdout, stderr, final status, event
-order, and pipeline status; a pass in one family is not a contract for the
-others.
-
-| Row | Causal question | Required trace |
-|---|---|---|
-| DEBUG simple/pipeline | Which command sites are eligible, including non-last stages? | One DEBUG event per accepted site, no aggregate duplicate |
-| ERR condition/`!`/pipeline | Does ERR use the existing errexit suppression boundary? | Suppressed exactly where errexit is ignored; fires once otherwise |
-| function/source RETURN | Is the frame visible and restored after dispatch? | Handler sees live frame; nested boundaries order inside-out |
-| EXIT root/child | Who owns termination and how many times? | One root EXIT, no child duplicate |
-| handler mutation | Does the current event use the captured action? | Old action runs now; new action runs next event |
-| status/pipeline | Can a handler overwrite `$?`/`PIPESTATUS` accidentally? | Trigger status/vector restored; explicit flow is the only override |
-| cancellation | Does Ctrl+C stop new trap work? | No newly admitted handler; existing cancel status survives |
-| resource admission | Is dispatch atomic? | No partial handler output/effects; typed resource result; refunds at unwind |
-| snapshot isolation | Can parent mutation rewrite a child action? | Child uses its captured binding; child mutation does not mutate parent |
-| noexec | What is observable without command execution? | Freeze DEBUG/ERR behavior explicitly before implementing the gate; no current-main claim |
-
-## Touch set and ownership
-
-The first implementation should touch only the lifecycle seam and its tests:
-`interpreter.rs` for the four calls and precomputed errexit/status snapshots,
-`interpreter/source.rs` for source-boundary ordering, `state/traps.rs` only for
-execution-facing binding capture if needed, and a focused lifecycle test module
-under `shell/engine/src/interpreter/`. Keep `builtins/trap.rs` registration
-semantics unchanged. Do not touch package manifests, locks, fixture identity,
-CI/scripts, versions, or closed PR78 metadata in this layer. Signal delivery,
-noexec implementation, and a general runtime rewrite are outside this contract.
-
-The direct constraints above are source facts. The root-only EXIT rule,
-handler-flow merge, same-event suppression mask, and noexec row are design
-constraints to validate against the frozen family matrix before broad code lands.
+This draft touches only this note and the new integration test file. Planned
+source regions are Context/command dispatch/failure policy/function calls/child
+supervisors in `interpreter.rs`, `interpreter/source.rs`, `interpreter/eval.rs`,
+`state/traps.rs`, `runtime_main.rs` and `compat.rs`. Trap status access, if needed,
+is a narrow status/PIPESTATUS accessor in `state.rs`; no new State/Snapshot fields
+or initializer changes are currently planned. Variable lookup/storage/prefix,
+assignment helpers, bindings and typed references remain with their owner.
+Package/locks/versions, fixture identity, CI and generated evidence are untouched.
+EOF callers must migrate together; separate handler fixes and root-only EXIT
+are rejected because they leave a wrong owner at real termination.
