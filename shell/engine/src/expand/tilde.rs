@@ -255,3 +255,16 @@ pub(crate) async fn assignment(
 ) -> Result<String, Error> {
     super::scalar_word(word, state, cancel, max, max_raw, Context::Assignment, work).await
 }
+
+pub(super) fn operand<'a>(
+    expansion: &'a mut Expansion<'_>,
+    state: &'a SharedState,
+) -> crate::exec::ResultFuture<'a, ()> {
+    expansion.part_frame(move |expansion| async move {
+        State::admit_scalar_access(state, "HOME", expansion.cancel, expansion.work).await?;
+        let home = home_snapshot(expansion, state)?.ok_or(2)?;
+        let result = expansion.segment(&home, Protection::All, true).await;
+        expansion.work.release_storage(home.len());
+        result
+    })
+}
