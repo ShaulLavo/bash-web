@@ -20,7 +20,8 @@ execute no actions. The study's 173 candidates and 130–170 estimate are not ga
 ## Ownership and transitions
 
 Use a private `interpreter/traps.rs` module, the existing `Outcome`/`Flow`, and a
-small event mask copied in `Context`. A synchronous plan captures `Rc<Action>`
+small event mask and outer-command DEBUG marker in `Context`. A synchronous
+plan captures `Rc<Action>`
 only for an executable binding. No handler action, saved status vector, or trap
 reader belongs in the ordinary command future. Registration retains action
 storage; dispatch never clones a value-level `State`. Isolated children continue
@@ -37,7 +38,8 @@ to use admitted `State::snapshot`; `SharedState` clones only share a handle.
 | child completion | Subshell, background, isolated pipeline, command/process substitution owners finish language execution and EXIT before fd release, capture-EOF wait, scope/group reap. Release writers before waiting for capture EOF. |
 
 Minimal private choices are `Event`, `Mask`, `DebugDecision`, a captured action
-plan and an environment completion gate. Keep policy in that module, with no
+plan and a completion gate owned by Core for the root or its child supervisor.
+Keep policy in that module, with no
 public event bus, general lifecycle framework, signal synthesis or async Drop.
 
 Before handler evaluation publish trigger `$?` and the original complete
@@ -84,9 +86,9 @@ matrix or claim Bash command/location metadata already exists.
 This draft touches only this note and the new integration test file. Planned
 source regions are Context/command dispatch/failure policy/function calls/child
 supervisors in `interpreter.rs`, `interpreter/source.rs`, `interpreter/eval.rs`,
-`state/traps.rs`, `runtime_main.rs` and `compat.rs`. Trap status access, if needed,
-is a narrow status/PIPESTATUS accessor in `state.rs`; no new State/Snapshot fields
-or initializer changes are currently planned. Variable lookup/storage/prefix,
+`state/traps.rs`, `runtime_main.rs` and `compat.rs`. Reuse the existing
+State status/PIPESTATUS accessors; no new State/Snapshot fields, initializers or
+clone-caller changes are planned. Variable lookup/storage/prefix,
 assignment helpers, bindings and typed references remain with their owner.
 Package/locks/versions, fixture identity, CI and generated evidence are untouched.
 EOF callers must migrate together; separate handler fixes and root-only EXIT
