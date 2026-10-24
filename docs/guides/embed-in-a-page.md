@@ -27,7 +27,7 @@ Waffle is not on npm. bash-web needs this exact commit of [ShaulLavo/waffle](htt
 250967060c0268950266fc5afb85be2170fb8ed3
 ```
 
-It is Waffle `0.0.67`. A different revision is not supported. Waffle's own docs install it as a Git dependency and trust its build step, because its `prepare` script builds the Node entry points and runs on Bun. In your app's `package.json`:
+It is Waffle `0.0.90`. A different revision is not supported. Waffle's own docs install it as a Git dependency and trust its build step, because its `prepare` script builds the Node entry points and runs on Bun. In your app's `package.json`:
 
 ```json
 {
