@@ -12,7 +12,7 @@ As compatibility grew, two problems appeared in the engine. Its modules imported
 Enforce a module layering and split the commands out.
 
 - **Layers.** Lower layers never import higher ones: `executor`, then `exec`, then `state` and `parse`, then `commands`, then the features (`expand`, `arithmetic`, `builtins`, `interpreter`). The features may import each other where the graph lists it. `npm run check:layers` scans every engine source and fails when a violation count rises. The graph is `allowedGraph` in `scripts/check-layers.ts`.
-- **One core build.** The core keeps every shell-language feature, including the `[[ =~ ]]` matcher, arrays, and all builtins. There are no Full and Lite presets. The owner retired that idea.
+- **One core build.** The core keeps every shell-language feature, including the `[[ =~ ]]` matcher, arrays, and all builtins. There are no Full and Lite presets. That idea was retired.
 - **Utilities as programs.** `cat`, `grep`, `mkdir`, and `seq` move, with unchanged behavior, to `shell/utilities`. Each is a separately linked WASM program with its own install entry, `bash-web/utilities/<name>`. A command that is not installed fails with status 127.
 
 New external commands follow the same rule. They are their own program with their own install entry, never a stand-in in the engine. New language features join the core.
