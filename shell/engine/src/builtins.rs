@@ -716,7 +716,7 @@ async fn set(
     state.errexit = flags.errexit;
     state.monitor = flags.monitor;
     state.noglob = flags.noglob;
-    state.noexec = flags.noexec;
+    state.noexec = flags.noexec && !state.interactive;
     state.xtrace = flags.xtrace;
     state.functrace = flags.functrace;
     state.errtrace = flags.errtrace;
