@@ -2212,5 +2212,32 @@
       "scripts/fixtures/shell-array-slicing.json"
     ],
     "implementation": "Sparse numeric offsets seek through the existing borrowed state reader. Length counts present entries, not holes. Empty sources and out-of-range offsets skip bound arithmetic. Selected strings are admitted before copying and emitted through shared quote/list/IFS logic with cooperative cancellation and command-wide limits. Scalar bindings keep existing text slicing. PIPESTATUS reads its existing producer. No indexed state mutation or durable producer publication API changes."
+  },
+  "shellScalarIntegers": {
+    "classification": "Original plain scalar integer metadata and assignment adapters. Reuses the existing upstream-derived arithmetic evaluator unchanged. No new upstream implementation copied or adapted.",
+    "oracle": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "implementationDestinations": [
+      "shell/engine/src/state/integer.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/state/declarations.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/declarations.rs",
+      "shell/engine/src/interpreter/integer.rs",
+      "shell/engine/src/interpreter.rs"
+    ],
+    "strategy": "State owns integer metadata, supported scalar classification, lifecycle and publication. The interpreter evaluates already expanded scalar values through arithmetic::evaluate_literal, then retains the existing State assignment frame and declaration write paths.",
+    "fixture": {
+      "path": "scripts/fixtures/shell-scalar-integer.json",
+      "sha256": "909d2b04ccff2429e1ca72bbd403bbdb661760a8835a0c5ec099df8bb9e7fdb5",
+      "sourceOracleSha256": "90c9ddafface903c3af1eee3039c949d6cb5062cf2ee17f64010b6431b772b06"
+    },
+    "deferred": [
+      "integer namerefs and local declarations",
+      "temporary command prefixes, integer append and arrays",
+      "read and printf integer destinations",
+      "nounset and arithmetic-error recovery",
+      "integer parameter-transform rendering"
+    ],
+    "documentation": "docs/declaration-printing.md"
   }
 }

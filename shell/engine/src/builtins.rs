@@ -759,12 +759,16 @@ async fn declarations(
         readonly,
         exported,
         case,
+        integer,
     } = declaration_options(name, &mut args, context, work).await?;
     if function_names {
         return declarations::function_names(args, state, fds, context, work).await;
     }
     if print {
         return declarations::print(name, args, state, fds, context, work).await;
+    }
+    if integer.is_some() && (nameref || case.specified() || state.borrow().in_function_scope()) {
+        return Err(2);
     }
     if nameref && (readonly || exported || case.specified()) {
         return Err(2);
@@ -788,7 +792,7 @@ async fn declarations(
         if extended {
             work.admit_storage(arg.len()).map_err(error_status)?;
         }
-        let (key, value) = arg
+        let (key, mut value) = arg
             .split_once('=')
             .map(|(key, value)| (key.to_owned(), Some(value.to_owned())))
             .unwrap_or((arg, None));
@@ -827,6 +831,21 @@ async fn declarations(
         } else {
             key
         };
+        let integer_result = integer.map_or(Ok(()), |enabled| {
+            state.borrow_mut().declare_integer(&key, enabled, work)
+        });
+        if declaration_status(integer_result)? != 0 {
+            status = 1;
+            readonly_diagnostic(name, &key, fds, context).await?;
+            continue;
+        }
+        if !local && let Some(text) = value {
+            value = Some(
+                crate::interpreter::integer::coerce(&key, text, state, context, work)
+                    .await
+                    .map_err(error_status)?,
+            );
+        }
         let result = if case.specified() {
             state
                 .borrow_mut()
@@ -877,6 +896,7 @@ struct DeclarationOptions {
     readonly: bool,
     exported: bool,
     case: crate::state::CaseOptions,
+    integer: Option<bool>,
 }
 
 async fn declaration_options(
@@ -917,6 +937,7 @@ async fn declaration_option(
             b'r' if enabled => flags.readonly = true,
             b'x' if enabled => flags.exported = true,
             b'l' | b'u' => flags.case.flag(flag == b'u', enabled),
+            b'i' if name != "local" => flags.integer = Some(enabled),
             _ => return Err(2),
         }
     }

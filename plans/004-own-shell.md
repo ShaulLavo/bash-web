@@ -3374,3 +3374,38 @@ offsets only under an independently assigned bounded family owner. Preserve
 retained-source ownership, parser admission and cancellation. Late extdebug
 argument initialization and indexed compound initializers remain with their
 existing owners and are not duplicated here.
+
+## Scalar integer readonly redeclaration follow-up, 2026-10-24
+
+Status: Approved, deferred beyond PR #89's bounded plain scalar integer family.
+Owner: VARIABLES declaration/builtin family. Independent review
+`/work/reports/wave-20261022/shell/review89-scalar-integer-r1.md` approved
+`fadf53659ba3ac2a4b7a7abe4b985d62d3a5f365` and reproduced this in native
+and production Waffle:
+
+```bash
+declare -ir r=7
+declare r=8 good=yes
+echo status:$?
+declare -p r good
+```
+
+The second command silently returns 2 and drops later operands. Observed stdout
+is `status:2\ndeclare -ir r="7"\n`, stderr is
+`declare: good: not found\n`, and final script status is 1. The existing
+readonly-declaration contract requires stdout
+`status:1\ndeclare -ir r="7"\ndeclare -- good="yes"\n`, stderr
+`declare: r: readonly variable\n`, and final status 0. The unchanged
+noninteger control proves status-1 handling and operand continuation.
+
+In `builtins.rs::declarations`, integer coercion returns a Readonly fault,
+but `map_err(error_status)?` maps it to 2 and exits before the ordinary
+readonly diagnostic and continuation path. Route that fault through the
+existing handling. This is later declaration reassignment, not later
+standalone assignment, and no previously passing base case was lost.
+Reproduce on current native and production Waffle before repair, retain
+all streams/status, and preserve State ownership, arithmetic admission,
+rollback and cancellation. Do not expand into integer arrays, namerefs,
+locals, prefixes, append, read/printf destinations, nounset or recovery.
+Review evidence remains in `review89-scalar-integer-r1-evidence/`, including
+`native-comparison.json`, `waffle-probes.jsonl` and `cases.json`.

@@ -17,6 +17,7 @@ mod call_stack;
 mod case;
 mod case_attributes;
 pub(crate) mod completion;
+mod integer;
 pub(crate) use case::Locale as CaseLocale;
 pub(crate) use case_attributes::{CaseMapping, CaseOptions};
 mod declarations;
@@ -73,6 +74,7 @@ pub(crate) struct LocalVariable {
     nameref: Option<String>,
     exported: bool,
     case_mapping: Option<CaseMapping>,
+    integer: bool,
     readonly: bool,
     function_prefix: bool,
     storage_base: usize,
@@ -140,6 +142,7 @@ pub struct State {
     exported: BTreeSet<String>,
     readonly: BTreeSet<String>,
     case_attributes: BTreeMap<String, CaseMapping>,
+    integers: BTreeSet<String>,
     /// Scalar reference targets, distinct from ordinary variable values.
     namerefs: BTreeMap<String, String>,
     pub cwd: String,
@@ -202,6 +205,7 @@ impl Default for State {
             exported: BTreeSet::new(),
             readonly: BTreeSet::new(),
             case_attributes: BTreeMap::new(),
+            integers: BTreeSet::new(),
             namerefs: BTreeMap::new(),
             cwd: "/home/guest".into(),
             directories: DirectoryStack::default(),
@@ -373,6 +377,7 @@ impl State {
         let readonly = snapshot_set(source, |s| &s.readonly, cancel, work).await?;
         let namerefs = snapshot_map(source, |s| &s.namerefs, cancel, work).await?;
         let case_attributes = snapshot_map(source, |s| &s.case_attributes, cancel, work).await?;
+        let integers = snapshot_set(source, |s| &s.integers, cancel, work).await?;
         let functions = snapshot_map(source, |s| &s.functions, cancel, work).await?;
         let call_stack = CallStack::snapshot(source, cancel, work).await?;
         let pipestatus = snapshot_vec(source, |s| &s.pipestatus, cancel, work).await?;
@@ -409,6 +414,7 @@ impl State {
             exported,
             readonly,
             case_attributes,
+            integers,
             namerefs,
             cwd,
             directories,
@@ -1319,6 +1325,7 @@ impl State {
             let local = self.locals[index].remove(name).ok_or(1)?;
             restore_nameref(&mut self.namerefs, name, local.nameref);
             self.restore_case(name, local.case_mapping);
+            self.restore_integer(name, local.integer);
             if local.exported {
                 self.exported.insert(name.to_owned());
             } else {
@@ -1353,6 +1360,7 @@ impl State {
         self.reserve_local_value(name, 0).map_err(|_| 1)?;
         self.exported.remove(name);
         self.case_attributes.remove(name);
+        self.integers.remove(name);
         let removed = self.variables.remove(name).is_some() || was_dynamic;
         if name == "IFS" {
             self.refresh_star_separator();
@@ -1443,6 +1451,8 @@ impl State {
                 .checked_add(self.namerefs.get(name).map_or(0, String::len))
                 .ok_or(2)?
                 .checked_add(self.saved_case_storage(name))
+                .ok_or(2)?
+                .checked_add(self.saved_integer_storage(name))
                 .ok_or(2)?;
             let memory = self
                 .memory
@@ -1460,6 +1470,7 @@ impl State {
                 nameref: self.namerefs.remove(name),
                 exported: self.exported.contains(name),
                 case_mapping: self.case_attributes.remove(name),
+                integer: self.integers.remove(name),
                 readonly: false,
                 function_prefix: false,
                 storage_base,
@@ -1477,6 +1488,7 @@ impl State {
             self.restore_getopts(local.getopts);
             restore_nameref(&mut self.namerefs, &name, local.nameref);
             self.restore_case(&name, local.case_mapping);
+            self.restore_integer(&name, local.integer);
             // Ordinary export changes in functions belong to the caller.
             if local.exported {
                 self.exported.insert(name.clone());
@@ -1537,7 +1549,8 @@ impl State {
             .saturating_add(name.len())
             .saturating_add(self.variables.get(name).map_or(0, Binding::storage_bytes))
             .saturating_add(self.namerefs.get(name).map_or(0, String::len))
-            .saturating_add(self.saved_case_storage(name));
+            .saturating_add(self.saved_case_storage(name))
+            .saturating_add(self.saved_integer_storage(name));
         Ok(bytes)
     }
 }
@@ -2958,6 +2971,7 @@ mod tests {
                     previous: Some("before local".into()),
                     nameref: None,
                     case_mapping: None,
+                    integer: false,
                     exported: true,
                     readonly: true,
                     function_prefix: false,
@@ -3004,6 +3018,7 @@ mod tests {
                         previous: Some("x".repeat(128 * 1024).into()),
                         nameref: None,
                         case_mapping: None,
+                        integer: false,
                         exported: false,
                         readonly: false,
                         function_prefix: false,
@@ -3334,7 +3349,7 @@ mod tests {
         }
     }
     #[test]
-    fn case_attribute_snapshot_admits_metadata_and_cancellation() {
+    fn attribute_snapshot_admits_metadata_and_cancellation() {
         let state = State::default().shared();
         let mut baseline = Work::new(100_000, 100_000, 0);
         finish_snapshot(&state, &Cancel::new(), &mut baseline)
@@ -3344,12 +3359,22 @@ mod tests {
             .borrow_mut()
             .case_attributes
             .insert("x".into(), CaseMapping::Upper);
+        let mut declaration = Work::new(100_000, 100_000, 0);
+        state
+            .borrow_mut()
+            .declare_integer("n", true, &mut declaration)
+            .unwrap();
         let bytes = plain_bytes
             + snapshot_node_bytes::<CaseMapping>().unwrap_or_else(|_| panic!("node fits"))
-            + 1;
+            + snapshot_node_bytes::<()>().unwrap_or_else(|_| panic!("node fits"))
+            + 2;
         let mut child = snapshot_at_exact_limit(&state, bytes);
         child.assign_parameter("x".into(), "child".into()).unwrap();
         assert_eq!(child.parameter("x"), "CHILD");
+        assert!(child.integer_assignment("n"));
+        child.unset_variable("n").unwrap();
+        assert!(!child.integer_assignment("n"));
+        assert!(state.borrow().integer_assignment("n"));
         assert_eq!(state.borrow().parameter("x"), "");
         let cancel = Cancel::new();
         cancel.cancel();
@@ -3359,6 +3384,7 @@ mod tests {
             Err(Error::Status(130))
         ));
         assert_eq!(state.borrow().case_mapping("x"), CaseMapping::Upper);
+        assert!(state.borrow().integer_assignment("n"));
     }
 }
 
