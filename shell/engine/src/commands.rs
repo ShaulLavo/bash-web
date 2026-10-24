@@ -30,6 +30,7 @@ pub(crate) enum Builtin {
     Test,
     LoopControl,
     Completion,
+    Enable,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -152,6 +153,7 @@ static COMMANDS: &[Command] = &[
     special(":", Handler::Builtin(Builtin::Noop)),
     regular("true", Builtin::Noop),
     regular("false", Builtin::False),
+    regular("enable", Builtin::Enable),
     regular("echo", Builtin::Echo),
     regular("printf", Builtin::Printf),
     regular("read", Builtin::Read),
@@ -235,6 +237,36 @@ static COMMANDS: &[Command] = &[
     keyword("]]", Availability::Included),
     keyword("coproc", Availability::UnsupportedSyntax),
 ];
+
+pub(crate) const COMMAND_COUNT: usize = COMMANDS.len();
+
+const _: () = assert!(COMMAND_COUNT <= u128::BITS as usize);
+
+pub(crate) fn enabled(name: &str, disabled: u128) -> bool {
+    builtin_index(name).is_some_and(|index| disabled & (1 << index) == 0)
+}
+
+pub(crate) fn enabled_handler(name: &str, disabled: u128) -> Option<Handler> {
+    handler(name).filter(|_| enabled(name, disabled))
+}
+
+pub(crate) fn set_enabled(name: &str, disabled: &mut u128, enabled: bool) -> bool {
+    let Some(index) = builtin_index(name) else {
+        return false;
+    };
+    if enabled {
+        *disabled &= !(1 << index);
+    } else {
+        *disabled |= 1 << index;
+    }
+    true
+}
+
+fn builtin_index(name: &str) -> Option<usize> {
+    COMMANDS
+        .iter()
+        .position(|command| command.name == name && command.query_builtin())
+}
 
 pub(crate) fn catalogue() -> &'static [Command] {
     COMMANDS
