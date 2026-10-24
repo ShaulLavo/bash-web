@@ -22,6 +22,37 @@ fn status(arguments: &[&str], expected: i32) {
 }
 
 #[test]
+fn scalar_test_argv_matches_recorded_bash_5_3_15() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../scripts/fixtures/shell-test-argv.json"
+    ))
+    .unwrap();
+    assert_eq!(
+        fixture["bash"],
+        "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)"
+    );
+    for case in fixture["cases"].as_array().unwrap() {
+        let rig = Rig::new(Limits::default());
+        let script = case["script"].as_str().unwrap();
+        assert_eq!(
+            rig.run(script),
+            case["status"].as_i64().unwrap() as i32,
+            "{script}"
+        );
+        assert_eq!(
+            rig.output.bytes(),
+            case["stdout"].as_str().unwrap().as_bytes(),
+            "{script}"
+        );
+        assert_eq!(
+            rig.errors.bytes().is_empty(),
+            case["stderr"].as_str().unwrap().is_empty(),
+            "{script}"
+        );
+    }
+}
+
+#[test]
 fn empty_single_and_small_argument_counts_match_bash() {
     for (arguments, expected) in [
         (&[][..], 1),
