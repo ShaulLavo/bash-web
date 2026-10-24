@@ -47,7 +47,7 @@ pub(super) async fn parse(
     }
     let count = end - start - usize::from(point.is_some());
     if count == 0 {
-        return Ok((Float::finite(negative, 0, 0), invalid(value, true)));
+        return Ok((Float::finite(false, 0, 0), invalid(value, true)));
     }
     let (exponent, consumed) = exponent(input, end, hexadecimal);
     let fraction = point.map_or(0, |point| end - point - 1) as i32;
@@ -207,7 +207,8 @@ async fn convert(
     let order = if hexadecimal {
         numerator.bits().saturating_add(exponent)
     } else {
-        (f64::from(numerator.bits()) * std::f64::consts::LOG10_2) as i32 + exponent
+        ((f64::from(numerator.bits()) * std::f64::consts::LOG10_2) as i32)
+            .saturating_add(exponent)
     };
     let bound = if hexadecimal { 16_500 } else { 5_000 };
     if order > bound {
