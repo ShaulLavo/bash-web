@@ -102,7 +102,7 @@ and callbacks from a stopped generation cannot contaminate the next start.
 Backend contention policy belongs to the runtime owner, not the shell. At the
 pinned Waffle revision, OPFS waits and rejects takeover; IndexedDB defaults to
 takeover with optional `whenBusy: "wait"`. See Waffle's
-[storage ownership contract](https://github.com/ShaulLavo/waffle/blob/b20fad173ebaa225cb87c51776f35edaaafd4a40/docs/storage.md).
+[storage ownership contract](https://github.com/ShaulLavo/waffle/blob/250967060c0268950266fc5afb85be2170fb8ed3/docs/storage.md).
 
 Restart/stop cancels admission, joins pending session creation and awaits
 `BrowserSession.dispose()` before releasing an owned lease or creating its
@@ -501,7 +501,7 @@ What the repository contains, by origin:
   at `2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13` (wasi-sdk 34.0), patched by
   Waffle's `patches/wasi-libc/preopen-scan.patch`. Builds consume Waffle's patch
   and builder; see the [classified ledger](wasi-libc.md).
-- **External shared runtime, not vendored.** Waffle `b20fad173ebaa225cb87c51776f35edaaafd4a40`,
+- **External shared runtime, not vendored.** Waffle `250967060c0268950266fc5afb85be2170fb8ed3`,
   as the required peer and the identical development pin. The application imports
   `createRuntime` from Waffle's package root.
 - **Pinned terminal source.** The Ghostty WebGPU revision and archive checksum
@@ -533,7 +533,7 @@ Browser test failures print pending stages and attach the full snapshot as
 `browser-startup-diagnostics`. Shell embeddings may supply `onStartupStage` to
 `createShell` for the same non-blocking observations. Observer throws and rejected
 returns are ignored; observers are never awaited. Observers must not abort or start/stop
-shell or runtime control, matching [Waffle's passive observer contract](https://github.com/ShaulLavo/waffle/blob/b20fad173ebaa225cb87c51776f35edaaafd4a40/docs/runtime-startup.md).
+shell or runtime control, matching [Waffle's passive observer contract](https://github.com/ShaulLavo/waffle/blob/250967060c0268950266fc5afb85be2170fb8ed3/docs/runtime-startup.md).
 No polling or history is kept by the observer hook.
 An absent marker means unobserved, not pending. In particular, a borrowed runtime
 or cached shell registration may have completed work before observation began.

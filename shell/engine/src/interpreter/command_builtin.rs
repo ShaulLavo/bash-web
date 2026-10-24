@@ -424,6 +424,45 @@ fn cwd_storage(cwd: &str, path: &str) -> Result<usize, i32> {
     cwd.len().checked_add(path.len()).ok_or(2)
 }
 
+pub(super) async fn hashed(
+    name: &str,
+    state: &SharedState,
+    context: &Context,
+    work: &mut expand::Work,
+) -> Result<Option<Rc<crate::state::command_hash::Entry>>, i32> {
+    if name.contains('/') {
+        return Ok(None);
+    }
+    let table = state.borrow().command_hash.clone();
+    table
+        .find(name, &context.cancel, work)
+        .await
+        .map_err(admission_status)
+}
+pub(super) async fn hash_description(
+    name: &str,
+    path: &str,
+    verbose: bool,
+    fds: &Descriptors,
+    context: &Context,
+    work: &mut expand::Work,
+) -> Result<(), i32> {
+    for _ in path.bytes() {
+        work.checkpoint(&context.cancel)
+            .await
+            .map_err(admission_status)?;
+    }
+    if verbose {
+        output(fds, context, name.as_bytes()).await?;
+        output(fds, context, b" is hashed (").await?;
+    }
+    output(fds, context, path.as_bytes()).await?;
+    if verbose {
+        output(fds, context, b")").await?;
+    }
+    output(fds, context, b"\n").await
+}
+
 pub(super) async fn query(
     args: &[String],
     options: &Options,
@@ -481,6 +520,8 @@ pub(super) async fn query(
                 },
             )
             .await?;
+        } else if let Some(entry) = hashed(name, state, context, work).await? {
+            hash_description(name, &entry.path, options.verbose, fds, context, work).await?;
         } else {
             let resolution = executable(
                 name,

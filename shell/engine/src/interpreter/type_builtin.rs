@@ -185,6 +185,24 @@ async fn describe(
     if found && !options.all {
         return Ok(true);
     }
+    if !options.all
+        && let Some(entry) = command_builtin::hashed(name, state, context, work).await?
+    {
+        if options.mode == Mode::Type {
+            output(fds, context, b"file\n").await?;
+        } else {
+            command_builtin::hash_description(
+                name,
+                &entry.path,
+                options.mode == Mode::Describe,
+                fds,
+                context,
+                work,
+            )
+            .await?;
+        }
+        return Ok(true);
+    }
     let mut search =
         command_builtin::ExecutableSearch::new(name, state, false, None, context, lookup)?;
     loop {

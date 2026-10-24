@@ -16,6 +16,7 @@ use std::{
 mod call_stack;
 mod case;
 mod case_attributes;
+pub(crate) mod command_hash;
 pub(crate) mod completion;
 pub(crate) use case::Locale as CaseLocale;
 pub(crate) use case_attributes::{CaseMapping, CaseOptions};
@@ -155,6 +156,7 @@ pub struct State {
     pub expand_aliases: bool,
     pub(crate) disabled_builtins: u128,
     pub(crate) completions: completion::CompletionTable,
+    pub(crate) command_hash: command_hash::CommandHash,
     /// Function bodies are immutable. Isolated shells copy bindings, not ASTs.
     functions: BTreeMap<String, StoredFunction>,
     pub(crate) traps: traps::Traps,
@@ -218,6 +220,7 @@ impl Default for State {
             expand_aliases: false,
             disabled_builtins: 0,
             completions: completion::CompletionTable::default(),
+            command_hash: command_hash::CommandHash::default(),
             functions: BTreeMap::new(),
             traps: traps::Traps::default(),
             status: 0,
@@ -464,6 +467,7 @@ impl State {
             expand_aliases: state.expand_aliases,
             disabled_builtins: state.disabled_builtins,
             completions: state.completions.clone(),
+            command_hash: state.command_hash.clone(),
             functions,
             traps: state.traps.inherited(),
             status: state.status,

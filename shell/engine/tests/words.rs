@@ -4406,3 +4406,6 @@ mod array_slicing;
 
 #[path = "words/enable.rs"]
 mod enable;
+
+#[path = "words/command_hash.rs"]
+mod command_hash;

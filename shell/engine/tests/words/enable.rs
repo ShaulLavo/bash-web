@@ -143,3 +143,40 @@ fn enable_source_function_changes_share_state_but_subshell_changes_do_not() {
     assert_eq!(rig.run("enable -n source; (enable source; type -t source); type -t source; echo parent:$?; f() { enable source; }; f; type -t source"), 0);
     assert_eq!(rig.output.bytes(), b"builtin\nparent:1\nbuiltin\n");
 }
+
+#[test]
+fn enable_hash_lookup_records_disabled_but_not_enabled_builtins_or_functions() {
+    let rig = Rig::new(Limits::default());
+    rig.host
+        .register("/home/guest/printf", |_, _| async { 7 }.boxed_local());
+    assert_eq!(rig.run("hash printf; hash -t printf; echo enabled:$?; enable -n printf; hash printf; hash -t printf; hash -d printf; printf() { :; }; hash printf; hash -t printf; echo function:$?; unset -f printf; command hash printf; enable printf; hash -t printf"), 0);
+    assert_eq!(
+        rig.output.bytes(),
+        b"enabled:1\n/home/guest/printf\nfunction:1\n/home/guest/printf\n"
+    );
+    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.host.active_count(), 0);
+}
+
+#[test]
+fn enable_hash_queries_keep_builtin_precedence_and_real_execution_resolution() {
+    let rig = Rig::new(Limits::default());
+    let calls = rig.calls.clone();
+    rig.host.register("/home/guest/printf", move |request, _| {
+        calls.borrow_mut().push(request.argv);
+        async { 7 }.boxed_local()
+    });
+    assert_eq!(rig.run("hash -p /literal printf; type -t printf; command -v printf; enable -n printf; type -t printf; command -v printf; type -P printf; type -aP printf; builtin printf denied; echo builtin:$?; command printf external; echo external:$?; enable printf; command printf '%s\n' restored; hash -t printf"), 0);
+    assert_eq!(rig.output.bytes(), b"builtin\nprintf\nfile\n/literal\n/literal\n/home/guest/printf\nbuiltin:1\nexternal:7\nrestored\n/literal\n");
+    assert_eq!(*rig.calls.borrow(), [vec!["printf", "external"]]);
+    assert_eq!(rig.host.active_count(), 0);
+}
+
+#[test]
+fn enable_hash_mask_and_table_snapshot_independently_but_functions_share_both() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("hash -p /parent printf; enable -n printf; (enable printf; hash -p /child printf; command -v printf; hash -t printf); command -v printf; value=$(enable printf; hash -r; type -t printf); echo $value; command -v printf; enable printf | hash -r; enable printf & wait; command -v printf; f() { enable printf; hash -p /function printf; }; f; command -v printf; hash -t printf; enable -n hash; builtin hash -r; echo builtin:$?; command hash -r; echo command:$?; enable hash; hash -t printf; compgen -A enabled hash; enable -n hash; compgen -A disabled hash"), 0);
+    assert_eq!(rig.output.bytes(), b"printf\n/child\n/parent\nbuiltin\n/parent\n/parent\nprintf\n/function\nbuiltin:1\ncommand:127\n/function\nhash\nhash\n");
+    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.host.active_count(), 0);
+}
