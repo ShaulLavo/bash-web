@@ -1,0 +1,68 @@
+{
+  "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "invocation": [
+    "--noprofile",
+    "--norc",
+    "-c",
+    "<code>",
+    "bash"
+  ],
+  "cases": [
+    {
+      "id": "unset-funcname-assignment",
+      "code": "unset FUNCNAME; FUNCNAME=ordinary; printf \"<%s>\\n\" \"$FUNCNAME\"",
+      "status": 0,
+      "stdout": "<ordinary>\n",
+      "stderr": ""
+    },
+    {
+      "id": "unset-funcname-call",
+      "code": "unset FUNCNAME; f() { echo \"name:${FUNCNAME[*]}\"; }; f",
+      "status": 0,
+      "stdout": "name:\n",
+      "stderr": ""
+    },
+    {
+      "id": "unset-funcname-then-local",
+      "code": "unset FUNCNAME; f() { local FUNCNAME=ordinary; echo \"$FUNCNAME\"; }; f",
+      "status": 0,
+      "stdout": "ordinary\n",
+      "stderr": ""
+    },
+    {
+      "id": "unset-funcname-snapshots",
+      "code": "unset FUNCNAME; FUNCNAME=global; f() { local FUNCNAME=local; (printf \"sub:<%s>\\n\" \"$FUNCNAME\"); printf \"cmd:<%s>\\n\" \"$(echo \"$FUNCNAME\")\"; g; }; g() { echo \"nested:$FUNCNAME\"; }; f; echo \"after:$FUNCNAME\"",
+      "status": 0,
+      "stdout": "sub:<local>\ncmd:<local>\nnested:local\nafter:global\n",
+      "stderr": ""
+    },
+    {
+      "id": "unset-funcname-child-isolation",
+      "code": "f() { (unset FUNCNAME; FUNCNAME=child; echo \"child:$FUNCNAME\"); echo \"parent:$FUNCNAME\"; }; f",
+      "status": 0,
+      "stdout": "child:child\nparent:f\n",
+      "stderr": ""
+    },
+    {
+      "id": "unset-funcname-inside-call",
+      "code": "f() { unset FUNCNAME; FUNCNAME=ordinary; echo \"$FUNCNAME\"; }; f; g() { echo \"later:$FUNCNAME\"; }; g; echo \"after:$FUNCNAME\"",
+      "status": 0,
+      "stdout": "ordinary\nlater:ordinary\nafter:ordinary\n",
+      "stderr": ""
+    },
+    {
+      "id": "unset-funcname-nameref",
+      "code": "declare -n ref=FUNCNAME; unset ref; FUNCNAME=ordinary; f() { echo \"$ref:${FUNCNAME[*]}\"; }; f",
+      "status": 0,
+      "stdout": "ordinary:ordinary\n",
+      "stderr": ""
+    },
+    {
+      "id": "unset-funcname-local-restoration",
+      "code": "unset FUNCNAME; FUNCNAME=global; g() { local FUNCNAME=inner; echo \"$FUNCNAME\"; }; f() { local FUNCNAME=outer; g; echo \"$FUNCNAME\"; }; f; echo \"$FUNCNAME\"",
+      "status": 0,
+      "stdout": "inner\nouter\nglobal\n",
+      "stderr": ""
+    }
+  ]
+}
