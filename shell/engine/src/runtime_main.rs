@@ -1,6 +1,6 @@
 //! Persistent interactive WASI shell. Host stdin/stdout are runtime_proc endpoints;
 //! blocking preview1 fd_read/fd_write are never used by the shell's reactor.
-#[cfg(any(target_os = "wasi", test))]
+#[cfg(target_os = "wasi")]
 mod terminal;
 #[cfg(not(target_os = "wasi"))]
 fn main() {
@@ -62,8 +62,7 @@ mod guest {
         {
             let state = session.state();
             let mut state = state.borrow_mut();
-            state.variables.extend(std::env::vars());
-            state.exported = state.variables.keys().cloned().collect();
+            state.inherit_environment(std::env::vars());
             if let Ok(cwd) = std::env::var("PWD") {
                 state.cwd = cwd;
             }
@@ -152,7 +151,7 @@ mod guest {
             let prompt = session
                 .state()
                 .borrow()
-                .variables
+                .bindings()
                 .get("PS1")
                 .cloned()
                 .unwrap_or_else(|| "$ ".into());
@@ -167,7 +166,7 @@ mod guest {
                 match input.read_cancelled(&mut byte, &cancel).await {
                     Ok(0) => {
                         let _ = write(&output, b"\r\n").await;
-                        return session.state().borrow().status;
+                        return session.state().borrow().status();
                     }
                     Err(IoError::Cancelled) => {
                         editor.clear();
@@ -206,7 +205,7 @@ mod guest {
                     }
                     Action::Eof => {
                         let _ = write(&output, b"\r\n").await;
-                        return session.state().borrow().status;
+                        return session.state().borrow().status();
                     }
                     Action::Redraw => {
                         if write(&output, &editor.redraw(&prompt)).await.is_err() {
@@ -237,7 +236,7 @@ mod guest {
                 }
                 Err(error) => {
                     diagnostic(&errors, format!("shell: {error}\n").as_bytes()).await;
-                    session.state().borrow_mut().status = error.status();
+                    session.state().borrow_mut().publish_status(error.status());
                 }
             }
         }

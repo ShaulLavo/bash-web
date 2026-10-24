@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.38",
+  "version": "0.0.109",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -11,16 +11,26 @@
     "plans",
     "sources.lock.json",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "src"
   ],
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./shell": "./src/shell.ts",
+    "./utilities/cat": "./src/utilities/cat.ts",
+    "./utilities/grep": "./src/utilities/grep.ts",
+    "./utilities/mkdir": "./src/utilities/mkdir.ts",
+    "./utilities/seq": "./src/utilities/seq.ts"
+  },
   "scripts": {
-    "format:check": "oxfmt --check scripts shell package.json '!scripts/fixtures/**/*.json'",
+    "format:check": "oxfmt --check scripts shell src tests package.json vite.config.ts playwright.config.ts tsconfig.json .oxlintrc.json .knip.jsonc quality docs/code-quality.md '!scripts/fixtures/**/*.json'",
     "test:rust": "node scripts/check-shell-parser.mjs && cargo fmt --manifest-path shell/Cargo.toml --all --check && cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2",
-    "build:shell": "CARGO_TARGET_DIR=.build/shell cargo build --locked --release --target wasm32-wasip1 --manifest-path shell/Cargo.toml --workspace",
-    "test:shell:wasi": "node scripts/test-shell-wasi.mjs",
-    "test:shell:scoreboard": "node --test scripts/test-shell-scoreboard*.mjs scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-bash-compat*.mjs",
-    "compat:shell": "BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell node scripts/bash-compat.mjs",
+    "build:shell": "node scripts/build-shell.ts",
+    "check:capabilities": "node scripts/check-shell-capabilities.ts",
+    "test:shell:wasi": "node scripts/test-shell-wasi.ts",
+    "test:shell:scoreboard": "npm run build:node-harness && node --test scripts/test-shell-scoreboard*.mjs scripts/test-shell-scoreboard-instrument.ts scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-own-shell-root.ts scripts/test-own-shell-permissions.ts scripts/test-own-shell-descriptors.ts scripts/test-own-shell-printf-assignment.ts scripts/test-own-shell-extglob.ts scripts/test-own-shell-pathname.ts scripts/test-own-shell-tilde.ts scripts/test-own-shell-regex-groups.ts scripts/test-own-shell-file-substitution.ts scripts/test-own-shell-read-scalar.ts scripts/test-own-shell-read-options.ts scripts/test-own-shell-indirect-special.ts scripts/test-own-shell-special-params.ts scripts/test-own-shell-select.ts scripts/test-own-shell-source.ts scripts/test-own-shell-declarations.ts scripts/test-own-shell-index-names.ts scripts/test-own-shell-array-slicing.ts scripts/test-own-shell-function-names.ts scripts/test-own-shell-aliases.mjs scripts/test-own-shell-call-stack.ts scripts/test-own-shell-trap-registration.ts scripts/test-own-shell-pipeline-broken-pipe.ts scripts/test-own-shell-completion.ts scripts/test-own-shell-nameref-invalid.ts scripts/test-bash-compat*.mjs",
+    "compat:shell": "npm run build:node-harness && npm run compat:shell:prebuilt",
     "prepare:shell-corpus": "node scripts/prepare-shell-corpus.mjs",
     "fuzz:shell-braces": "node scripts/fuzz-shell-braces.mjs",
     "test:fuzz-shell-braces": "node --test scripts/test-fuzz-shell-braces.mjs",
@@ -35,21 +45,100 @@
     "fuzz:shell-braces:ci": "node scripts/fuzz-shell-braces.mjs --replay scripts/fixtures/shell-braces-seed-1.json --replay scripts/fixtures/shell-braces-seed-42.json",
     "fuzz:shell-substitutions:ci": "node scripts/fuzz-shell-substitution-boundaries.mjs --replay scripts/fixtures/shell-substitutions-seed-1.json --replay scripts/fixtures/shell-substitutions-seed-42.json",
     "fuzz:shell-parse-boundaries:ci": "node scripts/fuzz-shell-parse-boundaries.mjs --replay scripts/fixtures/shell-parse-boundaries.json",
-    "notices:shell": "node scripts/notices.mjs"
+    "notices:shell": "node scripts/notices.mjs",
+    "fuzz:shell-control-flow": "node scripts/fuzz-shell-control-flow.mjs",
+    "test:fuzz-shell-control-flow": "node --test scripts/test-fuzz-shell-control-flow.mjs",
+    "fuzz:shell-control-flow:ci": "node scripts/fuzz-shell-control-flow.mjs --replay scripts/fixtures/shell-control-flow-seed-1.json --replay scripts/fixtures/shell-control-flow-seed-42.json",
+    "fuzz:shell-job-lifetime": "node scripts/fuzz-shell-job-lifetime.mjs",
+    "test:fuzz-shell-job-lifetime": "node --test scripts/test-fuzz-shell-job-lifetime.mjs",
+    "fuzz:shell-job-lifetime:ci": "node scripts/fuzz-shell-job-lifetime.mjs --replay scripts/fixtures/shell-job-lifetime-seed-1.json --replay scripts/fixtures/shell-job-lifetime-seed-42.json",
+    "fuzz:shell-functions": "node scripts/fuzz-shell-functions.ts",
+    "test:fuzz-shell-functions": "node --test scripts/test-fuzz-shell-functions.ts",
+    "fuzz:shell-functions:ci": "node scripts/fuzz-shell-functions.ts --replay scripts/fixtures/shell-functions-seed-1.json --replay scripts/fixtures/shell-functions-seed-42.json",
+    "fuzz:shell-path": "node scripts/fuzz-shell-path.ts",
+    "test:fuzz-shell-path": "node --test scripts/test-fuzz-shell-path.ts",
+    "fuzz:shell-path:ci": "node scripts/fuzz-shell-path.ts --replay scripts/fixtures/shell-path-seed-1.json --replay scripts/fixtures/shell-path-seed-42.json",
+    "sources:browser": "node scripts/sources.mjs",
+    "build:shell:browser": "node scripts/build-shell-browser.mjs",
+    "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:utilities && npm run build:test-guest && npm run build:browser:assets",
+    "typecheck:browser": "tsc --noEmit",
+    "test:browser": "playwright test",
+    "test:runtime:terminal": "node --expose-gc scripts/test-runtime-terminal.mjs",
+    "notices:browser": "npm run notices:shell && node scripts/browser-notices.mjs",
+    "serve": "node dist/serve.mjs",
+    "verify:browser": "npm run test:browser:package && npm run build:browser && npm run typecheck:browser && npm run test:runtime:terminal && npm run test:browser",
+    "test:installed-waffle": "node --test scripts/test-installed-waffle.mjs",
+    "test:browser:package": "node --test scripts/test-browser-package.mjs scripts/test-utility-packaging.ts",
+    "build:worker": "node scripts/build-worker.mjs",
+    "prepare": "npm run build:worker",
+    "build:test-guest": "node scripts/build-test-guest.mjs",
+    "fuzz:shell-printf": "node scripts/fuzz-shell-printf.ts",
+    "test:fuzz-shell-printf": "node --test scripts/test-fuzz-shell-printf.ts",
+    "fuzz:shell-printf:ci": "node scripts/fuzz-shell-printf.ts --replay scripts/fixtures/shell-printf-seed-1.json --replay scripts/fixtures/shell-printf-seed-42.json",
+    "check:layers": "node scripts/check-layers.ts",
+    "test:check-layers": "node --test scripts/test-check-layers.ts",
+    "typecheck:layers": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-layers.ts scripts/test-check-layers.ts",
+    "compat": "npm run compat:shell",
+    "lint": "oxlint --config .oxlintrc.json --deny-warnings src scripts tests vite.config.ts playwright.config.ts",
+    "typecheck": "tsc --noEmit",
+    "check:unused": "knip --config .knip.jsonc --treat-config-hints-as-errors",
+    "check:duplicates": "node scripts/check-duplicates.mjs",
+    "check:rust": "node scripts/check-rust-quality.mjs",
+    "test:quality-gates": "node --test scripts/test-quality-gates.mjs",
+    "quality": "npm run sources:browser && npm run build:worker && npm run quality:js && npm run check:rust && cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast",
+    "build:utilities": "node scripts/build-utilities.ts",
+    "build:node-harness": "node scripts/build-node-harness.ts",
+    "build:compat-control": "node scripts/build-compat-control.ts",
+    "test:guest-build": "node --test scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts",
+    "typecheck:guest-build": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-shell-capabilities.ts scripts/wasi-build.ts scripts/utility-artifacts.ts scripts/test-utility-artifacts.ts scripts/build-utilities.ts scripts/build-compat-control.ts scripts/test-build-compat-control.ts scripts/test-utility-packaging.ts scripts/test-shell-wasi.ts scripts/test-wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts",
+    "fuzz:shell-echo": "node scripts/fuzz-shell-echo.ts",
+    "test:fuzz-shell-echo": "node --test scripts/test-fuzz-shell-echo.ts",
+    "fuzz:shell-echo:ci": "node scripts/fuzz-shell-echo.ts --replay scripts/fixtures/shell-echo.json",
+    "quality:js": "npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates",
+    "build:browser:assets": "npm run notices:browser && npm run bundle:browser:assets",
+    "test:ci": "node --test scripts/test-ci-inputs.ts scripts/test-ci-workflow.ts scripts/test-prepare-wasi-tests.ts scripts/test-ci-artifacts.ts scripts/test-ci-notices.ts",
+    "prepare:wasi-tests": "node scripts/prepare-wasi-tests.ts .build/ci-native/wasi-tests",
+    "typecheck:ci": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/ci-inputs.ts scripts/ci-artifacts.ts scripts/prepare-wasi-tests.ts scripts/test-ci*.ts scripts/test-prepare-wasi-tests.ts",
+    "compat:shell:prebuilt": "BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell BASH_COMPAT_UTILITY_DIR=${CARGO_TARGET_DIR:-.build/shell}/wasm32-wasip1/release node scripts/bash-compat.mjs",
+    "notices:browser:ci": "node scripts/ci-artifacts.ts notices .build/ci-native && node scripts/browser-notices.mjs",
+    "bundle:browser:assets": "vite build && node scripts/finish-build.mjs",
+    "build:browser:assets:ci": "npm run notices:browser:ci && npm run bundle:browser:assets",
+    "test:file-substitution": "npm run build:node-harness && node --test scripts/test-own-shell-file-substitution.ts",
+    "test:select": "npm run build:node-harness && node --test scripts/test-own-shell-select.ts",
+    "test:shell:completion:pending": "npm run build:node-harness && BASH_COMPLETION_PENDING=1 node --test scripts/test-own-shell-completion.ts",
+    "test:shell:function-names:pending": "npm run build:node-harness && BASH_FUNCTION_NAMES_PENDING=1 node --test scripts/test-own-shell-function-names.ts"
   },
   "devDependencies": {
+    "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",
+    "@playwright/test": "1.64.0",
+    "@types/node": "26.6.3",
+    "@webgpu/types": "0.1.74",
+    "esbuild": "0.28.2",
+    "jscpd": "5.4.1",
+    "knip": "6.41.0",
     "oxfmt": "0.70.0",
+    "oxlint": "1.88.0",
+    "remix": "3.0.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.3",
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#b20fad173ebaa225cb87c51776f35edaaafd4a40",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#b88b6ac1500c61c16411b479531f18df820e81e5"
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#b20fad173ebaa225cb87c51776f35edaaafd4a40"
   },
-  "peerDependenciesMeta": {
-    "waffle": {
-      "optional": true
-    }
+  "overrides": {
+    "esbuild": "0.28.2"
   },
   "engines": {
-    "node": ">=26.7.0"
-  }
+    "node": ">=26.12.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "waffle@0.0.67": true
+  },
+  "trustedDependencies": [
+    "waffle",
+    "esbuild"
+  ]
 }

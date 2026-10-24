@@ -10,26 +10,27 @@ fn register_output(rig: &Rig, name: &str, bytes: Vec<u8>) -> Rc<Cell<usize>> {
     let bytes = Rc::new(bytes);
     let written = Rc::new(Cell::new(0));
     let observed = written.clone();
-    rig.host.register(name, move |req, cancel| {
-        let bytes = bytes.clone();
-        let written = observed.clone();
-        async move {
-            let output = req.fds.get(1).unwrap();
-            for chunk in bytes.chunks(1024) {
-                if let Err(error) = output.write_all(chunk, &cancel).await {
-                    return error.status();
+    rig.host
+        .register(format!("/home/guest/{name}"), move |req, cancel| {
+            let bytes = bytes.clone();
+            let written = observed.clone();
+            async move {
+                let output = req.fds.get(1).unwrap();
+                for chunk in bytes.chunks(1024) {
+                    if let Err(error) = output.write_all(chunk, &cancel).await {
+                        return error.status();
+                    }
+                    written.set(written.get() + chunk.len());
                 }
-                written.set(written.get() + chunk.len());
+                0
             }
-            0
-        }
-        .boxed_local()
-    });
+            .boxed_local()
+        });
     written
 }
 
 fn register_copy(rig: &Rig) {
-    rig.host.register("copy", |req, cancel| {
+    rig.host.register("/home/guest/copy", |req, cancel| {
         async move {
             let input = req.fds.get(0).unwrap();
             let output = req.fds.get(1).unwrap();
@@ -57,7 +58,7 @@ fn register_gated(rig: &Rig, bytes: &'static [u8], linger: bool) -> (Cancel, Rc<
     let progress = Rc::new(Cell::new(false));
     let gate = release.clone();
     let observed = progress.clone();
-    rig.host.register("gated", move |req, cancel| {
+    rig.host.register("/home/guest/gated", move |req, cancel| {
         let gate = gate.clone();
         let progress = observed.clone();
         async move {
@@ -78,21 +79,22 @@ fn register_gated(rig: &Rig, bytes: &'static [u8], linger: bool) -> (Cancel, Rc<
     (release, progress)
 }
 
-fn register_status_gate(rig: &Rig, name: &str, status: i32) -> Cancel {
+pub(super) fn register_status_gate(rig: &Rig, name: &str, status: i32) -> Cancel {
     let release = Cancel::new();
     let gate = release.clone();
-    rig.host.register(name, move |_, _| {
-        let gate = gate.clone();
-        async move {
-            gate.cancelled().await;
-            status
-        }
-        .boxed_local()
-    });
+    rig.host
+        .register(format!("/home/guest/{name}"), move |_, _| {
+            let gate = gate.clone();
+            async move {
+                gate.cancelled().await;
+                status
+            }
+            .boxed_local()
+        });
     release
 }
 
-fn shutdown_and_check(rig: &Rig) {
+pub(super) fn shutdown_and_check(rig: &Rig) {
     let shutdown = rig.shell.shutdown();
     futures::pin_mut!(shutdown);
     for _ in 0..1000 {
@@ -112,7 +114,7 @@ fn drive_eval_progress(rig: &Rig, job: &JoinHandle<i32>, goal: usize) -> usize {
     for _ in 0..100_000 {
         rig.ex.drive(64);
         assert!(!job.is_finished(), "eval loop stopped before interruption");
-        progress = rig.shell.state().borrow().variables["n"]
+        progress = rig.shell.state().borrow().bindings()["n"]
             .parse::<usize>()
             .unwrap();
         if progress >= goal {
@@ -163,7 +165,8 @@ fn status_follows_each_substitution_and_empty_commands() {
     let rig = Rig::new(Limits::default());
     // Prefix assignments on builtins are not supported yet. An external
     // fixture tests named-command status independently of that restriction.
-    rig.host.register("okay", |_, _| async { 0 }.boxed_local());
+    rig.host
+        .register("/home/guest/okay", |_, _| async { 0 }.boxed_local());
     assert_eq!(
         rig.run(r#"false; args $(exit 3) $?; args $(exit 4)$?; x=$(exit 5); args $?; x=$(exit 5) $(exit 6); args $?; $(exit 7); args $?; x=$(exit 3) okay; args $?"#),
         0,
@@ -512,7 +515,7 @@ fn async_identity_obeys_nounset_before_launch_and_is_bound_after_completion() {
         b"/usr/bin/bash: line 1: !: unbound variable\n"
     );
     assert_eq!(rig.run(r#"false & pid=$!; wait "$pid"; args "$?" "$!""#), 0);
-    let pid = rig.shell.state().borrow().variables["pid"].clone();
+    let pid = rig.value("pid").unwrap();
     assert_eq!(*rig.calls.borrow(), [vec!["1".to_owned(), pid]]);
 }
 
@@ -524,8 +527,8 @@ fn numeric_async_handles_select_pending_children_independently_of_job_numbers() 
     let job = rig.shell.start(r#"first & one=$!; second & two=$!; ready=yes; wait "$two"; args second "$?"; wait %1; args first "$?"; args "$!""#).unwrap();
     rig.drive_until_variable("ready", "yes");
     assert_eq!(rig.host.active_count(), 2);
-    let one = rig.shell.state().borrow().variables["one"].clone();
-    let two = rig.shell.state().borrow().variables["two"].clone();
+    let one = rig.shell.state().borrow().bindings()["one"].to_string();
+    let two = rig.shell.state().borrow().bindings()["two"].to_string();
     assert_ne!(one, two);
     second.cancel();
     for _ in 0..200 {
@@ -555,7 +558,7 @@ fn numeric_async_handles_select_pending_children_independently_of_job_numbers() 
 }
 
 #[test]
-fn repeated_numeric_wait_reuses_retained_completion_without_restoring_percent_job() {
+fn repeated_waits_remember_direct_status_until_jobs_retires_percent_selector() {
     let rig = Rig::new(Limits::default());
     assert_eq!(
         rig.run(
@@ -563,10 +566,16 @@ fn repeated_numeric_wait_reuses_retained_completion_without_restoring_percent_jo
         ),
         0
     );
-    assert_eq!(*rig.calls.borrow(), [vec!["1", "1", "127"]]);
+    assert_eq!(*rig.calls.borrow(), [vec!["1", "1", "1"]]);
     assert_eq!(rig.shell.background_jobs(), 0);
     assert_eq!(rig.run(r#"kill -TERM "$pid"; args $?; wait "$pid""#), 1);
     assert_eq!(rig.calls.borrow()[1], ["1"]);
+    assert_eq!(rig.run(r#"jobs; wait %1"#), 127);
+    assert!(
+        rig.output.bytes().is_empty(),
+        "explicit wait already notified completion"
+    );
+    assert_eq!(rig.run(r#"wait "$pid""#), 1);
     assert_eq!(rig.run(r#"wait; wait "$pid""#), 127);
     assert_eq!(rig.host.retained_count(), 0);
 }
@@ -583,7 +592,7 @@ fn bounded_wait_history_evicts_completed_handles_without_evicting_pending_jobs()
     for round in 0..32 {
         assert_eq!(rig.run(r#"false & pid=$!; wait "$pid"; wait "$pid""#), 1);
         if round == 0 {
-            oldest = rig.shell.state().borrow().variables["pid"].clone();
+            oldest = rig.value("pid").unwrap();
         }
         assert_eq!(rig.shell.background_jobs(), 1);
         assert_eq!(rig.host.active_count(), 1);
@@ -617,7 +626,7 @@ fn async_identity_expands_in_nested_operands_and_arithmetic_without_reparsing_a_
         rig.run(r#"false & pid=$!; args "${u:-$!}" "${u:-${!}}" "$(( $! > 0 ))"; wait "$pid""#),
         1
     );
-    let pid = rig.shell.state().borrow().variables["pid"].clone();
+    let pid = rig.value("pid").unwrap();
     assert_eq!(
         *rig.calls.borrow(),
         [vec![pid.clone(), pid, "1".to_owned()]]
@@ -639,7 +648,7 @@ fn braced_async_identity_is_empty_before_launch_and_readable_under_nounset_after
         rig.run(r#"false & pid=$!; set -u; args "$!" "${!}" "${u:-${!}}"; wait "$pid""#),
         1
     );
-    let pid = rig.shell.state().borrow().variables["pid"].clone();
+    let pid = rig.value("pid").unwrap();
     assert_eq!(*rig.calls.borrow(), [vec![pid.clone(), pid.clone(), pid]]);
 
     let rig = Rig::new(Limits::default());
@@ -665,7 +674,7 @@ fn async_scalar_operators_test_presence_lazily_in_direct_and_nested_operands() {
         assert_eq!(rig.run(
             r#"false & pid=$!; args "${!-fallback}" "${!:-fallback}" "${!+set}" "${!:+set}" "${u:-${!+set}}" "${!:=unused}" "${!:?$missing}"; wait "$pid""#
         ), 1);
-        let pid = rig.shell.state().borrow().variables["pid"].clone();
+        let pid = rig.value("pid").unwrap();
         assert_eq!(
             rig.calls.borrow()[1],
             [
@@ -687,7 +696,7 @@ fn async_scalar_operators_test_presence_lazily_in_direct_and_nested_operands() {
         rig.errors.bytes(),
         b"/usr/bin/bash: line 1: $!: cannot assign in this way\n"
     );
-    assert!(!rig.shell.state().borrow().variables.contains_key("!"));
+    assert!(!rig.shell.state().borrow().bindings().contains_key("!"));
 }
 
 #[test]
@@ -811,7 +820,7 @@ fn invalid_signal_preserves_a_finite_background_job_and_wait_status() {
 fn isolated_readers_inherit_async_identity_without_changing_the_caller() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run(r#"false & parent=$!; capture=$(wait "$parent"; status=$?; true & child=$!; wait %1; printf '%s:%s:%s' "$status" "$parent" "$!"); args "$parent" "$!" "$capture"; (args "$!"; wait "$parent"; args $?; false & local=$!; args "$local" "$!"; wait "$local"; args $?); args "$!"; args "$!" | :; wait "$parent"; args $?"#), 0);
-    let parent = rig.shell.state().borrow().variables["parent"].clone();
+    let parent = rig.shell.state().borrow().bindings()["parent"].to_string();
     let calls = rig.calls.borrow();
     assert_eq!(calls.len(), 8);
     assert_eq!(calls[0][0], parent);
@@ -821,16 +830,16 @@ fn isolated_readers_inherit_async_identity_without_changing_the_caller() {
     assert_eq!(capture[0], "127");
     assert_eq!(capture[1], parent);
     assert_ne!(capture[2], parent);
-    assert_eq!(calls[1], [parent.clone()]);
+    assert_eq!(calls[1], std::slice::from_ref(&parent));
     assert_eq!(calls[2], ["127"]);
     assert_eq!(calls[3][0], calls[3][1]);
     assert_ne!(calls[3][0], parent);
     assert_eq!(calls[4], ["1"]);
-    assert_eq!(calls[5], [parent.clone()]);
+    assert_eq!(calls[5], std::slice::from_ref(&parent));
     assert_eq!(calls[6], [parent]);
     assert_eq!(calls[7], ["1"]);
-    assert!(!rig.shell.state().borrow().variables.contains_key("local"));
-    assert!(!rig.shell.state().borrow().variables.contains_key("child"));
+    assert!(!rig.shell.state().borrow().bindings().contains_key("local"));
+    assert!(!rig.shell.state().borrow().bindings().contains_key("child"));
 }
 
 #[test]
@@ -839,12 +848,12 @@ fn background_children_inherit_the_previous_async_identity() {
     assert_eq!(rig.run(r#"false & previous=$!; args "$!" & current=$!; wait "$current"; args "$!"; wait "$previous"; args $?"#), 0);
     let state = rig.shell.state();
     let state = state.borrow();
-    assert_ne!(state.variables["previous"], state.variables["current"]);
+    assert_ne!(state.bindings()["previous"], state.bindings()["current"]);
     assert_eq!(
         *rig.calls.borrow(),
         [
-            vec![state.variables["previous"].clone()],
-            vec![state.variables["current"].clone()],
+            vec![state.bindings()["previous"].to_string()],
+            vec![state.bindings()["current"].to_string()],
             vec!["1".to_owned()]
         ]
     );
@@ -856,15 +865,15 @@ fn process_substitution_handles_retain_status_without_taking_job_numbers() {
     assert_eq!(rig.run(r#": <(false); input=$!; : >(true); output=$!; false & background=$!; wait "$input"; args $?; wait "$output"; args $?; wait %1; args $?; args "$!"; wait; args $?"#), 0);
     let state = rig.shell.state();
     let state = state.borrow();
-    assert_ne!(state.variables["input"], state.variables["output"]);
-    assert_ne!(state.variables["output"], state.variables["background"]);
+    assert_ne!(state.bindings()["input"], state.bindings()["output"]);
+    assert_ne!(state.bindings()["output"], state.bindings()["background"]);
     assert_eq!(
         *rig.calls.borrow(),
         [
             vec!["1".to_owned()],
             vec!["0".to_owned()],
             vec!["1".to_owned()],
-            vec![state.variables["background"].clone()],
+            vec![state.bindings()["background"].to_string()],
             vec!["0".to_owned()]
         ]
     );
@@ -885,14 +894,17 @@ fn process_substitution_inherits_the_callers_previous_async_identity() {
     assert_eq!(rig.run(r#"false & previous=$!; : <(printf '%s' "$!" > inherited); process=$!; wait "$process"; args "$?" "$!"; wait "$previous""#), 1);
     let state = rig.shell.state();
     let state = state.borrow();
-    assert_ne!(state.variables["previous"], state.variables["process"]);
+    assert_ne!(state.bindings()["previous"], state.bindings()["process"]);
     assert_eq!(
         rig.fs.read_file("/home/guest/inherited").unwrap(),
-        state.variables["previous"].as_bytes()
+        state.bindings()["previous"].as_bytes()
     );
     assert_eq!(
         *rig.calls.borrow(),
-        [vec!["0".to_owned(), state.variables["process"].clone()]]
+        [vec![
+            "0".to_owned(),
+            state.bindings()["process"].to_string()
+        ]]
     );
 }
 
@@ -982,7 +994,7 @@ fn nameref_assignment_failure_discards_only_the_current_physical_read_unit() {
     );
     assert_eq!(rig.run(&same_line), 1);
     assert!(rig.output.bytes().is_empty());
-    assert_eq!(rig.shell.state().borrow().variables["target"], "value");
+    assert_eq!(rig.shell.state().borrow().bindings()["target"], "value");
 
     let rig = Rig::new(Limits::default());
     let next_line = format!(
@@ -999,7 +1011,7 @@ fn nameref_assignment_failure_discards_only_the_current_physical_read_unit() {
         0
     );
     assert_eq!(rig.output.bytes(), b"AFTER:1\n");
-    assert_eq!(rig.shell.state().borrow().variables["target"], "value");
+    assert_eq!(rig.shell.state().borrow().bindings()["target"], "value");
 
     let rig = Rig::new(Limits::default());
     assert_eq!(
@@ -1009,7 +1021,7 @@ fn nameref_assignment_failure_discards_only_the_current_physical_read_unit() {
         0
     );
     assert_eq!(rig.output.bytes(), b"AFTER:2\n");
-    assert_eq!(rig.shell.state().borrow().variables["target"], "value");
+    assert_eq!(rig.shell.state().borrow().bindings()["target"], "value");
 }
 
 #[test]
@@ -1031,11 +1043,11 @@ fn failed_builtin_prefix_admission_restores_existing_and_absent_bindings() {
         let state = rig.shell.state();
         let state = state.borrow();
         assert_eq!(
-            state.variables.get("a").map(String::as_str),
+            state.bindings().get("a").map(|value| value.as_str()),
             existing.then_some("before_a")
         );
         assert_eq!(
-            state.variables.get("b").map(String::as_str),
+            state.bindings().get("b").map(|value| value.as_str()),
             existing.then_some("before_b")
         );
         assert!(rig.calls.borrow().is_empty());
@@ -1087,7 +1099,7 @@ fn recursive_eval_has_an_execution_depth_bound_and_recovers() {
         rig.run(r#"n=0; s='n=$((n+1)); case $n in 160) :;; *) eval "$s";; esac'; eval "$s""#),
         2,
     );
-    assert_eq!(rig.shell.state().borrow().variables["n"], "16");
+    assert_eq!(rig.shell.state().borrow().bindings()["n"], "16");
     assert!(rig.calls.borrow().is_empty());
     assert_eq!(rig.ex.drive(64).pending, 0);
     assert_eq!(rig.run("args recovered"), 0);
@@ -1121,7 +1133,11 @@ fn eval_accepts_sixteen_active_readers_and_rejects_the_seventeenth() {
         eval_chain(&rig, levels, 0, "reached=yes");
         assert_eq!(rig.run("eval \"$e0\""), status, "eval levels {levels}");
         assert_eq!(
-            rig.shell.state().borrow().variables.contains_key("reached"),
+            rig.shell
+                .state()
+                .borrow()
+                .bindings()
+                .contains_key("reached"),
             status == 0,
         );
         assert!(rig.calls.borrow().is_empty());
@@ -1142,7 +1158,11 @@ fn compound_eval_accepts_execution_depth_256_and_rejects_257() {
         eval_chain(&rig, 16, groups, "reached=yes");
         assert_eq!(rig.run("eval \"$e0\""), status, "brace count {groups}");
         assert_eq!(
-            rig.shell.state().borrow().variables.contains_key("reached"),
+            rig.shell
+                .state()
+                .borrow()
+                .bindings()
+                .contains_key("reached"),
             status == 0,
         );
         assert!(rig.calls.borrow().is_empty());
@@ -1192,7 +1212,7 @@ fn eval_inside_compound_commands_bounds_the_actual_execution_chain() {
     );
     rig.variable("s", &body);
     assert_eq!(rig.run("n=0; eval \"$s\""), 2);
-    let progress = rig.shell.state().borrow().variables["n"]
+    let progress = rig.shell.state().borrow().bindings()["n"]
         .parse::<usize>()
         .unwrap();
     assert!(
@@ -1215,25 +1235,23 @@ fn returned_evals_release_storage_before_later_function_calls() {
         rig.run(r#"n=0; f() { eval 'n=$((n+1))'; case $n in 32) :;; *) f;; esac; }; f"#),
         0,
     );
-    let progress = rig.shell.state().borrow().variables["n"]
+    let progress = rig.shell.state().borrow().bindings()["n"]
         .parse::<usize>()
         .unwrap();
     // Earlier evals returned before the next function call. Their discarded
     // source/AST copies must not consume this call's live-memory admission.
     assert_eq!(progress, 32);
     assert_eq!(rig.run(r#"n=0; g() { eval 'n=$((n+1))'; g; }; g"#), 2);
-    assert_eq!(rig.shell.state().borrow().variables["n"], "32");
+    assert_eq!(rig.shell.state().borrow().bindings()["n"], "32");
     assert_eq!(rig.run("args recovered"), 0);
 }
 
 #[test]
-fn deep_function_calls_preserve_function_and_execution_depth_bounds() {
-    // The top-level list consumes one execution level; each simple call
-    // and its case body consume two more. Call 127's leaf fits at level 256.
-    // Call 128 reaches 256, then rejects its case body before incrementing n.
-    // Requesting 300 cannot bypass that guard, even with function_depth 512.
+fn deep_function_calls_preserve_explicit_policy_without_structural_depth_leak() {
+    // Structural command depth restarts at a scheduled function body, while
+    // the explicit host call policy continues counting active calls.
     for (function_depth, goal, status, admitted) in
-        [(127, 127, 0, 127), (127, 128, 2, 127), (512, 300, 2, 127)]
+        [(127, 127, 0, 127), (127, 128, 2, 127), (512, 512, 0, 512)]
     {
         let rig = Rig::new(Limits {
             function_depth,
@@ -1246,7 +1264,7 @@ fn deep_function_calls_preserve_function_and_execution_depth_bounds() {
             "function limit {function_depth}, requested depth {goal}",
         );
         assert_eq!(
-            rig.shell.state().borrow().variables["n"],
+            rig.shell.state().borrow().bindings()["n"],
             admitted.to_string()
         );
         assert!(rig.calls.borrow().is_empty());
@@ -1265,7 +1283,7 @@ fn interrupting_deep_function_tasks_restores_frames_and_drains_the_leaf() {
     let (_release, progress) = register_gated(&rig, b"unused", false);
     let job = rig
         .shell
-        .start("set -- caller; n=0; f() case $((n=n+1)) in 127) gated;; *) f inner;; esac; f outer")
+        .start("set -- caller; n=0; f() case $((n=n+1)) in 512) gated;; *) f inner;; esac; f outer")
         .unwrap();
     for _ in 0..2000 {
         rig.ex.drive(64);
@@ -1274,7 +1292,7 @@ fn interrupting_deep_function_tasks_restores_frames_and_drains_the_leaf() {
         }
     }
     assert_eq!(rig.host.active_count(), 1, "the deepest leaf must start");
-    assert_eq!(rig.shell.state().borrow().variables["n"], "127");
+    assert_eq!(rig.shell.state().borrow().bindings()["n"], "512");
     assert!(!job.is_finished());
     assert!(!progress.get());
     rig.shell.interrupt();
@@ -1375,14 +1393,14 @@ fn stored_eval_functions_and_isolated_snapshots_keep_their_live_storage() {
         admitted > 0 && admitted < 64,
         "stored {admitted} definitions"
     );
-    assert_eq!(rig.shell.state().borrow().functions.len(), admitted);
+    assert_eq!(rig.shell.state().borrow().functions().len(), admitted);
     assert_eq!(rig.run("status_gate & background=$!"), 0);
     let names = (0..admitted)
         .map(|index| format!("kept{index}"))
         .collect::<Vec<_>>()
         .join(" ");
     assert_eq!(rig.run(&format!("unset -f {names}")), 0);
-    assert!(rig.shell.state().borrow().functions.is_empty());
+    assert!(rig.shell.state().borrow().functions().is_empty());
     // The child snapshot still owns the same immutable bodies and admission.
     assert_eq!(rig.run(r#"eval "$definition""#), 2);
     release.cancel();
@@ -1403,7 +1421,7 @@ fn eval_admits_parsed_storage_before_execution_and_keeps_empty_eval_valid() {
         rig.run("value=before; eval 'value=after; args forbidden'"),
         2
     );
-    assert_eq!(rig.shell.state().borrow().variables["value"], "before");
+    assert_eq!(rig.shell.state().borrow().bindings()["value"], "before");
     assert!(rig.calls.borrow().is_empty());
     assert_eq!(rig.run("eval; eval ''"), 0);
     assert_eq!(rig.run("args recovered"), 0);
@@ -1426,7 +1444,7 @@ fn interrupting_nested_eval_unwinds_admission_without_undoing_completed_effects(
             .shell
             .state()
             .borrow()
-            .variables
+            .bindings()
             .get("n")
             .is_some_and(|n| n != "0");
         if progressed {
@@ -1437,7 +1455,7 @@ fn interrupting_nested_eval_unwinds_admission_without_undoing_completed_effects(
         !job.is_finished(),
         "the fixture must interrupt an admitted eval chain"
     );
-    assert_ne!(rig.shell.state().borrow().variables["n"], "0");
+    assert_ne!(rig.shell.state().borrow().bindings()["n"], "0");
     rig.shell.interrupt();
     assert_eq!(rig.finish(job), 130);
     assert!(rig.calls.borrow().is_empty());
@@ -1464,10 +1482,10 @@ fn interrupting_a_command_local_heredoc_discards_reader_effects_and_drains_child
     assert_eq!(rig.host.active_count(), 1);
     assert!(!progress.get());
     assert!(!job.is_finished());
-    assert!(!rig.shell.state().borrow().variables.contains_key("x"));
+    assert!(!rig.shell.state().borrow().bindings().contains_key("x"));
     rig.shell.interrupt();
     assert_eq!(rig.finish(job), 130);
-    assert!(!rig.shell.state().borrow().variables.contains_key("x"));
+    assert!(!rig.shell.state().borrow().bindings().contains_key("x"));
     assert!(rig.output.bytes().is_empty());
     assert_eq!(rig.ex.drive(64).pending, 0);
     assert_eq!(rig.host.active_count(), 0);
@@ -1475,3 +1493,6 @@ fn interrupting_a_command_local_heredoc_discards_reader_effects_and_drains_child
     assert_eq!(rig.run("args \"${x-unset}\" recovered"), 0);
     assert_eq!(*rig.calls.borrow(), [vec!["unset", "recovered"]]);
 }
+
+#[path = "file_substitution.rs"]
+mod file_substitution;

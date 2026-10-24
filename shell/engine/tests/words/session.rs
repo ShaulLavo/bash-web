@@ -53,8 +53,21 @@ impl ProcessHost for ParseInterruptHost {
         self.probes.set(probes);
         probes >= self.interrupt_at.get()
     }
+    fn access(
+        &self,
+        path: String,
+        cwd: String,
+    ) -> futures::future::LocalBoxFuture<'static, Result<(), ProcessError>> {
+        self.inner.access(path, cwd)
+    }
     fn spawn(&self, request: SpawnRequest) -> Result<ProcessId, ProcessError> {
         self.inner.spawn(request)
+    }
+    fn wait_start(
+        &self,
+        pid: ProcessId,
+    ) -> futures::future::LocalBoxFuture<'static, Result<(), ProcessError>> {
+        self.inner.wait_start(pid)
     }
     fn wait(
         &self,
@@ -64,6 +77,18 @@ impl ProcessHost for ParseInterruptHost {
     }
     fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
         self.inner.kill(pid, signal)
+    }
+    fn wait_direct_group(
+        &self,
+        group: GroupId,
+    ) -> futures::future::LocalBoxFuture<'static, Result<(), ProcessError>> {
+        self.inner.wait_direct_group(group)
+    }
+    fn detach_group(
+        &self,
+        group: GroupId,
+    ) -> shell_engine::executor::JoinHandle<Result<(), ProcessError>> {
+        self.inner.detach_group(group)
     }
     fn kill_group(&self, group: GroupId, signal: i32) -> Result<(), ProcessError> {
         self.inner.kill_group(group, signal)

@@ -1,5 +1,11 @@
 # Third-party notices
 
+The browser integration's current source and distribution boundary is recorded
+under [Browser integration port](#browser-integration-port) below. Earlier
+browser/reference-engine descriptions retain their historical context; they do
+not mean that all prototype hosts or reference engines ship in the current
+browser package. Shell and frozen-corpus provenance below is retained unchanged.
+
 Brush is MIT licensed and retained as a pinned source submodule with its license. Ghostty WebGPU is MIT licensed; its source archive and included Ghostty WASM notices are pinned by revision and checksum. Remix 3 is MIT licensed. Comlink is Apache-2.0 licensed. browser_wasi_shim is MIT OR Apache-2.0 licensed. just-bash is Apache-2.0 licensed.
 
 `scripts/notices.mjs` copies the license and notice text from the exact Rust and npm dependencies and the terminal source into `public/THIRD_PARTY_NOTICES.txt`. The production build includes that generated file as `dist/THIRD_PARTY_NOTICES.txt`. Distribution must retain it.
@@ -26,6 +32,51 @@ is covered by its [retained MIT license](shell/parser/LICENSE), Copyright
 GNU bash executable code is not included. Keep these notices and licenses with
 copies of the fixture. The new CLI's fixture helpers and replay/comparison scripts
 are original code; no additional upstream implementation is ported.
+
+The `type` option modes and classification order in
+`shell/engine/src/interpreter/type_builtin.rs` are adapted from Bashkit's
+`crates/bashkit/src/builtins/introspect.rs` at the same pinned MIT revision.
+The focused type examples adapt `tests/spec_cases/bash/type.test.sh`. The retained
+Bashkit license above covers both. Catalogue registration, streaming descriptor
+writes, bounded resumable PATH lookup and shared canonical AST rendering are
+original local adapters over the existing shell. Alias/hash state, upstream PATH
+helpers, a second builtin registry and function-text reparsing are not included.
+`sources.lock.json` records source hashes and destinations.
+
+The typed command catalogue in `shell/engine/src/commands.rs` and its
+`commands/tests.rs` and `tests/words/command_metadata.rs` controls are original
+local ownership adapters over bash-web `92ab384516abcf91da811e11ac871b73f6722ba0`.
+They replace the duplicated local command-name lists with typed metadata and
+handler selection, not new upstream command implementations. Declaration syntax
+and continuation checks remain in the adapted `builtins.rs` code classified
+below, with their quoting and raw-spelling behavior unchanged. The parser's
+separate grammar tables, pinned sources and existing adapted algorithms are not
+moved or changed. No upstream payload or provenance-lock update is introduced.
+
+The parsing context facade in `shell/engine/src/parse.rs` and its
+`parse/tests.rs` controls are original local adapters. They centralize the
+existing script/eval, generated-word, lazy-operand and substitution parser calls
+from bash-web `3cec14c60bf2ed90dedb504d48da50d3b689108e`, without moving or
+copying upstream parser implementation. The unchanged Bashkit parser and adapted
+expansion code retain their classifications and licenses below; the facade adds
+no new upstream payload or provenance-lock changes.
+
+The binding ownership and restoration move in `shell/engine/src/state.rs` and
+its original `state/bindings_tests.rs` controls extracts the original local
+`BuiltinPrefixFrame` from `interpreter.rs` at bash-web
+`163386141175458cf9d265e70e92d0c5074333dc`. One state-owned guard preserves
+separate expansion and builtin replay policies; function locals keep their
+own scope guard. Private storage, immutable raw views, startup initialization
+and result-publication operations introduce no copied upstream code. Existing
+Bashkit-derived variable and expansion classifications below remain applicable.
+
+The shared execution module `shell/engine/src/exec.rs` is original engine
+admission and ownership machinery extracted from the local interpreter,
+expansion and arithmetic adapters. It owns shared fault metadata and the charged
+arithmetic-fault constructor, not Bashkit's arithmetic grammar or operators.
+The neutral work wrapper introduces no new copied upstream code; the existing
+Bashkit-derived expansion and arithmetic classifications and licenses still apply.
+Test stack instrumentation now lives in the original executor.
 
 The shell's first word-expansion area is separately adapted from Bashkit at
 `491c3281f668b76d64b15210b8f5d7bf97244be0` (MIT, Copyright 2024–2026 Everruns).
@@ -265,8 +316,7 @@ targets, replacements, substring/arithmetic, substitutions, tilde, pathname and
 brace expansion remain outside the slice. The parser correction below retains
 the license and all upstream assertions. No process-host, browser transport or output buffering code
 is copied or changed. Fixed oracle, scorer, cases, classifications, exclusions,
-baseline and plan scores remain unchanged; runtime and corpus results await the
-coordinator's CI.
+baseline and scores remain unchanged.
 
 The trim review repairs are original adapters in `shell/engine/src/expand.rs`
 and `expand/operand.rs`, plus an original `ParameterHeader` helper in the
@@ -287,10 +337,9 @@ versions are unchanged. Original regressions in `shell/engine/tests/words.rs`
 and `shell/parser/tests/api.rs` use focused GNU Bash `C.UTF-8` controls for all
 four trims, scalar and lazy contexts, partial protection, malformed brackets,
 quoted error messages and unrelated parser paths. They also check that nested
-length inputs share snapshot storage while ordinary PR20 length behavior keeps
+length inputs share snapshot storage while ordinary length behavior keeps
 its existing limits. `shellParser.changeLog` and
 `shellParameterTrim.reviewCorrections` classify the paths and local changes.
-Fresh runtime and corpus checks for these repairs remain coordinator-owned CI.
 
 ## Scalar parameter case modification
 
@@ -321,7 +370,7 @@ first-form tails remain unchanged. This does not claim full Unicode or locale
 collation compatibility. Pattern effects precede locale selection and final IFS
 splitting; shared bounds, cooperative yields and cancellation-safe frames remain
 in force. No process host, browser transport or output buffering is copied or
-changed. Versions and fixed measurement metadata remain coordinator-owned.
+changed. Versions and fixed measurement metadata are unchanged.
 
 The original integration also reserves actual matcher vector capacities and case
 result String capacities before allocation, including spare slots. Exact-budget
@@ -440,7 +489,8 @@ restoration corrections are original semantic-reference adapters measured agains
 finite GNU Bash 5.3.15 controls; no additional upstream implementation is copied.
 
 The acceptance-only streaming `grep` subset in
-`shell/engine/src/builtins/grep.rs` adapts Bashkit's
+`shell/utilities/src/grep.rs` (its own WASM program; formerly an in-shell
+stand-in in `shell/engine/src/builtins/grep.rs`) adapts Bashkit's
 `crates/bashkit/src/builtins/grep.rs` at
 `491c3281f668b76d64b15210b8f5d7bf97244be0` (MIT, Copyright 2024–2026 Everruns).
 The upstream license remains at `shell/parser/LICENSE` and is included in the
@@ -448,3 +498,161 @@ distribution notices. `sources.lock.json:shellAcceptanceUtilities` records the
 exact source hash, adapted behaviors and original bounded descriptor/regex
 adapters. The accompanying `mkdir` implementation and filesystem ABI bindings
 are original, not a copied upstream utility.
+
+The `cat`, `mkdir` and `seq` programs in `shell/utilities/src/acceptance.rs`
+are the original in-shell stand-ins moved unchanged in behavior into separately
+linked WASM programs. Their guest entry (`shell/utilities/src/lib.rs`), the
+installer (`src/utilities/`), the compatibility fixture guests and `shell-cli`
+composition (`shell/compat-fixtures`, reusing `shell/engine/src/compat.rs`) and
+the Node compatibility instrument (`scripts/waffle-compat.ts` and its worker
+roots) are original local adapters. Only the `grep` program depends on the
+`regex` crate; the core shell does not. No new upstream source, source-lock
+entry or license payload is introduced by the split.
+
+## Browser integration port
+
+The browser shell facade, bounded terminal bridge, shell-specific worker/guest
+adapters, and own-shell browser tests originate in the retired
+`ShaulLavo/brush-web` prototype at
+`a2a4e96f8f771fdd088303535a36c0f43869d10a` (MIT, Copyright 2026 Shaul Lavo).
+Their imported source content is retained in bash-web from this port onward;
+the retired repository is neither a dependency nor a required provenance link.
+The host-local checkpoint `50c2e35a61ba8caf1ef3edbbf4a5bdd346b191a6` left these
+`src/` and `tests/` sources unchanged. The retained root [MIT license](LICENSE)
+covers those original adapters. The detailed source/destination mapping,
+classifications, and local changes are recorded under `browserRuntime` in
+`sources.lock.json` and in [Browser integration](docs/browser-runtime.md#source-provenance).
+
+Original embedding code includes `src/{shell.ts,bridge.ts,shell-terminal-output.ts}`
+and `src/runtime/{guest-imports.ts,terminal-admission.ts,limits.ts}`, together
+with the shell-facing integration and original adapter regressions. These are
+not additional copies of Bashkit's interpreter or the old Brush host. The
+browser terminal/demo in `src/browser/` is a separate host concern. New package
+exports and Waffle runtime injection are local integration code.
+
+The earlier shell integration derives from `ShaulLavo/bun-wasm` revision
+`8d3d416aa9cb23718ed3487a33d0b06e8e373672` (MIT), including
+`web/src/{worker.ts,runtime-terminals.ts,runner.ts,subprocess-broker.ts}` via
+the prototype source above. The current `src/runtime/worker.ts` is a small
+original shell-specific `WorkerExecutor` passed to the published
+`waffle/browser/worker` bootstrap; it retains only shell imports/phase/memory
+observations, not generic runtime setup or cleanup. The adapted
+`src/runtime/runtime-terminals.ts` retains the bounded
+`createBridgeTerminal` stream and restores the original prototype
+`src/wasi-host.ts` cooked-input policy without importing that generic WASI host.
+This is a bounded local adapter, not a full cross-worker tty discipline; Waffle
+owns the terminal/descriptor codec and the planned terminal endpoint.
+
+The root lifecycle fencing from Bun's `web/src/runner.ts` passed through
+prototype `src/runtime/browser-runtime.ts` into `src/runtime/shell-host.ts`.
+The original `src/runtime/worker-launcher.ts` assembles terminal-consumer hooks
+from the earlier lifecycle adapters and delegates to Waffle's
+`service.launchWorker`; the original `diagnostics.ts` and `src/index.ts` expose
+borrowed observations and package exports. New original regressions live in
+`src/runtime/{diagnostics.test.ts,terminal.test.ts,shell-host.test.ts}`; the
+diagnostics cases verify autonomous closed-getter observation before any snapshot
+and timer cancellation on root retirement. Shared WASI, filesystem,
+process, descriptor, pipe, signal, worker-bootstrap and lifecycle implementations
+belong to Waffle. No generic runtime, broker or terminal codec is copied here.
+The exact mappings and original-versus-adapted classifications remain recorded
+in the manifest and browser documentation.
+
+The original worker builder bundles the shell-specific executor and the external
+peer's public `waffle/browser/fs-worker` entry into stable JavaScript assets;
+this does not vendor a runtime source tree. Original regressions in
+`tests/worker-assets.spec.ts` check worker delivery and usable Canvas rendering
+when WebGPU has no available adapter. Startup cancellation/join, explicit
+post-fetch-failure admission retry, locally observed shell-worker cleanup, and
+dropped-terminal-byte diagnostics are original integration changes. The counters
+expose output loss; they are not a lossless generic terminal implementation or a
+foreign-adapter teardown guarantee. Manual pipe observations retain no relay or
+disposal ownership and clear closed observations on a bounded timer.
+
+The browser acceptance harness in `tests/browser-main.ts` and
+`tests/helpers/test-programs.ts` is original package composition
+around the page's Waffle runtime. The page owns its source-guest lease;
+`test-programs.ts` registers compiled cooperative `test-guest` and source-admitted,
+instrumented `test-spin` through the existing shell adapter, without copied
+runtime or ABI-host implementations. The documented installer contract describes
+future Bun composition. The required public Bun installer/worker and matching
+verified guest descriptor are not yet available at a published dependency pin:
+there is no Bun host package dependency, implementation, guest binary or guest
+license payload in this delivery. Affected Bun-specific cases remain pending.
+The generic browser host knows no specific external programs. No Bun worker,
+broker, subprocess transport, import-slot implementation, or runtime source is
+copied into this package to work around the missing external package surface.
+
+The small source-built guests under `tests/guest/` and their
+`scripts/build-test-guest.mjs` builder are original regression fixtures under the
+root MIT license, not adapted Bun implementations. `test-guest` exercises generic
+cooperative process-ABI behavior; `test-spin` has no `runtime_proc` imports and
+exercises the runtime's actual source interruption admission. Generated test
+assets are ignored build output, not externally sourced guest payloads.
+
+### Waffle peer
+
+`waffle` **0.0.47** at published revision `afe9cc1f3f93ea84929903e5a55854dbfd973448`
+is MIT licensed, Copyright 2026 Shaul Lavochkin. It is a required peer imported
+by the shell adapter and is pinned identically for development. The application
+creates the runtime through Waffle's root `createRuntime` and supplies it to the
+shell. Filesystem, process, descriptor, pipe, and shared lifecycle authority
+belongs to that peer, not a vendored `@bun-wasm/runtime` copy. Preserve Waffle's
+license and dependency notices when distributing its implementation.
+
+### Browser distribution
+
+The Ghostty terminal source/archive and included WASM notice identity retain the
+existing `terminal` pin and the historical notice correction above. The current
+port does not add the prototype's reference-engine comparisons or default Brush
+host. Browser distributions must include the generated terminal, npm/Waffle,
+and adapter notices as well as shell dependency notices in
+`dist/THIRD_PARTY_NOTICES.txt`. This port changes no frozen shell scoreboard,
+corpus licenses, generator fixture bytes, or earlier extraction provenance.
+
+### Startup observation and original acceptance controls
+
+**External dependency:** Waffle `afe9cc1f3f93ea84929903e5a55854dbfd973448`,
+`docs/host-abi.md`, `proc/abi.ts`, and `browser/worker.ts` define the
+non-consuming `start_status` and CHILD_START (kind 6) boundary. This pin also
+fixes nested `wait_job` observation after a pending claim. No Waffle implementation
+or libc patch is copied or changed locally.
+
+**Original adapters:** `shell/engine/src/{process.rs,runtime.rs,runtime/wasi.rs}`
+and `interpreter.rs` observe that boundary and retain the command diagnostic
+endpoint only through startup resolution and its diagnostic, not terminal/job
+cleanup. Fork diagnostics use parent stderr; real exits 126/127 remain ordinary
+exits. `tests/guest/src/main.rs`, `tests/helpers/test-programs.ts`, and
+`tests/pipelines.acceptance.spec.ts` add original EOF acknowledgement programs
+and an original empty core-Wasm module that fails executable startup. These are
+MIT-licensed original fixtures, not copied upstream implementations.
+
+**Original test instrumentation:** `scripts/test-bash-compat-cleanup.mjs` installs
+its Node Worker interceptor before importing the compatibility entrypoint and
+requires its actual dispatch message. A bypass mutation must fail that assertion.
+This standalone CLI fixture uses Node WASI, not Waffle's browser worker; no runtime
+built-in capture behavior is changed for instrumentation.
+
+### Getopts scanner
+
+`getopts` adapts `execute_getopts`, `execute_getopts_inner`, `unset_optarg` and
+`set_getopts_name` from Bashkit's `crates/bashkit/src/interpreter/mod.rs` at
+`491c3281f668b76d64b15210b8f5d7bf97244be0`, MIT, Copyright 2024–2026 Everruns.
+Cluster, required-argument and local-OPTIND examples adapt
+`crates/bashkit/tests/spec_cases/bash/getopts.test.sh` and
+`getopts-local-optind.test.sh` at that revision. The retained license is
+`shell/parser/LICENSE`; `sources.lock.json` records source hashes and destinations.
+
+The constant-size cursor, scoped restoration, bounded argument snapshots,
+command/execution storage admission, cooperative cancellation and diagnostic
+integration are original adapters. Readonly, prefix/reset, alias and resource
+controls use GNU Bash observations, not copied Bash implementation. See
+[Getopts](docs/getopts.md) for the supported boundary and verification.
+
+### Input-only substitution eligibility
+
+The owned parser's backtick-origin metadata and dedicated file-substitution AST
+variant are original local modifications to the Bashkit-derived parser at
+`491c3281f668b76d64b15210b8f5d7bf97244be0`. The file capture adapter and GNU Bash
+5.3.15 controls are original. GNU Bash 5.3 source was inspected to explain the
+observed optimization boundaries; no upstream implementation was copied.
+See `sources.lock.json:shellFileSubstitution` and `docs/file-substitution.md`.

@@ -1,0 +1,1128 @@
+{
+  "schema": 1,
+  "identity": {
+    "kind": "lexical-source-scan",
+    "engineSourceSha256": "837c005c9843426e9c0bf3de791cfba1c67db8eae8c96203d7364293170a74c5",
+    "binaryBuild": null
+  },
+  "contract": {
+    "version": 1,
+    "counting": "unique top-level source->target edges per production/testOnly scope",
+    "paths": "crate:: and grouped use trees; self/super resolved against conventional file and inline modules",
+    "exclusions": "comments and literals; no alias/re-export resolution, external crate paths or macro expansion",
+    "testScopes": "#[test] and cfg provably false without test; uncertain cfgs counted as production"
+  },
+  "graph": {
+    "executor": [],
+    "io": [
+      "executor"
+    ],
+    "process": [
+      "executor",
+      "io"
+    ],
+    "runtime": [
+      "executor",
+      "io",
+      "process"
+    ],
+    "exec": [
+      "executor"
+    ],
+    "state": [
+      "executor",
+      "exec"
+    ],
+    "parse": [
+      "executor",
+      "exec"
+    ],
+    "commands": [
+      "parse",
+      "exec"
+    ],
+    "ast_copy": [
+      "executor",
+      "exec",
+      "parse"
+    ],
+    "arithmetic": [
+      "executor",
+      "exec",
+      "state",
+      "expand",
+      "parse"
+    ],
+    "expand": [
+      "executor",
+      "exec",
+      "state",
+      "parse",
+      "arithmetic",
+      "ast_copy",
+      "io",
+      "interpreter"
+    ],
+    "builtins": [
+      "executor",
+      "exec",
+      "state",
+      "parse",
+      "commands",
+      "expand",
+      "interpreter",
+      "io"
+    ],
+    "interpreter": [
+      "executor",
+      "exec",
+      "state",
+      "parse",
+      "commands",
+      "arithmetic",
+      "expand",
+      "builtins",
+      "io",
+      "process",
+      "ast_copy"
+    ]
+  },
+  "testFixtureEdges": {
+    "builtins": [
+      "process"
+    ],
+    "expand": [
+      "process"
+    ],
+    "process": [
+      "interpreter"
+    ],
+    "runtime": [
+      "interpreter"
+    ]
+  },
+  "compositionRoots": {
+    "lib": [
+      "arithmetic",
+      "ast_copy",
+      "builtins",
+      "executor",
+      "expand",
+      "interpreter",
+      "io",
+      "process",
+      "runtime",
+      "state",
+      "exec",
+      "parse",
+      "commands"
+    ],
+    "main": [
+      "compat",
+      "executor",
+      "interpreter",
+      "io",
+      "process",
+      "state"
+    ],
+    "runtime_main": [
+      "terminal",
+      "executor",
+      "interpreter",
+      "io",
+      "runtime",
+      "state"
+    ],
+    "compat": [
+      "executor",
+      "io",
+      "process"
+    ],
+    "terminal": []
+  },
+  "rootInlineModules": {
+    "runtime_main": [
+      "guest"
+    ]
+  },
+  "rootReexports": {
+    "Limits": "interpreter",
+    "Session": "interpreter"
+  },
+  "modules": [
+    {
+      "name": "arithmetic",
+      "kind": "layer",
+      "files": [
+        "shell/engine/src/arithmetic.rs"
+      ]
+    },
+    {
+      "name": "ast_copy",
+      "kind": "layer",
+      "files": [
+        "shell/engine/src/ast_copy.rs"
+      ]
+    },
+    {
+      "name": "builtins",
+      "kind": "layer",
+      "files": [
+        "shell/engine/src/builtins.rs",
+        "shell/engine/src/builtins/alias.rs",
+        "shell/engine/src/builtins/caller.rs",
+        "shell/engine/src/builtins/completion.rs",
+        "shell/engine/src/builtins/completion/generate.rs",
+        "shell/engine/src/builtins/completion/generate/filesystem.rs",
+        "shell/engine/src/builtins/completion/options.rs",
+        "shell/engine/src/builtins/completion/wordlist.rs",
+        "shell/engine/src/builtins/declarations.rs",
+        "shell/engine/src/builtins/directories.rs",
+        "shell/engine/src/builtins/directories/tests.rs",
+        "shell/engine/src/builtins/getopts.rs",
+        "shell/engine/src/builtins/getopts/tests.rs",
+        "shell/engine/src/builtins/printf.rs",
+        "shell/engine/src/builtins/printf/fields.rs",
+        "shell/engine/src/builtins/printf/quoting.rs",
+        "shell/engine/src/builtins/read.rs",
+        "shell/engine/src/builtins/read/fields.rs",
+        "shell/engine/src/builtins/test.rs",
+        "shell/engine/src/builtins/trap.rs"
+      ]
+    },
+    {
+      "name": "commands",
+      "kind": "layer",
+      "files": [
+        "shell/engine/src/commands.rs",
+        "shell/engine/src/commands/tests.rs"
+      ]
+    },
+    {
+      "name": "compat",
+      "kind": "composition-root",
+      "files": [
+        "shell/engine/src/compat.rs"
+      ]
+    },
+    {
+      "name": "exec",
+      "kind": "layer",
+      "files": [
+        "shell/engine/src/exec.rs"
+      ]
+    },
+    {
+      "name": "executor",
+      "kind": "layer",
+      "files": [
+        "shell/engine/src/executor.rs"
+      ]
+    },
+    {
+      "name": "expand",
+      "kind": "layer",
+      "files": [
+        "shell/engine/src/expand.rs",
+        "shell/engine/src/expand/array_slice.rs",
+        "shell/engine/src/expand/braces.rs",
+        "shell/engine/src/expand/case_pattern.rs",
+        "shell/engine/src/expand/command.rs",
+        "shell/engine/src/expand/glob.rs",
+        "shell/engine/src/expand/ifs.rs",
+        "shell/engine/src/expand/indices.rs",
+        "shell/engine/src/expand/indirect.rs",
+        "shell/engine/src/expand/operand.rs",
+        "shell/engine/src/expand/pattern.rs",
+        "shell/engine/src/expand/pattern/classes.rs",
+        "shell/engine/src/expand/pattern/extglob.rs",
+        "shell/engine/src/expand/positional.rs",
+        "shell/engine/src/expand/printable.rs",
+        "shell/engine/src/expand/replacement.rs",
+        "shell/engine/src/expand/tilde.rs",
+        "shell/engine/src/expand/transformation.rs"
+      ]
+    },
+    {
+      "name": "interpreter",
+      "kind": "layer",
+      "files": [
+        "shell/engine/src/interpreter.rs",
+        "shell/engine/src/interpreter/builtin_wrapper.rs",
+        "shell/engine/src/interpreter/command_builtin.rs",
+        "shell/engine/src/interpreter/command_builtin/tests.rs",
+        "shell/engine/src/interpreter/conditional.rs",
+        "shell/engine/src/interpreter/conditional/regex.rs",
+        "shell/engine/src/interpreter/control.rs",
+        "shell/engine/src/interpreter/eval.rs",
+        "shell/engine/src/interpreter/file_substitution.rs",
+        "shell/engine/src/interpreter/function_names.rs",
+        "shell/engine/src/interpreter/indexed.rs",
+        "shell/engine/src/interpreter/reader.rs",
+        "shell/engine/src/interpreter/select.rs",
+        "shell/engine/src/interpreter/source.rs",
+        "shell/engine/src/interpreter/trap_tests.rs",
+        "shell/engine/src/interpreter/type_builtin.rs"
+      ]
+    },
+    {
+      "name": "io",
+      "kind": "layer",
+      "files": [
+        "shell/engine/src/io.rs"
+      ]
+    },
+    {
+      "name": "lib",
+      "kind": "composition-root",
+      "files": [
+        "shell/engine/src/lib.rs"
+      ]
+    },
+    {
+      "name": "main",
+      "kind": "composition-root",
+      "files": [
+        "shell/engine/src/main.rs"
+      ]
+    },
+    {
+      "name": "parse",
+      "kind": "layer",
+      "files": [
+        "shell/engine/src/parse.rs",
+        "shell/engine/src/parse/tests.rs"
+      ]
+    },
+    {
+      "name": "process",
+      "kind": "layer",
+      "files": [
+        "shell/engine/src/process.rs"
+      ]
+    },
+    {
+      "name": "runtime",
+      "kind": "layer",
+      "files": [
+        "shell/engine/src/runtime.rs",
+        "shell/engine/src/runtime/tests.rs",
+        "shell/engine/src/runtime/wasi.rs"
+      ]
+    },
+    {
+      "name": "runtime_main",
+      "kind": "composition-root",
+      "files": [
+        "shell/engine/src/runtime_main.rs"
+      ]
+    },
+    {
+      "name": "state",
+      "kind": "layer",
+      "files": [
+        "shell/engine/src/state.rs",
+        "shell/engine/src/state/aliases.rs",
+        "shell/engine/src/state/binding.rs",
+        "shell/engine/src/state/bindings_tests.rs",
+        "shell/engine/src/state/call_stack.rs",
+        "shell/engine/src/state/case.rs",
+        "shell/engine/src/state/case_attributes.rs",
+        "shell/engine/src/state/completion.rs",
+        "shell/engine/src/state/completion/tests.rs",
+        "shell/engine/src/state/declarations.rs",
+        "shell/engine/src/state/directory_stack.rs",
+        "shell/engine/src/state/getopts_tests.rs",
+        "shell/engine/src/state/source_tests.rs",
+        "shell/engine/src/state/traps.rs"
+      ]
+    },
+    {
+      "name": "terminal",
+      "kind": "composition-root",
+      "files": [
+        "shell/engine/src/terminal.rs"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "source": "arithmetic",
+      "target": "exec",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/arithmetic.rs",
+        "line": 6,
+        "column": 12
+      }
+    },
+    {
+      "source": "arithmetic",
+      "target": "executor",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/arithmetic.rs",
+        "line": 7,
+        "column": 5
+      }
+    },
+    {
+      "source": "arithmetic",
+      "target": "expand",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/arithmetic.rs",
+        "line": 8,
+        "column": 14
+      }
+    },
+    {
+      "source": "arithmetic",
+      "target": "state",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/arithmetic.rs",
+        "line": 9,
+        "column": 13
+      }
+    },
+    {
+      "source": "ast_copy",
+      "target": "exec",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/ast_copy.rs",
+        "line": 4,
+        "column": 12
+      }
+    },
+    {
+      "source": "ast_copy",
+      "target": "executor",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/ast_copy.rs",
+        "line": 5,
+        "column": 5
+      }
+    },
+    {
+      "source": "builtins",
+      "target": "commands",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/builtins.rs",
+        "line": 13,
+        "column": 16
+      }
+    },
+    {
+      "source": "builtins",
+      "target": "exec",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/builtins.rs",
+        "line": 885,
+        "column": 25
+      }
+    },
+    {
+      "source": "builtins",
+      "target": "executor",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/builtins.rs",
+        "line": 14,
+        "column": 5
+      }
+    },
+    {
+      "source": "builtins",
+      "target": "expand",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/builtins.rs",
+        "line": 15,
+        "column": 14
+      }
+    },
+    {
+      "source": "builtins",
+      "target": "interpreter",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/builtins.rs",
+        "line": 16,
+        "column": 19
+      }
+    },
+    {
+      "source": "builtins",
+      "target": "io",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/builtins.rs",
+        "line": 17,
+        "column": 10
+      }
+    },
+    {
+      "source": "builtins",
+      "target": "parse",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/builtins/completion/wordlist.rs",
+        "line": 237,
+        "column": 20
+      }
+    },
+    {
+      "source": "builtins",
+      "target": "state",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/builtins.rs",
+        "line": 18,
+        "column": 13
+      }
+    },
+    {
+      "source": "exec",
+      "target": "executor",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/exec.rs",
+        "line": 3,
+        "column": 23
+      }
+    },
+    {
+      "source": "expand",
+      "target": "arithmetic",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/expand.rs",
+        "line": 1038,
+        "column": 29
+      }
+    },
+    {
+      "source": "expand",
+      "target": "ast_copy",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/expand.rs",
+        "line": 1012,
+        "column": 17
+      }
+    },
+    {
+      "source": "expand",
+      "target": "exec",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/expand.rs",
+        "line": 34,
+        "column": 30
+      }
+    },
+    {
+      "source": "expand",
+      "target": "executor",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/expand.rs",
+        "line": 7,
+        "column": 5
+      }
+    },
+    {
+      "source": "expand",
+      "target": "interpreter",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/expand.rs",
+        "line": 64,
+        "column": 38
+      }
+    },
+    {
+      "source": "expand",
+      "target": "io",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/expand/command.rs",
+        "line": 172,
+        "column": 18
+      }
+    },
+    {
+      "source": "expand",
+      "target": "parse",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/expand.rs",
+        "line": 1268,
+        "column": 15
+      }
+    },
+    {
+      "source": "expand",
+      "target": "state",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/expand.rs",
+        "line": 8,
+        "column": 13
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "arithmetic",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 5,
+        "column": 5
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "ast_copy",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 1605,
+        "column": 33
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "builtins",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 5,
+        "column": 17
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "commands",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 3,
+        "column": 5
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "exec",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 93,
+        "column": 30
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "executor",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 6,
+        "column": 16
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "expand",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 7,
+        "column": 5
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "io",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 8,
+        "column": 10
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "parse",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 9,
+        "column": 13
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "process",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 10,
+        "column": 15
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "state",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 11,
+        "column": 13
+      }
+    },
+    {
+      "source": "io",
+      "target": "executor",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/io.rs",
+        "line": 2,
+        "column": 23
+      }
+    },
+    {
+      "source": "process",
+      "target": "executor",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/process.rs",
+        "line": 4,
+        "column": 16
+      }
+    },
+    {
+      "source": "process",
+      "target": "io",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/process.rs",
+        "line": 5,
+        "column": 5
+      }
+    },
+    {
+      "source": "runtime",
+      "target": "executor",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/runtime.rs",
+        "line": 5,
+        "column": 16
+      }
+    },
+    {
+      "source": "runtime",
+      "target": "io",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/runtime.rs",
+        "line": 7,
+        "column": 9
+      }
+    },
+    {
+      "source": "runtime",
+      "target": "process",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/runtime.rs",
+        "line": 10,
+        "column": 15
+      }
+    },
+    {
+      "source": "runtime_main",
+      "target": "terminal",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/runtime_main.rs",
+        "line": 17,
+        "column": 27
+      }
+    },
+    {
+      "source": "state",
+      "target": "exec",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/state.rs",
+        "line": 5,
+        "column": 12
+      }
+    },
+    {
+      "source": "state",
+      "target": "executor",
+      "scope": "production",
+      "location": {
+        "path": "shell/engine/src/state.rs",
+        "line": 6,
+        "column": 5
+      }
+    },
+    {
+      "source": "arithmetic",
+      "target": "executor",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/arithmetic.rs",
+        "line": 709,
+        "column": 17
+      }
+    },
+    {
+      "source": "arithmetic",
+      "target": "state",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/arithmetic.rs",
+        "line": 709,
+        "column": 37
+      }
+    },
+    {
+      "source": "builtins",
+      "target": "exec",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/builtins/getopts/tests.rs",
+        "line": 4,
+        "column": 5
+      }
+    },
+    {
+      "source": "builtins",
+      "target": "executor",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/builtins/directories/tests.rs",
+        "line": 6,
+        "column": 5
+      }
+    },
+    {
+      "source": "builtins",
+      "target": "interpreter",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/builtins/directories/tests.rs",
+        "line": 5,
+        "column": 5
+      }
+    },
+    {
+      "source": "builtins",
+      "target": "io",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/builtins/directories/tests.rs",
+        "line": 7,
+        "column": 10
+      }
+    },
+    {
+      "source": "builtins",
+      "target": "process",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/builtins/directories/tests.rs",
+        "line": 8,
+        "column": 5
+      }
+    },
+    {
+      "source": "builtins",
+      "target": "state",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/builtins/getopts/tests.rs",
+        "line": 8,
+        "column": 13
+      }
+    },
+    {
+      "source": "exec",
+      "target": "executor",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/exec.rs",
+        "line": 44,
+        "column": 13
+      }
+    },
+    {
+      "source": "expand",
+      "target": "exec",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/expand.rs",
+        "line": 2769,
+        "column": 25
+      }
+    },
+    {
+      "source": "expand",
+      "target": "executor",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/expand/case_pattern.rs",
+        "line": 65,
+        "column": 20
+      }
+    },
+    {
+      "source": "expand",
+      "target": "interpreter",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/expand/case_pattern.rs",
+        "line": 64,
+        "column": 9
+      }
+    },
+    {
+      "source": "expand",
+      "target": "io",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/expand/case_pattern.rs",
+        "line": 66,
+        "column": 9
+      }
+    },
+    {
+      "source": "expand",
+      "target": "process",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/expand/case_pattern.rs",
+        "line": 67,
+        "column": 9
+      }
+    },
+    {
+      "source": "expand",
+      "target": "state",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/expand.rs",
+        "line": 2995,
+        "column": 21
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "ast_copy",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/interpreter/function_names.rs",
+        "line": 223,
+        "column": 20
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "exec",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 4175,
+        "column": 25
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "executor",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 5528,
+        "column": 17
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "expand",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/interpreter/conditional/regex.rs",
+        "line": 766,
+        "column": 37
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "io",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 4161,
+        "column": 17
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "process",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/interpreter.rs",
+        "line": 4161,
+        "column": 31
+      }
+    },
+    {
+      "source": "interpreter",
+      "target": "state",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/interpreter/conditional/regex.rs",
+        "line": 766,
+        "column": 45
+      }
+    },
+    {
+      "source": "io",
+      "target": "executor",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/io.rs",
+        "line": 1061,
+        "column": 9
+      }
+    },
+    {
+      "source": "process",
+      "target": "executor",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/process.rs",
+        "line": 1096,
+        "column": 20
+      }
+    },
+    {
+      "source": "process",
+      "target": "interpreter",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/process.rs",
+        "line": 1149,
+        "column": 13
+      }
+    },
+    {
+      "source": "process",
+      "target": "io",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/process.rs",
+        "line": 710,
+        "column": 21
+      }
+    },
+    {
+      "source": "runtime",
+      "target": "executor",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/runtime/tests.rs",
+        "line": 4,
+        "column": 5
+      }
+    },
+    {
+      "source": "runtime",
+      "target": "interpreter",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/runtime/tests.rs",
+        "line": 3,
+        "column": 5
+      }
+    },
+    {
+      "source": "runtime",
+      "target": "io",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/runtime/tests.rs",
+        "line": 5,
+        "column": 10
+      }
+    },
+    {
+      "source": "runtime",
+      "target": "process",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/runtime/tests.rs",
+        "line": 6,
+        "column": 5
+      }
+    },
+    {
+      "source": "state",
+      "target": "exec",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/state.rs",
+        "line": 1182,
+        "column": 63
+      }
+    },
+    {
+      "source": "state",
+      "target": "executor",
+      "scope": "testOnly",
+      "location": {
+        "path": "shell/engine/src/state.rs",
+        "line": 2361,
+        "column": 9
+      }
+    }
+  ],
+  "violations": [],
+  "issues": [],
+  "counts": {
+    "production": {
+      "edges": 43,
+      "violations": 0
+    },
+    "testOnly": {
+      "edges": 32,
+      "violations": 0
+    },
+    "violations": 0,
+    "inventoryIssues": 0
+  },
+  "capabilities": {
+    "status": "not-measured",
+    "gate": "plan 006 step 6 separate Full/Lite compile-and-test matrix; lexical edges do not prove compilation"
+  },
+  "sizes": {
+    "full": {
+      "rawBytes": null,
+      "gzipBytes": null
+    },
+    "lite": {
+      "rawBytes": null,
+      "gzipBytes": null
+    }
+  }
+}

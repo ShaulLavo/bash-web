@@ -1,7 +1,6 @@
 //! Scalar replacement adapted from the pinned Bashkit expansion.rs rules.
 //! Search and emission use the engine's shared admission and cancellation budget.
 use super::{Error, Expansion, Protection, Segment, Segments, Work, admit_vec_slot, pattern};
-use crate::state::SharedState;
 
 enum Piece {
     Literal(char),
@@ -121,19 +120,27 @@ impl Expansion<'_> {
         pattern_source: &str,
         replacement_source: &str,
         global: bool,
-        state: &SharedState,
-        protected: bool,
-        depth: usize,
+        context: super::TransformContext<'_>,
     ) -> Result<(), Error> {
+        let super::TransformContext {
+            state,
+            protected,
+            depth,
+        } = context;
         self.work.checkpoint(self.cancel).await?;
         let value = {
             let s = state.borrow();
-            let value = s.scalar_parameter(name);
-            if value.is_some_and(|v| v.len() > self.raw_remaining.min(self.work.remaining)) {
-                return Err(2.into());
+            if !s.scalar_is_set(name) {
+                None
+            } else {
+                Some(super::parameter_snapshot(
+                    &s,
+                    name,
+                    self.raw_remaining.min(self.work.remaining),
+                    true,
+                    self.work,
+                )?)
             }
-            self.work.admit_storage(value.map_or(0, str::len))?;
-            value.map(str::to_owned)
         };
         let Some(value) = value else {
             return self
@@ -151,6 +158,7 @@ impl Expansion<'_> {
             replacement: None,
             pattern_context: true,
             pattern_snapshots: true,
+            admit_frames: self.admit_frames,
             ifs: None,
             ifs_changed: false,
             work: self.work,
@@ -176,12 +184,21 @@ impl Expansion<'_> {
         if ifs_changed {
             self.ifs = None;
         }
-        let mut search = pattern.replacement(global, self.work, self.cancel).await?;
+        let cancel = self.cancel;
+        let mut search = self
+            .work
+            .frame(|work| pattern.replacement(global, work, cancel))
+            .await?;
         self.admit_replacement_output().await?;
         let protection = Protection::expansion(protected, state);
         let mut last = 0;
         let mut from = 0;
-        while let Some((start, end)) = search.find(&value, from, self.work, self.cancel).await? {
+        loop {
+            let found = self
+                .work
+                .frame(|work| search.find(&value, from, work, cancel))
+                .await?;
+            let Some((start, end)) = found else { break };
             self.segment(&value[last..start], protection, false).await?;
             replacement
                 .emit(&value[start..end], self, protection)
@@ -224,6 +241,7 @@ mod tests {
             replacement: None,
             pattern_context: snapshots,
             pattern_snapshots: snapshots,
+            admit_frames: false,
             ifs: None,
             ifs_changed: false,
             work: &mut work,

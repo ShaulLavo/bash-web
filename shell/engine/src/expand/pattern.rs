@@ -2,26 +2,66 @@
 //! and glob.rs::glob_match_steps at the pinned revision in sources.lock.json.
 //! This matcher advances all basic-glob states over borrowed character slices.
 //! It allocates no candidate strings and never treats exhausted work as a miss.
-use super::{Error, Protection, Work, admit_string_growth, admit_vec_slot, case};
+use super::{Error, Protection, Work, admit_string_growth, admit_vec_slot};
 use crate::executor::Cancel;
 use std::mem::size_of;
+
+pub(crate) mod classes;
+mod extglob;
 
 #[derive(Clone, Copy)]
 struct Character {
     value: char,
     protected: bool,
     escaped_protected: bool,
+    /// Backslashes in Bash's literal spelling of a malformed group suffix.
+    literal_prefix: u8,
 }
 
 #[derive(Default)]
 pub(crate) struct Pattern {
     chars: Vec<Character>,
+    extglob: bool,
+    classes: Option<Result<crate::state::CaseLocale, i32>>,
     quoted_empty: bool,
     /// Case matching selects the first field from a quoted multi-value `$@`.
     /// Continue evaluating the remaining source, but discard its emitted text.
     first_field_complete: bool,
+    /// `[[ ]]` scalar patterns join quoted `$@` instead of selecting one field.
+    pub(super) join_positionals: bool,
 }
 impl Pattern {
+    /// Already-expanded pattern text, without another parameter expansion pass.
+    pub(crate) async fn literal(
+        text: &str,
+        state: &crate::state::SharedState,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<Self, Error> {
+        let mut pattern = Self::with_options(false, state.borrow().extglob);
+        pattern.classes =
+            Some(crate::state::CaseLocale::from_state(&state.borrow()).map_err(|_| 2));
+        for ch in text.chars() {
+            work.checkpoint(cancel).await?;
+            pattern.push(ch, Protection::None, work)?;
+        }
+        Ok(pattern)
+    }
+
+    /// Borrow quote-aware source without glob normalization; ERE escaping has
+    /// different rules and must not change the shared shell expansion result.
+    pub(crate) fn regex_character(&self, index: usize) -> Option<(char, bool)> {
+        self.chars.get(index).map(|ch| (ch.value, ch.protected))
+    }
+
+    pub(super) fn with_options(join_positionals: bool, extglob: bool) -> Self {
+        Self {
+            join_positionals,
+            extglob,
+            ..Self::default()
+        }
+    }
+
     pub(super) fn finish_first_field(&mut self) {
         self.first_field_complete = true;
     }
@@ -42,6 +82,27 @@ impl Pattern {
             value,
             protected: protection.protects(value),
             escaped_protected: false,
+            literal_prefix: u8::from(
+                protection.protects(value)
+                    && matches!(
+                        value,
+                        '!' | '#'
+                            | '%'
+                            | '('
+                            | ')'
+                            | '*'
+                            | '-'
+                            | '.'
+                            | ':'
+                            | '='
+                            | '?'
+                            | '['
+                            | '\\'
+                            | ']'
+                            | '^'
+                            | '|'
+                    ),
+            ),
         });
         Ok(())
     }
@@ -53,6 +114,8 @@ impl Pattern {
     async fn normalize(&mut self, work: &mut Work, cancel: &Cancel) -> Result<(), Error> {
         // Backslashes introduced by an unquoted variable are pattern escapes.
         // Source escapes have already been removed and structurally protected.
+        // Keep the escaped-protected marker once observed: scalar pattern
+        // operations may compile the same Pattern more than once.
         let mut read = 0;
         let mut write = 0;
         while read < self.chars.len() {
@@ -60,7 +123,53 @@ impl Pattern {
             let escape = self.active(read, '\\') && read + 1 < self.chars.len();
             read += usize::from(escape);
             let mut ch = self.chars[read];
-            ch.escaped_protected = escape && ch.protected;
+            ch.escaped_protected |= escape && ch.protected;
+            ch.protected |= escape;
+            self.chars[write] = ch;
+            read += 1;
+            write += 1;
+        }
+        self.chars.truncate(write);
+        Ok(())
+    }
+    /// An expansion-provided backslash escapes the synthetic quote marker on
+    /// quoted glob punctuation. Full extglob patterns also escape group
+    /// delimiters and '!'. Scalar trim/replacement keep their separate
+    /// escaped-protected rule; pathname matching keeps only basic punctuation.
+    async fn normalize_pathname(&mut self, work: &mut Work, cancel: &Cancel) -> Result<(), Error> {
+        self.normalize_glob(false, work, cancel).await
+    }
+    async fn normalize_glob(
+        &mut self,
+        extended: bool,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<(), Error> {
+        let mut read = 0;
+        let mut write = 0;
+        while read < self.chars.len() {
+            work.checkpoint(cancel).await?;
+            let escape = self.active(read, '\\') && read + 1 < self.chars.len();
+            if escape
+                && self.chars[read + 1].protected
+                && (matches!(self.chars[read + 1].value, '*' | '?' | '[' | ']' | '\\')
+                    || extended && matches!(self.chars[read + 1].value, '(' | ')' | '|' | '!'))
+            {
+                self.chars[write] = Character {
+                    value: '\\',
+                    protected: true,
+                    escaped_protected: false,
+                    literal_prefix: self.chars[read + 1].literal_prefix,
+                };
+                self.chars[read + 1].protected = false;
+                self.chars[read + 1].literal_prefix = 0;
+                read += 1;
+                write += 1;
+                continue;
+            }
+            read += usize::from(escape);
+            let mut ch = self.chars[read];
+            ch.literal_prefix = ch.literal_prefix.checked_add(u8::from(escape)).ok_or(2)?;
             ch.protected |= escape;
             self.chars[write] = ch;
             read += 1;
@@ -94,6 +203,10 @@ impl Pattern {
                     end + 1,
                 )));
             }
+            if let Some((_, after)) = self.named_class(end, work, cancel).await? {
+                end = after;
+                continue;
+            }
             if self.active(end, '[') && [':', '.', '='].iter().any(|&ch| self.active(end + 1, ch)) {
                 return Err(2.into());
             }
@@ -101,8 +214,88 @@ impl Pattern {
         }
         Ok(None)
     }
+    async fn named_class(
+        &self,
+        start: usize,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<Option<(Option<classes::Named>, usize)>, Error> {
+        if self.classes.is_none() || !self.active(start, '[') || !self.active(start + 1, ':') {
+            return Ok(None);
+        }
+        let mut name = [0u8; 6];
+        let mut length = 0usize;
+        let mut index = start + 2;
+        while let Some(ch) = self.chars.get(index) {
+            work.checkpoint(cancel).await?;
+            if self.active(index, ':') && self.active(index + 1, ']') {
+                let named = (length <= name.len())
+                    .then(|| classes::Named::parse(&name[..length]))
+                    .flatten();
+                return Ok(Some((named, index + 2)));
+            }
+            if length < name.len() {
+                name[length] = u8::try_from(ch.value)
+                    .ok()
+                    .filter(|_| ch.value.is_ascii() && !ch.protected)
+                    .unwrap_or(0);
+            }
+            length += 1;
+            index += 1;
+        }
+        Ok(None)
+    }
+    /// A pathname component has magic only after quote-boundary escapes have
+    /// been resolved. Share normalization with matching rather than guessing
+    /// from the unnormalized source bytes and their quote mask.
+    pub(super) async fn has_pathname_magic(
+        &mut self,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<bool, Error> {
+        self.normalize_pathname(work, cancel).await?;
+        for index in 0..self.chars.len() {
+            work.checkpoint(cancel).await?;
+            if self.active(index, '*') || self.active(index, '?') {
+                return Ok(true);
+            }
+            if self.active(index, '[') && self.bracket(index + 1, work, cancel).await?.is_some() {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+    pub(super) async fn pathname_literal(
+        &mut self,
+        max_bytes: usize,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<String, Error> {
+        self.normalize_pathname(work, cancel).await?;
+        work.admit_storage(max_bytes)?;
+        let mut value = String::new();
+        value
+            .try_reserve_exact(max_bytes)
+            .map_err(|_| Error::Status(2))?;
+        for ch in &self.chars {
+            work.checkpoint(cancel).await?;
+            if ch.value.len_utf8() > max_bytes.saturating_sub(value.len()) {
+                return Err(2.into());
+            }
+            value.push(ch.value);
+        }
+        Ok(value)
+    }
     async fn compile(&mut self, work: &mut Work, cancel: &Cancel) -> Result<Vec<Atom>, Error> {
         self.normalize(work, cancel).await?;
+        self.atoms(0, work, cancel).await
+    }
+    async fn compile_pathname(
+        &mut self,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<Vec<Atom>, Error> {
+        self.normalize_pathname(work, cancel).await?;
         self.atoms(0, work, cancel).await
     }
     async fn atoms(
@@ -162,7 +355,18 @@ impl Pattern {
         work: &mut Work,
         cancel: &Cancel,
     ) -> Result<bool, Error> {
-        let atoms = self.compile(work, cancel).await?;
+        self.normalize_glob(self.extglob, work, cancel).await?;
+        extglob::matches(self, value, work, cancel).await
+    }
+
+    /// Keep pathname expansion on the basic-glob compiler.
+    pub(super) async fn matches_pathname(
+        &mut self,
+        value: &str,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<bool, Error> {
+        let atoms = self.compile_pathname(work, cancel).await?;
         let count = atoms.len().checked_add(1).ok_or(2)?;
         work.admit_storage(count)?;
         let mut states = Vec::new();
@@ -186,18 +390,30 @@ impl Pattern {
         work: &mut Work,
         cancel: &Cancel,
     ) -> Result<(Atom, usize), Error> {
+        if self.group_operator(index).is_some() {
+            return Err(2.into());
+        }
+        self.basic_atom(index, work, cancel).await
+    }
+    fn group_operator(&self, index: usize) -> Option<char> {
         let ch = self.chars[index];
-        // GNU Bash cannot match an expansion-provided escape followed by an
-        // already quoted character outside a bracket. Keep that distinction
-        // typed; inside a bracket it remains an ordinary literal member.
+        (!ch.protected
+            && matches!(ch.value, '@' | '?' | '*' | '+' | '!')
+            && self.active(index + 1, '('))
+        .then_some(ch.value)
+    }
+    async fn basic_atom(
+        &self,
+        index: usize,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<(Atom, usize), Error> {
+        let ch = self.chars[index];
         if ch.escaped_protected {
             return Ok((Atom::Never, index + 1));
         }
         if ch.protected {
             return Ok((Atom::Literal(ch.value), index + 1));
-        }
-        if matches!(ch.value, '@' | '?' | '*' | '+' | '!') && self.active(index + 1, '(') {
-            return Err(2.into());
         }
         if ch.value == '[' {
             if let Some(class) = self.bracket(index + 1, work, cancel).await? {
@@ -221,8 +437,8 @@ impl Pattern {
     ) -> Result<bool, Error> {
         match *atom {
             Atom::Literal(ch) => Ok(ch == value),
-            Atom::Any => Ok(true),
             Atom::Never => Ok(false),
+            Atom::Any => Ok(true),
             Atom::Star => Err(2.into()),
             Atom::Class {
                 start,
@@ -246,6 +462,12 @@ impl Pattern {
         let mut matched = false;
         while index < end {
             work.checkpoint(cancel).await?;
+            if let Some((named, after)) = self.named_class(index, work, cancel).await? {
+                let locale = self.classes.ok_or(2)??;
+                matched |= named.is_some_and(|class| class.matches(value, locale.utf8()));
+                index = after;
+                continue;
+            }
             let first = self.chars[index].value;
             if index + 2 < end && self.active(index + 1, '-') {
                 matched |= first <= value && value <= self.chars[index + 2].value;
@@ -316,13 +538,13 @@ impl Pattern {
     pub(super) async fn change_case(
         &mut self,
         value: &str,
-        upper: bool,
-        all: bool,
-        locale: case::Locale,
+        mode: (bool, bool),
+        locale: crate::state::CaseLocale,
         max_bytes: usize,
         work: &mut Work,
         cancel: &Cancel,
     ) -> Result<String, Error> {
+        let (upper, all) = mode;
         if !locale.utf8() {
             self.require_ascii(work, cancel).await?;
         }
@@ -484,6 +706,7 @@ impl Search {
     }
 }
 
+#[derive(Clone, Copy)]
 enum Atom {
     Literal(char),
     Never,
@@ -501,6 +724,111 @@ mod tests {
     use super::*;
     use futures::FutureExt;
 
+    fn finish<T>(future: impl std::future::Future<Output = T>) -> T {
+        let mut future = Box::pin(future);
+        let mut context = std::task::Context::from_waker(futures::task::noop_waker_ref());
+        for _ in 0..4096 {
+            if let std::task::Poll::Ready(value) = future.as_mut().poll(&mut context) {
+                return value;
+            }
+        }
+        panic!("bounded pattern operation did not finish");
+    }
+
+    #[test]
+    fn quote_boundary_normalization_is_idempotent_across_repeated_matches() {
+        for (quoted, suffix, positive, negative, magic, expected) in [
+            ('a', '*', "aa", "ba", true, vec![('a', true), ('*', false)]),
+            (
+                '*',
+                '*',
+                "\\first",
+                "first",
+                true,
+                vec![('\\', true), ('*', false), ('*', false)],
+            ),
+            (
+                '?',
+                '*',
+                "\\first",
+                "first",
+                true,
+                vec![('\\', true), ('?', false), ('*', false)],
+            ),
+            (
+                '\\',
+                '*',
+                "\\*",
+                "\\first",
+                false,
+                vec![('\\', true), ('*', true)],
+            ),
+        ] {
+            let cancel = Cancel::new();
+            let mut work = Work::new(16384, 16384, 16);
+            let mut pattern = Pattern::default();
+            pattern
+                .push('\\', Protection::None, &mut work)
+                .unwrap_or_else(|_| panic!("escape fits"));
+            pattern
+                .push(quoted, Protection::All, &mut work)
+                .unwrap_or_else(|_| panic!("quoted target fits"));
+            pattern
+                .push(suffix, Protection::None, &mut work)
+                .unwrap_or_else(|_| panic!("suffix fits"));
+            for _ in 0..3 {
+                assert_eq!(
+                    finish(pattern.has_pathname_magic(&mut work, &cancel)).ok(),
+                    Some(magic)
+                );
+                assert_eq!(
+                    finish(pattern.matches_full(positive, &mut work, &cancel)).ok(),
+                    Some(true)
+                );
+                assert_eq!(
+                    finish(pattern.matches_full(negative, &mut work, &cancel)).ok(),
+                    Some(false)
+                );
+                assert_eq!(
+                    pattern
+                        .chars
+                        .iter()
+                        .map(|ch| (ch.value, ch.protected))
+                        .collect::<Vec<_>>(),
+                    expected
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn extended_quote_boundary_normalization_is_idempotent() {
+        let mut work = Work::new(100000, 100000, 16);
+        let cancel = Cancel::new();
+        let mut pattern = Pattern::with_options(false, true);
+        for (text, protection) in [
+            ("@(a\\", Protection::None),
+            ("|", Protection::All),
+            ("b|c)", Protection::None),
+        ] {
+            for ch in text.chars() {
+                pattern
+                    .push(ch, protection, &mut work)
+                    .unwrap_or_else(|_| panic!("pattern fits"));
+            }
+        }
+        for _ in 0..3 {
+            assert_eq!(
+                finish(pattern.matches_full("b", &mut work, &cancel)).ok(),
+                Some(true)
+            );
+            assert_eq!(
+                finish(pattern.matches_full("a|b", &mut work, &cancel)).ok(),
+                Some(false)
+            );
+        }
+    }
+
     #[test]
     fn case_result_admits_capacity_not_only_written_bytes() {
         // The omitted pattern needs one state byte and the first String
@@ -510,7 +838,14 @@ mod tests {
             let mut work = Work::new(32, storage, 2);
             let cancel = Cancel::new();
             let result = pattern
-                .change_case("a", true, true, case::Locale::C, 8, &mut work, &cancel)
+                .change_case(
+                    "a",
+                    (true, true),
+                    crate::state::CaseLocale::C,
+                    8,
+                    &mut work,
+                    &cancel,
+                )
                 .now_or_never()
                 .expect("small mapping finishes in one turn");
             if storage == 8 {

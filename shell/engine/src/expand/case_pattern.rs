@@ -11,7 +11,7 @@ impl Expansion<'_> {
         at: bool,
         quoted: bool,
     ) -> Result<(), Error> {
-        let count = state.borrow().positional.len();
+        let count = state.borrow().positional().len();
         if count > self.elements_remaining {
             return Err(2.into());
         }
@@ -24,7 +24,11 @@ impl Expansion<'_> {
         } else {
             self.positional_star_separator(state).await?
         };
-        let first_field = at && quoted && ifs_separator.is_some() && count > 1;
+        let join_positionals = self
+            .pattern
+            .as_ref()
+            .is_some_and(|pattern| pattern.join_positionals);
+        let first_field = at && quoted && !join_positionals && ifs_separator.is_some() && count > 1;
         let protection = Protection::expansion(quoted, state);
         for index in 0..count {
             self.work.checkpoint(self.cancel).await?;
@@ -36,7 +40,7 @@ impl Expansion<'_> {
             }
             let value = {
                 let state = state.borrow();
-                let value = &state.positional[index];
+                let value = &state.positional()[index];
                 if value.len() > self.snapshot_max() {
                     return Err(2.into());
                 }
@@ -80,9 +84,11 @@ mod tests {
 
     fn matches(source: &str, values: &[&str], ifs: Option<&str>, value: &str) -> bool {
         let mut state = State::default();
-        state.positional = values.iter().map(|value| (*value).to_owned()).collect();
+        state
+            .replace_positional(values.iter().map(|value| (*value).to_owned()).collect())
+            .unwrap();
         if let Some(ifs) = ifs {
-            state.variables.insert("IFS".into(), ifs.into());
+            state.assign_parameter("IFS".into(), ifs.into()).unwrap();
         }
         let state = state.shared();
         let word = Word {
@@ -141,7 +147,9 @@ mod tests {
     #[test]
     fn first_field_selection_still_evaluates_suffix_assignments() {
         let mut state = State::default();
-        state.positional = vec!["a".into(), "b".into()];
+        state
+            .replace_positional(vec!["a".into(), "b".into()])
+            .unwrap();
         let state = state.shared();
         let word = Word {
             raw: Some("\"$@\"${side:=written}".into()),
@@ -152,7 +160,11 @@ mod tests {
         let mut pattern = finish(pattern(&word, &state, &cancel, 1024, &mut work))
             .unwrap_or_else(|_| panic!("suffix assignment must expand"));
         assert_eq!(
-            state.borrow().variables.get("side").map(String::as_str),
+            state
+                .borrow()
+                .bindings()
+                .get("side")
+                .map(|value| value.as_str()),
             Some("written")
         );
         assert!(
@@ -268,7 +280,7 @@ mod tests {
             }
             assert!(job.is_finished(), "bounded case session did not finish");
             assert_eq!(job.now_or_never(), Some(2));
-            assert!(!session.state().borrow().variables.contains_key("touched"));
+            assert!(!session.state().borrow().bindings().contains_key("touched"));
         }
     }
 

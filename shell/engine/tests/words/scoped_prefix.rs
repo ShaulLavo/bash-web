@@ -11,9 +11,9 @@ fn read_keeps_its_result_and_restores_only_prefix_values() {
     assert_eq!(*rig.calls.borrow(), [vec!["0", "  first\\tail  ", ":", ""]]);
     let state = rig.shell.state();
     let state = state.borrow();
-    assert!(state.exported.contains("IFS"));
-    assert!(!state.exported.contains("temporary"));
-    assert!(!state.readonly.contains("IFS"));
+    assert!(state.exported_bindings().contains("IFS"));
+    assert!(!state.exported_bindings().contains("temporary"));
+    assert!(!state.readonly_bindings().contains("IFS"));
 }
 
 #[test]
@@ -45,27 +45,23 @@ fn builtin_prefixes_preserve_local_export_and_readonly_rules() {
             vec!["1", "global", "kept"]
         ]
     );
-    assert!(!rig.shell.state().borrow().exported.contains("IFS"));
-    assert!(rig.shell.state().borrow().readonly.contains("locked"));
+    assert!(
+        !rig.shell
+            .state()
+            .borrow()
+            .exported_bindings()
+            .contains("IFS")
+    );
+    assert!(
+        rig.shell
+            .state()
+            .borrow()
+            .readonly_bindings()
+            .contains("locked")
+    );
     assert_eq!(rig.run("IFS=temporary locked=changed read line < input"), 1);
-    assert_eq!(
-        rig.shell
-            .state()
-            .borrow()
-            .variables
-            .get("IFS")
-            .map(String::as_str),
-        Some("global")
-    );
-    assert_eq!(
-        rig.shell
-            .state()
-            .borrow()
-            .variables
-            .get("locked")
-            .map(String::as_str),
-        Some("kept")
-    );
+    assert_eq!(rig.value("IFS").as_deref(), Some("global"));
+    assert_eq!(rig.value("locked").as_deref(), Some("kept"));
 }
 
 #[test]
@@ -100,9 +96,12 @@ fn builtin_prefixes_restore_after_cancellation() {
     assert_eq!(rig.finish(job), 130);
     let state = rig.shell.state();
     let state = state.borrow();
-    assert_eq!(state.variables.get("IFS").map(String::as_str), Some(":"));
-    assert!(!state.variables.contains_key("temporary"));
-    assert!(!state.variables.contains_key("line"));
+    assert_eq!(
+        state.bindings().get("IFS").map(|value| value.as_str()),
+        Some(":")
+    );
+    assert!(!state.bindings().contains_key("temporary"));
+    assert!(!state.bindings().contains_key("line"));
     drop(writer);
 }
 
@@ -110,23 +109,24 @@ fn builtin_prefixes_restore_after_cancellation() {
 fn acceptance_ifs_read_pipeline_preserves_sigpipe_and_handled_epipe() {
     for (name, expected) in [("endless", 141), ("handled", 23)] {
         let rig = Rig::new(Limits::default());
-        rig.host.register(name, move |request, cancel| {
-            async move {
-                let output = request.fds.get(1).unwrap();
-                loop {
-                    if let Err(error) = output.write_all(b"first\n", &cancel).await {
-                        return if name == "handled"
-                            && error == shell_engine::io::IoError::BrokenPipe
-                        {
-                            23
-                        } else {
-                            error.status()
-                        };
+        rig.host
+            .register(format!("/home/guest/{name}"), move |request, cancel| {
+                async move {
+                    let output = request.fds.get(1).unwrap();
+                    loop {
+                        if let Err(error) = output.write_all(b"first\n", &cancel).await {
+                            return if name == "handled"
+                                && error == shell_engine::io::IoError::BrokenPipe
+                            {
+                                23
+                            } else {
+                                error.status()
+                            };
+                        }
                     }
                 }
-            }
-            .boxed_local()
-        });
+                .boxed_local()
+            });
         assert_eq!(rig.run(&format!(r#"set -o pipefail; {name} | {{ IFS= read -r line; echo "$line"; }}; printf 'STATUS:%s:%s\n' "$?" "${{PIPESTATUS[*]}}""#)), 0);
         assert_eq!(
             rig.output.bytes(),

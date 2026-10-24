@@ -1,0 +1,334 @@
+{
+  "schema": 1,
+  "status": "Measured implementation; independent review, blocking CI, merge and exact-main acceptance owned by parent",
+  "baseRevision": "fa9f07983fc2974404bc58493616757669148471",
+  "measuredRevision": "8b8ce95b3bfb04405eaa5c494eb7d883ee0b33fd",
+  "revisionCorrespondence": "Final r4 release artifacts and the single frozen replay use measuredRevision. The reviewed implementation at 04fd04521d46d9279cb9099a25d9d478c1ffea8e has identical production/test bytes. The later parent cleanup trims only two inherited comments, refreshes layer source locations/digests and records that correspondence; executable code, assertions, fixtures and frozen memberships are unchanged.",
+  "model": "gpt-6.1-sol",
+  "provider": "cli-proxy; selected loopback route verified read-only",
+  "scope": "Integer %d/%i/%u/%o/%x/%X literal/star width and precision, flags -, +, space, 0, # only. No floats, time, locale grouping, %c, -v, runtime, architecture or dependency changes",
+  "classification": "Original local Rust observed against GNU Bash 5.3.15; no upstream implementation copied or adapted",
+  "implementation": "Shared string/integer field parsing; signed32 stars and signed/unsigned64 values retain their separate policies. Integer stars/value diagnostics precede literal field overflow. Fixed 22-byte digits, borrowed sign/hex prefix and constant 4096-byte zero/space chunks retain original two-pass admission, work accounting, cancellation, ordering and partial writes.",
+  "changedBaselineMemberships": 24,
+  "frozenDelta": {
+    "ok": true,
+    "corpora": {
+      "oils": {
+        "before": 996,
+        "after": 1002,
+        "gained": [
+          "oils:builtin-printf:178",
+          "oils:builtin-printf:198",
+          "oils:builtin-printf:216",
+          "oils:builtin-printf:242",
+          "oils:builtin-printf:256",
+          "oils:builtin-printf:895"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "brush-suite": {
+        "before": 975,
+        "after": 983,
+        "gained": [
+          "brush-suite:builtins/printf:23",
+          "brush-suite:builtins/printf:43",
+          "brush-suite:builtins/printf:44",
+          "brush-suite:builtins/printf:45",
+          "brush-suite:builtins/printf:46",
+          "brush-suite:builtins/printf:48",
+          "brush-suite:builtins/printf:49",
+          "brush-suite:builtins/printf:57"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "bashkit-suite": {
+        "before": 1373,
+        "after": 1383,
+        "gained": [
+          "bashkit-suite:bashbox-printf:12",
+          "bashkit-suite:bashbox-printf:97",
+          "bashkit-suite:bashbox-printf:104",
+          "bashkit-suite:blackbox-edge-cases:424",
+          "bashkit-suite:printf:22",
+          "bashkit-suite:printf:29",
+          "bashkit-suite:printf:36",
+          "bashkit-suite:printf:57",
+          "bashkit-suite:printf:71",
+          "bashkit-suite:printf:128"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      }
+    }
+  },
+  "frozenIdentity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "sourcePins": {
+    "oils": {
+      "revision": "bdc8364c253ce921e033bbc2399ea2ce0be41825"
+    },
+    "brush-suite": {
+      "revision": "4cfba081f2f8bcda8150010a57203d020f14f0cc"
+    },
+    "bashkit-suite": {
+      "revision": "491c3281f668b76d64b15210b8f5d7bf97244be0"
+    }
+  },
+  "behaviorOracle": {
+    "version": "GNU Bash 5.3.15",
+    "executable": "/usr/bin/bash",
+    "sha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5"
+  },
+  "frozenProof": {
+    "records": 9221,
+    "scored": 5792,
+    "singleCompleteRealWaffleReplay": true,
+    "jobs": 1,
+    "record": 0,
+    "originalDeadlines": true,
+    "originalScoringExclusionsStatusesAndGates": true,
+    "replayExit": 1,
+    "replayExitMeaning": "Complete candidate saved; old strict membership fails on genuine new passes. Only gained rows updated, then unchanged strict membership comparator run offline against saved replay. No repeated complete replay.",
+    "unchangedOtherBaselineRecords": 9197,
+    "retainedHistoricalFailPayloadDifferences": [
+      "oils:unicode:125",
+      "oils:unicode:150",
+      "oils:var-op-slice:107",
+      "oils:var-op-slice:124",
+      "oils:builtin-printf:910",
+      "oils:builtin-read:100",
+      "brush-suite:builtins/command:35",
+      "brush-suite:builtins/echo:5",
+      "brush-suite:builtins/echo:6",
+      "brush-suite:builtins/printf:47",
+      "brush-suite:builtins/printf:56",
+      "brush-suite:builtins/read:54",
+      "brush-suite:prompt:14",
+      "bashkit-suite:background:1",
+      "bashkit-suite:bashbox-printf:111",
+      "bashkit-suite:bashbox-read-names:5",
+      "bashkit-suite:heredoc-read-escapes:36",
+      "bashkit-suite:printf:311"
+    ],
+    "noWholeOutputEqualityClaim": true
+  },
+  "comparison": "Stdout/status strict. Raw stderr retained separately. Only diagnostic analysis removes /usr/bin/bash: line N: annotation; frozen scoring has no new normalization. Raw merged stdout differences are not called strict matches.",
+  "targeted": {
+    "before": {
+      "native": {
+        "total": 542,
+        "strictStdoutStatus": 31,
+        "normalizedStderrAlone": 33,
+        "strictStdoutStatusAndNormalizedStderr": 30,
+        "rawAll": 28
+      },
+      "waffle": {
+        "total": 542,
+        "strictStdoutStatus": 31,
+        "normalizedStderrAlone": 33,
+        "strictStdoutStatusAndNormalizedStderr": 30,
+        "rawAll": 28
+      }
+    },
+    "after": {
+      "native": {
+        "total": 542,
+        "strictStdoutStatus": 537,
+        "normalizedStderrAlone": 538,
+        "strictStdoutStatusAndNormalizedStderr": 536,
+        "rawAll": 481
+      },
+      "waffle": {
+        "total": 542,
+        "strictStdoutStatus": 537,
+        "normalizedStderrAlone": 538,
+        "strictStdoutStatusAndNormalizedStderr": 536,
+        "rawAll": 481
+      }
+    },
+    "prior-unsigned": {
+      "native": {
+        "total": 446,
+        "strictStdoutStatus": 444,
+        "normalizedStderrAlone": 443,
+        "strictStdoutStatusAndNormalizedStderr": 441,
+        "rawAll": 199
+      },
+      "waffle": {
+        "total": 446,
+        "strictStdoutStatus": 444,
+        "normalizedStderrAlone": 443,
+        "strictStdoutStatusAndNormalizedStderr": 441,
+        "rawAll": 199
+      }
+    },
+    "signed-controls": {
+      "native": {
+        "total": 195,
+        "strictStdoutStatus": 194,
+        "normalizedStderrAlone": 193,
+        "strictStdoutStatusAndNormalizedStderr": 192,
+        "rawAll": 71
+      },
+      "waffle": {
+        "total": 195,
+        "strictStdoutStatus": 194,
+        "normalizedStderrAlone": 193,
+        "strictStdoutStatusAndNormalizedStderr": 192,
+        "rawAll": 71
+      }
+    }
+  },
+  "disclosedDifferences": [
+    "One merged stdout control retains Bash source-line annotation; one closed-stdout control lacks the existing extra Bash write-error diagnostic",
+    "Three inventory controls still require excluded floats; one requires excluded -v. No implementation expansion to make them pass",
+    "Prior unsigned/signed matrices retain exactly their accepted stdout/status, normalized-stderr and raw comparison counts"
+  ],
+  "tests": {
+    "native": {
+      "printf": 62,
+      "echo": 10,
+      "printerMemory": 2
+    },
+    "wasi": {
+      "printf": 62,
+      "echo": 10,
+      "printerMemory": 2
+    },
+    "newTests": 10,
+    "initialIntendedSemanticRedTests": 2,
+    "diagnosticOrderSemanticRedTests": 1,
+    "wasmtimeCliControls": {
+      "total": 16,
+      "strictStdoutStatus": 15,
+      "normalizedStderr": 16
+    },
+    "literalOverflowNativeAndWaffle": 26,
+    "chunkAndNulSeparateMergedObservations": 40,
+    "silentWarningStopAdmissionRejections": 6,
+    "priorStarDiagnosticControlsPerNativeAndWaffle": 108,
+    "priorStringControlsPerNativeAndWaffle": 167,
+    "printfFixturesPerNativeAndWaffle": 1122,
+    "echoFixturesPerNativeAndWaffle": 492,
+    "preAdmissionControlsAcrossNativeAndWaffle": 22,
+    "printfGeneratorControlTests": 9
+  },
+  "localChecks": [
+    "Native/WASI focused tests and workspace all-target clippy with warnings denied, Cargo j2",
+    "Cargo fmt, parser audit, unchanged exact and structural duplicate gates",
+    "Layer graph zero violations; 42 production and 28 test-only edges",
+    "Production Waffle/native controls, unchanged printf/echo fixtures, Wasmtime controls",
+    "Single frozen replay with expected stale-membership exit followed by unchanged strict offline comparison",
+    "Final formatting, source/evidence and artifact checks recorded separately"
+  ],
+  "notRun": [
+    "whole unrelated Rust suites",
+    "browser suites",
+    "other fuzz families",
+    "full quality command",
+    "hosted CI",
+    "independent review",
+    "exact-main checks"
+  ],
+  "sourceSha256": {
+    "docs/evidence/engine-layers.json": "9dc5fe900c376cdfc3347fca44c98b6b2f41a9bf9bc90ad60af613befa58a013",
+    "docs/evidence/own-shell-baseline.json": "b0c971e17ea49c730eb763d1ab5ed8465695ac7ee9abb8b00587cb7fb3d94163",
+    "docs/printf-integer-fields.md": "17a77aebf824740e47578cdc6fbc6312bd52a3eb0e0dda33dfb9dba491f8fa44",
+    "docs/printf-integer-operands.md": "1cec48c9597bb8c403640b3820856e27137a4f37af01551c8f068a692617c197",
+    "docs/printf-string-fields.md": "d4d1d5eeb2718ca0de86aeaaeebee66d594978f9c5afd3871260306b196acac0",
+    "docs/printf-unsigned-radix.md": "48b0a106375269e40d3cbdcf74fa8a327f375118147120dbd207a2f80ae8ccec",
+    "package-lock.json": "6a0273fb6116848f69296ff66e33ffdb5ee4890044e1d690771c07ec01a333be",
+    "package.json": "5f2abdd80df69c77523564b42438105bb1af112b84dce6b74d9a876c1fe8dfec",
+    "plans/004-own-shell.md": "e0d549327641d888412292eca8e7ba8d8d75576f28c8cc45ee7336a8dc348e10",
+    "shell/Cargo.lock": "3a7c7b956e13b07238c994045b07e037977f840322a36c23f1fe90bac3699d5a",
+    "shell/engine/Cargo.toml": "ba1f8189c8f029584772b73033c70421bde4b04b7ef8c00bced176d9dd66900c",
+    "shell/engine/src/builtins/printf.rs": "6612a632d6cdc77e8231995b005a703043919c622009838fe16c8aba731664b3",
+    "shell/engine/src/builtins/printf/fields.rs": "0bf32f607c6187044b6921daaa85f67ce988665d5535a95cf18bc99b6a25b9c9",
+    "shell/engine/tests/words.rs": "44d2c104e86a4d6e482c41fe70712ec78f6bfabe5f5e95f97e86beaafebd1e46",
+    "shell/engine/tests/words/printf.rs": "b4b2bcb9f90235821849e1176d394f7f338d6ec990bcf1936ac4800f0871dd21",
+    "shell/engine/tests/words/printf_integer_fields.rs": "ec43ca1655c39bcf640875697c1ffaec1c8a11275bef08101fc13f5514d2ddf6",
+    "sources.lock.json": "49b9b5acf25e1d4f9cc39e22e0b3bfa05d35aebce1e8f17cb3446213c6e0be70"
+  },
+  "measuredSourceSha256": {
+    "docs/evidence/engine-layers.json": "cb0cfd923ff3aa63bffe473a4ac085bbba2c5150a3d6e8d502adc8f0483dbe89",
+    "docs/printf-integer-fields.md": "17a77aebf824740e47578cdc6fbc6312bd52a3eb0e0dda33dfb9dba491f8fa44",
+    "docs/printf-integer-operands.md": "1cec48c9597bb8c403640b3820856e27137a4f37af01551c8f068a692617c197",
+    "docs/printf-string-fields.md": "d4d1d5eeb2718ca0de86aeaaeebee66d594978f9c5afd3871260306b196acac0",
+    "docs/printf-unsigned-radix.md": "48b0a106375269e40d3cbdcf74fa8a327f375118147120dbd207a2f80ae8ccec",
+    "package-lock.json": "6a0273fb6116848f69296ff66e33ffdb5ee4890044e1d690771c07ec01a333be",
+    "package.json": "5f2abdd80df69c77523564b42438105bb1af112b84dce6b74d9a876c1fe8dfec",
+    "plans/004-own-shell.md": "3ba42be4f27337e312894746e8493c24a54d75d55fddc56dc8bb8a25bfccf1f2",
+    "shell/Cargo.lock": "3a7c7b956e13b07238c994045b07e037977f840322a36c23f1fe90bac3699d5a",
+    "shell/engine/Cargo.toml": "ba1f8189c8f029584772b73033c70421bde4b04b7ef8c00bced176d9dd66900c",
+    "shell/engine/src/builtins/printf.rs": "5459b582042865966a97271797016df11a594ba997d97a010669b3ca63227d77",
+    "shell/engine/src/builtins/printf/fields.rs": "0bf32f607c6187044b6921daaa85f67ce988665d5535a95cf18bc99b6a25b9c9",
+    "shell/engine/tests/words.rs": "cde8ee8dec6250f51fdb4bc442d5923159df9f876f3d4775959100527359671b",
+    "shell/engine/tests/words/printf.rs": "b4b2bcb9f90235821849e1176d394f7f338d6ec990bcf1936ac4800f0871dd21",
+    "shell/engine/tests/words/printf_integer_fields.rs": "ec43ca1655c39bcf640875697c1ffaec1c8a11275bef08101fc13f5514d2ddf6",
+    "sources.lock.json": "49b9b5acf25e1d4f9cc39e22e0b3bfa05d35aebce1e8f17cb3446213c6e0be70"
+  },
+  "artifactSha256": {
+    "/work/tmp/bash-web-printf-integer-fields/target/release/shell-cli": "249a2e28a58b22ea7a968685048dd0025c9432428d99bced08690294bd2269aa",
+    "/work/tmp/bash-web-printf-integer-fields/target/wasm32-wasip1/release/shell-cli.wasm": "72aade7cb4d1c00c11ff0f5b17e96c0bfa272992da7b57278482b80d6c1c4863",
+    "/work/tmp/bash-web-printf-integer-fields/target/wasm32-wasip1/release/shell-runtime.wasm": "1e4566a53d57e7551007a71ac431221375e94a8127e0abfa83d2cc12c0cf0f31"
+  },
+  "immutableInputSha256": {
+    "docs/evidence/own-shell-oracle.json": "bb13fdf4319ae0af179457ff4b3e3c0db57002902f07eb37fde02ff7a6636eaa",
+    "docs/evidence/bash-compatibility.json": "65da50f1c7ce548fb0ca72ce1c10f3dd67a4d608f565f1bb30d5af374c45266f",
+    "quality/duplicates-exact.json": "435a57553fb04ae59adb5f12fe635042e9183fd125b3bd97a32ad99817c7dc33",
+    "quality/duplicates-rust-structural.json": "c5a2a8ee3fb1eb73f963d19d0ce23226b7a4b19a443452757beaacc75aac0965",
+    "scripts/shell-scoreboard.mjs": "15f548dc88f2dd9a8639fbc3091466b131d04339de70a6569eef5df4ab436807",
+    "scripts/bash-compat.mjs": "859024733dd17e85bc296d78d209404dfd1c41aff56417c742ea11bf9893ab39",
+    "scripts/waffle-compat.ts": "deb4356e85cec0ab3b915970ad228273c3012f7be6297f1a20667b205c7abb96",
+    "scripts/fixtures/shell-arithmetic-seed-314.json": "b2212f4442349b5d9da18ae1a853dbafbd001785c110527fce20a5e2ed1f1442",
+    "scripts/fixtures/shell-arithmetic-seed-7.json": "297a5497323c5fe8263874e7c267d639ab6929daf9c8dcf07673dba964f6246f",
+    "scripts/fixtures/shell-braces-seed-1.json": "49cad3fe8594d04c354b2b1951c7f1aed7472c17d08265f641a5f218647ac264",
+    "scripts/fixtures/shell-braces-seed-42.json": "9810699443ab8da158f80903138035205d909ce4a2f17ecb3abde5c78b1d7b60",
+    "scripts/fixtures/shell-control-flow-seed-1.json": "d90dc4c412de98685f69aeeb757b94aed2f614127ff3a507d6112038030b3cf6",
+    "scripts/fixtures/shell-control-flow-seed-42.json": "389aef9885ae1dc693b66faa1638ca1af500e93d94a6e503d3b6da9463ab7323",
+    "scripts/fixtures/shell-echo.json": "a41db7b0cca14d5c65aa1f3851849db79c0781ec489483d43c4fc0ebc0094d3c",
+    "scripts/fixtures/shell-functions-seed-1.json": "30a63172f071c9ffc08348bf9c7e41fa59ee2c8a18245c91712298ef8434c7c0",
+    "scripts/fixtures/shell-functions-seed-42.json": "5bf569081490a4d4833794a7a5302d078bb371768ecdc07c51ba8c42d1c4d24a",
+    "scripts/fixtures/shell-job-lifetime-seed-1.json": "42c8570a476d5c01e1b395389dab531037b940f62328e6472e710a829f692c77",
+    "scripts/fixtures/shell-job-lifetime-seed-42.json": "363802c04e376b31d0ef7a22fb21197a11893454f3a5c77984ba5b648e4d9000",
+    "scripts/fixtures/shell-parse-boundaries.json": "f46cf012672359158a38461c44855ad0f4223266badb100216afbd8259ff639c",
+    "scripts/fixtures/shell-path-seed-1.json": "f127475dc2b5551cce44f423b5fa3d3348b2bb4d2e50767bd39708e8a2d2f72e",
+    "scripts/fixtures/shell-path-seed-42.json": "fa30d34c6360015885b1fc54da7ac25667d95bd553797d00e93bef7a5b157461",
+    "scripts/fixtures/shell-printf-seed-1.json": "b68a255fd1c48247c198221167a032d8d970ee7f6d028f03d08ca18df1113d34",
+    "scripts/fixtures/shell-printf-seed-42.json": "a4184f7afa4bc94ea36e2663cf762492d996b6b935c057e2822b92daf169b77c",
+    "scripts/fixtures/shell-readonly-seed-17.json": "0fd5787fd9921ea4afe36fa58ceb6f806bd0335d61a1119e0a4705cf69ac3d75",
+    "scripts/fixtures/shell-substitutions-seed-1.json": "530996b32e92eb3f758b4b36a443a990ad5485561be91a4f81e3ae68ce30e267",
+    "scripts/fixtures/shell-substitutions-seed-42.json": "f537e618df4073e1d86be0c951d1bc321b1f78c3f86eb8d6a115a1d3cb93d82c",
+    "scripts/fixtures/shell-words-seed-1.json": "159bc66d62dcfc2b81ac4b2cbe201d7c59509afb424722bca91275157d24d589",
+    "scripts/fixtures/shell-words-seed-42.json": "6d31db411b25dd997298f291ab527caccd3bb3b40e30ba61983db171846f3718"
+  },
+  "resources": {
+    "host": "PC canonical shared heavy queue, Cargo j2, two-hour queue+run bound, owner availability checked",
+    "retained": [
+      "/work/tmp/bash-web-printf-integer-fields",
+      "/work/worktrees/bash-web/climb-printf-integer-fields"
+    ],
+    "owner": "Parent coordinator and independent reviewer through review, required checks, merge and exact-main verification",
+    "measuredSizes": "/work/reports/bash-web/hill-climb/printf-integer-fields/retained-sizes.json",
+    "cleanup": "/work/reports/bash-web/hill-climb/printf-integer-fields/remove-after-review.sh",
+    "removalCondition": "After parent/reviewer consumers stop; live-consumer audit, clean worktree and git worktree remove. Reports remain parent-owned evidence"
+  },
+  "reportDirectory": "/work/reports/bash-web/hill-climb/printf-integer-fields",
+  "postMeasurementCommentCleanup": {
+    "reviewedRevision": "04fd04521d46d9279cb9099a25d9d478c1ffea8e",
+    "sourceFiles": [
+      "shell/engine/src/builtins/printf.rs",
+      "shell/engine/tests/words.rs"
+    ],
+    "netRemovedCommentLines": 3,
+    "executableCodeAndAssertionsUnchanged": true,
+    "localMeasurementRemainsHistorical": true
+  }
+}

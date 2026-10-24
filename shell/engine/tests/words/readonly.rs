@@ -50,15 +50,7 @@ fn arithmetic_readonly_errors_preserve_rhs_effects_and_skip_unselected_writes() 
         } else {
             None
         };
-        assert_eq!(
-            rig.shell
-                .state()
-                .borrow()
-                .variables
-                .get("saved")
-                .map(String::as_str),
-            expected
-        );
+        assert_eq!(rig.value("saved").as_deref(), expected);
     }
     check(
         r#"readonly x=1; args "$((0&&(x=2)))" "$((1||(x=2)))" "$((0?x++:4))" "$x"; let 'x=3'; args "$?" "$x""#,
@@ -157,6 +149,6 @@ fn rejected_writes_discard_the_read_unit_and_keep_readonly_state() {
             0
         );
         assert_eq!(*rig.calls.borrow(), [vec!["after=1", "unset"]]);
-        assert!(rig.shell.state().borrow().readonly.contains("x"));
+        assert!(rig.shell.state().borrow().readonly_bindings().contains("x"));
     }
 }

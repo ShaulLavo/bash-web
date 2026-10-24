@@ -1,66 +1,231 @@
 name: Shell
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main
+  pull_request: null
 permissions:
   contents: read
+concurrency:
+  group: shell-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
-  shell:
+  prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      CARGO_TARGET_DIR: .build/shell
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 26.7.0
-          cache: npm
+          node-version: 26.12.1
+      - id: inputs
+        run: node scripts/ci-inputs.ts
+      - uses: actions/cache@v4
+        id: downloads
+        with:
+          path: ~/.npm
+          key: npm-downloads-${{ runner.os }}-${{ runner.arch }}-node26.12.1-${{ steps.inputs.outputs.dependencies }}
+          restore-keys: npm-downloads-${{ runner.os }}-${{ runner.arch }}-node26.12.1-
+      - uses: actions/cache@v4
+        id: packages
+        with:
+          path: node_modules
+          key: packages-${{ runner.os }}-${{ runner.arch }}-node26.12.1-${{ steps.inputs.outputs.dependencies }}
+      - if: steps.packages.outputs.cache-hit != 'true' || steps.downloads.outputs.cache-hit != 'true'
+        run: npm ci --ignore-scripts
+      - run: npm run sources:browser && npm run build:worker
+      - name: Pack shared JavaScript inputs
+        run: tar -czf "$RUNNER_TEMP/javascript.tar.gz" node_modules .sources .build/browser dist/shell-worker.js dist/fs-worker.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: javascript-${{ github.sha }}
+          path: ${{ runner.temp }}/javascript.tar.gz
+          compression-level: 0
+          retention-days: 1
+  layers:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      LAYERS_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.12.1
+      - uses: ./.github/actions/javascript
+      - name: Select immutable layer baseline
+        run: |
+          baseline="$LAYERS_BASE_REF"
+          if [[ ! "$baseline" =~ ^[a-f0-9]{40}$ ]] || ! git cat-file -e "$baseline^{commit}"; then
+            echo "Could not resolve immutable layer baseline: $baseline" >&2
+            exit 1
+          fi
+          echo "LAYERS_BASE_REF=$baseline" >> "$GITHUB_ENV"
+      - run: npm run test:check-layers && npm run check:layers && npm run typecheck:layers
+  quality:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.12.1
+      - uses: ./.github/actions/javascript
+      - run: ulimit -c 0; npm run quality:js
+      - run: npm run test:ci
+      - run: npm run test:guest-build
+      - run: npm run typecheck:guest-build
+      - run: npm run typecheck:ci
+  native:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CARGO_TARGET_DIR: .build/shell
+      WASI_LIBC_JOBS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.12.1
+      - uses: ./.github/actions/javascript
+      - uses: actions/cache@v4
+        with:
+          path: ~/.rustup/toolchains/1.98.1-x86_64-unknown-linux-gnu
+          key: rustup-${{ runner.os }}-${{ runner.arch }}-1.98.1-wasip1-rustfmt-clippy
       - uses: dtolnay/rust-toolchain@1.98.1
         with:
           targets: wasm32-wasip1
-          components: rustfmt
-      - uses: bytecodealliance/actions/wasmtime/setup@v1.1.3
-        with:
-          version: v49.0.3
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: shell -> ../.build/shell
-      - run: npm ci
-      - run: node scripts/check-shell-parser.mjs
-      - run: cargo fmt --manifest-path shell/Cargo.toml --all --check
-      - name: Native shell tests
-        run: cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast
-      - name: WASI shell tests and size
-        run: npm run test:shell:wasi
+          workspaces: |
+            shell -> ../.build/shell
+            tests/guest -> ../../.build/test-guest
+          cache-all-crates: true
+          cache-workspace-crates: true
+          cache-directories: .build/wasi-libc
+      - uses: actions/cache@v4
+        id: machete
+        with:
+          path: .build/quality-tools
+          key: cargo-machete-${{ runner.os }}-${{ runner.arch }}-0.9.2
+      - name: Install pinned Rust dependency checker
+        if: steps.machete.outputs.cache-hit != 'true'
+        run: cargo install cargo-machete --version 0.9.2 --locked --root .build/quality-tools -j2
+      - uses: ./.github/actions/wasi-sdk
+      - name: Rust quality and native tests
+        run: |
+          ulimit -c 0
+          npm run check:rust
+          cargo fmt --manifest-path tests/guest/Cargo.toml --check
+          cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast
+      - name: Build shared WASI guests and test binaries
+        run: |
+          ulimit -c 0
+          npm run build:shell
+          npm run build:test-guest
+          npm run prepare:wasi-tests
         env:
           CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime run -W max-memory-size=268435456
-      - name: Native shell CLI
-        run: cargo build --locked --release --manifest-path shell/Cargo.toml -p shell-engine -j2
-      - name: Record native shell CLI receipts
+      - name: Build shared native CLI
         run: |
-          sha256sum .build/shell/release/shell-engine > .build/shell/cli-sha256.txt
+          cargo build --locked --release --manifest-path shell/Cargo.toml -p shell-engine -p shell-compat-fixtures -j2
+          sha256sum .build/shell/release/shell-engine .build/shell/release/shell-cli > .build/shell/cli-sha256.txt
           git rev-parse HEAD > .build/shell/cli-source.txt
+          node scripts/utility-artifacts.ts
+          npm run notices:shell
+          node scripts/ci-artifacts.ts pack .build/ci-native
+      - name: Core dependency proof
+        run: npm run check:capabilities
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ github.sha }}
+          path: .build/ci-native
+          retention-days: 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: utility-guests-${{ github.sha }}
+          path: .build/utility-artifacts/
+          if-no-files-found: error
+          retention-days: 3
       - uses: actions/upload-artifact@v4
         with:
           name: shell-cli-${{ github.sha }}
           path: |
             .build/shell/release/shell-engine
+            .build/shell/release/shell-cli
             .build/shell/cli-sha256.txt
             .build/shell/cli-source.txt
           retention-days: 3
+  wasi:
+    needs:
+      - prepare
+      - native
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.12.1
+      - uses: ./.github/actions/javascript
+      - uses: ./.github/actions/native
+      - uses: bytecodealliance/actions/wasmtime/setup@v1.1.3
+        with:
+          version: v49.0.3
+      - name: WASI tests and size
+        run: |
+          ulimit -c 0
+          npm run test:shell:wasi -- --prebuilt .build/ci-native
+  fuzz:
+    needs:
+      - prepare
+      - native
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.12.1
+      - uses: ./.github/actions/javascript
+      - uses: ./.github/actions/native
       - run: npm run test:fuzz-shell-braces
-      - run: npm run fuzz:shell-braces:ci -- --shell .build/shell/release/shell-engine
-      - run: npm run fuzz:shell-words:ci -- --shell .build/shell/release/shell-engine
-      - run: npm run fuzz:shell-arithmetic:ci -- --shell .build/shell/release/shell-engine
-      - run: npm run fuzz:shell-readonly:ci -- --shell .build/shell/release/shell-engine
+      - run: npm run fuzz:shell-braces:ci -- --shell .build/shell/release/shell-cli
+      - run: npm run fuzz:shell-words:ci -- --shell .build/shell/release/shell-cli
+      - run: npm run fuzz:shell-arithmetic:ci -- --shell .build/shell/release/shell-cli
+      - run: npm run fuzz:shell-readonly:ci -- --shell .build/shell/release/shell-cli
       - run: npm run test:fuzz-shell-substitutions
-      - run: npm run fuzz:shell-substitutions:ci -- --shell .build/shell/release/shell-engine
-      - run: npm run fuzz:shell-parse-boundaries:ci -- --shell .build/shell/release/shell-engine
-
+      - run: npm run fuzz:shell-substitutions:ci -- --shell .build/shell/release/shell-cli
+      - run: npm run fuzz:shell-parse-boundaries:ci -- --shell .build/shell/release/shell-cli
+      - run: npm run test:fuzz-shell-control-flow
+      - run: npm run fuzz:shell-control-flow:ci -- --shell .build/shell/release/shell-cli
+      - run: ulimit -c 0; npm run test:fuzz-shell-job-lifetime
+      - run: ulimit -c 0; npm run fuzz:shell-job-lifetime:ci -- --shell .build/shell/release/shell-cli
+      - run: ulimit -c 0; npm run test:fuzz-shell-functions
+      - run: ulimit -c 0; npm run fuzz:shell-functions:ci -- --shell .build/shell/release/shell-cli
+      - run: ulimit -c 0; npm run test:fuzz-shell-path
+      - run: ulimit -c 0; npm run fuzz:shell-path:ci -- --shell .build/shell/release/shell-cli
+      - run: ulimit -c 0; npm run test:fuzz-shell-printf
+      - run: ulimit -c 0; npm run fuzz:shell-printf:ci -- --shell .build/shell/release/shell-cli
+      - run: npm run test:fuzz-shell-echo
+      - run: ulimit -c 0; npm run fuzz:shell-echo:ci -- --shell "$GITHUB_WORKSPACE/.build/shell/release/shell-cli"
+        env:
+          TMPDIR: ${{ runner.temp }}
   own-shell-compatibility:
+    needs:
+      - prepare
+      - native
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
       CARGO_TARGET_DIR: .build/shell
+      BASH_WEB_UTILITY_ARTIFACTS: .build/utility-artifacts
       BASH_COMPAT_MODE: frozen
       BASH_COMPAT_ENGINES: own-shell
       BASH_COMPAT_JOBS: 4
@@ -86,14 +251,18 @@ jobs:
           echo "BASH_COMPAT_BASE_REF=$baseline" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with:
-          node-version: 26.7.0
+          node-version: 26.12.1
+      - uses: ./.github/actions/javascript
+      - uses: ./.github/actions/native
+      - uses: actions/cache@v4
+        with:
+          path: ~/.rustup/toolchains/1.98.1-x86_64-unknown-linux-gnu
+          key: rustup-${{ runner.os }}-${{ runner.arch }}-1.98.1-wasip1-rustfmt-clippy
       - uses: dtolnay/rust-toolchain@1.98.1
         with:
           targets: wasm32-wasip1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: shell -> ../.build/shell
-      - run: npm ci
+          components: rustfmt, clippy
+      - uses: ./.github/actions/wasi-sdk
       - name: Install isolated Bash runner tools
         run: |
           sudo apt-get update
@@ -101,9 +270,13 @@ jobs:
           # The disposable Ubuntu runner must permit bubblewrap's user namespace.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --unshare-all --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 --proc /proc --dev /dev -- /usr/bin/true
+      - run: node --test scripts/test-diagnose-compat.ts
       - run: npm run test:shell:scoreboard
-      - run: npm run build:shell
-      - run: npm run compat:shell
+      - run: npm run fuzz:shell-echo:ci -- --waffle --shell "$GITHUB_WORKSPACE/.build/shell/wasm32-wasip1/release/shell-runtime.wasm"
+        env:
+          TMPDIR: ${{ runner.temp }}
+      - name: Observe compatibility with the same-job node build
+        run: node scripts/diagnose-compat.ts "${{ runner.temp }}/own-shell-diagnostics" -- npm run compat:shell:prebuilt
         env:
           BASH_COMPAT_OUT: ${{ runner.temp }}/own-shell-current.json
           BASH_COMPAT_SCRATCH: ${{ runner.temp }}
@@ -111,5 +284,65 @@ jobs:
         if: always()
         with:
           name: own-shell-current
-          path: ${{ runner.temp }}/own-shell-current.json
+          path: |
+            ${{ runner.temp }}/own-shell-current.json
+            ${{ runner.temp }}/own-shell-diagnostics/
           if-no-files-found: ignore
+  browser:
+    needs:
+      - prepare
+      - native
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.12.1
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: ./.github/actions/javascript
+      - uses: ./.github/actions/native
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      - name: Use Ubuntu HTTPS archives for browser dependencies
+        run: |
+          sudo sed -i '\|^http://azure\.archive\.ubuntu\.com/ubuntu/|d' /etc/apt/apt-mirrors.txt
+          test -s /etc/apt/apt-mirrors.txt
+          cat /etc/apt/apt-mirrors.txt
+      - run: npx playwright install --with-deps chromium firefox
+      - run: npm run build:browser:assets:ci
+      - run: npm run test:runtime:terminal
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failure-evidence
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 3
+  shell:
+    needs:
+      - prepare
+      - layers
+      - quality
+      - native
+      - wasi
+      - fuzz
+      - own-shell-compatibility
+      - browser
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require every check
+        run: |
+          for result in ${{ join(needs.*.result, ' ') }}; do
+            if [[ "$result" != 'success' ]]; then
+              exit 1
+            fi
+          done

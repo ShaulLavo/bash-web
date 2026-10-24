@@ -1,0 +1,154 @@
+{
+  "schema": 1,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "environment": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "PWD": "/tmp/spec",
+    "SH": "bash",
+    "LC_ALL": "C.UTF-8"
+  },
+  "cases": [
+    {
+      "name": "oils:append:164",
+      "code": "typeset s+=foo\necho s=$s\n\n\nset -u\n\ntypeset t+=foo\necho t=$t\ntypeset t+=foo\necho t=$t\n",
+      "status": 0,
+      "stdout": "cz1mb28KdD1mb28KdD1mb29mb28K",
+      "stderr": ""
+    },
+    {
+      "name": "oils:append:186",
+      "code": "dyn=x\n\ntypeset s${dyn}+=foo\necho sx=$sx\n\n\nset -u\n\ntypeset t${dyn}+=foo\necho tx=$tx\ntypeset t${dyn}+=foo\necho tx=$tx\n",
+      "status": 0,
+      "stdout": "c3g9Zm9vCnR4PWZvbwp0eD1mb29mb28K",
+      "stderr": ""
+    },
+    {
+      "name": "oils:append:210",
+      "code": "export e+=foo\necho e=$e\n\nreadonly r+=bar\necho r=$r\n\nset -u\n\nexport e+=foo\necho e=$e\n\n\n",
+      "status": 0,
+      "stdout": "ZT1mb28Kcj1iYXIKZT1mb29mb28K",
+      "stderr": ""
+    },
+    {
+      "name": "oils:append:234",
+      "code": "f() {\n  local s+=foo\n  echo s=$s\n\n  set -u\n  local s+=foo\n  echo s=$s\n}\n\nf\n",
+      "status": 0,
+      "stdout": "cz1mb28Kcz1mb29mb28K",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:builtins/export:11",
+      "code": "MYVAR=\"-O3 -pipe\"\nexport MYVAR+=\" -Wno-foo\"\necho \"MYVAR: $MYVAR\"\n",
+      "status": 0,
+      "stdout": "TVlWQVI6IC1PMyAtcGlwZSAtV25vLWZvbwo=",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:builtins/export:12",
+      "code": "export MYVAR=\"-O3 -pipe\"\nexport MYVAR+=\" -Wno-baz\"\necho \"MYVAR: $MYVAR\"\n",
+      "status": 0,
+      "stdout": "TVlWQVI6IC1PMyAtcGlwZSAtV25vLWJhego=",
+      "stderr": ""
+    },
+    {
+      "name": "brush-suite:builtins/export:13",
+      "code": "export MYVAR+=\"first\"\necho \"MYVAR: $MYVAR\"\n",
+      "status": 0,
+      "stdout": "TVlWQVI6IGZpcnN0Cg==",
+      "stderr": ""
+    },
+    {
+      "name": "first local hides outer, repeated local appends",
+      "code": "x=outer; f(){ local x+=inner; printf \"[%s]\\n\" \"$x\"; local x+=again; printf \"[%s]\\n\" \"$x\"; }; f; printf \"[%s]\\n\" \"$x\"",
+      "status": 0,
+      "stdout": "W2lubmVyXQpbaW5uZXJhZ2Fpbl0KW291dGVyXQo=",
+      "stderr": ""
+    },
+    {
+      "name": "callee local hides caller",
+      "code": "x=global; f(){ local x=caller; g; echo \"$x\"; }; g(){ local x+=callee; echo \"$x\"; }; f; echo \"$x\"",
+      "status": 0,
+      "stdout": "Y2FsbGVlCmNhbGxlcgpnbG9iYWwK",
+      "stderr": ""
+    },
+    {
+      "name": "function prefix inheritance",
+      "code": "x=global; f(){ local x+=suffix; echo \"$x\"; local x+=tail; echo \"$x\"; }; x=prefix f; echo \"$x\"",
+      "status": 0,
+      "stdout": "cHJlZml4c3VmZml4CnByZWZpeHN1ZmZpeHRhaWwKZ2xvYmFsCg==",
+      "stderr": ""
+    },
+    {
+      "name": "quoted and dynamic operands",
+      "code": "x=one; declare \"x+= two\"; echo \"$x\"; key=x; typeset ${key}+=three; echo \"$x\"",
+      "status": 0,
+      "stdout": "b25lIHR3bwpvbmUgdHdvdGhyZWUK",
+      "stderr": ""
+    },
+    {
+      "name": "assignment RHS does not split or glob",
+      "code": "v=\" two * three\"; x=one; export x+=$v; printf \"[%s]\\n\" \"$x\"; f(){ local x+=$v; printf \"[%s]\\n\" \"$x\"; }; f",
+      "status": 0,
+      "stdout": "W29uZSB0d28gKiB0aHJlZV0KWyB0d28gKiB0aHJlZV0K",
+      "stderr": ""
+    },
+    {
+      "name": "caller value through dynamic scope",
+      "code": "x=global; f(){ local x=caller; g; echo \"$x\"; }; g(){ export x+=suffix; }; f; echo \"$x\"",
+      "status": 0,
+      "stdout": "Y2FsbGVyc3VmZml4Cmdsb2JhbAo=",
+      "stderr": ""
+    },
+    {
+      "name": "temporary ordinary builtin restores",
+      "code": "x=outer; x=temp true; echo \"$x\"",
+      "status": 0,
+      "stdout": "b3V0ZXIK",
+      "stderr": ""
+    },
+    {
+      "name": "global indexed scalar element zero",
+      "code": "a=(zero one); export a+=tail; printf \"[%s]\\n\" \"${a[@]}\"",
+      "status": 0,
+      "stdout": "W3plcm90YWlsXQpbb25lXQo=",
+      "stderr": ""
+    },
+    {
+      "name": "nameref target appends",
+      "code": "target=one; declare -n ref=target; export ref+=two; echo \"$ref $target\"",
+      "status": 0,
+      "stdout": "b25ldHdvIG9uZXR3bwo=",
+      "stderr": ""
+    },
+    {
+      "name": "readonly append rejects unchanged",
+      "code": "readonly x=old; export x+=new 2>/dev/null; echo \"status:$? x:$x\"",
+      "status": 0,
+      "stdout": "c3RhdHVzOjEgeDpvbGQK",
+      "stderr": ""
+    },
+    {
+      "name": "IFS append and local restoration",
+      "code": "IFS=,; export IFS+=:; v=\"a,b:c\"; printf \"[%s]\" $v; echo; f(){ local IFS+=/; v=\"a/b,c\"; printf \"[%s]\" $v; echo; }; f; echo \"IFS:$IFS\"",
+      "status": 0,
+      "stdout": "W2FdW2JdW2NdClthXVtiLGNdCklGUzosOgo=",
+      "stderr": ""
+    },
+    {
+      "name": "ordinary declarations retain replacement semantics",
+      "code": "x=outer; export x=new; f(){ local x=inner; local x; echo \"$x\"; }; f; echo \"$x\"",
+      "status": 0,
+      "stdout": "aW5uZXIKbmV3Cg==",
+      "stderr": ""
+    },
+    {
+      "name": "bare declarations stay unset",
+      "code": "f(){ local x; local x+=; printf \"[%s]\\n\" \"$x\"; }; f; echo \"[${x-unset}]\"",
+      "status": 0,
+      "stdout": "W10KW3Vuc2V0XQo=",
+      "stderr": ""
+    }
+  ]
+}

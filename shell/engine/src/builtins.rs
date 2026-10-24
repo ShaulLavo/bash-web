@@ -1,16 +1,24 @@
-//! Small streaming builtins needed by the engine acceptance gate. Utilities here
-//! are original adapters except the explicitly attributed grep subset. The full
-//! utility/compatibility work is still deferred.
-mod grep;
+//! Bash builtins. External commands are installed by the embedding runtime.
+mod alias;
+mod caller;
+mod completion;
+mod declarations;
+mod directories;
+mod getopts;
+mod printf;
+mod read;
+pub(crate) mod test;
+mod trap;
 use crate::{
+    commands::{self, Builtin, Declaration},
     executor::Budget,
     expand::{Error, Work},
     interpreter::{Context, Flow, JobSelector, Outcome},
-    io::{Endpoint, FdTable, OpenOptions},
-    state::{SharedState, State, absolute},
+    io::{Endpoint, FdTable, IoError},
+    state::{SharedState, State},
 };
 use shell_parser::parser::{Word, WordPart};
-use std::fmt::Write as _;
+use std::borrow::Cow;
 
 /// Bashkit's is_decl_keyword starts with the command's syntax, not the name
 /// produced by expansion. Quoting also prevents declaration-keyword syntax.
@@ -21,13 +29,12 @@ pub(crate) fn declaration_command(word: &Word) -> bool {
     let [WordPart::Literal(name)] = word.parts.as_slice() else {
         return false;
     };
-    matches!(
-        name.as_str(),
-        "export" | "local" | "readonly" | "declare" | "typeset"
-    ) && word
-        .raw
-        .as_deref()
-        .is_none_or(|raw| uncontinued(raw).eq(name.bytes()))
+    commands::lookup(name)
+        .is_some_and(|command| command.declaration == Declaration::AssignmentOperands)
+        && word
+            .raw
+            .as_deref()
+            .is_none_or(|raw| uncontinued(raw).eq(name.bytes()))
 }
 
 /// The prefix-only part of Bashkit normalize_raw_word: continuations disappear
@@ -61,6 +68,7 @@ pub(crate) fn assignment_operand(word: &Word) -> bool {
     }) {
         return false;
     }
+    let name = name.strip_suffix('+').unwrap_or(name);
     let mut bytes = name.bytes();
     bytes
         .next()
@@ -68,34 +76,7 @@ pub(crate) fn assignment_operand(word: &Word) -> bool {
         && bytes.all(|b| b == b'_' || b.is_ascii_alphanumeric())
 }
 
-pub(crate) fn is_builtin(name: &str) -> bool {
-    matches!(
-        name,
-        ":" | "true"
-            | "false"
-            | "echo"
-            | "printf"
-            | "cat"
-            | "grep"
-            | "mkdir"
-            | "seq"
-            | "read"
-            | "export"
-            | "local"
-            | "readonly"
-            | "declare"
-            | "typeset"
-            | "cd"
-            | "pwd"
-            | "set"
-            | "exit"
-            | "return"
-            | "wait"
-            | "kill"
-            | "unset"
-    )
-}
-fn valid_name(name: &str) -> bool {
+pub(crate) fn valid_name(name: &str) -> bool {
     !name.is_empty()
         && name.bytes().enumerate().all(|(index, byte)| {
             byte == b'_' || byte.is_ascii_alphabetic() || (index > 0 && byte.is_ascii_digit())
@@ -110,42 +91,84 @@ async fn write(fds: &FdTable, bytes: &[u8], context: &Context) -> Result<(), i32
         .await
         .map_err(|e| e.status())
 }
-async fn copy(input: Endpoint, fds: &FdTable, context: &Context) -> Result<(), i32> {
-    let mut buffer = [0u8; 8192];
-    let mut budget = Budget::default();
-    loop {
-        budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-        let n = input
-            .read_cancelled(&mut buffer, &context.cancel)
-            .await
-            .map_err(|e| e.status())?;
-        if n == 0 {
-            return Ok(());
-        }
-        write(fds, &buffer[..n], context).await?;
+fn output_outcome(result: Result<(), printf::PrintFailure>) -> Result<Outcome, i32> {
+    match result {
+        Ok(()) => Ok(Outcome::status(0)),
+        Err(printf::PrintFailure::Io(IoError::BrokenPipe)) => Ok(Outcome {
+            code: 141,
+            flow: Flow::Abort,
+        }),
+        Err(printf::PrintFailure::Io(error)) => Err(error.status()),
+        Err(printf::PrintFailure::Status(code)) => Err(code),
     }
 }
 pub(crate) async fn run(
+    builtin: Builtin,
     name: &str,
-    args: Vec<String>,
-    state: SharedState,
-    fds: FdTable,
-    context: Context,
+    arguments: Cow<'_, [String]>,
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
     work: &mut Work,
 ) -> Result<Outcome, i32> {
-    match name {
-        ":" | "true" => {}
-        "false" => return Err(1),
-        "exit" | "return" => {
-            if args.len() > 1 {
+    let args = arguments.as_ref();
+    match builtin {
+        Builtin::Completion => {
+            let kind = match name {
+                "compgen" => completion::Kind::Generate,
+                "complete" => completion::Kind::Complete,
+                _ => completion::Kind::Options,
+            };
+            return completion::run(kind, args, state, fds, context, work).await;
+        }
+        Builtin::Noop => {}
+        Builtin::False => return Err(1),
+        Builtin::Test => return test::run(name, args, state, fds, context, work).await,
+        Builtin::Trap => return trap::run(args, state, fds, context, work).await,
+        Builtin::Getopts => return getopts::run(args, state, fds, context, work).await,
+        Builtin::Alias => {
+            return alias::run(name, args, state, fds, context, work)
+                .await
+                .map(Outcome::status);
+        }
+        Builtin::Caller => return caller::run(args, state, fds, context, work).await,
+        Builtin::Shopt => return shopt(args, state, fds, context, work).await,
+        Builtin::LoopControl => {
+            return loop_control(name, args, fds, context, work).await;
+        }
+        Builtin::ExitReturn => {
+            let args = if args.first().is_some_and(|arg| arg == "--") {
+                &args[1..]
+            } else {
+                args
+            };
+            if name == "return"
+                && state.borrow().function_calls == 0
+                && state.borrow().source_calls == 0
+            {
                 return Err(2);
             }
             let code = match args.first() {
-                Some(s) => s.parse::<i32>().map_err(|_| 2)?.rem_euclid(256),
-                None => state.borrow().status,
+                Some(s) => match s.trim_matches([' ', '\t', '\n']).parse::<i64>() {
+                    Ok(code) => code.rem_euclid(256) as i32,
+                    Err(_) => {
+                        return Ok(Outcome {
+                            code: 2,
+                            flow: if name == "return" {
+                                Flow::Return
+                            } else {
+                                Flow::Exit
+                            },
+                        });
+                    }
+                },
+                None => state.borrow().status(),
             };
-            if name == "return" && state.borrow().locals.is_empty() {
-                return Err(1);
+            if args.len() > 1 {
+                return Ok(Outcome {
+                    code: 1,
+                    flow: Flow::Exit,
+                });
             }
             return Ok(Outcome {
                 code,
@@ -156,221 +179,63 @@ pub(crate) async fn run(
                 },
             });
         }
-        "echo" => {
-            for (index, arg) in args.iter().enumerate() {
-                if index != 0 {
-                    write(&fds, b" ", &context).await?;
-                }
-                write(&fds, arg.as_bytes(), &context).await?;
-            }
-            write(&fds, b"\n", &context).await?;
+        Builtin::Echo => {
+            return output_outcome(printf::echo(args, state, fds, context, work).await);
         }
-        "printf" => {
-            let format = args.first().ok_or(2)?;
-            let mut index = 1;
-            let mut budget = Budget::default();
-            loop {
-                let mut chars = format.chars();
-                let mut buffer = String::new();
-                let mut consumed = false;
-                // Stream each format pass instead of creating an unbounded result buffer.
-                while let Some(ch) = chars.next() {
-                    budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-                    match ch {
-                        '%' => match chars.next() {
-                            Some('s' | 'd') => {
-                                write(&fds, buffer.as_bytes(), &context).await?;
-                                buffer.clear();
-                                let arg = args.get(index).map(String::as_str).unwrap_or("");
-                                index += 1;
-                                consumed = true;
-                                write(&fds, arg.as_bytes(), &context).await?;
-                            }
-                            Some('%') => buffer.push('%'),
-                            _ => return Err(2),
-                        },
-                        '\\' => buffer.push(match chars.next() {
-                            Some('n') => '\n',
-                            Some('r') => '\r',
-                            Some('t') => '\t',
-                            Some('\\') => '\\',
-                            _ => return Err(2),
-                        }),
-                        _ => buffer.push(ch),
-                    }
-                    if buffer.len() >= 4096 {
-                        write(&fds, buffer.as_bytes(), &context).await?;
-                        buffer.clear();
-                    }
-                }
-                write(&fds, buffer.as_bytes(), &context).await?;
-                // Bash repeats a format that consumes arguments, but a format with
-                // no consuming conversion is emitted only once.
-                if !consumed || index >= args.len() {
-                    break;
-                }
-            }
+        Builtin::Printf => {
+            return output_outcome(printf::run(args, state, fds, context, work).await);
         }
-        "cat" => {
-            if args.is_empty() {
-                copy(endpoint(&fds, 0)?, &fds, &context).await?;
-            } else {
-                for path in args {
-                    if let Some(input) = crate::interpreter::device_endpoint(&path, &fds) {
-                        copy(input?, &fds, &context).await?;
-                        continue;
-                    }
-                    let path = absolute(&state.borrow().cwd, &path);
-                    let options = OpenOptions::default();
-                    let input = context
-                        .cancel
-                        .run(context.fs().open(&path, &options))
-                        .await
-                        .map_err(|_| 130)?
-                        .map_err(|e| e.status())?;
-                    copy(input, &fds, &context).await?;
-                }
-            }
+        Builtin::Read => return read::run(args, state, fds, context, work).await,
+        Builtin::Declaration => {
+            return declarations(name, args, state, fds, context, work).await;
         }
-        "grep" => return grep::run(args, &state, &fds, &context).await,
-        "mkdir" => {
-            let mut parents = false;
-            let mut operands = Vec::new();
-            let mut options = true;
-            for arg in args {
-                match arg.as_str() {
-                    "--" if options => options = false,
-                    "-p" if options => parents = true,
-                    s if options && s.starts_with('-') && s != "-" => return Err(2),
-                    _ => operands.push(arg),
-                }
-            }
-            if operands.is_empty() {
-                return Err(2);
-            }
-            let mut status = 0;
-            let mut budget = Budget::default();
-            for operand in operands {
-                budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-                // Empty operands must not turn into the current directory under -p.
-                let path = if operand.is_empty() {
-                    String::new()
-                } else {
-                    absolute(&state.borrow().cwd, &operand)
-                };
-                if let Err(error) = context
-                    .cancel
-                    .run(context.fs().mkdir(&path, parents))
-                    .await
-                    .map_err(|_| 130)?
-                {
-                    status = 1;
-                    if let Some(stderr) = fds.get(2) {
-                        stderr
-                            .write_all(
-                                format!("mkdir: {operand}: {error}\n").as_bytes(),
-                                &context.cancel,
-                            )
-                            .await
-                            .map_err(|error| error.status())?;
-                    }
-                }
-            }
-            return Ok(Outcome::status(status));
-        }
-        "seq" => {
-            let (start, end) = match args.as_slice() {
-                [end] => (1, end.parse::<i64>().map_err(|_| 2)?),
-                [start, end] => (
-                    start.parse::<i64>().map_err(|_| 2)?,
-                    end.parse::<i64>().map_err(|_| 2)?,
-                ),
-                _ => return Err(2),
-            };
-            let mut buffer = String::new();
-            let mut budget = Budget::default();
-            for n in start..=end {
-                budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-                writeln!(&mut buffer, "{n}").map_err(|_| 1)?;
-                if buffer.len() >= 8192 {
-                    write(&fds, buffer.as_bytes(), &context).await?;
-                    buffer.clear();
-                }
-            }
-            write(&fds, buffer.as_bytes(), &context).await?;
-        }
-        "read" => {
-            let mut fd = 0;
-            let mut name = None;
-            let mut iter = args.iter();
-            while let Some(arg) = iter.next() {
-                match arg.as_str() {
-                    "-r" => {}
-                    "-u" => fd = iter.next().ok_or(2)?.parse().map_err(|_| 2)?,
-                    s if s.starts_with('-') => return Err(2),
-                    _ => {
-                        if name.replace(arg.clone()).is_some() {
-                            return Err(2);
-                        }
-                    }
-                }
-            }
-            let input = endpoint(&fds, fd)?;
-            let mut bytes = Vec::new();
-            let mut byte = [0];
-            let mut budget = Budget::default();
-            let code = loop {
-                budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-                if input
-                    .read_cancelled(&mut byte, &context.cancel)
-                    .await
-                    .map_err(|e| e.status())?
-                    == 0
-                {
-                    break 1;
-                }
-                if byte[0] == b'\n' {
-                    break 0;
-                }
-                if bytes.len() >= context.limits().line_bytes {
-                    return Err(2);
-                }
-                bytes.push(byte[0]);
-            };
-            let name = name.unwrap_or_else(|| "REPLY".into());
-            State::admit_assignment(&state, &name, bytes.len(), &context.cancel, work)
-                .await
-                .map_err(error_status)?;
-            state
-                .borrow_mut()
-                .assign_parameter(name, String::from_utf8(bytes).map_err(|_| 2)?)?;
-            return Ok(Outcome::status(code));
-        }
-        "export" | "local" | "readonly" | "declare" | "typeset" => {
-            return declarations(name, args, &state, &fds, &context, work).await;
-        }
-        "unset" => return unset(args, &state, &fds, &context, work).await,
-        "cd" => {
-            if args.len() != 1 {
-                return Err(2);
-            }
-            let cwd = absolute(&state.borrow().cwd, &args[0]);
-            state.borrow_mut().cwd = cwd;
-        }
-        "pwd" => {
+        Builtin::Unset => return unset(args, state, fds, context, work).await,
+        Builtin::Cd => return directories::cd(args, state, fds, context, work).await,
+        Builtin::Pushd => return directories::pushd(args, state, fds, context, work).await,
+        Builtin::Popd => return directories::popd(args, state, fds, context, work).await,
+        Builtin::Dirs => return directories::dirs(args, state, fds, context, work).await,
+        Builtin::Pwd => {
             let cwd = state.borrow().cwd.clone();
-            write(&fds, format!("{cwd}\n").as_bytes(), &context).await?;
+            write(fds, format!("{cwd}\n").as_bytes(), context).await?;
         }
-        "set" => return set(args, &state, &context, work).await,
-        "wait" => {
+        Builtin::Set => return set(arguments.into_owned(), state, context, work).await,
+        Builtin::Shift => {
+            let args = if args.first().is_some_and(|arg| arg == "--") {
+                &args[1..]
+            } else {
+                args
+            };
+            let count = match args.first() {
+                None => 1,
+                Some(value) => value
+                    .trim_matches([' ', '\t', '\n'])
+                    .parse::<i64>()
+                    .map_err(|_| 2)?,
+            };
+            if args.len() > 1 {
+                return Ok(Outcome {
+                    code: 1,
+                    flow: Flow::Exit,
+                });
+            }
+            let count = usize::try_from(count).map_err(|_| 1)?;
+            state.borrow_mut().shift_positional(count)?;
+        }
+        Builtin::Jobs => {
+            if !args.is_empty() {
+                return Err(2);
+            }
+            context.list_jobs(fds).await?;
+        }
+        Builtin::Wait => {
             if args.len() > 1 {
                 return Err(2);
             }
             let id = args.first().map(|s| JobSelector::parse(s)).transpose()?;
             return Ok(Outcome::status(context.wait_job(id).await?));
         }
-        "kill" => {
-            let (action, selector) = match kill_arguments(&args) {
+        Builtin::Kill => {
+            let (action, selector) = match kill_arguments(args) {
                 Ok(value) => value,
                 Err(error) => {
                     if let Some(stderr) = fds.get(2) {
@@ -396,7 +261,6 @@ pub(crate) async fn run(
                 SignalAction::Terminate(signal) => context.kill_job(selector, signal)?,
             }
         }
-        _ => return Err(127),
     }
     Ok(Outcome::status(0))
 }
@@ -501,6 +365,274 @@ fn error_status(error: Error) -> i32 {
     }
 }
 
+const SHOPT_OPTIONS: [&str; 7] = [
+    "expand_aliases",
+    "extdebug",
+    "extglob",
+    "inherit_errexit",
+    "lastpipe",
+    "nullglob",
+    "sourcepath",
+];
+
+fn shopt_value(state: &State, option: &str) -> Option<bool> {
+    match option {
+        "expand_aliases" => Some(state.expand_aliases),
+        "extglob" => Some(state.extglob),
+        "extdebug" => Some(state.extdebug),
+        "inherit_errexit" => Some(state.inherit_errexit),
+        "nullglob" => Some(state.nullglob),
+        "lastpipe" => Some(state.lastpipe),
+        "sourcepath" => Some(state.sourcepath),
+        _ => None,
+    }
+}
+
+/// Original streaming shopt adapter. Only options with actual state/consumers
+/// are accepted; unknown names fail rather than pretending to enable a feature.
+/// Extended-pattern matching itself may still reject unsupported syntax with 2.
+async fn set_shopt_option(
+    option: &str,
+    enabled: bool,
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    if option == "extdebug" && enabled {
+        State::initialize_arguments(state, &context.cancel, work)
+            .await
+            .map_err(error_status)?;
+    }
+    let mut state = state.borrow_mut();
+    match option {
+        "expand_aliases" => state.expand_aliases = enabled,
+        "extglob" => state.extglob = enabled,
+        "extdebug" => {
+            state.extdebug = enabled;
+            state.functrace = enabled;
+            state.errtrace = enabled;
+        }
+        "inherit_errexit" => state.inherit_errexit = enabled,
+        "nullglob" => state.nullglob = enabled,
+        "lastpipe" => state.lastpipe = enabled,
+        "sourcepath" => state.sourcepath = enabled,
+        _ => unreachable!("validated shell option"),
+    }
+    Ok(())
+}
+
+async fn shopt(
+    args: &[String],
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<Outcome, i32> {
+    let mut set = false;
+    let mut unset = false;
+    let mut quiet = false;
+    let mut reusable = false;
+    let mut index = 0;
+    while let Some(argument) = args.get(index) {
+        work.checkpoint(&context.cancel)
+            .await
+            .map_err(error_status)?;
+        if argument == "--" {
+            index += 1;
+            break;
+        }
+        if !argument.starts_with('-') || argument == "-" {
+            break;
+        }
+        for flag in argument[1..].bytes() {
+            work.checkpoint(&context.cancel)
+                .await
+                .map_err(error_status)?;
+            match flag {
+                b's' => set = true,
+                b'u' => unset = true,
+                b'q' => quiet = true,
+                b'p' => reusable = true,
+                _ => {
+                    shopt_diagnostic(argument, "invalid option", fds, context).await?;
+                    return Err(2);
+                }
+            }
+        }
+        index += 1;
+    }
+    if set && unset {
+        shopt_diagnostic(
+            "",
+            "cannot set and unset shell options simultaneously",
+            fds,
+            context,
+        )
+        .await?;
+        return Err(1);
+    }
+    let operands = &args[index..];
+    let options = if operands.is_empty() {
+        SHOPT_OPTIONS.map(Some)
+    } else {
+        [None; SHOPT_OPTIONS.len()]
+    };
+    let mut status = 0;
+    // A fixed iterator over known names avoids allocating or copying argv.
+    let names = operands
+        .iter()
+        .map(String::as_str)
+        .chain(options.into_iter().flatten());
+    for option in names {
+        work.checkpoint(&context.cancel)
+            .await
+            .map_err(error_status)?;
+        for _ in option.bytes() {
+            work.checkpoint(&context.cancel)
+                .await
+                .map_err(error_status)?;
+        }
+        let enabled = {
+            let state = state.borrow();
+            shopt_value(&state, option)
+        };
+        let Some(enabled) = enabled else {
+            shopt_diagnostic(option, "invalid shell option name", fds, context).await?;
+            status = 1;
+            continue;
+        };
+        if !operands.is_empty() && (set || unset) {
+            set_shopt_option(option, set, state, context, work).await?;
+            continue;
+        }
+        if !operands.is_empty() && !enabled {
+            status = 1;
+        }
+        if quiet || (operands.is_empty() && ((set && !enabled) || (unset && enabled))) {
+            continue;
+        }
+        if reusable {
+            write(
+                fds,
+                if enabled { b"shopt -s " } else { b"shopt -u " },
+                context,
+            )
+            .await?;
+            write(fds, option.as_bytes(), context).await?;
+        } else {
+            write(fds, option.as_bytes(), context).await?;
+            let padding = 20usize.saturating_sub(option.len());
+            write(fds, &b"                    "[..padding], context).await?;
+            write(fds, if enabled { b"\ton" } else { b"\toff" }, context).await?;
+        }
+        write(fds, b"\n", context).await?;
+    }
+    Ok(Outcome::status(status))
+}
+
+async fn shopt_diagnostic(
+    option: &str,
+    message: &str,
+    fds: &FdTable,
+    context: &Context,
+) -> Result<(), i32> {
+    let output = endpoint(fds, 2)?;
+    for piece in [
+        "/usr/bin/bash: shopt: ",
+        option,
+        if option.is_empty() { "" } else { ": " },
+        message,
+        "\n",
+    ] {
+        output
+            .write_all(piece.as_bytes(), &context.cancel)
+            .await
+            .map_err(|error| error.status())?;
+    }
+    Ok(())
+}
+
+/// Original bounded loop-control adapter. Counts use Bash's signed decimal
+/// intmax_t syntax, not wasm32 usize, and outside-loop calls return success
+/// before inspecting their operands. Diagnostics borrow rather than clone argv.
+async fn loop_control(
+    name: &str,
+    args: &[String],
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<Outcome, i32> {
+    work.checkpoint(&context.cancel)
+        .await
+        .map_err(error_status)?;
+    let depth = context.loop_depth();
+    let (code, flow, value, message) = if depth == 0 {
+        (
+            0,
+            Flow::Normal,
+            None,
+            "only meaningful in a `for', `while', or `until' loop",
+        )
+    } else if args.len() > 1 {
+        (1, Flow::Exit, None, "too many arguments")
+    } else {
+        let count = match args.first() {
+            None => Some(1),
+            Some(value) => test::decimal(value, &context.cancel, work).await?,
+        };
+        match count {
+            Some(count) if count > 0 => {
+                // Clamping to active depth also avoids truncating a valid
+                // 64-bit Bash count on our wasm32 target.
+                let count = (count as u64).min(depth as u64) as usize;
+                return Ok(Outcome {
+                    code: 0,
+                    flow: if name == "break" {
+                        Flow::Break(count)
+                    } else {
+                        Flow::Continue(count)
+                    },
+                });
+            }
+            // Bash unwinds every enclosing loop for a nonpositive count,
+            // including when the command was `continue`, while preserving 1.
+            Some(_) => (
+                1,
+                Flow::Break(depth),
+                args.first(),
+                "loop count out of range",
+            ),
+            None => (2, Flow::Exit, args.first(), "numeric argument required"),
+        }
+    };
+    let output = endpoint(fds, 2)?;
+    for piece in ["/usr/bin/bash: ", name, ": "] {
+        output
+            .write_all(piece.as_bytes(), &context.cancel)
+            .await
+            .map_err(|error| error.status())?;
+    }
+    if let Some(value) = value {
+        output
+            .write_all(value.as_bytes(), &context.cancel)
+            .await
+            .map_err(|error| error.status())?;
+        output
+            .write_all(b": ", &context.cancel)
+            .await
+            .map_err(|error| error.status())?;
+    }
+    output
+        .write_all(message.as_bytes(), &context.cancel)
+        .await
+        .map_err(|error| error.status())?;
+    output
+        .write_all(b"\n", &context.cancel)
+        .await
+        .map_err(|error| error.status())?;
+    Ok(Outcome { code, flow })
+}
+
 /// Original streaming adapter for Bashkit builtins/vars.rs Set. Expanded argv
 /// moves into the positional frame; no side-effect vector or argv clone.
 async fn set(
@@ -512,9 +644,17 @@ async fn set(
     if args.is_empty() {
         return Err(2); // Variable/option listing remains unsupported.
     }
-    let (mut nounset, mut pipefail) = {
+    let mut flags = {
         let state = state.borrow();
-        (state.nounset, state.pipefail)
+        SetFlags {
+            nounset: state.nounset,
+            pipefail: state.pipefail,
+            errexit: state.errexit,
+            monitor: state.monitor,
+            noglob: state.noglob,
+            functrace: state.functrace,
+            errtrace: state.errtrace,
+        }
     };
     let mut index = 0;
     let mut explicit = false;
@@ -537,37 +677,48 @@ async fn set(
         let enabled = option.starts_with('-');
         index += 1;
         if matches!(option.as_str(), "-o" | "+o") {
-            set_option(
-                args.get(index).ok_or(2)?,
-                enabled,
-                &mut nounset,
-                &mut pipefail,
-            )?;
+            set_option(args.get(index).ok_or(2)?, enabled, &mut flags)?;
             index += 1;
             continue;
         }
-        set_short_options(option, enabled, &mut nounset, context, work).await?;
+        set_short_options(option, enabled, &mut flags, context, work).await?;
     }
     // All options and work admission complete before any state changes.
     let mut state = state.borrow_mut();
-    state.nounset = nounset;
-    state.pipefail = pipefail;
     if explicit || index < args.len() {
         args.drain(..index);
-        state.replace_positional(args);
+        state.replace_positional(args)?;
     }
+    state.nounset = flags.nounset;
+    state.pipefail = flags.pipefail;
+    state.errexit = flags.errexit;
+    state.monitor = flags.monitor;
+    state.noglob = flags.noglob;
+    state.functrace = flags.functrace;
+    state.errtrace = flags.errtrace;
     Ok(Outcome::status(0))
 }
 
-fn set_option(
-    option: &str,
-    enabled: bool,
-    nounset: &mut bool,
-    pipefail: &mut bool,
-) -> Result<(), i32> {
+/// `set` options staged until every argument has been validated.
+struct SetFlags {
+    functrace: bool,
+    errtrace: bool,
+    nounset: bool,
+    pipefail: bool,
+    errexit: bool,
+    monitor: bool,
+    noglob: bool,
+}
+
+fn set_option(option: &str, enabled: bool, flags: &mut SetFlags) -> Result<(), i32> {
     match option {
-        "nounset" => *nounset = enabled,
-        "pipefail" => *pipefail = enabled,
+        "nounset" => flags.nounset = enabled,
+        "pipefail" => flags.pipefail = enabled,
+        "errexit" => flags.errexit = enabled,
+        "monitor" => flags.monitor = enabled,
+        "noglob" => flags.noglob = enabled,
+        "functrace" => flags.functrace = enabled,
+        "errtrace" => flags.errtrace = enabled,
         _ => return Err(2),
     }
     Ok(())
@@ -576,7 +727,7 @@ fn set_option(
 async fn set_short_options(
     option: &str,
     enabled: bool,
-    nounset: &mut bool,
+    flags: &mut SetFlags,
     context: &Context,
     work: &mut Work,
 ) -> Result<(), i32> {
@@ -584,27 +735,47 @@ async fn set_short_options(
         work.checkpoint(&context.cancel)
             .await
             .map_err(error_status)?;
-        if flag != b'u' {
-            return Err(2);
+        match flag {
+            b'u' => flags.nounset = enabled,
+            b'e' => flags.errexit = enabled,
+            b'm' => flags.monitor = enabled,
+            b'f' => flags.noglob = enabled,
+            b'T' => flags.functrace = enabled,
+            b'E' => flags.errtrace = enabled,
+            _ => return Err(2),
         }
-        *nounset = enabled;
     }
     Ok(())
 }
 
 async fn declarations(
     name: &str,
-    args: Vec<String>,
+    args: &[String],
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
 ) -> Result<Outcome, i32> {
-    let mut args = args.into_iter().peekable();
-    let mut nameref = false;
-    if matches!(name, "local" | "declare" | "typeset") {
-        nameref = args.next_if(|arg| arg == "-n").is_some();
-        args.next_if(|arg| arg == "--");
+    let mut args = args.iter().peekable();
+    if name == "local" && state.borrow().function_calls == 0 {
+        return Err(1);
+    }
+    let DeclarationOptions {
+        print,
+        function_names,
+        nameref,
+        readonly,
+        exported,
+        case,
+    } = declaration_options(name, &mut args, context, work).await?;
+    if function_names {
+        return declarations::function_names(args, state, fds, context, work).await;
+    }
+    if print {
+        return declarations::print(name, args, state, fds, context, work).await;
+    }
+    if nameref && (readonly || exported || case.specified()) {
+        return Err(2);
     }
     if args.peek().is_none() && (nameref || matches!(name, "declare" | "typeset")) {
         return Err(2);
@@ -625,34 +796,58 @@ async fn declarations(
         if extended {
             work.admit_storage(arg.len()).map_err(error_status)?;
         }
-        let (key, value) = arg
-            .split_once('=')
-            .map(|(key, value)| (key.to_owned(), Some(value.to_owned())))
-            .unwrap_or((arg, None));
+        let (key, value, append) = match arg.split_once('=') {
+            Some((key, value)) => (
+                key.strip_suffix('+').unwrap_or(key).to_owned(),
+                Some(value.to_owned()),
+                key.ends_with('+'),
+            ),
+            None => (arg.to_owned(), None, false),
+        };
         if !valid_name(&key) {
+            if name == "local" {
+                status = 1;
+                continue;
+            }
             return Err(2);
         }
         let local = name == "local"
-            || matches!(name, "declare" | "typeset") && !state.borrow().locals.is_empty();
-        if extended {
+            || matches!(name, "declare" | "typeset") && state.borrow().in_function_scope();
+        let target = if append && local && !nameref && state.borrow().is_current_local(&key) {
+            declarations::local_append_target(key, state, context, work).await
+        } else {
+            Ok(key)
+        };
+        if target == Err(1) {
+            status = 1;
+            continue;
+        }
+        let key = target?;
+        if extended || local {
             let storage = state
                 .borrow()
                 .declaration_storage(&key, local)
                 .map_err(error_status)?;
             work.admit_storage(storage).map_err(error_status)?;
         }
+        if nameref && append {
+            return Err(2);
+        }
         if nameref {
             let result = nameref_declaration(&key, value, local, state, context, work).await;
-            status |= i32::from(result.is_err());
-            if let Err(code) = result
-                && code == 2
-            {
-                return Err(2);
-            }
+            status |= declaration_status(result)?;
             continue;
         }
+        let value = if append {
+            Some(
+                declarations::append_scalar(&key, value.ok_or(2)?, local, state, context, work)
+                    .await?,
+            )
+        } else {
+            value
+        };
         if let Some(value) = &value
-            && !local
+            && (!local || append && state.borrow().is_current_local(&key))
         {
             State::admit_assignment(state, &key, value.len(), &context.cancel, work)
                 .await
@@ -665,7 +860,15 @@ async fn declarations(
         } else {
             key
         };
-        if apply_declaration(name, &key, value, &mut state.borrow_mut()).is_ok() {
+        let result = if case.specified() {
+            state
+                .borrow_mut()
+                .declare_case(key.clone(), value, local, case, work)
+        } else {
+            apply_declaration(name, &key, value, append, &mut state.borrow_mut())
+        };
+        if declaration_status(result)? == 0 {
+            declaration_attributes(&key, exported, readonly, &mut state.borrow_mut())?;
             continue;
         }
         status = 1;
@@ -674,6 +877,83 @@ async fn declarations(
         }
     }
     Ok(Outcome::status(status))
+}
+
+fn declaration_status(result: Result<(), i32>) -> Result<i32, i32> {
+    match result {
+        Ok(()) => Ok(0),
+        Err(code @ (2 | crate::exec::RESOURCE_STATUS)) => Err(code),
+        Err(_) => Ok(1),
+    }
+}
+
+fn declaration_attributes(
+    key: &str,
+    exported: bool,
+    readonly: bool,
+    state: &mut crate::state::State,
+) -> Result<(), i32> {
+    if exported {
+        state.export(key.to_owned(), None)?;
+    }
+    if readonly {
+        state.readonly(key.to_owned(), None)?;
+    }
+    Ok(())
+}
+
+#[derive(Default)]
+struct DeclarationOptions {
+    print: bool,
+    function_names: bool,
+    nameref: bool,
+    readonly: bool,
+    exported: bool,
+    case: crate::state::CaseOptions,
+}
+
+async fn declaration_options(
+    name: &str,
+    args: &mut std::iter::Peekable<std::slice::Iter<'_, String>>,
+    context: &Context,
+    work: &mut Work,
+) -> Result<DeclarationOptions, i32> {
+    let mut flags = DeclarationOptions::default();
+    if !matches!(name, "local" | "declare" | "typeset") {
+        return Ok(flags);
+    }
+    while let Some(option) = args.next_if(|arg| arg.starts_with(['-', '+'])) {
+        if option == "--" {
+            break;
+        }
+        declaration_option(name, option, &mut flags, context, work).await?;
+    }
+    Ok(flags)
+}
+
+async fn declaration_option(
+    name: &str,
+    option: &str,
+    flags: &mut DeclarationOptions,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    let enabled = option.starts_with('-');
+    for flag in option[1..].bytes() {
+        work.checkpoint(&context.cancel)
+            .await
+            .map_err(error_status)?;
+        match flag {
+            b'p' if enabled && name != "local" => flags.print = true,
+            b'F' if enabled && name != "local" => flags.function_names = true,
+            b'n' if enabled => flags.nameref = true,
+            b'r' if enabled => flags.readonly = true,
+            b'x' if enabled => flags.exported = true,
+            b'l' | b'u' => flags.case.flag(flag == b'u', enabled),
+            _ => return Err(2),
+        }
+    }
+    Ok(())
 }
 
 async fn nameref_declaration(
@@ -689,9 +969,14 @@ async fn nameref_declaration(
         None => {
             let state = state.borrow();
             let target = state
-                .namerefs
+                .namerefs()
                 .get(key)
-                .or_else(|| state.variables.get(key))
+                .or_else(|| {
+                    state
+                        .bindings()
+                        .get(key)
+                        .and_then(crate::state::Binding::scalar)
+                })
                 .ok_or(2)?;
             work.admit_storage(target.len()).map_err(error_status)?;
             target.clone()
@@ -704,8 +989,15 @@ async fn nameref_declaration(
     }
     // Array targets, unbound reference declarations and broad attributes are
     // explicit prerequisites for later units, never target-string parsing.
-    if !valid_name(&target) || target == "PIPESTATUS" || key == "PIPESTATUS" {
+    if target.is_empty()
+        || target.contains(['[', ']'])
+        || target == "PIPESTATUS"
+        || key == "PIPESTATUS"
+    {
         return Err(2);
+    }
+    if !valid_name(&target) {
+        return Err(1);
     }
     state
         .borrow_mut()
@@ -716,6 +1008,7 @@ fn apply_declaration(
     name: &str,
     key: &str,
     value: Option<String>,
+    append: bool,
     state: &mut crate::state::State,
 ) -> Result<(), i32> {
     if name == "readonly" {
@@ -724,12 +1017,10 @@ fn apply_declaration(
     if name == "export" {
         return state.export(key.to_owned(), value);
     }
-    if name == "local" {
-        let value = value.unwrap_or_else(|| state.variables.get(key).cloned().unwrap_or_default());
-        return state.local(key.to_owned(), value);
-    }
-    if matches!(name, "declare" | "typeset") && !state.locals.is_empty() {
-        return state.local(key.to_owned(), value.unwrap_or_default());
+    let local =
+        name == "local" || matches!(name, "declare" | "typeset") && state.in_function_scope();
+    if local && (!append || !state.is_current_local(key)) {
+        return state.declare_local(key.to_owned(), value);
     }
     if let Some(value) = value {
         state.assign_parameter(key.to_owned(), value)?;
@@ -739,9 +1030,9 @@ fn apply_declaration(
 
 /// `unset [-f] [-v] [-n] [--] name...`. Bash 5.3 ignores names that are not
 /// identifiers. Without `-v` a name with no variable unsets a function.
-/// `-n` (namerefs) is not implemented and fails closed.
+/// `-n` removes the reference itself without following its target.
 async fn unset(
-    args: Vec<String>,
+    args: &[String],
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
@@ -749,6 +1040,7 @@ async fn unset(
 ) -> Result<Outcome, i32> {
     let mut functions = false;
     let mut variables = false;
+    let mut namerefs = false;
     let mut names = args.iter().peekable();
     while let Some(option) = names.next_if(|arg| arg.starts_with('-') && arg.len() > 1) {
         if option == "--" {
@@ -758,7 +1050,7 @@ async fn unset(
             match flag {
                 'f' => functions = true,
                 'v' => variables = true,
-                'n' => return Err(2),
+                'n' => namerefs = true,
                 _ => {
                     let diagnostic = format!(
                         "/usr/bin/bash: unset: -{flag}: invalid option\nunset: usage: unset [-f] [-v] [-n] [name ...]\n"
@@ -786,38 +1078,51 @@ async fn unset(
             continue;
         }
         if functions {
-            state.borrow_mut().functions.remove(name);
+            state.borrow_mut().unset_function(name);
             continue;
         }
-        State::admit_scalar_access(state, name, &context.cancel, work)
-            .await
-            .map_err(error_status)?;
-        let target_bytes = {
-            let state = state.borrow();
-            state
-                .namerefs
-                .contains_key(name)
-                .then(|| state.scalar_target(name))
-                .transpose()?
-                .flatten()
-                .map_or(0, str::len)
+        let removed = if namerefs {
+            state.borrow_mut().unset_nameref(name)
+        } else {
+            admit_unset_target(name, state, context, work).await?;
+            state.borrow_mut().unset_variable(name)
         };
-        work.admit_storage(target_bytes).map_err(error_status)?;
-        let removed = state.borrow_mut().unset_variable(name);
         match removed {
-            Err(()) => {
+            Err(_) => {
                 let diagnostic =
                     format!("/usr/bin/bash: unset: {name}: cannot unset: readonly variable\n");
                 diagnose(fds, &diagnostic, context).await?;
                 code = 1;
             }
-            Ok(false) if !variables => {
-                state.borrow_mut().functions.remove(name);
+            Ok(false) if !variables && !namerefs => {
+                state.borrow_mut().unset_function(name);
             }
             Ok(_) => {}
         }
     }
     Ok(Outcome::status(code))
+}
+
+async fn admit_unset_target(
+    name: &str,
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    State::admit_scalar_access(state, name, &context.cancel, work)
+        .await
+        .map_err(error_status)?;
+    let target_bytes = {
+        let state = state.borrow();
+        state
+            .namerefs()
+            .contains_key(name)
+            .then(|| state.scalar_target(name))
+            .transpose()?
+            .flatten()
+            .map_or(0, str::len)
+    };
+    work.admit_storage(target_bytes).map_err(error_status)
 }
 
 async fn diagnose(fds: &FdTable, diagnostic: &str, context: &Context) -> Result<(), i32> {
@@ -837,11 +1142,14 @@ async fn readonly_diagnostic(
     context: &Context,
 ) -> Result<(), i32> {
     let diagnostic = format!("{builtin}: {key}: readonly variable\n");
-    if let Some(stderr) = fds.get(2) {
-        stderr
-            .write_all(diagnostic.as_bytes(), &context.cancel)
+    diagnose(fds, &diagnostic, context).await
+}
+
+async fn scan_bytes(bytes: usize, context: &Context, work: &mut Work) -> Result<(), i32> {
+    for _ in 0..bytes {
+        work.checkpoint(&context.cancel)
             .await
-            .map_err(|error| error.status())?;
+            .map_err(error_status)?;
     }
     Ok(())
 }

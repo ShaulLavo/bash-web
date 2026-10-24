@@ -139,9 +139,30 @@ pub enum CompoundCommand {
     // substantially larger than the pipeline wrapper itself.
     Time(Box<TimeCommand>),
     /// Conditional expression [[ ... ]]
-    Conditional(Vec<Word>),
+    Test(Box<TestExpr>),
     /// Coprocess: `coproc [NAME] command`
     Coproc(CoprocCommand),
+}
+
+/// Parse-time structure of `[[ ... ]]`. Operators are recognized before any
+/// expansion: quoted operator-looking words remain operands. Logical chains
+/// are flat so their width does not become AST clone/evaluation stack depth.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum TestExpr {
+    Word(Word),
+    Unary {
+        operator: String,
+        operand: Word,
+    },
+    Binary {
+        left: Word,
+        operator: String,
+        right: Word,
+    },
+    Not(Box<TestExpr>),
+    And(Vec<TestExpr>),
+    Or(Vec<TestExpr>),
+    Group(Box<TestExpr>),
 }
 
 /// Coprocess command - runs a command with bidirectional communication.
@@ -278,6 +299,8 @@ pub struct CaseItem {
 /// Function definition.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FunctionDef {
+    /// Literal declaration-token spelling. The interpreter validates it and
+    /// removes line continuations only when the declaration executes.
     pub name: String,
     pub body: Box<Command>,
     /// Original source text for this function when available.
@@ -372,7 +395,7 @@ impl fmt::Display for Word {
                 WordPart::BadSubstitution(text) => write!(f, "{}", text)?,
                 // Printed as shell text (re-parsed by alias expansion);
                 // never `Debug` (TM-INF-022).
-                WordPart::CommandSubstitution(cmd) => {
+                WordPart::CommandSubstitution(cmd) | WordPart::FileSubstitution(cmd) => {
                     write!(f, "$({})", super::print_cmd::inline_commands(cmd))?
                 }
                 WordPart::UnparsedCommandSubstitution { source, .. } => {
@@ -518,6 +541,8 @@ pub enum WordPart {
     Variable(String),
     /// Command substitution ($(...))
     CommandSubstitution(Vec<Command>),
+    /// A single input-only substitution whose Bash file-read shortcut is enabled.
+    FileSubstitution(Vec<Command>),
     /// A `$((...) ... )` span whose text is not arithmetic, so bash runs it as
     /// a command substitution. Bash parses that text only when the word
     /// expands: a syntax error there is reported then, with status 2, rather
@@ -1520,12 +1545,18 @@ mod tests {
 
     #[test]
     fn compound_command_conditional() {
-        let cmd = CompoundCommand::Conditional(vec![Word::literal("-f"), Word::literal("file")]);
-        if let CompoundCommand::Conditional(words) = &cmd {
-            assert_eq!(words.len(), 2);
-        } else {
-            panic!("expected Conditional");
-        }
+        let cmd = CompoundCommand::Test(Box::new(TestExpr::Unary {
+            operator: "-f".into(),
+            operand: Word::literal("file"),
+        }));
+        let CompoundCommand::Test(expression) = cmd else {
+            panic!("expected Test");
+        };
+        let TestExpr::Unary { operator, operand } = *expression else {
+            panic!("expected unary predicate");
+        };
+        assert_eq!(operator, "-f");
+        assert_eq!(operand.to_string(), "file");
     }
 
     #[test]

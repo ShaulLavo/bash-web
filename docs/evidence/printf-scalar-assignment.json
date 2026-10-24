@@ -1,0 +1,275 @@
+{
+  "schema": 1,
+  "status": "Review-ready safe IFS assignment under approved parent decision, not independently approved or merged. Parent owns hosted compatibility, CI, merge and exact-main acceptance.",
+  "acceptedSource": "50ab6a7f3cdf6c4c7a7e1ad875d4e804e76da5fd",
+  "measuredSource": "286dd4cd0bc59410bda90348992044812a208dd3",
+  "sourceCorrespondence": "Historical full replay: production implementation, tests, package versions and derived layer evidence froze in measuredSource before exactly one full replay. Evidence/baseline/plan/prose commits followed, including the five approved prose cuts at ad9bdf619e190b07c5b01399f677d43ce51abb01. Review fixes at c29fab56685afceadc7449e7b2e15f59b7ca3aed change printf.rs and state.rs. The original replay did not run on those later production bytes. No second full replay or membership changes in this follow-up. The continuation from 506745aff7bb213e7353f2d0a2a14e89657ac323 corrects closure claims only; all production and test bytes remain identical to c29fab5. Safe-IFS r3 removes the disproven c29fab5 cache restoration and changes production bytes again; prior focused checks remain historical. Final exact-source focused and bounded affected evidence is separate from the single historical full replay.",
+  "model": "gpt-6.1-sol",
+  "provider": "codex through existing parent-verified cli-proxy. No nested agents or provider/settings/credential changes.",
+  "classification": "Original local Rust and TypeScript observed against Bash. No copied or adapted upstream implementation.",
+  "scope": "printf -v scalar assignment, attached names, repeated -v and --, existing scope/nameref/readonly/IFS semantics, byte capture and accounting. No parser/runtime changes, arrays, attributes, time or floating-point formats.",
+  "versions": {
+    "root": "0.0.71",
+    "engine": "0.0.41",
+    "waffle": "0.0.58"
+  },
+  "wafflePin": "fc58a532f0d7a617e631ea4b7580a190915d4ed6",
+  "behaviorOracle": {
+    "executable": "/usr/bin/bash",
+    "version": "5.3.15(1)-release",
+    "sha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5"
+  },
+  "sourceSha256": "08a47fcc82f628f77bd41e46fbd40952d6a505bb70b216f906cdca6aead79a8b",
+  "productionGuestSha256": "93c9a0ef5cdabbf88b080673e7577eebdbf5042ffcc6c087d8e868a1108716b7",
+  "frozenMeasurement": {
+    "acceptedBase": "50ab6a7f3cdf6c4c7a7e1ad875d4e804e76da5fd",
+    "measuredSource": "286dd4cd0bc59410bda90348992044812a208dd3",
+    "waffle": "fc58a532f0d7a617e631ea4b7580a190915d4ed6",
+    "versions": {
+      "root": "0.0.71",
+      "engine": "0.0.41",
+      "waffle": "0.0.58"
+    },
+    "records": 9221,
+    "scored": 5792,
+    "skips": 3429,
+    "jobs": 1,
+    "fullReplays": 1,
+    "identity": {
+      "schema": 1,
+      "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+      "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+      "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+      "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+    },
+    "replaySha256": "97cb2fafe0b5059609247aba196a299fe4508030b3050bcae84bca4fc40e7c4d",
+    "baselineBeforeSha256": "3a74ea2104c2db0d550bedae3223ebe959964cfd58419ee05262c0261b747d48",
+    "baselineAfterSha256": "d3931d2bd2e1fe6e9f462b6088360792d798744a4ed1c0a7f6aee9af917e550d",
+    "ok": true,
+    "corpora": {
+      "oils": {
+        "before": 1013,
+        "after": 1015,
+        "gained": ["oils:builtin-printf:38", "oils:builtin-printf:115"],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "brush-suite": {
+        "before": 1001,
+        "after": 1007,
+        "gained": [
+          "brush-suite:builtins/printf:3",
+          "brush-suite:builtins/printf:6",
+          "brush-suite:builtins/printf:7",
+          "brush-suite:builtins/printf:63",
+          "brush-suite:builtins/printf:73",
+          "brush-suite:nameref:47"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      },
+      "bashkit-suite": {
+        "before": 1406,
+        "after": 1412,
+        "gained": [
+          "bashkit-suite:bashbox-declare:345",
+          "bashkit-suite:bashbox-declare:364",
+          "bashkit-suite:bashbox-printf:175",
+          "bashkit-suite:printf:194",
+          "bashkit-suite:printf:201",
+          "bashkit-suite:printf:311"
+        ],
+        "lost": [],
+        "newlyFailing": []
+      }
+    },
+    "strictOfflineComparator": "passed",
+    "historicalPayloads": "preserved"
+  },
+  "verification": {
+    "failingFirst": {
+      "log": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/red.log",
+      "description": "Accepted-main production-Waffle controls fail for unsupported scalar assignment. Bash observations retained as raw base64 streams and status."
+    },
+    "rust": {
+      "command": "npm run check:rust",
+      "log": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/gates-final-3.log",
+      "result": "Native/WASI all-target Clippy, rustfmt, native workspace tests and pinned dependency checker pass. Existing low-memory read control unchanged."
+    },
+    "wasi": {
+      "command": "npm run test:shell:wasi",
+      "log": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/gates-final-3.log",
+      "result": "Selected WASI suites pass under wasmtime, including 113 printf and 9 echo word tests, real builtin I/O, live memory refunds, cancellation and exact NUL-truncated scalar capacity."
+    },
+    "realRuntime": {
+      "command": "node --test scripts/test-own-shell-printf-assignment.ts",
+      "log": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/final-controls.log",
+      "passed": 33,
+      "bashComparisons": 29,
+      "explicitBoundaries": 4,
+      "comparison": "Raw stdout/status. Stderr separately compared after removing only Bash source-line annotations. Frozen scoring policy unchanged."
+    },
+    "scoreboard": {
+      "command": "npm run test:shell:scoreboard",
+      "log": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/gates-final-3.log",
+      "passed": 107
+    },
+    "quality": {
+      "commands": [
+        "npm run sources:browser",
+        "npm run build:worker",
+        "npm run format:check",
+        "npm run lint",
+        "npm run typecheck",
+        "npm run check:unused",
+        "npm run check:duplicates",
+        "npm run test:quality-gates",
+        "npm run test:guest-build",
+        "npm run typecheck:guest-build",
+        "npm run test:check-layers",
+        "npm run typecheck:layers"
+      ],
+      "log": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/remaining-2.log",
+      "result": "Passed without changing duplicate baselines or weakening checks. New real-runtime controls use the repository bundler typecheck rather than the unrelated NodeNext guest-build file list."
+    },
+    "layers": {
+      "command": "LAYERS_BASE_REF=50ab6a7f3cdf6c4c7a7e1ad875d4e804e76da5fd npm run check:layers",
+      "log": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/final-controls.log",
+      "result": "0 production / 0 test-only violations; 42 / 28 unique edges. Derived evidence recorded in measuredSource."
+    },
+    "browser": {
+      "command": "npm run verify:browser",
+      "log": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/remaining-2.log",
+      "passed": 228,
+      "existingSkips": 16,
+      "runtimeTerminalTests": 143,
+      "engines": ["Chromium", "Firefox"],
+      "result": "Passed. Disposable server on127.0.0.1:42731 and physically short browser temporary directory owned by teardown."
+    },
+    "frozen": {
+      "command": "BASH_COMPAT_BASE_REF=50ab6a7f3cdf6c4c7a7e1ad875d4e804e76da5fd BASH_COMPAT_JOBS=1 BASH_COMPAT_OUT=/work/reports/bash-web/hill-climb/printf-scalar-assignment/replay.json npm run compat:shell",
+      "log": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/replay.log",
+      "savedOutput": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/replay.json",
+      "offlineCommand": "node /work/reports/bash-web/hill-climb/printf-scalar-assignment/score.ts",
+      "result": "Exactly one replay. Strict offline membership comparator passes after only measured gained outcomes and derived counts change; historical payloads preserved."
+    },
+    "hosted": "Not watched or claimed locally. All existing CI checks, including browser, shell, compatibility and Darwin, remain blocking and parent-owned."
+  },
+  "boundaries": [
+    "Scalars are UTF-8 Strings. Output truncates at the first NUL and shrinks to its stored length. Invalid UTF-8 before that NUL returns2 without replacing the previous value, unlike Bash byte scalars. Stdout printf remains byte-preserving.",
+    "The existing builtin prefix guard restores x after x=prefix printf -v x. Bash keeps printf's assignment. State::assign_parameter can update expansion saves but cannot update the builtin guard's private saves. No interpreter prefix contract rewrite in this unit.",
+    "Array lvalues reject without evaluation or mutation. Existing attribute/time/float/help boundaries remain. An unsupported format conversion assigns the supported prefix and returns2, as the existing formatter dictates."
+  ],
+  "deviations": [
+    "VDO physical capacity statistics were not readable without privileged device-mapper access; sudo required a password. Expected mounted/work and >1.6TiB logical free space checked before and after queue admission. No large toolchain installation or host permission change.",
+    "Early draft moved Printer into an async helper and enlarged the shared builtin future, breaking the existing read-local low-memory control. Final helper borrows Printer. The existing test is unchanged and passes.",
+    "A new capacity control originally exhausted its200-turn readiness helper. A bounded10000-turn drive fixes the observation; original131072-byte execution budget and exact capacity assertions remain. A zero-selected --exact probe is not counted as evidence.",
+    "Generated tracked browser notices were restored to their accepted bytes after verification. No unrelated generated notices are included."
+  ],
+  "cleanup": {
+    "inventory": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/inventory-before.txt",
+    "actualHostReceipt": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/cleanup.txt",
+    "owner": "Implementation lane until handoff, then parent owns retained small evidence",
+    "policy": "Stop only owned consumers. Remove the exclusive worktree with git worktree remove and delete owned scratch/build/browser data. Keep small logs, replay, comparator and reproducer here until parent acceptance. Preserve all shared caches, other-owner PR23 and diagnostic worktree."
+  },
+  "reviewFixes": {
+    "startSource": "ad9bdf619e190b07c5b01399f677d43ce51abb01",
+    "fixedSource": "c29fab56685afceadc7449e7b2e15f59b7ca3aed",
+    "independentReview": "CHANGES REQUESTED comment6307762029 at b3196bb449e594e7f169c2f5f66d6f502fad2d64; no replacement reviewer verdict claimed.",
+    "fixes": [
+      "Capture-only malformed format and %b escape warnings tolerate closed stderr; cancellation130 and broken-pipe141 still abort before commit.",
+      "Incomplete indirect-IFS attempt at c29fab5 retains the pre-admitted fixed-size membership and separator snapshots while committing through the existing scalar assignment owner once. This is not a complete fix for review blocker 2."
+    ],
+    "productionSourceSha256": {
+      "printf": "3c35c42a7d066f0e0b30b3d67317a686f087bef2a331792679d6807d6d159524",
+      "state": "e2925901987d64e107d406452fb2c62af0b853cf844f3b286bc601a7da54dda3"
+    },
+    "productionGuestSha256": "ecbacd0c4cb13845c378aa2eebcd29dbf099fdda1ba32b2d1ed4bdf13747062b",
+    "measurementBoundary": "Historical full replay and its 14 gains/0 losses remain unchanged at measuredSource. Final source has focused production-Waffle and bounded affected frozen-case validation only, not a complete new score.",
+    "verification": {
+      "failingFirst": "red.log and red-exact.log reproduce both blockers on the starting production-Waffle and native source; reviewer five raw-byte finding/control pairs repeated against the verified starting-source CI artifact.",
+      "nativeAndWasi": "Engine all-target Clippy, rustfmt, 36 state tests, words filters printf119, echo10, namerefs14, scalar_refs18, readonly15 and unchanged low-memory read1 pass on each target. No assertions weakened.",
+      "realWaffle": "48 passed: 44 Bash comparisons plus four preserved explicit boundaries. Format/%b x/u/U open and closed stderr, exact indirect IFS and separate direct/ordinary controls. Raw stdout/status and existing stderr line-annotation normalization only.",
+      "budget": "9 exact-source budget/cancellation/byte controls pass. Numeric and malformed-escape diagnostic backpressure cancellation preserve the original binding and drain executor/process consumers.",
+      "boundedFrozen": {
+        "selected": 392,
+        "passed": 392,
+        "lostSelectedPasses": 0,
+        "historicalGainsRechecked": 14,
+        "jobs": 1,
+        "timeoutMs": 10000,
+        "selection": "All committed passes in printf, nameref, ifs and word-split files, plus all 14 historical gains. Same worker, runtime, oracle bytes and normalization. No baseline/runner/deadline edits."
+      },
+      "static": "Changed TypeScript format/lint/strict bundler typecheck, unchanged duplicate gate, 34 layer tests and immutable-base layer gate pass; 0 production/0 test-only violations,42/28 unique edges.",
+      "hosted": "Parent-owned. No CI rerun, watch, workflow edit, merge or exact-main acceptance by this lane."
+    },
+    "remainingFinding": "Historical blocker at ac8f726: the indirect-IFS approximation did not match the family. Safe-IFS r3 below replaces it under the parent decision; no replacement independent verdict or Bash-family equality is claimed.",
+    "report": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/review-fixes-r1.md",
+    "cleanupReceipt": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/review-fixes-r1-cleanup.json",
+    "continuation": {
+      "sourceCheckpoint": "506745aff7bb213e7353f2d0a2a14e89657ac323",
+      "productionEdits": false,
+      "reason": "Observed nondeterministic upstream stale-pointer semantics require a parent decision on intended safe behavior and acceptance policy. An exact-reproducer-only patch or allocator emulation is not delivered.",
+      "evidence": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/review-fixes-r1-evidence/ifs-exact-repeat.log and ifs-free-argument.log",
+      "bashSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+      "familyMatrix": 84,
+      "familyRepetitions": {
+        "scripts": 24,
+        "runsEach": 100
+      },
+      "exactRepetitions": {
+        "scripts": 9,
+        "runsEach": 1000
+      },
+      "stableControls": "Unset prior IFS, direct printf-to-IFS and ordinary nameref assignment are each stable in all 1000 launches.",
+      "verificationBoundary": "Existing c29fab5 native/WASI/Waffle and bounded392 results recorded here are unchanged historical focused evidence. No new product builds/tests/replays are needed for this documentation-only continuation; none are claimed. No assertions, memberships or frozen inputs change."
+    }
+  },
+  "safeIfsR3": {
+    "startSource": "ac8f726b032f3a4f61f3caac4635f312f185998d",
+    "decision": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/parent-ifs-decision.md",
+    "implementation": "Remove printf-specific member-map admission/restoration and assign_printf_parameter. Use ordinary State::assign_parameter, which resolves the scalar target, enforces readonly/storage rules, writes once and refreshes normal IFS-derived state. Existing local/prefix guards restore their ordinary scope.",
+    "semantics": "Declared safe divergence for confirmed nondeterministic Bash IFS-nameref printf cases; no majority output or allocator emulation. Direct IFS and ordinary nameref controls remain Bash equality evidence.",
+    "measurementBoundary": "Only focused exact-source and bounded affected checks. No second full replay, new membership or frozen input change. Historical 286dd4c replay and 14 gains remain historical.",
+    "verification": {
+      "failingFirst": "Two native safe-contract tests fail at ac8f726 with only regression assertions added: prior splitter and $* separator are retained. Red log preserved.",
+      "nativeAndWasi": "18 printf-assignment tests, 36 State tests and unchanged low-memory read control pass on each target. Engine all-target Clippy passes on each target; rustfmt passes. This includes readonly, budget, cancellation, broken diagnostic pipe and open/closed escape-warning assertions.",
+      "realWaffle": {
+        "passed": 62,
+        "stableBashComparisons": 45,
+        "preservedExplicitBoundaries": 4,
+        "declaredSafeIfsControls": 13,
+        "policy": "Raw stdout/status. Existing separate stderr line-annotation normalization unchanged. Safe IFS controls do not execute undefined Bash cases."
+      },
+      "boundedFrozen": {
+        "status": "passed",
+        "selected": 392,
+        "passed": 392,
+        "lostSelectedPasses": 0,
+        "historicalGainsRechecked": 14,
+        "fullReplay": false,
+        "baselineChanged": false,
+        "identity": {
+          "schema": 1,
+          "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+          "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+          "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+          "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+        },
+        "guestSha256": "6d202ca934416af26d9c92067d2f191faf4a6c379ad0ad30b40cd9af7cb442f8",
+        "productionSourceSha256": {
+          "printf": "7dc44b7d75460481f274b4482535d5a4c89b70126a3068b9fbb508fd8cdf45bb",
+          "state": "534a6ab44843216dca890841b5495c042c399ed59fc09456930eb4ef6a7d8609"
+        }
+      },
+      "static": "Changed TypeScript format/lint/strict Bundler typecheck and immutable-base layer gate passed. Layer digest/line locations refreshed only, zero violations and unchanged 42/28 production/test-only unique edges.",
+      "hosted": "Parent-owned, not run or watched by author."
+    },
+    "report": "/work/reports/bash-web/hill-climb/printf-scalar-assignment/safe-ifs-r3.md",
+    "productionSourceSha256": {
+      "printf": "7dc44b7d75460481f274b4482535d5a4c89b70126a3068b9fbb508fd8cdf45bb",
+      "state": "534a6ab44843216dca890841b5495c042c399ed59fc09456930eb4ef6a7d8609"
+    },
+    "productionGuestSha256": "6d202ca934416af26d9c92067d2f191faf4a6c379ad0ad30b40cd9af7cb442f8"
+  }
+}

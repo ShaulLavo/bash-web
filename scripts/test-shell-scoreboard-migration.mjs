@@ -14,8 +14,18 @@ import { dirname, resolve } from "node:path";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { baselinePath, oraclePath, targetBranchBaseline } from "./shell-scoreboard-base.mjs";
+import {
+  authorizedInstrumentTransition,
+  authorizedRuntimeTransition,
+  baseBranchBaseline,
+  runtimeReceiptPath,
+  baselinePath,
+  instrumentReceiptPath,
+  oraclePath,
+  targetBranchBaseline,
+} from "./shell-scoreboard-base.mjs";
 import { bytesDigest, compareScores, sealOracle, validateScore } from "./shell-scoreboard.mjs";
+import { killGroup } from "./shell-process-group.mjs";
 
 // Original fake compiler/scorer: no Cargo, WASI execution, network, or installed dependencies.
 const cargoFixture = `#!${process.execPath}
@@ -27,7 +37,22 @@ if (existsSync(target)) throw Error('reused build artifacts');
 if (process.env.RUSTC_WRAPPER || process.env.RUSTFLAGS) throw Error('compiler environment leaked');
 const source = readFileSync('shell/source.json');
 mkdirSync(resolve(target, 'wasm32-wasip1/release'), { recursive: true });
-writeFileSync(resolve(target, 'wasm32-wasip1/release/shell-engine.wasm'), source);
+const integer = (value) => {
+  const bytes = [];
+  do { const part = value & 127; value >>>= 7; bytes.push(part | (value ? 128 : 0)); } while (value);
+  return bytes;
+};
+// Genuine minimal Wasm keeps verification real while the compiler is a stand-in.
+const memory = [1, 1, 1].concat(integer(JSON.parse(source).invalidArtifact ? 65536 : 4096));
+const payload = Buffer.concat([Buffer.from([7]), Buffer.from('fixture'), source]);
+const names = process.argv.includes('shell-runtime')
+  ? ['shell-runtime', 'argv-py', 'printenv-py']
+  : ['shell-engine'];
+const bytes = Buffer.concat([
+  Buffer.from([0, 97, 115, 109, 1, 0, 0, 0, 5].concat(integer(memory.length), memory)),
+  Buffer.from([0].concat(integer(payload.length))), payload,
+]);
+for (const name of names) writeFileSync(resolve(target, 'wasm32-wasip1/release', name + '.wasm'), bytes);
 if (JSON.parse(source).buildFail) throw Error('fake build failure');
 if (JSON.parse(source).hang) {
   const marker = resolve(target, '../started');
@@ -42,15 +67,30 @@ if (JSON.parse(source).hang) {
   setInterval(() => {}, 1000);
 }
 `;
+const npmFixture = `#!${process.execPath}
+import assert from 'node:assert/strict';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+assert.equal(process.argv[2], 'ci');
+assert.equal(process.argv[3], '--ignore-scripts');
+const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+const pinned = lock.packages[''].dependencies.waffle;
+mkdirSync(resolve('node_modules/waffle'), { recursive: true });
+writeFileSync(resolve('node_modules/waffle/content.txt'), pinned);
+assert.equal(process.env.NPM_CONFIG_CACHE, process.env.RUNNER_TEMP + '/shared-npm-cache');
+`;
 const scorerFixture = `
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 assert.equal(process.env.BASH_COMPAT_RECORD, '1');
 assert.equal(process.env.BASH_COMPAT_BASE_REF, undefined, 'recursive base validation');
 assert.equal(process.env.BASH_COMPAT_SKIP_BUILD, '1');
 const oracle = JSON.parse(readFileSync('${oraclePath}'));
 assert.equal(process.env.BASH_COMPAT_TIMEOUT_MS, String(oracle.environment.timeoutMs));
-const actual = JSON.parse(readFileSync(process.env.BASH_COMPAT_SHELL_WASM));
+const module = new WebAssembly.Module(readFileSync(process.env.BASH_COMPAT_SHELL_WASM));
+const actual = JSON.parse(Buffer.from(WebAssembly.Module.customSections(module, 'fixture')[0]));
+if (existsSync('harness-observed.txt')) assert.equal(readFileSync('harness-observed.txt', 'utf8'), 'target-pinned');
+if (actual.invalidArtifact) writeFileSync(process.env.WASI_SDK_PATH + '/../scorer-ran', 'unexpected scoring');
 if (actual.scoreFail && oracle.oracle.capture === 'corrected') throw Error('fake scorer failure');
 writeFileSync(process.env.BASH_COMPAT_OUT, JSON.stringify({
   identity: oracle.identity,
@@ -60,7 +100,7 @@ writeFileSync(process.env.BASH_COMPAT_OUT, JSON.stringify({
   })),
 }));
 `;
-function makeOracle(environment = { nodeVersion: "v26.7.0", stdin: "empty", timeoutMs: 10000 }) {
+function makeOracle(environment = { nodeVersion: "v26.12.1", stdin: "empty", timeoutMs: 10000 }) {
   return sealOracle({
     schema: 1,
     oracle: { capture: "old" },
@@ -103,6 +143,27 @@ function directChildren() {
       : [],
   );
 }
+function signalChild(pid) {
+  if (!processState(pid).active) return;
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch (error) {
+    if (error.code !== "ESRCH") throw error;
+  }
+}
+function admitChildren(preexisting, owned) {
+  for (const [pid, start] of directChildren()) {
+    if (preexisting.get(pid) === start || owned.has(pid)) continue;
+    owned.set(pid, start);
+    signalChild(pid);
+  }
+}
+function restoreEnvironment(saved) {
+  for (const name of Object.keys(process.env)) {
+    if (!(name in saved)) delete process.env[name];
+  }
+  Object.assign(process.env, saved);
+}
 function fixtureOwner() {
   const preexisting = directChildren();
   const owner = { scratch: undefined };
@@ -112,18 +173,7 @@ function fixtureOwner() {
       const owned = new Map();
       const deadline = Date.now() + 15000;
       for (;;) {
-        for (const [pid, start] of directChildren()) {
-          if (preexisting.get(pid) !== start && !owned.has(pid)) {
-            owned.set(pid, start);
-            if (processState(pid).active) {
-              try {
-                process.kill(pid, "SIGTERM");
-              } catch (error) {
-                if (error.code !== "ESRCH") throw error;
-              }
-            }
-          }
-        }
+        admitChildren(preexisting, owned);
         const live = Array.from(owned, ([pid, start]) => {
           const current = processState(pid);
           return current.active && current.start === start;
@@ -175,8 +225,11 @@ async function fixture(
     hang = false,
     descendant = false,
     buildFail = false,
+    invalidArtifact = false,
     scoreFail = false,
     entrypoint = false,
+    targetRunner = undefined,
+    tarMode = undefined,
   } = {},
 ) {
   const owner = fixtureOwner(); // Teardown and the pre-existing child inventory precede setup.
@@ -203,7 +256,9 @@ async function fixture(
     const old = makeOracle(
       entrypoint
         ? JSON.parse(readFileSync(new URL(`../${oraclePath}`, import.meta.url))).environment
-        : undefined,
+        : targetRunner
+          ? { nodeVersion: "v26.12.1", stdin: "empty", timeoutMs: 10000, runner: targetRunner }
+          : undefined,
     );
     const sourcePins = {
       oils: { revision: "fixture" },
@@ -212,6 +267,20 @@ async function fixture(
     };
     put(oraclePath, JSON.stringify(old));
     put(baselinePath, JSON.stringify(score(old, wrongBaseline ? ["fail", "pass"] : undefined)));
+    if (targetRunner === "waffle-node") {
+      put(
+        "package-lock.json",
+        JSON.stringify({
+          name: "fixture",
+          lockfileVersion: 3,
+          packages: { "": { dependencies: { waffle: "target-pinned" } } },
+        }),
+      );
+      put(
+        "scripts/build-node-harness.ts",
+        "import { readFileSync, writeFileSync } from 'node:fs';\nwriteFileSync('harness-observed.txt', readFileSync('node_modules/waffle/content.txt', 'utf8'));\n",
+      );
+    }
     put(
       "sources.lock.json",
       JSON.stringify({
@@ -223,7 +292,7 @@ async function fixture(
     );
     put(
       "shell/source.json",
-      JSON.stringify({ stdout: "YQ==", hang, descendant, buildFail, scoreFail }),
+      JSON.stringify({ stdout: "YQ==", hang, descendant, buildFail, invalidArtifact, scoreFail }),
     );
     put("scripts/bash-compat.mjs", scorerFixture);
     git(["init", "-q"]);
@@ -240,6 +309,28 @@ async function fixture(
       "fixture",
     ]);
     const ref = git(["rev-parse", "HEAD"]);
+    if (targetRunner === "waffle-node") {
+      put(
+        "package-lock.json",
+        JSON.stringify({
+          name: "fixture",
+          lockfileVersion: 3,
+          packages: { "": { dependencies: { waffle: "candidate-pinned" } } },
+        }),
+      );
+      put("node_modules/waffle/content.txt", "candidate-pinned");
+    }
+    if (tarMode) {
+      writeFileSync(
+        resolve(bin, "tar"),
+        `#!${process.execPath}\nimport { writeFileSync } from 'node:fs';\nconst mode = ${JSON.stringify(tarMode)};\nif (mode === 'fail') throw Error('fake archive extraction failure');\nwriteFileSync('setup-started', String(process.pid));\nprocess.on('SIGTERM', () => {});\nsetInterval(() => {}, 1000);\n`,
+      );
+      chmodSync(resolve(bin, "tar"), 0o755);
+    }
+    if (targetRunner === "waffle-node") {
+      writeFileSync(resolve(bin, "npm"), npmFixture);
+      chmodSync(resolve(bin, "npm"), 0o755);
+    }
     const candidate = structuredClone(old);
     candidate.oracle.capture = "corrected";
     candidate.cases[0].bash.stdout = "eg==";
@@ -264,10 +355,23 @@ async function fixture(
       "scripts/bash-compat.mjs",
       'throw Error("candidate scorer must not collect target evidence");',
     );
+    // The libc compiler is also a stand-in, but the shared link recipe is real.
+    put("sdk/VERSION", "34.0\nwasi-libc: 2e6fb9d8ee0c\n");
+    put("node_modules/waffle/patches/wasi-libc/preopen-scan.patch", "fixture patch");
+    put(
+      "node_modules/waffle/scripts/build-wasi-libc.sh",
+      `#!/bin/bash
+set -eu
+mkdir -p "$1/lib/wasm32-wasip1"
+printf fixture > "$1/lib/wasm32-wasip1/libc.a"
+`,
+    );
+    process.env.WASI_SDK_PATH = resolve(repo, "sdk");
     writeFileSync(resolve(bin, "cargo"), cargoFixture);
     chmodSync(resolve(bin, "cargo"), 0o755);
     process.env.PATH = `${bin}:${process.env.PATH}`;
     process.env.RUNNER_TEMP = runner;
+    process.env.NPM_CONFIG_CACHE = resolve(runner, "shared-npm-cache");
     process.env.CARGO_TARGET_DIR = resolve(repo, ".build/shell");
     process.env.RUSTC_WRAPPER = "candidate-wrapper-must-not-run";
     process.env.RUSTFLAGS = "candidate-flags-must-not-apply";
@@ -284,8 +388,7 @@ async function fixture(
       await owner.close();
       if (owner.scratch) assert.equal(existsSync(owner.scratch), false);
     } finally {
-      for (const name of Object.keys(process.env)) if (!(name in saved)) delete process.env[name];
-      Object.assign(process.env, saved);
+      restoreEnvironment(saved);
     }
   }
 }
@@ -331,6 +434,23 @@ test("migration rejects incorrect immutable baseline membership", async () => {
       await assert.rejects(targetBranchBaseline(repo, ref, next), /stale candidate baseline/);
     },
     { wrongBaseline: true },
+  );
+});
+
+test("migration rejects a freshly built artifact with the wrong memory cap before scoring", async () => {
+  await fixture(
+    async ({ repo, ref }) => {
+      await assert.rejects(
+        targetBranchBaseline(repo, ref, JSON.parse(readFileSync(resolve(repo, oraclePath)))),
+        /failed \(1\)/,
+      );
+      assert.equal(
+        existsSync(resolve(repo, "scorer-ran")),
+        false,
+        "scorer ran before artifact validation",
+      );
+    },
+    { invalidArtifact: true },
   );
 });
 
@@ -491,6 +611,9 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
           "shell-scoreboard-base.mjs",
           "shell-scoreboard-migration.mjs",
           "shell-process-group.mjs",
+          "wasi-build.ts",
+          "utility-artifacts.ts",
+          "verify-wasi-guests.ts",
         ])
           put(`scripts/${name}`, readFileSync(new URL(name, import.meta.url)));
         const child = spawn(process.execPath, [resolve(repo, "scripts/bash-compat.mjs")], {
@@ -553,3 +676,215 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
     );
   });
 }
+
+test("archive setup failure removes scratch acquired before extraction", async () => {
+  await fixture(
+    async ({ repo, ref, next, runner }) => {
+      await assert.rejects(targetBranchBaseline(repo, ref, next), /tar failed/);
+      assert.deepEqual(readdirSync(runner), []);
+    },
+    { tarMode: "fail" },
+  );
+});
+
+function setupConsumer(runner) {
+  const directory = readdirSync(runner).find((name) => name.startsWith("audit-oracle-migration-"));
+  if (!directory) return;
+  const marker = resolve(runner, directory, "setup-started");
+  if (!existsSync(marker)) return;
+  const pid = Number(readFileSync(marker, "utf8"));
+  const start = processState(pid).start;
+  if (!start) return;
+  return { directory, pid, start };
+}
+
+async function cleanupSetupConsumer(consumer) {
+  if (!consumer || processState(consumer.pid).start !== consumer.start) return;
+  killGroup(consumer.pid, "SIGKILL");
+  await until(() => !processState(consumer.pid).active);
+}
+
+async function interruptSetup({ repo, ref, runner }, cancellation) {
+  const launcher = fileURLToPath(new URL("./shell-scoreboard-migration.mjs", import.meta.url));
+  const child = fork(launcher, [repo, ref], { stdio: ["ignore", "ignore", "ignore", "ipc"] });
+  const exited = new Promise((accept) => child.once("exit", accept));
+  const watchdog = setTimeout(() => child.kill("SIGKILL"), 8000).unref();
+  let consumer;
+  try {
+    await until(() => {
+      consumer = setupConsumer(runner);
+      return consumer !== undefined;
+    });
+    if (cancellation === "TERM") child.kill("SIGTERM");
+    else child.disconnect();
+    await delay(50);
+    assert.equal(child.exitCode, null, "launcher exited before extraction stopped");
+    assert.equal(existsSync(resolve(runner, consumer.directory)), true);
+    await exited;
+    assert.equal(processState(consumer.pid).active, false, "extractor outlived launcher");
+    assert.deepEqual(readdirSync(runner), []);
+  } finally {
+    child.kill("SIGTERM");
+    await exited;
+    clearTimeout(watchdog);
+    await cleanupSetupConsumer(consumer);
+  }
+}
+
+for (const cancellation of ["TERM", "parent disconnect"]) {
+  test(`${cancellation} during archive setup drains its consumer and removes scratch`, async () => {
+    await fixture((context) => interruptSetup(context, cancellation), { tarMode: "hang" });
+  });
+}
+
+test("waffle target migration installs target-pinned dependencies in target scratch", async () => {
+  await fixture(
+    async ({ repo, ref, next }) => {
+      const result = await targetBranchBaseline(repo, ref, next);
+      assert.deepEqual(
+        result.cases.map((item) => item.outcome),
+        ["fail", "pass"],
+      );
+      assert.equal(
+        readFileSync(resolve(repo, "node_modules/waffle/content.txt"), "utf8"),
+        "candidate-pinned",
+      );
+    },
+    { targetRunner: "waffle-node" },
+  );
+});
+
+function linkRepositoryHistory(put) {
+  const root = resolve(import.meta.dirname, "..");
+  const common = execFileSync("git", ["rev-parse", "--git-common-dir"], {
+    cwd: root,
+    encoding: "utf8",
+  }).trim();
+  put(".git/objects/info/alternates", `${resolve(root, common, "objects")}\n`);
+  return root;
+}
+
+test("instrument migration prepares a cold patched sysroot before its first cargo build", async () => {
+  await fixture(async ({ repo, runner, put, update }) => {
+    const root = linkRepositoryHistory(put);
+    const candidate = JSON.parse(
+      execFileSync("git", ["show", `38c229271c851543ce564976e7b09f2971c5e0f8:${oraclePath}`], {
+        cwd: root,
+        maxBuffer: 1 << 26,
+      }).toString(),
+    );
+    update(candidate);
+    put(instrumentReceiptPath, readFileSync(resolve(root, instrumentReceiptPath)));
+    const proof = resolve(repo, "cold-build-proof");
+    const compiler = resolve(runner, "../bin/cargo");
+    writeFileSync(
+      compiler,
+      `#!${process.execPath}
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+const sysroot = process.env.CFLAGS_wasm32_wasip1.split('--sysroot=')[1];
+assert.ok(existsSync(resolve(sysroot, 'lib/wasm32-wasip1/libc.a')), 'cold libc not prepared');
+assert.match(readFileSync(resolve(sysroot, '../recipe.sha256'), 'utf8'), /^[a-f0-9]{64}$/);
+writeFileSync(${JSON.stringify(proof)}, sysroot);
+process.exit(21);
+`,
+    );
+    assert.equal(existsSync(resolve(repo, ".build/wasi-libc")), false);
+    await assert.rejects(
+      targetBranchBaseline(repo, authorizedInstrumentTransition.target, candidate),
+      /cargo failed \(21\)/,
+    );
+    assert.ok(readFileSync(proof, "utf8").startsWith(resolve(repo, ".build/wasi-libc")));
+    assert.deepEqual(readdirSync(runner), []);
+  });
+});
+
+test("runtime migration builds and supplies immutable target utility guests", async () => {
+  await fixture(async ({ repo, runner, put, update }) => {
+    const root = linkRepositoryHistory(put);
+    const candidate = JSON.parse(readFileSync(resolve(root, oraclePath), "utf8"));
+    update(candidate);
+    put(runtimeReceiptPath, readFileSync(resolve(root, runtimeReceiptPath)));
+    put(baselinePath, readFileSync(resolve(root, baselinePath)));
+    const migratedTarget = {
+      identity: candidate.identity,
+      cases: baseBranchBaseline(root, authorizedRuntimeTransition.target).cases,
+    };
+    put("fixture-target-score.json", JSON.stringify(migratedTarget));
+    put("scripts/build-node-harness.ts", "");
+    const compiler = resolve(runner, "../bin/cargo");
+    writeFileSync(
+      compiler,
+      `#!${process.execPath}
+import assert from 'node:assert/strict';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+const release = resolve(process.env.CARGO_TARGET_DIR, 'wasm32-wasip1/release');
+mkdirSync(release, { recursive: true });
+const names = process.argv.includes('shell-utilities')
+  ? ['shell-runtime', 'cat', 'grep', 'mkdir', 'seq']
+  : ['argv-py', 'printenv-py'];
+if (process.cwd() !== ${JSON.stringify(repo)}) {
+  assert.match(readFileSync('shell/utilities/Cargo.toml', 'utf8'), /name = "shell-utilities"/);
+  for (const name of names) assert.ok(process.argv.includes(name), 'missing target binary ' + name);
+}
+const wasm = Buffer.from([0, 97, 115, 109, 1, 0, 0, 0, 5, 5, 1, 1, 1, 128, 32]);
+for (const name of names) writeFileSync(resolve(release, name + '.wasm'), wasm);
+`,
+    );
+    put(
+      "scripts/bash-compat.mjs",
+      `
+import assert from 'node:assert/strict';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+const release = dirname(process.env.BASH_COMPAT_SHELL_WASM);
+assert.equal(process.env.BASH_COMPAT_UTILITY_DIR, release);
+for (const name of ['cat', 'grep', 'mkdir', 'seq'])
+  assert.ok(readFileSync(resolve(release, name + '.wasm')).length > 0);
+writeFileSync(process.env.BASH_COMPAT_OUT, readFileSync('fixture-target-score.json'));
+`,
+    );
+    const result = await targetBranchBaseline(repo, authorizedRuntimeTransition.target, candidate);
+    assert.deepEqual(result, migratedTarget);
+    const candidateScore = JSON.parse(readFileSync(resolve(repo, baselinePath)));
+    const delta = compareScores(result, candidateScore);
+    assert.equal(delta.ok, true);
+    assert.ok(
+      Object.values(delta.corpora).some((row) => row.gained.length > 0),
+      "later candidate gains remain separate from target evidence",
+    );
+    const passing = result.cases.find((item) => item.outcome === "pass");
+    const failing = result.cases.find((item) => item.outcome === "fail");
+    assert.ok(passing && failing);
+    for (const mutations of [
+      { [passing.id]: "fail" },
+      { [failing.id]: "pass" },
+      { [passing.id]: "fail", [failing.id]: "pass" },
+    ]) {
+      const changed = {
+        ...migratedTarget,
+        cases: migratedTarget.cases.map((item) => ({
+          ...item,
+          outcome: mutations[item.id] ?? item.outcome,
+        })),
+      };
+      put("fixture-target-score.json", JSON.stringify(changed));
+      await assert.rejects(
+        targetBranchBaseline(repo, authorizedRuntimeTransition.target, candidate),
+        /recorded transition/,
+      );
+    }
+    const changedIdentity = {
+      ...migratedTarget,
+      identity: { ...migratedTarget.identity, environment: "wrong" },
+    };
+    put("fixture-target-score.json", JSON.stringify(changedIdentity));
+    await assert.rejects(
+      targetBranchBaseline(repo, authorizedRuntimeTransition.target, candidate),
+      /incomparable/,
+    );
+    assert.deepEqual(readdirSync(runner), []);
+  });
+});

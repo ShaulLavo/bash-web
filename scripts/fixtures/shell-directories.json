@@ -1,0 +1,242 @@
+{
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "stderrNormalization": "Bash's '/usr/bin/bash: line N: ' stderr prefix is rewritten to '/usr/bin/bash: ' at recording time; stdout and status are unmodified.",
+  "cases": [
+    {
+      "name": "missing-dotdot",
+      "setup": [],
+      "code": "cd nonexistent_ZZ/..; echo status=$?; pwd; cd /nonexistent/dir; echo status=$?",
+      "status": 0,
+      "stdout": "status=1\n/home/guest\nstatus=1\n",
+      "stderr": "/usr/bin/bash: cd: nonexistent_ZZ/..: No such file or directory\n/usr/bin/bash: cd: /nonexistent/dir: No such file or directory\n"
+    },
+    {
+      "name": "oldpwd-unset",
+      "setup": [],
+      "code": "cd - >/dev/null; echo status=$?; pwd",
+      "status": 0,
+      "stdout": "status=1\n/home/guest\n",
+      "stderr": "/usr/bin/bash: cd: OLDPWD not set\n"
+    },
+    {
+      "name": "publish",
+      "setup": [],
+      "code": "cd -- /; echo \"$PWD\"; cd /tmp; echo \"$OLDPWD|$PWD\"; cd -; pwd; echo \"$OLDPWD|$PWD\"",
+      "status": 0,
+      "stdout": "/\n/|/tmp\n/\n/\n/tmp|/\n",
+      "stderr": ""
+    },
+    {
+      "name": "options",
+      "setup": [],
+      "code": "cd -x; echo s=$?; cd /tmp /tmp; echo s=$?; cd -@ /; echo s=$?; cd -L /tmp; echo s=$? $PWD; cd -e /; echo s=$? $PWD; cd -LP- /; echo s=$?; pwd",
+      "status": 0,
+      "stdout": "s=2\ns=2\ns=2\ns=0 /tmp\ns=0 /\ns=2\n/\n",
+      "stderr": "/usr/bin/bash: cd: -x: invalid option\ncd: usage: cd [-L|[-P [-e]]] [-@] [dir]\n/usr/bin/bash: cd: too many arguments\n/usr/bin/bash: cd: -@: invalid option\ncd: usage: cd [-L|[-P [-e]]] [-@] [dir]\n/usr/bin/bash: cd: --: invalid option\ncd: usage: cd [-L|[-P [-e]]] [-@] [dir]\n"
+    },
+    {
+      "name": "cdpath",
+      "setup": [
+        "/tmp/a/foo",
+        "/tmp/b/foo"
+      ],
+      "code": "CDPATH=/tmp/a:/tmp/b; cd foo; echo s=$?; pwd; CDPATH=:/tmp/a/; cd /tmp/b; cd foo; pwd; cd ./zz; echo s=$?; CDPATH=/nonexist; cd /tmp; cd a; echo s=$? $PWD; cd /; CDPATH=; cd tmp; echo s=$? $PWD",
+      "status": 0,
+      "stdout": "/tmp/a/foo\ns=0\n/tmp/a/foo\n/tmp/b/foo\ns=1\ns=0 /tmp/a\ns=0 /tmp\n",
+      "stderr": "/usr/bin/bash: cd: ./zz: No such file or directory\n"
+    },
+    {
+      "name": "not-directory",
+      "setup": [
+        "/tmp/a"
+      ],
+      "code": ": > /tmp/f; cd /tmp/f; echo s=$?; cd /tmp/f/..; echo s=$?; cd /tmp/f/x; echo s=$?; cd /tmp/../tmp/./a//; echo $PWD; cd //; pwd; cd ///tmp; pwd",
+      "status": 0,
+      "stdout": "s=1\ns=1\ns=1\n/tmp/a\n//\n/tmp\n",
+      "stderr": "/usr/bin/bash: cd: /tmp/f: Not a directory\n/usr/bin/bash: cd: /tmp/f/..: Not a directory\n/usr/bin/bash: cd: /tmp/f/x: Not a directory\n"
+    },
+    {
+      "name": "home-null",
+      "setup": [],
+      "code": "cd \"\"; echo s=$?; pwd; HOME=/tmp; cd; echo s=$? $PWD; HOME=; cd; echo s=$? $PWD; unset HOME; cd; echo s=$? $PWD",
+      "status": 0,
+      "stdout": "s=1\n/home/guest\ns=0 /tmp\ns=0 /tmp\ns=1 /tmp\n",
+      "stderr": "/usr/bin/bash: cd: null directory\n/usr/bin/bash: cd: HOME not set\n"
+    },
+    {
+      "name": "readonly-oldpwd",
+      "setup": [],
+      "code": "readonly OLDPWD; cd /tmp; echo s=$?; pwd; echo \"[$OLDPWD] $PWD\"",
+      "status": 0,
+      "stdout": "s=1\n/tmp\n[] /tmp\n",
+      "stderr": "/usr/bin/bash: OLDPWD: readonly variable\n"
+    },
+    {
+      "name": "readonly-pwd",
+      "setup": [],
+      "code": "readonly PWD; cd /tmp; echo s=$?; pwd; echo \"[$OLDPWD]\"",
+      "status": 0,
+      "stdout": "s=1\n/tmp\n[/home/guest]\n",
+      "stderr": "/usr/bin/bash: PWD: readonly variable\n"
+    },
+    {
+      "name": "pushd-popd",
+      "setup": [],
+      "code": "cd /; pushd /tmp; echo s=$?; pwd; popd; echo s=$?; pwd; popd; echo s=$?; pwd",
+      "status": 0,
+      "stdout": "/tmp /\ns=0\n/tmp\n/\ns=0\n/\ns=1\n/\n",
+      "stderr": "/usr/bin/bash: popd: directory stack empty\n"
+    },
+    {
+      "name": "dirs-formats",
+      "setup": [
+        "/tmp/a/foo",
+        "/tmp/b/foo"
+      ],
+      "code": "cd /; pushd /tmp/a >/dev/null; pushd /tmp/b >/dev/null; dirs; dirs -v; dirs -p; dirs -l; dirs +1; dirs -0; dirs -v +2; dirs -p -v; dirs +5; echo s=$?",
+      "status": 0,
+      "stdout": "/tmp/b /tmp/a /\n 0  /tmp/b\n 1  /tmp/a\n 2  /\n/tmp/b\n/tmp/a\n/\n/tmp/b /tmp/a /\n/tmp/a\n/\n 2  /\n 0  /tmp/b\n 1  /tmp/a\n 2  /\ns=1\n",
+      "stderr": "/usr/bin/bash: dirs: 5: directory stack index out of range\n"
+    },
+    {
+      "name": "tilde",
+      "setup": [
+        "/tmp/a/foo",
+        "/tmp/b/foo"
+      ],
+      "code": "HOME=/tmp/a; cd /; pushd /tmp/a/foo >/dev/null; pushd /tmp/a >/dev/null; dirs; dirs -l; HOME=/tmp/a/; dirs; HOME=/; dirs; HOME=/tmp/; dirs; HOME=/tmp/a/fo; dirs",
+      "status": 0,
+      "stdout": "~ ~/foo /\n/tmp/a /tmp/a/foo /\n/tmp/a /tmp/a/foo /\n/tmp/a /tmp/a/foo /\n/tmp/a /tmp/a/foo /\n/tmp/a /tmp/a/foo /\n",
+      "stderr": ""
+    },
+    {
+      "name": "rotate",
+      "setup": [
+        "/tmp/a/foo",
+        "/tmp/b/foo"
+      ],
+      "code": "cd /; pushd /tmp/a >/dev/null; pushd /tmp/b >/dev/null; pushd +1; pushd -0; pushd +0; echo s=$?; dirs; pushd +3; echo s=$?; pushd -z; echo s=$?; pushd +x; echo s=$?",
+      "status": 0,
+      "stdout": "/tmp/a / /tmp/b\n/tmp/b /tmp/a /\n/tmp/b /tmp/a /\ns=0\n/tmp/b /tmp/a /\ns=1\ns=2\ns=2\n",
+      "stderr": "/usr/bin/bash: pushd: +3: directory stack index out of range\n/usr/bin/bash: pushd: -z: invalid number\npushd: usage: pushd [-n] [+N | -N | dir]\n/usr/bin/bash: pushd: +x: invalid number\npushd: usage: pushd [-n] [+N | -N | dir]\n"
+    },
+    {
+      "name": "swap-nocd",
+      "setup": [
+        "/tmp/a/foo",
+        "/tmp/b/foo"
+      ],
+      "code": "cd /tmp; pushd; echo s=$?; pushd -n /tmp/a; pushd -n; echo s=$?; pushd; echo s=$? $PWD; dirs; pushd -n /nonexist; pushd +1; echo s=$?; dirs; pushd --; echo s=$?; pushd -- -0; echo s=$?",
+      "status": 0,
+      "stdout": "s=1\n/tmp /tmp/a\ns=0\n/tmp/a /tmp\ns=0 /tmp/a\n/tmp/a /tmp\n/tmp/a /nonexist /tmp\ns=1\n/tmp/a /tmp /tmp/a\n/tmp /tmp/a /tmp/a\ns=0\ns=1\n",
+      "stderr": "/usr/bin/bash: pushd: no other directory\n/usr/bin/bash: pushd: /nonexist: No such file or directory\n/usr/bin/bash: pushd: -0: No such file or directory\n"
+    },
+    {
+      "name": "popd-forms",
+      "setup": [
+        "/tmp/a/foo",
+        "/tmp/b/foo"
+      ],
+      "code": "cd /; pushd /tmp/a >/dev/null; pushd /tmp/b >/dev/null; pushd /tmp >/dev/null; popd -n; popd +1; popd -0; echo s=$?; dirs; popd zzz; echo s=$?; popd -z; echo s=$?; popd -- >/dev/null; echo s=$?; popd; echo s=$?; popd +0; echo s=$?; popd -n +0; echo s=$?",
+      "status": 0,
+      "stdout": "/tmp /tmp/a /\n/tmp /\n/tmp\ns=0\n/tmp\ns=2\ns=2\ns=1\ns=1\ns=1\ns=1\n",
+      "stderr": "/usr/bin/bash: popd: zzz: invalid argument\npopd: usage: popd [-n] [+N | -N]\n/usr/bin/bash: popd: -z: invalid number\npopd: usage: popd [-n] [+N | -N]\n/usr/bin/bash: popd: directory stack empty\n/usr/bin/bash: popd: directory stack empty\n/usr/bin/bash: popd: directory stack empty\n/usr/bin/bash: popd: directory stack empty\n"
+    },
+    {
+      "name": "failure-keeps-state",
+      "setup": [
+        "/tmp/a/foo",
+        "/tmp/b/foo"
+      ],
+      "code": "cd /tmp/a; pushd /nonexist; echo s=$?; dirs; echo \"$PWD|${OLDPWD-unset}\"; pushd /tmp/b /tmp; echo s=$?; dirs; pushd \"\"; echo s=$?; dirs",
+      "status": 0,
+      "stdout": "s=1\n/tmp/a\n/tmp/a|/home/guest\ns=1\n/tmp/a\ns=1\n/tmp/a\n",
+      "stderr": "/usr/bin/bash: pushd: /nonexist: No such file or directory\n/usr/bin/bash: pushd: too many arguments\n/usr/bin/bash: pushd: null directory\n"
+    },
+    {
+      "name": "isolation",
+      "setup": [
+        "/tmp/a/foo",
+        "/tmp/b/foo"
+      ],
+      "code": "cd /; pushd /tmp >/dev/null; (pushd /tmp/a >/dev/null; dirs; cd /tmp/b; pwd); dirs; pwd; x=$(popd); echo \"[$x]\"; dirs; pushd /tmp/a | { read -r line; echo \"<$line>\"; }; dirs",
+      "status": 0,
+      "stdout": "/tmp/a /tmp /\n/tmp/b\n/tmp /\n/tmp\n[/]\n/tmp /\n</tmp/a /tmp />\n/tmp /\n",
+      "stderr": ""
+    },
+    {
+      "name": "dirs-options",
+      "setup": [],
+      "code": "cd /; dirs -x; echo s=$?; dirs -lv; echo s=$?; dirs zz; echo s=$?; dirs -- zz; echo s=$?; pushd /tmp >/dev/null; dirs -c +9; echo s=$?; dirs; dirs +9; echo s=$?; dirs -0; dirs +0",
+      "status": 0,
+      "stdout": "s=2\ns=2\ns=2\n/\ns=0\ns=0\n/tmp\ns=1\n/tmp\n/tmp\n",
+      "stderr": "/usr/bin/bash: dirs: -x: invalid number\ndirs: usage: dirs [-clpv] [+N] [-N]\n/usr/bin/bash: dirs: -lv: invalid number\ndirs: usage: dirs [-clpv] [+N] [-N]\n/usr/bin/bash: dirs: zz: invalid option\ndirs: usage: dirs [-clpv] [+N] [-N]\n/usr/bin/bash: dirs: directory stack empty\n"
+    },
+    {
+      "name": "successful-stack-commands-under-errexit",
+      "setup": [],
+      "code": "set -e; cd /; pushd /tmp; popd; echo done",
+      "status": 0,
+      "stdout": "/tmp /\n/\ndone\n",
+      "stderr": ""
+    },
+    {
+      "name": "cd-dash-operand",
+      "setup": [
+        "/tmp/a"
+      ],
+      "code": "cd /tmp; OLDPWD=/tmp/../tmp/a//; cd -; echo \"$PWD|$OLDPWD\"",
+      "status": 0,
+      "stdout": "/tmp/../tmp/a//\n/tmp/a|/tmp\n",
+      "stderr": ""
+    },
+    {
+      "name": "internal-names",
+      "setup": [],
+      "code": "_DIRSTACK_SIZE=9; _DIRSTACK_0=/forged; cd /; pushd /tmp >/dev/null; dirs; echo \"$_DIRSTACK_SIZE $_DIRSTACK_0\"",
+      "status": 0,
+      "stdout": "/tmp /\n9 /forged\n",
+      "stderr": ""
+    },
+    {
+      "name": "swap-missing-directory",
+      "setup": [],
+      "code": "cd /; pushd -n /absent_review_dir >/dev/null; pushd; echo s=$?; pwd; dirs -l",
+      "status": 0,
+      "stdout": "s=1\n/\n/ /\n",
+      "stderr": "/usr/bin/bash: pushd: /absent_review_dir: No such file or directory\n"
+    },
+    {
+      "name": "swap-readonly-oldpwd",
+      "setup": [
+        "/tmp/a/foo",
+        "/tmp/b/foo"
+      ],
+      "code": "cd /; pushd /tmp/a >/dev/null; pushd /tmp/b >/dev/null; readonly OLDPWD; pushd; echo s=$?; pwd; dirs -l",
+      "status": 0,
+      "stdout": "s=1\n/tmp/a\n/tmp/a /tmp/b /\n",
+      "stderr": "/usr/bin/bash: OLDPWD: readonly variable\n"
+    },
+    {
+      "name": "pushd-bare-plus",
+      "setup": [
+        "/tmp/a/foo",
+        "/tmp/b/foo"
+      ],
+      "code": "cd /; pushd +; echo s=$?; pwd; dirs -l; pushd -- +; echo s=$?; cd /tmp/a; cd /tmp/b; pushd - >/dev/null; echo s=$? $PWD; dirs -l; popd +; echo s=$?; dirs +; echo s=$?",
+      "status": 0,
+      "stdout": "s=2\n/\n/\ns=1\ns=0 /tmp/a\n/tmp/a /tmp/b\ns=2\ns=2\n",
+      "stderr": "/usr/bin/bash: pushd: +: invalid number\npushd: usage: pushd [-n] [+N | -N | dir]\n/usr/bin/bash: pushd: +: No such file or directory\n/usr/bin/bash: popd: +: invalid number\npopd: usage: popd [-n] [+N | -N]\n/usr/bin/bash: dirs: +: invalid number\ndirs: usage: dirs [-clpv] [+N] [-N]\n"
+    },
+    {
+      "name": "closed-stdout",
+      "setup": [
+        "/tmp/a"
+      ],
+      "code": "cd /; OLDPWD=/tmp; cd - >&-; echo s=$?; pushd /tmp/a >&-; echo s=$?; popd >&-; echo s=$?; dirs >&-; echo s=$?; pwd",
+      "status": 0,
+      "stdout": "s=1\ns=0\ns=0\ns=1\n/tmp\n",
+      "stderr": "/usr/bin/bash: cd: write error: Bad file descriptor\n/usr/bin/bash: pushd: write error: Bad file descriptor\n/usr/bin/bash: popd: write error: Bad file descriptor\n/usr/bin/bash: dirs: write error: Bad file descriptor\n"
+    }
+  ]
+}

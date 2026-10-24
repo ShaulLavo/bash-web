@@ -1,74 +1,118 @@
-# bash-web
+<h1 align="center">bash-web</h1>
+<p align="center">A bash-compatible shell for web pages. A Rust engine compiled to WASM, running in a worker on a runtime your page owns.</p>
+<p align="center">
+  <a href="https://github.com/ShaulLavo/bash-web/actions/workflows/ci.yml"><img alt="CI status of the main branch" src="https://github.com/ShaulLavo/bash-web/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+</p>
 
-`bash-web` is a WASM-first bash-compatible shell. It contains the Rust parser
-and shell engine extracted from [brush-web](https://github.com/ShaulLavo/brush-web)
-with the original commits, fixtures, oracle observations, and compatibility
-harness preserved.
+> **Experimental and pre-1.0.** Not on npm. Build from source. [Status](#status) lists what works and what does not.
 
-The shell is a WASM program, not a browser runtime. A host supplies process,
-filesystem, pipe, and page lifecycle services through the separate
-[`waffle`](https://github.com/ShaulLavo/waffle) package. Applications pass one
-shared runtime instance per page, for example `createShell({ runtime })`.
-`waffle` is an optional peer dependency pinned to a reviewed commit; it is not
-installed by this package because the extracted package has no JavaScript entry
-that imports it yet. A later standalone entry will wire waffle, the shell, and a
-terminal for applications that do not provide their own host, and will make the
-peer required when it imports waffle.
+Run a script on the engine, natively, with no browser:
 
-## Build and test
-
-Prerequisites are Node 26.7 or newer, npm, Rust 1.98.1 through rustup, and
-wasmtime for WASI tests.
-
-```sh
-git clone https://github.com/ShaulLavo/bash-web.git
-cd bash-web
-rustup toolchain install 1.98.1 --profile minimal --component rustfmt --target wasm32-wasip1
-npm ci
-npm run build:shell
-npm run test:rust
-npm run test:shell:wasi
+```console
+$ shell/target/release/shell-engine -c '
+greet() { echo "hello, $1"; }
+for name in web wasm; do greet "$name"; done
+words=(a b c)
+echo "${#words[@]} words, first is ${words[0]}"
+printf "%q\n" "two words"
+echo $((6 * 7))
+seq 3; echo "seq exited $?"
+'
+hello, web
+hello, wasm
+3 words, first is a
+two\ words
+42
+seq exited 127
+/usr/bin/bash: seq: command not found
 ```
 
-The shell-only CI also runs the native and WASI suites, size ceiling,
-scoreboard runner tests, generator source tests and fixed fixture replays.
-Run the individual shell fuzz replays with the `:ci` scripts in
-`package.json`; they use only the committed generator and fixture bytes.
+Run the same engine in a page. This needs a built checkout, the pinned [Waffle](https://github.com/ShaulLavo/waffle) commit `b20fad173ebaa225cb87c51776f35edaaafd4a40` (Waffle's API is early and can change), and `dist/fs-worker.js` served at `/fs-worker.js`. [Embed a shell in a page](docs/guides/embed-in-a-page.md#install-the-waffle-peer) has the install steps.
 
-The frozen compatibility score can be replayed without downloading corpora,
-installing GNU Bash, or installing browser assets. The full compatibility CI job
-also runs sandbox and transport tests, which require bubblewrap and Python 3:
+```ts
+import { createRuntime } from "waffle";
+import { createShell } from "bash-web";
 
-```sh
-BASH_COMPAT_BASE_REF=$(git rev-parse HEAD) npm run compat:shell
+const runtime = createRuntime({
+  filesystem: { workerURL: new URL("/fs-worker.js", location.href) },
+});
+const shell = await createShell({ runtime, script: "echo hello" });
+const { code } = await shell.done; // output arrives in shell.terminal
+await shell.dispose();
+await runtime.dispose();
 ```
 
-For explicit maintenance capture, prepare the pinned corpus sources only with
-`npm run prepare:shell-corpus`. That command verifies archive checksums and
-does not build an engine. Capture itself requires Linux, GNU Bash 5.3.15,
-bubblewrap, Python's standard library, and the `yaml` package.
+## Why
 
-## Repository layout
+- **Bash behavior, measured.** GNU Bash 5.3.15 is the oracle. The committed baseline passes 1,315 of 1,682 Oils builtins-only cases (78.2%), comparing stdout bytes and exit status, and CI fails any change that stops a passing case from passing. [Reproduce it](docs/status.md#compatibility-with-bash).
+- **Pipelines stream.** Every pipeline stage is a task on one thread, and pipes are bounded. `producer | grep` shows lines as they arrive, and Ctrl+C stops the foreground job without touching background jobs.
+- **You pay for the commands you use.** The shell core has no external commands. `cat`, `grep`, `mkdir`, and `seq` are separate WASM programs that you install on demand. Anything not installed exits 127.
+- **One runtime per page.** The shell borrows your [Waffle](https://github.com/ShaulLavo/waffle) runtime. It never creates one, and disposing a shell leaves the runtime and other shells alone.
 
-- `shell/` contains the parser and WASI shell engine.
-- `scripts/` contains the shell runner, scoreboard, provenance checks, and
-  differential generators.
-- `scripts/fixtures/` contains frozen generator inputs; do not regenerate them
-  during ordinary maintenance.
-- `docs/evidence/` contains frozen oracle, baseline, and classification data.
-- `docs/extraction/brush-web-commit-map.txt` maps every retained source commit
-  to its rewritten destination commit.
-- `plans/004-own-shell.md` records the approved extraction, and
-  `plans/005-bash-web-packaging.md` records the package boundary.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture.dark.svg">
+  <img alt="The application page creates a Waffle Runtime and calls createShell. createShell starts the shell worker, which runs shell-runtime.wasm. The terminal UI and the shell worker exchange bytes through the SharedBridge ring buffers. The shell worker calls the Waffle Runtime for processes and files, and Waffle starts utility guest workers and talks to the filesystem worker." src="docs/assets/architecture.light.svg">
+</picture>
 
-The pinned source revisions, archive checksums, and implementation
-classifications are in [`sources.lock.json`](sources.lock.json). The generated
-license file is `dist/THIRD_PARTY_NOTICES.txt`; regenerate it with
-`npm run notices:shell`.
+The page creates the runtime and `createShell` borrows it. The terminal is two byte rings between the page and the worker.
 
-## Host boundary
+## Quick start
 
-Browser terminal UI, Bun payloads, browser process/runtime adapters, and
-reference-engine comparisons remain in brush-web. This repository owns the
-shell program and its standalone verification only. The historical browser
-measurements and comparisons in brush-web are not standalone bash-web gates.
+You need `git` and Rust through [rustup](https://rustup.rs), because the repository pins its Rust version in `rust-toolchain.toml` and rustup installs that version.
+
+1. Clone and build the engine:
+
+   ```sh
+   git clone https://github.com/ShaulLavo/bash-web.git
+   cd bash-web
+   cargo build --release --locked --manifest-path shell/Cargo.toml -p shell-engine --bin shell-engine
+   ```
+
+2. Run a script:
+
+   ```sh
+   shell/target/release/shell-engine -c 'echo hello; exit 7'; echo "exit: $?"
+   ```
+
+   ```text
+   hello
+   exit: 7
+   ```
+
+[Getting started](docs/getting-started.md) continues with pipelines and the utilities. The browser build also needs wasi-sdk 34.0 to compile the WASM guests. Start with [Embed a shell in a page](docs/guides/embed-in-a-page.md).
+
+## What you can do
+
+- Build the engine and try scripts: [Getting started](docs/getting-started.md)
+- Run a script or an interactive shell in a page: [Embed a shell in a page](docs/guides/embed-in-a-page.md)
+- Add `cat`, `grep`, `mkdir`, and `seq`: [Install utilities](docs/guides/install-utilities.md)
+- Fix `command not found` or a blank page: [Troubleshooting](docs/troubleshooting.md)
+
+## How it works
+
+The shell is a WASM program, not a runtime. A thin TypeScript adapter starts it in a worker on the Waffle runtime your page created. The page and the worker share a `SharedArrayBuffer` with an input ring and an output ring, so the page never blocks on the shell. The engine runs one async executor on one thread, and every pipeline stage, subshell, and background job is a task. External commands run as other WASM programs that Waffle starts with the right descriptors. [How bash-web works](docs/concepts/architecture.md) explains the design and [its three ADRs](docs/adr/) record why.
+
+## Docs
+
+[Docs map](docs/README.md) · [Getting started](docs/getting-started.md) · [Guides](docs/guides/embed-in-a-page.md) · [Concepts](docs/concepts/architecture.md) · [API reference](docs/reference/api.md) · [Status and limits](docs/status.md) · [ADRs](docs/adr/) · [Development](docs/development.md)
+
+## Status
+
+Experimental and pre-1.0. The version is `0.0.x`, the package is private, and there are no releases. Any commit can change the API.
+
+- **Native engine:** builds and tests on macOS arm64 and Linux.
+- **WASI guests and browser build:** Linux only (CI). Not verified on macOS or Windows.
+- **Browsers:** Chromium and Firefox in CI. Safari is not verified.
+- **Bash compatibility:** 78.2% of Oils builtins-only cases. Missing: associative arrays, `mapfile`, running traps, printf floats.
+- **Bun:** not included. The Bun-specific browser tests are skipped.
+
+Every gap, with a command that shows it, is in [Status and limits](docs/status.md).
+
+## License
+
+[MIT](LICENSE). The parser and several expansion rules started from [Bashkit](https://github.com/everruns/bashkit) (MIT). See [third-party notices](THIRD_PARTY_NOTICES.md).
+
+## Contributing
+
+Build, test, and layout notes are in [Development](docs/development.md).

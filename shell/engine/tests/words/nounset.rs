@@ -64,7 +64,13 @@ fn selected_lazy_operands_still_enforce_plain_variable_reads() {
             b"/usr/bin/bash: line 1: other: unbound variable\n",
             "{expression}"
         );
-        assert!(!rig.shell.state().borrow().variables.contains_key("missing"));
+        assert!(
+            !rig.shell
+                .state()
+                .borrow()
+                .bindings()
+                .contains_key("missing")
+        );
     }
 }
 
@@ -270,20 +276,12 @@ fn prefix_rhs_failure_is_fatal_even_when_the_command_has_a_heredoc() {
             rig.errors.bytes(),
             b"/usr/bin/bash: line 2: missing: unbound variable\n"
         );
-        assert_eq!(
-            rig.shell
-                .state()
-                .borrow()
-                .variables
-                .get("TEMP")
-                .map(String::as_str),
-            Some("before")
-        );
-        assert!(!rig.shell.state().borrow().variables.contains_key("value"));
+        assert_eq!(rig.value("TEMP").as_deref(), Some("before"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("value"));
     }
     let rig = Rig::new(Limits::default());
     let observed = rig.calls.clone();
-    rig.host.register("observe", move |request, _| {
+    rig.host.register("/home/guest/observe", move |request, _| {
         let observed = observed.clone();
         async move {
             observed.borrow_mut().push(vec![
@@ -370,21 +368,18 @@ fn cancellation_before_a_later_unbound_read_has_no_partial_dispatch_or_diagnosti
     assert_eq!(rig.finish(job), 130);
     assert!(rig.calls.borrow().is_empty());
     assert!(rig.errors.bytes().is_empty());
-    assert_eq!(
-        rig.shell
-            .state()
-            .borrow()
-            .variables
-            .get("TEMP")
-            .map(String::as_str),
-        Some("before")
-    );
-    assert!(!rig.shell.state().borrow().variables.contains_key("value"));
+    assert_eq!(rig.value("TEMP").as_deref(), Some("before"));
+    assert!(!rig.shell.state().borrow().bindings().contains_key("value"));
 }
 
 #[test]
 fn failed_command_local_heredoc_readers_discard_their_parameter_effects() {
-    for (command, status) in [("cat", "127"), ("", "1"), ("value=kept", "1")] {
+    for (command, status) in [
+        ("cat", "127"),
+        ("missing-command", "127"),
+        ("", "1"),
+        ("value=kept", "1"),
+    ] {
         for body in ["${x:=changed}$missing", "${x:=changed}${missing:?oops}"] {
             let rig = Rig::new(Limits::default());
             let source = format!(
@@ -402,7 +397,7 @@ fn failed_command_local_heredoc_readers_discard_their_parameter_effects() {
 
 #[test]
 fn command_local_heredoc_arithmetic_failure_does_not_discard_the_caller_read_unit() {
-    for command in ["cat", "", "value=kept"] {
+    for command in ["cat", "missing-command", "", "value=kept"] {
         let rig = Rig::new(Limits::default());
         let source = format!(
             "unset x\n{command} <<EOF; args \"$?\" \"${{x-unset}}\"\n${{x:=changed}}$((1/0))\nEOF\n"

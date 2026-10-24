@@ -1,5 +1,5 @@
 //! Word cases adapted from the pinned Bashkit sources in sources.lock.json.
-//! The fixture observes argv directly, without relying on printf's format rules.
+mod support;
 use futures::FutureExt;
 use shell_engine::{
     Limits, Session,
@@ -24,7 +24,7 @@ impl Rig {
         let host = InProcessHost::new(ex.clone());
         let calls = Rc::new(RefCell::new(Vec::new()));
         let observed = calls.clone();
-        host.register("args", move |req, _| {
+        host.register("/home/guest/args", move |req, _| {
             let observed = observed.clone();
             async move {
                 observed.borrow_mut().push(req.argv[1..].to_vec());
@@ -39,6 +39,11 @@ impl Rig {
             Rc::new(fs.clone()),
             limits,
         );
+        shell
+            .state()
+            .borrow_mut()
+            .assign_parameter("PATH".into(), "/home/guest".into())
+            .unwrap();
         let (out, output) = capture(64 * 1024);
         let (err, errors) = capture(64 * 1024);
         let mut fds = FdTable::default();
@@ -46,6 +51,7 @@ impl Rig {
         fds.insert(1, out);
         fds.insert(2, err);
         shell.set_descriptors(fds).unwrap();
+        support::register_utilities(&host, &fs, false);
         Self {
             ex,
             shell,
@@ -55,6 +61,40 @@ impl Rig {
             errors,
             fs,
         }
+    }
+    fn value(&self, name: &str) -> Option<String> {
+        self.shell
+            .state()
+            .borrow()
+            .bindings()
+            .get(name)
+            .map(|value| value.as_str().to_owned())
+    }
+    fn drive_until_value(&self, turns: usize, name: &str, expected: &str) {
+        for _ in 0..turns {
+            self.ex.drive(1);
+            if self.value(name).as_deref() == Some(expected) {
+                break;
+            }
+        }
+        assert_eq!(self.value(name).as_deref(), Some(expected));
+    }
+    fn start_until_value(
+        &self,
+        source: &str,
+        turns: usize,
+        name: &str,
+        expected: &str,
+    ) -> JoinHandle<i32> {
+        let job = self.shell.start(source).unwrap();
+        self.drive_until_value(turns, name, expected);
+        job
+    }
+    fn interrupt_without_calls(&self, job: JoinHandle<i32>) {
+        assert!(!job.is_finished());
+        self.shell.interrupt();
+        assert_eq!(self.finish(job), 130);
+        assert!(self.calls.borrow().is_empty());
     }
     fn finish(&self, job: JoinHandle<i32>) -> i32 {
         for _ in 0..100_000 {
@@ -73,8 +113,22 @@ impl Rig {
         self.shell
             .state()
             .borrow_mut()
-            .variables
-            .insert(name.into(), value.into());
+            .assign_parameter(name.into(), value.into())
+            .unwrap();
+    }
+    fn prepare_large_matching_input(&self) {
+        assert!(self.calls.borrow().is_empty());
+        self.variable("v", &"a".repeat(12_000));
+    }
+    fn interrupt_after_counting_yields(&self, job: JoinHandle<i32>) {
+        let peer = self.ex.spawn(async { 42 });
+        self.ex.drive(4);
+        assert!(peer.is_finished(), "counting must yield");
+        assert!(!job.is_finished());
+        self.variable("peer", "ran");
+        self.shell.interrupt();
+        assert_eq!(self.finish(job), 130);
+        assert!(self.calls.borrow().is_empty());
     }
     fn drive_until_variable(&self, name: &str, value: &str) {
         for _ in 0..200 {
@@ -83,9 +137,9 @@ impl Rig {
                 .shell
                 .state()
                 .borrow()
-                .variables
+                .bindings()
                 .get(name)
-                .map(String::as_str)
+                .map(|value| value.as_str())
                 == Some(value)
             {
                 return;
@@ -110,6 +164,7 @@ impl Drop for Rig {
         panic!("fixture shutdown did not finish");
     }
 }
+
 fn check(source: &str, expected: &[&[&str]]) {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run(source), 0, "{source}");
@@ -332,7 +387,7 @@ fn scalar_replace_unsupported_selected_syntax_fails_without_dispatch() {
         rig.variable("v", "abc");
         assert_eq!(rig.run(source), 2, "{source}");
         assert!(rig.calls.borrow().is_empty(), "{source}");
-        assert!(!rig.shell.state().borrow().variables.contains_key("side"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("side"));
         assert_eq!(rig.run("args recovered"), 0);
         assert_eq!(*rig.calls.borrow(), &[vec!["recovered"]]);
     }
@@ -387,13 +442,11 @@ fn scalar_replace_snapshots_storage_raw_fields_and_work_are_shared() {
     assert_eq!(rig.run("args recovered"), 0);
 
     for (source, rejected_bytes, expected) in [
-        // Replacement enables accounting after the first capture allocation.
         (
             "args ${x:=$long${v/a/b}}",
             2000,
             format!("{}b", "x".repeat(400)),
         ),
-        // A later assignment capture inherits replacement output accounting.
         (
             "args ${v/a/b}${x:=$long}",
             1800,
@@ -493,9 +546,6 @@ fn scalar_replace_search_and_emission_yield_cancel_and_restore_frames() {
     }
 }
 
-// Scalar cases adapted from Bashkit 491c3281's remove-pattern-glob,
-// param-operand-quotes and variables specs. Other cases use focused GNU Bash
-// probes under LC_ALL=C.UTF-8, with engine-specific limit/cancellation checks.
 // Case examples adapted from Bashkit 491c3281's variables:226-253,
 // string-ops:73-85 and bashbox-word-expander:181-186. Other cases are original
 // bounded GNU Bash controls and engine-specific admission/cancellation checks.
@@ -648,7 +698,6 @@ fn unsupported_case_targets_transformations_and_selected_patterns_fail_closed() 
         "${PIPESTATUS[@],,}",
         "${PIPESTATUS^^}",
         "${!v^^}",
-        "${v@U}",
         "${v~}",
         "${v~~}",
         "${v^^~}",
@@ -687,13 +736,12 @@ fn unsupported_case_targets_transformations_and_selected_patterns_fail_closed() 
         assert!(rig.calls.borrow().is_empty());
     }
     let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run("f() { args forbidden; }; X=${v^^} f"), 2);
-    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.run("f() { args allowed; }; X=${v^^} f"), 0);
+    assert_eq!(*rig.calls.borrow(), [vec!["allowed"]]);
     assert!(rig.output.bytes().is_empty());
-    // Ordinary builtin prefixes are supported; function prefixes remain deferred.
     assert_eq!(rig.run("X=${v^^} echo allowed"), 0);
     assert_eq!(rig.output.bytes(), b"allowed\n");
-    assert!(!rig.shell.state().borrow().variables.contains_key("X"));
+    assert!(!rig.shell.state().borrow().bindings().contains_key("X"));
     let rig = Rig::new(Limits::default());
     rig.variable("v", "abc");
     rig.variable("p", "[[:alpha:]]");
@@ -785,8 +833,7 @@ fn case_matching_reparsing_and_redirects_share_work_without_a_candidate_cap() {
         )),
         2
     );
-    assert!(rig.calls.borrow().is_empty());
-    rig.variable("v", &"a".repeat(12_000));
+    rig.prepare_large_matching_input();
     assert_eq!(rig.run(r#"args "${v^^*?}""#), 0);
     assert_eq!(rig.calls.borrow()[0][0], "A".repeat(12_000));
 }
@@ -996,7 +1043,6 @@ fn trim_nested_length_input_cannot_bypass_shared_snapshot_storage() {
         rig.variable("p", &"x".repeat(256));
         assert_eq!(rig.run(&format!("args \"{operand}\"")), 2);
         assert!(rig.calls.borrow().is_empty());
-        // Ordinary length retains PR20's input bound and counting behavior.
         assert_eq!(rig.run("args ${#p}"), 0);
         assert_eq!(*rig.calls.borrow(), &[vec!["256"]]);
     }
@@ -1133,7 +1179,7 @@ fn unsupported_trim_targets_and_selected_patterns_fail_without_dispatch() {
             rig.variable("v", "abc");
             assert_eq!(rig.run(&source), 2, "{source}");
             assert!(rig.calls.borrow().is_empty(), "{source}");
-            assert!(!rig.shell.state().borrow().variables.contains_key("u"));
+            assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
         }
     }
     for pattern in ["@(a)", "[[:alpha:]]", "[[.a.]]", "[[=a=]]"] {
@@ -1146,13 +1192,12 @@ fn unsupported_trim_targets_and_selected_patterns_fail_without_dispatch() {
         assert_eq!(*rig.calls.borrow(), &[vec!["tail"]]);
     }
     let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run("f() { args forbidden; }; X=${v#a} f"), 2);
-    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.run("f() { args allowed; }; X=${v#a} f"), 0);
+    assert_eq!(*rig.calls.borrow(), [vec!["allowed"]]);
     assert!(rig.output.bytes().is_empty());
-    // Ordinary builtin prefixes are supported; function prefixes remain deferred.
     assert_eq!(rig.run("X=${v#a} echo allowed"), 0);
     assert_eq!(rig.output.bytes(), b"allowed\n");
-    assert!(!rig.shell.state().borrow().variables.contains_key("X"));
+    assert!(!rig.shell.state().borrow().bindings().contains_key("X"));
 }
 
 #[test]
@@ -1167,15 +1212,7 @@ fn trim_selected_substitution_patterns_reach_default_assignment_and_error_operan
             rig.variable("v", "abc");
             assert_eq!(rig.run(&format!("args {form}")), 0, "{form}");
             assert_eq!(*rig.calls.borrow(), &[vec!["pattern"], vec!["bc"]]);
-            assert_eq!(
-                rig.shell
-                    .state()
-                    .borrow()
-                    .variables
-                    .get("u")
-                    .map(String::as_str),
-                assigned.then_some("bc"),
-            );
+            assert_eq!(rig.value("u").as_deref(), assigned.then_some("bc"),);
         }
         let rig = Rig::new(Limits::default());
         rig.variable("v", "abc");
@@ -1185,7 +1222,7 @@ fn trim_selected_substitution_patterns_reach_default_assignment_and_error_operan
         );
         assert_eq!(*rig.calls.borrow(), &[vec!["pattern"]]);
         assert_eq!(rig.errors.bytes(), b"/usr/bin/bash: line 1: u: bc\n");
-        assert!(!rig.shell.state().borrow().variables.contains_key("u"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
     }
 }
 
@@ -1263,9 +1300,7 @@ fn trim_matching_and_operand_reparsing_share_command_work() {
     assert_eq!(rig.run(&oversized), 2);
     let deep = format!("args {}${{v#x}}{}", "${u:-".repeat(34), "}".repeat(34));
     assert_eq!(rig.run(&deep), 2);
-    assert!(rig.calls.borrow().is_empty());
-    // More than upstream's 10,000 candidate cap, with no partial result.
-    rig.variable("v", &"a".repeat(12_000));
+    rig.prepare_large_matching_input();
     assert_eq!(rig.run(r#"args "${v##*?}" "${v%%?*}""#), 0);
     assert_eq!(*rig.calls.borrow(), &[vec!["", ""]]);
 }
@@ -1433,7 +1468,6 @@ fn scalar_lengths_accept_positive_decimal_targets_beyond_machine_indices() {
         "length tokens retain their byte cap"
     );
     assert!(rig.calls.borrow().is_empty());
-    // All-zero spellings remain excluded, as do numeric assignment targets.
     for target in ["0".to_owned(), zeros] {
         for source in [
             format!("args ${{#{target}}}"),
@@ -1486,14 +1520,7 @@ fn lazy_lengths_keep_quote_ifs_and_scalar_context_rules() {
 
 #[test]
 fn unsupported_length_targets_fail_closed_even_in_selected_operands() {
-    for token in [
-        "${#0}",
-        "${#@}",
-        "${#*}",
-        "${#arr[0]}",
-        "${#arr[@]}",
-        "${#arr[*]}",
-    ] {
+    for token in ["${#0}", "${#@}", "${#*}"] {
         for source in [format!("args {token}"), format!("args ${{u:-{token}}}")] {
             let rig = Rig::new(Limits::default());
             assert_eq!(rig.run(&source), 2, "{source}");
@@ -1582,18 +1609,10 @@ fn length_counting_yields_and_cancellation_restores_function_frames() {
             .unwrap();
         rig.drive_until_variable("LC_ALL", locale);
         assert_eq!(
-            rig.shell.state().borrow().variables.get("LC_ALL").unwrap(),
+            rig.shell.state().borrow().bindings().get("LC_ALL").unwrap(),
             locale
         );
-        let peer = rig.ex.spawn(async { 42 });
-        rig.ex.drive(4);
-        assert!(peer.is_finished(), "counting must yield");
-        assert!(!job.is_finished());
-        // A mutable borrow while suspended also proves counting holds no RefCell borrow.
-        rig.variable("peer", "ran");
-        rig.shell.interrupt();
-        assert_eq!(rig.finish(job), 130);
-        assert!(rig.calls.borrow().is_empty());
+        rig.interrupt_after_counting_yields(job);
         assert_eq!(rig.run(r#"args "$LC_ALL" "$#" "$1" "${TEMP-unset}""#), 0);
         assert_eq!(*rig.calls.borrow(), &[vec!["POSIX", "0", "", "unset"]]);
     }
@@ -1610,24 +1629,16 @@ fn length_rhs_yields_and_cancellation_restores_prefix_frames() {
         rig.variable("s", &"é".repeat(150_000));
         rig.variable("LC_ALL", "POSIX");
         rig.variable("length", "outer");
-        // External-command prefixes expose earlier values while a later RHS yields.
         let job = rig
             .shell
             .start(&format!("TEMP=value LC_ALL={locale} length={operand} args"))
             .unwrap();
         rig.drive_until_variable("LC_ALL", locale);
         assert_eq!(
-            rig.shell.state().borrow().variables.get("TEMP").unwrap(),
+            rig.shell.state().borrow().bindings().get("TEMP").unwrap(),
             "value"
         );
-        let peer = rig.ex.spawn(async { 42 });
-        rig.ex.drive(4);
-        assert!(peer.is_finished(), "counting must yield");
-        assert!(!job.is_finished());
-        rig.variable("peer", "ran");
-        rig.shell.interrupt();
-        assert_eq!(rig.finish(job), 130);
-        assert!(rig.calls.borrow().is_empty());
+        rig.interrupt_after_counting_yields(job);
         assert_eq!(rig.run(r#"args "$LC_ALL" "${TEMP-unset}" "$length""#), 0);
         assert_eq!(*rig.calls.borrow(), &[vec!["POSIX", "unset", "outer"]]);
     }
@@ -1635,8 +1646,6 @@ fn length_rhs_yields_and_cancellation_restores_prefix_frames() {
 
 #[test]
 fn whole_word_quotes_override_unmarked_part_flags() {
-    // Standalone QuotedWord tokens have whole-word quoting, while mixed words
-    // carry explicit true/false part flags. Exercise both through the parser.
     check(
         r#"v=' a  b '; args "$v" "${v}" "" "$missing"; args $v"$v" "$v"$v"#,
         &[
@@ -1652,8 +1661,6 @@ fn whole_word_quotes_override_unmarked_part_flags() {
 
 #[test]
 fn frozen_parent_losses_preserve_whole_word_quoting() {
-    // Every loss from the first replay is kept verbatim here. Expected stdout
-    // comes from docs/evidence/own-shell-oracle.json, not the old scalar engine.
     for (source, expected) in [
         (
             "f() {\n  echo f\n  return \"\"\n}\n\nf\necho status=$?\n",
@@ -1873,7 +1880,7 @@ fn declaration_raw_capture_yields_and_can_be_cancelled_before_dispatch() {
     assert!(!job.is_finished());
     rig.shell.interrupt();
     assert_eq!(rig.finish(job), 130);
-    assert!(!rig.shell.state().borrow().variables.contains_key("v"));
+    assert!(!rig.shell.state().borrow().bindings().contains_key("v"));
 }
 
 #[test]
@@ -1977,24 +1984,7 @@ fn long_splitting_yields_and_cancellation_restores_frames() {
         .shell
         .start("f() { local IFS=' '; args $v; }; f inner")
         .unwrap();
-    for _ in 0..200 {
-        rig.ex.drive(1);
-        if rig
-            .shell
-            .state()
-            .borrow()
-            .variables
-            .get("IFS")
-            .map(String::as_str)
-            == Some(" ")
-        {
-            break;
-        }
-    }
-    assert_eq!(
-        rig.shell.state().borrow().variables.get("IFS").unwrap(),
-        " "
-    );
+    rig.drive_until_value(200, "IFS", " ");
     let peer = rig.ex.spawn(async { 42 });
     rig.ex.drive(4);
     assert!(
@@ -2046,7 +2036,6 @@ fn vanished_words_do_not_consume_argument_capacity() {
 
 #[test]
 fn aggregate_work_is_bounded_even_when_every_expansion_disappears() {
-    // Command work is source + expansion bytes + one step per argument slot.
     let rig = Rig::new(Limits {
         source_bytes: 256,
         expansion_bytes: 128,
@@ -2173,9 +2162,8 @@ fn selected_unsupported_operands_and_operator_targets_fail_without_dispatch() {
         let rig = Rig::new(Limits::default());
         assert_eq!(rig.run(source), 2, "{source}");
         assert!(rig.calls.borrow().is_empty(), "{source}");
-        assert!(!rig.shell.state().borrow().variables.contains_key("u"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
     }
-    // Selected command substitutions execute without assigning the default.
     check(
         r#"args ${u:-$(args command; echo selected)} ${u:-`args backtick; echo tick`}; args "${u-unset}""#,
         &[
@@ -2185,7 +2173,6 @@ fn selected_unsupported_operands_and_operator_targets_fail_without_dispatch() {
             &["unset"],
         ],
     );
-    // Brace expansion is supported now; bash leaves this operand's braces.
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("args ${u:-{a,b}}"), 0);
     assert_eq!(*rig.calls.borrow(), &[vec!["{a,b}"]]);
@@ -2224,8 +2211,6 @@ fn operand_fields_bytes_and_parsing_share_command_limits() {
         arguments: 4,
         ..Limits::default()
     });
-    // All selected operands disappear. Repeated small reparses must still spend
-    // the same command work allowance instead of resetting parser fuel per call.
     assert_eq!(
         rig.run(&format!("args {}", "${u:-$missing} ".repeat(25))),
         2
@@ -2241,7 +2226,6 @@ fn operand_reparse_admission_rejects_oversize_and_depth_without_literal_fallback
     let deep = format!("args {}x{}", "${u:-".repeat(34), "}".repeat(34));
     assert_eq!(rig.run(&deep), 2);
     assert!(rig.calls.borrow().is_empty());
-    // Literal operands do not enter the synchronous parser token path.
     assert_eq!(rig.run(&format!("args ${{u:-{}}}", "x".repeat(5000))), 0);
     assert_eq!(rig.calls.borrow()[0][0].len(), 5000);
 }
@@ -2257,20 +2241,12 @@ fn selected_operand_scanning_yields_and_cancellation_restores_local_frames() {
     let job = rig.shell.start(&source).unwrap();
     for _ in 0..200 {
         rig.ex.drive(1);
-        if rig
-            .shell
-            .state()
-            .borrow()
-            .variables
-            .get("v")
-            .map(String::as_str)
-            == Some("inner")
-        {
+        if rig.value("v").as_deref() == Some("inner") {
             break;
         }
     }
     assert_eq!(
-        rig.shell.state().borrow().variables.get("v").unwrap(),
+        rig.shell.state().borrow().bindings().get("v").unwrap(),
         "inner"
     );
     let peer = rig.ex.spawn(async { 42 });
@@ -2325,20 +2301,10 @@ fn cancellation_during_nested_token_admission_never_dispatches() {
     let job = rig.shell.start(&source).unwrap();
     for _ in 0..100 {
         rig.ex.drive(1);
-        if rig
-            .shell
-            .state()
-            .borrow()
-            .variables
-            .get("v")
-            .map(String::as_str)
-            == Some("inner")
-        {
+        if rig.value("v").as_deref() == Some("inner") {
             break;
         }
     }
-    // More than the 3,006 scanner steps, less than the reserved reparse work.
-    // One executor poll advances at most the 64-step cooperative quantum.
     rig.ex.drive(80);
     assert!(!job.is_finished());
     let peer = rig.ex.spawn(async { 42 });
@@ -2348,7 +2314,7 @@ fn cancellation_during_nested_token_admission_never_dispatches() {
     assert_eq!(rig.finish(job), 130);
     assert!(rig.calls.borrow().is_empty());
     assert_eq!(
-        rig.shell.state().borrow().variables.get("v").unwrap(),
+        rig.shell.state().borrow().bindings().get("v").unwrap(),
         "outer"
     );
     assert_eq!(rig.run(r#"args "$#" "${u:-ok}""#), 0);
@@ -2425,7 +2391,7 @@ fn quoted_process_substitution_lookalikes_are_text() {
         assert_eq!(calls[0].len(), 1, "{source}");
         let fd = calls[0][0].strip_prefix("/dev/fd/").unwrap();
         assert!(fd.parse::<i32>().unwrap() > 2, "{source}");
-        assert!(!rig.shell.state().borrow().variables.contains_key("u"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
     }
 }
 
@@ -2485,7 +2451,6 @@ fn assignment_quote_removal_keeps_surrounding_word_boundaries() {
 
 #[test]
 fn ifs_assignment_splits_the_entire_expanded_word_with_the_new_value() {
-    // Independent GNU Bash observations, including text emitted before the write.
     for (source, expected) in [
         (r#"IFS=; args ${IFS:=:}a:b"#, vec!["", "a:b"]),
         (r#"IFS=; args a:b${IFS:=:}"#, vec!["a", "b"]),
@@ -2695,7 +2660,6 @@ fn deferred_list_splitting_distinguishes_element_spaces_and_word_split_mode() {
     ] {
         check(&format!("IFS=; v='a b\tc\nd:e'; args {word}"), &[&expected]);
     }
-    // These observations use native `unset IFS`, not Bash's startup value.
     for (source, expected) in [
         (
             r#"f() { args "$@"${IFS:=:}; }; f a:b '' c:d"#,
@@ -2712,8 +2676,8 @@ fn deferred_list_splitting_distinguishes_element_spaces_and_word_split_mode() {
     ] {
         let rig = Rig::new(Limits::default());
         assert_eq!(
-            rig.shell.state().borrow_mut().variables.remove("IFS"),
-            Some(" \t\n".to_owned()),
+            rig.shell.state().borrow_mut().unset_variable("IFS"),
+            Ok(true),
             "explicitly unset the startup IFS before this observation"
         );
         assert_eq!(rig.run(source), 0, "{source}");
@@ -2733,7 +2697,6 @@ fn deferred_list_splitting_distinguishes_element_spaces_and_word_split_mode() {
 fn lexical_escapes_keep_only_the_escaped_character_protected_after_ifs_writes() {
     for (source, expected) in [
         (r#"IFS=; args a:\:b${IFS:=:}"#, vec!["a", ":b"]),
-        // Keep neighboring letters splittable, not just neighboring colons.
         (r#"IFS=; args a\:b${IFS:=ab}"#, vec!["", ":", "", ""]),
         (r#"IFS=; args a\:b${IFS:=a}"#, vec!["", ":b"]),
         (r#"IFS=; args a\:b${IFS:=b}"#, vec!["a:", ""]),
@@ -2810,7 +2773,6 @@ fn deferred_list_separators_keep_raw_output_and_field_bounds() {
         expansion_bytes: 8,
         ..Limits::default()
     });
-    // Nine generated separators exceed raw bytes even though splitting drops them.
     assert_eq!(
         rig.run(r#"f() { IFS=; args "$@"${IFS:= }; }; f '' '' '' '' '' '' '' '' '' ''"#),
         2
@@ -2851,20 +2813,12 @@ fn deferred_list_separator_replay_yields_and_cancels_after_the_ifs_write() {
     let job = rig.shell.start(&source).unwrap();
     for _ in 0..1000 {
         rig.ex.drive(1);
-        if rig
-            .shell
-            .state()
-            .borrow()
-            .variables
-            .get("IFS")
-            .map(String::as_str)
-            == Some(":")
-        {
+        if rig.value("IFS").as_deref() == Some(":") {
             break;
         }
     }
     assert_eq!(
-        rig.shell.state().borrow().variables.get("IFS").unwrap(),
+        rig.shell.state().borrow().bindings().get("IFS").unwrap(),
         ":"
     );
     let peer = rig.ex.spawn(async { 42 });
@@ -2878,7 +2832,7 @@ fn deferred_list_separator_replay_yields_and_cancels_after_the_ifs_write() {
     assert_eq!(rig.finish(job), 130);
     assert!(rig.calls.borrow().is_empty());
     assert_eq!(
-        rig.shell.state().borrow().variables.get("IFS").unwrap(),
+        rig.shell.state().borrow().bindings().get("IFS").unwrap(),
         "|"
     );
     assert_eq!(rig.run(r#"args "$#""#), 0);
@@ -2931,24 +2885,7 @@ fn deferred_ifs_splitting_yields_and_cancels_after_the_parameter_write() {
         .shell
         .start("f() { local IFS=; args ${v}${IFS:= }; }; f")
         .unwrap();
-    for _ in 0..1000 {
-        rig.ex.drive(1);
-        if rig
-            .shell
-            .state()
-            .borrow()
-            .variables
-            .get("IFS")
-            .map(String::as_str)
-            == Some(" ")
-        {
-            break;
-        }
-    }
-    assert_eq!(
-        rig.shell.state().borrow().variables.get("IFS").unwrap(),
-        " "
-    );
+    rig.drive_until_value(1000, "IFS", " ");
     let peer = rig.ex.spawn(async { 42 });
     rig.ex.drive(4);
     assert!(peer.is_finished());
@@ -2960,7 +2897,7 @@ fn deferred_ifs_splitting_yields_and_cancels_after_the_parameter_write() {
     assert_eq!(rig.finish(job), 130);
     assert!(rig.calls.borrow().is_empty());
     assert_eq!(
-        rig.shell.state().borrow().variables.get("IFS").unwrap(),
+        rig.shell.state().borrow().bindings().get("IFS").unwrap(),
         ":"
     );
 }
@@ -3013,13 +2950,12 @@ fn assignment_and_error_operands_are_lazy_including_unsupported_syntax() {
     );
     assert_eq!(*rig.calls.borrow(), &[vec!["diagnostic"]]);
     assert_eq!(rig.errors.bytes(), b"/usr/bin/bash: line 1: u: failure\n");
-    assert!(!rig.shell.state().borrow().variables.contains_key("u"));
-    for source in ["args ${u:=$@}"] {
-        let rig = Rig::new(Limits::default());
-        assert_eq!(rig.run(source), 2, "{source}");
-        assert!(rig.calls.borrow().is_empty());
-        assert!(!rig.shell.state().borrow().variables.contains_key("u"));
-    }
+    assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
+    let source = "args ${u:=$@}";
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run(source), 2, "{source}");
+    assert!(rig.calls.borrow().is_empty());
+    assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
 }
 
 #[test]
@@ -3161,7 +3097,6 @@ fn diagnostic_splitting_does_not_admit_oversized_raw_whitespace() {
         });
         rig.variable("IFS", " :");
         rig.variable("v", &value);
-        // The target and diagnostic reserve leave 157 raw operand bytes.
         assert_eq!(rig.run("args ${bad:?$v}"), 2);
         assert!(rig.calls.borrow().is_empty());
         assert!(rig.output.bytes().is_empty());
@@ -3256,13 +3191,10 @@ fn errors_inside_trim_keep_cumulative_pattern_snapshot_admission() {
     rig.variable("v", "x");
     rig.variable("a", &"x".repeat(80));
     rig.variable("b", &"x".repeat(80));
-    // The trim snapshot, diagnostic reserve and both length inputs exceed
-    // shared storage even though the final diagnostic would be only four bytes.
     assert_eq!(rig.run("args ${v#${bad:?${#a}${#b}}}"), 2);
     assert!(rig.calls.borrow().is_empty());
     assert!(rig.output.bytes().is_empty());
     assert!(rig.errors.bytes().is_empty());
-    // Ordinary diagnostics retain buffers too, so both snapshots share storage.
     assert_eq!(rig.run("args ${bad:?${#a}${#b}}"), 2);
     assert!(rig.calls.borrow().is_empty());
     assert!(rig.output.bytes().is_empty());
@@ -3338,14 +3270,13 @@ fn diagnostic_fields_share_the_remaining_command_ceiling_without_partial_dispatc
         assert_eq!(rig.errors.bytes(), expected.as_bytes(), "{source}");
         assert_eq!(rig.run("args recovered"), 0);
         assert_eq!(*rig.calls.borrow(), &[vec!["recovered"]]);
-        assert!(!rig.shell.state().borrow().variables.contains_key("a"));
-        assert!(!rig.shell.state().borrow().variables.contains_key("x"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("a"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("x"));
     }
 }
 
 #[test]
 fn diagnostic_segment_and_join_storage_share_the_command_allowance() {
-    // A generous field ceiling isolates storage admission from field admission.
     for (bytes, status) in [(256, 2), (1024, 127)] {
         let rig = Rig::new(Limits {
             expansion_bytes: bytes,
@@ -3406,7 +3337,7 @@ fn fatal_parameter_errors_stop_sequences_functions_and_conditions() {
             "{source}"
         );
         assert_eq!(
-            rig.shell.state().borrow().variables.get("v").unwrap(),
+            rig.shell.state().borrow().bindings().get("v").unwrap(),
             "outside"
         );
         assert_eq!(rig.run(r#"args "$#" "$v""#), 0);
@@ -3470,7 +3401,7 @@ fn assignment_storage_and_error_diagnostics_are_bounded() {
         assert_eq!(rig.run(source), 2, "{source}");
         assert!(rig.calls.borrow().is_empty());
         assert!(rig.errors.bytes().is_empty());
-        assert!(!rig.shell.state().borrow().variables.contains_key("u"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
     }
 }
 
@@ -3488,14 +3419,14 @@ fn parameter_writes_share_storage_admission_even_when_fields_fit() {
     let state = rig.shell.state();
     let state = state.borrow();
     assert_eq!(
-        state.variables.get("aa").map(String::as_str),
+        state.bindings().get("aa").map(|value| value.as_str()),
         Some("123456789")
     );
     assert_eq!(
-        state.variables.get("bb").map(String::as_str),
+        state.bindings().get("bb").map(|value| value.as_str()),
         Some("123456789")
     );
-    assert!(!state.variables.contains_key("cc"));
+    assert!(!state.bindings().contains_key("cc"));
 }
 
 #[test]
@@ -3506,27 +3437,9 @@ fn cancellation_keeps_completed_rhs_effects_and_restores_local_prefix_frames() {
         "f() {{ local v=; a=${{saved:=yes}} b=${{v:=inner}} c=${{long:={}}} args; }}; f arg",
         "x".repeat(100_000)
     );
-    let job = rig.shell.start(&source).unwrap();
-    for _ in 0..500 {
-        rig.ex.drive(1);
-        if rig.shell.state().borrow().variables.contains_key("saved") {
-            break;
-        }
-    }
-    assert_eq!(
-        rig.shell
-            .state()
-            .borrow()
-            .variables
-            .get("saved")
-            .map(String::as_str),
-        Some("yes")
-    );
+    let job = rig.start_until_value(&source, 500, "saved", "yes");
     rig.ex.drive(4);
-    assert!(!job.is_finished());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert!(rig.calls.borrow().is_empty());
+    rig.interrupt_without_calls(job);
     assert_eq!(rig.run(r#"args "$saved" "$v" "$a" "$b" "$long" "$#""#), 0);
     assert_eq!(
         *rig.calls.borrow(),
@@ -3536,8 +3449,6 @@ fn cancellation_keeps_completed_rhs_effects_and_restores_local_prefix_frames() {
 
 #[test]
 fn frozen_scalar_error_observations_keep_exact_status_and_output() {
-    // Verbatim scripts and observations from the committed oracle. No fixture
-    // membership, classifications, identities or expected statuses are changed.
     for (source, error) in [
         (
             "empty=''\necho ${empty:?'is em'pty}  # test eval of error\necho should not get here\n\n",
@@ -3570,26 +3481,8 @@ fn cancellation_during_error_operand_keeps_effects_without_partial_diagnostic() 
         "f() {{ local v=inside; args ${{u:?${{saved:=yes}}{}}}; }}; f arg",
         "x".repeat(100_000)
     );
-    let job = rig.shell.start(&source).unwrap();
-    for _ in 0..500 {
-        rig.ex.drive(1);
-        if rig.shell.state().borrow().variables.contains_key("saved") {
-            break;
-        }
-    }
-    assert_eq!(
-        rig.shell
-            .state()
-            .borrow()
-            .variables
-            .get("saved")
-            .map(String::as_str),
-        Some("yes")
-    );
-    assert!(!job.is_finished());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert!(rig.calls.borrow().is_empty());
+    let job = rig.start_until_value(&source, 500, "saved", "yes");
+    rig.interrupt_without_calls(job);
     assert!(rig.errors.bytes().is_empty());
     assert_eq!(rig.run(r#"args "$saved" "$v" "$#""#), 0);
     assert_eq!(*rig.calls.borrow(), &[vec!["yes", "", "0"]]);
@@ -3636,8 +3529,6 @@ fn review_multiline_compound_redirect_errors_keep_source_line() {
 
 #[test]
 fn multiline_parameter_errors_use_bash_parse_time_diagnostic_lines() {
-    // Exact expectations from bounded GNU Bash probes, independent of the
-    // evaluator's location metadata. These native regressions await CI.
     for (case, source, status, stdout, stderr) in [
         (
             "simple continued target",
@@ -4070,22 +3961,7 @@ fn cancellation_during_redirect_target_keeps_effects_and_restores_frames() {
         "f() {{ local v=inner; echo body 2>&1 >${{u:?${{saved:=yes}}{}}}; }}; f arg",
         "x".repeat(100_000)
     );
-    let job = rig.shell.start(&source).unwrap();
-    for _ in 0..500 {
-        rig.ex.drive(1);
-        if rig.shell.state().borrow().variables.contains_key("saved") {
-            break;
-        }
-    }
-    assert_eq!(
-        rig.shell
-            .state()
-            .borrow()
-            .variables
-            .get("saved")
-            .map(String::as_str),
-        Some("yes")
-    );
+    let job = rig.start_until_value(&source, 500, "saved", "yes");
     assert!(!job.is_finished());
     rig.shell.interrupt();
     assert_eq!(rig.finish(job), 130);
@@ -4104,6 +3980,10 @@ mod braces;
 mod case;
 #[path = "words/command.rs"]
 mod command;
+#[path = "words/command_metadata.rs"]
+mod command_metadata;
+#[path = "words/control.rs"]
+mod control;
 #[path = "words/indirect.rs"]
 mod indirect;
 #[path = "words/nounset.rs"]
@@ -4121,3 +4001,405 @@ mod scoped_prefix;
 mod session;
 #[path = "words/set_positionals.rs"]
 mod set_positionals;
+
+#[path = "words/conditional.rs"]
+mod conditional;
+#[path = "words/regex.rs"]
+mod regex;
+#[path = "words/test_builtin.rs"]
+mod test_builtin;
+
+#[path = "words/glob.rs"]
+mod glob;
+
+#[path = "words/functions.rs"]
+mod functions;
+#[path = "words/path.rs"]
+mod path;
+#[path = "words/printf.rs"]
+mod printf;
+
+#[path = "words/echo.rs"]
+mod echo;
+
+#[path = "words/read_count.rs"]
+mod read_count;
+
+#[path = "words/transformation.rs"]
+mod transformation;
+
+#[path = "words/printf_escaped_fields.rs"]
+mod printf_escaped_fields;
+#[path = "words/printf_fields.rs"]
+mod printf_fields;
+#[path = "words/printf_integers.rs"]
+mod printf_integers;
+#[path = "words/printf_unsigned.rs"]
+mod printf_unsigned;
+
+#[path = "words/printf_assignment.rs"]
+mod printf_assignment;
+#[path = "words/printf_character.rs"]
+mod printf_character;
+#[path = "words/printf_integer_fields.rs"]
+mod printf_integer_fields;
+#[path = "words/printf_options.rs"]
+mod printf_options;
+#[path = "words/printf_quoting.rs"]
+mod printf_quoting;
+
+#[path = "words/builtin_wrapper.rs"]
+mod builtin_wrapper;
+
+#[test]
+fn indexed_arrays_compound_sparse_and_quoted_fields() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("a=('one two' '' three); a[7]=last; args \"${a[@]}\" \"${a[7]}\" \"${#a[@]}\""),
+        0
+    );
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["one two", "", "three", "last", "last", "4"]]
+    );
+}
+
+#[test]
+fn indexed_arrays_append_scalar_zero_and_negative_index() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run(
+            "a=zero; a[3]=three; a+=(four five); a[-1]=LAST; a=new; args \"${a[@]}\" \"${a[-2]}\""
+        ),
+        0
+    );
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["new", "three", "four", "LAST", "four"]]
+    );
+}
+
+#[test]
+fn indexed_arrays_restore_prefix_local_and_subshell_bindings() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(outer kept); a=prefix echo \"$a\"; f() { local a=local; a=(inner x); args \"${a[@]}\"; }; f; (a=(child)); args \"${a[@]}\""), 0);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["inner", "x"], vec!["outer", "kept"]]
+    );
+}
+
+#[test]
+fn indexed_arrays_lengths_empty_lists_and_scalar_zero() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(); args \"${a[@]}\"; a[7]=last; args \"$a\" \"${a[*]}\" \"${#a[@]}\" \"${#a[7]}\"; a+=zero; args \"${a[@]}\""), 0);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![
+            Vec::<String>::new(),
+            vec!["", "last", "1", "4"]
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+            vec!["zero", "last"]
+                .into_iter()
+                .map(str::to_owned)
+                .collect()
+        ]
+    );
+}
+
+#[test]
+fn indexed_arrays_readonly_and_scalar_builtin_writes_preserve_elements() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(old kept); printf -v a %s new; args \"${a[@]}\"; a=prefix printf -v a %s temporary; args \"${a[@]}\""), 0);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["new", "kept"], vec!["new", "kept"]]
+    );
+    assert_eq!(rig.run("readonly a; a[3]=bad"), 1);
+    assert_eq!(rig.run("args \"${a[@]}\""), 0);
+    assert_eq!(rig.calls.borrow().last().unwrap(), &vec!["new", "kept"]);
+}
+
+#[test]
+fn indexed_arrays_reject_oversize_replacement_before_changing_binding() {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 2048,
+        ..Limits::default()
+    });
+    assert_eq!(rig.run("a=(saved kept)"), 0);
+    assert_eq!(rig.run(&format!("a=({})", "x".repeat(2049))), 2);
+    assert_eq!(rig.run("args \"${a[@]}\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["saved", "kept"]]);
+}
+
+#[test]
+fn indexed_arrays_element_length_and_reads_obey_nounset() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(set); set -u; args \"${a[5]}\""), 127);
+    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.run("args \"${#a[5]}\""), 0);
+    assert_eq!(rig.run("a=(); args \"${#a[@]}\" \"${a[@]}\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["0"], vec!["0"]]);
+}
+
+#[test]
+fn indexed_review_rhs_precedes_subscript_side_effects() {
+    check(
+        "a=(x y); i=0; a[i++]=${i} a[i++]=${i}; args \"$i\" \"${a[@]}\"",
+        &[&["2", "0", "1"]],
+    );
+}
+
+#[test]
+fn indexed_review_invalid_negative_assignment_ends_read_unit() {
+    for (source, subscript) in [
+        ("a=(); a[-1]=x; args AFTER", "-1"),
+        ("a=(x y); a[-3]=z; args AFTER", "-3"),
+        ("a=(x y); i=-3; a[i]=z; args AFTER", "i"),
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 1, "{source}");
+        assert_eq!(
+            rig.errors.bytes(),
+            format!("/usr/bin/bash: line 1: a[{subscript}]: bad array subscript\n").as_bytes()
+        );
+        assert!(rig.calls.borrow().is_empty(), "{source}");
+    }
+}
+
+#[test]
+fn indexed_review_negative_reads_at_largest_sparse_index() {
+    check(
+        "a=(zero one); a[9223372036854775807]=last; args \"${a[-1]}\" \"${a[-9223372036854775808]}\"",
+        &[&["last", "zero"]],
+    );
+}
+
+#[test]
+fn indexed_review_array_ifs_disables_field_splitting() {
+    for assignment in ["IFS=(, :)", "IFS=()", "IFS=,; IFS[1]=:"] {
+        check(
+            &format!("{assignment}; v='x,y:z q'; args $v; IFS=,; args $v"),
+            &[&["x,y:z q"], &["x,y:z q"]],
+        );
+    }
+}
+
+#[test]
+fn indexed_review_local_scalar_ifs_restores_array_binding() {
+    check(
+        "IFS=(, :); v='x,y:z'; f() { local IFS=,; args $v; }; f; args $v",
+        &[&["x", "y:z"], &["x,y:z"]],
+    );
+}
+
+#[test]
+fn indexed_r1_incremental_writes_fit_default_limits() {
+    check(
+        "for ((i=0; i<5000; i++)); do a[i]=x || break; done; args \"$i\" \"${#a[@]}\" \"${a[4999]}\"",
+        &[&["5000", "5000", "x"]],
+    );
+}
+
+#[test]
+fn indexed_r1_incremental_appends_fit_default_limits() {
+    check(
+        "for ((i=0; i<5000; i++)); do a+=(x) || break; done; args \"$i\" \"${#a[@]}\" \"${a[4999]}\"",
+        &[&["5000", "5000", "x"]],
+    );
+}
+
+#[test]
+fn indexed_r1_compound_ten_thousand_elements_fit_default_limits() {
+    check(
+        "a=({1..10000}); args \"$?\" \"${#a[@]}\" \"${a[9999]}\"",
+        &[&["0", "10000", "10000"]],
+    );
+}
+
+#[test]
+fn indexed_r1_explicit_compound_subscripts_fail_closed() {
+    for source in ["a=([0]=x [5]=y)", "a+=([1]+=x)", "a=([$i]=x)"] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run("a=(saved kept)"), 0);
+        assert_eq!(rig.run(source), 2, "{source}");
+        assert_eq!(rig.run("args \"${a[@]}\""), 0);
+        assert_eq!(*rig.calls.borrow(), vec![vec!["saved", "kept"]]);
+    }
+    check(
+        "a=('[0]=x' \"[5]+=y\" \\[7]=z); args \"${a[@]}\"",
+        &[&["[0]=x", "[5]+=y", "[7]=z"]],
+    );
+}
+
+#[test]
+fn indexed_r1_pipeline_element_lengths_use_special_producer() {
+    check(
+        "true | false; args \"${#PIPESTATUS[0]}\" \"${#PIPESTATUS[1]}\" \"${#PIPESTATUS[8]}\"; false; args \"${u:-${#PIPESTATUS[0]}}\"",
+        &[&["1", "1", "0"], &["1"]],
+    );
+}
+
+#[test]
+fn indexed_r1_pipeline_negative_element_lengths_use_special_producer() {
+    check(
+        "true | false; args \"${#PIPESTATUS[0]}\" \"${#PIPESTATUS[1]}\" \"${#PIPESTATUS[8]}\" \"${#PIPESTATUS[-1]}\" \"${#PIPESTATUS[-2]}\"",
+        &[&["1", "1", "0", "1", "1"]],
+    );
+}
+
+#[test]
+fn indexed_r1_pipeline_negative_lengths_in_selected_operands() {
+    check(
+        "true | false; args \"${u:-${#PIPESTATUS[-1]}}\" \"${u:-${#PIPESTATUS[-2]}}\"",
+        &[&["1", "1"]],
+    );
+}
+
+#[test]
+fn indexed_r1_pipeline_negative_lengths_obey_nounset_and_missing_policy() {
+    check(
+        "set -u; true | false; args \"${#PIPESTATUS[-1]}\" \"${#PIPESTATUS[-2]}\" \"${#PIPESTATUS[8]}\" \"${#PIPESTATUS[9223372036854775807]}\"",
+        &[&["1", "1", "0", "0"]],
+    );
+}
+
+#[test]
+fn indexed_r1_pipeline_negative_lengths_reject_invalid_boundaries() {
+    for options in ["", "set -u; "] {
+        for subscript in ["-3", "-9223372036854775808"] {
+            let rig = Rig::new(Limits::default());
+            let source = format!(
+                "{options}true | false; args \"${{#PIPESTATUS[{subscript}]}}\"; args AFTER"
+            );
+            assert_eq!(rig.run(&source), 1, "{source}");
+            assert_eq!(
+                rig.errors.bytes(),
+                format!("/usr/bin/bash: line 1: [{subscript}]: bad array subscript\n").as_bytes()
+            );
+            assert!(rig.calls.borrow().is_empty(), "{source}");
+        }
+    }
+}
+
+#[test]
+fn indexed_r1_completed_assignments_survive_later_errors() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("a=(x y)\na[0]=new a[-3]=bad; args SAME\nargs \"$?\" \"${a[@]}\""),
+        0
+    );
+    assert_eq!(*rig.calls.borrow(), vec![vec!["1", "new", "y"]]);
+}
+
+#[test]
+fn indexed_r1_completed_scalar_assignments_survive_later_errors() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("x=old; readonly r\nx=new r=bad\nargs \"$?\" \"$x\""),
+        0
+    );
+    assert_eq!(*rig.calls.borrow(), vec![vec!["1", "new"]]);
+}
+
+fn cancel_indexed_assignment(rig: &Rig, source: &str) {
+    let job = rig.shell.start(source).unwrap();
+    rig.ex.drive(256);
+    assert!(!job.is_finished());
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+}
+
+fn assert_indexed_calls(rig: &Rig, expected: &[&str]) {
+    let calls = rig.calls.borrow();
+    assert!(!calls.is_empty());
+    for call in calls.iter() {
+        assert_eq!(call, expected);
+    }
+}
+
+#[test]
+fn indexed_r1_cancelled_staging_preserves_live_array_and_refunds_invocation() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(saved kept)"), 0);
+    for _ in 0..8 {
+        cancel_indexed_assignment(&rig, "a=(new $(while true; do :; done))");
+        assert_eq!(rig.run("args \"${a[@]}\""), 0);
+    }
+    assert_indexed_calls(&rig, &["saved", "kept"]);
+}
+
+#[test]
+fn indexed_r1_resource_rejection_rolls_back_completed_writes() {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 4096,
+        ..Limits::default()
+    });
+    assert_eq!(rig.run("a=(saved kept); x=old"), 0);
+    rig.variable("VALUE", &"x".repeat(4090));
+    for source in ["a[0]=new b=$VALUE", "a+=(new) b=$VALUE", "x=new b=$VALUE"] {
+        assert_eq!(rig.run(source), 2, "{source}");
+        assert_eq!(rig.run("args \"${a[@]}\" \"$x\""), 0);
+    }
+    assert_indexed_calls(&rig, &["saved", "kept", "old"]);
+}
+
+#[test]
+fn indexed_r1_cancellation_rolls_back_completed_writes() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(saved kept); x=old"), 0);
+    for prefix in ["a[0]=new", "a+=(new)", "x=new"] {
+        let source = format!("{prefix} b=$(while true; do :; done)");
+        cancel_indexed_assignment(&rig, &source);
+        assert_eq!(rig.run("args \"${a[@]}\" \"$x\""), 0);
+    }
+    assert_indexed_calls(&rig, &["saved", "kept", "old"]);
+}
+
+#[test]
+fn indexed_r1_cancellation_keeps_later_durable_rhs_writes_to_completed_targets() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=('' kept); x=old"), 0);
+    cancel_indexed_assignment(
+        &rig,
+        "a[0]= x= y=${a:=durable} z=${x:=effect} b=$(while true; do :; done)",
+    );
+    assert_eq!(rig.run("args \"${a[@]}\" \"$x\" \"$y\" \"$z\""), 0);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["durable", "kept", "effect", "", ""]]
+    );
+}
+#[path = "words/getopts.rs"]
+mod getopts;
+
+#[path = "words/declarations.rs"]
+mod declarations;
+#[path = "words/select.rs"]
+mod select;
+
+#[path = "words/type_builtin.rs"]
+mod type_builtin;
+
+#[path = "words/tilde.rs"]
+mod tilde;
+
+#[path = "words/index_names.rs"]
+mod index_names;
+
+#[path = "words/read_options.rs"]
+mod read_options;
+
+#[path = "words/nameref_invalid.rs"]
+mod nameref_invalid;
+
+#[path = "words/source.rs"]
+mod source;
+
+#[path = "words/aliases.rs"]
+mod aliases;
+
+#[path = "words/array_slicing.rs"]
+mod array_slicing;

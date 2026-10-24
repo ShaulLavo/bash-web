@@ -1,379 +1,16 @@
-//! The seven scenarios from pipelines.acceptance.spec.ts adapted to the real
-//! engine and an explicitly in-process ProcessHost. These do NOT claim browser,
-//! Bun, transport interruption or shared-filesystem acceptance for step 1.
-use futures::FutureExt;
+mod support;
 use shell_engine::{
-    Limits, Session,
-    executor::{Budget, Cancel, Executor, JoinHandle},
-    io::{Capture, Endpoint, FdTable, IoError, MemoryFs, PIPE_CAPACITY, capture, pipe},
-    process::{InProcessHost, ProcessHost, SpawnRequest},
+    io::{PIPE_CAPACITY, pipe},
+    process::ProcessHost,
 };
-use std::{cell::Cell, rc::Rc};
-
-struct Rig {
-    ex: Executor,
-    host: InProcessHost,
-    shell: Session,
-    fs: MemoryFs,
-    output: Capture,
-    fds: FdTable,
-    slow: Cancel,
-    ticks: Vec<Cancel>,
-    written: Rc<Cell<usize>>,
+fn register_utilities(
+    host: &shell_engine::process::InProcessHost,
+    fs: &shell_engine::io::MemoryFs,
+    _line_bytes: usize,
+) {
+    support::register_utilities(host, fs, true);
 }
-impl Rig {
-    fn new() -> Self {
-        Self::with_limits(Limits::default())
-    }
-    fn with_limits(limits: Limits) -> Self {
-        let ex = Executor::new();
-        let host = InProcessHost::new(ex.clone());
-        let fs = MemoryFs::new(16 * 1024 * 1024);
-        let shell = Session::new(
-            ex.clone(),
-            Rc::new(host.clone()),
-            Rc::new(fs.clone()),
-            limits,
-        );
-        let (out, output) = capture(8 * 1024 * 1024);
-        let mut fds = FdTable::default();
-        fds.insert(0, Endpoint::null());
-        fds.insert(1, out.clone());
-        fds.insert(2, out);
-        shell.set_descriptors(fds.clone()).unwrap();
-        let slow = Cancel::new();
-        let ticks = vec![Cancel::new(), Cancel::new(), Cancel::new()];
-        let written = Rc::new(Cell::new(0));
-        let value = Self {
-            ex,
-            host,
-            shell,
-            fs,
-            output,
-            fds,
-            slow,
-            ticks,
-            written,
-        };
-        value.register();
-        value
-    }
-    fn register(&self) {
-        self.host.register("okay", |_, _| async { 0 }.boxed_local());
-        let ticks = self.ticks.clone();
-        self.host.register("ticker", move |req, cancel| {
-            let ticks = ticks.clone();
-            async move {
-                for (i, gate) in ticks.into_iter().enumerate() {
-                    if let Err(e) = req
-                        .fds
-                        .get(1)
-                        .unwrap()
-                        .write_all(format!("tick {i}\n").as_bytes(), &cancel)
-                        .await
-                    {
-                        return e.status();
-                    }
-                    gate.cancelled().await;
-                }
-                futures::future::pending().await
-            }
-            .boxed_local()
-        });
-        let written = self.written.clone();
-        self.host.register("emit", move |req, cancel| {
-            let written = written.clone();
-            async move {
-                let size = req.argv[1].parse::<usize>().unwrap();
-                let output = req.fds.get(1).unwrap();
-                let mut offset = 0;
-                while offset < size {
-                    let n = (size - offset).min(8192);
-                    let bytes = vec![(offset / 8192 % 251) as u8; n];
-                    if let Err(e) = output.write_all(&bytes, &cancel).await {
-                        return e.status();
-                    }
-                    offset += n;
-                    written.set(offset);
-                }
-                0
-            }
-            .boxed_local()
-        });
-        self.host.register("copy", |req, cancel| {
-            async move { copy(&req, &cancel, 0, 1).await }.boxed_local()
-        });
-        self.host.register("fdcat", |req, cancel| {
-            async move { copy(&req, &cancel, 4, 3).await }.boxed_local()
-        });
-        self.host.register("count", |req, cancel| {
-            async move { count(&req, &cancel, false).await }.boxed_local()
-        });
-        self.host.register("verify", |req, cancel| {
-            async move { count(&req, &cancel, true).await }.boxed_local()
-        });
-        let slow = self.slow.clone();
-        self.host.register("slow-count", move |req, cancel| {
-            let slow = slow.clone();
-            async move {
-                req.fds
-                    .get(2)
-                    .unwrap()
-                    .write_all(b"READER_WAITING\n", &cancel)
-                    .await
-                    .unwrap();
-                slow.cancelled().await;
-                count(&req, &cancel, false).await
-            }
-            .boxed_local()
-        });
-        self.host.register("filter", |req, cancel| {
-            async move {
-                let needle = req.argv[1].as_bytes();
-                let input = req.fds.get(0).unwrap();
-                let output = req.fds.get(1).unwrap();
-                let mut buffer = [0; 8192];
-                let mut line = Vec::new();
-                let mut found = false;
-                let mut budget = Budget::default();
-                loop {
-                    let n = match input.read_cancelled(&mut buffer, &cancel).await {
-                        Ok(n) => n,
-                        Err(e) => return e.status(),
-                    };
-                    for &byte in &buffer[..n] {
-                        if budget.checkpoint(&cancel).await.is_err() {
-                            return 130;
-                        }
-                        if line.len() >= 65536 {
-                            return 2;
-                        }
-                        line.push(byte);
-                        if byte == b'\n' {
-                            if needle.is_empty() || line.windows(needle.len()).any(|v| v == needle)
-                            {
-                                if let Err(e) = output.write_all(&line, &cancel).await {
-                                    return e.status();
-                                }
-                                found = true;
-                            }
-                            line.clear();
-                        }
-                    }
-                    if n == 0 {
-                        break;
-                    }
-                }
-                if !line.is_empty()
-                    && (needle.is_empty() || line.windows(needle.len()).any(|v| v == needle))
-                {
-                    if let Err(e) = output.write_all(&line, &cancel).await {
-                        return e.status();
-                    }
-                    found = true;
-                }
-                i32::from(!found)
-            }
-            .boxed_local()
-        });
-        for name in ["endless", "handled"] {
-            self.host.register(name, move |req, cancel| {
-                async move {
-                    req.fds
-                        .get(2)
-                        .unwrap()
-                        .write_all(b"PRODUCER_READY\n", &cancel)
-                        .await
-                        .unwrap();
-                    let output = req.fds.get(1).unwrap();
-                    loop {
-                        if let Err(e) = output.write_all(b"first\n", &cancel).await {
-                            return if name == "handled" && e == IoError::BrokenPipe {
-                                23
-                            } else {
-                                e.status()
-                            };
-                        }
-                    }
-                }
-                .boxed_local()
-            });
-        }
-        self.host.register("take", |req, cancel| {
-            async move {
-                let mut byte = [0];
-                let input = req.fds.get(0).unwrap();
-                let output = req.fds.get(1).unwrap();
-                loop {
-                    match input.read_cancelled(&mut byte, &cancel).await {
-                        Ok(0) => return 0,
-                        Ok(_) => {}
-                        Err(e) => return e.status(),
-                    };
-                    if let Err(e) = output.write_all(&byte, &cancel).await {
-                        return e.status();
-                    }
-                    if byte[0] == b'\n' {
-                        return 0;
-                    }
-                }
-            }
-            .boxed_local()
-        });
-        self.host.register("hold", |req, cancel| {
-            async move {
-                req.fds
-                    .get(1)
-                    .unwrap()
-                    .write_all(b"HOLDING\n", &cancel)
-                    .await
-                    .unwrap();
-                futures::future::pending().await
-            }
-            .boxed_local()
-        });
-        self.host.register("accumulate", |req, cancel| {
-            async move {
-                let (sink, _capture) = capture(65536);
-                let mut buffer = [0; 8192];
-                let input = req.fds.get(0).unwrap();
-                loop {
-                    let n = match input.read_cancelled(&mut buffer, &cancel).await {
-                        Ok(0) => return 0,
-                        Ok(n) => n,
-                        Err(e) => return e.status(),
-                    };
-                    if let Err(e) = sink.write_all(&buffer[..n], &cancel).await {
-                        return e.status();
-                    }
-                }
-            }
-            .boxed_local()
-        });
-        self.host.register("environment", |req, cancel| {
-            async move {
-                let text = format!(
-                    "{}:{}:{}\n",
-                    req.env.get("EXPORTED").map(String::as_str).unwrap_or(""),
-                    req.env.contains_key("secret"),
-                    req.cwd
-                );
-                match req
-                    .fds
-                    .get(1)
-                    .unwrap()
-                    .write_all(text.as_bytes(), &cancel)
-                    .await
-                {
-                    Ok(()) => 0,
-                    Err(e) => e.status(),
-                }
-            }
-            .boxed_local()
-        });
-    }
-    fn start(&self, script: &str) -> JoinHandle<i32> {
-        self.shell.start(script).unwrap()
-    }
-    fn finish(&self, job: JoinHandle<i32>) -> i32 {
-        for _ in 0..200000 {
-            if job.is_finished() {
-                return job.now_or_never().unwrap();
-            }
-            let drive = self.ex.drive(256);
-            assert!(
-                drive.runnable || job.is_finished(),
-                "job unexpectedly parked, output={}",
-                self.text()
-            );
-        }
-        panic!("work budget exhausted")
-    }
-    fn run(&self, script: &str) -> i32 {
-        self.finish(self.start(script))
-    }
-    fn text(&self) -> String {
-        String::from_utf8_lossy(&self.output.bytes()).into_owned()
-    }
-    fn until(&self, text: &str) {
-        for _ in 0..10000 {
-            if self.text().contains(text) {
-                return;
-            }
-            self.ex.drive(64);
-        }
-        panic!("missing {text}: {}", self.text());
-    }
-}
-impl Drop for Rig {
-    fn drop(&mut self) {
-        self.shell.interrupt();
-        let shutdown = self.shell.shutdown();
-        futures::pin_mut!(shutdown);
-        for _ in 0..10000 {
-            self.ex.drive(256);
-            if shutdown.as_mut().now_or_never().is_some() {
-                self.ex.drive(256);
-                assert_eq!(self.host.active_count(), 0);
-                assert_eq!(self.host.retained_count(), 0);
-                return;
-            }
-        }
-        panic!("session shutdown did not finish");
-    }
-}
-async fn copy(req: &SpawnRequest, cancel: &Cancel, input: u32, output: u32) -> i32 {
-    let input = req.fds.get(input).unwrap();
-    let output = req.fds.get(output).unwrap();
-    let mut buffer = [0; 8192];
-    loop {
-        let n = match input.read_cancelled(&mut buffer, cancel).await {
-            Ok(0) => return 0,
-            Ok(n) => n,
-            Err(e) => return e.status(),
-        };
-        if let Err(e) = output.write_all(&buffer[..n], cancel).await {
-            return e.status();
-        }
-    }
-}
-async fn count(req: &SpawnRequest, cancel: &Cancel, verify: bool) -> i32 {
-    let input = req.fds.get(0).unwrap();
-    let mut buffer = [0; 8192];
-    let mut total = 0;
-    let mut lines = 0;
-    let mut correct = true;
-    loop {
-        let n = match input.read_cancelled(&mut buffer, cancel).await {
-            Ok(0) => break,
-            Ok(n) => n,
-            Err(e) => return e.status(),
-        };
-        for (index, &byte) in buffer[..n].iter().enumerate() {
-            lines += usize::from(byte == b'\n');
-            if verify {
-                correct &= byte == ((total + index) / 8192 % 251) as u8;
-            }
-        }
-        total += n;
-    }
-    let text = if verify {
-        format!("COUNT:{total}:{correct}\n")
-    } else {
-        format!("COUNT:{total}:{lines}\n")
-    };
-    match req
-        .fds
-        .get(1)
-        .unwrap()
-        .write_all(text.as_bytes(), cancel)
-        .await
-    {
-        Ok(()) => 0,
-        Err(e) => e.status(),
-    }
-}
-
+include!("support/streaming.rs");
 #[test]
 fn ticker_streams_through_filter_before_exit() {
     let rig = Rig::new();
@@ -492,6 +129,7 @@ fn early_exit_sigpipe_and_guest_handled_epipe_keep_distinct_statuses() {
 #[test]
 fn pipeline_inherits_function_unexported_state_cwd_and_redirect() {
     let r = Rig::new();
+    r.fs.mkdir("/home/guest/nested", false).unwrap();
     assert_eq!(r.run("cd nested; secret=retained; f() { printf '%s\\n' \"$secret:$PWD:$1\"; }; f value | cat > result; cat result"),0);
     assert_eq!(r.text(), "retained:/home/guest/nested:value\n");
 }
@@ -548,7 +186,7 @@ fn cancelled_function_restores_local_positional_and_export_frames() {
         0
     );
     assert!(r.text().contains("outer:0::kept\n"));
-    assert!(!r.shell.state().borrow().exported.contains("x"));
+    assert!(!r.shell.state().borrow().exported_bindings().contains("x"));
 }
 #[test]
 fn ordinary_function_shares_state_but_pipeline_subshell_and_background_do_not() {
@@ -559,6 +197,7 @@ fn ordinary_function_shares_state_but_pipeline_subshell_and_background_do_not() 
 #[test]
 fn arbitrary_inherited_fds_share_open_offset_and_environment() {
     let r = Rig::new();
+    r.fs.mkdir("/home/guest/nested", false).unwrap();
     assert_eq!(r.run("printf 'fd data' > file; exec 4<file; fdcat 3>&1; secret=private; export EXPORTED=value; cd nested; environment"),0);
     assert_eq!(r.text(), "fd datavalue:false:/home/guest/nested\n");
     assert_eq!(r.run("fdcat 3>&1"), 0);
@@ -640,45 +279,47 @@ fn external_fd_close_delivers_epipe_before_consumer_exit() {
     let closed_gate = closed.clone();
     let done_gate = producer_done.clone();
     let exited = consumer_exited.clone();
-    r.host.register("close-input", move |mut req, _cancel| {
-        let closed = closed_gate.clone();
-        let done = done_gate.clone();
-        let exited = exited.clone();
-        async move {
-            drop(req.fds.remove(0).unwrap());
-            closed.cancel();
-            // The consumer cannot exit to release an accidentally retained fd.
-            // Only the producer completing its write can release this latch.
-            done.cancelled().await;
-            exited.set(true);
-            0
-        }
-        .boxed_local()
-    });
+    r.host
+        .register("/home/guest/close-input", move |mut req, _cancel| {
+            let closed = closed_gate.clone();
+            let done = done_gate.clone();
+            let exited = exited.clone();
+            async move {
+                drop(req.fds.remove(0).unwrap());
+                closed.cancel();
+                // The consumer cannot exit to release an accidentally retained fd.
+                // Only the producer completing its write can release this latch.
+                done.cancelled().await;
+                exited.set(true);
+                0
+            }
+            .boxed_local()
+        });
     let producer_exited = consumer_exited.clone();
     let producer_observed = epipe_before_exit.clone();
-    r.host.register("write-after-close", move |req, cancel| {
-        let closed = closed.clone();
-        let done = producer_done.clone();
-        let exited = producer_exited.clone();
-        let observed = producer_observed.clone();
-        async move {
-            closed.cancelled().await;
-            let result = req
-                .fds
-                .get(1)
-                .unwrap()
-                .write_all(&vec![b'x'; PIPE_CAPACITY * 2], &cancel)
-                .await;
-            observed.set(result == Err(IoError::BrokenPipe) && !exited.get());
-            done.cancel();
-            match result {
-                Ok(()) => 0,
-                Err(error) => error.status(),
+    r.host
+        .register("/home/guest/write-after-close", move |req, cancel| {
+            let closed = closed.clone();
+            let done = producer_done.clone();
+            let exited = producer_exited.clone();
+            let observed = producer_observed.clone();
+            async move {
+                closed.cancelled().await;
+                let result = req
+                    .fds
+                    .get(1)
+                    .unwrap()
+                    .write_all(&vec![b'x'; PIPE_CAPACITY * 2], &cancel)
+                    .await;
+                observed.set(result == Err(IoError::BrokenPipe) && !exited.get());
+                done.cancel();
+                match result {
+                    Ok(()) => 0,
+                    Err(error) => error.status(),
+                }
             }
-        }
-        .boxed_local()
-    });
+            .boxed_local()
+        });
     // Keep observer handles outside the registry callbacks.
     let observed = epipe_before_exit.clone();
     let exited = consumer_exited.clone();
@@ -706,10 +347,10 @@ fn command_byte_limit_includes_prefix_and_assignment_only_values() {
         r.shell
             .state()
             .borrow_mut()
-            .variables
-            .insert("VALUE".into(), "123456789".into());
+            .assign_parameter("VALUE".into(), "123456789".into())
+            .unwrap();
         assert_eq!(r.run(script), 2, "{script}");
-        assert!(!r.shell.state().borrow().variables.contains_key("A"));
+        assert!(!r.shell.state().borrow().bindings().contains_key("A"));
         assert!(r.output.is_empty());
         assert_eq!(r.host.retained_count(), 0);
     }
@@ -719,7 +360,10 @@ fn command_byte_limit_includes_prefix_and_assignment_only_values() {
     });
     assert_eq!(r.run("A=1234 B=5678"), 0);
     assert_eq!(r.run("C=1234 okay"), 0);
-    assert_eq!(r.shell.state().borrow().variables.get("A").unwrap(), "1234");
+    assert_eq!(
+        r.shell.state().borrow().bindings().get("A").unwrap(),
+        "1234"
+    );
 }
 
 #[test]
@@ -730,7 +374,7 @@ fn command_word_limit_includes_prefix_and_assignment_only_values() {
             ..Limits::default()
         });
         assert_eq!(r.run(script), 2, "{script}");
-        assert!(!r.shell.state().borrow().variables.contains_key("A"));
+        assert!(!r.shell.state().borrow().bindings().contains_key("A"));
     }
     let r = Rig::with_limits(Limits {
         arguments: 2,
@@ -751,7 +395,7 @@ fn sessions_sharing_a_host_have_independent_first_process_groups() {
         Limits::default(),
     );
     other.set_descriptors(r.fds.clone()).unwrap();
-    r.host.register("other-hold", |req, cancel| {
+    r.host.register("/home/guest/other-hold", |req, cancel| {
         async move {
             req.fds
                 .get(1)
@@ -818,10 +462,11 @@ fn interrupt_after_ast_completion_reaps_lingering_group_descendant() {
     let descendant = Rc::new(Cell::new(None));
     let spawned = descendant.clone();
     r.host
-        .register("leave-descendant", move |mut req, _cancel| {
+        .register("/home/guest/leave-descendant", move |mut req, _cancel| {
             let host = weak_host.upgrade().unwrap();
             let spawned = spawned.clone();
             async move {
+                req.executable = "/home/guest/hold".into();
                 req.argv = vec!["hold".into()];
                 // The host boundary supplies the process group, not the caller pid.
                 // Membership must keep this process under the foreground lifetime.
@@ -850,10 +495,10 @@ fn local_restores_export_state_at_declaration_not_function_entry() {
     let r = Rig::new();
     assert_eq!(r.run("f() { export X=outer; local X=inner; }; f"), 0);
     assert_eq!(
-        r.shell.state().borrow().variables.get("X").unwrap(),
+        r.shell.state().borrow().bindings().get("X").unwrap(),
         "outer"
     );
-    assert!(r.shell.state().borrow().exported.contains("X"));
+    assert!(r.shell.state().borrow().exported_bindings().contains("X"));
 }
 
 #[test]
@@ -918,237 +563,3 @@ fn rejected_pipeline_and_background_publish_failure_status() {
 }
 
 // Acceptance-only utility ports: these tests exercise the engine descriptor
-// path, never mock executables called grep/mkdir or upstream output buffers.
-#[test]
-fn grep_streams_matching_lines_before_producer_exit() {
-    let rig = Rig::new();
-    let job = rig.start("ticker | grep tick | cat");
-    rig.until("tick 0\n");
-    assert!(!job.is_finished());
-    rig.ticks[0].cancel();
-    rig.until("tick 1\n");
-    assert!(!job.is_finished());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert_eq!(rig.host.active_count(), 0);
-}
-
-#[test]
-fn grep_unmatched_pipeline_is_cancellable_and_preserves_session() {
-    let rig = Rig::new();
-    let job = rig.start("secret=kept; ticker | copy | grep unmatched; echo BAD_AFTER_INTERRUPT");
-    for _ in 0..100 {
-        rig.ex.drive(128);
-    }
-    assert!(!job.is_finished());
-    assert!(rig.output.is_empty());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert_eq!(rig.host.active_count(), 0);
-    assert_eq!(rig.run("echo \"$secret:$?\""), 0);
-    assert_eq!(rig.text(), "kept:130\n");
-}
-
-#[test]
-fn grep_options_match_gnu_subset_and_statuses() {
-    for (script, status, expected) in [
-        (
-            "printf 'tick\\nmiss\\nTICK\\n' | grep -nvi tick",
-            0,
-            "2:miss\n",
-        ),
-        ("printf 'ab\\nabab\\na+b\\n' | grep -Ec '^(ab)+$'", 0, "2\n"),
-        (
-            "printf 'a+b\\naaab\\nA+B' | grep -Fin a+b",
-            0,
-            "1:a+b\n3:A+B\n",
-        ),
-        ("printf 'a+b\\naaab\\n' | grep 'a+b'", 0, "a+b\n"),
-        (
-            "printf 'ab\\nabab\\na+b\\n' | grep -c '^\\(ab\\)\\+$'",
-            0,
-            "2\n",
-        ),
-        ("printf 'tick\\nmiss\\n' | grep -vqc tick", 0, ""),
-        ("printf 'tick\\n' | grep -c missing", 1, "0\n"),
-        ("printf 'tick\\n' | grep missing", 1, ""),
-        ("printf 'abc\\ndef\\n' | grep 'x\ndef'", 0, "def\n"),
-        ("printf 'x\\r\\n' | grep 'x$'", 1, ""),
-        ("printf '\\n' | grep -n ''", 0, "1:\n"),
-        ("printf '' | grep -c ''", 1, "0\n"),
-        ("printf '-needle\\n' | grep -- -needle", 0, "-needle\n"),
-    ] {
-        let rig = Rig::new();
-        assert_eq!(rig.run(script), status, "{script}: {}", rig.text());
-        assert_eq!(rig.text(), expected, "{script}");
-    }
-    for script in [
-        "grep",
-        "grep -Z x",
-        "grep -EF x",
-        "grep -E '['",
-        "grep missing-file-pattern no-such-file",
-    ] {
-        let rig = Rig::new();
-        assert_eq!(rig.run(script), 2, "{script}: {}", rig.text());
-        assert!(rig.text().starts_with("grep: "));
-    }
-}
-
-#[test]
-fn grep_files_counts_prefixes_quiet_error_priority_and_exact_bytes() {
-    let rig = Rig::new();
-    rig.fs.write_file("/home/guest/first", b"a\nx\na").unwrap();
-    rig.fs.write_file("/home/guest/second", b"y\na\n").unwrap();
-    assert_eq!(rig.run("grep -nc a first second"), 0);
-    assert_eq!(rig.text(), "first:2\nsecond:1\n");
-    let rig = Rig::new();
-    rig.fs
-        .write_file("/home/guest/bytes", b"x\0\xff\r\nother")
-        .unwrap();
-    assert_eq!(rig.run("grep -Fn x bytes"), 0);
-    assert_eq!(rig.output.bytes(), b"1:x\0\xff\r\n");
-    let rig = Rig::new();
-    rig.fs.write_file("/home/guest/file", b"hit\n").unwrap();
-    assert_eq!(rig.run("grep -q hit missing file"), 0);
-    assert!(rig.text().contains("missing:"));
-    assert!(!rig.text().contains("hit\n"));
-    let rig = Rig::new();
-    rig.fs.write_file("/home/guest/file", b"hit\n").unwrap();
-    assert_eq!(rig.run("grep hit missing file"), 2);
-    assert!(rig.text().contains("file:hit\n"));
-}
-
-#[test]
-fn grep_quiet_returns_before_eof_and_closes_reader() {
-    let rig = Rig::new();
-    let job = rig.start("ticker | grep -q tick");
-    // The producer is deliberately still parked with its write end open.
-    for _ in 0..100 {
-        rig.ex.drive(128);
-    }
-    assert!(!job.is_finished());
-    rig.ticks[0].cancel();
-    assert_eq!(rig.finish(job), 0);
-    assert!(rig.output.is_empty());
-    assert_eq!(rig.run("echo ${PIPESTATUS[0]}:${PIPESTATUS[1]}"), 0);
-    assert_eq!(rig.text(), "141:0\n");
-}
-
-#[test]
-fn grep_streams_more_than_one_mib_and_propagates_broken_pipe() {
-    let rig = Rig::new();
-    assert_eq!(rig.run("seq 1 400000 | grep -E '^[0-9]+$' | count"), 0);
-    assert_eq!(rig.text(), "COUNT:2688895:400000\n");
-    let rig = Rig::new();
-    assert_eq!(
-        rig.run("set -o pipefail; seq 1 400000 | grep . | take"),
-        141
-    );
-    assert_eq!(rig.run("echo ${PIPESTATUS[1]}"), 0);
-    assert_eq!(rig.text(), "1\n141\n");
-}
-
-#[test]
-fn grep_record_and_regex_admission_are_bounded() {
-    let rig = Rig::with_limits(Limits {
-        line_bytes: 4,
-        ..Limits::default()
-    });
-    assert_eq!(rig.run("printf '12345' | grep ."), 2);
-    assert!(rig.text().contains("record limit"));
-    let rig = Rig::new();
-    assert_eq!(rig.run(&format!("grep '{}'", "x".repeat(4097))), 2);
-    assert!(rig.text().contains("pattern byte limit"));
-    let rig = Rig::new();
-    assert_eq!(rig.run("grep -E 'a{1000000}'"), 2);
-    assert!(rig.text().starts_with("grep: "));
-}
-
-#[test]
-fn mkdir_nested_function_pipeline_inherits_unexported_state_and_cwd() {
-    let rig = Rig::new();
-    assert_eq!(rig.run("mkdir nested; cd nested; secret=retained; f() { printf '%s\\n' \"$secret:$PWD:$1\"; }; f value | cat > result; cat result"), 0);
-    assert_eq!(rig.text(), "retained:/home/guest/nested:value\n");
-    assert_eq!(
-        rig.fs.read_file("/home/guest/nested/result").unwrap(),
-        rig.output.bytes()
-    );
-}
-
-#[test]
-fn mkdir_parents_existing_files_and_failures() {
-    let rig = Rig::new();
-    assert_eq!(
-        rig.run("mkdir -p a/b/c; mkdir -p a/b/c; mkdir -p /; mkdir -- ./-name"),
-        0
-    );
-    assert_eq!(rig.run("mkdir a"), 1);
-    assert_eq!(rig.run("mkdir missing/child"), 1);
-    assert_eq!(rig.run("mkdir"), 2);
-    assert_eq!(rig.run("mkdir -x other"), 2);
-    assert_eq!(rig.run("mkdir -p ''"), 1);
-    rig.fs.write_file("/home/guest/file", b"data").unwrap();
-    assert_eq!(rig.run("mkdir -p file"), 1);
-    assert_eq!(rig.run("mkdir -p file/child"), 1);
-    assert_eq!(rig.fs.read_file("/home/guest/file").unwrap(), b"data");
-    assert_eq!(rig.run("mkdir a another"), 1);
-    assert_eq!(rig.run("mkdir another"), 1); // The second operand was still created.
-    assert_eq!(rig.run("mkdir -p a/b/c/d"), 0);
-}
-
-#[test]
-fn grep_always_ready_unmatched_input_still_observes_cancellation() {
-    let rig = Rig::new();
-    let job = rig.start("seq 1 1000000000000 | grep unmatched");
-    for _ in 0..100 {
-        rig.ex.drive(128);
-    }
-    assert!(!job.is_finished());
-    assert!(rig.output.is_empty());
-    rig.shell.interrupt();
-    assert_eq!(rig.finish(job), 130);
-    assert_eq!(rig.host.active_count(), 0);
-}
-
-#[test]
-fn grep_basic_anchors_only_at_bre_branch_boundaries() {
-    // GNU grep observations: internal ^/$ are literal in BRE, but escaped
-    // groups and alternation establish new branch-start/end anchor positions.
-    let lines = b"a^b\na$b\na\n^a\na$\n^^a\na$$\nab\nb\n^b\n";
-    for (pattern, expected) in [
-        ("a^b", "1:a^b\n"),
-        ("a$b", "2:a$b\n"),
-        ("^^a", "4:^a\n"),
-        ("a$$", "5:a$\n"),
-        (r"a\^b", "1:a^b\n"),
-        (r"a\$b", "2:a$b\n"),
-        (r"\(^a$\)", "3:a\n"),
-        (r"\(^a$\)\|\(^b$\)", "3:a\n9:b\n"),
-        (r"z\|^b", "9:b\n"),
-        (r"a$\|z", "3:a\n4:^a\n6:^^a\n"),
-        (r"z\|^^b", "10:^b\n"),
-        (r"\(^\^a\)", "4:^a\n"),
-        (r"\(a$\)b", ""),
-        (r"a\(^b\)", ""),
-        // Unescaped parentheses and pipes are literals, not BRE boundaries.
-        ("(^a", ""),
-        ("z|^b", ""),
-        ("a$)", ""),
-    ] {
-        let rig = Rig::new();
-        rig.fs.write_file("/home/guest/lines", lines).unwrap();
-        assert_eq!(
-            rig.run(&format!("grep -n '{pattern}' < lines")),
-            i32::from(expected.is_empty()),
-            "{pattern}: {}",
-            rig.text(),
-        );
-        assert_eq!(rig.text(), expected, "{pattern}");
-    }
-    let rig = Rig::new();
-    rig.fs.write_file("/home/guest/lines", lines).unwrap();
-    assert_eq!(rig.run("grep -nE 'a^b' lines"), 1);
-    assert_eq!(rig.run("grep -nF 'a$b' lines"), 0);
-    assert_eq!(rig.text(), "2:a$b\n");
-}

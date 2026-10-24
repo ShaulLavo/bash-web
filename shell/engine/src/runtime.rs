@@ -3,14 +3,23 @@
 //! preview1 path_open, runtime pipes and inherited stdio share one namespace.
 use crate::{
     executor::{Cancel, Executor, JoinHandle},
-    io::{Endpoint, FdTable, FileSystem, HostEndpoint, IoError, OpenOptions},
+    io::{
+        DescriptorKind, Endpoint, FdTable, FileMetadata, FileSystem, HostEndpoint, IoError,
+        OpenOptions,
+    },
     process::{GroupId, ProcessError, ProcessHost, ProcessId, SpawnRequest},
 };
-use futures::{FutureExt, future::LocalBoxFuture};
+use futures::{
+    FutureExt,
+    future::{LocalBoxFuture, WeakShared},
+};
 use serde::Serialize;
+type WaitFuture = LocalBoxFuture<'static, Result<(), ProcessError>>;
+type WaitRegistry = RefCell<BTreeMap<GroupId, WeakShared<WaitFuture>>>;
+
 use std::{
     cell::{Cell, RefCell},
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     future::Future,
     pin::Pin,
     rc::{Rc, Weak},
@@ -21,6 +30,67 @@ use std::{
 mod wasi;
 #[cfg(target_os = "wasi")]
 pub use wasi::WasiAbi;
+
+/// Decode runtime_proc's append-only descriptor categories, not Preview1 types.
+#[cfg(any(target_os = "wasi", test))]
+fn decode_descriptor_kind(kind: u32) -> DescriptorKind {
+    match kind {
+        1 => DescriptorKind::Pipe,
+        2 => DescriptorKind::Terminal,
+        3 => DescriptorKind::Regular,
+        4 => DescriptorKind::Directory,
+        _ => DescriptorKind::Other,
+    }
+}
+
+/// Decode preview1's fixed 64-byte filestat record without relying on Rust
+/// layout/alignment. Preview1 exposes no Unix mode, owner or effective access
+/// information, so those capabilities remain absent rather than guessed.
+#[cfg(any(target_os = "wasi", test))]
+fn decode_filestat(bytes: &[u8; 64]) -> FileMetadata {
+    use crate::io::FileKind;
+    let u64_at = |offset| u64::from_le_bytes(bytes[offset..offset + 8].try_into().unwrap());
+    FileMetadata {
+        kind: match bytes[16] {
+            1 => FileKind::BlockDevice,
+            2 => FileKind::CharacterDevice,
+            3 => FileKind::Directory,
+            4 => FileKind::Regular,
+            5 | 6 => FileKind::Socket,
+            7 => FileKind::Symlink,
+            _ => FileKind::Unknown,
+        },
+        size: u64_at(32),
+        mode: None,
+        device: Some(u64_at(0)),
+        inode: Some(u64_at(8)),
+        uid: None,
+        gid: None,
+        accessed_ns: Some(u64_at(40)),
+        modified_ns: Some(u64_at(48)),
+        readable: None,
+        writable: None,
+        executable: None,
+        owned_by_effective_uid: None,
+        owned_by_effective_gid: None,
+    }
+}
+
+/// The runtime_fs record is four little-endian u32s, independent of filestat.
+#[cfg(any(target_os = "wasi", test))]
+fn decode_permissions(metadata: &mut FileMetadata, bytes: &[u8; 16]) {
+    let word = |offset| u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap());
+    metadata.mode = Some(crate::io::FileMode {
+        bits: word(0),
+        supported: word(4),
+    });
+    let access = word(8);
+    let supported = word(12);
+    let allowed = |bit| (supported & bit != 0).then_some(access & bit != 0);
+    metadata.readable = allowed(4);
+    metadata.writable = allowed(2);
+    metadata.executable = allowed(1);
+}
 
 const AGAIN: i32 = 6;
 // runtime/proc/signals.ts: DEFAULT=0, IGNORE=1, HANDLE=2. This is a
@@ -81,6 +151,25 @@ impl PollEvent {
         }
     }
 }
+/// The runtime_proc waits share one eight-byte little-endian terminal record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WaitResult {
+    Exited(i32),
+    Signaled(i32),
+    StartFailed(i32),
+}
+impl WaitResult {
+    pub fn decode(bytes: [u8; 8]) -> Result<Self, i32> {
+        let kind = u32::from_le_bytes(bytes[..4].try_into().unwrap());
+        let value = i32::from_le_bytes(bytes[4..].try_into().unwrap());
+        match kind {
+            0 => Ok(Self::Exited(value)),
+            1 => Ok(Self::Signaled(value)),
+            2 => Ok(Self::StartFailed(value)),
+            _ => Err(28),
+        }
+    }
+}
 /// Injectable boundary keeps native engine tests independent of WASM imports.
 /// Errnos are positive WASI errnos here; the WASM adapter decodes negative results.
 /// `wait_job` confirms descendant teardown and reaps runtime-owned tombstones.
@@ -88,19 +177,40 @@ pub trait Abi {
     /// The embedder's initial logical bindings, excluding private directory preopens
     /// and descriptors subsequently allocated by this guest.
     fn inherited_fds(&self) -> Vec<u32>;
+    fn access_start(&self, path: &str, cwd: &str) -> Result<u32, i32>;
+    fn access_take(&self, request: u32) -> Result<(), i32>;
+    fn access_cancel(&self, request: u32);
     fn spawn(&self, request: &RuntimeSpawn) -> Result<u32, i32>;
     fn job_of(&self, pid: u32) -> Result<u32, i32>;
-    fn wait(&self, pid: u32) -> Result<i32, i32>;
+    /// Zero means entry committed; positive values are startup errnos.
+    /// Negative ABI results are represented as Err, including pending EAGAIN.
+    fn start_status(&self, pid: u32) -> Result<i32, i32>;
+    fn wait(&self, pid: u32) -> Result<WaitResult, i32>;
     /// Nonblocking runtime wait_job with NOHANG=1. EAGAIN until all members exit.
-    fn wait_job(&self, job: u32) -> Result<i32, i32>;
+    fn wait_job(&self, job: u32) -> Result<WaitResult, i32>;
     fn kill(&self, pid: u32, signal: i32) -> Result<(), i32>;
     fn kill_job(&self, job: u32, signal: i32) -> Result<(), i32>;
     fn pipe(&self) -> Result<(u32, u32), i32>;
+    fn fd_kind(&self, fd: u32) -> Result<DescriptorKind, i32>;
     fn dup(&self, fd: u32) -> Result<u32, i32>;
     fn close(&self, fd: u32);
     /// One preview1 directory operation. Existing directories (never files)
     /// are accepted only for mkdir -p; the caller walks parent components.
     fn mkdir(&self, path: &str, allow_existing: bool) -> Result<(), i32>;
+    /// Metadata only: must not allocate descriptors or open the named node.
+    fn stat(&self, path: &str, follow_symlinks: bool) -> Result<FileMetadata, i32>;
+    /// Incremental directory operations; descriptor ownership stays with Runtime.
+    fn open_dir(&self, _path: &str) -> Result<u32, i32> {
+        Err(58)
+    }
+    fn read_dir_entry(
+        &self,
+        _fd: u32,
+        _cookie: u64,
+        _output: &mut [u8],
+    ) -> Result<Option<crate::io::DirectoryEntry>, i32> {
+        Err(58)
+    }
     fn open(&self, path: &str, options: &OpenOptions) -> Result<u32, i32>;
     fn read(&self, fd: u32, output: &mut [u8]) -> Result<usize, i32>;
     fn write(&self, fd: u32, input: &[u8]) -> Result<usize, i32>;
@@ -123,6 +233,7 @@ struct Group {
     runtime_jobs: Vec<u32>,
     background: bool,
     closing: bool,
+    cleanup_failed: bool,
 }
 
 const MAX_RETAINED_PROCESSES: usize = 4096;
@@ -208,20 +319,14 @@ impl Drop for InputPump {
     }
 }
 
-fn input_future(
-    source: Endpoint,
-    writer: Endpoint,
-    cancel: Cancel,
-) -> impl Future<Output = Result<(), IoError>> {
-    async move {
-        let mut buffer = [0; 1024];
-        loop {
-            let count = source.read_cancelled(&mut buffer, &cancel).await?;
-            if count == 0 {
-                return Ok(());
-            }
-            writer.write_all(&buffer[..count], &cancel).await?;
+async fn input_future(source: Endpoint, writer: Endpoint, cancel: Cancel) -> Result<(), IoError> {
+    let mut buffer = [0; 1024];
+    loop {
+        let count = source.read_cancelled(&mut buffer, &cancel).await?;
+        if count == 0 {
+            return Ok(());
         }
+        writer.write_all(&buffer[..count], &cancel).await?;
     }
 }
 
@@ -230,7 +335,8 @@ fn input_future_bytes<F>(_: &impl FnOnce(Endpoint, Endpoint, Cancel) -> F) -> us
 }
 struct Child {
     group: GroupId,
-    status: Cell<Option<i32>>,
+    job: Option<u32>,
+    status: Cell<Option<Result<i32, i32>>>,
 }
 struct State {
     abi: Rc<dyn Abi>,
@@ -240,6 +346,7 @@ struct State {
     next_group: Cell<GroupId>,
     groups: RefCell<BTreeMap<GroupId, Group>>,
     children: RefCell<BTreeMap<ProcessId, Rc<Child>>>,
+    waits: WaitRegistry,
     input_slots: Rc<Cell<usize>>,
     inputs: RefCell<Vec<InputPump>>,
 }
@@ -255,6 +362,7 @@ impl Runtime {
             next_group: Cell::new(1),
             groups: RefCell::new(BTreeMap::new()),
             children: RefCell::new(BTreeMap::new()),
+            waits: RefCell::new(BTreeMap::new()),
             input_slots: Rc::new(Cell::new(0)),
             inputs: RefCell::new(Vec::new()),
         }))
@@ -282,6 +390,39 @@ impl Runtime {
             id,
             token: None,
         }
+    }
+    fn access_future(
+        &self,
+        path: String,
+        cwd: String,
+    ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        let runtime = self.clone();
+        async move {
+            let request = runtime
+                .0
+                .abi
+                .access_start(&path, &cwd)
+                .map_err(ProcessError::Runtime)?;
+            let guard = AccessGuard {
+                runtime: runtime.clone(),
+                request,
+                retired: Cell::new(false),
+            };
+            loop {
+                match runtime.0.abi.access_take(request) {
+                    Ok(()) => {
+                        guard.retired.set(true);
+                        return Ok(());
+                    }
+                    Err(AGAIN) => runtime.ready(5, request).await,
+                    Err(errno) => {
+                        guard.retired.set(true);
+                        return Err(ProcessError::Runtime(errno));
+                    }
+                }
+            }
+        }
+        .boxed_local()
     }
     /// Drive only BETWEEN executor turns. With timeout 0 this never blocks;
     /// timeout -1 parks until host readiness or a signal. No task calls poll.
@@ -338,6 +479,7 @@ impl Runtime {
                 runtime_jobs: Vec::new(),
                 background,
                 closing: false,
+                cleanup_failed: false,
             },
         );
         id
@@ -345,12 +487,99 @@ impl Runtime {
     pub fn retained_count(&self) -> usize {
         self.0.children.borrow().len()
     }
+    fn retained_slots(&self) -> usize {
+        let jobs: usize = self
+            .0
+            .groups
+            .borrow()
+            .values()
+            // A sweep may heal the last ABI job after a failed drain. Its
+            // logical group/input ownership still needs a successful retry;
+            // do not release the final admission slot before that teardown.
+            .map(|group| {
+                group
+                    .runtime_jobs
+                    .len()
+                    .max(usize::from(group.cleanup_failed))
+            })
+            .sum();
+        // Metadata failures still own a direct pid even without a runtime job ID.
+        jobs.saturating_add(
+            self.0
+                .children
+                .borrow()
+                .values()
+                .filter(|child| child.job.is_none())
+                .count(),
+        )
+    }
+    fn try_reap_job(&self, group: GroupId, job: u32) -> Result<(), i32> {
+        if !self
+            .0
+            .groups
+            .borrow()
+            .get(&group)
+            .is_some_and(|group| group.runtime_jobs.contains(&job))
+        {
+            return Ok(());
+        }
+        self.0.abi.wait_job(job)?;
+        if let Some(group) = self.0.groups.borrow_mut().get_mut(&group) {
+            group.runtime_jobs.retain(|retained| *retained != job);
+        }
+        // An admission sweep can consume a job observed by a parked group drain.
+        // Wake those observers locally: polling its now-reaped ABI ID is invalid.
+        let mut wakers = Vec::new();
+        self.0.waiters.borrow_mut().retain(|_, waiter| {
+            if waiter.kind == 4 && waiter.id == job {
+                wakers.push(waiter.waker.clone());
+                false
+            } else {
+                true
+            }
+        });
+        for waker in wakers {
+            waker.wake();
+        }
+        Ok(())
+    }
+
+    fn reap_finished_jobs(&self) {
+        // One NOHANG attempt per residual job, bounded by the admission limit.
+        // Never reap a job before its direct child's status has been consumed:
+        // wait_job also removes that child's runtime-owned tombstone.
+        let direct: BTreeSet<_> = self
+            .0
+            .children
+            .borrow()
+            .values()
+            .filter_map(|child| child.job)
+            .collect();
+        let jobs: Vec<_> = self
+            .0
+            .groups
+            .borrow()
+            .iter()
+            .flat_map(|(&id, group)| {
+                group
+                    .runtime_jobs
+                    .iter()
+                    .filter(|job| !direct.contains(job))
+                    .map(move |&job| (id, job))
+            })
+            .collect();
+        for (group, job) in jobs {
+            // EAGAIN and errors both retain the cleanup/signal handle for retry.
+            let _ = self.try_reap_job(group, job);
+        }
+    }
 
     fn prepare_input(
         &self,
         source: &Endpoint,
         payload: usize,
     ) -> Result<PreparedInput, ProcessError> {
+        self.reap_finished_jobs();
         // Include retained payload, the concrete pump, queue/task metadata and
         // vector slots. Input owners share the existing bounded process slots.
         let bytes = payload
@@ -366,7 +595,7 @@ impl Runtime {
             .get()
             .checked_add(units)
             .ok_or(ProcessError::ProcessLimit)?;
-        if used.saturating_add(self.retained_count()).saturating_add(1) > MAX_RETAINED_PROCESSES {
+        if used.saturating_add(self.retained_slots()).saturating_add(1) > MAX_RETAINED_PROCESSES {
             return Err(ProcessError::ProcessLimit);
         }
         self.0.input_slots.set(used);
@@ -415,6 +644,20 @@ impl Runtime {
         Ok(fd)
     }
 }
+struct AccessGuard {
+    runtime: Runtime,
+    request: u32,
+    retired: Cell<bool>,
+}
+impl Drop for AccessGuard {
+    fn drop(&mut self) {
+        if !self.retired.get() {
+            self.runtime.0.abi.access_cancel(self.request);
+            self.retired.set(true);
+        }
+    }
+}
+
 struct Ready {
     runtime: Runtime,
     kind: u32,
@@ -470,6 +713,9 @@ impl HostEndpoint for RuntimeEndpoint {
     fn runtime_fd(&self) -> Option<u32> {
         Some(self.fd)
     }
+    fn descriptor_kind(&self) -> Result<DescriptorKind, IoError> {
+        self.runtime.0.abi.fd_kind(self.fd).map_err(io_error)
+    }
     fn read<'a>(&'a self, output: &'a mut [u8]) -> LocalBoxFuture<'a, Result<usize, IoError>> {
         async move {
             loop {
@@ -493,7 +739,70 @@ impl HostEndpoint for RuntimeEndpoint {
         .boxed_local()
     }
 }
+struct RuntimeDirectory {
+    runtime: Runtime,
+    fd: u32,
+}
+impl Drop for RuntimeDirectory {
+    fn drop(&mut self) {
+        self.runtime.0.abi.close(self.fd);
+    }
+}
+impl crate::io::Directory for RuntimeDirectory {
+    fn read_entry<'a>(
+        &'a self,
+        cookie: u64,
+        output: &'a mut [u8],
+    ) -> LocalBoxFuture<'a, Result<Option<crate::io::DirectoryEntry>, IoError>> {
+        async move {
+            crate::executor::yield_now().await;
+            self.runtime
+                .0
+                .abi
+                .read_dir_entry(self.fd, cookie, output)
+                .map_err(io_error)
+        }
+        .boxed_local()
+    }
+}
 impl FileSystem for Runtime {
+    fn open_dir<'a>(
+        &'a self,
+        path: &'a str,
+    ) -> LocalBoxFuture<'a, Result<Rc<dyn crate::io::Directory>, IoError>> {
+        async move {
+            if !path.starts_with('/')
+                || path.len() > crate::io::MAX_PATH_BYTES
+                || path.contains('\0')
+            {
+                return Err(IoError::InvalidPath);
+            }
+            crate::executor::yield_now().await;
+            let fd = self.0.abi.open_dir(path).map_err(io_error)?;
+            Ok(Rc::new(RuntimeDirectory {
+                runtime: self.clone(),
+                fd,
+            }) as Rc<dyn crate::io::Directory>)
+        }
+        .boxed_local()
+    }
+    fn stat<'a>(
+        &'a self,
+        path: &'a str,
+        follow_symlinks: bool,
+    ) -> LocalBoxFuture<'a, Result<FileMetadata, IoError>> {
+        async move {
+            if !path.starts_with('/')
+                || path.len() > crate::io::MAX_PATH_BYTES
+                || path.contains('\0')
+            {
+                return Err(IoError::InvalidPath);
+            }
+            crate::executor::yield_now().await;
+            self.0.abi.stat(path, follow_symlinks).map_err(io_error)
+        }
+        .boxed_local()
+    }
     fn mkdir<'a>(
         &'a self,
         path: &'a str,
@@ -541,12 +850,21 @@ fn io_error(errno: i32) -> IoError {
         8 | 76 => IoError::BadDescriptor,
         64 => IoError::BrokenPipe,
         44 => IoError::NotFound,
+        54 => IoError::NotDirectory,
+        58 => IoError::Unsupported,
         28 | 37 => IoError::InvalidPath,
         33 | 48 | 51 => IoError::LimitExceeded,
         _ => IoError::Runtime(errno),
     }
 }
 impl ProcessHost for Runtime {
+    fn access(
+        &self,
+        path: String,
+        cwd: String,
+    ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        self.access_future(path, cwd)
+    }
     fn allocate_group(&self) -> GroupId {
         self.group(false)
     }
@@ -557,12 +875,13 @@ impl ProcessHost for Runtime {
         self.take_interrupt()
     }
     fn spawn(&self, request: SpawnRequest) -> Result<ProcessId, ProcessError> {
+        self.reap_finished_jobs();
         self.0
             .inputs
             .borrow_mut()
             .retain(|input| !input.join.is_finished());
         if self
-            .retained_count()
+            .retained_slots()
             .saturating_add(self.0.input_slots.get())
             >= MAX_RETAINED_PROCESSES
         {
@@ -581,12 +900,9 @@ impl ProcessHost for Runtime {
             .filter(|group| !group.closing)
             .map(|group| group.background)
             .ok_or(ProcessError::GroupClosed(request.group))?;
-        let executable = request
-            .argv
-            .first()
-            .cloned()
-            .filter(|name| !name.is_empty())
-            .ok_or_else(|| ProcessError::UnknownCommand(String::new()))?;
+        if request.executable.is_empty() {
+            return Err(ProcessError::UnknownCommand(String::new()));
+        }
         let mut inputs = Vec::new();
         let mut fds = Vec::new();
         fds.try_reserve_exact(request.fds.iter().count())
@@ -613,11 +929,11 @@ impl ProcessHost for Runtime {
                     .is_some_and(|owner| owner.ptr_eq(&input.reader))
             });
             if used {
-                input.reserve_user(request.group, self.retained_count())?;
+                input.reserve_user(request.group, self.retained_slots())?;
             }
         }
         let spec = RuntimeSpawn {
-            executable,
+            executable: request.executable,
             argv: request.argv,
             env: request.env,
             cwd: request.cwd,
@@ -636,6 +952,7 @@ impl ProcessHost for Runtime {
                     pid as u64,
                     Rc::new(Child {
                         group: request.group,
+                        job: None,
                         status: Cell::new(None),
                     }),
                 );
@@ -682,10 +999,28 @@ impl ProcessHost for Runtime {
             pid as u64,
             Rc::new(Child {
                 group: request.group,
+                job: Some(runtime_job),
                 status: Cell::new(None),
             }),
         );
         Ok(pid as u64)
+    }
+    fn wait_start(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        let runtime = self.clone();
+        async move {
+            if !runtime.0.children.borrow().contains_key(&pid) {
+                return Err(ProcessError::UnknownProcess(pid));
+            }
+            loop {
+                match runtime.0.abi.start_status(pid as u32) {
+                    Ok(0) => return Ok(()),
+                    Ok(errno) => return Err(ProcessError::StartFailed(errno)),
+                    Err(AGAIN) => runtime.ready(6, pid as u32).await,
+                    Err(errno) => return Err(ProcessError::Runtime(errno)),
+                }
+            }
+        }
+        .boxed_local()
     }
     fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<i32, ProcessError>> {
         let child = self.0.children.borrow().get(&pid).cloned();
@@ -694,13 +1029,21 @@ impl ProcessHost for Runtime {
             let child = child.ok_or(ProcessError::UnknownProcess(pid))?;
             loop {
                 if let Some(status) = child.status.get() {
-                    return Ok(status);
+                    return status.map_err(ProcessError::StartFailed);
                 }
                 match runtime.0.abi.wait(pid as u32) {
-                    Ok(status) => {
+                    Ok(result) => {
+                        let status = match result {
+                            WaitResult::Exited(code) => Ok(code),
+                            WaitResult::Signaled(signal) => Ok(128 + signal),
+                            WaitResult::StartFailed(errno) => Err(errno),
+                        };
                         child.status.set(Some(status));
                         runtime.0.children.borrow_mut().remove(&pid);
-                        return Ok(status);
+                        if let Some(job) = child.job {
+                            let _ = runtime.try_reap_job(child.group, job);
+                        }
+                        return status.map_err(ProcessError::StartFailed);
                     }
                     Err(AGAIN) => runtime.ready(2, pid as u32).await,
                     Err(errno) => return Err(ProcessError::Runtime(errno)),
@@ -737,9 +1080,61 @@ impl ProcessHost for Runtime {
         }
         error.map_or(Ok(()), Err)
     }
+    fn wait_direct_group(
+        &self,
+        group: GroupId,
+    ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        let direct: Vec<_> = self
+            .0
+            .children
+            .borrow()
+            .iter()
+            .filter(|(_, child)| child.group == group)
+            .map(|(&pid, _)| self.wait(pid))
+            .collect();
+        Box::pin(async move {
+            for result in futures::future::join_all(direct).await {
+                // A typed startup failure is a consumed terminal child result,
+                // not a failure to observe/reap that child. `wait(pid)` reports
+                // it to the command; group waits own only lifecycle cleanup.
+                if let Err(error) = result
+                    && !matches!(error, ProcessError::StartFailed(_))
+                {
+                    return Err(error);
+                }
+            }
+            Ok(())
+        })
+    }
+    fn detach_group(&self, group: GroupId) -> JoinHandle<Result<(), ProcessError>> {
+        // Reap already-empty groups synchronously; a pending drain remains
+        // shared and is then driven by the host-owned executor task.
+        let ready = self.wait_group(group).now_or_never();
+        match ready {
+            Some(result) => JoinHandle::ready(result),
+            None => self.0.executor.spawn(self.wait_group(group)),
+        }
+    }
     fn wait_group(&self, group: GroupId) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
+        // Observers share a drain, but the cache must not own a future that
+        // captures this host. Detach/abandon own their strong handles separately.
+        // Prune dropped observations so dead weak entries cannot accumulate.
+        self.0
+            .waits
+            .borrow_mut()
+            .retain(|_, wait| wait.upgrade().is_some());
+        if let Some(wait) = self
+            .0
+            .waits
+            .borrow()
+            .get(&group)
+            .and_then(WeakShared::upgrade)
+        {
+            return wait.boxed_local();
+        }
         let runtime = self.clone();
-        async move {
+        let owner = self.clone();
+        let drain = async move {
             let mut error = None;
             let mut failed_jobs = Vec::new();
             loop {
@@ -752,14 +1147,16 @@ impl ProcessHost for Runtime {
                     .map(|(&pid, _)| runtime.wait(pid))
                     .collect();
                 if batch.is_empty() {
-                    let job = runtime.0.groups.borrow().get(&group).and_then(|group| {
-                        group
-                            .runtime_jobs
-                            .iter()
-                            .copied()
-                            .find(|job| !failed_jobs.contains(job))
-                    });
-                    let Some(job) = job else {
+                    let jobs: Vec<_> = runtime
+                        .0
+                        .groups
+                        .borrow()
+                        .get(&group)
+                        .into_iter()
+                        .flat_map(|group| group.runtime_jobs.iter().copied())
+                        .filter(|job| !failed_jobs.contains(job))
+                        .collect();
+                    if jobs.is_empty() {
                         if let Some(error) = error {
                             return Err(error);
                         }
@@ -789,21 +1186,25 @@ impl ProcessHost for Runtime {
                         }
                         runtime.0.groups.borrow_mut().remove(&group);
                         return Ok(());
-                    };
-                    loop {
-                        match runtime.0.abi.wait_job(job) {
-                            Ok(_) => {
-                                if let Some(group) = runtime.0.groups.borrow_mut().get_mut(&group) {
-                                    group.runtime_jobs.retain(|retained| *retained != job);
+                    }
+                    // Each job owns its own readiness subscription. A lingering
+                    // member of an earlier job must not retain later empty jobs.
+                    let waits = jobs.into_iter().map(|job| {
+                        let runtime = runtime.clone();
+                        async move {
+                            loop {
+                                match runtime.try_reap_job(group, job) {
+                                    Ok(()) => return (job, Ok(())),
+                                    Err(AGAIN) => runtime.ready(4, job).await,
+                                    Err(errno) => return (job, Err(errno)),
                                 }
-                                break;
                             }
-                            Err(AGAIN) => runtime.ready(4, job).await,
-                            Err(errno) => {
-                                failed_jobs.push(job);
-                                error.get_or_insert(ProcessError::Runtime(errno));
-                                break;
-                            }
+                        }
+                    });
+                    for (job, result) in futures::future::join_all(waits).await {
+                        if let Err(errno) = result {
+                            failed_jobs.push(job);
+                            error.get_or_insert(ProcessError::Runtime(errno));
                         }
                     }
                     // A shell task may have admitted more children while a prior
@@ -811,12 +1212,32 @@ impl ProcessHost for Runtime {
                     // children and jobs before releasing the logical group.
                 } else {
                     for result in futures::future::join_all(batch).await {
-                        result?;
+                        if let Err(error) = result
+                            && !matches!(error, ProcessError::StartFailed(_))
+                        {
+                            return Err(error);
+                        }
                     }
                 }
             }
+        };
+        let wait = async move {
+            let result = drain.await;
+            if result.is_err()
+                && let Some(group) = owner.0.groups.borrow_mut().get_mut(&group)
+            {
+                group.cleanup_failed = true;
+            }
+            owner.0.waits.borrow_mut().remove(&group);
+            result
         }
         .boxed_local()
+        .shared();
+        self.0
+            .waits
+            .borrow_mut()
+            .insert(group, wait.downgrade().expect("new drain is unpolled"));
+        wait.boxed_local()
     }
     fn abandon_group(&self, group: GroupId, signal: i32) {
         let _ = self.kill_group(group, signal);

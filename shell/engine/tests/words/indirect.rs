@@ -117,7 +117,7 @@ fn indirect_selected_errors_preserve_nested_names_and_completed_effects() {
         );
         if source.contains("side:=") {
             assert_eq!(
-                rig.shell.state().borrow().variables.get("side").unwrap(),
+                rig.shell.state().borrow().bindings().get("side").unwrap(),
                 "written"
             );
         }
@@ -140,7 +140,6 @@ fn indirect_selected_syntax_fails_closed_and_skipped_operands_stay_lazy() {
         "${!p*}",
         "${!p@}",
         "${!a[0]}",
-        "${!a[@]}",
         "${!PIPESTATUS}",
         "${!1}",
         "${!#}",
@@ -168,7 +167,7 @@ fn indirect_selected_syntax_fails_closed_and_skipped_operands_stay_lazy() {
         rig.variable("p", target);
         assert_eq!(rig.run("args ${!p:-${side:=forbidden}}"), 2, "{target}");
         assert!(rig.calls.borrow().is_empty());
-        assert!(!rig.shell.state().borrow().variables.contains_key("side"));
+        assert!(!rig.shell.state().borrow().bindings().contains_key("side"));
     }
     check(
         r#"p=missing; args "${!p:-$(args selected; echo value)}" "${!p:-`args backtick; echo tick`}"; args "${missing-unset}"; args "${!p:=$(echo assigned)}" "$missing" "$p""#,
@@ -381,7 +380,7 @@ fn indirect_assignment_admits_the_resolved_key_before_a_selected_write() {
     rig.variable("p", &target);
     assert_eq!(rig.run("args ${!p:=v}"), 2);
     assert!(rig.calls.borrow().is_empty());
-    assert!(!rig.shell.state().borrow().variables.contains_key(&target));
+    assert!(!rig.shell.state().borrow().bindings().contains_key(&target));
     assert_eq!(rig.run("args recovered"), 0);
 }
 

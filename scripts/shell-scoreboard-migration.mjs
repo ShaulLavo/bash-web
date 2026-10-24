@@ -2,9 +2,17 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { migrationEnvironment, migrationEvidence, oraclePath } from "./shell-scoreboard-base.mjs";
+import {
+  assertInstrumentChanges,
+  baseBranchBaseline,
+  instrumentMigrationEvidence,
+  migrationEnvironment,
+  migrationEvidence,
+  oraclePath,
+} from "./shell-scoreboard-base.mjs";
 import {
   bytesDigest,
   compareScores,
@@ -12,7 +20,9 @@ import {
   validateScore,
   verifyOracle,
 } from "./shell-scoreboard.mjs";
+import { wasiCargoEnvironment, wasiSysrootCommand } from "./wasi-build.ts";
 import { drainGroup, killGroup } from "./shell-process-group.mjs";
+import { utilityNames } from "./utility-artifacts.ts";
 
 const root = resolve(process.argv[2] ?? ".");
 const ref = process.argv[3];
@@ -58,6 +68,146 @@ function run(command, args, cwd, extraEnv = {}) {
   });
 }
 
+const cargoBuild = (args, cwd, targetDir) =>
+  run(
+    "cargo",
+    ["build", "--locked", "--release", "--target", "wasm32-wasip1"].concat(args, ["-j2"]),
+    cwd,
+    { ...wasiCargoEnvironment(root, targetDir, env), CARGO_INCREMENTAL: "0" },
+  );
+const verify = (path) =>
+  run(
+    process.execPath,
+    [fileURLToPath(new URL("./verify-wasi-guests.ts", import.meta.url)), path],
+    root,
+  );
+
+async function buildTarget(checkout, targetDir, runner) {
+  const [prepareCommand, prepareArgs] = wasiSysrootCommand(root);
+  await run(prepareCommand, prepareArgs, root);
+  const manifest = ["--manifest-path", "shell/Cargo.toml"];
+  const release = resolve(targetDir, "wasm32-wasip1/release");
+  if (runner !== "waffle-node") {
+    await cargoBuild(
+      manifest.concat(["-p", "shell-engine", "--bin", "shell-engine"]),
+      checkout,
+      targetDir,
+    );
+    await verify(resolve(release, "shell-engine.wasm"));
+    return { wasm: resolve(release, "shell-engine.wasm") };
+  }
+  await cargoBuild(
+    manifest.concat([
+      "-p",
+      "shell-engine",
+      "--bin",
+      "shell-runtime",
+      "-p",
+      "shell-compat-fixtures",
+    ]),
+    checkout,
+    targetDir,
+  );
+  for (const name of ["shell-runtime", "argv-py", "printenv-py"])
+    await verify(resolve(release, `${name}.wasm`));
+  const cache = process.env.NPM_CONFIG_CACHE ?? process.env.npm_config_cache;
+  await run("npm", ["ci", "--ignore-scripts"], checkout, cache ? { NPM_CONFIG_CACHE: cache } : {});
+  await run(process.execPath, ["scripts/build-node-harness.ts"], checkout);
+  return { wasm: resolve(release, "shell-runtime.wasm"), fixtures: release };
+}
+
+async function cleanupTarget(scratch) {
+  // Never remove files from under an uninterruptible consumer.
+  assert.equal(children.size, 0, `target processes remain; scratch retained at ${scratch}`);
+  await rm(scratch, { recursive: true, force: true });
+}
+
+async function targetCheckout(kind, paths) {
+  const scratchRoot = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
+  await mkdir(scratchRoot, { recursive: true });
+  const scratch = await mkdtemp(resolve(scratchRoot, `audit-${kind}-migration-`));
+  const checkout = resolve(scratch, "target");
+  const archive = resolve(scratch, "target.tar");
+  try {
+    await mkdir(checkout);
+    await run("git", ["archive", "--format=tar", `--output=${archive}`, ref].concat(paths), root);
+    await run("tar", ["-xf", archive, "-C", checkout], scratch);
+    await rm(archive);
+    return { scratch, checkout, targetDir: resolve(scratch, "cargo-target") };
+  } catch (error) {
+    await cleanupTarget(scratch);
+    throw error;
+  }
+}
+
+async function rescoreUnderCandidateInstrument(candidate) {
+  const { baseline, receipt } = instrumentMigrationEvidence(root, ref, candidate);
+  const { scratch, checkout, targetDir } = await targetCheckout("instrument", [
+    "shell",
+    "rust-toolchain.toml",
+  ]);
+  try {
+    const [prepareCommand, prepareArgs] = wasiSysrootCommand(root);
+    await run(prepareCommand, prepareArgs, root);
+    const utilities = existsSync(resolve(checkout, "shell/utilities/Cargo.toml"))
+      ? utilityNames
+      : [];
+    const binaries = ["shell-runtime"].concat(utilities);
+    await cargoBuild(
+      ["--manifest-path", "shell/Cargo.toml", "-p", "shell-engine"]
+        .concat(utilities.length ? ["-p", "shell-utilities"] : [])
+        .concat(binaries.flatMap((name) => ["--bin", name])),
+      checkout,
+      targetDir,
+    );
+    const release = resolve(targetDir, "wasm32-wasip1/release");
+    const wasm = resolve(release, "shell-runtime.wasm");
+    for (const name of binaries) await verify(resolve(release, `${name}.wasm`));
+    await cargoBuild(
+      ["--manifest-path", resolve(root, "shell/Cargo.toml"), "-p", "shell-compat-fixtures"],
+      root,
+      targetDir,
+    );
+    for (const name of ["argv-py", "printenv-py"]) await verify(resolve(release, `${name}.wasm`));
+    await run(process.execPath, ["scripts/build-node-harness.ts"], root);
+    const binaryHash = bytesDigest(await readFile(wasm));
+    const output = resolve(scratch, "target-under-candidate-instrument.json");
+    await run(process.execPath, ["scripts/bash-compat.mjs"], root, {
+      BASH_COMPAT_MODE: "frozen",
+      BASH_COMPAT_ENGINES: "own-shell",
+      BASH_COMPAT_JOBS: process.env.BASH_COMPAT_JOBS ?? "4",
+      BASH_COMPAT_TIMEOUT_MS: String(candidate.environment.timeoutMs),
+      BASH_COMPAT_SKIP_BUILD: "1",
+      BASH_COMPAT_RECORD: "1",
+      BASH_COMPAT_SHELL_WASM: wasm,
+      BASH_COMPAT_FIXTURE_DIR: release,
+      BASH_COMPAT_UTILITY_DIR: utilities.length ? release : undefined,
+      BASH_COMPAT_OUT: output,
+      BASH_COMPAT_SCRATCH: scratch,
+    });
+    assert.equal(
+      bytesDigest(await readFile(wasm)),
+      binaryHash,
+      "target binary changed while scoring",
+    );
+    const rescored = JSON.parse(await readFile(output, "utf8"));
+    validateScore(candidate, rescored);
+    assertInstrumentChanges(baseline, rescored, receipt);
+    console.error(
+      `[instrument-migration-proof] ${JSON.stringify({
+        baseRef: ref,
+        engineSha256: binaryHash,
+        from: receipt.from.environment,
+        to: receipt.to.environment,
+        changes: receipt.changes.length,
+      })}`,
+    );
+    return rescored;
+  } finally {
+    await cleanupTarget(scratch);
+  }
+}
+
 async function migrate() {
   assert.equal(
     process.argv.length,
@@ -67,43 +217,19 @@ async function migrate() {
   const candidateBytes = await readFile(resolve(root, oraclePath));
   const candidate = JSON.parse(candidateBytes);
   verifyOracle(candidate);
-  const { pins, oracle, baseline } = migrationEvidence(root, ref, candidate);
   const candidatePins = JSON.parse(await readFile(resolve(root, "sources.lock.json"), "utf8"));
   assert.equal(
     candidatePins.shellScoreboard.oracleSha256,
     bytesDigest(candidateBytes),
     "candidate oracle checksum",
   );
+  if (baseBranchBaseline(root, ref)?.identity.oracle === candidate.identity.oracle)
+    return rescoreUnderCandidateInstrument(candidate);
+  const { pins, oracle, baseline } = migrationEvidence(root, ref, candidate);
   assert.notEqual(candidate.identity.oracle, oracle.identity.oracle, "oracle did not change");
-  const scratchRoot = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
-  await mkdir(scratchRoot, { recursive: true });
-  const scratch = await mkdtemp(resolve(scratchRoot, "audit-oracle-migration-"));
+  const { scratch, checkout, targetDir } = await targetCheckout("oracle", []);
   try {
-    const checkout = resolve(scratch, "target");
-    const targetDir = resolve(scratch, "cargo-target");
-    const archive = resolve(scratch, "target.tar");
-    await mkdir(checkout);
-    await run("git", ["archive", "--format=tar", `--output=${archive}`, ref], root);
-    await run("tar", ["-xf", archive, "-C", checkout], scratch);
-    await rm(archive);
-    await run(
-      "cargo",
-      [
-        "build",
-        "--locked",
-        "--release",
-        "--target",
-        "wasm32-wasip1",
-        "--manifest-path",
-        "shell/Cargo.toml",
-        "-p",
-        "shell-engine",
-        "-j2",
-      ],
-      checkout,
-      { CARGO_TARGET_DIR: targetDir, CARGO_INCREMENTAL: "0" },
-    );
-    const wasm = resolve(targetDir, "wasm32-wasip1/release/shell-engine.wasm");
+    const { wasm, fixtures } = await buildTarget(checkout, targetDir, oracle.environment.runner);
     const binaryHash = bytesDigest(await readFile(wasm));
     const score = async (label) => {
       const output = resolve(scratch, `${label}.json`);
@@ -113,8 +239,9 @@ async function migrate() {
         BASH_COMPAT_JOBS: "4",
         BASH_COMPAT_TIMEOUT_MS: String(oracle.environment.timeoutMs),
         BASH_COMPAT_SKIP_BUILD: "1",
-        BASH_COMPAT_RECORD: "1", // Collection only: explicit validation and comparisons follow below.
+        BASH_COMPAT_RECORD: "1",
         BASH_COMPAT_SHELL_WASM: wasm,
+        ...(fixtures ? { BASH_COMPAT_FIXTURE_DIR: fixtures } : {}),
         BASH_COMPAT_OUT: output,
         BASH_COMPAT_SCRATCH: scratch,
       });
@@ -158,9 +285,7 @@ async function migrate() {
     console.error(`Verified target ${ref} under original and corrected oracles`);
     return corrected;
   } finally {
-    // Never remove files from under an uninterruptible consumer; surface its cleanup location.
-    assert.equal(children.size, 0, `target processes remain; scratch retained at ${scratch}`);
-    await rm(scratch, { recursive: true, force: true });
+    await cleanupTarget(scratch);
   }
 }
 

@@ -6,6 +6,7 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs
 import { availableParallelism } from "node:os";
 import { basename, resolve } from "node:path";
 import { Worker } from "node:worker_threads";
+import { buildWasiShell } from "./wasi-build.ts";
 import { pythonHelpers } from "./bash-compat-helpers.mjs";
 import {
   bashStderrTransport,
@@ -61,7 +62,8 @@ const engines = {
   "own-shell": {
     modulePath: resolve(
       root,
-      process.env.BASH_COMPAT_SHELL_WASM ?? ".build/shell/wasm32-wasip1/release/shell-engine.wasm",
+      process.env.BASH_COMPAT_SHELL_WASM ??
+        `${process.env.CARGO_TARGET_DIR ?? ".build/shell"}/wasm32-wasip1/release/shell-runtime.wasm`,
     ),
   },
 };
@@ -512,26 +514,7 @@ async function prepareCorpus() {
 
 function prepareEngines() {
   if (process.env.BASH_COMPAT_SKIP_BUILD === "1") return;
-  execFileSync(
-    "cargo",
-    [
-      "build",
-      "--locked",
-      "--release",
-      "--target",
-      "wasm32-wasip1",
-      "--manifest-path",
-      "shell/Cargo.toml",
-      "-p",
-      "shell-engine",
-      "-j2",
-    ],
-    {
-      cwd: root,
-      stdio: "inherit",
-      env: { ...process.env, CARGO_TARGET_DIR: resolve(root, ".build/shell") },
-    },
-  );
+  buildWasiShell();
 }
 
 async function loadOilsCases(corpus) {
@@ -612,6 +595,35 @@ async function loadBrushCases() {
 
 // Secondary signal: Bashkit's own bash spec cases, parsed like its spec_runner.rs.
 // Files ported from Oils or just-bash are left out: they duplicate other corpora.
+function parseBashkitCases(file, lines) {
+  const cases = [];
+  let current;
+  for (const [index, line] of lines.entries()) {
+    if (line.startsWith("### ")) {
+      const directive = line.slice(4).trim();
+      if (directive === "expect" || directive === "end") current = undefined;
+      else if (!/^(exit_code|skip|bash_diff|paused_time)\b/.test(directive)) {
+        current = {
+          corpus: "bashkit-suite",
+          file: basename(file, ".test.sh"),
+          line: index + 1,
+          name: directive,
+          code: "",
+        };
+        cases.push(current);
+      }
+      continue;
+    }
+    if (!current) continue;
+    if (line.startsWith("# ") && !current.code && !current.described) {
+      current.described = true;
+      continue;
+    }
+    current.code += line + "\n";
+  }
+  return cases;
+}
+
 async function loadBashkitCases() {
   if (!corpusNames.includes("bashkit-suite")) return [];
   const directory = resolve(bashkitCorpus, "crates/bashkit/tests/spec_cases/bash");
@@ -622,30 +634,7 @@ async function loadBashkitCases() {
   const cases = [];
   for (const file of files) {
     const lines = (await corpusText("bashkit-suite", file, resolve(directory, file))).split("\n");
-    let current;
-    for (const [index, line] of lines.entries()) {
-      if (line.startsWith("### ")) {
-        const directive = line.slice(4).trim();
-        if (directive === "expect" || directive === "end") current = undefined;
-        else if (!/^(exit_code|skip|bash_diff|paused_time)\b/.test(directive)) {
-          current = {
-            corpus: "bashkit-suite",
-            file: basename(file, ".test.sh"),
-            line: index + 1,
-            name: directive,
-            code: "",
-          };
-          cases.push(current);
-        }
-        continue;
-      }
-      if (!current) continue;
-      if (line.startsWith("# ") && !current.code && !current.described) {
-        current.described = true;
-        continue;
-      }
-      current.code += line + "\n";
-    }
+    cases.push(...parseBashkitCases(file, lines));
   }
   for (const item of cases) delete item.described;
   return cases.filter((item) => item.code.trim());
@@ -753,6 +742,14 @@ class Pool {
         engine: this.engine.startsWith("bashkit") ? "bashkit" : this.engine,
         modulePath: engines[this.engine].modulePath,
         scratch,
+        fixtureDirectory: resolve(
+          root,
+          process.env.BASH_COMPAT_FIXTURE_DIR ??
+            `${process.env.CARGO_TARGET_DIR ?? ".build/shell"}/wasm32-wasip1/release`,
+        ),
+        utilityDirectory: process.env.BASH_COMPAT_UTILITY_DIR
+          ? resolve(root, process.env.BASH_COMPAT_UTILITY_DIR)
+          : undefined,
         tmp: virtualTmp,
         home: virtualHome,
         env: { HOME: virtualHome, TMP: virtualTmp, SH: "bash", LC_ALL: "C.UTF-8" },
@@ -940,7 +937,7 @@ function buildEvidence({ bashVersion, cases, spots, inventories, inventoryNames 
     oilsExcludedFiles: excludedFiles,
     engines: {
       "own-shell":
-        "Original shell-engine CLI, wasm32-wasip1, in-process fixture ProcessHost on node:wasi; no browser integration",
+        "Production shell-runtime guest, wasm32-wasip1, on Waffle's Node runtime with fixture guests; no browser terminal",
     },
     corpora,
     oilsByCategory: Object.fromEntries(
@@ -1057,12 +1054,21 @@ const packResult = (result) => ({
 function runtimeEnvironment() {
   return {
     target: "wasm32-wasip1",
-    runner: "node:wasi",
-    nodeVersion: "v26.7.0",
-    env: { HOME: virtualHome, TMP: virtualTmp, PWD: virtualTmp, SH: "bash", LC_ALL: "C.UTF-8" },
+    runner: "waffle-node",
+    nodeVersion: "v26.12.1",
+    shell: "shell-runtime -c SCRIPT, the production runtime_proc guest",
+    env: {
+      PATH: "/usr/bin:/bin",
+      HOME: virtualHome,
+      TMP: virtualTmp,
+      PWD: virtualTmp,
+      SH: "bash",
+      LC_ALL: "C.UTF-8",
+    },
     stdin: "empty",
-    filesystem: "fresh MemoryFs, 16 MiB; no host preopens",
-    processHost: "InProcessHost, argv.py and printenv.py fixtures only",
+    filesystem:
+      "fresh Waffle filesystem per case, no persistence: working directory, /dev, /bin, /usr/bin, /usr/local/bin",
+    processHost: "Waffle process broker; argv.py and printenv.py fixture guests only",
     timeoutMs,
     outputLimitBytes: 4 * 1024 * 1024,
     normalization: [
@@ -1271,9 +1277,7 @@ async function runFrozen() {
     throw new Error("own-shell corpus regression; see gained/lost/newlyFailing cases above");
 }
 
-try {
-  await main();
-} finally {
+async function cleanup() {
   cancelled = true;
   killAll();
   await shutdown;
@@ -1282,4 +1286,10 @@ try {
   if (activeChildren.size)
     throw new Error(`compatibility consumers remain; scratch retained at ${scratch}`);
   await rm(scratch, { recursive: true, force: true });
+}
+
+try {
+  await main();
+} finally {
+  await cleanup();
 }

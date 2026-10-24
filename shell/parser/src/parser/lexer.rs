@@ -23,6 +23,8 @@ pub struct SpannedToken {
     /// checked for alias expansion too (bash `alias e='echo '`).
     pub after_blank_alias: bool,
     pub(crate) literal_escapes: Vec<LiteralEscape>,
+    /// Normalized token byte offsets of backtick openers, before conversion to `$(`.
+    pub(crate) backtick_offsets: Vec<usize>,
 }
 
 /// Maximum nesting depth for command substitution in the lexer.
@@ -143,6 +145,7 @@ pub struct Lexer<'a> {
     /// source text); this is where the input resumes after the body.
     heredoc_resume: Option<Position>,
     literal_escapes: Vec<LiteralEscape>,
+    backtick_offsets: Vec<usize>,
     boundary_scan_work: usize,
     /// Command text of the last `$(`/`<(` span that reached end of input,
     /// which bash parses before it notices the end of input.
@@ -192,11 +195,17 @@ impl<'a> Lexer<'a> {
             extglob_bang: true,
             heredoc_resume: None,
             literal_escapes: Vec::new(),
+            backtick_offsets: Vec::new(),
             boundary_scan_work: 0,
             unterminated_substitution: None,
             token_substitutions: Vec::new(),
             last_substitution_fused: false,
         }
+    }
+
+    pub(crate) fn start_at(&mut self, position: Position) {
+        self.chars = self.input[position.offset..].chars().peekable();
+        self.position = position;
     }
 
     pub(crate) fn limit_exceeded(&self) -> Option<crate::limits::LimitExceeded> {
@@ -233,6 +242,7 @@ impl<'a> Lexer<'a> {
     /// Get the next token from the input (without span info).
     pub fn next_token(&mut self) -> Option<Token> {
         self.literal_escapes.clear();
+        self.backtick_offsets.clear();
         self.skip_whitespace();
         self.next_token_inner()
     }
@@ -281,9 +291,7 @@ impl<'a> Lexer<'a> {
             self.chars.next()
         };
         if let Some(c) = ch {
-            if from_alias {
-                self.finish_used_aliases();
-            } else {
+            if !from_alias {
                 self.position.advance(c);
             }
             // The re-read rest of a here-document's command line is used
@@ -320,7 +328,7 @@ impl<'a> Lexer<'a> {
     pub(crate) fn alias_active(&self, name: &str) -> bool {
         self.alias_stack
             .iter()
-            .any(|(n, end, _)| n == name && self.alias_front > *end)
+            .any(|(n, _, _)| n == name)
     }
 
     /// Read `text`, the value of alias `name`, before the rest of the input.
@@ -503,9 +511,11 @@ impl<'a> Lexer<'a> {
     /// Get the next token with its source span.
     pub fn next_spanned_token(&mut self) -> Option<SpannedToken> {
         self.literal_escapes.clear();
+        self.backtick_offsets.clear();
         self.token_substitutions.clear();
         self.unterminated_substitution = None;
         self.skip_whitespace();
+        self.finish_used_aliases();
         let start = self.position;
         self.raw_buf.clear();
         let after_blank_alias = std::mem::take(&mut self.blank_alias_pending);
@@ -537,6 +547,7 @@ impl<'a> Lexer<'a> {
             plain,
             after_blank_alias,
             literal_escapes: std::mem::take(&mut self.literal_escapes),
+            backtick_offsets: std::mem::take(&mut self.backtick_offsets),
         })
     }
 
@@ -927,6 +938,7 @@ impl<'a> Lexer<'a> {
     /// to `word` as `$(cmd)`.
     fn read_backtick_into(&mut self, word: &mut String) -> Result<(), String> {
         self.advance(); // consume opening `
+        self.backtick_offsets.push(word.len());
         word.push_str("$(");
         // `` `(cmd)` `` must not read as `$((`.
         if self.peek_char() == Some('(') {
@@ -945,7 +957,7 @@ impl<'a> Lexer<'a> {
                 self.advance();
                 if let Some(next) = self.peek_char() {
                     if matches!(next, '$' | '`' | '\\' | '\n') {
-                        word.push(next);
+                        Self::push_backtick_escape(word, next);
                         self.advance();
                     } else {
                         word.push('\\');
@@ -964,6 +976,12 @@ impl<'a> Lexer<'a> {
         defer_backtick_syntax_error(word, body_start);
         word.push(')');
         Ok(())
+    }
+
+    fn push_backtick_escape(word: &mut String, ch: char) {
+        if ch != '\n' {
+            word.push(ch);
+        }
     }
 
     fn read_word_starting_with(&mut self, prefix: &str) -> Option<Token> {
@@ -1020,6 +1038,11 @@ impl<'a> Lexer<'a> {
                         self.advance(); // consume closing quote
                         closed = true;
                         break;
+                    }
+                    if c == '`' && quote_char == '"' {
+                        self.read_dquote_backtick_into(&mut word);
+                        has_quoted_expansion = true;
+                        continue;
                     }
                     if c == '\\' && quote_char == '"' {
                         self.advance();
@@ -1432,19 +1455,11 @@ impl<'a> Lexer<'a> {
         let quoted_dash =
             has_unquoted_glob && quoted_ranges.iter().any(|&(s, e)| word[s..e].contains('-'));
         if (quoted_glob || quoted_dash) && has_unquoted_glob {
-            return Some(Token::QuotedGlobWord(Self::mark_quoted_ranges(
-                &word,
-                &quoted_ranges,
-                &mut self.literal_escapes,
-            )));
+            return Some(self.quoted_glob(&word, &quoted_ranges));
         }
         if extglob_escaped && !has_unquoted_expansion && !has_quoted_expansion {
             // `@(a|'*')` with no match prints `@(a|*)` (quote removal).
-            return Some(Token::QuotedGlobWord(Self::mark_quoted_ranges(
-                &word,
-                &quoted_ranges,
-                &mut self.literal_escapes,
-            )));
+            return Some(self.quoted_glob(&word, &quoted_ranges));
         }
         if quoted_glob && !has_unquoted_expansion {
             return Some(Token::QuotedWord(word));
@@ -1521,13 +1536,9 @@ impl<'a> Lexer<'a> {
                 // Preserve quoted glob text as well as IFS boundaries; an
                 // empty unquoted substitution must not activate quoted `*`.
                 ranges.sort_unstable_by_key(|&(start, _)| start);
-                return Some(Token::QuotedGlobWord(Self::mark_quoted_ranges(
-                    &content,
-                    &ranges,
-                    &mut self.literal_escapes,
-                )));
+                return Some(self.quoted_glob(&content, &ranges));
             }
-            Self::apply_quote_markers(&mut content, ranges, &mut self.literal_escapes);
+            self.mark_current_quotes(&mut content, ranges);
             if !flags.has_unquoted_expansion && !flags.has_unquoted_glob && !has_empty_quoted {
                 // Nothing in it splits or globs: a quoted word whose
                 // markers only end names at quote boundaries.
@@ -1539,17 +1550,14 @@ impl<'a> Lexer<'a> {
             let mut ranges = flags.quoted_ranges;
             ranges.push((0, quoted_prefix_len));
             ranges.sort_unstable_by_key(|&(s, _)| s);
-            return Some(Token::QuotedGlobWord(Self::mark_quoted_ranges(
-                &content,
-                &ranges,
-                &mut self.literal_escapes,
-            )));
+            return Some(self.quoted_glob(&content, &ranges));
         }
 
         // Single-quoted strings are literal - no variable expansion. Quote-boundary
         // markers are only for parsed mixed words; LiteralWord keeps contents raw.
         // Also decode any NUL escape sentinels from continued double-quoted segments.
         self.literal_escapes.clear();
+        self.backtick_offsets.clear();
         Some(Token::LiteralWord(Self::strip_markers_decode_sentinels(
             &content,
         )))
@@ -1727,10 +1735,23 @@ impl<'a> Lexer<'a> {
     /// Add quote markers in one rebuild pass. Adjacent quoted ranges are
     /// equivalent to one quoted span. An empty range (`""$x`) keeps its
     /// marker pair: an empty quoted part still makes a field.
+    fn quoted_glob(&mut self, text: &str, ranges: &[(usize, usize)]) -> Token {
+        Token::QuotedGlobWord(Self::mark_quoted_ranges(
+            text, ranges, &mut self.literal_escapes, &mut self.backtick_offsets,
+        ))
+    }
+
+    fn mark_current_quotes(&mut self, text: &mut String, ranges: Vec<(usize, usize)>) {
+        Self::apply_quote_markers(
+            text, ranges, &mut self.literal_escapes, &mut self.backtick_offsets,
+        );
+    }
+
     fn apply_quote_markers(
         content: &mut String,
         mut ranges: Vec<(usize, usize)>,
         escapes: &mut Vec<LiteralEscape>,
+        backticks: &mut [usize],
     ) {
         if ranges.is_empty() {
             return;
@@ -1755,6 +1776,7 @@ impl<'a> Lexer<'a> {
             merged.push((start, end));
         }
 
+        super::file_substitution::remap_offsets(backticks, &merged);
         let mut marked = String::with_capacity(content.len() + merged.len() * 2);
         let mut mapping = EscapeMap::new(escapes);
         let mut cursor = 0;
@@ -2135,6 +2157,7 @@ impl<'a> Lexer<'a> {
     /// yet consumed) into `content` as `$(...)`.
     fn read_dquote_backtick_into(&mut self, content: &mut String) {
         self.advance(); // consume opening `
+        self.backtick_offsets.push(content.len());
         content.push_str("$(");
         if self.peek_char() == Some('(') {
             content.push(' ');
@@ -2290,15 +2313,11 @@ impl<'a> Lexer<'a> {
                     })
                 {
                     ranges.sort_unstable_by_key(|&(start, _)| start);
-                    return Some(Token::QuotedGlobWord(Self::mark_quoted_ranges(
-                        &content,
-                        &ranges,
-                        &mut self.literal_escapes,
-                    )));
+                    return Some(self.quoted_glob(&content, &ranges));
                 }
                 // Build marker-delimited quoted spans in one pass so hostile
                 // many-continuation words cannot trigger quadratic insertion work.
-                Self::apply_quote_markers(&mut content, ranges, &mut self.literal_escapes);
+                self.mark_current_quotes(&mut content, ranges);
                 if !flags.has_unquoted_expansion
                     && !flags.has_unquoted_glob
                     && !empty_quoted_beside_expansion
@@ -2313,11 +2332,7 @@ impl<'a> Lexer<'a> {
                 let mut ranges = flags.quoted_ranges;
                 ranges.push((0, quoted_prefix_len));
                 ranges.sort_unstable_by_key(|&(s, _)| s);
-                return Some(Token::QuotedGlobWord(Self::mark_quoted_ranges(
-                    &content,
-                    &ranges,
-                    &mut self.literal_escapes,
-                )));
+                return Some(self.quoted_glob(&content, &ranges));
             }
             return Some(Token::QuotedWord(content));
         }
@@ -2331,16 +2346,17 @@ impl<'a> Lexer<'a> {
     /// without having to undo an encoding or guess which slashes were source.
     #[cfg(test)]
     fn mark_quoted_ranges_for_test(s: &str, quoted_ranges: &[(usize, usize)]) -> String {
-        Self::mark_quoted_ranges(s, quoted_ranges, &mut Vec::new())
+        Self::mark_quoted_ranges(s, quoted_ranges, &mut Vec::new(), &mut [])
     }
 
     fn mark_quoted_ranges(
         s: &str,
         quoted_ranges: &[(usize, usize)],
         escapes: &mut Vec<LiteralEscape>,
+        backticks: &mut [usize],
     ) -> String {
         let mut marked = s.to_string();
-        Self::apply_quote_markers(&mut marked, quoted_ranges.to_vec(), escapes);
+        Self::apply_quote_markers(&mut marked, quoted_ranges.to_vec(), escapes, backticks);
         marked
     }
 

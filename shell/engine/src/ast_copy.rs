@@ -1,14 +1,14 @@
 //! Cooperative admission for synchronous parser-AST clones. Account for every
 //! owned allocation before the caller clones; never print or serialize the AST.
 use crate::{
+    exec::{Error, Work},
     executor::Cancel,
-    expand::{self, Work},
 };
 use shell_parser::parser::{
     ArithmeticForCommand, Assignment, AssignmentValue, CaseCommand, CaseItem, Command, CommandList,
     CompoundCommand, CoprocCommand, ForCommand, FunctionDef, IfCommand, ListOperator, ParameterOp,
-    Pipeline, Redirect, SelectCommand, SimpleCommand, TimeCommand, UntilCommand, WhileCommand,
-    Word, WordPart,
+    Pipeline, Redirect, SelectCommand, SimpleCommand, TestExpr, TimeCommand, UntilCommand,
+    WhileCommand, Word, WordPart,
 };
 use std::mem::size_of;
 
@@ -22,7 +22,7 @@ pub(crate) async fn admit(
     commands: &[Command],
     cancel: &Cancel,
     work: &mut Work,
-) -> Result<(), expand::Error> {
+) -> Result<(), Error> {
     work.checkpoint(cancel).await?;
     let mut stack = Vec::new();
     push_vec(&mut stack, commands, Visit::Commands, work)?;
@@ -217,8 +217,9 @@ pub(crate) async fn admit(
                         push_boxed_command(&mut stack, command, work)?;
                     }
                 }
-                CompoundCommand::Conditional(words) => {
-                    push_vec(&mut stack, words, Visit::Words, work)?;
+                CompoundCommand::Test(expression) => {
+                    work.admit_storage(size_of::<TestExpr>())?;
+                    push(&mut stack, Visit::Test(expression), work)?;
                 }
                 CompoundCommand::Coproc(CoprocCommand {
                     name,
@@ -229,6 +230,32 @@ pub(crate) async fn admit(
                     push_boxed_command(&mut stack, body, work)?;
                 }
             },
+            Visit::Test(expression) => match expression {
+                TestExpr::Word(word) => push(&mut stack, Visit::Word(word), work)?,
+                TestExpr::Unary { operator, operand } => {
+                    push(&mut stack, Visit::Text(operator), work)?;
+                    push(&mut stack, Visit::Word(operand), work)?;
+                }
+                TestExpr::Binary {
+                    left,
+                    operator,
+                    right,
+                } => {
+                    push(&mut stack, Visit::Text(operator), work)?;
+                    push(&mut stack, Visit::Word(left), work)?;
+                    push(&mut stack, Visit::Word(right), work)?;
+                }
+                TestExpr::Not(child) | TestExpr::Group(child) => {
+                    work.admit_storage(size_of::<TestExpr>())?;
+                    push(&mut stack, Visit::Test(child), work)?;
+                }
+                TestExpr::And(children) | TestExpr::Or(children) => {
+                    push_vec(&mut stack, children, Visit::Tests, work)?;
+                }
+            },
+            Visit::Tests(items) => {
+                visit_slice(&mut stack, items, Visit::Tests, Visit::Test, work)?;
+            }
             Visit::Case(CaseItem {
                 patterns,
                 commands,
@@ -266,6 +293,7 @@ pub(crate) async fn admit(
                     push_vec(&mut stack, elements, Visit::Words, work)?;
                 }
                 WordPart::CommandSubstitution(commands)
+                | WordPart::FileSubstitution(commands)
                 | WordPart::ProcessSubstitution {
                     commands,
                     is_input: _,
@@ -399,13 +427,15 @@ pub(crate) async fn command(
     command: &Command,
     cancel: &Cancel,
     work: &mut Work,
-) -> Result<(), expand::Error> {
+) -> Result<(), Error> {
     admit(std::slice::from_ref(command), cancel, work).await
 }
 
 enum Visit<'a> {
     Commands(&'a [Command]),
     Words(&'a [Word]),
+    Tests(&'a [TestExpr]),
+    Test(&'a TestExpr),
     Parts(&'a [WordPart]),
     Redirects(&'a [Redirect]),
     Assignments(&'a [Assignment]),
@@ -424,16 +454,12 @@ enum Visit<'a> {
     Text(&'a str),
 }
 
-fn admit_vec<T>(items: &[T], work: &mut Work) -> Result<(), expand::Error> {
+fn admit_vec<T>(items: &[T], work: &mut Work) -> Result<(), Error> {
     let bytes = items.len().checked_mul(size_of::<T>()).ok_or(2)?;
     work.admit_storage(bytes)
 }
 
-fn push<'a>(
-    stack: &mut Vec<Visit<'a>>,
-    visit: Visit<'a>,
-    work: &mut Work,
-) -> Result<(), expand::Error> {
+fn push<'a>(stack: &mut Vec<Visit<'a>>, visit: Visit<'a>, work: &mut Work) -> Result<(), Error> {
     if stack.len() == stack.capacity() {
         let capacity = stack.capacity().checked_mul(2).ok_or(2)?.max(1);
         let bytes = (capacity - stack.capacity())
@@ -442,7 +468,7 @@ fn push<'a>(
         work.admit_storage(bytes)?;
         stack
             .try_reserve_exact(capacity - stack.len())
-            .map_err(|_| expand::Error::Status(2))?;
+            .map_err(|_| Error::Status(2))?;
     }
     stack.push(visit);
     Ok(())
@@ -453,7 +479,7 @@ fn push_nonempty<'a, T>(
     items: &'a [T],
     visit: fn(&'a [T]) -> Visit<'a>,
     work: &mut Work,
-) -> Result<(), expand::Error> {
+) -> Result<(), Error> {
     if !items.is_empty() {
         push(stack, visit(items), work)?;
     }
@@ -465,7 +491,7 @@ fn push_vec<'a, T>(
     items: &'a [T],
     visit: fn(&'a [T]) -> Visit<'a>,
     work: &mut Work,
-) -> Result<(), expand::Error> {
+) -> Result<(), Error> {
     admit_vec(items, work)?;
     push_nonempty(stack, items, visit, work)
 }
@@ -476,7 +502,7 @@ fn visit_slice<'a, T>(
     rest: fn(&'a [T]) -> Visit<'a>,
     item: fn(&'a T) -> Visit<'a>,
     work: &mut Work,
-) -> Result<(), expand::Error> {
+) -> Result<(), Error> {
     if let Some((first, tail)) = items.split_first() {
         push_nonempty(stack, tail, rest, work)?;
         push(stack, item(first), work)?;
@@ -488,7 +514,7 @@ fn push_optional_text<'a>(
     stack: &mut Vec<Visit<'a>>,
     text: &'a Option<String>,
     work: &mut Work,
-) -> Result<(), expand::Error> {
+) -> Result<(), Error> {
     if let Some(text) = text {
         push(stack, Visit::Text(text), work)?;
     }
@@ -499,7 +525,7 @@ fn push_boxed_command<'a>(
     stack: &mut Vec<Visit<'a>>,
     command: &'a Command,
     work: &mut Work,
-) -> Result<(), expand::Error> {
+) -> Result<(), Error> {
     work.admit_storage(size_of::<Command>())?;
     push(stack, Visit::Command(command), work)
 }

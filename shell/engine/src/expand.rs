@@ -1,126 +1,37 @@
 //! Quote-aware fields adapted from Bashkit expansion.rs at the revision pinned
 //! in sources.lock.json. Protection and empty fields are structural, never data
 //! sentinels. Scalar parameter operands are lazy and bounded.
-//! Scalar trims and replacements use basic patterns; pathname globbing and substitutions remain unsupported.
+//! Scalar trims and replacements use basic patterns; argv and for-word lists
+//! also expand pathname patterns through the shell filesystem.
 use crate::{
-    executor::{Budget, Cancel},
+    executor::Cancel,
     state::{SharedState, State},
 };
-use futures::{FutureExt, future::LocalBoxFuture};
+use futures::FutureExt;
 use shell_parser::parser::{ParameterOp, Word, WordPart};
 
+mod array_slice;
 mod braces;
-mod case;
+use crate::state::CaseLocale as Locale;
 mod case_pattern;
 mod command;
+mod glob;
+pub(crate) use glob::{completion_matches, sort as sort_candidates};
 mod ifs;
+mod indices;
 mod indirect;
 mod operand;
-mod pattern;
+pub(crate) mod pattern;
 mod positional;
+mod printable;
 mod replacement;
+mod tilde;
+mod transformation;
+pub(crate) use printable::Printability;
 use std::{borrow::Cow, collections::BTreeSet};
+pub(crate) use tilde::assignment;
 
-/// Fatal parameter errors remain distinct from ordinary unsupported/limit errors.
-/// The interpreter supplies the shell environment's status and diagnostic line.
-pub(crate) enum Error {
-    Status(i32),
-    /// A scalar write could not resolve its reference within the supported
-    /// depth. Unlike an ordinary nonzero command, it ends this reader unit.
-    AssignmentDepth,
-    SpecialAssignment {
-        name: String,
-        line: Option<usize>,
-    },
-    Readonly {
-        name: String,
-        line: Option<usize>,
-        expansion: bool,
-    },
-    Arithmetic {
-        message: &'static str,
-        line: Option<usize>,
-        expansion: bool,
-    },
-    ShellBoundary {
-        stage: ShellBoundaryStage,
-        line: Option<usize>,
-    },
-    BadSubstitution {
-        message: &'static str,
-        line: Option<usize>,
-    },
-    Indirect {
-        name: String,
-        unset: bool,
-        line: Option<usize>,
-    },
-    Unbound {
-        name: String,
-        line: Option<usize>,
-    },
-    Parameter {
-        name: String,
-        message: String,
-        line: Option<usize>,
-    },
-}
-#[derive(Clone, Copy)]
-pub(crate) enum ShellBoundaryStage {
-    Word,
-    Expansion,
-}
-impl Error {
-    pub(crate) fn in_expansion(self) -> Self {
-        match self {
-            Self::Readonly { name, line, .. } => Self::Readonly {
-                name,
-                line,
-                expansion: true,
-            },
-            Self::Arithmetic { message, line, .. } => Self::Arithmetic {
-                message,
-                line,
-                expansion: true,
-            },
-            other => other,
-        }
-    }
-    pub(crate) fn at_line(self, line: Option<usize>) -> Self {
-        match self {
-            Self::SpecialAssignment { name, .. } => Self::SpecialAssignment { name, line },
-            Self::Readonly {
-                name, expansion, ..
-            } => Self::Readonly {
-                name,
-                line,
-                expansion,
-            },
-            Self::Arithmetic {
-                message, expansion, ..
-            } => Self::Arithmetic {
-                message,
-                expansion,
-                line,
-            },
-            Self::ShellBoundary { stage, .. } => Self::ShellBoundary { stage, line },
-            Self::BadSubstitution { message, .. } => Self::BadSubstitution { message, line },
-            Self::Parameter { name, message, .. } => Self::Parameter {
-                name,
-                message,
-                line,
-            },
-            Self::Indirect { name, unset, .. } => Self::Indirect { name, unset, line },
-            Self::Unbound { name, .. } => Self::Unbound { name, line },
-            status => status,
-        }
-    }
-}
-impl From<i32> for Error {
-    fn from(code: i32) -> Self {
-        Self::Status(code)
-    }
-}
+pub(crate) use crate::exec::{Error, ShellBoundaryStage};
 
 pub(crate) async fn admit_assignment(
     state: &SharedState,
@@ -141,16 +52,11 @@ pub(crate) async fn admit_assignment(
     result
 }
 
-/// Command-wide work accounting, including words that disappear and empty list
-/// elements. The caller supplies source + expansion + argument capacity as the
-/// step ceiling; every character, element and part also yields cooperatively.
-/// Diagnostics share the remaining command field capacity with argv/declarations.
+/// Expansion policy and command-substitution runner over neutral admission.
+/// Keep feature state inline and preserve its lifetime through the whole command.
 pub(crate) struct Work {
-    remaining: usize,
-    budget: Budget,
-    parse_remaining: usize,
-    storage_remaining: usize,
-    fields_remaining: usize,
+    execution: crate::exec::Work,
+    frame_scope: Option<crate::exec::Scope>,
     arithmetic_depth: usize,
     arithmetic_names: Vec<(String, u64)>,
     pub(crate) arithmetic_writes: u64,
@@ -159,19 +65,46 @@ pub(crate) struct Work {
     /// Status of the last command substitution this command ran.
     pub(crate) substitution_status: Option<i32>,
 }
+impl std::ops::Deref for Work {
+    type Target = crate::exec::Work;
+    fn deref(&self) -> &Self::Target {
+        &self.execution
+    }
+}
+impl std::ops::DerefMut for Work {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.execution
+    }
+}
 impl Work {
     pub(crate) fn new(steps: usize, storage: usize, fields: usize) -> Self {
         Self {
-            remaining: steps,
-            budget: Budget::default(),
-            parse_remaining: steps,
-            storage_remaining: storage,
-            fields_remaining: fields,
+            execution: crate::exec::Work::new(steps, storage, fields),
+            frame_scope: None,
             arithmetic_depth: 0,
             arithmetic_names: Vec::new(),
             arithmetic_writes: 0,
             substitutions: None,
             substitution_status: None,
+        }
+    }
+    pub(crate) fn with_frame_scope(mut self, scope: crate::exec::Scope) -> Self {
+        self.frame_scope = Some(scope);
+        self
+    }
+    fn frame<'a, T: 'a, F>(
+        &'a mut self,
+        build: impl FnOnce(&'a mut Self) -> F,
+    ) -> crate::exec::ResultFuture<'a, T>
+    where
+        F: std::future::Future<Output = Result<T, Error>> + 'a,
+    {
+        if let Some(scope) = self.frame_scope.clone() {
+            return scope.frame(build(self), |code| Err(code.into()));
+        }
+        match self.admit_storage(std::mem::size_of::<F>()) {
+            Ok(()) => futures::future::Either::Right(build(self).boxed_local()),
+            Err(error) => futures::future::Either::Left(futures::future::ready(Err(error))),
         }
     }
     pub(crate) fn enter_arithmetic(&mut self) -> Result<(), Error> {
@@ -194,15 +127,14 @@ impl Work {
             if self.arithmetic_names[index].0 == name
                 && self.arithmetic_names[index].1 == self.arithmetic_writes
             {
-                return crate::arithmetic::fault("expression recursion level exceeded", self);
+                return crate::exec::fault("expression recursion level exceeded", self);
             }
         }
         if self.arithmetic_names.len() == self.arithmetic_names.capacity() {
             let capacity = self.arithmetic_names.capacity().saturating_mul(2).max(1);
-            self.admit_storage(
-                (capacity - self.arithmetic_names.capacity())
-                    * std::mem::size_of::<(String, u64)>(),
-            )?;
+            let bytes = (capacity - self.arithmetic_names.capacity())
+                * std::mem::size_of::<(String, u64)>();
+            self.admit_storage(bytes)?;
             self.arithmetic_names
                 .try_reserve_exact(capacity - self.arithmetic_names.len())
                 .map_err(|_| Error::Status(2))?;
@@ -214,49 +146,6 @@ impl Work {
     }
     pub(crate) fn leave_scalar_arithmetic(&mut self) {
         self.arithmetic_names.pop();
-    }
-    pub(crate) fn admit_storage(&mut self, bytes: usize) -> Result<(), Error> {
-        if bytes > self.storage_remaining {
-            return Err(2.into());
-        }
-        self.storage_remaining -= bytes;
-        Ok(())
-    }
-    fn storage_left(&self) -> usize {
-        self.storage_remaining
-    }
-    /// Return storage admitted for a temporary once it has been dropped. Only
-    /// freed memory: retained values stay charged for the whole command.
-    fn release_storage(&mut self, bytes: usize) {
-        self.storage_remaining = self.storage_remaining.saturating_add(bytes);
-    }
-    pub(crate) fn consume_scalar_field(&mut self) {
-        self.fields_remaining = self.fields_remaining.saturating_sub(1);
-    }
-    async fn admit_parse(&mut self, bytes: usize, cancel: &Cancel) -> Result<(), Error> {
-        if bytes > self.parse_remaining {
-            return Err(2.into());
-        }
-        self.parse_remaining -= bytes;
-        // Reserve cumulative parser work before its synchronous, nonrecursive
-        // scalar-token call. No parser fuel/fallback is relied on for admission.
-        for _ in 0..bytes.saturating_mul(8) {
-            self.checkpoint(cancel).await?;
-        }
-        Ok(())
-    }
-    pub(crate) async fn checkpoint(&mut self, cancel: &Cancel) -> Result<(), Error> {
-        if cancel.is_cancelled() {
-            return Err(130.into());
-        }
-        if self.remaining == 0 {
-            return Err(2.into());
-        }
-        self.remaining -= 1;
-        self.budget
-            .checkpoint(cancel)
-            .await
-            .map_err(|_| Error::Status(130))
     }
 }
 
@@ -302,7 +191,7 @@ fn admit_vec_slot<T>(value: &mut Vec<T>, work: &mut Work) -> Result<(), Error> {
 }
 
 #[derive(Default)]
-struct Ifs {
+pub(crate) struct Ifs {
     small: [char; 3],
     small_len: usize,
     chars: BTreeSet<char>,
@@ -321,7 +210,7 @@ impl Ifs {
     ) -> Result<(), Error> {
         State::admit_scalar_access(state, "IFS", cancel, work).await
     }
-    async fn new(
+    pub(crate) async fn new(
         state: &SharedState,
         cancel: &Cancel,
         max: usize,
@@ -370,7 +259,7 @@ impl Ifs {
     fn is_empty(&self) -> bool {
         self.small_len == 0 && self.chars.is_empty()
     }
-    fn contains(&self, ch: char) -> bool {
+    pub(crate) fn contains(&self, ch: char) -> bool {
         self.small[..self.small_len].contains(&ch) || self.chars.contains(&ch)
     }
     fn insert(&mut self, ch: char, work: &mut Work) -> Result<(), Error> {
@@ -430,7 +319,11 @@ impl Protection {
 /// Adjacent text with identical protection shares one allocation, including
 /// the operand scanner's character-sized pieces.
 enum Segment {
-    Text { value: String, protected: bool },
+    Text {
+        value: String,
+        protected: bool,
+        glob_protected: bool,
+    },
     Empty,
     ListSeparator(char),
 }
@@ -456,12 +349,20 @@ impl Segments {
             .try_reserve_exact(capacity - self.parts.len())
             .map_err(|_| Error::Status(2))
     }
-    fn character(&mut self, ch: char, protected: bool, work: &mut Work) -> Result<(), Error> {
+    fn character(
+        &mut self,
+        ch: char,
+        protected: bool,
+        glob_protected: bool,
+        work: &mut Work,
+    ) -> Result<(), Error> {
         if let Some(Segment::Text {
             value,
             protected: previous,
+            glob_protected: previous_glob,
         }) = self.parts.last_mut()
             && *previous == protected
+            && *previous_glob == glob_protected
         {
             if self.account_storage {
                 admit_string_growth(value, ch.len_utf8(), work)?;
@@ -478,7 +379,11 @@ impl Segments {
         } else {
             ch.to_string()
         };
-        self.parts.push(Segment::Text { value, protected });
+        self.parts.push(Segment::Text {
+            value,
+            protected,
+            glob_protected,
+        });
         Ok(())
     }
     fn empty(&mut self, work: &mut Work) -> Result<(), Error> {
@@ -487,19 +392,6 @@ impl Segments {
             self.parts.push(Segment::Empty);
         }
         Ok(())
-    }
-    async fn split(
-        self,
-        ifs: Ifs,
-        max_bytes: usize,
-        max_fields: usize,
-        work: &mut Work,
-        cancel: &Cancel,
-    ) -> Result<Vec<String>, Error> {
-        Ok(self
-            .collect(ifs, Fields::new(max_bytes, max_fields), work, cancel)
-            .await?
-            .out)
     }
     async fn join(
         self,
@@ -546,6 +438,18 @@ impl Segments {
 struct Fields {
     out: Vec<String>,
     current: String,
+    pathname: bool,
+    /// Byte protections for pathname candidates only, keyed by `out` index.
+    /// Fields without an unprotected `*`, `?` or `[` keep no mask.
+    protections: Vec<(usize, Vec<bool>)>,
+    /// The current field's protection as (bytes, protected) runs, so plain
+    /// argv pays per quote boundary rather than per byte.
+    current_runs: Vec<(usize, bool)>,
+    current_magic: bool,
+    /// Admitted words with extglob on also flag `@(`, `+(` and `!(` groups,
+    /// which pathname expansion rejects instead of treating them literally.
+    extglob_groups: bool,
+    group_prefix: bool,
     present: bool,
     whitespace: bool,
     leading: bool,
@@ -563,6 +467,12 @@ impl Fields {
         Self {
             out: Vec::new(),
             current: String::new(),
+            pathname: false,
+            protections: Vec::new(),
+            current_runs: Vec::new(),
+            current_magic: false,
+            extglob_groups: false,
+            group_prefix: false,
             present: false,
             whitespace: false,
             leading: true,
@@ -588,9 +498,44 @@ impl Fields {
                 admit_vec_slot(&mut self.out, work)?;
             }
             self.out.push(std::mem::take(&mut self.current));
+            if self.pathname {
+                self.keep_protection(work)?;
+            }
         }
         self.count += 1;
         self.present = false;
+        Ok(())
+    }
+    /// Only pathname candidates expand their runs into a byte mask.
+    fn keep_protection(&mut self, work: &mut Work) -> Result<(), Error> {
+        self.group_prefix = false;
+        if !std::mem::take(&mut self.current_magic) {
+            self.current_runs.clear();
+            return Ok(());
+        }
+        let index = self.out.len().checked_sub(1).ok_or(2)?;
+        let mut mask = Vec::new();
+        admit_vec_exact(&mut mask, self.out[index].len(), work)?;
+        for &(bytes, protected) in &self.current_runs {
+            mask.resize(mask.len() + bytes, protected);
+        }
+        self.current_runs.clear();
+        admit_vec_slot(&mut self.protections, work)?;
+        self.protections.push((index, mask));
+        Ok(())
+    }
+    fn protect(&mut self, bytes: usize, protected: bool, work: &mut Work) -> Result<(), Error> {
+        if let Some((length, last)) = self.current_runs.last_mut()
+            && *last == protected
+        {
+            *length += bytes;
+            return Ok(());
+        }
+        // Unadmitted argv charges neither its text nor these per-segment runs.
+        if self.account_storage {
+            admit_vec_slot(&mut self.current_runs, work)?;
+        }
+        self.current_runs.push((bytes, protected));
         Ok(())
     }
     async fn segment(
@@ -600,7 +545,7 @@ impl Fields {
         work: &mut Work,
         cancel: &Cancel,
     ) -> Result<(), Error> {
-        let (value, protected) = match part {
+        let (value, protected, glob_protected) = match part {
             Segment::Empty => {
                 work.checkpoint(cancel).await?;
                 self.text_boundary(work)?;
@@ -608,10 +553,14 @@ impl Fields {
             }
             Segment::ListSeparator(ch) => {
                 work.checkpoint(cancel).await?;
-                self.character(ch, ifs.delimiter(ch), work)?;
+                self.character(ch, ifs.delimiter(ch), false, work)?;
                 return self.join_checkpoints(work, cancel).await;
             }
-            Segment::Text { value, protected } => (value, protected),
+            Segment::Text {
+                value,
+                protected,
+                glob_protected,
+            } => (value, protected, glob_protected),
         };
         // Text segments are nonempty; their first character pays for entry.
         for ch in value.chars() {
@@ -621,7 +570,7 @@ impl Fields {
             } else {
                 ifs.delimiter(ch)
             };
-            self.character(ch, delimiter, work)?;
+            self.character(ch, delimiter, glob_protected, work)?;
             self.join_checkpoints(work, cancel).await?;
         }
         Ok(())
@@ -645,16 +594,22 @@ impl Fields {
             return Err(2.into());
         }
         if self.joined && !self.present && self.count != 0 {
-            self.append(' ', work)?;
+            self.append(' ', true, work)?;
         }
         self.present = true;
         Ok(())
     }
-    fn character(&mut self, ch: char, delimiter: Delimiter, work: &mut Work) -> Result<(), Error> {
+    fn character(
+        &mut self,
+        ch: char,
+        delimiter: Delimiter,
+        glob_protected: bool,
+        work: &mut Work,
+    ) -> Result<(), Error> {
         match delimiter {
             Delimiter::Whitespace => self.whitespace = true,
             Delimiter::Other => self.non_whitespace(work)?,
-            Delimiter::Text => self.text(ch, work)?,
+            Delimiter::Text => self.text(ch, glob_protected, work)?,
         }
         Ok(())
     }
@@ -670,11 +625,11 @@ impl Fields {
         }
         Ok(())
     }
-    fn text(&mut self, ch: char, work: &mut Work) -> Result<(), Error> {
+    fn text(&mut self, ch: char, glob_protected: bool, work: &mut Work) -> Result<(), Error> {
         self.text_boundary(work)?;
-        self.append(ch, work)
+        self.append(ch, glob_protected, work)
     }
-    fn append(&mut self, ch: char, work: &mut Work) -> Result<(), Error> {
+    fn append(&mut self, ch: char, glob_protected: bool, work: &mut Work) -> Result<(), Error> {
         if ch.len_utf8() > self.max_bytes.saturating_sub(self.bytes) {
             return Err(2.into());
         }
@@ -686,6 +641,13 @@ impl Fields {
         }
         self.bytes += ch.len_utf8();
         self.current.push(ch);
+        if self.pathname {
+            self.protect(ch.len_utf8(), glob_protected, work)?;
+            let active = !glob_protected;
+            self.current_magic |=
+                active && (matches!(ch, '*' | '?' | '[') || (ch == '(' && self.group_prefix));
+            self.group_prefix = self.extglob_groups && active && matches!(ch, '@' | '+' | '!');
+        }
         Ok(())
     }
     fn end_group(&mut self, work: &mut Work) -> Result<(), Error> {
@@ -727,6 +689,32 @@ impl Captured {
     }
 }
 
+#[derive(Clone, Copy)]
+struct OperandContext<'a> {
+    state: &'a SharedState,
+    quoted: bool,
+    scalar: bool,
+    depth: usize,
+}
+
+#[derive(Clone, Copy)]
+struct TransformContext<'a> {
+    state: &'a SharedState,
+    protected: bool,
+    depth: usize,
+}
+
+#[derive(Clone, Copy)]
+struct ExpansionOptions {
+    max_bytes: usize,
+    max_fields: usize,
+    max_raw: usize,
+    scalar: bool,
+    pathname: bool,
+    admitted: bool,
+    tilde: tilde::Context,
+}
+
 struct Expansion<'a> {
     segments: Segments,
     captured: Option<Captured>,
@@ -735,6 +723,8 @@ struct Expansion<'a> {
     pattern_context: bool,
     // Diagnostics leave pattern syntax but retain enclosing snapshot charges.
     pattern_snapshots: bool,
+    // Fully admitted entry points also own their boxed recursive futures.
+    admit_frames: bool,
     ifs: Option<Ifs>,
     ifs_changed: bool,
     work: &'a mut Work,
@@ -761,11 +751,11 @@ impl Expansion<'_> {
             let state = state.borrow();
             match name {
                 "0" | "?" | "#" | "@" | "*" | "PWD" | "PIPESTATUS" => false,
-                "!" => state.last_async.is_none(),
-                _ if operand::scalar_name(name) => state.scalar_parameter(name).is_none(),
+                "!" => state.last_async().is_none(),
+                _ if operand::scalar_name(name) => !state.scalar_is_set(name),
                 _ if !name.is_empty() && name.bytes().all(|byte| byte.is_ascii_digit()) => name
                     .parse::<usize>()
-                    .map_or(true, |index| index > state.positional.len()),
+                    .map_or(true, |index| index > state.positional().len()),
                 // Other special parameters and general arrays are outside the
                 // scalar adapter; nounset does not add semantics for them.
                 _ => false,
@@ -812,10 +802,17 @@ impl Expansion<'_> {
         if !self.pattern_snapshots {
             return Ok(());
         }
+        self.scan_value(value).await
+    }
+    async fn scan_value(&mut self, value: &str) -> Result<(), Error> {
         for _ in value.bytes() {
             self.work.checkpoint(self.cancel).await?;
         }
         Ok(())
+    }
+    async fn empty_expansion(&mut self, protected: bool, state: &SharedState) -> Result<(), Error> {
+        self.segment("", Protection::expansion(protected, state), protected)
+            .await
     }
     fn admit_pattern_length(&mut self, name: &str, state: &SharedState) -> Result<(), Error> {
         if !self.pattern_snapshots {
@@ -826,8 +823,15 @@ impl Expansion<'_> {
         }
         // A nested length retains its existing counting rules. Its transient
         // input must also fit alongside the enclosing trim's snapshot.
-        self.work
-            .admit_storage(state.borrow().parameter(name).len())
+        if state.borrow().dynamic_parameter(name) {
+            self.work.admit_storage(State::DYNAMIC_PARAMETER_BYTES)
+        } else if matches!(name, "?" | "#") {
+            // parameter() formats these special values into an owned string.
+            self.work.admit_storage(20)
+        } else {
+            self.work
+                .admit_storage(state.borrow().parameter(name).len())
+        }
     }
     async fn literal(
         &mut self,
@@ -852,6 +856,7 @@ impl Expansion<'_> {
                     || !matches!(ifs.delimiter(ch), Delimiter::Text),
                     |members| members.contains(ch),
                 ),
+                false,
                 self.work,
             )?;
         }
@@ -909,8 +914,12 @@ impl Expansion<'_> {
         }
         for ch in value.chars() {
             self.work.checkpoint(self.cancel).await?;
-            self.segments
-                .character(ch, protection.protects(ch), self.work)?;
+            self.segments.character(
+                ch,
+                protection.protects(ch),
+                matches!(protection, Protection::All),
+                self.work,
+            )?;
         }
         Ok(())
     }
@@ -921,14 +930,14 @@ impl Expansion<'_> {
         quoted: bool,
         scalar: bool,
         depth: usize,
-    ) -> LocalBoxFuture<'a, Result<(), Error>> {
-        async move {
+    ) -> crate::exec::ResultFuture<'a, ()> {
+        self.part_frame(move |expansion| async move {
             if !scalar && !quoted {
-                Ifs::admit_access(state, self.cancel, self.work).await?;
+                Ifs::admit_access(state, expansion.cancel, expansion.work).await?;
             }
-            self.segments.needs_split |= !scalar && !quoted;
+            expansion.segments.needs_split |= !scalar && !quoted;
             if matches!(part, WordPart::BadSubstitution(_)) {
-                self.work.admit_storage(256)?;
+                expansion.work.admit_storage(256)?;
                 return Err(Error::BadSubstitution {
                     message: "invalid parameter expansion",
                     line: None,
@@ -941,16 +950,18 @@ impl Expansion<'_> {
                 colon_variant,
             } = part
             {
-                return self
+                return expansion
                     .parameter(
                         name,
                         operator,
                         operand,
                         *colon_variant,
-                        state,
-                        quoted,
-                        scalar,
-                        depth,
+                        OperandContext {
+                            state,
+                            quoted,
+                            scalar,
+                            depth,
+                        },
                         None,
                     )
                     .await;
@@ -965,53 +976,61 @@ impl Expansion<'_> {
                 // The parser represents the special `${!}` with an empty
                 // indirect name. Resolve that typed node as an ordinary read.
                 if name.is_empty() && operator.is_none() {
-                    return self.variable("!", state, quoted, scalar).await;
+                    return expansion.variable("!", state, quoted, scalar).await;
                 }
-                return self
+                return expansion
                     .indirect(
                         name,
                         operator.as_ref(),
                         operand,
                         *colon_variant,
-                        state,
-                        quoted,
-                        scalar,
-                        depth,
+                        OperandContext {
+                            state,
+                            quoted,
+                            scalar,
+                            depth,
+                        },
                     )
                     .await;
             }
+            if let WordPart::FileSubstitution(commands) = part {
+                return expansion
+                    .file_substitution(commands, state, quoted, scalar)
+                    .await;
+            }
             if let WordPart::CommandSubstitution(commands) = part {
-                return self
+                return expansion
                     .command_substitution(commands, state, quoted, scalar)
                     .await;
             }
             if let WordPart::ProcessSubstitution { commands, is_input } = part {
                 // Bash expands an empty body (`<()`) to nothing at all.
                 if commands.is_empty() {
-                    return self.segment("", Protection::All, false).await;
+                    return expansion.segment("", Protection::All, false).await;
                 }
-                let runner = self.work.substitutions.clone().ok_or(2)?;
-                crate::ast_copy::admit(commands, self.cancel, self.work).await?;
-                let child = crate::state::State::snapshot(state, self.cancel, self.work)
-                    .await?
-                    .shared();
-                self.work.admit_storage(16)?;
+                let runner = expansion.work.substitutions.clone().ok_or(2)?;
+                crate::ast_copy::admit(commands, expansion.cancel, expansion.work).await?;
+                let mut child =
+                    crate::state::State::snapshot(state, expansion.cancel, expansion.work).await?;
+                child.traps = state.borrow().traps.process_substitution();
+                let child = child.shared();
+                expansion.work.admit_storage(16)?;
                 let fd = runner
-                    .process(commands.clone(), *is_input, child, state, self.work)
+                    .process(commands.clone(), *is_input, child, state, expansion.work)
                     .await?;
-                return self
+                return expansion
                     .segment(&format!("/dev/fd/{fd}"), Protection::All, false)
                     .await;
             }
             if matches!(part, WordPart::UnparsedProcessSubstitution { .. }) {
-                self.work.admit_storage(256)?;
+                expansion.work.admit_storage(256)?;
                 return Err(Error::ShellBoundary {
                     stage: ShellBoundaryStage::Expansion,
                     line: None,
                 });
             }
             if let WordPart::UnparsedCommandSubstitution { source, error } = part {
-                return self
+                return expansion
                     .unparsed_substitution(source, error, state, quoted, scalar)
                     .await;
             }
@@ -1019,16 +1038,16 @@ impl Expansion<'_> {
                 let value = crate::arithmetic::evaluate(
                     source,
                     state,
-                    self.cancel,
-                    self.raw_remaining,
-                    self.work,
+                    expansion.cancel,
+                    expansion.raw_remaining,
+                    expansion.work,
                 )
                 .await
                 .map_err(Error::in_expansion)?;
-                self.ifs = None;
-                self.ifs_changed = true;
-                self.work.admit_storage(20)?;
-                return self
+                expansion.ifs = None;
+                expansion.ifs_changed = true;
+                expansion.work.admit_storage(20)?;
+                return expansion
                     .segment(
                         &value.to_string(),
                         Protection::expansion(scalar || quoted, state),
@@ -1042,49 +1061,86 @@ impl Expansion<'_> {
                 length,
             } = part
             {
-                if name == "@" {
-                    return self
-                        .positional_substring(offset, length.as_deref(), state, quoted, scalar)
-                        .await
-                        .map_err(Error::in_expansion);
-                }
-                let result = self
-                    .substring(name, offset, length.as_deref(), state, scalar || quoted)
+                return expansion
+                    .substring_part(name, offset, length.as_deref(), state, quoted, scalar)
+                    .await
+                    .map_err(Error::in_expansion);
+            }
+            if matches!(part, WordPart::ArrayIndices { .. }) {
+                return expansion.elements(part, state, quoted, scalar).await;
+            }
+            if let WordPart::ArrayLength(name) = part {
+                return expansion
+                    .indexed_length(name, "@", state, scalar || quoted)
                     .await;
-                self.ifs = None;
-                self.ifs_changed = true;
-                return result.map_err(Error::in_expansion);
             }
             if let WordPart::Length(name) = part {
                 if name.contains(':') {
-                    self.work.admit_storage(256)?;
+                    expansion.work.admit_storage(256)?;
                     return Err(Error::BadSubstitution {
                         message: "invalid length parameter",
                         line: None,
                     });
                 }
-                self.admit_pattern_length(name, state)?;
-                return self.length(name, state, scalar || quoted, depth).await;
+                expansion.admit_pattern_length(name, state)?;
+                return expansion.length(name, state, scalar || quoted, depth).await;
+            }
+            if let WordPart::ArrayAccess { name, index } = part
+                && name != "PIPESTATUS"
+            {
+                return expansion
+                    .indexed_element(name, index, state, scalar || quoted)
+                    .await;
             }
             if let WordPart::Variable(name) = part {
-                return self.variable(name, state, quoted, scalar).await;
+                return expansion.variable(name, state, quoted, scalar).await;
             }
-            let max = self.snapshot_max();
+            if let WordPart::Transformation { name, operator } = part {
+                return expansion
+                    .transformation(
+                        name,
+                        *operator,
+                        TransformContext {
+                            state,
+                            protected: scalar || quoted,
+                            depth,
+                        },
+                    )
+                    .await;
+            }
+            let max = expansion.snapshot_max();
             let value = scalar_value(
                 part,
                 state,
                 max,
-                self.pattern_snapshots.then_some(&mut *self.work),
+                expansion.pattern_snapshots.then_some(&mut *expansion.work),
             )?;
-            self.admit_pattern_snapshot(&value).await?;
-            self.segment(
-                &value,
-                Protection::expansion(scalar || quoted, state),
-                scalar || quoted,
-            )
-            .await
+            expansion.admit_pattern_snapshot(&value).await?;
+            expansion
+                .segment(
+                    &value,
+                    Protection::expansion(scalar || quoted, state),
+                    scalar || quoted,
+                )
+                .await
+        })
+    }
+
+    fn part_frame<'a, F>(
+        &'a mut self,
+        build: impl FnOnce(&'a mut Self) -> F,
+    ) -> crate::exec::ResultFuture<'a, ()>
+    where
+        F: std::future::Future<Output = Result<(), Error>> + 'a,
+    {
+        // Admitted scalar/pattern contexts must charge the actual recursive
+        // future before boxing it. Legacy argv retains its separate accounting.
+        if self.admit_frames
+            && let Err(error) = self.work.admit_storage(std::mem::size_of::<F>())
+        {
+            return futures::future::Either::Left(futures::future::ready(Err(error)));
         }
-        .boxed_local()
+        futures::future::Either::Right(build(self).boxed_local())
     }
 
     async fn variable(
@@ -1098,8 +1154,15 @@ impl Expansion<'_> {
         let max = self.snapshot_max();
         let value = {
             let state = state.borrow();
+            let dynamic = state.dynamic_parameter(name);
+            let formatted = matches!(name, "?" | "#") || dynamic;
+            if dynamic {
+                self.work.admit_storage(State::DYNAMIC_PARAMETER_BYTES)?;
+            } else if self.pattern_snapshots && formatted {
+                self.work.admit_storage(20)?;
+            }
             let value = state.parameter(name);
-            if self.pattern_snapshots {
+            if self.pattern_snapshots && !formatted {
                 self.work.admit_storage(value.len())?;
             }
             bounded(value, max)?
@@ -1202,7 +1265,7 @@ impl Expansion<'_> {
         self.work.admit_parse(body.len(), self.cancel).await?;
         self.work
             .admit_storage(body.len().saturating_mul(512).saturating_add(2048))?;
-        match slice_shell_grammar(body) {
+        match crate::parse::substitution_grammar(body) {
             Ok(_) => Ok(()),
             Err(error) if shell_parser_budget_error(&error) => Err(2.into()),
             Err(_) => {
@@ -1214,13 +1277,43 @@ impl Expansion<'_> {
             }
         }
     }
-    async fn substring(
+    async fn substring_part(
         &mut self,
         name: &str,
         offset: &str,
         length: Option<&str>,
         state: &SharedState,
+        quoted: bool,
+        scalar: bool,
+    ) -> Result<(), Error> {
+        if name == "@" {
+            return self
+                .positional_substring(offset, length, state, quoted, scalar)
+                .await;
+        }
+        if let Some((array, index)) = indexed_name(name)
+            && matches!(index, "@" | "*")
+        {
+            return self
+                .array_substring(array, index == "@", (offset, length), state, quoted, scalar)
+                .await;
+        }
+        let result = self
+            .substring(name, (offset, length), state, scalar || quoted, false)
+            .await;
+        self.ifs = None;
+        self.ifs_changed = true;
+        result
+    }
+    /// `null_field` marks a quoted `[@]` reference, where an out-of-range
+    /// start yields no word, like an empty `"$@"`.
+    async fn substring(
+        &mut self,
+        name: &str,
+        (offset, length): (&str, Option<&str>),
+        state: &SharedState,
         protected: bool,
+        null_field: bool,
     ) -> Result<(), Error> {
         if !operand::length_name(name) {
             return Err(2.into());
@@ -1233,36 +1326,32 @@ impl Expansion<'_> {
         // Resolve the source before arithmetic side effects. An unset scalar
         // skips both expressions; an out-of-range start skips the length.
         self.require_bound(name, state).await?;
-        let (value, utf8) = {
+        let present = {
             let s = state.borrow();
-            let present = if operand::scalar_name(name) {
-                s.scalar_parameter(name).is_some()
+            if operand::scalar_name(name) {
+                s.scalar_is_set(name)
             } else if matches!(name, "?" | "#") {
                 true
             } else {
                 name.parse::<usize>()
                     .ok()
                     .and_then(|n| n.checked_sub(1))
-                    .is_some_and(|n| n < s.positional.len())
-            };
-            if !present {
-                drop(s);
-                return self
-                    .segment("", Protection::expansion(protected, state), protected)
-                    .await;
+                    .is_some_and(|n| n < s.positional().len())
             }
+        };
+        if !present {
+            return self.empty_expansion(protected, state).await;
+        }
+        let (value, utf8) = {
+            let s = state.borrow();
             let value = substring_snapshot(&s, name, self.raw_remaining, self.work)?;
             let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
                 .iter()
-                .filter_map(|name| s.variables.get(*name))
+                .filter_map(|name| s.bindings().get(*name))
                 .find(|v| !v.is_empty());
             (value, locale.is_some_and(|v| utf8_locale(v)))
         };
-        let mut count = 0usize;
-        for byte in value.bytes() {
-            self.work.checkpoint(self.cancel).await?;
-            count += usize::from(!utf8 || byte & 0xc0 != 0x80);
-        }
+        let count = self.character_count(&value, utf8).await?;
         let offset =
             crate::arithmetic::evaluate(offset, state, self.cancel, self.raw_remaining, self.work)
                 .await?;
@@ -1274,9 +1363,12 @@ impl Expansion<'_> {
             usize::try_from(offset).ok().filter(|&n| n <= count)
         };
         let Some(start) = start else {
-            return self
-                .segment("", Protection::expansion(protected, state), protected)
-                .await;
+            if null_field {
+                self.element_layout(ListSource::Array, true, state, true, false)
+                    .await?;
+                return Ok(());
+            }
+            return self.empty_expansion(protected, state).await;
         };
         let end = if let Some(length) = length {
             let length = crate::arithmetic::evaluate(
@@ -1294,7 +1386,7 @@ impl Expansion<'_> {
                     .checked_sub(usize::try_from(length.unsigned_abs()).unwrap_or(usize::MAX))
                 {
                     Some(end) if end >= start => end,
-                    _ => return crate::arithmetic::fault("substring expression < 0", self.work),
+                    _ => return crate::exec::fault("substring expression < 0", self.work),
                 }
             } else {
                 start
@@ -1325,6 +1417,16 @@ impl Expansion<'_> {
         self.segment(result, Protection::expansion(protected, state), protected)
             .await
     }
+    async fn character_count(&mut self, value: &str, utf8: bool) -> Result<usize, Error> {
+        let mut count = 0usize;
+        for byte in value.bytes() {
+            self.work.checkpoint(self.cancel).await?;
+            // Rust strings are valid UTF-8. C/POSIX count every byte.
+            count += usize::from(!utf8 || byte & 0xc0 != 0x80);
+        }
+        Ok(count)
+    }
+
     async fn length(
         &mut self,
         name: &str,
@@ -1332,6 +1434,9 @@ impl Expansion<'_> {
         protected: bool,
         depth: usize,
     ) -> Result<(), Error> {
+        if let Some((array, index)) = indexed_name(name) {
+            return self.indexed_length(array, index, state, protected).await;
+        }
         if !operand::length_name(name) || depth >= operand::MAX_DEPTH {
             return Err(2.into());
         }
@@ -1341,22 +1446,22 @@ impl Expansion<'_> {
             let s = state.borrow();
             // Admit the transient snapshot before copying, independently of the
             // much smaller decimal result. No state borrow crosses counting.
+            if s.dynamic_parameter(name) {
+                self.work.admit_storage(State::DYNAMIC_PARAMETER_BYTES)?;
+            }
             let value = bounded(
                 s.parameter(name),
                 self.raw_remaining.min(self.work.remaining),
             )?;
             let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
                 .iter()
-                .filter_map(|name| s.variables.get(*name))
+                .filter_map(|name| s.bindings().get(*name))
                 .find(|value| !value.is_empty());
             (value, locale.is_some_and(|value| utf8_locale(value)))
         };
-        let mut count = 0usize;
-        for byte in value.bytes() {
-            self.work.checkpoint(self.cancel).await?;
-            // Rust strings are valid UTF-8. Count each leading byte as one
-            // scalar, including combining marks; C/POSIX count every byte.
-            count += usize::from(!utf8 || byte & 0xc0 != 0x80);
+        let count = self.character_count(&value, utf8).await?;
+        if self.pattern_snapshots {
+            self.work.admit_storage(20)?;
         }
         self.segment(
             &count.to_string(),
@@ -1371,12 +1476,15 @@ impl Expansion<'_> {
         operator: &ParameterOp,
         operand: &str,
         colon: bool,
-        state: &SharedState,
-        quoted: bool,
-        scalar: bool,
-        depth: usize,
+        context: OperandContext<'_>,
         error_pointer: Option<&str>,
     ) -> Result<(), Error> {
+        let OperandContext {
+            state,
+            quoted,
+            scalar,
+            depth,
+        } = context;
         self.slice_boundaries(operand).await?;
         if error_pointer.is_none() && !operand::parameter_name(name) || depth >= operand::MAX_DEPTH
         {
@@ -1411,9 +1519,11 @@ impl Expansion<'_> {
                     pattern,
                     replacement,
                     matches!(operator, ParameterOp::ReplaceAll { .. }),
-                    state,
-                    scalar || quoted,
-                    depth,
+                    TransformContext {
+                        state,
+                        protected: scalar || quoted,
+                        depth,
+                    },
                 )
                 .await;
         }
@@ -1422,9 +1532,11 @@ impl Expansion<'_> {
                 .trim(
                     name,
                     operand,
-                    state,
-                    scalar || quoted,
-                    depth,
+                    TransformContext {
+                        state,
+                        protected: scalar || quoted,
+                        depth,
+                    },
                     prefix,
                     longest,
                 )
@@ -1435,7 +1547,17 @@ impl Expansion<'_> {
                 return Err(2.into());
             }
             return self
-                .change_case(name, operand, state, scalar || quoted, depth, upper, all)
+                .change_case(
+                    name,
+                    operand,
+                    TransformContext {
+                        state,
+                        protected: scalar || quoted,
+                        depth,
+                    },
+                    upper,
+                    all,
+                )
                 .await;
         }
         let replacement = match operator {
@@ -1445,23 +1567,15 @@ impl Expansion<'_> {
             _ => return Err(2.into()),
         };
         State::admit_scalar_access(state, name, self.cancel, self.work).await?;
-        let absent = state
-            .borrow()
-            .scalar_parameter(name)
-            .is_none_or(|v| colon && v.is_empty());
+        let absent = {
+            let s = state.borrow();
+            !s.dynamic_parameter(name)
+                && s.scalar_parameter(name)
+                    .is_none_or(|v| colon && v.is_empty())
+        };
         if absent && matches!(operator, ParameterOp::AssignDefault | ParameterOp::Error) {
             return self
-                .effect_operand(
-                    name,
-                    operator,
-                    operand,
-                    colon,
-                    state,
-                    quoted,
-                    scalar,
-                    depth,
-                    error_pointer,
-                )
+                .effect_operand(name, operator, operand, colon, context, error_pointer)
                 .await;
         }
         if replacement != absent {
@@ -1474,11 +1588,7 @@ impl Expansion<'_> {
             String::new()
         } else {
             let s = state.borrow();
-            let value = s.scalar_parameter(name).unwrap_or("");
-            if self.pattern_snapshots {
-                self.work.admit_storage(value.len())?;
-            }
-            bounded(Cow::Borrowed(value), max)?
+            parameter_snapshot(&s, name, max, self.pattern_snapshots, self.work)?
         };
         self.admit_pattern_snapshot(&value).await?;
         self.segment(
@@ -1492,34 +1602,28 @@ impl Expansion<'_> {
         &mut self,
         name: &str,
         source: &str,
-        state: &SharedState,
-        protected: bool,
-        depth: usize,
+        context: TransformContext<'_>,
         prefix: bool,
         longest: bool,
     ) -> Result<(), Error> {
+        let TransformContext {
+            state,
+            protected,
+            depth,
+        } = context;
         self.work.checkpoint(self.cancel).await?;
         // Resolve before operand side effects. Admit storage and work before
         // snapshotting, and release the state borrow before any suspension.
         let value = {
             let s = state.borrow();
-            let value = s.scalar_parameter(name).unwrap_or("");
             let max = self.raw_remaining.min(self.work.remaining);
-            if value.len() > max {
-                return Err(2.into());
-            }
-            self.work.admit_storage(value.len())?;
-            value.to_owned()
+            parameter_snapshot(&s, name, max, true, self.work)?
         };
         // Bash does not evaluate a trim pattern for an unset or empty scalar.
         if value.is_empty() {
-            return self
-                .segment("", Protection::expansion(protected, state), protected)
-                .await;
+            return self.empty_expansion(protected, state).await;
         }
-        for _ in value.bytes() {
-            self.work.checkpoint(self.cancel).await?;
-        }
+        self.scan_value(&value).await?;
         let mut pattern = self.pattern_operand(source, state, depth).await?;
         let result = pattern
             .remove(&value, prefix, longest, self.work, self.cancel)
@@ -1541,6 +1645,7 @@ impl Expansion<'_> {
             replacement: None,
             pattern_context: true,
             pattern_snapshots: true,
+            admit_frames: self.admit_frames,
             ifs: None,
             ifs_changed: false,
             work: self.work,
@@ -1572,38 +1677,38 @@ impl Expansion<'_> {
         &mut self,
         name: &str,
         source: &str,
-        state: &SharedState,
-        protected: bool,
-        depth: usize,
+        context: TransformContext<'_>,
         upper: bool,
         all: bool,
     ) -> Result<(), Error> {
+        let TransformContext {
+            state,
+            protected,
+            depth,
+        } = context;
         self.work.checkpoint(self.cancel).await?;
         let (value, present) = {
             let s = state.borrow();
-            let parameter = s.scalar_parameter(name);
-            let value = parameter.unwrap_or("");
-            if value.len() > self.raw_remaining.min(self.work.remaining) {
-                return Err(2.into());
-            }
-            self.work.admit_storage(value.len())?;
-            (value.to_owned(), parameter.is_some())
+            let present = s.scalar_is_set(name);
+            let value = parameter_snapshot(
+                &s,
+                name,
+                self.raw_remaining.min(self.work.remaining),
+                true,
+                self.work,
+            )?;
+            (value, present)
         };
         if !present {
-            return self
-                .segment("", Protection::expansion(protected, state), protected)
-                .await;
+            return self.empty_expansion(protected, state).await;
         }
-        for _ in value.bytes() {
-            self.work.checkpoint(self.cancel).await?;
-        }
+        self.scan_value(&value).await?;
         let mut pattern = self.pattern_operand(source, state, depth).await?;
-        let locale = case::Locale::from_state(state)?;
+        let locale = Locale::from_state(&state.borrow())?;
         let result = pattern
             .change_case(
                 &value,
-                upper,
-                all,
+                (upper, all),
                 locale,
                 self.raw_remaining,
                 self.work,
@@ -1619,12 +1724,15 @@ impl Expansion<'_> {
         operator: &ParameterOp,
         source: &str,
         colon: bool,
-        state: &SharedState,
-        quoted: bool,
-        scalar: bool,
-        depth: usize,
+        context: OperandContext<'_>,
         error_pointer: Option<&str>,
     ) -> Result<(), Error> {
+        let OperandContext {
+            state,
+            quoted,
+            scalar,
+            depth,
+        } = context;
         // Reserve target/diagnostic bytes before copying either name or value.
         let diagnostic_bytes =
             error_pointer.map_or(name.len(), |pointer| pointer.len().saturating_add(1));
@@ -1652,6 +1760,7 @@ impl Expansion<'_> {
             pattern_context: self.pattern_context && !matches!(operator, ParameterOp::Error),
             // Ordinary diagnostics also retain segments/output while snapshotting.
             pattern_snapshots: self.pattern_snapshots || matches!(operator, ParameterOp::Error),
+            admit_frames: self.admit_frames,
             ifs: None,
             ifs_changed: false,
             work: self.work,
@@ -1830,11 +1939,22 @@ impl Expansion<'_> {
         quoted: bool,
         scalar: bool,
     ) -> Result<(), Error> {
+        if let WordPart::ArrayIndices { name, .. } | WordPart::ArrayAccess { name, .. } = part {
+            State::admit_scalar_access(state, name, self.cancel, self.work).await?;
+        }
         let (count, at) = {
             let s = state.borrow();
             match part {
-                WordPart::Variable(name) => (s.positional.len(), name == "@"),
-                WordPart::ArrayAccess { index, .. } => (s.pipestatus.len(), index == "@"),
+                WordPart::Variable(name) => (s.positional().len(), name == "@"),
+                WordPart::ArrayIndices { name, star } => (indices::count(&s, name), !star),
+                WordPart::ArrayAccess { name, index } => (
+                    if name == "PIPESTATUS" {
+                        s.pipeline_status().len()
+                    } else {
+                        s.array_count(name)
+                    },
+                    index == "@",
+                ),
                 _ => return Err(2.into()),
             }
         };
@@ -1842,14 +1962,55 @@ impl Expansion<'_> {
             return Err(2.into());
         }
         self.elements_remaining -= count;
+        let source = match part {
+            WordPart::Variable(_) => ListSource::Positional,
+            WordPart::ArrayIndices { .. } => ListSource::Indices,
+            _ => ListSource::Array,
+        };
+        let (list, separator) = self
+            .element_layout(source, at, state, quoted, scalar)
+            .await?;
+        let protection = Protection::expansion(quoted || scalar, state);
+        let mut array_index = None;
+        for index in 0..count {
+            self.element_boundary(index, list, separator, quoted || scalar)
+                .await?;
+            if let WordPart::ArrayIndices { name, .. } = part {
+                State::admit_scalar_access(state, name, self.cancel, self.work).await?;
+            }
+            let value = list_value(
+                part,
+                state,
+                index,
+                &mut array_index,
+                self.raw_remaining,
+                self.work,
+            )?;
+            self.segment(&value, protection, quoted || scalar).await?;
+        }
+        Ok(())
+    }
+    async fn element_layout(
+        &mut self,
+        source: ListSource,
+        at: bool,
+        state: &SharedState,
+        quoted: bool,
+        scalar: bool,
+    ) -> Result<(bool, Option<char>), Error> {
         let ifs_separator = self.ifs_separator(state).await?;
         let star_separator = if at {
             ifs_separator
         } else {
             self.positional_star_separator(state).await?
         };
-        let list = !scalar && (at || !quoted);
-        self.segments.needs_split |= list;
+        let indices_space_join = !scalar
+            && !quoted
+            && matches!(source, ListSource::Indices)
+            && !at
+            && ifs_separator.is_none();
+        let list = !scalar && (at || !quoted && !indices_space_join);
+        self.segments.needs_split |= list || indices_space_join;
         // An initially empty IFS selects Bash's list-word space path. A
         // nonempty reference IFS whose target later becomes empty does not.
         let reference_ifs = state.borrow().is_nameref("IFS");
@@ -1857,9 +2018,9 @@ impl Expansion<'_> {
         self.segments.split_space |= !scalar
             && !quoted
             && !at
-            && matches!(part, WordPart::Variable(_))
+            && matches!(source, ListSource::Positional)
             && star_separator.is_none();
-        let separator = if scalar && at {
+        let separator = if scalar && at || indices_space_join {
             Some(' ')
         } else if list {
             ifs_separator.or(Some(' '))
@@ -1870,14 +2031,7 @@ impl Expansion<'_> {
         if scalar || (quoted && !at) {
             self.segments.empty(self.work)?;
         }
-        let protection = Protection::expansion(quoted || scalar, state);
-        for index in 0..count {
-            self.element_boundary(index, list, separator, quoted || scalar)
-                .await?;
-            let value = list_value(part, state, index, self.raw_remaining, self.work)?;
-            self.segment(&value, protection, quoted || scalar).await?;
-        }
-        Ok(())
+        Ok((list, separator))
     }
     async fn element_boundary(
         &mut self,
@@ -1899,6 +2053,12 @@ impl Expansion<'_> {
         }
         self.separator(separator, protected).await
     }
+}
+
+enum ListSource {
+    Positional,
+    Indices,
+    Array,
 }
 
 fn case_mode(operator: &ParameterOp) -> Option<(bool, bool)> {
@@ -1932,19 +2092,42 @@ fn utf8_locale(locale: &str) -> bool {
             .is_some_and(|suffix| suffix.eq_ignore_ascii_case(".UTF8"))
 }
 
+// Dynamic values must be admitted before formatting, rather than measuring
+// an already allocated clock string. Ordinary borrowed scalars keep exact size.
+fn parameter_snapshot(
+    state: &State,
+    name: &str,
+    max: usize,
+    admitted: bool,
+    work: &mut Work,
+) -> Result<String, Error> {
+    if state.dynamic_parameter(name) {
+        work.admit_storage(State::DYNAMIC_PARAMETER_BYTES)?;
+        return bounded(state.parameter(name), max);
+    }
+    let value = state.scalar_parameter(name).unwrap_or("");
+    if admitted {
+        work.admit_storage(value.len())?;
+    }
+    bounded(Cow::Borrowed(value), max)
+}
+
 fn substring_snapshot(
     state: &crate::state::State,
     name: &str,
     max: usize,
     work: &mut Work,
 ) -> Result<String, Error> {
+    if state.dynamic_parameter(name) {
+        return parameter_snapshot(state, name, max, true, work);
+    }
     let size = match name {
         "?" => {
-            state.status.unsigned_abs().checked_ilog10().unwrap_or(0) as usize
+            state.status().unsigned_abs().checked_ilog10().unwrap_or(0) as usize
                 + 1
-                + usize::from(state.status < 0)
+                + usize::from(state.status() < 0)
         }
-        "#" => state.positional.len().checked_ilog10().unwrap_or(0) as usize + 1,
+        "#" => state.positional().len().checked_ilog10().unwrap_or(0) as usize + 1,
         _ => state.parameter(name).len(),
     };
     if size > max {
@@ -1960,21 +2143,6 @@ fn bounded(value: Cow<'_, str>, max: usize) -> Result<String, Error> {
     }
     Ok(value.into_owned())
 }
-// Keep the large synchronous parser frame out of every recursive expansion
-// future. Its input, depth, work and allocation bounds are admitted by caller.
-#[inline(never)]
-fn slice_shell_grammar(source: &str) -> Result<(), shell_parser::error::Error> {
-    shell_parser::parser::Parser::with_limits_and_options(
-        source,
-        operand::MAX_DEPTH,
-        4096 * 16,
-        shell_parser::parser::ParseOptions::default(),
-    )
-    .with_substitution_body()
-    .parse()
-    .map(|_| ())
-}
-
 fn shell_parser_budget_error(error: &shell_parser::error::Error) -> bool {
     matches!(error, shell_parser::error::Error::ResourceLimit(_))
 }
@@ -1983,22 +2151,26 @@ fn scalar_value(
     part: &WordPart,
     state: &SharedState,
     max: usize,
-    snapshot_work: Option<&mut Work>,
+    mut snapshot_work: Option<&mut Work>,
 ) -> Result<String, Error> {
     let s = state.borrow();
+    let formatted = matches!(part, WordPart::ArrayAccess { name, .. } if name == "PIPESTATUS");
+    if formatted && let Some(work) = snapshot_work.as_deref_mut() {
+        work.admit_storage(20)?;
+    }
     let value = match part {
         WordPart::Literal(text) => Cow::Borrowed(text.as_str()),
         WordPart::ArrayAccess { name, index } if name == "PIPESTATUS" => Cow::Owned(
             index
                 .parse::<usize>()
                 .ok()
-                .and_then(|i| s.pipestatus.get(i))
+                .and_then(|i| s.pipeline_status().get(i))
                 .map(i32::to_string)
                 .unwrap_or_default(),
         ),
         _ => return Err(2.into()),
     };
-    if let Some(work) = snapshot_work {
+    if !formatted && let Some(work) = snapshot_work {
         work.admit_storage(value.len())?;
     }
     bounded(value, max)
@@ -2007,37 +2179,46 @@ fn list_value(
     part: &WordPart,
     state: &SharedState,
     index: usize,
+    array_index: &mut Option<i64>,
     max: usize,
     work: &mut Work,
 ) -> Result<String, Error> {
     let s = state.borrow();
-    match part {
-        WordPart::Variable(_) => {
-            let value = s.positional.get(index).map(String::as_str).unwrap_or("");
-            if value.len() > max {
-                return Err(2.into());
-            }
-            work.admit_storage(value.len())?;
-            bounded(Cow::Borrowed(value), max)
+    let value = match part {
+        WordPart::Variable(_) => s.positional().get(index).map(String::as_str).unwrap_or(""),
+        WordPart::ArrayIndices { name, .. } => {
+            return indices::value(&s, name, index, array_index, max, work);
         }
-        WordPart::ArrayAccess { .. } => bounded(
-            Cow::Owned(
-                s.pipestatus
-                    .get(index)
-                    .map(i32::to_string)
-                    .unwrap_or_default(),
-            ),
-            max,
-        ),
-        _ => Err(2.into()),
+        WordPart::ArrayAccess { name, .. } if name != "PIPESTATUS" => {
+            let (next, value) = s.array_next(name, *array_index).ok_or(2)?;
+            *array_index = Some(next);
+            value
+        }
+        WordPart::ArrayAccess { .. } => {
+            work.admit_storage(20)?;
+            return bounded(
+                Cow::Owned(
+                    s.pipeline_status()
+                        .get(index)
+                        .map(i32::to_string)
+                        .unwrap_or_default(),
+                ),
+                max,
+            );
+        }
+        _ => return Err(2.into()),
+    };
+    if value.len() > max {
+        return Err(2.into());
     }
+    work.admit_storage(value.len())?;
+    bounded(Cow::Borrowed(value), max)
 }
 fn is_list(part: &WordPart) -> bool {
     match part {
         WordPart::Variable(name) => matches!(name.as_str(), "@" | "*"),
-        WordPart::ArrayAccess { name, index } => {
-            name == "PIPESTATUS" && matches!(index.as_str(), "@" | "*")
-        }
+        WordPart::ArrayIndices { .. } => true,
+        WordPart::ArrayAccess { index, .. } => matches!(index.as_str(), "@" | "*"),
         _ => false,
     }
 }
@@ -2053,20 +2234,30 @@ async fn expand_one(
     word: &Word,
     state: &SharedState,
     cancel: &Cancel,
-    max_bytes: usize,
-    max_fields: usize,
-    max_raw: usize,
+    options: ExpansionOptions,
     raw_remaining: &mut usize,
-    scalar: bool,
     work: &mut Work,
 ) -> Result<Vec<String>, Error> {
+    let ExpansionOptions {
+        max_bytes,
+        max_fields,
+        max_raw,
+        scalar,
+        pathname,
+        admitted,
+        tilde,
+    } = options;
     let mut expansion = Expansion {
-        segments: Segments::default(),
+        segments: Segments {
+            account_storage: admitted,
+            ..Segments::default()
+        },
         captured: None,
         pattern: None,
         replacement: None,
         pattern_context: false,
-        pattern_snapshots: false,
+        pattern_snapshots: admitted,
+        admit_frames: admitted,
         ifs: None,
         ifs_changed: false,
         work,
@@ -2083,6 +2274,8 @@ async fn expand_one(
         expansion.work.checkpoint(cancel).await?;
         has_part_quotes |= quoted;
     }
+    let tildes =
+        tilde::WordTildes::new(word, scalar, tilde, has_part_quotes, &mut expansion).await?;
     for (index, part) in word.parts.iter().enumerate() {
         expansion.work.checkpoint(cancel).await?;
         let quoted = part_quoted(word, index, has_part_quotes);
@@ -2090,8 +2283,8 @@ async fn expand_one(
             expansion.elements(part, state, quoted, scalar).await?;
             continue;
         }
-        if let WordPart::Literal(value) = part {
-            expansion.literal(value, state, scalar || quoted).await?;
+        if matches!(part, WordPart::Literal(_)) {
+            tildes.literal(&mut expansion, index, state).await?;
             continue;
         }
         expansion.part(part, state, quoted, scalar, 0).await?;
@@ -2099,22 +2292,60 @@ async fn expand_one(
     *raw_remaining = expansion.raw_remaining;
     expansion.current_ifs(state).await?;
     let ifs = expansion.ifs.take().ok_or(2)?;
-    expansion
+    let pathname =
+        pathname && !scalar && expansion.work.substitutions.is_some() && !state.borrow().noglob;
+    let mut fields = Fields::new(max_bytes, max_fields);
+    fields.pathname = pathname;
+    fields.extglob_groups = pathname && admitted && state.borrow().extglob;
+    let fields = expansion
         .segments
-        .split(ifs, max_bytes, max_fields, expansion.work, cancel)
-        .await
+        .collect(ifs, fields, expansion.work, cancel)
+        .await?;
+    if !pathname {
+        return Ok(fields.out);
+    }
+    let Fields {
+        out,
+        protections,
+        current_runs,
+        account_storage,
+        ..
+    } = fields;
+    if account_storage {
+        let spare = current_runs.capacity() * std::mem::size_of::<(usize, bool)>();
+        drop(current_runs);
+        expansion.work.release_storage(spare);
+    }
+    let candidates = glob::Candidates {
+        fields: out,
+        patterns: protections,
+        admitted: account_storage,
+    };
+    glob::expand_fields(
+        candidates,
+        state,
+        (max_bytes, max_fields),
+        raw_remaining,
+        expansion.work,
+        cancel,
+    )
+    .await
 }
 
 async fn expand(
     word: &Word,
     state: &SharedState,
     cancel: &Cancel,
-    max_bytes: usize,
-    max_fields: usize,
-    max_raw: usize,
-    scalar: bool,
+    options: ExpansionOptions,
     work: &mut Work,
 ) -> Result<Vec<String>, Error> {
+    let ExpansionOptions {
+        max_bytes,
+        max_fields,
+        max_raw,
+        scalar,
+        ..
+    } = options;
     let variants = if scalar || !braces::has_candidate(word) {
         None
     } else {
@@ -2122,18 +2353,7 @@ async fn expand(
     };
     let mut raw_remaining = max_raw;
     let Some(variants) = variants else {
-        return expand_one(
-            word,
-            state,
-            cancel,
-            max_bytes,
-            max_fields,
-            max_raw,
-            &mut raw_remaining,
-            scalar,
-            work,
-        )
-        .await;
+        return expand_one(word, state, cancel, options, &mut raw_remaining, work).await;
     };
     let mut values = Vec::new();
     // Usually one field per spelling; more fields still grow by doubling.
@@ -2203,14 +2423,7 @@ async fn expand(
                 .saturating_add(syntax.saturating_mul(4).saturating_mul(slot))
                 .saturating_add(512),
         )?;
-        let parsed = shell_parser::parser::Parser::parse_expanded_word_with_limits(
-            &variant,
-            // Brace spelling removes syntax; it must not impose the lower
-            // recursive operand-evaluation cap on already-accepted lazy text.
-            shell_parser::limits::ExecutionLimits::default().max_ast_depth,
-            variant.len().saturating_add(3).saturating_mul(16),
-        )
-        .map_err(|error| match error {
+        let parsed = crate::parse::generated_word(&variant).map_err(|error| match error {
             shell_parser::Error::ResourceLimit(_) => Error::Status(2),
             _ => Error::BadSubstitution {
                 message: "invalid generated word",
@@ -2221,11 +2434,13 @@ async fn expand(
             &parsed,
             state,
             cancel,
-            bytes_remaining,
-            max_fields.saturating_sub(values.len()),
-            max_raw,
+            ExpansionOptions {
+                max_bytes: bytes_remaining,
+                max_fields: max_fields.saturating_sub(values.len()),
+                tilde: tilde::Context::Generated,
+                ..options
+            },
             &mut raw_remaining,
-            scalar,
             work,
         )
         .await?;
@@ -2280,6 +2495,7 @@ pub(crate) async fn arithmetic_text(
         replacement: None,
         pattern_context: true,
         pattern_snapshots: true,
+        admit_frames: true,
         ifs: None,
         ifs_changed: false,
         work,
@@ -2296,21 +2512,46 @@ pub(crate) async fn arithmetic_text(
     Ok(expansion.captured.take().ok_or(2)?.value)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FieldContext {
+    Argv,
+    ForList,
+    Completion,
+}
+
 pub(crate) async fn fields(
     word: &Word,
     state: &SharedState,
     cancel: &Cancel,
-    max_bytes: usize,
-    max_fields: usize,
-    max_raw: usize,
+    context: FieldContext,
+    limits: (usize, usize, usize),
     work: &mut Work,
 ) -> Result<Vec<String>, Error> {
-    work.fields_remaining = work.fields_remaining.min(max_fields);
+    if context == FieldContext::ForList {
+        work.checkpoint(cancel).await?;
+    }
+    if context != FieldContext::Completion {
+        work.fields_remaining = work.fields_remaining.min(limits.1);
+    }
     let values = expand(
-        word, state, cancel, max_bytes, max_fields, max_raw, false, work,
+        word,
+        state,
+        cancel,
+        ExpansionOptions {
+            max_bytes: limits.0,
+            max_fields: limits.1,
+            max_raw: limits.2,
+            scalar: false,
+            pathname: context != FieldContext::Completion,
+            admitted: context != FieldContext::Argv,
+            tilde: tilde::Context::Word,
+        },
+        work,
     )
     .await?;
-    work.fields_remaining = work.fields_remaining.saturating_sub(values.len());
+    if context != FieldContext::Completion {
+        work.fields_remaining = work.fields_remaining.saturating_sub(values.len());
+    }
     Ok(values)
 }
 
@@ -2324,8 +2565,96 @@ pub(crate) async fn word(
     max_raw: usize,
     work: &mut Work,
 ) -> Result<String, Error> {
-    let values = expand(word, state, cancel, max, 1, max_raw, true, work).await?;
+    scalar_word(
+        word,
+        state,
+        cancel,
+        max,
+        max_raw,
+        tilde::Context::Word,
+        work,
+    )
+    .await
+}
+
+async fn scalar_word(
+    word: &Word,
+    state: &SharedState,
+    cancel: &Cancel,
+    max: usize,
+    max_raw: usize,
+    tilde: tilde::Context,
+    work: &mut Work,
+) -> Result<String, Error> {
+    let values = expand(
+        word,
+        state,
+        cancel,
+        ExpansionOptions {
+            max_bytes: max,
+            max_fields: 1,
+            max_raw,
+            scalar: true,
+            pathname: false,
+            admitted: false,
+            tilde,
+        },
+        work,
+    )
+    .await?;
     Ok(values.into_iter().next().unwrap_or_default())
+}
+
+/// Original fully storage-admitted scalar context for conditional operands.
+/// Capture directly into one bounded string: no field vector, splitting,
+/// pathname expansion, brace variants, or uncharged transient snapshots.
+pub(crate) async fn conditional_word(
+    word: &Word,
+    state: &SharedState,
+    cancel: &Cancel,
+    max: usize,
+    work: &mut Work,
+) -> Result<String, Error> {
+    work.checkpoint(cancel).await?;
+    let mut expansion = Expansion {
+        segments: Segments {
+            account_storage: true,
+            ..Segments::default()
+        },
+        captured: Some(Captured {
+            value: String::new(),
+            max_bytes: max,
+        }),
+        pattern: None,
+        replacement: None,
+        pattern_context: false,
+        pattern_snapshots: true,
+        admit_frames: true,
+        ifs: None,
+        ifs_changed: false,
+        work,
+        cancel,
+        max_raw: max,
+        raw_remaining: max,
+        elements_remaining: max,
+    };
+    let mut has_part_quotes = false;
+    for &quoted in &word.part_quoted {
+        expansion.work.checkpoint(cancel).await?;
+        has_part_quotes |= quoted;
+    }
+    for (index, part) in word.parts.iter().enumerate() {
+        expansion.work.checkpoint(cancel).await?;
+        let quoted = part_quoted(word, index, has_part_quotes);
+        if is_list(part) {
+            expansion.elements(part, state, quoted, true).await?;
+        } else if let WordPart::Literal(value) = part {
+            expansion.literal(value, state, true).await?;
+        } else {
+            expansion.part(part, state, quoted, true, 0).await?;
+        }
+    }
+    Ok(expansion.captured.take().ok_or(2)?.value)
 }
 
 /// Expand one case-pattern word while retaining the quote protection that the
@@ -2338,15 +2667,42 @@ pub(crate) async fn pattern(
     max_raw: usize,
     work: &mut Work,
 ) -> Result<pattern::Pattern, Error> {
+    pattern_with_positionals(word, state, cancel, max_raw, work, false).await
+}
+
+/// Original conditional-pattern adapter. Unlike case patterns, quoted `$@`
+/// remains one scalar with spaces between all positional values.
+pub(crate) async fn conditional_pattern(
+    word: &Word,
+    state: &SharedState,
+    cancel: &Cancel,
+    max_raw: usize,
+    work: &mut Work,
+) -> Result<pattern::Pattern, Error> {
+    pattern_with_positionals(word, state, cancel, max_raw, work, true).await
+}
+
+async fn pattern_with_positionals(
+    word: &Word,
+    state: &SharedState,
+    cancel: &Cancel,
+    max_raw: usize,
+    work: &mut Work,
+    join_positionals: bool,
+) -> Result<pattern::Pattern, Error> {
     work.checkpoint(cancel).await?;
     let source = word.raw.as_deref().ok_or(2)?;
     let mut expansion = Expansion {
         segments: Segments::default(),
         captured: None,
-        pattern: Some(pattern::Pattern::default()),
+        pattern: Some(pattern::Pattern::with_options(
+            join_positionals,
+            state.borrow().extglob || join_positionals,
+        )),
         replacement: None,
         pattern_context: true,
         pattern_snapshots: true,
+        admit_frames: true,
         ifs: None,
         ifs_changed: false,
         work,
@@ -2364,17 +2720,183 @@ pub(crate) async fn pattern(
     expansion.pattern.take().ok_or(2.into())
 }
 
+fn indexed_name(name: &str) -> Option<(&str, &str)> {
+    let (name, index) = name.split_once('[')?;
+    Some((name, index.strip_suffix(']')?))
+}
+
+#[cfg(test)]
+fn poll_argv(
+    word: &Word,
+    state: &SharedState,
+    cancel: &Cancel,
+    limits: (usize, usize, usize),
+    work: &mut Work,
+) -> Option<Result<Vec<String>, Error>> {
+    fields(word, state, cancel, FieldContext::Argv, limits, work).now_or_never()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pattern_frames_admit_actual_bytes_before_construction() {
+        let bytes = std::mem::size_of::<std::future::Ready<Result<usize, Error>>>();
+        let mut work = Work::new(8, bytes - 1, 1);
+        let called = std::cell::Cell::new(false);
+        let rejected = work.frame(|_| {
+            called.set(true);
+            std::future::ready(Ok(7usize))
+        });
+        assert!(matches!(
+            rejected.now_or_never(),
+            Some(Err(Error::Status(2)))
+        ));
+        assert!(!called.get());
+        assert_eq!(work.storage_left(), bytes - 1);
+        let mut work = Work::new(8, bytes, 1);
+        assert!(matches!(
+            work.frame(|_| std::future::ready(Ok(7usize)))
+                .now_or_never(),
+            Some(Ok(7))
+        ));
+        assert_eq!(work.storage_left(), 0);
+    }
+
+    #[test]
+    fn pattern_frames_share_and_refund_live_execution_admission() {
+        let execution = crate::exec::StorageBudget::new(4096);
+        let scope =
+            crate::exec::Scope::new(128, crate::exec::StorageBudget::new(128), execution.clone());
+        let mut work = Work::new(8, 0, 1).with_frame_scope(scope.clone());
+        let frame = work.frame(|_| std::future::pending::<Result<(), Error>>());
+        assert!(scope.execution_available() < 4096);
+        drop(frame);
+        assert_eq!(scope.execution_available(), 4096);
+        assert!(matches!(
+            work.frame(|_| std::future::ready(Ok(7))).now_or_never(),
+            Some(Ok(7))
+        ));
+        assert_eq!(scope.execution_available(), 4096);
+        assert_eq!(work.storage_left(), 0);
+    }
+
+    #[test]
+    fn admitted_fields_share_segment_output_and_slot_storage_without_changing_argv() {
+        let state = State::default().shared();
+        let cancel = Cancel::new();
+        let word = Word::literal("abc");
+        let storage = std::mem::size_of::<Segment>() + 8 + 8 + std::mem::size_of::<String>();
+        for (bytes, accepted) in [(storage - 1, false), (storage, true)] {
+            let mut work = Work::new(128, bytes, 1);
+            let result = fields(
+                &word,
+                &state,
+                &cancel,
+                FieldContext::ForList,
+                (16, 1, 16),
+                &mut work,
+            )
+            .now_or_never()
+            .expect("short literal must not suspend");
+            if accepted {
+                assert!(matches!(result, Ok(value) if value == ["abc"]));
+                assert_eq!(work.storage_remaining, 0);
+            } else {
+                assert!(matches!(result, Err(Error::Status(2))));
+            }
+        }
+        // Ordinary argv keeps its existing separate allocation accounting.
+        let mut work = Work::new(128, 0, 1);
+        assert!(
+            matches!(poll_argv(&word, &state, &cancel, (16, 1, 16), &mut work), Some(Ok(value)) if value == ["abc"])
+        );
+    }
+
+    #[test]
+    fn admitted_fields_preserve_splitting_quotes_and_brace_reparse() {
+        let state = State::default().shared();
+        state
+            .borrow_mut()
+            .assign_parameter("v".into(), "one two".into())
+            .unwrap();
+        let cancel = Cancel::new();
+        for source in ["$v", "\"$v\"", "{a,b}$v", "{a,b}\"$v\""] {
+            let word = shell_parser::Parser::parse_word_string_with_limits(source, 16, 4096);
+            let mut legacy = Work::new(65536, 1024 * 1024, 16);
+            let expected = poll_argv(&word, &state, &cancel, (4096, 16, 4096), &mut legacy)
+                .expect("short fixture must not suspend")
+                .unwrap_or_else(|_| panic!("legacy fixture must expand: {source}"));
+            let mut admitted = Work::new(65536, 1024 * 1024, 16);
+            let actual = fields(
+                &word,
+                &state,
+                &cancel,
+                FieldContext::ForList,
+                (4096, 16, 4096),
+                &mut admitted,
+            )
+            .now_or_never()
+            .expect("short fixture must not suspend")
+            .unwrap_or_else(|_| panic!("admitted fixture must expand: {source}"));
+            assert_eq!(actual, expected, "{source}");
+            assert!(
+                admitted.storage_remaining < legacy.storage_remaining,
+                "{source}"
+            );
+        }
+        cancel.cancel();
+        let mut work = Work::new(128, 0, 1);
+        assert!(matches!(
+            fields(
+                &Word::literal("abc"),
+                &state,
+                &cancel,
+                FieldContext::ForList,
+                (16, 1, 16),
+                &mut work
+            )
+            .now_or_never(),
+            Some(Err(Error::Status(130)))
+        ));
+    }
+
+    #[test]
+    fn conditional_capture_admits_storage_before_growing_and_keeps_empty_valid() {
+        let state = State::default().shared();
+        let cancel = Cancel::new();
+        let word = Word::literal("abc");
+        let mut work = Work::new(64, 7, 1);
+        assert!(matches!(
+            conditional_word(&word, &state, &cancel, 16, &mut work).now_or_never(),
+            Some(Err(Error::Status(2)))
+        ));
+        assert_eq!(work.storage_remaining, 7);
+        let mut work = Work::new(64, 8, 1);
+        assert!(
+            matches!(conditional_word(&word, &state, &cancel, 16, &mut work).now_or_never(), Some(Ok(value)) if value == "abc")
+        );
+        assert_eq!(work.storage_remaining, 0);
+        let mut work = Work::new(64, 0, 1);
+        assert!(
+            matches!(conditional_word(&Word::literal(""), &state, &cancel, 16, &mut work).now_or_never(), Some(Ok(value)) if value.is_empty())
+        );
+        cancel.cancel();
+        assert!(matches!(
+            conditional_word(&word, &state, &cancel, 16, &mut work).now_or_never(),
+            Some(Err(Error::Status(130)))
+        ));
+        assert_eq!(work.storage_remaining, 0);
+    }
 
     #[test]
     fn ifs_snapshot_rejects_unadmitted_storage_before_owning_a_custom_value() {
         let state = State::default().shared();
         state
             .borrow_mut()
-            .variables
-            .insert("IFS".into(), ":".into());
+            .assign_parameter("IFS".into(), ":".into())
+            .unwrap();
         let cancel = Cancel::new();
         let mut work = Work::new(64, 0, 1);
         assert!(matches!(
@@ -2405,8 +2927,8 @@ mod tests {
             if let Some(value) = value {
                 state
                     .borrow_mut()
-                    .variables
-                    .insert("sep".into(), value.into());
+                    .assign_parameter("sep".into(), value.into())
+                    .unwrap();
             }
             let cancel = Cancel::new();
             if peak != 0 {
@@ -2435,8 +2957,8 @@ mod tests {
             .unwrap();
         state
             .borrow_mut()
-            .variables
-            .insert("sep".into(), ":".repeat(4096));
+            .assign_parameter("sep".into(), ":".repeat(4096))
+            .unwrap();
         let cancel = Cancel::new();
         let mut work = Work::new(16_384, 8192, 1);
         // Reference admission yields before the effective value's raw bound
@@ -2465,7 +2987,7 @@ mod tests {
             state.borrow().scalar_parameter("IFS").map(str::len),
             Some(4096)
         );
-        assert_eq!(state.borrow().namerefs["IFS"], "sep");
+        assert_eq!(state.borrow().namerefs()["IFS"], "sep");
     }
 
     #[test]
@@ -2477,12 +2999,12 @@ mod tests {
         let cancel = Cancel::new();
         let mut work = Work::new(64, storage - 1, 1);
         assert!(matches!(
-            fields(&token, &state, &cancel, 64, 1, 64, &mut work).now_or_never(),
+            poll_argv(&token, &state, &cancel, (64, 1, 64), &mut work),
             Some(Err(Error::Status(2))),
         ));
         let mut work = Work::new(64, storage, 1);
         assert!(matches!(
-            fields(&token, &state, &cancel, 64, 1, 64, &mut work).now_or_never(),
+            poll_argv(&token, &state, &cancel, (64, 1, 64), &mut work),
             Some(Err(Error::Unbound { name, line: None })) if name == "missing",
         ));
         assert_eq!(work.storage_remaining, 0);
@@ -2496,7 +3018,14 @@ mod tests {
         let token = shell_parser::Parser::parse_word_string_with_limits(&source, 10, 16384);
         let cancel = Cancel::new();
         let mut work = Work::new(8192, 4096, 1);
-        let mut expansion = Box::pin(fields(&token, &state, &cancel, 4096, 1, 4096, &mut work));
+        let mut expansion = Box::pin(fields(
+            &token,
+            &state,
+            &cancel,
+            FieldContext::Argv,
+            (4096, 1, 4096),
+            &mut work,
+        ));
         assert!(expansion.as_mut().now_or_never().is_none());
         cancel.cancel();
         assert!(matches!(
@@ -2509,8 +3038,8 @@ mod tests {
     #[test]
     fn substring_special_snapshots_admit_decimal_storage_before_formatting() {
         let mut state = crate::state::State::default();
-        state.status = i32::MIN;
-        state.positional = vec![String::new(); 12];
+        state.publish_status(i32::MIN);
+        state.replace_positional(vec![String::new(); 12]).unwrap();
         for (name, expected) in [("?", "-2147483648"), ("#", "12")] {
             let mut work = Work::new(64, 0, 1);
             assert!(matches!(
@@ -2536,7 +3065,7 @@ mod tests {
             ..Segments::default()
         };
         for ch in "a:b".chars() {
-            segments.character(ch, false, &mut work)?;
+            segments.character(ch, false, false, &mut work)?;
         }
         let mut fields = Fields::new(3, max_fields);
         fields.joined = true;
@@ -2578,6 +3107,7 @@ mod tests {
             parts: vec![Segment::Text {
                 value: "a:".repeat(1024),
                 protected: false,
+                glob_protected: false,
             }],
             needs_split: true,
             ..Segments::default()

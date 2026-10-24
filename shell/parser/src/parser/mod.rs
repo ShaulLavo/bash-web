@@ -24,6 +24,7 @@
 
 mod ast;
 pub mod budget;
+mod file_substitution;
 mod lexer;
 mod lexical;
 pub mod parameter_scan;
@@ -37,8 +38,7 @@ mod tokens;
 pub use ast::*;
 pub use budget::{BudgetError, validate as validate_budget};
 pub use lexer::{Lexer, SpannedToken};
-pub use print_cmd::function_string;
-pub(crate) use print_cmd::word_text;
+pub use print_cmd::{command_string, function_string, function_string_bounded};
 pub use span::{Position, Span};
 pub use subst_scan::{Step as CommandBoundaryStep, SubstScanner as CommandBoundaryScanner};
 
@@ -93,6 +93,7 @@ pub struct Parser<'a> {
     /// parameter parsing. Brace expansion precedes those transformations.
     current_raw: Option<String>,
     current_escapes: Vec<LiteralEscape>,
+    current_backticks: Vec<usize>,
     /// Maximum allowed AST nesting depth
     max_depth: usize,
     /// Current nesting depth
@@ -205,13 +206,28 @@ impl<'a> Parser<'a> {
         timeout: Option<Duration>,
         options: ParseOptions,
     ) -> Self {
+        Self::at_position(input, max_depth, max_fuel, timeout, options, Position::new())
+    }
+
+    /// Re-read a source suffix without rebasing AST spans or diagnostic lines.
+    /// The position must identify a UTF-8 boundary in the original input.
+    pub fn at_position(
+        input: &'a str,
+        max_depth: usize,
+        max_fuel: usize,
+        timeout: Option<Duration>,
+        options: ParseOptions,
+        position: Position,
+    ) -> Self {
         let mut lexer = Lexer::with_max_subst_depth(input, max_depth.min(HARD_MAX_AST_DEPTH));
+        lexer.start_at(position);
+        lexer.set_track_plain(options.aliases.is_some());
         lexer.set_extglob_bang(options.extglob);
         lexer.set_capture_raw(true);
         let spanned = lexer.next_spanned_token();
-        let (current_token, current_span, current_escapes, current_raw) = match spanned {
-            Some(st) => (Some(st.token), st.span, st.literal_escapes, st.raw),
-            None => (None, Span::new(), Vec::new(), None),
+        let (current_token, current_span, current_escapes, current_raw, current_backticks) = match spanned {
+            Some(st) => (Some(st.token), st.span, st.literal_escapes, st.raw, st.backtick_offsets),
+            None => (None, Span::new(), Vec::new(), None, Vec::new()),
         };
         // The first token was lexed before any alias table was attached:
         // it is plain when it reads exactly as its source text.
@@ -225,6 +241,7 @@ impl<'a> Parser<'a> {
             peeked_token: None,
             current_raw,
             current_escapes,
+            current_backticks,
             max_depth: max_depth.min(HARD_MAX_AST_DEPTH),
             current_depth: 0,
             fuel: Cell::new(max_fuel),
@@ -242,10 +259,10 @@ impl<'a> Parser<'a> {
             current_plain,
             current_after_blank: false,
             prev_token_end: usize::MAX,
-            last_token_line: 1,
+            last_token_line: position.line,
             top_level_list: false,
             top_starts: Vec::new(),
-            failed_command_start: (0, 1),
+            failed_command_start: (position.offset, position.line),
         };
         parser.charge_literal_escapes();
         parser
@@ -288,17 +305,6 @@ impl<'a> Parser<'a> {
         self.lexer.set_track_plain(options.aliases.is_some());
         self.lexer.set_extglob_bang(options.extglob);
         self.options = options;
-    }
-
-    /// Count lines from `line` (text taken from later in a larger source).
-    pub(crate) fn starting_at_line(mut self, line: usize) -> Self {
-        let shift = line.saturating_sub(1);
-        if shift > 0 {
-            self.lexer.shift_lines(shift);
-            self.current_span.start.line += shift;
-            self.current_span.end.line += shift;
-        }
-        self
     }
 
     /// Expand an alias named by the current word, if it is one: its value
@@ -421,7 +427,7 @@ impl<'a> Parser<'a> {
             Some(tokens::Token::QuotedGlobWord(text)) => (text.clone(), true, true),
             _ => return Err(parser.error("expected one expanded word")),
         };
-        let mut word = parser.parse_word_inner(text, &parser.current_escapes, true);
+        let mut word = parser.parse_word_inner(text, &parser.current_escapes, true, &parser.current_backticks);
         budget.check()?;
         if let Some(error) = parser.deferred_error.take() {
             return Err(error);
@@ -495,7 +501,7 @@ impl<'a> Parser<'a> {
                     parser.validate_parameter_command(&body)?;
                 }
                 match parser.parse_substitution_body(&body) {
-                    Ok(script) => WordPart::CommandSubstitution(script.commands),
+                    Ok(script) => file_substitution::part(script, None),
                     Err(error) => substitution_error(body, fused, error, 1)?,
                 }
             }
@@ -530,7 +536,7 @@ impl<'a> Parser<'a> {
             .with_execution_budget(budget.clone())
             .with_strict_substitution_bodies();
         let part = match parser.parse_substitution_body(body) {
-            Ok(script) => WordPart::CommandSubstitution(script.commands),
+            Ok(script) => file_substitution::part(script, Some(body)),
             Err(error @ Error::ResourceLimit(_)) => return Err(error),
             Err(Error::Parse { message, .. }) => WordPart::UnparsedCommandSubstitution {
                 source: body.to_string(),
@@ -628,7 +634,7 @@ impl<'a> Parser<'a> {
             });
         }
         match self.parse_substitution_body(body) {
-            Ok(script) => Ok(WordPart::CommandSubstitution(script.commands)),
+            Ok(script) => Ok(file_substitution::part(script, Some(body))),
             Err(error @ Error::ResourceLimit(_)) => Err(error),
             Err(Error::Parse { message, .. }) => Ok(WordPart::UnparsedCommandSubstitution {
                 source: body.to_string(),
@@ -639,22 +645,6 @@ impl<'a> Parser<'a> {
                 error: format!("syntax error while looking for matching `)' at line {line}"),
             }),
         }
-    }
-
-    /// Prompt reparses must charge the same request budget as their caller.
-    pub(crate) fn parse_prompt_body(
-        input: &str,
-        max_depth: usize,
-        max_fuel: usize,
-        budget: crate::limits::ExecutionBudget,
-    ) -> Result<Word> {
-        let parser =
-            Parser::with_limits(input, max_depth, max_fuel).with_execution_budget(budget.clone());
-        let word = parser.parse_word(heredoc_body_escapes(input));
-        // Word parsing can turn child parse errors into literal text. A poisoned
-        // request must still fail closed rather than continue with that fallback.
-        budget.check()?;
-        Ok(word)
     }
 
     /// Create a parse error with the current position. A grammar error
@@ -901,7 +891,7 @@ impl<'a> Parser<'a> {
     fn parse_inner(&mut self) -> Result<Script> {
         let mut commands = Vec::new();
         let start_span = self.current_span;
-        self.parse_script_into(&mut commands)?;
+        self.parse_script_into(&mut commands, false)?;
         Ok(self.finish_script(commands, start_span))
     }
 
@@ -921,9 +911,24 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_recovering(mut self) -> (Script, Option<Error>) {
+        let (script, error, _) = self.parse_recovering_input(false);
+        (script, error)
+    }
+
+    /// Parse one complete top-level read unit, including multiline compounds
+    /// and here-documents. The caller retains the original source; this AST
+    /// does not copy it. Resume at the returned original-source position.
+    pub fn parse_read_unit_recovering(mut self) -> (Script, Option<Error>, Option<Position>) {
+        self.parse_recovering_input(true)
+    }
+
+    fn parse_recovering_input(
+        &mut self,
+        read_unit: bool,
+    ) -> (Script, Option<Error>, Option<Position>) {
         let mut commands = Vec::new();
         let start_span = self.current_span;
-        let result = self.parse_script_into(&mut commands);
+        let result = self.parse_script_into(&mut commands, read_unit);
         let end_span = self.current_span;
         let (keep, err) = match result {
             Ok(()) => (commands.len(), None),
@@ -963,27 +968,44 @@ impl<'a> Parser<'a> {
             command_starts.truncate(keep);
             command_starts.push(rest);
         }
+        // A heredoc's reinjected newline starts on its command line but ends
+        // after its body. Resume after the consumed delimiter, never in the body.
+        let next = (err.is_none() && self.current_token.is_some())
+            .then_some(self.current_span.end);
         (
             Script {
                 commands,
                 span: start_span.merge(end_span),
                 trailing_error: None,
                 command_end_lines,
-                source: Some(Arc::from(self.input)),
+                source: (!read_unit).then(|| Arc::from(self.input)),
                 command_starts,
             },
             err,
+            next,
         )
     }
 
     /// Top-level command loop. Each command is stored with the line its
     /// terminator (newline, `;`, `&` or EOF) sits on.
     // THREAT[TM-DOS-044]: on the recursive path; bookkeeping is out of line.
-    fn parse_script_into(&mut self, commands: &mut Vec<(Command, usize)>) -> Result<()> {
+    fn parse_script_into(
+        &mut self,
+        commands: &mut Vec<(Command, usize)>,
+        read_unit: bool,
+    ) -> Result<()> {
         self.check_error_token()?;
         while let Some(start) = self.next_script_command()? {
             let parsed = self.parse_command_list()?;
             self.end_script_command(commands, parsed, start)?;
+            // Injected alias newlines have zero-width source spans. Keep
+            // their remaining replacement text in this parser.
+            if read_unit
+                && matches!(self.current_token, Some(tokens::Token::Newline))
+                && self.current_span.start.offset != self.current_span.end.offset
+            {
+                break;
+            }
         }
         self.take_script_deferred_error()
     }
@@ -1071,6 +1093,7 @@ impl<'a> Parser<'a> {
                 self.current_span = st.span;
                 self.current_raw = st.raw;
                 self.current_escapes = st.literal_escapes;
+                self.current_backticks = st.backtick_offsets;
                 self.current_plain = st.plain;
                 self.current_after_blank = st.after_blank_alias;
             }
@@ -1078,6 +1101,7 @@ impl<'a> Parser<'a> {
                 self.current_token = None;
                 self.current_raw = None;
                 self.current_escapes.clear();
+                self.current_backticks.clear();
                 self.current_plain = false;
                 self.current_after_blank = false;
                 // Keep the last span for error reporting
@@ -1090,6 +1114,7 @@ impl<'a> Parser<'a> {
         let units = self
             .current_escapes
             .len()
+            .saturating_add(self.current_backticks.len())
             .saturating_add(self.lexer.take_boundary_scan_work());
         if let Err(err) = self.tick_units(units) {
             let first = self.deferred_error.take();
@@ -1133,12 +1158,9 @@ impl<'a> Parser<'a> {
         }
         let mut rest = Vec::new();
         while let Some(op) = self.list_operator(top_level, &mut rest)? {
-            match self.parse_pipeline()? {
-                Some(cmd) => push_list_command(&mut rest, op, cmd),
-                None => {
-                    end_list_without_command(&mut rest, op, self.current_span);
-                    break;
-                }
+            if !push_list_command(&mut rest, op, self.parse_pipeline()?) {
+                end_list_without_command(&mut rest, op, self.current_span);
+                break;
             }
         }
         self.check_list_end()?;
@@ -1238,9 +1260,8 @@ impl<'a> Parser<'a> {
         }
         let mut commands = pipeline_commands(first);
         while self.next_pipeline_stage(&mut commands)? {
-            match self.parse_command()? {
-                Some(cmd) => push_pipeline_command(&mut commands, cmd),
-                None => return Err(self.error("expected command after |")),
+            if !push_pipeline_command(&mut commands, self.parse_command()?) {
+                return Err(self.error("expected command after |"));
             }
         }
         finish_pipeline(commands, negated, start_span.merge(self.current_span))
@@ -1886,6 +1907,9 @@ impl<'a> Parser<'a> {
                             raw: self.current_raw.clone(),
                         });
                         self.advance();
+                    }
+                    Some(tokens::Token::ProcessSubIn | tokens::Token::ProcessSubOut) => {
+                        words.push(self.expect_word()?);
                     }
                     Some(tokens::Token::Newline) | Some(tokens::Token::Semicolon) => {
                         self.advance();
@@ -2814,8 +2838,11 @@ impl<'a> Parser<'a> {
                     kinds.push(CondTok::Word(None));
                     self.advance();
                 }
-                // `[[ a\n&& b\n]]`: newlines inside are blanks.
+                // Newlines are blanks only at specific grammar positions:
+                // before terms and after complete predicates, not after a
+                // lone word or between an operator and its operand.
                 Some(tokens::Token::Newline) => {
+                    kinds.push(CondTok::Op("\n"));
                     self.advance();
                 }
                 None => {
@@ -2832,17 +2859,17 @@ impl<'a> Parser<'a> {
             }
         }
 
-        if let Err(error) = check_conditional(&kinds) {
-            return Err(match error {
+        match parse_conditional_expression(&kinds, words) {
+            Ok(expression) => Ok(CompoundCommand::Test(Box::new(expression))),
+            Err(error) => Err(match error {
                 ConditionalError::Syntax(message) => Error::parse_at(
                     message,
                     self.current_span.start.line,
                     self.current_span.start.column,
                 ),
                 ConditionalError::Depth => self.limit_error(LimitExceeded::ConditionalDepth),
-            });
+            }),
         }
-        Ok(CompoundCommand::Conditional(words))
     }
 
     /// Build the `=~` operand from its raw source (see
@@ -3104,11 +3131,10 @@ impl<'a> Parser<'a> {
         // Bash requires the next word on the same line (`function` then a newline
         // is "unexpected token `newline'").
 
-        // Get function name
-        let name = match &self.current_token {
-            Some(tokens::Token::Word(w)) => w.clone(),
-            _ => return Err(self.error("expected function name")),
+        let Some(tokens::Token::Word(w)) = &self.current_token else {
+            return Err(self.error("expected function name"));
         };
+        let name = self.current_raw.clone().unwrap_or_else(|| w.clone());
         let body = self.parse_function_keyword_rest();
         let body = body?;
         let end_offset = self.current_command_end_offset();
@@ -3126,7 +3152,7 @@ impl<'a> Parser<'a> {
         let start_span = self.current_span;
         // Get function name
         let name = match &self.current_token {
-            Some(tokens::Token::Word(w)) => w.clone(),
+            Some(tokens::Token::Word(w)) => self.current_raw.clone().unwrap_or_else(|| w.clone()),
             _ => return Err(self.error("expected function name")),
         };
         self.advance();
@@ -3318,16 +3344,6 @@ impl<'a> Parser<'a> {
             result.push((current, is_quoted));
         }
         result
-    }
-
-    fn strip_quotes(s: &str) -> &str {
-        if s.len() >= 2
-            && ((s.starts_with('"') && s.ends_with('"'))
-                || (s.starts_with('\'') && s.ends_with('\'')))
-        {
-            return &s[1..s.len() - 1];
-        }
-        s
     }
 
     /// Find the assignment operator, ignoring `=` characters inside array subscripts.
@@ -3569,6 +3585,7 @@ impl<'a> Parser<'a> {
             index,
             value: value_str,
             escapes: value_escapes,
+            backticks: file_substitution::slice_offsets(&self.current_backticks, value_start, w.len()),
             raw: value_raw,
             append: is_append,
         }))
@@ -3624,7 +3641,7 @@ impl<'a> Parser<'a> {
     #[inline(never)]
     fn assignment_scalar_value(&self, source: &mut AssignmentSource) -> AssignmentValue {
         let mut word =
-            self.parse_word_with_escapes(std::mem::take(&mut source.value), &source.escapes);
+            self.parse_word_inner(std::mem::take(&mut source.value), &source.escapes, false, &source.backticks);
         word.raw = source.raw.take();
         AssignmentValue::Scalar(word)
     }
@@ -4202,6 +4219,7 @@ impl<'a> Parser<'a> {
     ) -> bool {
         let saved_raw = self.current_raw.clone();
         let saved_escapes = self.current_escapes.clone();
+        let saved_backticks = self.current_backticks.clone();
         self.advance();
         if let Some(word) = self.try_parse_compound_array_arg(w.clone(), saved_raw.clone()) {
             words.push(word);
@@ -4217,7 +4235,7 @@ impl<'a> Parser<'a> {
                 raw: saved_raw.clone(),
             }
         } else {
-            let mut word = self.parse_word_with_escapes(w, &saved_escapes);
+            let mut word = self.parse_word_inner(w, &saved_escapes, false, &saved_backticks);
             if is_quoted {
                 word.quoted = true;
             }
@@ -4640,7 +4658,7 @@ impl<'a> Parser<'a> {
                     inner_parser.started_at = self.started_at;
                     let mut commands = Vec::new();
                     let result = inner_parser
-                        .parse_script_into(&mut commands)
+                        .parse_script_into(&mut commands, false)
                         .map(|()| commands.into_iter().map(|(cmd, _)| cmd).collect::<Vec<_>>());
                     let raw = Some(format!(
                         "{}({cmd_src}){}",
@@ -5423,18 +5441,18 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_current_word(&self, s: String) -> Word {
-        self.parse_word_with_escapes(s, &self.current_escapes)
+        self.parse_word_inner(s, &self.current_escapes, false, &self.current_backticks)
     }
 
     fn parse_word_with_escapes(&self, s: String, escapes: &[LiteralEscape]) -> Word {
-        self.parse_word_inner(s, escapes, false)
+        self.parse_word_inner(s, escapes, false, &[])
     }
 
     // THREAT[TM-DOS-044]: nested `$(...)` bodies parse after the scan loop's
     // large frame has returned, so each substitution level keeps only this
     // small frame and `parse_word_substitutions` on the recursive path.
-    fn parse_word_inner(&self, s: String, escapes: &[LiteralEscape], preserve_empty: bool) -> Word {
-        let mut scanned = self.scan_word_parts(&s, escapes);
+    fn parse_word_inner(&self, s: String, escapes: &[LiteralEscape], preserve_empty: bool, backticks: &[usize]) -> Word {
+        let mut scanned = self.scan_word_parts(&s, escapes, backticks);
         drop(s);
         if !scanned.pending.is_empty() {
             self.parse_word_substitutions(&mut scanned);
@@ -5445,7 +5463,7 @@ impl<'a> Parser<'a> {
     /// One pass over the word's characters. Command substitution bodies are
     /// recorded in `pending` with placeholder parts, not parsed here.
     #[inline(never)]
-    fn scan_word_parts(&self, s: &str, escapes: &[LiteralEscape]) -> Box<ScannedWord> {
+    fn scan_word_parts(&self, s: &str, escapes: &[LiteralEscape], backticks: &[usize]) -> Box<ScannedWord> {
         let mut pending: Vec<PendingSubstitution> = Vec::new();
         let mut parts = Vec::new();
         let mut part_quoted = Vec::new();
@@ -5546,6 +5564,7 @@ impl<'a> Parser<'a> {
                 } else if chars.peek() == Some(&'(') {
                     // Check for $( - command substitution or arithmetic
                     chars.next(); // consume first '('
+                    let backtick = backticks.binary_search(&(s.len() - chars.remaining().len() - 2)).is_ok();
 
                     match self.read_word_substitution(&mut chars) {
                         Ok(WordSubstitution::Arithmetic { expression, nested }) => {
@@ -5570,6 +5589,7 @@ impl<'a> Parser<'a> {
                                 body,
                                 fused,
                                 first_error: !self.has_deferred_error(),
+                                backtick,
                             });
                             push_part!(WordPart::CommandSubstitution(Vec::new()));
                         }
@@ -5645,6 +5665,7 @@ impl<'a> Parser<'a> {
                 body,
                 fused: false,
                 first_error: !self.has_deferred_error(),
+                backtick: false,
             });
         }
     }
@@ -5703,7 +5724,7 @@ impl<'a> Parser<'a> {
         let line = self.current_span.start.line;
         let part = match result {
             Ok(None) => return,
-            Ok(Some(script)) => WordPart::CommandSubstitution(script.commands),
+            Ok(Some(script)) => file_substitution::part(script, pending.backtick.then_some(pending.body.as_str())),
             Err(err) => match substitution_error(pending.body, pending.fused, err, line) {
                 Ok(part) => part,
                 Err(err) => {
@@ -5943,6 +5964,7 @@ struct AssignmentSource {
     index: Option<String>,
     value: String,
     escapes: Vec<LiteralEscape>,
+    backticks: Vec<usize>,
     raw: Option<String>,
     append: bool,
 }
@@ -6005,6 +6027,7 @@ struct PendingSubstitution {
     fused: bool,
     /// No earlier error in source order was recorded when it was scanned.
     first_error: bool,
+    backtick: bool,
 }
 
 enum WordSubstitution {
@@ -6168,7 +6191,11 @@ fn finish_word(
             .iter()
             .zip(&part_quoted)
             .any(|(p, q)| !*q && matches!(p, WordPart::Literal(t) if t.contains('{')));
-        if !unquoted_expansion && !quoted_at && !brace_candidate {
+        let tilde_candidate = parts
+            .iter()
+            .zip(&part_quoted)
+            .any(|(p, q)| !*q && matches!(p, WordPart::Literal(t) if t.contains('~')));
+        if !unquoted_expansion && !quoted_at && !brace_candidate && !tilde_candidate {
             let mut kept_parts = Vec::with_capacity(parts.len());
             let mut kept_quoted = Vec::with_capacity(parts.len());
             for (p, q) in parts.into_iter().zip(part_quoted) {
@@ -6317,14 +6344,27 @@ fn pipeline_commands(first: Option<Box<Command>>) -> Vec<Command> {
     first.into_iter().map(|cmd| *cmd).collect()
 }
 
+// Consume optional parser results here, keeping Command moves off recursive WASI frames.
 #[inline(never)]
-fn push_pipeline_command(commands: &mut Vec<Command>, cmd: Box<Command>) {
+fn push_pipeline_command(commands: &mut Vec<Command>, cmd: Option<Box<Command>>) -> bool {
+    let Some(cmd) = cmd else {
+        return false;
+    };
     commands.push(*cmd);
+    true
 }
 
 #[inline(never)]
-fn push_list_command(rest: &mut Vec<(ListOperator, Command)>, op: ListOperator, cmd: Box<Command>) {
+fn push_list_command(
+    rest: &mut Vec<(ListOperator, Command)>,
+    op: ListOperator,
+    cmd: Option<Box<Command>>,
+) -> bool {
+    let Some(cmd) = cmd else {
+        return false;
+    };
     rest.push((op, *cmd));
+    true
 }
 
 /// `cmd &` followed by nothing still records the empty background job.
@@ -6937,7 +6977,7 @@ fn heredoc_body_escapes(content: &str) -> String {
     out
 }
 
-/// One `[[ ]]` token for [`check_conditional`]: a word (with its text when
+/// One `[[ ]]` token for [`parse_conditional_expression`]: a word (with its text when
 /// it is a bare unquoted word that may act as an operator) or an operator
 /// token the lexer split off (`&&`, `||`, `(`, `)`, `<`, `>`, other).
 enum CondTok {
@@ -6950,19 +6990,28 @@ enum ConditionalError {
     Depth,
 }
 
-/// bash's `[[ ]]` grammar (parse.y `cond_expr`), checked at parse time so
-/// `[[ a $op b ]]`, `[[ -z ]]` or `[[ '(' x ]]` are syntax errors (status
-/// 2) as in bash, not runtime tests. Evaluation still runs on the words.
-fn check_conditional(toks: &[CondTok]) -> std::result::Result<(), ConditionalError> {
+/// Original structured adapter around the existing conditional grammar. Keep
+/// operator recognition at parse time, never reinterpret expanded operands.
+fn parse_conditional_expression(
+    toks: &[CondTok],
+    words: Vec<Word>,
+) -> std::result::Result<TestExpr, ConditionalError> {
     let mut pos = 0;
-    cond_or(toks, &mut pos, 0)?;
+    let mut words = words.into_iter();
+    let expression = cond_or(toks, &mut pos, &mut words, 0)?;
     if pos < toks.len() {
         return Err(ConditionalError::Syntax(format!(
             "syntax error in conditional expression: unexpected token `{}'",
             cond_shown(toks.get(pos))
         )));
     }
-    Ok(())
+    Ok(expression)
+}
+
+fn cond_take(words: &mut std::vec::IntoIter<Word>) -> std::result::Result<Word, ConditionalError> {
+    words.next().ok_or_else(|| {
+        ConditionalError::Syntax("syntax error in conditional expression".into())
+    })
 }
 
 const COND_UNARY: &[&str] = &[
@@ -6978,6 +7027,7 @@ const COND_MAX_DEPTH: usize = 256;
 fn cond_shown(tok: Option<&CondTok>) -> String {
     match tok {
         None => "]]".to_string(),
+        Some(CondTok::Op("\n")) => "newline".to_string(),
         Some(CondTok::Op(op)) => op.to_string(),
         Some(CondTok::Word(Some(text))) => text.clone(),
         Some(CondTok::Word(None)) => "word".to_string(),
@@ -6994,52 +7044,77 @@ fn cond_word_text(tok: Option<&CondTok>) -> Option<&str> {
 fn cond_or(
     t: &[CondTok],
     pos: &mut usize,
+    words: &mut std::vec::IntoIter<Word>,
     depth: usize,
-) -> std::result::Result<(), ConditionalError> {
+) -> std::result::Result<TestExpr, ConditionalError> {
     if depth > COND_MAX_DEPTH {
         return Err(ConditionalError::Depth);
     }
-    cond_and(t, pos, depth)?;
+    let first = cond_and(t, pos, words, depth)?;
+    if !matches!(t.get(*pos), Some(CondTok::Op("||"))) {
+        return Ok(first);
+    }
+    let mut children = vec![first];
     while matches!(t.get(*pos), Some(CondTok::Op("||"))) {
         *pos += 1;
-        cond_and(t, pos, depth)?;
+        cond_take(words)?;
+        children.push(cond_and(t, pos, words, depth)?);
     }
-    Ok(())
+    Ok(TestExpr::Or(children))
+}
+
+// Newline tokens own no Word slot. Keep them in the grammar so a lone word
+// cannot silently become a string predicate across a physical newline.
+fn cond_newlines(t: &[CondTok], pos: &mut usize) {
+    while matches!(t.get(*pos), Some(CondTok::Op("\n"))) {
+        *pos += 1;
+    }
 }
 
 fn cond_and(
     t: &[CondTok],
     pos: &mut usize,
+    words: &mut std::vec::IntoIter<Word>,
     depth: usize,
-) -> std::result::Result<(), ConditionalError> {
-    cond_term(t, pos, depth)?;
+) -> std::result::Result<TestExpr, ConditionalError> {
+    let first = cond_term(t, pos, words, depth)?;
+    cond_newlines(t, pos);
+    if !matches!(t.get(*pos), Some(CondTok::Op("&&"))) {
+        return Ok(first);
+    }
+    let mut children = vec![first];
     while matches!(t.get(*pos), Some(CondTok::Op("&&"))) {
         *pos += 1;
-        cond_term(t, pos, depth)?;
+        cond_take(words)?;
+        children.push(cond_term(t, pos, words, depth)?);
+        cond_newlines(t, pos);
     }
-    Ok(())
+    Ok(TestExpr::And(children))
 }
 
 fn cond_term(
     t: &[CondTok],
     pos: &mut usize,
+    words: &mut std::vec::IntoIter<Word>,
     depth: usize,
-) -> std::result::Result<(), ConditionalError> {
+) -> std::result::Result<TestExpr, ConditionalError> {
     if depth > COND_MAX_DEPTH {
         return Err(ConditionalError::Depth);
     }
+    cond_newlines(t, pos);
     match t.get(*pos) {
         None => Err(ConditionalError::Syntax(
             "syntax error in conditional expression".to_string(),
         )),
         Some(CondTok::Op("(")) => {
             *pos += 1;
+            cond_take(words)?;
             if matches!(t.get(*pos), Some(CondTok::Op(")"))) {
                 return Err(ConditionalError::Syntax(
                     "unexpected token `)' in conditional command".to_string(),
                 ));
             }
-            cond_or(t, pos, depth + 1)?;
+            let expression = cond_or(t, pos, words, depth + 1)?;
             if !matches!(t.get(*pos), Some(CondTok::Op(")"))) {
                 return Err(ConditionalError::Syntax(format!(
                     "unexpected token `{}', expected `)'",
@@ -7047,15 +7122,18 @@ fn cond_term(
                 )));
             }
             *pos += 1;
-            Ok(())
+            cond_take(words)?;
+            Ok(TestExpr::Group(Box::new(expression)))
         }
         Some(CondTok::Word(_)) if cond_word_text(t.get(*pos)) == Some("!") => {
             *pos += 1;
-            cond_term(t, pos, depth + 1)
+            cond_take(words)?;
+            Ok(TestExpr::Not(Box::new(cond_term(t, pos, words, depth + 1)?)))
         }
         Some(CondTok::Word(_)) => {
             let first = cond_word_text(t.get(*pos));
             *pos += 1;
+            let left = cond_take(words)?;
             if first.is_some_and(|w| COND_UNARY.contains(&w)) {
                 if !matches!(t.get(*pos), Some(CondTok::Word(_))) {
                     return Err(ConditionalError::Syntax(format!(
@@ -7064,20 +7142,26 @@ fn cond_term(
                     )));
                 }
                 *pos += 1;
-                return Ok(());
+                return Ok(TestExpr::Unary {
+                    operator: first.unwrap().to_owned(),
+                    operand: cond_take(words)?,
+                });
             }
-            let binary = match t.get(*pos) {
-                Some(CondTok::Op("<" | ">")) => true,
-                Some(CondTok::Word(Some(op))) => COND_BINARY.contains(&op.as_str()),
-                None | Some(CondTok::Op("&&" | "||" | ")")) => return Ok(()),
-                _ => false,
+            let operator = match t.get(*pos) {
+                Some(CondTok::Op(op @ ("<" | ">"))) => Some(*op),
+                Some(CondTok::Word(Some(op))) if COND_BINARY.contains(&op.as_str()) => {
+                    Some(op.as_str())
+                }
+                None | Some(CondTok::Op("&&" | "||" | ")")) => return Ok(TestExpr::Word(left)),
+                _ => None,
             };
-            if !binary {
+            let Some(operator) = operator else {
                 return Err(ConditionalError::Syntax(
                     "conditional binary operator expected".to_string(),
                 ));
-            }
+            };
             *pos += 1;
+            cond_take(words)?;
             if !matches!(t.get(*pos), Some(CondTok::Word(_))) {
                 return Err(ConditionalError::Syntax(format!(
                     "unexpected argument `{}' to conditional binary operator",
@@ -7085,7 +7169,11 @@ fn cond_term(
                 )));
             }
             *pos += 1;
-            Ok(())
+            Ok(TestExpr::Binary {
+                left,
+                operator: operator.to_owned(),
+                right: cond_take(words)?,
+            })
         }
         Some(CondTok::Op(op)) => Err(ConditionalError::Syntax(format!(
             "unexpected token `{op}' in conditional command"

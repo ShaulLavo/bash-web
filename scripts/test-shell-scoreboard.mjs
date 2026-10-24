@@ -56,6 +56,27 @@ test("gains cannot conceal a regression in another corpus", () => {
   assert.deepEqual(delta.corpora["brush-suite"].gained, ["brush-suite:example:1"]);
 });
 
+test("same-corpus gains cannot conceal lost passes with equal or growing counts", () => {
+  const oracle = fixture();
+  oracle.cases = oracle.cases.map((item, index) => ({
+    ...item,
+    id: `oils:example:${index + 1}`,
+    corpus: "oils",
+  }));
+  const sealed = sealOracle(oracle);
+  const before = score(sealed, ["pass", "fail", "fail"]);
+  for (const outcomes of [
+    ["fail", "pass", "fail"],
+    ["fail", "pass", "pass"],
+  ]) {
+    const delta = compareScores(before, score(sealed, outcomes));
+    assert.equal(delta.ok, false);
+    assert.deepEqual(delta.corpora.oils.lost, ["oils:example:1"]);
+    assert.equal(delta.corpora.oils.before, 1);
+    assert.ok(delta.corpora.oils.after >= delta.corpora.oils.before);
+  }
+});
+
 test("identity changes and incomplete/duplicate results are rejected", () => {
   for (const key of ["caseSet", "oracle", "environment", "sources"]) {
     const oracle = fixture();
@@ -162,5 +183,5 @@ test("committed oracle and baseline preserve exact identities, skips and counts"
   verifyOracle(oracle);
   validateScore(oracle, baseline);
   compareScores(baseline, baseline, { requireMembership: true });
-  assert.equal(oracle.environment.nodeVersion, "v26.7.0");
+  assert.equal(oracle.environment.nodeVersion, "v26.12.1");
 });

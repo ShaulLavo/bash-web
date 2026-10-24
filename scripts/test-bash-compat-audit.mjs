@@ -11,6 +11,18 @@ import { sealOracle } from "./shell-scoreboard.mjs";
 const root = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
 await mkdir(root, { recursive: true });
 
+async function readyMarker(scratch) {
+  for (const audit of await readdir(scratch)) {
+    if (!audit.startsWith("audit-")) continue;
+    const directory = resolve(scratch, audit);
+    for (const name of await readdir(directory).catch(() => [])) {
+      if (!name.startsWith("bash-")) continue;
+      const path = resolve(directory, name, "tmp/live");
+      if ((await readFile(path, "utf8").catch(() => "")) === "ready") return path;
+    }
+  }
+}
+
 test("read-only transport audit preserves input and reports incomplete controls", async (t) => {
   const scratch = await mkdtemp(resolve(root, "audit-test-"));
   const children = new Set();
@@ -201,15 +213,7 @@ test("read-only transport audit preserves input and reports incomplete controls"
       const deadline = Date.now() + 5000;
       while (!marker) {
         assert.ok(Date.now() < deadline, "audit guest did not become ready");
-        for (const audit of await readdir(scratch)) {
-          if (!audit.startsWith("audit-")) continue;
-          const directory = resolve(scratch, audit);
-          for (const name of await readdir(directory).catch(() => [])) {
-            if (!name.startsWith("bash-")) continue;
-            const path = resolve(directory, name, "tmp/live");
-            if ((await readFile(path, "utf8").catch(() => "")) === "ready") marker = path;
-          }
-        }
+        marker = await readyMarker(scratch);
         if (!marker) await delay(5);
       }
       // Delay owned-group signal delivery so deleting scratch first is observable,

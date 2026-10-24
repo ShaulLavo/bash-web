@@ -120,6 +120,10 @@ impl Executor {
     }
     /// Nonblocking host turn, bounded even if tasks continually yield to themselves.
     pub fn drive(&self, max_polls: usize) -> Drive {
+        #[cfg(test)]
+        let marker = 0u8;
+        #[cfg(test)]
+        observation::measure_driver(&marker);
         assert!(
             !self.0.driving.replace(true),
             "executor drive is not reentrant"
@@ -188,6 +192,14 @@ impl<T> Clone for JoinHandle<T> {
     }
 }
 impl<T> JoinHandle<T> {
+    /// Observe an already-completed operation without scheduling an executor task.
+    pub fn ready(value: T) -> Self {
+        Self {
+            result: Rc::new(RefCell::new(Some(value))),
+            event: Event::default(),
+            waiting: None,
+        }
+    }
     pub fn is_finished(&self) -> bool {
         self.result.borrow().is_some()
     }
@@ -305,6 +317,7 @@ pub struct Cancel {
     shared: Rc<CancelShared>,
     event: Event,
     probe: Option<Rc<dyn Fn() -> bool>>,
+    parent: Option<Rc<Cancel>>,
 }
 impl Cancel {
     pub fn new() -> Self {
@@ -318,6 +331,15 @@ impl Cancel {
             }),
             event: Event::default(),
             probe: Some(probe),
+            parent: None,
+        }
+    }
+    /// A reader-local abort must not cancel its caller. Parent interruption
+    /// still reaches parked operations and descendants that outlive the reader.
+    pub(crate) fn child(&self) -> Self {
+        Self {
+            parent: Some(Rc::new(self.clone())),
+            ..Self::default()
         }
     }
     pub fn cancel(&self) {
@@ -330,11 +352,23 @@ impl Cancel {
             shared: self.shared.clone(),
             event: self.event.clone(),
             probe: None,
+            parent: self
+                .parent
+                .as_ref()
+                .map(|parent| Rc::new(parent.without_probe())),
         }
     }
     pub fn is_cancelled(&self) -> bool {
         let shared = &*self.shared;
         if shared.flag.get() {
+            return true;
+        }
+        if self
+            .parent
+            .as_ref()
+            .is_some_and(|parent| parent.is_cancelled())
+        {
+            self.cancel();
             return true;
         }
         let Some(probe) = &self.probe else {
@@ -358,7 +392,12 @@ impl Cancel {
         if shared.flag.get() {
             return true;
         }
-        if self.probe.as_ref().is_some_and(|probe| probe()) {
+        if self
+            .parent
+            .as_ref()
+            .is_some_and(|parent| parent.probe_now())
+            || self.probe.as_ref().is_some_and(|probe| probe())
+        {
             self.cancel();
         }
         shared.flag.get()
@@ -366,7 +405,11 @@ impl Cancel {
     pub async fn cancelled(&self) {
         let notification = self.event.listen();
         if !self.is_cancelled() {
-            notification.await;
+            if let Some(parent) = &self.parent {
+                let _ = futures::future::select(notification, Box::pin(parent.cancelled())).await;
+            } else {
+                notification.await;
+            }
         }
     }
     /// Dropping this operation or losing the race removes both wait registrations.
@@ -390,6 +433,7 @@ impl Default for Cancel {
             }),
             event: Event::default(),
             probe: None,
+            parent: None,
         }
     }
 }
@@ -495,6 +539,40 @@ mod tests {
         assert_eq!(cancel.event.waiter_count(), 0);
     }
     #[test]
+    fn child_cancellation_is_local_but_parent_wakes_parked_descendants() {
+        let parent = Cancel::new();
+        let child = parent.child();
+        let grandchild = child.child();
+        let mut wait = Box::pin(grandchild.cancelled());
+        let waker = noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        assert!(wait.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(parent.event.waiter_count(), 1);
+        parent.cancel();
+        assert!(wait.as_mut().poll(&mut cx).is_ready());
+        drop(wait);
+        assert!(grandchild.is_cancelled());
+        assert_eq!(parent.event.waiter_count(), 0);
+
+        let parent = Cancel::new();
+        let child = parent.child();
+        child.cancel();
+        assert!(!parent.is_cancelled());
+    }
+    #[test]
+    fn child_preserves_host_probe_and_without_probe_suppresses_it() {
+        let interrupted = Rc::new(Cell::new(false));
+        let observed = interrupted.clone();
+        let parent = Cancel::with_probe(Rc::new(move || observed.get()));
+        let child = parent.child();
+        let passive = child.without_probe();
+        interrupted.set(true);
+        assert!(!passive.probe_now());
+        assert!(child.probe_now());
+        assert!(parent.is_cancelled());
+        assert!(passive.is_cancelled());
+    }
+    #[test]
     fn notification_before_registration_and_nested_spawns() {
         let event = Event::default();
         let wait = event.listen();
@@ -571,5 +649,68 @@ mod tests {
         ex.drive(10);
         assert!(task.is_finished());
         assert!(!ex.park_if_idle());
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod observation {
+    use std::cell::Cell;
+    #[cfg(test)]
+    #[derive(Clone, Copy, Default, Debug)]
+    pub(crate) struct StackObservation {
+        driver: usize,
+        pub(crate) poll_bytes: usize,
+        pub(crate) drop_bytes: usize,
+        pub(crate) calls: usize,
+    }
+    #[cfg(test)]
+    thread_local! { static STACK_OBSERVATION: Cell<StackObservation> = Cell::new(StackObservation::default()); }
+    #[cfg(test)]
+    pub(crate) fn measure_driver(marker: &u8) {
+        STACK_OBSERVATION.with(|slot| {
+            let mut sample = slot.get();
+            sample.driver = marker as *const u8 as usize;
+            slot.set(sample);
+        });
+    }
+    #[cfg(test)]
+    pub(crate) fn measure_poll(marker: &u8) {
+        STACK_OBSERVATION.with(|slot| {
+            let mut sample = slot.get();
+            if sample.driver != 0 {
+                sample.poll_bytes = sample
+                    .poll_bytes
+                    .max(sample.driver.abs_diff(marker as *const u8 as usize));
+            }
+            slot.set(sample);
+        });
+    }
+    #[cfg(test)]
+    pub(crate) fn measure_drop(marker: &u8) {
+        STACK_OBSERVATION.with(|slot| {
+            let mut sample = slot.get();
+            if sample.driver != 0 {
+                sample.drop_bytes = sample
+                    .drop_bytes
+                    .max(sample.driver.abs_diff(marker as *const u8 as usize));
+            }
+            slot.set(sample);
+        });
+    }
+    #[cfg(test)]
+    pub(crate) fn measure_calls(calls: usize) {
+        STACK_OBSERVATION.with(|slot| {
+            let mut sample = slot.get();
+            sample.calls = sample.calls.max(calls);
+            slot.set(sample);
+        });
+    }
+    #[cfg(test)]
+    pub(crate) fn reset_stack_observation() {
+        STACK_OBSERVATION.with(|slot| slot.set(StackObservation::default()));
+    }
+    #[cfg(test)]
+    pub(crate) fn stack_observation() -> StackObservation {
+        STACK_OBSERVATION.with(Cell::get)
     }
 }

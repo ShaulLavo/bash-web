@@ -1,9 +1,31 @@
 import assert from "node:assert/strict";
 import { execFileSync, fork } from "node:child_process";
-import { bytesDigest, verifyOracle, validateScore } from "./shell-scoreboard.mjs";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { bytesDigest, digest, verifyOracle, validateScore } from "./shell-scoreboard.mjs";
 
 export const oraclePath = "docs/evidence/own-shell-oracle.json";
 export const baselinePath = "docs/evidence/own-shell-baseline.json";
+export const instrumentReceiptPath = "docs/evidence/own-shell-instrument-migration.json";
+
+export const authorizedInstrumentTransition = Object.freeze({
+  target: "9f0bf6a88ebba236a5db9ac3ca6fbe364632db9e",
+  fromEnvironment: "507eb1db0221423576b1a0daba7d79a7b2bc3fbbac1a5d86af3a00bc65b29e6a",
+  toEnvironment: "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+  fromRunner: "node:wasi",
+  toRunner: "waffle-node",
+  receiptSha256: "5478df004ad89919bf1cc60b2195f0cab9d2b08bb5cf4497e0cf79b19d3a7d9a",
+});
+
+export const runtimeReceiptPath = "docs/evidence/own-shell-runtime-migration.json";
+export const authorizedRuntimeTransition = Object.freeze({
+  target: "04ca4c1489aa349c4e57327684a24ebf8a9f726c",
+  fromEnvironment: "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+  toEnvironment: "6ed3e700fcfca7d03ae94ae372480a00ca737d3baa211cea90659f91c6e94c60",
+  fromRunner: "waffle-node",
+  toRunner: "waffle-node",
+  receiptSha256: "ad938096623d3e8dd3bd6bd0d1e7be7e56f99db1e50005319af6e4b822929a2a",
+});
 
 // Filter before fork startup, not only after the launcher has loaded Node hooks.
 export function migrationEnvironment() {
@@ -12,10 +34,15 @@ export function migrationEnvironment() {
       "PATH",
       "HOME",
       "CARGO_HOME",
+      "NPM_CONFIG_CACHE",
+      "npm_config_cache",
       "RUSTUP_HOME",
+      "WASI_SDK_PATH",
+      "WASI_LIBC_SCRATCH_ROOT",
       "TMPDIR",
       "RUNNER_TEMP",
       "SYSTEMROOT",
+      "BASH_COMPAT_JOBS",
       "HTTPS_PROXY",
       "HTTP_PROXY",
       "NO_PROXY",
@@ -25,7 +52,7 @@ export function migrationEnvironment() {
   );
 }
 
-export function baseFile(root, ref, path) {
+function baseFile(root, ref, path) {
   assert.match(ref, /^[a-f0-9]{40}$/, "BASH_COMPAT_BASE_REF must be a full commit SHA");
   const env = { ...process.env, GIT_NO_REPLACE_OBJECTS: "1" };
   assert.equal(
@@ -54,7 +81,7 @@ export function baseBranchBaseline(root, ref) {
   return JSON.parse(baseFile(root, ref, baselinePath));
 }
 
-export function migrationEvidence(root, ref, candidateOracle) {
+function targetEvidence(root, ref, candidateOracle) {
   const pins = JSON.parse(baseFile(root, ref, "sources.lock.json"));
   const bytes = baseFile(root, ref, oraclePath);
   assert.equal(bytesDigest(bytes), pins.shellScoreboard.oracleSha256, "target oracle checksum");
@@ -63,6 +90,11 @@ export function migrationEvidence(root, ref, candidateOracle) {
   verifyOracle(oracle);
   verifyOracle(candidateOracle);
   validateScore(oracle, baseline);
+  return { pins, oracle, baseline };
+}
+
+export function migrationEvidence(root, ref, candidateOracle) {
+  const { pins, oracle, baseline } = targetEvidence(root, ref, candidateOracle);
   const withoutObservations = ({ oracle: _observations, ...identity }) => identity;
   assert.deepEqual(
     withoutObservations(candidateOracle.identity),
@@ -70,6 +102,89 @@ export function migrationEvidence(root, ref, candidateOracle) {
     "oracle migration requires unchanged caseSet/environment/sources/schema",
   );
   return { pins, oracle, baseline };
+}
+
+function sameExceptEnvironment(target, candidate) {
+  const strip = ({ environment: _environment, identity, ...rest }) => ({
+    ...rest,
+    identity: { ...identity, environment: undefined },
+  });
+  return JSON.stringify(strip(target)) === JSON.stringify(strip(candidate));
+}
+
+/**
+ * @param {string} root
+ * @param {string} ref
+ * @param {any} candidateOracle
+ * @param {any} [receipt] the committed receipt unless supplied (tests only)
+ */
+export function instrumentMigrationEvidence(root, ref, candidateOracle, receipt = undefined) {
+  const transition =
+    ref === authorizedRuntimeTransition.target
+      ? authorizedRuntimeTransition
+      : authorizedInstrumentTransition;
+  assert.equal(ref, transition.target, "instrument migration is authorized only for its target");
+  const { pins, oracle, baseline } = targetEvidence(root, ref, candidateOracle);
+  assert.equal(oracle.identity.environment, transition.fromEnvironment, "target environment");
+  assert.equal(oracle.environment.runner, transition.fromRunner, "target runner");
+  assert.equal(
+    candidateOracle.identity.environment,
+    transition.toEnvironment,
+    "candidate environment",
+  );
+  assert.equal(candidateOracle.environment.runner, transition.toRunner, "candidate runner");
+  assert.ok(
+    sameExceptEnvironment(oracle, candidateOracle),
+    "instrument migration requires unchanged Bash observations, case set, sources and schema",
+  );
+  const receiptPath =
+    transition === authorizedRuntimeTransition ? runtimeReceiptPath : instrumentReceiptPath;
+  const recorded = receipt ?? JSON.parse(readFileSync(resolve(root, receiptPath), "utf8"));
+  assert.equal(recorded.schema, 1, "instrument receipt schema");
+  assert.deepEqual(
+    {
+      target: recorded.target,
+      fromEnvironment: recorded.from?.environment,
+      toEnvironment: recorded.to?.environment,
+    },
+    {
+      target: transition.target,
+      fromEnvironment: transition.fromEnvironment,
+      toEnvironment: transition.toEnvironment,
+    },
+    "instrument receipt names a different transition",
+  );
+  const scored = new Set(
+    oracle.cases
+      .filter((item) => !item.excluded && item.kind === "builtins-only")
+      .map((item) => item.id),
+  );
+  const seen = new Set();
+  for (const change of recorded.changes) {
+    assert.ok(scored.has(change.id) && !seen.has(change.id), `receipt case ${change.id}`);
+    seen.add(change.id);
+    assert.ok(["lost", "gained"].includes(change.change), `receipt change ${change.id}`);
+    assert.ok(["a", "b"].includes(change.class), `receipt classification ${change.id}`);
+    assert.ok(change.reason, `receipt reason ${change.id}`);
+    if (change.class === "a") assert.ok(change.plan, `receipt plan item ${change.id}`);
+  }
+  assert.equal(digest(recorded), transition.receiptSha256, "authorized receipt changed");
+  return { pins, oracle, baseline, receipt: recorded };
+}
+
+export function assertInstrumentChanges(before, after, receipt) {
+  const outcome = new Map(after.cases.map((item) => [item.id, item.outcome]));
+  const changes = [];
+  for (const item of before.cases) {
+    const next = outcome.get(item.id);
+    if (item.outcome === "pass" && next !== "pass") changes.push(`${item.id}:lost`);
+    if (item.outcome !== "pass" && next === "pass") changes.push(`${item.id}:gained`);
+  }
+  assert.deepEqual(
+    changes.toSorted(),
+    receipt.changes.map((change) => `${change.id}:${change.change}`).toSorted(),
+    "rescored target differs from the receipt's recorded transition",
+  );
 }
 
 const activeMigrations = new Set();
@@ -87,10 +202,12 @@ export async function targetBranchBaseline(root, ref, oracle) {
   const baseline = baseBranchBaseline(root, ref);
   if (!baseline) return null;
   if (baseline.identity.oracle === oracle.identity.oracle) {
-    validateScore(oracle, baseline);
-    return baseline;
-  }
-  migrationEvidence(root, ref, oracle);
+    if (baseline.identity.environment === oracle.identity.environment) {
+      validateScore(oracle, baseline);
+      return baseline;
+    }
+    instrumentMigrationEvidence(root, ref, oracle);
+  } else migrationEvidence(root, ref, oracle);
   for (const name of ["BASH_COMPAT_SHELL_WASM", "BASH_COMPAT_BASELINE", "BASH_COMPAT_ORACLE"])
     assert.equal(process.env[name], undefined, `oracle migration rejects supplied ${name}`);
   return new Promise((resolve, reject) => {

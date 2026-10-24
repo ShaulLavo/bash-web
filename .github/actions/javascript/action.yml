@@ -1,0 +1,11 @@
+name: Restore shared JavaScript inputs
+description: Reuse the single dependency install and worker build from this run
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: javascript-${{ github.sha }}
+        path: ${{ runner.temp }}/javascript
+    - shell: bash
+      run: tar -xzf "$RUNNER_TEMP/javascript/javascript.tar.gz"

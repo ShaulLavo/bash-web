@@ -117,7 +117,7 @@ fn protected_dollars_do_not_become_arithmetic_expansion_openers() {
             assert!(rig.calls.borrow().is_empty(), "{source}");
             assert!(rig.output.bytes().is_empty(), "{source}");
             assert!(!rig.errors.bytes().is_empty(), "{source}");
-            assert_eq!(rig.shell.state().borrow().variables["n"], "0", "{source}");
+            assert_eq!(rig.shell.state().borrow().bindings()["n"], "0", "{source}");
             assert_eq!(rig.run(r#"args "$n" recovered"#), 0);
             assert_eq!(*rig.calls.borrow(), [vec!["0", "recovered"]]);
         }
@@ -216,7 +216,7 @@ fn expansion_errors_abort_and_completed_writes_survive() {
             "{expression}"
         );
         assert!(rig.calls.borrow().is_empty());
-        assert_eq!(rig.shell.state().borrow().variables.get("x").unwrap(), "9");
+        assert_eq!(rig.shell.state().borrow().bindings().get("x").unwrap(), "9");
         assert!(!rig.errors.bytes().is_empty());
     }
     let rig = Rig::new(Limits::default());
@@ -254,10 +254,10 @@ fn substring_utf8_and_special_scalars() {
 }
 
 #[test]
-fn arithmetic_unavailable_categories_remain_explicit() {
+fn arithmetic_array_lvalues_and_element_slices_remain_explicit() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("args \"$((a[0]))\""), 2);
-    assert_eq!(rig.run("args \"${array[@]:1:2}\""), 2);
+    assert_eq!(rig.run("args \"${array[1]:1:2}\""), 2);
 }
 
 #[test]
@@ -345,7 +345,7 @@ fn unchanged_writes_do_not_hide_arithmetic_recursion() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("x='(y=1)+x'; y=3; args \"$((x))\"; args after"), 1);
     assert!(rig.calls.borrow().is_empty());
-    assert_eq!(rig.shell.state().borrow().variables["y"], "1");
+    assert_eq!(rig.shell.state().borrow().bindings()["y"], "1");
 }
 
 #[test]
@@ -549,7 +549,7 @@ fn substring_boundary_scans_yield_cancel_and_admit_storage_before_arithmetic() {
     assert!(!job.is_finished());
     rig.shell.interrupt();
     assert_eq!(rig.finish(job), 130);
-    assert_eq!(rig.shell.state().borrow().variables["x"], "0");
+    assert_eq!(rig.shell.state().borrow().bindings()["x"], "0");
     assert!(rig.calls.borrow().is_empty());
 
     let rig = Rig::new(Limits {
@@ -559,7 +559,7 @@ fn substring_boundary_scans_yield_cancel_and_admit_storage_before_arithmetic() {
     rig.variable("v", "abcdef");
     rig.variable("x", "0");
     assert_eq!(rig.run(&source), 2);
-    assert_eq!(rig.shell.state().borrow().variables["x"], "0");
+    assert_eq!(rig.shell.state().borrow().bindings()["x"], "0");
     assert!(rig.calls.borrow().is_empty());
 }
 
