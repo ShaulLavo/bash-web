@@ -665,6 +665,7 @@ async fn set(
             errexit: state.errexit,
             monitor: state.monitor,
             noglob: state.noglob,
+            noexec: state.noexec,
             functrace: state.functrace,
             errtrace: state.errtrace,
         }
@@ -707,6 +708,7 @@ async fn set(
     state.errexit = flags.errexit;
     state.monitor = flags.monitor;
     state.noglob = flags.noglob;
+    state.noexec = flags.noexec && !state.interactive;
     state.functrace = flags.functrace;
     state.errtrace = flags.errtrace;
     Ok(Outcome::status(0))
@@ -721,6 +723,7 @@ struct SetFlags {
     errexit: bool,
     monitor: bool,
     noglob: bool,
+    noexec: bool,
 }
 
 fn set_option(option: &str, enabled: bool, flags: &mut SetFlags) -> Result<(), i32> {
@@ -730,6 +733,7 @@ fn set_option(option: &str, enabled: bool, flags: &mut SetFlags) -> Result<(), i
         "errexit" => flags.errexit = enabled,
         "monitor" => flags.monitor = enabled,
         "noglob" => flags.noglob = enabled,
+        "noexec" => flags.noexec = enabled,
         "functrace" => flags.functrace = enabled,
         "errtrace" => flags.errtrace = enabled,
         _ => return Err(2),
@@ -753,6 +757,7 @@ async fn set_short_options(
             b'e' => flags.errexit = enabled,
             b'm' => flags.monitor = enabled,
             b'f' => flags.noglob = enabled,
+            b'n' => flags.noexec = enabled,
             b'T' => flags.functrace = enabled,
             b'E' => flags.errtrace = enabled,
             _ => return Err(2),

@@ -3483,6 +3483,37 @@ Evidence and paired release reproductions are in
 `source-location-main.json`, `interactions-source.mjs`, `waffle-interactions.log`
 and `attempt3/waffle-interactions.log`.
 
+## Interactive bare-function noexec follow-up from PR66 review, 2026-10-24
+
+Status: Approved follow-up, not implemented in PR66. Owner: CONTROL interpreter
+background execution and option state. Independent review
+`/work/reports/wave-20261022/shell/review66-prepared-integration-r3.md` approves
+prepared source `a4141698807e53bde9be1238313ad83c6016b99c` but records this rare
+remaining interaction. Clearing the interactive flag on every background child
+is too broad for Bash's bare simple-function form.
+
+Run in an interactive session:
+
+```bash
+f(){ set -o noexec; echo BAD; }; f & wait; echo parent; (set -n; echo foreground); true | { set -n; echo pipeline; }; echo last
+```
+
+Signed GNU Bash 5.3.15 prints `BAD\nparent\nforeground\npipeline\nlast\n`.
+Reviewed native and patched WASI print `parent\nforeground\npipeline\nlast\n`.
+Both exit 0. The relevant source at that commit is
+`shell/engine/src/interpreter.rs:2157-2161` and `builtins.rs:684`.
+Brace/subshell async forms suppress `BAD` in Bash and the candidate; foreground
+subshells and pipeline stages still ignore noexec. Preserve those controls.
+Bare async eval was oracle-sampled only, not a separate candidate finding.
+
+Evidence is in `review66-prepared-integration-r3-evidence/` beside the report:
+`guard.rs`, both `guards-*-build.log` files, `interactive-oracle.json` and
+`probe-classification.json`. The guard's candidate-output assertion is not
+oracle agreement. Reproduce the exact input against signed Bash 5.3.15, native
+and production Waffle before a bounded repair; add bare-function, brace and
+subshell controls without weakening existing noexec assertions. No runtime fix,
+new score, or Bash parity claim is made by this publication note.
+
 ## Explicit command hash review follow-ups, 2026-10-24
 
 Status: Approved, deferred beyond PR88 integration. Preserve the immutable AVL,
