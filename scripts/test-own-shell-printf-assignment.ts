@@ -201,14 +201,14 @@ for (const script of [
   'x=outer; x=prefix printf -v x %s assigned; echo "$x"',
   "x=old; printf -v x '%b' '\\377'; echo \"$?:$x\"",
   "x=old; printf -v 'x[0]' %s changed; echo \"$?:$x\"",
-  "x=old; printf -v x 'prefix%f' 3; echo \"$?:$x\"",
+  "x=old; printf -v x 'prefix%a' 3; echo \"$?:$x\"",
 ])
   test(`production Waffle explicit scalar boundary: ${script}`, async () => {
     const { actual } = await observe(script);
     assert.equal(actual.status, 0);
     const expected = script.startsWith("x=outer")
       ? "outer\n"
-      : script.includes("prefix%f")
+      : script.includes("prefix%a")
         ? "2:prefix\n"
         : "2:old\n";
     assert.deepEqual(actual.stdout, Buffer.from(expected));
