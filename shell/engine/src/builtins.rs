@@ -358,19 +358,21 @@ fn error_status(error: Error) -> i32 {
     }
 }
 
-const SHOPT_OPTIONS: [&str; 7] = [
+const SHOPT_OPTIONS: [&str; 8] = [
     "expand_aliases",
     "extdebug",
     "extglob",
     "inherit_errexit",
     "lastpipe",
     "nullglob",
+    "promptvars",
     "sourcepath",
 ];
 
 fn shopt_value(state: &State, option: &str) -> Option<bool> {
     match option {
         "expand_aliases" => Some(state.expand_aliases),
+        "promptvars" => Some(state.promptvars),
         "extglob" => Some(state.extglob),
         "extdebug" => Some(state.extdebug),
         "inherit_errexit" => Some(state.inherit_errexit),
@@ -399,6 +401,7 @@ async fn set_shopt_option(
     let mut state = state.borrow_mut();
     match option {
         "expand_aliases" => state.expand_aliases = enabled,
+        "promptvars" => state.promptvars = enabled,
         "extglob" => state.extglob = enabled,
         "extdebug" => {
             state.extdebug = enabled;

@@ -2229,5 +2229,23 @@
       "scripts/fixtures/shell-array-slicing.json"
     ],
     "implementation": "Sparse numeric offsets seek through the existing borrowed state reader. Length counts present entries, not holes. Empty sources and out-of-range offsets skip bound arithmetic. Selected strings are admitted before copying and emitted through shared quote/list/IFS logic with cooperative cancellation and command-wide limits. Scalar bindings keep existing text slicing. PIPESTATUS reads its existing producer. No indexed state mutation or durable producer publication API changes."
+  },
+  "shellPromptTransformation": {
+    "classification": "Original prompt decoder and scanner context; GNU Bash 5.3.15 is a behavior oracle. No upstream implementation copied or adapted.",
+    "baseRevision": "e6430b1554de7d2efad092f40751858292cb071d",
+    "paths": [
+      "shell/engine/src/expand/prompt.rs",
+      "shell/engine/src/expand/operand.rs",
+      "shell/engine/src/expand/transformation.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/tests/words/transformation.rs",
+      "scripts/test-own-shell-prompt.ts",
+      "scripts/fixtures/shell-prompt.json",
+      "docs/parameter-transformation.md"
+    ],
+    "implementation": "Decode scalar @P escapes into admitted UTF-8 bytes, then expand through the existing bounded substitution scanner with literal prompt quotes. State owns promptvars and inherits it into subshells. Cwd, HOME and PROMPT_DIRTRIM determine directory escapes; available USER, HOSTNAME and EUID bindings supply identity escapes without synthesized facts. Protect fact text before substitution scanning. Existing outer field rules apply to the final result. Nested scalar transformations use the operand scanner.",
+    "deferred": "Time/date formatting, history and command numbers, terminal and job facts, version escapes, missing identity bindings, invalid UTF-8, arrays and indirect transformation names. No live runtime identity or clock contract is added.",
+    "gate": "Pinned Bash 5.3.15 recordings through production Waffle, native recursion/output/cancellation/missing-fact controls, and the unchanged hosted frozen 9221-case replay."
   }
 }

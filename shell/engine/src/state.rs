@@ -169,6 +169,8 @@ pub struct State {
     pub extdebug: bool,
     /// Enable extended glob groups in option-sensitive pattern contexts.
     pub extglob: bool,
+    /// Expand variables and substitutions after decoding prompt escapes.
+    pub promptvars: bool,
     /// Remove unmatched unquoted pathname patterns instead of keeping them.
     pub nullglob: bool,
     pub sourcepath: bool,
@@ -227,6 +229,7 @@ impl Default for State {
             errtrace: false,
             extdebug: false,
             extglob: false,
+            promptvars: true,
             nullglob: false,
             sourcepath: true,
             noglob: false,
@@ -434,6 +437,7 @@ impl State {
             errtrace: state.errtrace,
             extdebug: state.extdebug,
             extglob: state.extglob,
+            promptvars: state.promptvars,
             nullglob: state.nullglob,
             sourcepath: state.sourcepath,
             noglob: state.noglob,
