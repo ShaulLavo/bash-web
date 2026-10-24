@@ -2,11 +2,11 @@
 
 Run a bash script, or an interactive shell, inside a web page. You need the [built browser assets](../development.md#build-and-test) and a page served with cross-origin isolation. Examples are TypeScript for a bundler that handles `new URL(..., import.meta.url)`.
 
-bash-web is not on npm. Use it from a checkout of the repository, or as a Git dependency.
+bash-web is not on npm. Use it from a checkout of the repository.
 
 ## Serve the assets
 
-1. Build the assets: `npm run build:browser`. It emits `dist/shell-worker.js`, `dist/fs-worker.js`, and the shell guest `public/programs/shell-engine.wasm`.
+1. Build the assets from a checkout with `npm ci` first. You need Node `>=26.12.1` ([install it](../development.md#prerequisites)), Waffle ([install it](#install-the-waffle-peer)), and wasi-sdk 34.0 ([why](../development.md#prerequisites)). Then run `npm run build:browser`. It emits `dist/shell-worker.js`, `dist/fs-worker.js`, and the shell guest `public/programs/shell-engine.wasm`.
 2. Serve the page, both workers, and the WASM files with these headers, because the terminal uses `SharedArrayBuffer`:
 
    ```http
@@ -21,7 +21,37 @@ bash-web is not on npm. Use it from a checkout of the repository, or as a Git de
 
 ## Install the Waffle peer
 
-Waffle is a required peer dependency, pinned to an exact Git commit. Install the commit that `peerDependencies.waffle` names in `package.json`. A different Waffle revision is not supported.
+Waffle is not on npm. bash-web needs this exact commit of [ShaulLavo/waffle](https://github.com/ShaulLavo/waffle), the one `peerDependencies.waffle` names in `package.json`:
+
+```text
+b20fad173ebaa225cb87c51776f35edaaafd4a40
+```
+
+It is Waffle `0.0.67`. A different revision is not supported. Waffle's own docs install it as a Git dependency and trust its build step, because its `prepare` script builds the Node entry points and runs on Bun. In your app's `package.json`:
+
+```json
+{
+  "dependencies": {
+    "waffle": "github:ShaulLavo/waffle#b20fad173ebaa225cb87c51776f35edaaafd4a40"
+  },
+  "trustedDependencies": ["waffle"]
+}
+```
+
+Then run `bun install`. You need [Bun](https://bun.sh) on your `PATH`, because Waffle's `prepare` runs `bun prepare.ts`. Without Bun, npm fails with `bun: command not found`. Waffle's [README](https://github.com/ShaulLavo/waffle#readme) has the full browser setup.
+
+In a bash-web checkout, `npm ci` already installs this commit. It leaves `node_modules/waffle/dist` unbuilt, and the browser build does not need it. The Node-side checks (`npm run compat:shell`, `npm run test:installed-waffle`) load that `dist`. To build it, install Bun (CI uses 1.4.4) and run `bun prepare.ts` inside `node_modules/waffle`.
+
+Waffle is pre-1.0, and its API is early. It can change between commits, which is why bash-web pins one.
+
+## What the snippets need
+
+The script example below runs only when all of these hold:
+
+- Waffle is installed at the pinned commit, as above.
+- `bash-web` resolves. It is not on npm, so import it from a checkout or point your bundler at `src/index.ts`.
+- Your server serves `dist/fs-worker.js` at `/fs-worker.js`. `npm run build:browser` writes it. It is Waffle's filesystem worker, bundled.
+- Your server serves `/programs/shell-engine.wasm` and `dist/shell-worker.js`, with the cross-origin isolation headers above.
 
 ## Run a script
 

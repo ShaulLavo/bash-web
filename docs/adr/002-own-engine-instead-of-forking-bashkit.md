@@ -7,7 +7,7 @@ Date: 2026-10-16
 
 The browser shell had been Brush built for `wasm32-wasip1`. A product dev environment in the browser needs real programs as child processes whose output streams live, for example `bun dev | grep error` showing each matching line as it happens. It also needs compatibility with GNU Bash that is measured, not assumed.
 
-[Bashkit](https://github.com/everruns/bashkit) has a strong bash parser and a high compatibility score. On the builtins-only Oils cases, the historical comparison in [Bash compatibility](../bash-compatibility.md) lists Bashkit source at 95.4% and Brush (browser) at 78.4%.
+[Bashkit](https://github.com/everruns/bashkit) has a strong bash parser and a high compatibility score. On the builtins-only Oils cases, the earlier comparison summarized in [Bash compatibility](../bash-compatibility.md#history) lists Bashkit source at 95.4% and Brush (browser) at 78.4%.
 
 Bashkit is built as a sandbox for AI agents. Its interpreter promises no process spawning by default, reimplements its commands in Rust in-process, and runs scripts to completion before returning output. That assumption runs through one `Interpreter` struct with 123 declared fields. A spike found four places where output or input is collected whole instead of streamed: the final pipeline stage, generic standard-input collection, process substitution, and the accumulated result output. Each missed spot would be a pipeline that silently stops streaming.
 

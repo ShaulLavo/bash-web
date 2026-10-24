@@ -112,7 +112,7 @@ artifact verifier; browser/test helpers verify before publishing their assets.
 Before a heavy build, verify the data mount/free space and record pre-existing
 resources. Admit work through the host's shared build queue. Waffle owns its
 unique temporary download/source/build tree under `WASI_LIBC_SCRATCH_ROOT`
-(`/work/tmp` on the PC) and removes it after descendants stop on success,
+ and removes it after descendants stop on success,
 failure or interruption. If cleanup cannot be verified it prints and retains
 the path for its caller to resolve. Compiler temporaries use that owned tree.
 

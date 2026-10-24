@@ -25,92 +25,37 @@ An unexported byte buffer still shares its cursor. After child export, the exist
 buffer machinery exposes a real host pipe, and reopening shares that pipe. Neither
 state provides Bash's large here-input regular-file reopening behavior. Short input
 controls happen to match Bash's pipes; that does not make Bytes a pipe. A separate
-approved follow-up covers the reproducer and removal condition. Descriptor metadata
+known gap remains with a reproducer and a removal condition. Descriptor metadata
 predicates and lexical path normalization also retain their existing limitations;
-this change does not claim virtual symlink/stat or path traversal parity.
+virtual symlink/stat and path traversal parity are not claimed.
 The old parser also accepts a leading plus in `/dev/fd/+3`, unlike Linux and
 Waffle, and `test` does not normalize `/dev//fd/3` before its descriptor lookup.
-Those pre-existing behaviors remain outside this adoption.
+Both behaviors differ from Bash and are not fixed.
 
-## Consumer audit
+## Runtime pin and storage behavior
 
-The previous actual pin was Waffle 0.0.58, `fc58a532`, not 0.0.50. The adopted pin is
-0.0.63, `c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289`.
+The shell pins Waffle 0.0.63, `c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289`.
 
-| Upstream change since 0.0.50 | Consumer action |
-| --- | --- |
-| FAST/SAFE/memory selector and format validation | Standalone explicitly selects FAST. SAFE preserves typed UNSUPPORTED_VFS with no fallback. Foreign IndexedDB preserves INVALID_VFS_FORMAT through the visible startup error and Restart, without deleting data. OPFS remains an internal test selector. |
-| Inode modes, supported access masks and guest permission query | Already adopted at 0.0.58. Keep the four-word mode/modeSupported/access/accessSupported adapter. Waffle, not shell inference, enforces inode access. |
-| Retained metadata, queued admission/rejection ownership, dispatcher and supervisor fixes | Internal upstream fixes. Keep readiness, Waiting, Restart, cancellation and disposal contracts and their tests. |
-| Localhost networking and shared-worker additions | Additive, not enabled by this adoption. |
-| Opt-in local publication and cross-page guard/private transport after 0.0.58 | Not enabled. Preserve one application-created Runtime and borrowed-runtime ownership. |
-| Reject save completion after disposal | Adopt through the exact pin; existing physical teardown tests remain blocking. |
-| Descriptor path reopening | Redirects, file substitutions, cat and grep operands translate logical fd, then use real path_open. Test offsets, flags, permissions, missing fds, remapping and shared streams. |
+- The standalone page selects FAST storage explicitly. SAFE storage preserves the typed `UNSUPPORTED_VFS` error with no fallback. A foreign IndexedDB format preserves `INVALID_VFS_FORMAT` through the visible startup error and Restart, without deleting data. OPFS stays an internal test selector.
+- The shell reads inode modes, supported access masks and the guest permission query through a four-word adapter (mode, modeSupported, access, accessSupported). Waffle, not shell inference, enforces inode access.
+- Readiness, Waiting, Restart, cancellation and disposal contracts are unchanged. Disposal rejects a save that completes afterwards.
+- Localhost networking, shared workers, opt-in local publication and cross-page guards exist in Waffle but are not enabled. The page keeps one application-created runtime and borrows it.
+- Redirects, file substitutions, `cat` and `grep` operands translate the logical fd, then use the real `path_open`. Tests cover offsets, flags, permissions, missing fds, remapping and shared streams.
+
+`grep` returns 2 without leaking data for an fd it cannot reopen, as Bash 5.3.15 does: `printf 'secret-stdin\n' | grep secret /dev/fd/4` prints nothing and exits 2. It reuses the typed opener of `cat` and redirects, keeps its generic I/O diagnostic, still processes later operands, gives quiet success priority over earlier errors, and preserves cancellation 130 and broken-pipe 141. No other shell-semantic file-operand open bypasses the translation. The remaining direct opens implement the filesystem or are test fixtures, and `mkdir` creates namespace entries.
 
 ## Provenance and verification
 
-The Rust translation, native MemoryFs extraction, WASI rights selection and browser
-error display are original bash-web adapters, not copied upstream implementations.
-Their external contract is Waffle's `docs/host-abi.md`, `docs/vfs.md` and
-`docs/permissions.md` at the exact pin above. No runtime source is vendored.
+The Rust translation, native MemoryFs extraction, WASI rights selection and browser error display are original bash-web adapters, not copied upstream implementations. Their external contract is Waffle's `docs/host-abi.md`, `docs/vfs.md` and `docs/permissions.md` at the exact pin above. No runtime source is vendored.
 
-Run `npm run build:shell`, `npm run build:node-harness`, then
-`node --test scripts/test-own-shell-descriptors.ts scripts/test-own-shell-permissions.ts`.
-The descriptor test is part of the unchanged blocking scoreboard recipe, with its
-exact complete selection asserted in `scripts/test-ci-workflow.ts`. Storage tests
-cover the actual standalone entry in both configured browsers.
+Run `npm run build:shell`, `npm run build:node-harness`, then `node --test scripts/test-own-shell-descriptors.ts scripts/test-own-shell-permissions.ts`. The descriptor test is part of the blocking scoreboard recipe, and `scripts/test-ci-workflow.ts` asserts its exact selection. Storage tests cover the standalone entry in Chromium and Firefox.
 
+## Measured effect
 
-## Final integrated measurement
+Measured at source `d7009e1afbdc06cd29ebb52dc78c97a2326154e3`: the full replay covers all 9,221 records and changes no score. Oils stays at 1,154/1,682 scored, Brush at 1,120/1,888, Bashkit at 1,554/2,222. The gained, lost and newly failing lists are empty. See [the receipt](evidence/waffle-descriptor-reopening.json) and [Bash compatibility](bash-compatibility.md) for the replay command.
 
-The measured production source is `d7009e1afbdc06cd29ebb52dc78c97a2326154e3`.
-It normally merges immutable main `4bf6a474ef6bb32dd5de44c1b6d30a300a079d93`,
-including PR41. No Rust semantic conflict needed manual resolution. Integration
-only resolves patch versions, the combined exact test recipe, the derived layer
-receipt and plan text. Parent independently accepted that integration delta.
+The frozen inventory has 16 descriptor-path cases: 10 pass, four are excluded command-dependent cases, and two fail for unrelated reasons: `oils:redirect:543` (`{var}` redirects) and `brush-suite:builtins/dot:8` (no `.` builtin).
 
-The full production replay preserves all 9,221 records. Oils stays 1,154/1,682
-scored, Brush stays 1,120/1,888, and Bashkit stays 1,554/2,222. Every gained, lost
-and newly failing ID list is empty, with no other outcome changes. Official
-`validateScore` and `compareScores` with `requireMembership: true` pass. The
-baseline bytes and historical failure payloads are unchanged. This is supporting
-host-backed adoption, not a new scored gain. See
-[the exact receipt](evidence/waffle-descriptor-reopening.json).
+Integrated suites at that source: native/WASI 1,438/1,418 tests, production controls 154, scoreboard recipe 710, CI tests 105, runtime unit tests 145. Chromium and Firefox pass 234 browser cases with 16 skipped, including shared terminals, Waiting, Restart, SAFE rejection and foreign-format preservation. The eight short and large here-input observations are unchanged. Engine layers keep zero violations and 42 production and 30 test-only edges.
 
-The frozen inventory contains 16 descriptor-path cases: 10 pass, four are excluded
-command-dependent cases, and two fail for unrelated behavior. All 10 passes remain.
-The failures are `oils:redirect:543` for `{var}` redirects and
-`brush-suite:builtins/dot:8` for the missing `.` builtin.
-
-Independent review found that grep operands still bypassed logical translation.
-Before repair, `printf 'secret-stdin\n' | grep secret /dev/fd/4` read a private
-stdin duplicate and returned 0. Bash 5.3.15 returned 2 with no stdout. Grep now
-uses the same typed opener as cat and redirects, returns 2 without leaking data,
-and retains its existing generic I/O diagnostic. The operand loop still processes
-later inputs, gives quiet success priority over earlier errors, and preserves
-cancellation 130 and broken-pipe 141. Production controls cover fd 3 through 6,
-remapping, both numbered namespaces, stdio aliases, normalized spellings,
-independent regular offsets, real pipes, ordinary files and inode access denial.
-
-The consumer audit found no other direct shell-semantic file-operand open.
-Ordinary redirects and `interpreter/file_substitution.rs` use `open_path`.
-The remaining direct opens implement the filesystem itself or are test fixtures;
-mkdir creates namespace entries rather than reopening input operands. No program
-or generic I/O contract was added.
-
-Integrated native/WASI suites pass 1,438/1,418 tests. Production controls pass 154,
-the exact combined scoreboard recipe passes 710, CI tests pass 105, and runtime
-unit tests pass 145. Rust formatting, native/WASI clippy, machete, guest size,
-JS quality, typechecks and capability checks pass. Chromium/Firefox pass 234
-browser cases with 16 unchanged skips, including shared terminals, Waiting,
-Restart, SAFE rejection and foreign-format preservation. All eight short/large
-here-input observations are unchanged. Engine layers retain zero violations and
-42 production/30 test-only edges, the same graph counts as integrated main.
-Release guest hashes are recorded against the measured source and checked before
-and after replay. Only this document, its evidence receipt and plan text change
-after the measured source. Actual-host teardown is recorded in the report.
-
-Root granted the CONTROL48-then49 slot on 2026-10-22, superseding all historical
-holds. Parent owns hosted CI and landing; this receipt does not claim merged
-status. The Approved local-buffer follow-up remains required before full alias
-removal or large here-input parity can be claimed.
+Full alias removal and large here-input parity are not claimed until the local-buffer gap above is closed.
