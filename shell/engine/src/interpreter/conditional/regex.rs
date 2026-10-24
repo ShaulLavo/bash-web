@@ -1585,6 +1585,91 @@ mod tests {
         }
     }
     #[test]
+    fn larger_nested_group_captures_fit_default_command_work() {
+        for (groups, length) in [
+            (64, 3072),
+            (48, 4096),
+            (32, 8192),
+            (16, 16384),
+            (4, 65536),
+            (1, 65536),
+        ] {
+            let source = "(".repeat(groups) + "a" + &")".repeat(groups) + "*";
+            let pattern = self::pattern(&source);
+            let value = "a".repeat(length);
+            let mut work =
+                crate::interpreter::expansion_work(&crate::interpreter::Limits::default());
+            let captures = finish(matches(&pattern, &value, &mut work, &Cancel::new()))
+                .unwrap_or_else(|_| {
+                    panic!("{groups} groups on {length} bytes exhausted default work")
+                })
+                .unwrap();
+            assert_eq!(captures.len(), groups + 1);
+            assert_eq!(captures[0], Some((0, length)));
+            assert!(
+                captures[1..]
+                    .iter()
+                    .all(|pair| *pair == Some((length - 1, length)))
+            );
+        }
+    }
+    #[test]
+    fn manager_capture_chain_profile() {
+        for (groups, length) in [
+            (64, 3072),
+            (48, 4096),
+            (32, 8192),
+            (16, 16384),
+            (4, 65536),
+            (1, 65536),
+        ] {
+            let source = "(".repeat(groups) + "a" + &")".repeat(groups) + "*";
+            let pattern = self::pattern(&source);
+            let value = "a".repeat(length);
+            let cancel = Cancel::new();
+            let mut work = Work::new(100_000_000, 100_000_000, 16);
+            finish(ascii(&pattern, &value, &mut work, &cancel))
+                .unwrap_or_else(|_| panic!("profile stage failed"));
+            let (nodes, start, count) = finish(compile(&pattern, &mut work, &cancel))
+                .unwrap_or_else(|_| panic!("profile stage failed"));
+            let compiled = work.remaining;
+            let graph = finish(graph(&nodes, &mut work, &cancel))
+                .unwrap_or_else(|_| panic!("profile stage failed"));
+            let graphed = work.remaining;
+            let span = finish(longest(&graph, start, &pattern, &value, &mut work, &cancel))
+                .unwrap_or_else(|_| panic!("profile stage failed"))
+                .expect("profile matches");
+            let scanned = work.remaining;
+            let reachable = finish(reachability(
+                &graph, &pattern, &value, span, true, &mut work, &cancel,
+            ))
+            .unwrap_or_else(|_| panic!("profile stage failed"));
+            let reached = work.remaining;
+            let captures = finish(captures(
+                &graph, start, count, &reachable, span, &mut work, &cancel,
+            ))
+            .unwrap_or_else(|_| panic!("profile stage failed"));
+            assert_eq!(captures[0], Some((0, length)));
+            assert!(
+                captures[1..]
+                    .iter()
+                    .all(|pair| *pair == Some((length - 1, length)))
+            );
+            eprintln!(
+                "PROFILE groups={groups} n={length} nodes={} kept={} compile={} graph={} scan={} reach={} reconstruction={} total={} storage={}",
+                nodes.len(),
+                graph.kept.len(),
+                100_000_000 - compiled,
+                compiled - graphed,
+                graphed - scanned,
+                scanned - reached,
+                reached - work.remaining,
+                100_000_000 - work.remaining,
+                100_000_000 - work.storage_remaining
+            );
+        }
+    }
+    #[test]
     fn nested_group_reconstruction_is_linear_in_groups() {
         let small = reconstruction_steps(16);
         let large = reconstruction_steps(64);
