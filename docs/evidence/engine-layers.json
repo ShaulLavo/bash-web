@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "68bd7a109bdfc846ad2f3997fa2e9fc05984c8a08c0c25685ee531ecee53d7ec",
+    "engineSourceSha256": "39452a26dc64b95a55bb70601288a5b87593af9a2089dcb0a06713ad1b106cde",
     "binaryBuild": null
   },
   "contract": {
@@ -236,6 +236,7 @@
         "shell/engine/src/expand/pattern.rs",
         "shell/engine/src/expand/pattern/classes.rs",
         "shell/engine/src/expand/pattern/extglob.rs",
+        "shell/engine/src/expand/pattern/extglob/negative.rs",
         "shell/engine/src/expand/positional.rs",
         "shell/engine/src/expand/printable.rs",
         "shell/engine/src/expand/replacement.rs",

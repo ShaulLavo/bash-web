@@ -556,10 +556,10 @@ fn positive_extglob_case_match_and_miss_preserve_errexit_status() {
 }
 
 #[test]
-fn extglob_option_does_not_pretend_unsupported_patterns_matched_or_missed() {
+fn negative_extglob_case_match_and_miss_preserve_errexit_status() {
     check_output(
-        "set -e\nshopt -s extglob\ncase xyz in a!(b)c) echo forbidden;; esac\nsaved=$?; echo status:$saved; echo after",
-        "status:2\nafter\n",
+        "set -e\nshopt -s extglob\ncase xyz in a!(b)c) echo forbidden;; esac\nsaved=$?; echo status:$saved; case abc in a!(b)c) echo forbidden;; esac; echo excluded:$?; case axc in a!(b)c) echo matched;; esac; echo matched:$?; echo after",
+        "status:0\nexcluded:0\nmatched\nmatched:0\nafter\n",
     );
 }
 
