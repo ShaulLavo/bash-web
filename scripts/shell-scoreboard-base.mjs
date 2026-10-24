@@ -17,6 +17,16 @@ export const authorizedInstrumentTransition = Object.freeze({
   receiptSha256: "5478df004ad89919bf1cc60b2195f0cab9d2b08bb5cf4497e0cf79b19d3a7d9a",
 });
 
+export const runtimeReceiptPath = "docs/evidence/own-shell-runtime-migration.json";
+export const authorizedRuntimeTransition = Object.freeze({
+  target: "04ca4c1489aa349c4e57327684a24ebf8a9f726c",
+  fromEnvironment: "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+  toEnvironment: "6ed3e700fcfca7d03ae94ae372480a00ca737d3baa211cea90659f91c6e94c60",
+  fromRunner: "waffle-node",
+  toRunner: "waffle-node",
+  receiptSha256: "ad938096623d3e8dd3bd6bd0d1e7be7e56f99db1e50005319af6e4b822929a2a",
+});
+
 // Filter before fork startup, not only after the launcher has loaded Node hooks.
 export function migrationEnvironment() {
   return Object.fromEntries(
@@ -109,7 +119,10 @@ function sameExceptEnvironment(target, candidate) {
  * @param {any} [receipt] the committed receipt unless supplied (tests only)
  */
 export function instrumentMigrationEvidence(root, ref, candidateOracle, receipt = undefined) {
-  const transition = authorizedInstrumentTransition;
+  const transition =
+    ref === authorizedRuntimeTransition.target
+      ? authorizedRuntimeTransition
+      : authorizedInstrumentTransition;
   assert.equal(ref, transition.target, "instrument migration is authorized only for its target");
   const { pins, oracle, baseline } = targetEvidence(root, ref, candidateOracle);
   assert.equal(oracle.identity.environment, transition.fromEnvironment, "target environment");
@@ -124,8 +137,9 @@ export function instrumentMigrationEvidence(root, ref, candidateOracle, receipt 
     sameExceptEnvironment(oracle, candidateOracle),
     "instrument migration requires unchanged Bash observations, case set, sources and schema",
   );
-  const recorded =
-    receipt ?? JSON.parse(readFileSync(resolve(root, instrumentReceiptPath), "utf8"));
+  const receiptPath =
+    transition === authorizedRuntimeTransition ? runtimeReceiptPath : instrumentReceiptPath;
+  const recorded = receipt ?? JSON.parse(readFileSync(resolve(root, receiptPath), "utf8"));
   assert.equal(recorded.schema, 1, "instrument receipt schema");
   assert.deepEqual(
     {

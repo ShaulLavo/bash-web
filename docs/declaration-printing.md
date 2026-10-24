@@ -1,7 +1,7 @@
 # Named scalar declaration printing
 
 `declare -p name...` and `typeset -p name...` inspect existing named scalar
-bindings. Both print `declare`, with existing `n`, `r`, and `x` attributes.
+bindings. Both print `declare`, with existing `n`, `r`, `x`, `l`, and `u` attributes.
 Inspection never creates a binding, changes an attribute, or makes a function
 local. A nameref prints its immediate raw target, including chains and cycles.
 Represented local unset values print without `=`, unlike an empty string.
@@ -29,7 +29,7 @@ stdout/stderr bytes, and statuses are recorded in
 TypeScript regressions read that recording, not the CI host's Bash.
 
 Global enumeration, new global declared-unset storage, indexed/associative
-arrays, integer/case attributes, and new special-variable support are excluded.
+arrays, integer attributes, and new special-variable support are excluded.
 The frozen 24-case scalar selection is targeted diagnostic evidence only.
 Indexed bindings now reject with status 2 instead of printing element zero as a
 scalar. Direct, empty, sparse, local and raw-nameref controls cover this boundary.
@@ -41,3 +41,23 @@ suite passes with no losses or new abnormal outcomes on all 9,221 frozen cases.
 The candidate baseline preserves every nongained historical row. Exact source,
 artifact and review identities are in the declaration-printing evidence receipt;
 final-head CI and merge are separate acceptance gates.
+
+## Scalar case attributes
+
+`declare`, `typeset`, and `local` accept `-l` and `-u`. Their assignments,
+ordinary writes, append, `read`, `printf -v`, and nameref-target writes apply the
+selected conversion. An attribute-only declaration preserves the old value.
+`+l` and `+u` remove that conversion; selecting both `-l` and `-u` clears it.
+Plain locals shadow outer attributes, function return restores them, and
+subshell snapshots copy them. `unset` removes the live case attribute.
+`${name@a}` and `${name@A}` include case attributes.
+
+Case metadata belongs to state, alongside readonly and export attributes.
+ASCII conversion reuses the owned value. Non-ASCII input uses the same bounded
+C/POSIX or C.UTF-8 Latin-1 mapper as expansion case operators, with admitted
+temporary storage before allocation. Other locales or Unicode input outside that
+mapper reject explicitly. Declaring array attributes, integer conversion,
+`-g`, export removal, and global enumeration remain separate work.
+
+The case controls are recorded in `scripts/fixtures/shell-declare-attrs.json`.
+Both native and real-Waffle tests replay the exact Bash 5.3.15 observations.

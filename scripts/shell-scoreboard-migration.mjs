@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -21,6 +22,7 @@ import {
 } from "./shell-scoreboard.mjs";
 import { wasiCargoEnvironment, wasiSysrootCommand } from "./wasi-build.ts";
 import { drainGroup, killGroup } from "./shell-process-group.mjs";
+import { utilityNames } from "./utility-artifacts.ts";
 
 const root = resolve(process.argv[2] ?? ".");
 const ref = process.argv[3];
@@ -147,14 +149,20 @@ async function rescoreUnderCandidateInstrument(candidate) {
   try {
     const [prepareCommand, prepareArgs] = wasiSysrootCommand(root);
     await run(prepareCommand, prepareArgs, root);
+    const utilities = existsSync(resolve(checkout, "shell/utilities/Cargo.toml"))
+      ? utilityNames
+      : [];
+    const binaries = ["shell-runtime"].concat(utilities);
     await cargoBuild(
-      ["--manifest-path", "shell/Cargo.toml", "-p", "shell-engine", "--bin", "shell-runtime"],
+      ["--manifest-path", "shell/Cargo.toml", "-p", "shell-engine"]
+        .concat(utilities.length ? ["-p", "shell-utilities"] : [])
+        .concat(binaries.flatMap((name) => ["--bin", name])),
       checkout,
       targetDir,
     );
     const release = resolve(targetDir, "wasm32-wasip1/release");
     const wasm = resolve(release, "shell-runtime.wasm");
-    await verify(wasm);
+    for (const name of binaries) await verify(resolve(release, `${name}.wasm`));
     await cargoBuild(
       ["--manifest-path", resolve(root, "shell/Cargo.toml"), "-p", "shell-compat-fixtures"],
       root,
@@ -173,6 +181,7 @@ async function rescoreUnderCandidateInstrument(candidate) {
       BASH_COMPAT_RECORD: "1",
       BASH_COMPAT_SHELL_WASM: wasm,
       BASH_COMPAT_FIXTURE_DIR: release,
+      BASH_COMPAT_UTILITY_DIR: utilities.length ? release : undefined,
       BASH_COMPAT_OUT: output,
       BASH_COMPAT_SCRATCH: scratch,
     });
