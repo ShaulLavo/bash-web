@@ -61,7 +61,7 @@ regular-file aliases requires a separate runtime/I/O contract; pipes and
 terminals must continue to share their descriptions. No descriptor parity is
 claimed, and no path blacklist, offset restoration, case skip or scoring change
 is used. Filesystem service stall behavior also remains the existing runtime
-boundary described in plan 004.
+boundary described in [Browser integration](browser-runtime.md#pending-external-program-coverage).
 
 ## Provenance
 

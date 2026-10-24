@@ -5,43 +5,11 @@ and the shell-specific guest/terminal adapter, not a second browser runtime.
 The application creates one shared Waffle runtime for the page, gives that
 runtime to its shells, and disposes it when the page's consumers have stopped.
 
-## Embed a shell
+## Embedding contract
 
-Use Node 26.7.0 for the frozen compatibility oracle and CI; newer Node
-versions may work for development tooling. Use a browser-capable bundler for the
-TypeScript entry and its worker imports. Install the required `waffle` peer at
-the exact pin in `package.json`:
+For the steps, see [Embed a shell in a page](guides/embed-in-a-page.md). The API is in the [API reference](reference/api.md). This section states the contract that the adapter keeps.
 
-```text
-git+https://github.com/ShaulLavo/waffle.git#b20fad173ebaa225cb87c51776f35edaaafd4a40
-```
-
-Run `npm run test:installed-waffle` after Bun installation to verify the prepared
-Node exports. Browser-only CI installs without lifecycle scripts and checks the
-source export declarations separately.
-
-The package's development dependency uses that same published commit. There
-is no local runtime-tree alias or vendored runtime fallback.
-
-```ts
-import { createRuntime } from "waffle";
-import { createShell } from "bash-web";
-
-// This URL serves Waffle's bundled public filesystem-worker entry.
-const runtime = createRuntime({
-  filesystem: { workerURL: new URL("/fs-worker.js", location.href) },
-});
-const shell = await createShell({ runtime });
-
-// Connect shell.terminal to the application's terminal UI.
-// The host forwards input/resize and drains output without blocking the page.
-
-// Stop this shell without disposing other consumers of the same runtime.
-await shell.dispose();
-
-// At page teardown, the application owns shared-runtime disposal.
-await runtime.dispose();
-```
+Use a browser-capable bundler for the TypeScript entry and its worker imports. The required `waffle` peer is pinned to the exact Git commit in `peerDependencies.waffle` in `package.json`, and the development dependency uses the same commit. There is no local runtime-tree alias or vendored runtime fallback. Run `npm run test:installed-waffle` after installation to verify the prepared Node exports. Browser-only CI installs without lifecycle scripts and checks the source export declarations separately.
 
 Supply `script` to execute a command instead of starting the persistent
 interactive editor. `cwd` and `env` set shell startup state. `wasmUrl` and
@@ -164,8 +132,8 @@ The shell adapter's bounded terminal path must not be confused with a generic
 foreign adapter's callback-based terminal writes. That path can acknowledge more
 bytes than fit in the shared ring. Global and per-root `droppedTerminalBytes`
 counters and visible console errors expose the loss; they do not make it
-lossless. The [approved follow-up](../plans/005-bash-web-packaging.md#approved-follow-up-generic-terminal-backpressure-and-scoped-teardown)
-requires synchronous accepted-byte/EAGAIN semantics and root-scoped teardown.
+lossless. Approved follow-up work in Waffle requires synchronous
+accepted-byte/EAGAIN semantics and root-scoped teardown.
 
 Diagnostics attach manual pipe observers without taking relay, endpoint or
 disposal ownership. Their pipe counts cover requests observed from the shell
@@ -173,8 +141,8 @@ root, not every descendant's pipes: Waffle handles child-worker process messages
 internally, so nested shell-created pipes are not included. A zero count is not
 proof that the entire process tree has no live pipes. Closed observations are
 reclaimed on a 100 ms sweep rather than waiting for another snapshot; retiring
-the root clears its timer. The [approved introspection follow-up](../plans/005-bash-web-packaging.md#approved-follow-up-runtime-owned-process-and-pipe-introspection)
-will replace message-derived pipe counts with Waffle-owned read-only snapshots.
+the root clears its timer. Approved follow-up work will replace message-derived
+pipe counts with Waffle-owned read-only snapshots.
 
 The browser host cancels and joins pending shell admission on startup timeout or
 session disposal, without disposing a borrowed runtime. It explicitly falls back
@@ -334,7 +302,7 @@ exports are already published.
 
 ## Build and verify
 
-Install the [build prerequisites](getting-started.md#build-and-test), including
+Install the [build prerequisites](development.md#prerequisites), including
 wasi-sdk 34.0, CMake and Ninja for the shared patched-libc sysroot. From a checkout
 with `npm ci` completed, run:
 
@@ -549,7 +517,7 @@ Exact pins, checksums, import mappings, classifications, and reasons are recorde
 under `waffle` and `browserRuntime` in
 [`sources.lock.json`](../sources.lock.json). Retain
 [Third-party notices](../THIRD_PARTY_NOTICES.md) and generated distribution
-notices with copied assets. The extraction records, plan 004, frozen shell
+notices with copied assets. The extraction records, the planning notes, frozen shell
 scoreboard, oracle/baseline, and differential-generator records are independent
 historical evidence and are unchanged by the browser integration.
 
