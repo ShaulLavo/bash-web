@@ -3513,3 +3513,27 @@ Evidence and exact recorded streams/statuses are in
 `prefix-diagnosis-records.json`. The initial strict oracle comparison remains a
 recorded failure, not a waived check or a claimed Bash-compatible pass. N1's
 completion group/slash boundary stays with its existing separate owner.
+
+## Explicit command hash review follow-ups, 2026-10-24
+
+Status: Approved, deferred beyond PR88 integration. Preserve the immutable AVL,
+shared snapshot ownership, no-allocation queries and proved listing reservation.
+The reviewed repair does not add automatic hashing or execution through entries.
+
+- Reusable listing names. `hash -p /kept 'a b'; hash -l` writes the name without
+  shell quoting. Add frozen Bash 5.3.15 controls for whitespace, quotes, leading
+  options and empty names before repairing reusable output. Keep insertion order
+  and the one admitted listing buffer. See `review88-kimi-hash-cost-r3.md` and
+  `review88-listing-work-r6.md` under the wave shell reports.
+- Diagnostics. `hash non-existent-program` lacks Bash's shell and line prefix.
+  The options error arm also prints usage on work exhaustion. Keep these in the
+  builtin diagnostic-coordinate family. Recorded fixture tests compare stdout
+  and status, not stderr parity. See `review88-command-hash-r1.md` and
+  `review88-hash-cost-sol-r4.md` for the saved observations and classifications.
+- Directory registration. Investigate `mkdir adir; hash -p adir z1; hash -t z1`
+  only after recording an actual Bash 5.3.15 comparison. The prior Kimi comment
+  did not establish a saved oracle mismatch. Do not assert one or change runtime
+  executable facts on that basis.
+- Alias queries remain the existing PR75 follow-up above. Lexical alias
+  expansion and hash-query precedence are separate paths. Do not implement
+  alias introspection or redirect execution through hash entries in this merge.
