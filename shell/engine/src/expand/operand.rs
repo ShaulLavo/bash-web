@@ -38,7 +38,7 @@ fn basic_name(name: &str) -> bool {
     scalar_name(name)
         || name == "?"
         || name == "#"
-        || name == "!"
+        || matches!(name, "!" | "@" | "*")
         || name.bytes().all(|c| c.is_ascii_digit()) && !name.is_empty()
 }
 
@@ -281,6 +281,9 @@ impl<'a> Scanner<'a> {
                     protected: self.protected(),
                 });
             }
+            Some('@' | '*') if !self.pattern && !self.pattern_source => {
+                self.take();
+            }
             Some('!') => {
                 self.take();
             }
@@ -322,7 +325,7 @@ impl<'a> Scanner<'a> {
             part
         };
         work.checkpoint(cancel).await?;
-        if !supported(&part) {
+        if !supported(&part, !self.pattern && !self.pattern_source) {
             return Err(2.into());
         }
         Ok(Piece::Expansion {
@@ -557,6 +560,13 @@ fn validate_token(token: &str, work: &mut Work) -> Result<(), Error> {
     if basic_name(body) {
         return Ok(());
     }
+    if let Some(prefix) = body
+        .strip_prefix('!')
+        .and_then(|s| s.strip_suffix(['@', '*']))
+        && scalar_name(prefix)
+    {
+        return Ok(());
+    }
     let indirect = body.starts_with('!');
     let body = body.strip_prefix('!').unwrap_or(body);
     if basic_name(body) && (!indirect || scalar_name(body)) {
@@ -577,7 +587,7 @@ fn validate_token(token: &str, work: &mut Work) -> Result<(), Error> {
     {
         return bad_substitution("invalid length parameter", work);
     }
-    let name_end = if body.starts_with(['#', '?', '@']) {
+    let name_end = if body.starts_with(['#', '?', '@', '*']) {
         1
     } else {
         body.find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
@@ -589,7 +599,9 @@ fn validate_token(token: &str, work: &mut Work) -> Result<(), Error> {
     let trim = suffix.starts_with(['#', '%', '/', '^', ',']);
     let substring =
         !indirect && suffix.starts_with(':') && !operator.starts_with(['-', '+', '=', '?']);
-    if !(scalar_name(name) || substring && (length_name(name) || name == "@"))
+    let lazy_list =
+        !indirect && matches!(name, "@" | "*") && operator.starts_with(['-', '+', '=', '?']);
+    if !(scalar_name(name) || lazy_list || substring && (length_name(name) || name == "@"))
         || !(substring || !indirect && trim || operator.starts_with(['-', '+', '=', '?']))
     {
         if parse::bad_parameter_token(token) {
@@ -599,18 +611,22 @@ fn validate_token(token: &str, work: &mut Work) -> Result<(), Error> {
     }
     Ok(())
 }
-fn supported(part: &WordPart) -> bool {
+fn supported(part: &WordPart, lists: bool) -> bool {
     match part {
         WordPart::ArithmeticExpansion(_) | WordPart::BadSubstitution(_) => true,
         WordPart::Substring { name, .. } => length_name(name) || name == "@",
-        WordPart::Variable(name) => basic_name(name),
+        WordPart::Variable(name) => {
+            basic_name(name) && (lists || !matches!(name.as_str(), "@" | "*"))
+        }
+        WordPart::PrefixMatch { prefix, .. } => lists && scalar_name(prefix),
         WordPart::Length(name) => length_operand_name(name),
         WordPart::IndirectExpansion { name, operator, .. } => {
             name.is_empty() && operator.is_none()
                 || scalar_name(name) && operator.as_ref().is_none_or(indirect_operator)
         }
         WordPart::ParameterExpansion { name, operator, .. } => {
-            parameter_name(name)
+            (parameter_name(name)
+                || lists && matches!(name.as_str(), "@" | "*") && indirect_operator(operator))
                 && matches!(
                     operator,
                     ParameterOp::UseDefault
