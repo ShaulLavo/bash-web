@@ -66,4 +66,4 @@ flowchart TD
 
 ## How correctness is measured
 
-GNU Bash 5.3.15 is the oracle. A case passes when stdout bytes and exit status match, and stderr is recorded but not scored. CI compares per-case results against a committed baseline and rejects any change that loses a passing case. [Status](../status.md#compatibility-with-bash) has the current numbers and the command that reproduces them.
+GNU Bash 5.3.15 is the oracle. A case passes when stdout bytes and exit status match, and stderr is recorded but not scored. CI compares per-case results against the accumulated current-main passing floor and fails any lost pass. Accepted gains become required without a generated source commit. See [landing checks](../landing-infrastructure.md). [Status](../status.md#compatibility-with-bash) has the current numbers and the command that reproduces them.

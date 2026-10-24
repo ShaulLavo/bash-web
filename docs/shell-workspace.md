@@ -27,8 +27,7 @@ not source byte identity. Keep upstream parser tests running; remove one only fo
 a deliberate behavior change recorded with a reason in `removedUpstreamTests`.
 Rustfmt skips the imported module to avoid unrelated formatting changes.
 
-The spike at `/work/tmp/own-shell-spike-tloM5o/proof/parser` was inspected only as
-a reference for extracting the module. Its adapters and mock engine are not
+A prototype was used only as a reference for extracting the module. Its adapters and mock engine are not
 included. `parser/src/{error,limits,time_compat}.rs` and the root wrapper are
 **original adapters** implementing only what the parser needs:
 

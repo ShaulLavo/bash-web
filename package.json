@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.110",
+  "version": "0.0.109",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
@@ -29,7 +29,7 @@
     "build:shell": "node scripts/build-shell.ts",
     "check:capabilities": "node scripts/check-shell-capabilities.ts",
     "test:shell:wasi": "node scripts/test-shell-wasi.ts",
-    "test:shell:scoreboard": "npm run build:node-harness && node --test scripts/test-shell-scoreboard*.mjs scripts/test-shell-scoreboard-instrument.ts scripts/test-compat-selection.mjs scripts/test-own-shell-runner.mjs scripts/test-own-shell-root.ts scripts/test-own-shell-permissions.ts scripts/test-own-shell-descriptors.ts scripts/test-own-shell-printf-assignment.ts scripts/test-own-shell-extglob.ts scripts/test-own-shell-pathname.ts scripts/test-own-shell-tilde.ts scripts/test-own-shell-regex-groups.ts scripts/test-own-shell-file-substitution.ts scripts/test-own-shell-read-scalar.ts scripts/test-own-shell-read-options.ts scripts/test-own-shell-indirect-special.ts scripts/test-own-shell-special-params.ts scripts/test-own-shell-select.ts scripts/test-own-shell-source.ts scripts/test-own-shell-declarations.ts scripts/test-own-shell-enable.ts scripts/test-own-shell-index-names.ts scripts/test-own-shell-array-slicing.ts scripts/test-own-shell-function-names.ts scripts/test-own-shell-aliases.mjs scripts/test-own-shell-call-stack.ts scripts/test-own-shell-trap-registration.ts scripts/test-own-shell-pipeline-broken-pipe.ts scripts/test-own-shell-completion.ts scripts/test-own-shell-nameref-invalid.ts scripts/test-bash-compat*.mjs",
+    "test:shell:scoreboard": "npm run build:node-harness && node scripts/scoreboard-tests.mjs",
     "compat:shell": "npm run build:node-harness && npm run compat:shell:prebuilt",
     "prepare:shell-corpus": "node scripts/prepare-shell-corpus.mjs",
     "fuzz:shell-braces": "node scripts/fuzz-shell-braces.mjs",
@@ -96,7 +96,7 @@
     "fuzz:shell-echo:ci": "node scripts/fuzz-shell-echo.ts --replay scripts/fixtures/shell-echo.json",
     "quality:js": "npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates",
     "build:browser:assets": "npm run notices:browser && npm run bundle:browser:assets",
-    "test:ci": "node --test scripts/test-ci-inputs.ts scripts/test-ci-workflow.ts scripts/test-prepare-wasi-tests.ts scripts/test-ci-artifacts.ts scripts/test-ci-notices.ts",
+    "test:ci": "node --test --test-concurrency=1 scripts/test-ci-inputs.ts scripts/test-ci-workflow.ts scripts/test-prepare-wasi-tests.ts scripts/test-ci-artifacts.ts scripts/test-ci-notices.ts scripts/test-scoreboard-discovery.mjs",
     "prepare:wasi-tests": "node scripts/prepare-wasi-tests.ts .build/ci-native/wasi-tests",
     "typecheck:ci": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/ci-inputs.ts scripts/ci-artifacts.ts scripts/prepare-wasi-tests.ts scripts/test-ci*.ts scripts/test-prepare-wasi-tests.ts",
     "compat:shell:prebuilt": "BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell BASH_COMPAT_UTILITY_DIR=${CARGO_TARGET_DIR:-.build/shell}/wasm32-wasip1/release node scripts/bash-compat.mjs",
