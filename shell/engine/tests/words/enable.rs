@@ -35,21 +35,25 @@ fn enable_does_not_advertise_unavailable_builtins_or_change_alias_precedence() {
     assert_eq!(rig.output.bytes(), b"source:0\ntimes:1\nenable .\nenable :\nenable break\nenable continue\nenable eval\nenable exec\nenable exit\nenable export\nenable readonly\nenable return\nenable set\nenable shift\nenable trap\nenable unset\nalias value\ncommand:127\nbuiltin\n");
 }
 
-#[test]
-fn enable_disabled_builtin_uses_real_external_and_function_precedence() {
+fn check_external_printf(source: &str, expected: &[u8]) {
     let rig = Rig::new(Limits::default());
     let calls = rig.calls.clone();
     rig.host.register("/home/guest/printf", move |request, _| {
         calls.borrow_mut().push(request.argv);
         async { 7 }.boxed_local()
     });
-    assert_eq!(rig.run("enable -n printf; printf() { echo function; }; printf; command printf external; echo external:$?; builtin printf denied; echo builtin:$?; type -at printf; enable printf; printf; command printf '%s\\n' restored"), 0);
-    assert_eq!(
-        rig.output.bytes(),
-        b"function\nexternal:7\nbuiltin:1\nfunction\nfile\nfunction\nrestored\n"
-    );
+    assert_eq!(rig.run(source), 0);
+    assert_eq!(rig.output.bytes(), expected);
     assert_eq!(*rig.calls.borrow(), [vec!["printf", "external"]]);
     assert_eq!(rig.host.active_count(), 0);
+}
+
+#[test]
+fn enable_disabled_builtin_uses_real_external_and_function_precedence() {
+    check_external_printf(
+        "enable -n printf; printf() { echo function; }; printf; command printf external; echo external:$?; builtin printf denied; echo builtin:$?; type -at printf; enable printf; printf; command printf '%s\\n' restored",
+        b"function\nexternal:7\nbuiltin:1\nfunction\nfile\nfunction\nrestored\n",
+    );
 }
 
 #[test]
@@ -160,16 +164,10 @@ fn enable_hash_lookup_records_disabled_but_not_enabled_builtins_or_functions() {
 
 #[test]
 fn enable_hash_queries_keep_builtin_precedence_and_real_execution_resolution() {
-    let rig = Rig::new(Limits::default());
-    let calls = rig.calls.clone();
-    rig.host.register("/home/guest/printf", move |request, _| {
-        calls.borrow_mut().push(request.argv);
-        async { 7 }.boxed_local()
-    });
-    assert_eq!(rig.run("hash -p /literal printf; type -t printf; command -v printf; enable -n printf; type -t printf; command -v printf; type -P printf; type -aP printf; builtin printf denied; echo builtin:$?; command printf external; echo external:$?; enable printf; command printf '%s\n' restored; hash -t printf"), 0);
-    assert_eq!(rig.output.bytes(), b"builtin\nprintf\nfile\n/literal\n/literal\n/home/guest/printf\nbuiltin:1\nexternal:7\nrestored\n/literal\n");
-    assert_eq!(*rig.calls.borrow(), [vec!["printf", "external"]]);
-    assert_eq!(rig.host.active_count(), 0);
+    check_external_printf(
+        "hash -p /literal printf; type -t printf; command -v printf; enable -n printf; type -t printf; command -v printf; type -P printf; type -aP printf; builtin printf denied; echo builtin:$?; command printf external; echo external:$?; enable printf; command printf '%s\n' restored; hash -t printf",
+        b"builtin\nprintf\nfile\n/literal\n/literal\n/home/guest/printf\nbuiltin:1\nexternal:7\nrestored\n/literal\n",
+    );
 }
 
 #[test]
