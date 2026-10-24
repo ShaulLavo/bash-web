@@ -45,16 +45,6 @@ fn pipeline_status_declaration_preserves_active_attributes() {
     .unwrap();
     for item in fixture["cases"].as_array().unwrap() {
         let rig = Rig::new(Limits::default());
-        let code = item["code"].as_str().unwrap();
-        assert_eq!(
-            rig.run(code),
-            item["status"].as_i64().unwrap() as i32,
-            "{code}"
-        );
-        assert_eq!(
-            rig.output.bytes(),
-            item["stdout"].as_str().unwrap().as_bytes(),
-            "{code}"
-        );
+        rig.check_recorded(item, item["stdout"].as_str().unwrap().as_bytes());
     }
 }

@@ -5165,6 +5165,27 @@ mod residual_review_tests {
 }
 
 #[cfg(test)]
+pub(crate) mod printer_controls {
+    use super::*;
+
+    pub(crate) fn assert_parked(ex: &Executor, job: &JoinHandle<i32>) {
+        for _ in 0..100_000 {
+            let turn = ex.drive(1);
+            if !turn.runnable && !job.is_finished() {
+                return;
+            }
+        }
+        panic!("printer must block behind the full pipe");
+    }
+
+    pub(crate) fn read_available(reader: &io::Endpoint, length: usize) -> Vec<u8> {
+        let mut bytes = vec![0; length];
+        assert_eq!(reader.read(&mut bytes).now_or_never(), Some(Ok(length)));
+        bytes
+    }
+}
+
+#[cfg(test)]
 mod function_measurements {
     use super::*;
 
@@ -5269,16 +5290,28 @@ mod function_measurements {
             .expect("bounded review control completes")
     }
 
-    #[test]
-    fn review_shift_refunds_dropped_strings_but_keeps_vector_allocation() {
+    fn review_session(limits: Limits) -> (Executor, crate::process::InProcessHost, Session) {
         let ex = Executor::new();
         let host = crate::process::InProcessHost::new(ex.clone());
         let session = Session::new(
             ex.clone(),
-            Rc::new(host),
+            Rc::new(host.clone()),
             Rc::new(io::MemoryFs::new(1024)),
-            Limits::default(),
+            limits,
         );
+        (ex, host, session)
+    }
+
+    fn assert_review_idle(ex: &Executor, host: &crate::process::InProcessHost, session: &Session) {
+        assert_eq!(session.core.execution_storage.observation().0, 0);
+        assert_eq!(host.active_count(), 0);
+        assert_eq!(host.retained_count(), 0);
+        assert_eq!(ex.drive(64).pending, 0);
+    }
+
+    #[test]
+    fn review_shift_refunds_dropped_strings_but_keeps_vector_allocation() {
+        let (ex, _host, session) = review_session(Limits::default());
         assert_eq!(
             finish_review(
                 &ex,
@@ -5335,17 +5368,10 @@ mod function_measurements {
 
     #[test]
     fn review_shift_releases_memory_for_nested_call_and_later_session_start() {
-        let ex = Executor::new();
-        let host = crate::process::InProcessHost::new(ex.clone());
-        let session = Session::new(
-            ex.clone(),
-            Rc::new(host),
-            Rc::new(io::MemoryFs::new(1024)),
-            Limits {
-                execution_bytes: 160 * 1024,
-                ..Limits::default()
-            },
-        );
+        let (ex, _host, session) = review_session(Limits {
+            execution_bytes: 160 * 1024,
+            ..Limits::default()
+        });
         session
             .state
             .borrow_mut()
@@ -5376,14 +5402,7 @@ mod function_measurements {
 
     #[test]
     fn pipeline_status_printer_cancellation_releases_snapshot_and_borrow() {
-        let ex = Executor::new();
-        let host = crate::process::InProcessHost::new(ex.clone());
-        let session = Session::new(
-            ex.clone(),
-            Rc::new(host.clone()),
-            Rc::new(io::MemoryFs::new(1024)),
-            Limits::default(),
-        );
+        let (ex, host, session) = review_session(Limits::default());
         let (reader, writer) = io::pipe();
         let filler = vec![b'!'; io::PIPE_CAPACITY];
         assert_eq!(writer.write(&filler).now_or_never(), Some(Ok(filler.len())));
@@ -5401,15 +5420,7 @@ mod function_measurements {
             0
         );
         let job = session.start("declare -p PIPESTATUS").unwrap();
-        let mut parked = false;
-        for _ in 0..100_000 {
-            let turn = ex.drive(1);
-            if !turn.runnable && !job.is_finished() {
-                parked = true;
-                break;
-            }
-        }
-        assert!(parked, "declaration must block behind the full pipe");
+        printer_controls::assert_parked(&ex, &job);
         {
             let state = session.state.try_borrow_mut().unwrap();
             assert_eq!(state.pipeline_status(), [1, 0]);
@@ -5420,12 +5431,10 @@ mod function_measurements {
         session.interrupt();
         assert_eq!(finish_review(&ex, job), 130);
         assert_eq!(session.core.execution_storage.observation().0, 0);
-        let mut actual = vec![0; filler.len()];
         assert_eq!(
-            reader.read(&mut actual).now_or_never(),
-            Some(Ok(filler.len()))
+            printer_controls::read_available(&reader, filler.len()),
+            filler
         );
-        assert_eq!(actual, filler);
         let (out, output) = io::capture(4096);
         let mut fds = FdTable::default();
         fds.insert(1, out);
@@ -5444,10 +5453,7 @@ mod function_measurements {
             output.bytes(),
             b"declare -arx PIPESTATUS=([0]=\"1\" [1]=\"0\")\n"
         );
-        assert_eq!(session.core.execution_storage.observation().0, 0);
-        assert_eq!(host.active_count(), 0);
-        assert_eq!(host.retained_count(), 0);
-        assert_eq!(ex.drive(64).pending, 0);
+        assert_review_idle(&ex, &host, &session);
     }
 
     #[test]
@@ -5516,10 +5522,7 @@ mod function_measurements {
             );
             assert_eq!(session.state.borrow().bindings()["recovered"], "yes");
             assert_eq!(session.state.borrow().pipeline_status(), [0]);
-            assert_eq!(session.core.execution_storage.observation().0, 0);
-            assert_eq!(host.active_count(), 0);
-            assert_eq!(host.retained_count(), 0);
-            assert_eq!(ex.drive(64).pending, 0);
+            assert_review_idle(&ex, &host, &session);
         }
     }
 
@@ -5599,14 +5602,7 @@ mod function_measurements {
         for increment in ["n=$((n+1))", "eval 'n=$((n+1))'"] {
             let mut first = None;
             for goal in [1, 32, 128, 512] {
-                let ex = Executor::new();
-                let host = crate::process::InProcessHost::new(ex.clone());
-                let session = Session::new(
-                    ex.clone(),
-                    Rc::new(host),
-                    Rc::new(io::MemoryFs::new(1024)),
-                    Limits::default(),
-                );
+                let (ex, _host, session) = review_session(Limits::default());
                 let source = format!(
                     "n=0; seen=0; unwound=0; leaf=0; f() {{ local d=$1; {increment}; seen=$((seen+1)); case $n in {goal}) leaf=$n;; *) f child;; esac; unwound=$((unwound+1)); }}; f root"
                 );

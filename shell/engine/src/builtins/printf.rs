@@ -939,6 +939,18 @@ mod tests {
         (ex, shell)
     }
 
+    fn shutdown_budget_session(ex: &Executor, shell: &Session) {
+        let shutdown = shell.shutdown();
+        futures::pin_mut!(shutdown);
+        for _ in 0..1000 {
+            ex.drive(64);
+            if shutdown.as_mut().now_or_never().is_some() {
+                return;
+            }
+        }
+        panic!("printf budget session did not shut down");
+    }
+
     #[test]
     fn printf_buffer_live_budget_refunds_after_normal_error_and_cancellation() {
         buffer_live_budget_refunds("printf");
@@ -974,15 +986,7 @@ mod tests {
             .set_descriptors(printer_descriptors(writer, Endpoint::null()))
             .unwrap();
         let job = shell.start(&format!("{command} buffered")).unwrap();
-        let mut parked = false;
-        for _ in 0..100_000 {
-            let turn = ex.drive(1);
-            if !turn.runnable && !job.is_finished() {
-                parked = true;
-                break;
-            }
-        }
-        assert!(parked);
+        crate::interpreter::printer_controls::assert_parked(&ex, &job);
         assert!(
             shell
                 .state()
@@ -993,21 +997,11 @@ mod tests {
         shell.interrupt();
         assert_eq!(finish(&ex, job), 130);
         drop(shell.state().borrow().admit_temporary(limit).unwrap());
-        let mut actual = vec![0; filler.len()];
         assert_eq!(
-            reader.read(&mut actual).now_or_never(),
-            Some(Ok(filler.len()))
+            crate::interpreter::printer_controls::read_available(&reader, filler.len()),
+            filler
         );
-        assert_eq!(actual, filler);
-        let shutdown = shell.shutdown();
-        futures::pin_mut!(shutdown);
-        for _ in 0..1000 {
-            ex.drive(64);
-            if shutdown.as_mut().now_or_never().is_some() {
-                return;
-            }
-        }
-        panic!("printf live-budget session did not shut down");
+        shutdown_budget_session(&ex, &shell);
     }
 
     #[test]
@@ -1043,14 +1037,6 @@ mod tests {
             drop(shell.state().borrow().admit_temporary(limit).unwrap());
         }
         assert_eq!(output.bytes(), b"recovered\n");
-        let shutdown = shell.shutdown();
-        futures::pin_mut!(shutdown);
-        for _ in 0..1000 {
-            ex.drive(64);
-            if shutdown.as_mut().now_or_never().is_some() {
-                return;
-            }
-        }
-        panic!("printf low-budget session did not shut down");
+        shutdown_budget_session(&ex, &shell);
     }
 }

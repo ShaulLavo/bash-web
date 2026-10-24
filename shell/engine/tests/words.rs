@@ -109,6 +109,15 @@ impl Rig {
     fn run(&self, source: &str) -> i32 {
         self.finish(self.shell.start(source).unwrap())
     }
+    fn check_recorded(&self, case: &serde_json::Value, expected: &[u8]) {
+        let code = case["code"].as_str().unwrap();
+        assert_eq!(
+            self.run(code),
+            case["status"].as_i64().unwrap() as i32,
+            "{code}"
+        );
+        assert_eq!(self.output.bytes(), expected, "{code}");
+    }
     fn variable(&self, name: &str, value: &str) {
         self.shell
             .state()

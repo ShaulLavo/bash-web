@@ -298,7 +298,7 @@ async fn print_pipeline_status(
         (state.pipeline_status().to_vec(), attributes)
     };
     write(fds, b"declare -a", context).await?;
-    for (set, flag) in attributes.into_iter().zip([b'n', b'r', b'x', b'l', b'u']) {
+    for (set, flag) in attributes.into_iter().zip(*b"nrxlu") {
         if set {
             write(fds, &[flag], context).await?;
         }
