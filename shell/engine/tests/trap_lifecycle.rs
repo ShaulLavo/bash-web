@@ -359,3 +359,13 @@ status 1
 "#,
     );
 }
+
+#[test]
+fn for_header_debug_runs_before_each_iteration() {
+    check(
+        "brush-suite:builtins/trap:79",
+        "trap 'echo \"[debug: $BASH_COMMAND]\"' DEBUG\nfor i in 1 2; do\n  echo \"iter $i\"\ndone\n",
+        0,
+        "[debug: for i in 1 2]\n[debug: echo \"iter $i\"]\niter 1\n[debug: for i in 1 2]\n[debug: echo \"iter $i\"]\niter 2\n",
+    );
+}

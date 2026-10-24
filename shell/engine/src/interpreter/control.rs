@@ -93,6 +93,11 @@ async fn for_body(
     let context = context.loop_body();
     let mut result = Outcome::status(0);
     for value in values {
+        match traps::for_iteration(&command, state.clone(), fds.clone(), context.clone()).await {
+            traps::DebugDecision::Execute => {}
+            traps::DebugDecision::Skip => continue,
+            traps::DebugDecision::Transfer(outcome) => return outcome,
+        }
         if let Err(outcome) = for_assignment(&mut command, value, &state, &fds, &context).await {
             return outcome;
         }

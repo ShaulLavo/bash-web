@@ -1,7 +1,7 @@
 //! Trap execution owns admission, status restoration and boundary-local visibility.
 use super::*;
 use crate::state::traps::{Binding, Traps};
-use futures::future::{Either, ready};
+use futures::future::{AbortHandle, Abortable, Either, ready};
 
 #[derive(Clone, Copy)]
 pub(super) enum Event {
@@ -51,7 +51,7 @@ impl Status {
             .ok_or(2)?;
         let allocation = context
             .evaluation
-            .admit_execution(bytes + size_of::<Self>())?;
+            .admit_execution(bytes.checked_add(size_of::<Self>()).ok_or(2)?)?;
         let mut pipeline = Vec::new();
         pipeline
             .try_reserve_exact(shell.pipeline_status().len())
@@ -142,26 +142,42 @@ pub(super) fn run(
         skip_debug: false,
         ..context
     };
-    scope.frame(
+    let executor = context.core.executor.clone();
+    let task = scope.frame(
         async move {
             let _status = status;
             let _action = action;
-            // A joined reader bounds recursive poll and drop, including cross-kind traps.
-            context
-                .core
-                .executor
-                .spawn(reader::run(
-                    reader,
-                    "trap",
-                    true,
-                    state,
-                    fds,
-                    context.clone(),
-                ))
+            reader::run(reader, "trap", true, state, fds, context).await
+        },
+        Outcome::status,
+    );
+    if let Either::Left(result) = task {
+        return Either::Left(result);
+    }
+    let (abort, registration) = AbortHandle::new_pair();
+    let guard = ReaderWait(abort);
+    scope.frame(
+        async move {
+            let _guard = guard;
+            executor
+                .spawn(async move {
+                    Abortable::new(task, registration)
+                        .await
+                        .unwrap_or_else(|_| Outcome::status(130))
+                })
                 .await
         },
         Outcome::status,
     )
+}
+
+// Dropping a wait never leaves user code running on a detached reader task.
+// The task owns status restoration until its canceled future is retired.
+struct ReaderWait(AbortHandle);
+impl Drop for ReaderWait {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
 }
 
 fn prepare(
@@ -194,6 +210,34 @@ fn prepare(
     ))
 }
 
+fn debug_active(state: &SharedState, context: &Context) -> bool {
+    !context.skip_debug
+        && context.trap_mask & Event::Debug.bit() == 0
+        && matches!(
+            state.borrow().traps.executable(Event::Debug as usize),
+            Some(Binding::Handler(_))
+        )
+}
+
+pub(super) fn for_iteration(
+    command: &ForCommand,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> eval::Frame<'static, DebugDecision> {
+    if !debug_active(&state, &context) {
+        return Either::Left(ready(DebugDecision::Execute));
+    }
+    let limit = context.limits().source_bytes;
+    let text = shell_parser::parser::for_header_string(
+        command,
+        &Cell::new(limit),
+        limit,
+        Some(&context.parser_budget()),
+    );
+    planned_debug(text, state, fds, context)
+}
+
 pub(super) fn debug(
     command: &Command,
     state: SharedState,
@@ -205,11 +249,7 @@ pub(super) fn debug(
         Command::Simple(_)
             | Command::Compound(CompoundCommand::Arithmetic(_) | CompoundCommand::Test(_), _)
     );
-    let active = matches!(
-        state.borrow().traps.executable(Event::Debug as usize),
-        Some(Binding::Handler(_))
-    );
-    if !eligible || !active || context.skip_debug || context.trap_mask & Event::Debug.bit() != 0 {
+    if !eligible || !debug_active(&state, &context) {
         return Either::Left(ready(DebugDecision::Execute));
     }
     let limit = context.limits().source_bytes;
@@ -219,6 +259,15 @@ pub(super) fn debug(
         limit,
         Some(&context.parser_budget()),
     );
+    planned_debug(text, state, fds, context)
+}
+
+fn planned_debug(
+    text: shell_parser::error::Result<String>,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> eval::Frame<'static, DebugDecision> {
     let text = match text {
         Ok(text) => text,
         Err(_) => {

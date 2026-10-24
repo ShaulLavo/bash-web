@@ -1190,6 +1190,16 @@ impl<'a> Printer<'a> {
         }
     }
 
+    fn print_for_header(&mut self, command: &ForCommand) {
+        self.out.push_str("for ");
+        self.out.push_str(&command.variable);
+        self.out.push_str(" in ");
+        match &command.words {
+            Some(words) => self.print_words(words, " "),
+            None => self.out.push_str("\"$@\""),
+        }
+    }
+
     fn print_compound(&mut self, cc: &CompoundCommand) {
         match cc {
             CompoundCommand::If(c) => self.print_if(
@@ -1199,15 +1209,7 @@ impl<'a> Printer<'a> {
                 c.else_branch.as_deref(),
             ),
             CompoundCommand::For(f) => {
-                self.out.push_str("for ");
-                self.out.push_str(&f.variable);
-                self.out.push_str(" in ");
-                match &f.words {
-                    Some(words) => {
-                        self.print_words(words, " ");
-                    }
-                    None => self.out.push_str("\"$@\""),
-                }
+                self.print_for_header(f);
                 self.loop_body_after_head(&f.body);
             }
             CompoundCommand::Select(f) => {
@@ -1623,6 +1625,20 @@ pub fn command_string(
     let mut printer = Printer::with_quota(quota);
     printer.make(Some(command));
     printer.print_deferred_if_any("");
+    printer.finish()
+}
+
+/// Render only a for-loop header for its per-iteration DEBUG event.
+pub fn for_header_string(
+    command: &ForCommand,
+    fuel: &Cell<usize>,
+    max_fuel: usize,
+    execution_budget: Option<&ExecutionBudget>,
+) -> Result<String> {
+    let quota = Rc::new(PrintQuota { fuel, max_fuel, execution_budget, failure: RefCell::new(None) });
+    quota.charge(0);
+    let mut printer = Printer::with_quota(quota);
+    printer.print_for_header(command);
     printer.finish()
 }
 

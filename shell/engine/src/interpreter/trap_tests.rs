@@ -115,11 +115,19 @@ fn refused_trap_reader_has_no_handler_effects_and_refunds_entry_storage() {
         0
     );
     let before = shell.core.execution_storage.observation().0;
-    let job = shell.start("false").unwrap();
+    let context = context(&shell);
     let limit = shell.core.limits.expansion_bytes;
     let used = shell.core.eval_storage.observation().0;
     let held = shell.core.eval_storage.admit(limit - used).unwrap();
-    assert_eq!(complete(&executor, job), 2);
+    let result = super::traps::run(
+        super::traps::Event::Err,
+        shell.state(),
+        shell.core.descriptors.clone(),
+        context,
+    )
+    .now_or_never()
+    .unwrap();
+    assert_eq!(result.flow, super::Flow::Resource);
     assert!(shell.state().borrow().bindings().get("seen").is_none());
     assert!(output.bytes().is_empty());
     drop(held);
@@ -191,15 +199,7 @@ fn late_resource_failure_preserves_completed_handler_effects() {
         .admit(shell.core.limits.execution_bytes - used)
         .unwrap();
     assert_eq!(complete(&executor, job), 2);
-    assert_eq!(
-        shell
-            .state()
-            .borrow()
-            .bindings()
-            .get("seen")
-            .map(String::as_str),
-        Some("1")
-    );
+    assert_eq!(shell.state().borrow().scalar_parameter("seen"), Some("1"));
     drop(held);
     assert_eq!(
         complete(&executor, shell.start("trap - ERR; unset seen").unwrap()),
@@ -212,4 +212,62 @@ fn late_resource_failure_preserves_completed_handler_effects() {
             .unwrap()
             .contains("memory limit")
     );
+}
+
+fn context(shell: &Session) -> super::Context {
+    let core = shell.core.clone();
+    let evaluation = crate::exec::Scope::new(
+        core.limits.source_bytes,
+        core.eval_storage.clone(),
+        core.execution_storage.clone(),
+    );
+    let group = core.host.allocate_group();
+    super::Context::root(
+        core,
+        crate::exec::Source::root(""),
+        evaluation,
+        crate::executor::Cancel::new(),
+        group,
+    )
+}
+
+#[test]
+fn dropping_handler_wait_cancels_reader_and_restores_status_before_reuse() {
+    let (shell, executor, output) = session();
+    assert_eq!(
+        complete(
+            &executor,
+            shell
+                .start("trap 'seen=1; while :; do :; done' ERR; false || true")
+                .unwrap()
+        ),
+        0
+    );
+    shell.state().borrow_mut().publish_status(7);
+    let before = shell.core.execution_storage.observation().0;
+    let mut handler = super::traps::run(
+        super::traps::Event::Err,
+        shell.state(),
+        shell.core.descriptors.clone(),
+        context(&shell),
+    );
+    assert!((&mut handler).now_or_never().is_none());
+    executor.drive(64);
+    assert_eq!(shell.state().borrow().scalar_parameter("seen"), Some("1"));
+    drop(handler);
+    for _ in 0..1000 {
+        if executor.drive(64).pending == 0 {
+            break;
+        }
+    }
+    assert_eq!(executor.drive(64).pending, 0);
+    assert_eq!(shell.state().borrow().status(), 7);
+    assert_eq!(shell.core.eval_storage.observation().0, 0);
+    assert_eq!(
+        complete(&executor, shell.start("trap - ERR; unset seen").unwrap()),
+        0
+    );
+    assert_eq!(shell.core.execution_storage.observation().0, 0);
+    assert!(output.bytes().is_empty());
+    assert!(before > 0);
 }
