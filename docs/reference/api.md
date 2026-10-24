@@ -1,6 +1,6 @@
 # API reference
 
-The TypeScript surface of bash-web, from `src/index.ts`, `src/shell.ts`, `src/bridge.ts`, and `src/utilities/`. The package is private and not published. Import it from a checkout or a Git dependency. For tasks, see [Embed a shell in a page](../guides/embed-in-a-page.md).
+The TypeScript surface of bash-web, from `src/index.ts`, `src/shell.ts`, `src/bridge.ts`, and `src/utilities/`. The package is private and not published. Import it from a checkout. For tasks, see [Embed a shell in a page](../guides/embed-in-a-page.md).
 
 ## Entry points
 

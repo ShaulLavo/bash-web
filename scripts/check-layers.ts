@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { isDeepStrictEqual } from "node:util";
 
 /**
  * Lexical contract (not a Rust parser or a capability/build check):
@@ -28,10 +28,9 @@ import { isDeepStrictEqual } from "node:util";
  *   than pretending their source was scanned. New top-level modules (even unused
  *   files or inline declarations) and unknown rooted targets fail closed.
  *
- * Usage: node scripts/check-layers.ts [--record] [--base-ref FULL_COMMIT_SHA]
- * LAYERS_BASE_REF is the equivalent environment setting. --record explicitly
- * refreshes evidence, but cannot increase violations against committed HEAD or
- * the optional immutable target. Normal checks require exact current evidence.
+ * Usage: node scripts/check-layers.ts [--base-ref FULL_COMMIT_SHA] [--output PATH]
+ * LAYERS_BASE_REF is the equivalent environment setting. Both source sets use
+ * the immutable base scanner/policy. Generated snapshots are never gate inputs.
  * Step 6 owns real separate Full/Lite compile and size measurements.
  */
 export const allowedGraph = {
@@ -116,7 +115,6 @@ const defaultPolicy: Policy = {
   rootInlineModules,
   rootReexports,
 };
-const graph: Readonly<Record<string, readonly string[]>> = { ...allowedGraph, ...compositionRoots };
 export const evidencePath = "docs/evidence/engine-layers.json";
 const sourceRoot = "shell/engine/src/";
 type Scope = "production" | "testOnly";
@@ -671,145 +669,96 @@ function git(root: string, args: readonly string[]): string {
     stdio: ["ignore", "pipe", "pipe"],
   });
 }
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function stringLists(value: unknown): Readonly<Record<string, readonly string[]>> {
-  assert.ok(isRecord(value), "invalid layer policy map");
-  const entries: [string, string[]][] = [];
-  for (const [name, items] of Object.entries(value)) {
-    assert.ok(
-      Array.isArray(items) && items.every((item: unknown) => typeof item === "string"),
-      "invalid layer policy target list",
-    );
-    entries.push([name, items]);
-  }
-  return Object.fromEntries(entries);
-}
-function storedPolicy(value: unknown): Policy {
-  assert.ok(isRecord(value), "invalid committed layer evidence");
-  assert.ok(isRecord(value.rootReexports), "invalid layer re-export map");
-  const reexports: [string, string][] = [];
-  for (const [name, target] of Object.entries(value.rootReexports)) {
-    assert.ok(typeof target === "string", "invalid layer re-export target");
-    reexports.push([name, target]);
-  }
-  return {
-    allowedGraph: stringLists(value.graph),
-    testFixtureEdges: stringLists(value.testFixtureEdges),
-    compositionRoots: stringLists(value.compositionRoots),
-    rootInlineModules: stringLists(value.rootInlineModules),
-    rootReexports: Object.fromEntries(reexports),
-  };
-}
-function verifyInheritedEvidence(
-  root: string,
-  ref: string,
-  label: string,
-  scan: ReturnType<typeof scanSources>,
-) {
-  const parents = git(root, ["rev-list", "--parents", "-n", "1", ref]).trim().split(" ").slice(1);
-  if (parents.length <= 1) return false;
-  const blob = git(root, ["ls-tree", ref, "--", evidencePath]);
-  let inherited = false;
-  for (const parent of parents) {
-    if (git(root, ["ls-tree", parent, "--", evidencePath]) !== blob) continue;
-    const parentScan = committedScan(root, parent, `${label} inherited parent`);
-    assertRatchet(scan, parentScan, `${label} merged sources`);
-    inherited = true;
-  }
-  return inherited;
+function committedSources(root: string, ref: string): SourceFile[] {
+  assert.match(ref, /^[a-f0-9]{40}$/, "layer base must be a full commit SHA");
+  assert.equal(git(root, ["rev-parse", "--verify", `${ref}^{commit}`]).trim(), ref);
+  const entries = git(root, ["ls-tree", "-r", "-z", ref, "--", sourceRoot]).split("\0");
+  return entries
+    .filter((entry) => entry.endsWith(".rs"))
+    .map((entry) => {
+      assert.match(entry, /^100644 blob [a-f0-9]{40}\t/, "non-regular engine source");
+      const path = entry.slice(entry.indexOf("\t") + 1);
+      return { path, source: git(root, ["show", `${ref}:${path}`]) };
+    });
 }
 
-function committedScan(root: string, ref: string, label: string): Evidence {
-  assert.match(ref, /^[a-f0-9]{40}$/, `${label} must be a full commit SHA`);
-  assert.equal(
-    git(root, ["rev-parse", "--verify", `${ref}^{commit}`]).trim(),
-    ref,
-    `${label} must identify an exact commit`,
-  );
-  const paths = git(root, ["ls-tree", "-r", "--name-only", "-z", ref, "--", sourceRoot])
-    .split("\0")
-    .filter((path) => path.endsWith(".rs"));
-  const files = paths.map((path) => ({ path, source: git(root, ["show", `${ref}:${path}`]) }));
-  const stored = git(root, ["ls-tree", "--name-only", ref, "--", evidencePath]).trim();
-  if (stored) {
-    const evidence: unknown = JSON.parse(git(root, ["show", `${ref}:${evidencePath}`]));
-    // Verify an older snapshot using its deliberately recorded policy. This lets
-    // future graph additions be reviewed without freezing today's inventory,
-    // while neither edited counts nor stale source identities can be trusted.
-    const scan = scanSources(files, storedPolicy(evidence));
-    if (!isDeepStrictEqual(evidence, scan)) {
-      // A normal merge may inherit an unchanged evidence blob while combining
-      // new engine sources. Trust neither that stale digest nor arbitrary old
-      // evidence: verify the identical parent blob, then ratchet the merge's
-      // actual sources against that verified parent. Ordinary stale commits and
-      // evidence edited in the merge still fail closed.
-      const inherited = verifyInheritedEvidence(root, ref, label, scan);
-      if (!inherited)
-        assert.deepEqual(
-          evidence,
-          scan,
-          `${label}: committed layer evidence does not match its engine sources`,
-        );
-    }
-    return scan;
+function scanWithBase(root: string, ref: string, sources: readonly SourceFile[][]) {
+  const checker = git(root, ["show", `${ref}:scripts/check-layers.ts`]);
+  const directory = mkdtempSync(resolve(process.env.TMPDIR || tmpdir(), "layer-checker-"));
+  try {
+    const path = resolve(directory, "checker.ts");
+    writeFileSync(path, checker);
+    const code = `import { readFileSync } from 'node:fs';
+      import { scanSources } from ${JSON.stringify(pathToFileURL(path).href)};
+      process.stdout.write(JSON.stringify(JSON.parse(readFileSync(0, 'utf8')).map(files => scanSources(files))));`;
+    const scans: Evidence[] = JSON.parse(
+      execFileSync(process.execPath, ["--input-type=module", "-e", code], {
+        input: JSON.stringify(sources),
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+        env: { ...process.env, NODE_OPTIONS: "" },
+        stdio: ["pipe", "pipe", "pipe"],
+      }),
+    );
+    assert.equal(scans.length, 2);
+    return { checkerSha256: digest(checker), base: scans[0], candidate: scans[1] };
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
-  // A first-baseline target has no JSON yet: scan its immutable sources instead
-  // of skipping the ratchet or trusting candidate-provided numbers.
-  return scanSources(files);
 }
 
 export function checkLayers(
   root: string,
-  { record = false, baseRef }: { record?: boolean; baseRef?: string } = {},
+  {
+    baseRef = git(root, ["rev-parse", "HEAD"]).trim(),
+    output,
+  }: { baseRef?: string; output?: string } = {},
 ): Evidence {
-  const current = scanSources(readSources(root));
-  assert.equal(
-    current.issues.length,
-    0,
-    `layer inventory/scanner issues:\n${JSON.stringify(current.issues, null, 2)}`,
-  );
-  for (const edge of current.edges)
-    assert.ok(
-      Object.hasOwn(graph, edge.target),
-      `unknown rooted target ${edge.target} at ${edge.location.path}:${edge.location.line}`,
-    );
-  const head = git(root, ["rev-parse", "HEAD"]).trim();
-  assertRatchet(current, committedScan(root, head, "committed HEAD"), "committed HEAD");
-  if (baseRef)
-    assertRatchet(current, committedScan(root, baseRef, "LAYERS_BASE_REF"), "immutable target");
-  const path = resolve(root, evidencePath);
-  if (record) writeFileSync(path, `${JSON.stringify(current, null, 2)}\n`);
-  else {
-    assert.ok(
-      existsSync(path),
-      "missing layer evidence; run node scripts/check-layers.ts --record",
-    );
-    const stored: unknown = JSON.parse(readFileSync(path, "utf8"));
-    assert.deepEqual(
-      stored,
-      current,
-      "layer evidence is stale or edited; explicitly refresh with --record (ratchets still apply)",
-    );
+  const scans = scanWithBase(root, baseRef, [committedSources(root, baseRef), readSources(root)]);
+  const envelope = {
+    schema: 1,
+    baseRef,
+    candidateRef: git(root, ["rev-parse", "HEAD"]).trim(),
+    ...scans,
+    ok: false,
+    error: "",
+  };
+  try {
+    for (const scan of [scans.base, scans.candidate]) {
+      assert.equal(
+        scan.issues.length,
+        0,
+        `layer inventory/scanner issues:\n${JSON.stringify(scan.issues)}`,
+      );
+      const modules = new Set(scan.modules.map((entry) => entry.name));
+      for (const edge of scan.edges)
+        assert.ok(modules.has(edge.target), `unknown rooted target ${edge.target}`);
+    }
+    assertRatchet(scans.candidate, scans.base, "immutable target");
+    envelope.ok = true;
+  } catch (error) {
+    envelope.error = error instanceof Error ? error.message : String(error);
+    throw error;
+  } finally {
+    if (output) writeFileSync(resolve(root, output), `${JSON.stringify(envelope, null, 2)}\n`);
   }
-  return current;
+  return scans.candidate;
 }
 
 export function optionsFor(args: readonly string[], environment: NodeJS.ProcessEnv = process.env) {
-  let record = false;
   let baseRef = environment.LAYERS_BASE_REF;
+  let output = environment.LAYERS_OUTPUT;
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--record") record = true;
-    else if (args[i] === "--base-ref") {
-      const value = args[++i];
-      assert.ok(value && !value.startsWith("--"), "--base-ref requires a full commit SHA");
-      baseRef = value;
-    } else throw new Error(`unknown layer-check argument ${args[i]}`);
+    const name = args[i];
+    assert.ok(name === "--base-ref" || name === "--output", `unknown layer-check argument ${name}`);
+    const value = args[++i];
+    assert.ok(value && !value.startsWith("--"), `${name} requires a value`);
+    if (name === "--base-ref") baseRef = value;
+    else output = value;
   }
   if (baseRef !== undefined)
-    assert.match(baseRef, /^[a-f0-9]{40}$/, "LAYERS_BASE_REF/--base-ref must be a full commit SHA");
-  return { record, baseRef };
+    assert.match(baseRef, /^[a-f0-9]{40}$/, "layer base must be a full commit SHA");
+  return { baseRef, output };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
