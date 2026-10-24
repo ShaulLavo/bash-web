@@ -317,24 +317,6 @@ impl Context {
             evaluation,
         }
     }
-    fn frame<'a, F: std::future::Future<Output = Outcome> + 'a>(
-        mut self,
-        run: impl FnOnce(Self) -> F,
-    ) -> eval::Frame<'a> {
-        if self.cancel.is_cancelled() {
-            return futures::future::Either::Left(futures::future::ready(Outcome::status(130)));
-        }
-        self.evaluation = match self.evaluation.descend() {
-            Ok(evaluation) => evaluation,
-            Err(code) => {
-                return futures::future::Either::Left(futures::future::ready(Outcome::status(
-                    code,
-                )));
-            }
-        };
-        let evaluation = self.evaluation.clone();
-        evaluation.frame(run(self), Outcome::status)
-    }
     fn substitution(&self, cancel: Cancel, signal: Rc<Cell<Option<i32>>>, group: GroupId) -> Self {
         Self {
             cancel,
@@ -1953,7 +1935,12 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
     };
     let (name, message, line, status) = match error {
         expand::Error::Status(code) => return Outcome::status(code),
-        expand::Error::Abort(code) => return Outcome { code, flow: Flow::Abort },
+        expand::Error::Abort(code) => {
+            return Outcome {
+                code,
+                flow: Flow::Abort,
+            };
+        }
         expand::Error::AssignmentDepth => return Outcome { code: 1, flow },
         expand::Error::SpecialAssignment { name, line } => {
             (name, "cannot assign in this way".to_owned(), line, 1)
