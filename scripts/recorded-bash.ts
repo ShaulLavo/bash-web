@@ -55,6 +55,10 @@ export function runRecordingBash(script: string, env: NodeJS.ProcessEnv, cwd?: s
   return { status: 0, stdout: bash.stdout, stderr: bash.stderr };
 }
 
+export function recordingEnvironment() {
+  return { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" };
+}
+
 type ReaderCase = { script: string; status: number; stdout: string; stderr: string };
 
 export function recordedReaderCases(options: {

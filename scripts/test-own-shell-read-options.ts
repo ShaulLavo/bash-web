@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { after, test } from "node:test";
-import { recordedBash, runRecordingBash } from "./recorded-bash.ts";
+import { recordedBash, recordingEnvironment, runRecordingBash } from "./recorded-bash.ts";
 import { releaseShellRunner } from "./release-shell-runner.ts";
 
-const env = { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" };
+const env = recordingEnvironment();
 const runner = await releaseShellRunner(env);
 const cases = ["", "-r", "-n0", "-n3", "-N0", "-N3", "-n3 -N5", "-N5 -n3"]
   .flatMap((options) =>
