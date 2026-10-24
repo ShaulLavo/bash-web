@@ -4032,6 +4032,8 @@ mod transformation;
 mod printf_escaped_fields;
 #[path = "words/printf_fields.rs"]
 mod printf_fields;
+#[path = "words/printf_float.rs"]
+mod printf_float;
 #[path = "words/printf_integers.rs"]
 mod printf_integers;
 #[path = "words/printf_unsigned.rs"]
