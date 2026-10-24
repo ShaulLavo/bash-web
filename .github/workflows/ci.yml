@@ -47,7 +47,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      LAYERS_OUTPUT: ${{ runner.temp }}/engine-layers.json
       LAYERS_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - uses: actions/checkout@v4
@@ -66,6 +65,8 @@ jobs:
           fi
           echo "LAYERS_BASE_REF=$baseline" >> "$GITHUB_ENV"
       - run: npm run test:check-layers && npm run check:layers && npm run typecheck:layers
+        env:
+          LAYERS_OUTPUT: ${{ runner.temp }}/engine-layers.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

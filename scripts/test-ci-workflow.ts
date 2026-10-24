@@ -62,6 +62,36 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function assertPreStepEnv(env: unknown, scope: string) {
+  if (!env) return;
+  for (const [key, value] of Object.entries(object(env))) {
+    if (typeof value !== "string") continue;
+    for (const expression of value.matchAll(/\$\{\{(.*?)\}\}/gs))
+      assert.doesNotMatch(
+        expression[1].replace(/'(?:[^']|'')*'/g, ""),
+        /\brunner\s*(?:\.|\[)/,
+        `${scope}.${key}: runner context is unavailable before steps`,
+      );
+  }
+}
+
+test("runner context is rejected in workflow/job env rather than step env", () => {
+  const expression = "${{ runner.temp }}/engine-layers.json";
+  assert.throws(
+    () => assertPreStepEnv({ OUTPUT: expression }, "jobs.fixture.env"),
+    /jobs\.fixture\.env\.OUTPUT: runner context is unavailable before steps/,
+  );
+  assert.doesNotThrow(() =>
+    assertPreStepEnv({ LITERAL: "runner.temp", QUOTED: "${{ 'runner.temp' }}" }, "env"),
+  );
+  const workflow = object(
+    parse(readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8")),
+  );
+  assertPreStepEnv(workflow.env, "env");
+  for (const [id, job] of Object.entries(object(workflow.jobs)))
+    assertPreStepEnv(object(job).env, `jobs.${id}.env`);
+});
+
 function jobs() {
   return object(
     object(parse(readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8")))
@@ -347,11 +377,16 @@ test("read tokens stay out of the replay environment and layer graphs are artifa
     assert.equal(step.name, "Bind qualification and resolve PR main floor");
   }
   const layer = object(jobs().layers);
-  assert.match(String(object(layer.env).LAYERS_OUTPUT), /runner\.temp/);
   assert.doesNotMatch(commands(layer), /--record/);
   assert.ok(Array.isArray(layer.steps));
+  const check = layer.steps
+    .map(object)
+    .find((step) => typeof step.run === "string" && step.run.includes("npm run check:layers"));
+  assert.ok(check);
+  assert.equal(object(check.env).LAYERS_OUTPUT, "${{ runner.temp }}/engine-layers.json");
   const upload = layer.steps.map(object).find((step) => step.uses === "actions/upload-artifact@v4");
   assert.ok(upload);
+  assert.equal(object(upload.with).path, object(check.env).LAYERS_OUTPUT);
   assert.equal(upload.if, "always()");
   assert.equal(object(upload.with)["retention-days"], 90);
 });
