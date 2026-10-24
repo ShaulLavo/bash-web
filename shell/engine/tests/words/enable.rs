@@ -32,7 +32,7 @@ fn enable_state_follows_function_scope_but_isolates_shell_snapshots() {
 fn enable_does_not_advertise_unavailable_builtins_or_change_alias_precedence() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("enable -n source; echo source:$?; enable times; echo times:$?; enable -s; shopt -s expand_aliases\nalias printf='echo alias'\nenable -n printf\nprintf value\ncommand printf bad; echo command:$?\nenable printf\ncommand printf '%s\\n' builtin"), 0);
-    assert_eq!(rig.output.bytes(), b"source:1\ntimes:1\nenable :\nenable break\nenable continue\nenable eval\nenable exec\nenable exit\nenable export\nenable readonly\nenable return\nenable set\nenable shift\nenable trap\nenable unset\nalias value\ncommand:127\nbuiltin\n");
+    assert_eq!(rig.output.bytes(), b"source:0\ntimes:1\nenable .\nenable :\nenable break\nenable continue\nenable eval\nenable exec\nenable exit\nenable export\nenable readonly\nenable return\nenable set\nenable shift\nenable trap\nenable unset\nalias value\ncommand:127\nbuiltin\n");
 }
 
 #[test]
@@ -115,4 +115,31 @@ fn enable_completion_views_follow_disabled_state_without_hiding_builtin_names() 
         rig.output.bytes(),
         b"enabled:1\nprintf\nprintf\ncommand:1\nprintf\ndisabled:1\n"
     );
+}
+
+#[test]
+fn enable_source_handlers_share_registry_dispatch_and_completion() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("echo 'echo loaded' > lib; PATH=; enable -n source .; source ./lib; echo direct:$?; builtin . ./lib; echo wrapped:$?; command -v source; echo query:$?; compgen -A disabled source; enable source .; command source ./lib; builtin . ./lib; compgen -A enabled source"), 0);
+    assert_eq!(
+        rig.output.bytes(),
+        b"direct:127\nwrapped:1\nquery:1\nsource\nloaded\nloaded\nsource\n"
+    );
+}
+
+#[test]
+fn enable_sourced_local_append_shares_disable_state_and_restores_local_bindings() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("word=outer; echo 'value=loaded; enable -n printf; local word+=X' > lib; f() { local word=before; source ./lib; echo inside:$word:$value; }; f; type -t printf; echo disabled:$?; enable printf; printf '%s\\n' outside:$word:$value"), 0);
+    assert_eq!(
+        rig.output.bytes(),
+        b"inside:beforeX:loaded\ndisabled:1\noutside:outer:loaded\n"
+    );
+}
+
+#[test]
+fn enable_source_function_changes_share_state_but_subshell_changes_do_not() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("enable -n source; (enable source; type -t source); type -t source; echo parent:$?; f() { enable source; }; f; type -t source"), 0);
+    assert_eq!(rig.output.bytes(), b"builtin\nparent:1\nbuiltin\n");
 }

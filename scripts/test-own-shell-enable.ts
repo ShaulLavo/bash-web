@@ -8,6 +8,21 @@ await recordedBashTests("enable", new URL("fixtures/shell-enable.json", import.m
 const run = await createShellFixtureRunner({ utilities: false });
 const controls = [
   {
+    name: "source handlers share dispatch and completion availability",
+    code: "echo 'echo loaded' > lib; PATH=; enable -n source .; source ./lib; echo direct:$?; builtin . ./lib; echo wrapped:$?; command -v source; echo query:$?; compgen -A disabled source; enable source .; command source ./lib; builtin . ./lib; compgen -A enabled source",
+    stdout: "direct:127\nwrapped:1\nquery:1\nsource\nloaded\nloaded\nsource\n",
+  },
+  {
+    name: "sourced local append shares disable state and restores local bindings",
+    code: "word=outer; echo 'value=loaded; enable -n printf; local word+=X' > lib; f() { local word=before; source ./lib; echo inside:$word:$value; }; f; type -t printf; echo disabled:$?; enable printf; printf '%s\\n' outside:$word:$value",
+    stdout: "inside:beforeX:loaded\ndisabled:1\noutside:outer:loaded\n",
+  },
+  {
+    name: "source function changes share state but subshell changes do not",
+    code: "enable -n source; (enable source; type -t source); type -t source; echo parent:$?; f() { enable source; }; f; type -t source",
+    stdout: "builtin\nparent:1\nbuiltin\n",
+  },
+  {
     name: "completion availability follows the registry",
     code: "PATH=; enable -n printf; compgen -A enabled printf; echo enabled:$?; compgen -A disabled printf; compgen -A builtin printf; compgen -A command printf; echo command:$?; enable printf; compgen -A enabled printf; compgen -A disabled printf; echo disabled:$?",
     stdout: "enabled:1\nprintf\nprintf\ncommand:1\nprintf\ndisabled:1\n",
@@ -30,7 +45,7 @@ const controls = [
   {
     name: "unsupported names and dynamic loading cannot claim builtin support",
     code: "enable source; echo source:$?; enable times; echo times:$?; enable -f library printf; echo load:$?; enable -d printf; echo delete:$?; type -t printf",
-    stdout: "source:1\ntimes:1\nload:2\ndelete:2\nbuiltin\n",
+    stdout: "source:0\ntimes:1\nload:2\ndelete:2\nbuiltin\n",
   },
   {
     name: "functions precede disabled builtins and command still bypasses them",

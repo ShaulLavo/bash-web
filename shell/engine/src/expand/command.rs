@@ -39,6 +39,11 @@ impl CaptureBuffer {
 }
 
 impl Expansion<'_> {
+    pub(super) fn process_child(&self, mut child: State, state: &SharedState) -> SharedState {
+        child.traps = state.borrow().traps.process_substitution();
+        child.shared()
+    }
+
     pub(super) async fn command_substitution(
         &mut self,
         commands: &[Command],

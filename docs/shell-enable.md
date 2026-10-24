@@ -23,7 +23,9 @@ The fixed-size mask is part of the existing shell-state snapshot admission.
 No builtin names or per-change heap allocations are retained in the mask.
 
 This does not add dynamic loading, library removal, or unsupported builtin handlers.
-The special-builtin list intentionally omits `.`, `source`, and `times` until those
-commands have real implementations. Frozen Brush enable case 1 therefore remains a gap.
+The catalogue includes the real `.` and `source` handlers. The special-builtin list
+includes `.`, while `source` retains its regular-builtin class. `times` remains
+unavailable because the runtime provides no CPU accounting. Frozen Brush enable
+case 1 therefore remains a gap.
 Cases 2 and 4 are checked against the saved Bash 5.3.15 recordings. Nearby original
 controls cover dispatch, snapshots, external fallback, cancellation, and admission.

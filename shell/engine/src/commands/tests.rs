@@ -144,7 +144,7 @@ fn enable_registry_masks_only_supported_builtin_slots() {
         assert_eq!(enabled_handler(command.name, disabled), None);
     }
     let before = disabled;
-    for unsupported in ["source", ".", "times", "cat", "if", "time", "unknown"] {
+    for unsupported in ["times", "cat", "if", "time", "unknown"] {
         assert!(!set_enabled(unsupported, &mut disabled, true));
         assert!(!enabled(unsupported, disabled));
         assert_eq!(disabled, before);
