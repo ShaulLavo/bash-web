@@ -6,7 +6,7 @@ bash-web is experimental and pre-1.0. The package version is `0.0.x`, `package.j
 
 | Area | Runs on | Not verified |
 | ---- | ------- | ------------ |
-| Native engine build and tests (`npm run test:rust`) | macOS arm64 (TESTS tests passed at `a745a96`), Linux (CI, `ubuntu-latest`) | Windows |
+| Native engine build and tests (`npm run test:rust`) | macOS arm64 (1,657 tests passed at `a745a96`), Linux (CI, `ubuntu-latest`) | Windows |
 | WASI guests, size gate, frozen score replay | Linux (CI) | macOS, Windows. The wasi-sdk default path in `scripts/wasi-build.ts` is a Linux x86_64 build, and the libc rebuild needs `setsid`, `flock`, and GNU `timeout`. |
 | Browser embedding | Chromium and Firefox through Playwright in CI | Safari. Chromium and Firefox results say nothing about it. |
 | Browser requirements | A secure context, cross-origin isolation for `SharedArrayBuffer`, WASM served as `application/wasm` | |

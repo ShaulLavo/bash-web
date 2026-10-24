@@ -32,7 +32,7 @@ npm run test:rust         # parser provenance, rustfmt, native workspace tests
 npm run test:shell:wasi   # WASI tests under wasmtime and the brotli size ceiling
 ```
 
-`npm run test:rust` ends with the native test summary. At commit `a26ce56` the workspace has 1,648 passing tests on macOS arm64.
+`npm run test:rust` ends with the native test summary. At commit `a745a96` the workspace has 1,657 passing tests on macOS arm64.
 
 Build and check the browser integration separately:
 
