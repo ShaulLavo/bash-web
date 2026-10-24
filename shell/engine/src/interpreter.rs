@@ -75,7 +75,7 @@ pub(crate) enum Flow {
     Normal,
     /// A user-level `exit` completed the executing shell environment.
     Complete,
-    /// The current submission must stop; the root session completes the environment.
+    /// The current submission must stop; the root session may latch exit but stays open.
     Exit,
     Abort,
     // Unlike isolated errexit, a failed fork aborts the invoking reader even
@@ -870,19 +870,22 @@ impl Session {
                 context.clone(),
             )
             .await;
-            let result = if matches!(result.flow, Flow::Complete | Flow::Exit)
-                && !context.cancel.is_cancelled()
-            {
-                context.core.exit_requested.set(true);
-                finish_environment(
-                    result,
-                    state.clone(),
-                    context.core.descriptors.clone(),
-                    context.clone(),
-                )
-                .await
-            } else {
-                result
+            let result = match result.flow {
+                Flow::Complete if !context.cancel.is_cancelled() => {
+                    context.core.exit_requested.set(true);
+                    finish_environment(
+                        result,
+                        state.clone(),
+                        context.core.descriptors.clone(),
+                        context.clone(),
+                    )
+                    .await
+                }
+                Flow::Exit if !context.cancel.is_cancelled() => {
+                    context.core.exit_requested.set(true);
+                    result
+                }
+                _ => result,
             };
             let code = context.finish_group(&mut processes, result).await;
             state.borrow_mut().publish_status(code);

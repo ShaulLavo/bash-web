@@ -338,11 +338,14 @@ fn compound_setup_failure_uses_err_policy_with_or_without_errexit() {
     );
     assert_eq!(shell.state().borrow().scalar_parameter("seen"), Some("1"));
     assert!(shell.exit_requested());
-    assert!(
-        String::from_utf8(output.bytes())
-            .unwrap()
-            .ends_with("err\nexit\n")
+    assert_eq!(output.bytes(), b"err\ndone\nerr\n");
+    assert_eq!(
+        complete(&executor, shell.start("set +e; echo recovered").unwrap()),
+        0
     );
+    assert_eq!(output.bytes(), b"err\ndone\nerr\nrecovered\n");
+    assert_eq!(complete(&executor, shell.finish(1).unwrap()), 1);
+    assert_eq!(output.bytes(), b"err\ndone\nerr\nrecovered\nexit\n");
 }
 
 #[test]
@@ -363,6 +366,11 @@ fn handler_failures_obey_errexit_but_same_kind_does_not_recurse() {
     assert_eq!(complete(&executor, shell.start(source).unwrap()), 1);
     assert_eq!(output.bytes(), b"err\ntail\nerr\n");
     assert!(shell.exit_requested());
+    assert_eq!(
+        complete(&executor, shell.start("set +e; echo recovered").unwrap()),
+        0
+    );
+    assert_eq!(output.bytes(), b"err\ntail\nerr\nrecovered\n");
 }
 
 #[test]
