@@ -153,6 +153,39 @@ impl Drop for StorageAllocation {
 
 pub(crate) type RetainedStorage = Rc<StorageAllocation>;
 
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ReaderLocation {
+    name: Option<Rc<ReaderName>>,
+    pub(crate) line_offset: usize,
+}
+
+#[derive(Debug)]
+struct ReaderName {
+    text: String,
+    _storage: StorageAllocation,
+}
+
+impl ReaderLocation {
+    pub(crate) fn file(name: String, scope: &Scope) -> Result<Self, i32> {
+        let bytes = name
+            .capacity()
+            .checked_add(size_of::<ReaderName>() + 2 * size_of::<usize>())
+            .ok_or(2)?;
+        let storage = scope.admit_storage(bytes)?;
+        Ok(Self {
+            name: Some(Rc::new(ReaderName {
+                text: name,
+                _storage: storage,
+            })),
+            line_offset: 0,
+        })
+    }
+
+    pub(crate) fn filename(&self) -> Option<&str> {
+        self.name.as_ref().map(|name| name.text.as_str())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct Source {
     reader: Rc<SourceReader>,
@@ -309,6 +342,18 @@ impl Scope {
         };
         debug_assert_eq!(size_of_val(&future), bytes);
         Either::Right(future.boxed_local())
+    }
+
+    pub(crate) fn reader_frame<'a, T: 'a, F: Future<Output = T> + 'a>(
+        &self,
+        reader: impl FnOnce(Self) -> F,
+        failure: impl FnOnce(i32) -> T,
+    ) -> Frame<'a, T> {
+        let scope = match self.enter() {
+            Ok(scope) => scope,
+            Err(code) => return Either::Left(ready(failure(code))),
+        };
+        scope.frame(reader(scope.clone()), failure)
     }
 
     pub(crate) fn admit_execution(&self, bytes: usize) -> Result<Allocation, i32> {
@@ -606,6 +651,41 @@ mod tests {
         assert_eq!(task.enter().unwrap().depth, 1);
         assert_eq!(task.descend().unwrap().execution_depth, 1);
         assert!(Rc::ptr_eq(&scope.shared, &task.shared));
+    }
+
+    #[test]
+    fn reader_frame_checks_depth_before_constructing_a_future() {
+        let mut scope = Scope::new(1024, StorageBudget::new(1024), StorageBudget::new(1024));
+        for _ in 0..MAX_EVAL_DEPTH {
+            scope = scope.enter().unwrap();
+        }
+        let constructed = Cell::new(false);
+        let frame = scope.reader_frame(
+            |_| {
+                constructed.set(true);
+                ready(0)
+            },
+            |code| code,
+        );
+        assert_eq!(frame.now_or_never(), Some(2));
+        assert!(!constructed.get());
+    }
+
+    #[test]
+    fn reader_frame_charges_and_refunds_its_pending_future() {
+        let memory = StorageBudget::new(1024);
+        let scope = Scope::new(1024, StorageBudget::new(1024), memory.clone());
+        let frame = scope.reader_frame(
+            |reader| async move {
+                assert_eq!(reader.depth, 1);
+                futures::future::pending::<i32>().await
+            },
+            |code| code,
+        );
+        assert!(memory.observation().0 > 0);
+        assert!(frame.now_or_never().is_none());
+        assert_eq!(memory.observation().0, 0);
+        assert_eq!(scope.depth, 0);
     }
 
     #[test]

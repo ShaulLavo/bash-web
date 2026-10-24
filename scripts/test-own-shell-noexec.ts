@@ -41,3 +41,27 @@ for (const entry of fixture.cases)
       entry.script,
     );
   });
+
+for (const name of [".", "source"]) {
+  test(`production Waffle noexec skips the real ${name} reader`, async () => {
+    const setup = "echo 'echo BODY; loaded=yes; return 9' > lib; ";
+    const control = await runner(setup + `${name} ./lib supplied; echo status=$? loaded=$loaded`);
+    assert.equal(control.crash, undefined);
+    assert.equal(control.outputLimit, undefined);
+    assert.equal(control.status, 0);
+    assert.deepEqual(control.stdout, Buffer.from("BODY\nstatus=9 loaded=yes\n"));
+    assert.deepEqual(control.stderr, Buffer.alloc(0));
+    const skipped = await runner(setup + `set -n; ${name} ./lib supplied; echo BAD`);
+    assert.equal(skipped.crash, undefined);
+    assert.equal(skipped.outputLimit, undefined);
+    assert.equal(skipped.status, 0);
+    assert.deepEqual(skipped.stdout, Buffer.alloc(0));
+    assert.deepEqual(skipped.stderr, Buffer.alloc(0));
+    const unread = await runner(`echo 'echo >' > lib; set -n; ${name} ./lib; echo BAD`);
+    assert.equal(unread.crash, undefined);
+    assert.equal(unread.outputLimit, undefined);
+    assert.equal(unread.status, 0);
+    assert.deepEqual(unread.stdout, Buffer.alloc(0));
+    assert.deepEqual(unread.stderr, Buffer.alloc(0));
+  });
+}
