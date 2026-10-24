@@ -1506,7 +1506,40 @@ impl Expansion<'_> {
         )
         .await
     }
-    async fn parameter(
+    fn parameter<'a>(
+        &'a mut self,
+        name: &'a str,
+        operator: &'a ParameterOp,
+        operand: &'a str,
+        colon: bool,
+        context: OperandContext<'a>,
+        error_pointer: Option<&'a str>,
+    ) -> crate::exec::ResultFuture<'a, ()> {
+        self.parameter_frame(move |expansion| {
+            expansion.parameter_value(name, operator, operand, colon, context, error_pointer)
+        })
+    }
+
+    // Typed selector/write futures must not inflate every recursive operand poll.
+    // Own this operation in the existing execution scope, or admit its actual
+    // future bytes in standalone expansion work before constructing it.
+    fn parameter_frame<'a, F>(
+        &'a mut self,
+        build: impl FnOnce(&'a mut Self) -> F,
+    ) -> crate::exec::ResultFuture<'a, ()>
+    where
+        F: std::future::Future<Output = Result<(), Error>> + 'a,
+    {
+        if let Some(scope) = self.work.frame_scope.clone() {
+            return scope.frame(build(self), |code| Err(code.into()));
+        }
+        if let Err(error) = self.work.admit_storage(std::mem::size_of::<F>()) {
+            return futures::future::Either::Left(futures::future::ready(Err(error)));
+        }
+        futures::future::Either::Right(build(self).boxed_local())
+    }
+
+    async fn parameter_value(
         &mut self,
         name: &str,
         operator: &ParameterOp,
@@ -2831,6 +2864,104 @@ fn poll_argv(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn parameter_expansion<'a>(work: &'a mut Work, cancel: &'a Cancel) -> Expansion<'a> {
+        Expansion {
+            segments: Segments::default(),
+            captured: None,
+            pattern: None,
+            replacement: None,
+            pattern_context: false,
+            pattern_snapshots: false,
+            admit_frames: false,
+            ifs: None,
+            ifs_changed: false,
+            work,
+            cancel,
+            max_raw: 1024,
+            raw_remaining: 1024,
+            elements_remaining: 16,
+        }
+    }
+
+    #[test]
+    fn parameter_frames_admit_actual_bytes_before_construction() {
+        let bytes = std::mem::size_of::<std::future::Ready<Result<(), Error>>>();
+        let cancel = Cancel::new();
+        let mut work = Work::new(8, bytes - 1, 1);
+        let mut expansion = parameter_expansion(&mut work, &cancel);
+        let called = std::cell::Cell::new(false);
+        let rejected = expansion.parameter_frame(|_| {
+            called.set(true);
+            std::future::ready(Ok(()))
+        });
+        assert!(matches!(
+            rejected.now_or_never(),
+            Some(Err(Error::Status(2)))
+        ));
+        assert!(!called.get());
+        assert_eq!(expansion.work.storage_left(), bytes - 1);
+        let mut work = Work::new(8, bytes, 1);
+        let mut expansion = parameter_expansion(&mut work, &cancel);
+        assert!(matches!(
+            expansion
+                .parameter_frame(|_| std::future::ready(Ok(())))
+                .now_or_never(),
+            Some(Ok(()))
+        ));
+        assert_eq!(expansion.work.storage_left(), 0);
+    }
+
+    #[test]
+    fn parameter_frames_preserve_scoped_refusal_completion_cancel_and_drop() {
+        let execution = crate::exec::StorageBudget::new(4096);
+        let scope =
+            crate::exec::Scope::new(128, crate::exec::StorageBudget::new(128), execution.clone());
+        let cancel = Cancel::new();
+        let mut work = Work::new(8, 0, 1).with_frame_scope(scope.clone());
+        let mut expansion = parameter_expansion(&mut work, &cancel);
+        let frame = expansion.parameter_frame(|_| std::future::pending::<Result<(), Error>>());
+        assert!(scope.execution_available() < 4096);
+        drop(frame);
+        assert_eq!(scope.execution_available(), 4096);
+        assert!(matches!(
+            expansion
+                .parameter_frame(|_| std::future::ready(Ok(())))
+                .now_or_never(),
+            Some(Ok(()))
+        ));
+        assert_eq!(scope.execution_available(), 4096);
+        cancel.cancel();
+        assert!(matches!(
+            expansion
+                .parameter_frame(|expansion| async move {
+                    expansion.work.checkpoint(expansion.cancel).await
+                })
+                .now_or_never(),
+            Some(Err(Error::Status(130)))
+        ));
+        assert_eq!(scope.execution_available(), 4096);
+        assert_eq!(expansion.work.storage_left(), 0);
+
+        let scope = crate::exec::Scope::new(
+            128,
+            crate::exec::StorageBudget::new(128),
+            crate::exec::StorageBudget::new(0),
+        );
+        let mut work = Work::new(8, 0, 1).with_frame_scope(scope.clone());
+        let mut expansion = parameter_expansion(&mut work, &cancel);
+        let polled = std::cell::Cell::new(false);
+        let rejected = expansion.parameter_frame(|_| async {
+            polled.set(true);
+            Ok(())
+        });
+        assert!(matches!(
+            rejected.now_or_never(),
+            Some(Err(Error::Status(crate::exec::RESOURCE_STATUS)))
+        ));
+        assert!(!polled.get());
+        assert_eq!(scope.execution_available(), 0);
+    }
 
     #[test]
     fn pattern_frames_admit_actual_bytes_before_construction() {
