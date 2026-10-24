@@ -325,6 +325,7 @@ impl Drop for Open {
 #[derive(Clone)]
 pub struct Endpoint(Rc<Open>);
 /// Observing an open description must not keep its pipe reader/writer alive.
+#[derive(Clone)]
 pub(crate) struct WeakEndpoint(Weak<Open>);
 impl WeakEndpoint {
     pub(crate) fn upgrade(&self) -> Option<Endpoint> {
