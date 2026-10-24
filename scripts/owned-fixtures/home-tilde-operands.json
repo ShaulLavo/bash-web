@@ -1,0 +1,103 @@
+{
+  "schema": 1,
+  "oracle": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "identity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "6ed3e700fcfca7d03ae94ae372480a00ca737d3baa211cea90659f91c6e94c60",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "cases": [
+    {
+      "id": "bashkit-suite:tilde-expansion:6",
+      "corpus": "bashkit-suite",
+      "file": "tilde-expansion",
+      "line": 6,
+      "name": "tilde_quoted_forms_stay_literal",
+      "category": "tilde-expansion",
+      "code": "HOME=/home/tt\nx=y\necho ~/\"b\" ~\"/b\" ~/$x ~$x \"~\" \\~ ~:x\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "L2hvbWUvdHQvYiB+L2IgL2hvbWUvdHQveSB+eSB+IH4gL2hvbWUvdHQ6eAo=",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:tilde-expansion:14",
+      "corpus": "bashkit-suite",
+      "file": "tilde-expansion",
+      "line": 14,
+      "name": "tilde_in_assignment_values",
+      "category": "tilde-expansion",
+      "code": "HOME=/home/tt\nv=a:~:~root/x:\"~\":\\~\necho $v\nv='~'\necho $v\nv=\\~\necho $v\nv=~/\"b\"\necho $v\nPATHLIKE=~/bin:~/sbin\necho $PATHLIKE\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "YTovaG9tZS90dDp+cm9vdC94On46fgp+Cn4KL2hvbWUvdHQvYgovaG9tZS90dC9iaW46L2hvbWUvdHQvc2Jpbgo=",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:tilde-expansion:34",
+      "corpus": "bashkit-suite",
+      "file": "tilde-expansion",
+      "line": 34,
+      "name": "tilde_in_assignment_like_arguments",
+      "category": "tilde-expansion",
+      "code": "HOME=/home/tt\necho x=~ x=~:~ a=b:~ 1x=~ foo:~\nreadonly r=~:~\necho $r\nf() { local l=x:~; echo $l; }\nf\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "eD0vaG9tZS90dCB4PS9ob21lL3R0Oi9ob21lL3R0IGE9YjovaG9tZS90dCAxeD1+IGZvbzp+Ci9ob21lL3R0Oi9ob21lL3R0Cng6L2hvbWUvdHQK",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:tilde-expansion:57",
+      "corpus": "bashkit-suite",
+      "file": "tilde-expansion",
+      "line": 57,
+      "name": "tilde_in_parameter_operands",
+      "category": "tilde-expansion",
+      "code": "HOME=/home/tt\necho ${undef:-~} \"${undef:-~}\" ${HOME:+~/z} ${undef:-\"~\"}\nx=/home/tt/a\necho ${x//~/z} \"${x#~}\" \"${x/#~/Z}\"\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "L2hvbWUvdHQgfiAvaG9tZS90dC96IH4Kei9hIC9hIC9ob21lL3R0L2EK",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:variables:163",
+      "corpus": "bashkit-suite",
+      "file": "variables",
+      "line": 163,
+      "name": "tilde_home",
+      "category": "variables",
+      "code": "HOME=/home/user; echo ~\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "L2hvbWUvdXNlcgo=",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:variables:170",
+      "corpus": "bashkit-suite",
+      "file": "variables",
+      "line": 170,
+      "name": "tilde_in_path",
+      "category": "variables",
+      "code": "HOME=/home/user; echo ~/subdir\n",
+      "kind": "builtins-only",
+      "bash": {
+        "status": 0,
+        "stdout": "L2hvbWUvdXNlci9zdWJkaXIK",
+        "stderr": ""
+      }
+    }
+  ]
+}
