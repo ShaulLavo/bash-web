@@ -177,6 +177,15 @@ fn check_output(source: &str, expected: &str) {
     assert_eq!(rig.output.bytes(), expected.as_bytes(), "{source}");
 }
 
+fn recorded_bash_fixture(source: &str) -> serde_json::Value {
+    let fixture: serde_json::Value = serde_json::from_str(source).unwrap();
+    assert_eq!(
+        fixture["bash"],
+        "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)"
+    );
+    fixture
+}
+
 // Scalar replacements adapt the pinned Bashkit specs; Bash 5.3 controls also
 // cover default patsub_replacement semantics and bounded engine behavior.
 #[test]
@@ -4406,12 +4415,3 @@ mod array_slicing;
 
 #[path = "words/command_hash.rs"]
 mod command_hash;
-
-fn recorded_bash_fixture(source: &str) -> serde_json::Value {
-    let fixture: serde_json::Value = serde_json::from_str(source).unwrap();
-    assert_eq!(
-        fixture["bash"],
-        "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)"
-    );
-    fixture
-}
