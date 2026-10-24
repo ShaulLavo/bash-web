@@ -5,6 +5,8 @@
     "src/{runtime,browser}/*.test.ts",
     "tests/*.unit.ts",
     "scripts/bash-compat-worker.mjs",
+    // Filename-discovered scoreboard tests are independent executable roots.
+    "scripts/test-{shell-scoreboard*,own-shell-*,bash-compat*,compat-selection}.{mjs,ts}",
     "scripts/waffle-node-api.ts",
     "scripts/waffle-root-worker.ts",
     "scripts/waffle-child-worker.ts",
