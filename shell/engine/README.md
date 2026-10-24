@@ -17,4 +17,4 @@ wasmtime run .build/shell/wasm32-wasip1/release/shell-engine.wasm -c 'printf hel
 
 - [Execution contract, bounds and supported semantics](../../docs/shell-engine.md)
 - [Workspace and runtime integration](../../docs/shell-workspace.md)
-- [Build setup](../../docs/getting-started.md#build-and-test)
+- [Build setup](../../docs/development.md#prerequisites)

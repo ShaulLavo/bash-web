@@ -53,15 +53,14 @@ printf 'x=<%s> y=<%s>\n' "$x" "$y"
 Bash prints `x=<one\ntwo> y=<one>`, with a literal newline inside `x`. The shell
 prints `x=<one\ntwo> y=<>`. Replacing `$(</dev/fd/3)` with
 `$(cat </dev/fd/3)` produces the same difference on production Waffle. Both
-return status 0. Raw observations are retained in
-`/work/reports/bash-web/hill-climb/control/file-substitution/fd-observation.json`.
+return status 0.
 
 This family preserves the shared descriptor helper. Independent reopening of
 regular-file aliases requires a separate runtime/I/O contract; pipes and
 terminals must continue to share their descriptions. No descriptor parity is
 claimed, and no path blacklist, offset restoration, case skip or scoring change
 is used. Filesystem service stall behavior also remains the existing runtime
-boundary described in plan 004.
+boundary described in [Browser integration](browser-runtime.md#pending-external-program-coverage).
 
 ## Provenance
 

@@ -27,7 +27,7 @@ means code written here to call that boundary, not a copied upstream implementat
 Upstream: [`WebAssembly/wasi-libc`, `libc-bottom-half/sources/preopens.c`](https://github.com/WebAssembly/wasi-libc/blob/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/libc-bottom-half/sources/preopens.c),
 revision `2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13`, shipped by wasi-sdk **34.0**.
 The change lives only in Waffle's
-[`patches/wasi-libc/preopen-scan.patch`](https://github.com/ShaulLavo/waffle/blob/afe9cc1f3f93ea84929903e5a55854dbfd973448/patches/wasi-libc/preopen-scan.patch).
+[`patches/wasi-libc/preopen-scan.patch`](https://github.com/ShaulLavo/waffle/blob/b20fad173ebaa225cb87c51776f35edaaafd4a40/patches/wasi-libc/preopen-scan.patch).
 
 Unmodified libc stops on the first `fd_prestat_get` `BADF`. WASI truthfully
 returns `BADF` for an open inherited descriptor that is not a preopen, so an
@@ -39,9 +39,9 @@ and does not invent successful prestat metadata or a `NOTSUP` workaround.
 
 ## Waffle placement and builder
 
-Waffle **0.0.47** is pinned to
-`afe9cc1f3f93ea84929903e5a55854dbfd973448` for both the required peer and the
-development dependency. Its [`docs/wasi-libc.md`](https://github.com/ShaulLavo/waffle/blob/afe9cc1f3f93ea84929903e5a55854dbfd973448/docs/wasi-libc.md)
+Waffle is pinned to the commit in `peerDependencies.waffle` (`package.json`),
+currently `b20fad173ebaa225cb87c51776f35edaaafd4a40`, for both the required peer
+and the development dependency. Its [`docs/wasi-libc.md`](https://github.com/ShaulLavo/waffle/blob/b20fad173ebaa225cb87c51776f35edaaafd4a40/docs/wasi-libc.md)
 is the shared contract; bash-web does not fork it.
 
 Before guest instantiation, Waffle reserves every inherited target and places
@@ -55,7 +55,7 @@ The installed `node_modules/waffle/scripts/build-wasi-libc.sh` verifies the SDK
 revision and source archive checksum and applies the one shared patch. It needs
 wasi-sdk **34.0**, CMake **3.26+**, Ninja, curl, tar, patch, sha256sum, Linux
 setsid and GNU timeout; bash-web's cache serialization also needs flock. See
-[setup](getting-started.md#build-and-test) for tool paths and commands.
+[setup](development.md#prerequisites) for tool paths and commands.
 
 ## Shell guest adapters and probes
 
@@ -112,7 +112,7 @@ artifact verifier; browser/test helpers verify before publishing their assets.
 Before a heavy build, verify the data mount/free space and record pre-existing
 resources. Admit work through the host's shared build queue. Waffle owns its
 unique temporary download/source/build tree under `WASI_LIBC_SCRATCH_ROOT`
-(`/work/tmp` on the PC) and removes it after descendants stop on success,
+ and removes it after descendants stop on success,
 failure or interruption. If cleanup cannot be verified it prints and retains
 the path for its caller to resolve. Compiler temporaries use that owned tree.
 

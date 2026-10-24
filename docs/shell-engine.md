@@ -1,6 +1,6 @@
 # Async shell core
 
-This is [plan 004](../plans/004-own-shell.md)'s async engine core. The
+This page describes the async engine core. The
 `shell-engine -c` executable is a native/WASI CLI and release-size harness; its
 process registry contains only the shared `argv.py` and `printenv.py`
 compatibility fixtures. The separate runtime-backed `shell-runtime` guest powers

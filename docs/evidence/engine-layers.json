@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "da38730a65ae9f038aaaed9190144eda7044ed3500ea8c5b392e447d5892e1a5",
+    "engineSourceSha256": "837c005c9843426e9c0bf3de791cfba1c67db8eae8c96203d7364293170a74c5",
     "binaryBuild": null
   },
   "contract": {
@@ -261,8 +261,6 @@
         "shell/engine/src/interpreter/reader.rs",
         "shell/engine/src/interpreter/select.rs",
         "shell/engine/src/interpreter/source.rs",
-        "shell/engine/src/interpreter/timing.rs",
-        "shell/engine/src/interpreter/timing/tests.rs",
         "shell/engine/src/interpreter/trap_tests.rs",
         "shell/engine/src/interpreter/type_builtin.rs"
       ]
@@ -424,7 +422,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 914,
+        "line": 885,
         "column": 25
       }
     },
@@ -594,7 +592,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 1664,
+        "line": 1605,
         "column": 33
       }
     },
@@ -624,7 +622,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 97,
+        "line": 93,
         "column": 30
       }
     },
@@ -944,7 +942,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 4241,
+        "line": 4175,
         "column": 25
       }
     },
@@ -954,7 +952,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 5594,
+        "line": 5528,
         "column": 17
       }
     },
@@ -974,7 +972,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 4227,
+        "line": 4161,
         "column": 17
       }
     },
@@ -984,8 +982,8 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 4222,
-        "column": 24
+        "line": 4161,
+        "column": 31
       }
     },
     {
