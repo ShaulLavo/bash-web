@@ -1,4 +1,4 @@
-use super::{Context, Descriptors, Flow, Outcome, parse_failure, script_sequence};
+use super::{Context, Descriptors, Flow, Outcome, reader};
 use crate::{
     exec::{JoinedSource, Scope, StorageAllocation},
     executor::Budget,
@@ -85,7 +85,7 @@ async fn join_body(
     if bytes > context.limits().source_bytes {
         return Err(2);
     }
-    // String plus the later Rc<str> copy and both reference-count headers.
+    // Text conversion and allocation headers. Shape::storage admits reader metadata.
     let storage = bytes
         .checked_mul(2)
         .and_then(|bytes| bytes.checked_add(size_of::<usize>() * 4))
@@ -161,8 +161,13 @@ async fn run_body(
         Err(code) => return Outcome::status(code),
     };
     let parser = context.parser_budget();
-    let (script, failure) = match parse::eval(source.text(), context.limits().source_bytes, &parser)
-    {
+    let aliases = reader::AliasOptions::snapshot(&state);
+    let (script, failure) = match parse::eval(
+        source.text(),
+        context.limits().source_bytes,
+        &parser,
+        aliases.options(),
+    ) {
         Ok(parsed) => parsed,
         Err(_)
             if matches!(
@@ -173,7 +178,10 @@ async fn run_body(
             context.cancel.cancel();
             return Outcome::status(130);
         }
-        Err(_) => return Outcome::status(2),
+        Err(error) => {
+            let outcome = super::abort_diagnostic(&fds, &context, error.as_bytes(), 2).await;
+            return Outcome::status(outcome.code);
+        }
     };
     if context.cancel.is_cancelled() {
         return Outcome::status(130);
@@ -190,11 +198,11 @@ async fn run_body(
     let mut result = context
         .core
         .executor
-        .spawn(script_sequence(
-            script.commands,
-            script.command_end_lines,
+        .spawn(reader::run(
+            reader::Reader::new(script, failure, aliases, parser),
+            "eval",
             state,
-            fds.clone(),
+            fds,
             context.clone(),
         ))
         .await;
@@ -202,14 +210,6 @@ async fn run_body(
     // return a status to the caller instead of discarding the caller's line.
     if result.flow == Flow::DiscardReadUnit {
         result.flow = Flow::Normal;
-    }
-    if result.flow == Flow::Normal
-        && let Some(failure) = failure
-    {
-        result = parse_failure(failure, "eval", &fds, &context).await;
-        if result.code == 2 && result.flow == Flow::Exit {
-            result.flow = Flow::Normal;
-        }
     }
     result
 }

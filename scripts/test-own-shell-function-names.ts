@@ -96,15 +96,12 @@ const scripts =
         "'foo'() { :; }; echo status=$?",
         '"foo"() { :; }; echo status=$?',
       ]
-    : pending === "aliases"
-      ? [
-          "shopt -s expand_aliases; alias def=function\ndef $foo { :; }; echo after",
-          "shopt -s expand_aliases; alias make='function `echo $x` { echo called; }'\nmake\n'`echo $x`'",
-        ]
-      : supportedScripts;
+    : supportedScripts.concat([
+        "shopt -s expand_aliases; alias def=function\ndef $foo { :; }; echo after",
+        "shopt -s expand_aliases; alias make='function `echo $x` { echo called; }'\nmake\n'`echo $x`'",
+      ]);
 const recordPath = process.env.BASH_FUNCTION_NAMES_RECORD;
-const fixtureSuffix =
-  pending === "1" ? "-pending" : pending === "aliases" ? "-aliases-pending" : "";
+const fixtureSuffix = pending === "1" ? "-pending" : "";
 const fixturePath = new URL(`fixtures/shell-function-names${fixtureSuffix}.json`, import.meta.url);
 const version = "5.3.15(1)-release";
 type Recording = { schema: number; bash: string; cases: { script: string; bash: EncodedResult }[] };

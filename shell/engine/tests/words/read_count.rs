@@ -152,12 +152,10 @@ fn read_count_pending_cancellation_refunds_storage_and_keeps_assignment_atomic()
 }
 
 #[test]
-fn read_count_rejects_other_modes_and_unrepresentable_input_without_partial_assignment() {
+fn read_count_rejects_closed_input_and_unrepresentable_input_without_partial_assignment() {
     let rig = Rig::new(Limits::default());
     rig.variable("x", "old");
     for source in [
-        "read -N3 x <<<hello",
-        "read -d: -n3 x <<<hello",
         "read -n3 x <&-",
         "LC_ALL=C read -n1 x <<<é",
         "printf '\\xff' | read -n1 x",
@@ -313,7 +311,7 @@ fn read_count_signed_zero_descriptor_and_invalid_descriptors() {
             &format!(
                 "{{ x=old; read -n3 -u '{fd}' x 2>/dev/null; echo \"[$x]:$?\"; read -r tail; echo \"[$tail]:$?\"; }} <<<abcdef"
             ),
-            b"[old]:2\n[abcdef]:0\n",
+            b"[old]:1\n[abcdef]:0\n",
         );
     }
 }

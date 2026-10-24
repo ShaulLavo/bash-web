@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "purpose": "Move the frozen replay to security-fixed Node 26.12.1. Bash observations, case set, source pins, runner and expected pass membership are unchanged. CI independently rebuilds the immutable target and requires unchanged pass membership under the updated host.",
+  "target": "04ca4c1489aa349c4e57327684a24ebf8a9f726c",
+  "from": {
+    "runner": "waffle-node",
+    "nodeVersion": "v26.7.0",
+    "environment": "563b65495700fa04ee09b312022865864ce51fbd97af0da29a9452d3ce82a9c1",
+    "counts": {
+      "oils": 1241,
+      "brush-suite": 1248,
+      "bashkit-suite": 1668
+    }
+  },
+  "to": {
+    "runner": "waffle-node",
+    "nodeVersion": "v26.12.1",
+    "environment": "6ed3e700fcfca7d03ae94ae372480a00ca737d3baa211cea90659f91c6e94c60",
+    "counts": {
+      "oils": 1241,
+      "brush-suite": 1248,
+      "bashkit-suite": 1668
+    }
+  },
+  "unchanged": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "classification": {
+    "a": 0,
+    "b": 0
+  },
+  "changes": []
+}

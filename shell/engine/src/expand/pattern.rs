@@ -2,10 +2,11 @@
 //! and glob.rs::glob_match_steps at the pinned revision in sources.lock.json.
 //! This matcher advances all basic-glob states over borrowed character slices.
 //! It allocates no candidate strings and never treats exhausted work as a miss.
-use super::{Error, Protection, Work, admit_string_growth, admit_vec_slot, case};
+use super::{Error, Protection, Work, admit_string_growth, admit_vec_slot};
 use crate::executor::Cancel;
 use std::mem::size_of;
 
+pub(crate) mod classes;
 mod extglob;
 
 #[derive(Clone, Copy)]
@@ -21,6 +22,7 @@ struct Character {
 pub(crate) struct Pattern {
     chars: Vec<Character>,
     extglob: bool,
+    classes: Option<Result<crate::state::CaseLocale, i32>>,
     quoted_empty: bool,
     /// Case matching selects the first field from a quoted multi-value `$@`.
     /// Continue evaluating the remaining source, but discard its emitted text.
@@ -29,6 +31,23 @@ pub(crate) struct Pattern {
     pub(super) join_positionals: bool,
 }
 impl Pattern {
+    /// Already-expanded pattern text, without another parameter expansion pass.
+    pub(crate) async fn literal(
+        text: &str,
+        state: &crate::state::SharedState,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<Self, Error> {
+        let mut pattern = Self::with_options(false, state.borrow().extglob);
+        pattern.classes =
+            Some(crate::state::CaseLocale::from_state(&state.borrow()).map_err(|_| 2));
+        for ch in text.chars() {
+            work.checkpoint(cancel).await?;
+            pattern.push(ch, Protection::None, work)?;
+        }
+        Ok(pattern)
+    }
+
     /// Borrow quote-aware source without glob normalization; ERE escaping has
     /// different rules and must not change the shared shell expansion result.
     pub(crate) fn regex_character(&self, index: usize) -> Option<(char, bool)> {
@@ -184,10 +203,45 @@ impl Pattern {
                     end + 1,
                 )));
             }
+            if let Some((_, after)) = self.named_class(end, work, cancel).await? {
+                end = after;
+                continue;
+            }
             if self.active(end, '[') && [':', '.', '='].iter().any(|&ch| self.active(end + 1, ch)) {
                 return Err(2.into());
             }
             end += 1;
+        }
+        Ok(None)
+    }
+    async fn named_class(
+        &self,
+        start: usize,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<Option<(Option<classes::Named>, usize)>, Error> {
+        if self.classes.is_none() || !self.active(start, '[') || !self.active(start + 1, ':') {
+            return Ok(None);
+        }
+        let mut name = [0u8; 6];
+        let mut length = 0usize;
+        let mut index = start + 2;
+        while let Some(ch) = self.chars.get(index) {
+            work.checkpoint(cancel).await?;
+            if self.active(index, ':') && self.active(index + 1, ']') {
+                let named = (length <= name.len())
+                    .then(|| classes::Named::parse(&name[..length]))
+                    .flatten();
+                return Ok(Some((named, index + 2)));
+            }
+            if length < name.len() {
+                name[length] = u8::try_from(ch.value)
+                    .ok()
+                    .filter(|_| ch.value.is_ascii() && !ch.protected)
+                    .unwrap_or(0);
+            }
+            length += 1;
+            index += 1;
         }
         Ok(None)
     }
@@ -408,6 +462,12 @@ impl Pattern {
         let mut matched = false;
         while index < end {
             work.checkpoint(cancel).await?;
+            if let Some((named, after)) = self.named_class(index, work, cancel).await? {
+                let locale = self.classes.ok_or(2)??;
+                matched |= named.is_some_and(|class| class.matches(value, locale.utf8()));
+                index = after;
+                continue;
+            }
             let first = self.chars[index].value;
             if index + 2 < end && self.active(index + 1, '-') {
                 matched |= first <= value && value <= self.chars[index + 2].value;
@@ -479,7 +539,7 @@ impl Pattern {
         &mut self,
         value: &str,
         mode: (bool, bool),
-        locale: case::Locale,
+        locale: crate::state::CaseLocale,
         max_bytes: usize,
         work: &mut Work,
         cancel: &Cancel,
@@ -778,7 +838,14 @@ mod tests {
             let mut work = Work::new(32, storage, 2);
             let cancel = Cancel::new();
             let result = pattern
-                .change_case("a", (true, true), case::Locale::C, 8, &mut work, &cancel)
+                .change_case(
+                    "a",
+                    (true, true),
+                    crate::state::CaseLocale::C,
+                    8,
+                    &mut work,
+                    &cancel,
+                )
                 .now_or_never()
                 .expect("small mapping finishes in one turn");
             if storage == 8 {
