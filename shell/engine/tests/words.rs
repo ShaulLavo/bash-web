@@ -4406,3 +4406,12 @@ mod array_slicing;
 
 #[path = "words/command_hash.rs"]
 mod command_hash;
+
+fn recorded_bash_fixture(source: &str) -> serde_json::Value {
+    let fixture: serde_json::Value = serde_json::from_str(source).unwrap();
+    assert_eq!(
+        fixture["bash"],
+        "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)"
+    );
+    fixture
+}
