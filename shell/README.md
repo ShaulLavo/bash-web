@@ -18,6 +18,6 @@ wasmtime run .build/shell/wasm32-wasip1/release/shell-engine.wasm -c 'echo hello
 
 - [Workspace, parser provenance and runtime ABI](../docs/shell-workspace.md)
 - [Async engine contract](../docs/shell-engine.md)
-- [Build prerequisites](../docs/getting-started.md#build-and-test)
+- [Build prerequisites](../docs/development.md#prerequisites)
 - [Guest libc and final link](../docs/wasi-libc.md)
 - [Compatibility scoreboard](../docs/bash-compatibility.md#own-shell-fixed-scoreboard)

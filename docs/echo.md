@@ -42,6 +42,5 @@ The native Rust controls also cover admission failure, cancellation during both
 walks, large binary output, cap recovery, EPIPE, closed descriptors, write sizes
 and execution-memory refund. Existing printf fixtures stay unchanged.
 
-See `sources.lock.json` for the original-local classification and
-[the approved shell plan](../plans/004-own-shell.md) for frozen-score evidence. Exact gained IDs, source and artifact hashes are in
+See `sources.lock.json` for the original-local classification. Exact gained IDs, source and artifact hashes are in
 [the measurement receipt](evidence/echo-options.json).

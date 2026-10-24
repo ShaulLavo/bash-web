@@ -17,5 +17,5 @@ test-guest emit hello
 `test-guest` is cooperative; `test-spin` exercises source interruption admission.
 
 - [Commands, registration and descriptor regression gate](../../docs/test-guests.md)
-- [Build prerequisites](../../docs/getting-started.md#build-and-test)
+- [Build prerequisites](../../docs/development.md#prerequisites)
 - [Shared libc patch and final-link verification](../../docs/wasi-libc.md)

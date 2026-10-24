@@ -37,7 +37,7 @@ colon prefixes, protected HOME bytes, IFS, and HOME changes. CI never invokes li
 refresh the recording on the pinned local Bash:
 
 ```sh
-BASH_TILDE_SCRATCH=/work/tmp \
+BASH_TILDE_SCRATCH="$TMPDIR" \
 BASH_TILDE_RECORD=scripts/fixtures/shell-tilde.json \
 node scripts/test-own-shell-tilde.ts
 ```
