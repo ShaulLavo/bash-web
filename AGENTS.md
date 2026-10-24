@@ -5,10 +5,10 @@ bash-web is a Rust shell engine compiled to WASM, plus a TypeScript browser adap
 ## Check a change
 
 - Rust change: `npm run test:rust` (parser provenance, rustfmt, native tests). It needs only rustup.
-- Engine source change: also run `LAYERS_BASE_REF=$(git rev-parse origin/main) npm run check:layers -- --record` and commit the updated `docs/evidence/engine-layers.json` with the change.
+- Engine source change: also run `LAYERS_BASE_REF=$(git rev-parse origin/main) npm run check:layers`. It compares actual sources; do not commit generated layer snapshots.
 - TypeScript change: `npm run sources:browser && npm run build:worker && npm run quality:js`. Typechecking fails until `sources:browser` has fetched the terminal source.
 - WASI, browser, and score work needs wasi-sdk 34.0 on Linux. Set `WASI_SDK_PATH` to the SDK directory (`scripts/wasi-build.ts` reads it; its built-in default fits only one Linux layout). See [docs/development.md](docs/development.md#prerequisites).
-- Compatibility change: `npm run compat:shell` must not lose a passing case against the committed baseline.
+- Compatibility change: `npm run compat:shell` must not lose a passing case against the admitted current-main floor. See [landing checks](docs/landing-infrastructure.md).
 - Engine tests live in `shell/engine/tests/` and in each module's `tests` folder. Replay tests for builtins are `scripts/test-own-shell-*.ts`. Add yours beside them.
 
 ## Rules the code does not enforce
@@ -20,7 +20,7 @@ bash-web is a Rust shell engine compiled to WASM, plus a TypeScript browser adap
 
 ## Do not touch
 
-- `docs/evidence/` (except `engine-layers.json` through `--record`), `scripts/fixtures/`, and the pins in `sources.lock.json`. Scripts check them by digest. Regenerating them rewrites the baseline the score is held to.
+- `docs/evidence/`, `scripts/fixtures/`, and the pins in `sources.lock.json`. Scripts check them by digest. Regenerating them rewrites the baseline the score is held to.
 - Paths that `sources.lock.json` cites: `docs/*.md` file names and one file in `plans/`. Renaming them breaks provenance records.
 - `plans/` and `.internal/` are working notes, not documentation. Do not link them from `README.md` or `docs/`.
 - `docs/code-quality.md` is checked by `oxfmt` in `npm run format:check`. Run `npx oxfmt docs/code-quality.md` after editing it.
