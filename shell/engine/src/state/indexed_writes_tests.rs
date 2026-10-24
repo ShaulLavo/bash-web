@@ -43,6 +43,60 @@ fn status(error: Error) -> i32 {
     }
 }
 
+fn scoped_state(limit: usize) -> (StorageBudget, SharedState, FunctionFrame) {
+    let memory = StorageBudget::new(limit);
+    let state = State::with_memory(memory.clone()).shared();
+    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    (memory, state, function)
+}
+
+fn snapshot(state: &SharedState) -> State {
+    let mut snapshot_work = work();
+    finish(State::snapshot(state, &Cancel::new(), &mut snapshot_work))
+        .unwrap_or_else(|_| panic!("snapshot fits"))
+}
+
+fn appended_assignment(state: &SharedState, fields: &[&str]) -> AssignmentFrame {
+    replace(state, "a", &["o"]).unwrap();
+    let mut completed = enter(state);
+    journal_update(
+        state,
+        &mut completed,
+        "a",
+        BindingUpdate::Append(run(1, fields)),
+    );
+    completed
+}
+
+fn poll_once<T: Future>(future: std::pin::Pin<&mut T>) -> std::task::Poll<T::Output> {
+    let waker = noop_waker();
+    let mut context = Context::from_waker(&waker);
+    future.poll(&mut context)
+}
+
+fn check_pending_admission<T>(
+    admission: impl Future<Output = Result<T, Error>>,
+    state: &SharedState,
+    completed: Option<&AssignmentFrame>,
+    cancel: &Cancel,
+    cancelled: bool,
+) {
+    let mut admission = Box::pin(admission);
+    assert!(poll_once(admission.as_mut()).is_pending());
+    assert!(state.try_borrow_mut().is_ok());
+    if let Some(completed) = completed {
+        assert!(completed.changes.try_borrow_mut().is_ok());
+    }
+    if cancelled {
+        cancel.cancel();
+        assert!(matches!(
+            poll_once(admission.as_mut()),
+            std::task::Poll::Ready(Err(Error::Status(130)))
+        ));
+    }
+    drop(admission);
+}
+
 /// `name[index]=value` as an arithmetic consumer publishes it.
 fn element(state: &SharedState, name: &str, index: i64, value: &str) -> Result<(), i32> {
     let index = state.borrow().indexed_write_index(name, index).ok_or(1)?;
@@ -336,14 +390,7 @@ fn kept_assignment_commands_keep_journaled_and_durable_writes() {
     drop(completed);
     assert!(bash("assignment-only-keeps-both").starts_with(&declare(&state, "a")));
 
-    replace(&state, "a", &["o"]).unwrap();
-    let mut completed = enter(&state);
-    journal_update(
-        &state,
-        &mut completed,
-        "a",
-        BindingUpdate::Append(run(1, &["x", "y"])),
-    );
+    let mut completed = appended_assignment(&state, &["x", "y"]);
     element(&state, "a", 2, "5").unwrap();
     element(&state, "a", 9, "6").unwrap();
     completed.keep();
@@ -421,14 +468,7 @@ fn rollback_keeps_durable_elements_over_every_inverse_kind() {
     assert_eq!(declare(&state, "t"), bash("scalar-keeps-element-zero"));
 
     // An appended run keeps a durable slot inside it and one beyond it.
-    replace(&state, "a", &["o"]).unwrap();
-    let mut completed = enter(&state);
-    journal_update(
-        &state,
-        &mut completed,
-        "a",
-        BindingUpdate::Append(run(1, &["x", "y", "z"])),
-    );
+    let completed = appended_assignment(&state, &["x", "y", "z"]);
     element(&state, "a", 2, "5").unwrap();
     element(&state, "a", 9, "6").unwrap();
     drop(completed);
@@ -486,9 +526,7 @@ fn durable_write_to_a_shared_array_copies_once_and_leaves_the_snapshot() {
 
 #[test]
 fn five_thousand_element_writes_reuse_one_unique_array() {
-    let memory = StorageBudget::new(1 << 22);
-    let state = State::with_memory(memory.clone()).shared();
-    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    let (memory, state, function) = scoped_state(1 << 22);
     state.borrow_mut().declare_local("a".into(), None).unwrap();
     element(&state, "a", 0, "0").unwrap();
     let address = match &state.borrow().variables["a"] {
@@ -530,9 +568,7 @@ fn five_thousand_element_writes_reuse_one_unique_array() {
 #[test]
 fn exhausted_session_storage_rejects_without_partial_effects() {
     let limit = 65_536;
-    let memory = StorageBudget::new(limit);
-    let state = State::with_memory(memory.clone()).shared();
-    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    let (memory, state, function) = scoped_state(limit);
     state.borrow_mut().local("a".into(), "o".into()).unwrap();
     let mut completed = enter(&state);
     journal_update(
@@ -574,9 +610,7 @@ fn exhausted_session_storage_rejects_without_partial_effects() {
 #[test]
 fn rollback_after_durable_element_write_under_exhausted_budget_refunds_exactly() {
     let limit = 65_536;
-    let memory = StorageBudget::new(limit);
-    let state = State::with_memory(memory.clone()).shared();
-    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    let (memory, state, function) = scoped_state(limit);
     state
         .borrow_mut()
         .local("a".into(), "local".into())
@@ -632,9 +666,7 @@ fn review86_shared_journal_copy_must_consume_work() {
     let state = State::default().shared();
     let large = "x".repeat(131_072);
     replace(&state, "a", &[&large, "old"]).unwrap();
-    let mut snapshot_work = work();
-    let snapshot = finish(State::snapshot(&state, &Cancel::new(), &mut snapshot_work))
-        .unwrap_or_else(|_| panic!("snapshot fits"));
+    let snapshot = snapshot(&state);
     let mut completed = enter(&state);
     journal_update(
         &state,
@@ -679,9 +711,7 @@ fn review86_shared_journal_copy_must_consume_work() {
 
 #[test]
 fn review86_append_keep_tracking_has_bounded_storage_and_work() {
-    let memory = StorageBudget::new(1 << 22);
-    let state = State::with_memory(memory.clone()).shared();
-    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    let (memory, state, function) = scoped_state(1 << 22);
     state.borrow_mut().declare_local("a".into(), None).unwrap();
     replace(&state, "a", &["original"]).unwrap();
     let mut completed = enter(&state);
@@ -850,32 +880,17 @@ fn review86_inverse_sequences_keep_only_durable_effects() {
 
 #[test]
 fn review86_cancelled_shared_write_and_replacement_leave_state_and_tickets() {
-    let memory = StorageBudget::new(1 << 22);
-    let state = State::with_memory(memory.clone()).shared();
-    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    let (memory, state, function) = scoped_state(1 << 22);
     state.borrow_mut().declare_local("a".into(), None).unwrap();
     replace(&state, "a", &[&"x".repeat(131_072)]).unwrap();
-    let mut snapshot_work = work();
-    let child = finish(State::snapshot(&state, &Cancel::new(), &mut snapshot_work))
-        .unwrap_or_else(|_| panic!("snapshot fits"));
+    let child = snapshot(&state);
     let before = state.borrow().binding("a").cloned();
     let held = state.borrow().held_local_value("a");
     let observed = memory.observation().0;
     let cancel = Cancel::new();
     let mut fuel = work();
-    let mut admission = Box::pin(State::admit_indexed_element(
-        &state, "a", 1, 1, &cancel, &mut fuel,
-    ));
-    let waker = noop_waker();
-    let mut context = Context::from_waker(&waker);
-    assert!(admission.as_mut().poll(&mut context).is_pending());
-    assert!(state.try_borrow_mut().is_ok());
-    cancel.cancel();
-    assert!(matches!(
-        admission.as_mut().poll(&mut context),
-        std::task::Poll::Ready(Err(Error::Status(130)))
-    ));
-    drop(admission);
+    let admission = State::admit_indexed_element(&state, "a", 1, 1, &cancel, &mut fuel);
+    check_pending_admission(admission, &state, None, &cancel, true);
     assert!(matches!(
         finish(State::admit_indexed_replacement(
             &state, "a", &cancel, &mut fuel
@@ -893,9 +908,7 @@ fn review86_cancelled_shared_write_and_replacement_leave_state_and_tickets() {
 
 #[test]
 fn review86_saved_prefix_local_and_boundary_indexes_refund_exactly() {
-    let memory = StorageBudget::new(1 << 22);
-    let state = State::with_memory(memory.clone()).shared();
-    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    let (memory, state, function) = scoped_state(1 << 22);
     state
         .borrow_mut()
         .local("a".into(), "scalar".into())
@@ -921,9 +934,7 @@ fn review86_saved_prefix_local_and_boundary_indexes_refund_exactly() {
 }
 
 fn snapshot_then_replace(state: &SharedState) -> (State, AssignmentFrame) {
-    let mut snapshot_work = work();
-    let snapshot = finish(State::snapshot(state, &Cancel::new(), &mut snapshot_work))
-        .unwrap_or_else(|_| panic!("snapshot fits"));
+    let snapshot = snapshot(state);
     let mut completed = enter(state);
     journal_update(
         state,
@@ -936,9 +947,7 @@ fn snapshot_then_replace(state: &SharedState) -> (State, AssignmentFrame) {
 
 #[test]
 fn retained_inverse_copy_work_has_an_exact_prepublication_boundary() {
-    let memory = StorageBudget::new(1 << 22);
-    let state = State::with_memory(memory.clone()).shared();
-    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    let (memory, state, function) = scoped_state(1 << 22);
     state.borrow_mut().declare_local("a".into(), None).unwrap();
     replace(&state, "a", &[&"x".repeat(131_072), "old"]).unwrap();
     let (snapshot, completed) = snapshot_then_replace(&state);
@@ -1009,9 +1018,7 @@ fn pending_retained_copy_cancellation_and_future_drop_keep_tickets_atomic() {
 }
 
 fn check_pending_retained_copy(cancelled: bool) {
-    let memory = StorageBudget::new(1 << 22);
-    let state = State::with_memory(memory.clone()).shared();
-    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    let (memory, state, function) = scoped_state(1 << 22);
     state.borrow_mut().declare_local("a".into(), None).unwrap();
     replace(&state, "a", &[&"x".repeat(131_072), "old"]).unwrap();
     let (snapshot, completed) = snapshot_then_replace(&state);
@@ -1019,22 +1026,8 @@ fn check_pending_retained_copy(cancelled: bool) {
     let used = memory.observation().0;
     let cancel = Cancel::new();
     let mut fuel = work();
-    let mut admission = Box::pin(State::admit_indexed_element(
-        &state, "a", 1, 1, &cancel, &mut fuel,
-    ));
-    let waker = noop_waker();
-    let mut context = Context::from_waker(&waker);
-    assert!(admission.as_mut().poll(&mut context).is_pending());
-    assert!(state.try_borrow_mut().is_ok());
-    assert!(completed.changes.try_borrow_mut().is_ok());
-    if cancelled {
-        cancel.cancel();
-        assert!(matches!(
-            admission.as_mut().poll(&mut context),
-            std::task::Poll::Ready(Err(Error::Status(130)))
-        ));
-    }
-    drop(admission);
+    let admission = State::admit_indexed_element(&state, "a", 1, 1, &cancel, &mut fuel);
+    check_pending_admission(admission, &state, Some(&completed), &cancel, cancelled);
     assert_eq!(state.borrow().scalar_parameter("a"), Some("temporary"));
     assert_eq!(state.borrow().held_local_value("a"), held);
     assert_eq!(memory.observation().0, used);
@@ -1054,9 +1047,7 @@ fn check_pending_retained_copy(cancelled: bool) {
 #[test]
 fn append_tracking_rejection_preserves_inverse_value_and_session_storage() {
     let limit = 65_536;
-    let memory = StorageBudget::new(limit);
-    let state = State::with_memory(memory.clone()).shared();
-    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    let (memory, state, function) = scoped_state(limit);
     state
         .borrow_mut()
         .local("a".into(), "original".into())
@@ -1102,9 +1093,7 @@ fn append_tracking_rejection_preserves_inverse_value_and_session_storage() {
 fn review86r5_replacement_supersession_must_consume_work() {
     let state = State::default().shared();
     replace(&state, "a", &["original"]).unwrap();
-    let mut snapshot_work = work();
-    let snapshot = finish(State::snapshot(&state, &Cancel::new(), &mut snapshot_work))
-        .unwrap_or_else(|_| panic!("snapshot fits"));
+    let snapshot = snapshot(&state);
     let mut completed = enter(&state);
     for index in 0..512 {
         journal_update(
@@ -1159,9 +1148,7 @@ fn review86r7_replacement_history(state: &SharedState, completed: &mut Assignmen
 #[test]
 fn review86r7_replacement_exact_work_preserves_snapshot_and_full_budget_refunds() {
     let limit = 1 << 22;
-    let memory = StorageBudget::new(limit);
-    let state = State::with_memory(memory.clone()).shared();
-    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    let (memory, state, function) = scoped_state(limit);
     state.borrow_mut().declare_local("a".into(), None).unwrap();
     replace(&state, "a", &["original"]).unwrap();
     let snapshot = finish(State::snapshot(&state, &Cancel::new(), &mut work()))
@@ -1235,22 +1222,8 @@ fn review86r7_replacement_pending_cancel_and_drop_leave_journal_unchanged() {
         let held = state.borrow().held_local_value("a");
         let cancel = Cancel::new();
         let mut fuel = work();
-        let mut admission = Box::pin(State::admit_indexed_replacement(
-            &state, "a", &cancel, &mut fuel,
-        ));
-        let waker = noop_waker();
-        let mut context = Context::from_waker(&waker);
-        assert!(admission.as_mut().poll(&mut context).is_pending());
-        assert!(state.try_borrow_mut().is_ok());
-        assert!(completed.changes.try_borrow_mut().is_ok());
-        if cancelled {
-            cancel.cancel();
-            assert!(matches!(
-                admission.as_mut().poll(&mut context),
-                std::task::Poll::Ready(Err(Error::Status(130)))
-            ));
-        }
-        drop(admission);
+        let admission = State::admit_indexed_replacement(&state, "a", &cancel, &mut fuel);
+        check_pending_admission(admission, &state, Some(&completed), &cancel, cancelled);
         assert_eq!(state.borrow().scalar_parameter("a"), Some("511"));
         assert_eq!(state.borrow().held_local_value("a"), held);
         assert_eq!(memory.observation().0, used);
