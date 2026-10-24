@@ -54,10 +54,7 @@ impl Expansion<'_> {
             else {
                 return Ok(());
             };
-            if self.elements_remaining == 0 {
-                return Err(2.into());
-            }
-            self.elements_remaining -= 1;
+            self.admit_element()?;
             self.element_boundary(index, list, separator, quoted || scalar)
                 .await?;
             self.segment(&name, protection, quoted || scalar).await?;

@@ -2080,6 +2080,13 @@ impl Expansion<'_> {
         }
         Ok((list, separator))
     }
+    fn admit_element(&mut self) -> Result<(), Error> {
+        if self.elements_remaining == 0 {
+            return Err(2.into());
+        }
+        self.elements_remaining -= 1;
+        Ok(())
+    }
     async fn element_boundary(
         &mut self,
         index: usize,
