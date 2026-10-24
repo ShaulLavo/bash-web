@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "acbe602e955a9cde51791a901b6a525aa4ef7f93a8bfe97c346d83a38db6c7ec",
+    "engineSourceSha256": "33455e59bc11df834ab9bd00d91e0c646ecb232b9779077681f190732611794f",
     "binaryBuild": null
   },
   "contract": {
@@ -424,7 +424,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 852,
+        "line": 878,
         "column": 25
       }
     },
@@ -1084,7 +1084,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 1125,
+        "line": 1132,
         "column": 63
       }
     },
@@ -1094,7 +1094,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 2298,
+        "line": 2311,
         "column": 9
       }
     }
