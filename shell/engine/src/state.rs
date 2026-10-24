@@ -219,7 +219,7 @@ impl Default for State {
             functions: BTreeMap::new(),
             traps: traps::Traps::default(),
             status: 0,
-            pipestatus: vec![0],
+            pipestatus: Vec::new(),
             pipefail: false,
             nounset: false,
             errexit: false,
@@ -2509,8 +2509,7 @@ mod tests {
             + 9
             + snapshot_node_bytes::<Binding>().unwrap_or_else(|_| panic!("node fits"))
             + "_".len()
-            + "bash".len()
-            + std::mem::size_of::<i32>();
+            + "bash".len();
         let mut child = snapshot_at_exact_limit(&state, bytes);
         child
             .assign_parameter("ref".into(), "child".into())

@@ -76,6 +76,10 @@ pub(super) async fn print<'a>(
     for name in names {
         count += 1;
         scan_bytes(name.len(), context, work).await?;
+        if name == "PIPESTATUS" {
+            print_pipeline_status(state, fds, context, work).await?;
+            continue;
+        }
         if state.borrow().stack_array(name) && !state.borrow().is_nameref(name) {
             print_stack_array(name, state, fds, context, work).await?;
             continue;
@@ -270,6 +274,37 @@ fn encode<'a>(
         ]);
     }
     std::str::from_utf8(&buffer[..bytes.len() * 4]).expect("octal escapes are ASCII")
+}
+
+async fn print_pipeline_status(
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    let bytes = state
+        .borrow()
+        .pipeline_status()
+        .len()
+        .checked_mul(std::mem::size_of::<i32>())
+        .ok_or(2)?;
+    work.admit_storage(bytes).map_err(error_status)?;
+    scan_bytes(bytes, context, work).await?;
+    let statuses = state.borrow().pipeline_status().to_vec();
+    write(fds, b"declare -a PIPESTATUS=(", context).await?;
+    for (index, code) in statuses.iter().enumerate() {
+        work.admit_storage(48).map_err(error_status)?;
+        scan_bytes(48, context, work).await?;
+        let separator = if index == 0 { "" } else { " " };
+        let line = format!("{separator}[{index}]=\"{code}\"");
+        write(fds, line.as_bytes(), context).await?;
+        drop(line);
+        work.release_storage(48);
+    }
+    write(fds, b")\n", context).await?;
+    drop(statuses);
+    work.release_storage(bytes);
+    Ok(())
 }
 
 async fn print_stack_array(
