@@ -31,6 +31,9 @@ pub(crate) async fn select(
             reference.subscript.map(str::to_owned),
         )
     };
+    if matches!(subscript.as_deref(), Some("@" | "*")) {
+        return Err(2.into());
+    }
     let index = match subscript {
         Some(ref subscript) => {
             Some(arithmetic::evaluate(subscript, state, cancel, max, work).await?)
@@ -50,6 +53,33 @@ pub(crate) async fn select(
     };
     let owner = state.reference_owner(&name);
     Ok(Place { name, index, owner })
+}
+
+/// Lazy scalar operators retain the ordinary scalar path's admission costs.
+/// Only an explicit or referenced element needs an evaluated place.
+pub(crate) async fn parameter_place(
+    text: &str,
+    state: &SharedState,
+    cancel: &Cancel,
+    max: usize,
+    work: &mut Work,
+) -> Result<Option<Place>, Error> {
+    let Some(reference) = Reference::parse(text) else {
+        return Ok(None);
+    };
+    let indexed = state
+        .borrow()
+        .reference(reference)
+        .map_err(|error| match error {
+            ScalarResolution::DepthExceeded => Error::AssignmentDepth,
+            _ => Error::Status(1),
+        })?
+        .subscript
+        .is_some();
+    if !indexed {
+        return Ok(None);
+    }
+    select(reference, state, cancel, max, work).await.map(Some)
 }
 
 fn resolve_index(
@@ -87,6 +117,19 @@ pub(crate) async fn read(
 ) -> Result<Option<String>, Error> {
     work.checkpoint(cancel).await?;
     let state = state.borrow();
+    if place.name == "PIPESTATUS"
+        && let Some(index) = place.index
+    {
+        work.admit_storage(20)?;
+        let value = usize::try_from(index)
+            .ok()
+            .and_then(|index| state.pipeline_status().get(index))
+            .map(i32::to_string);
+        if value.as_ref().is_some_and(|value| value.len() > max) {
+            return Err(2.into());
+        }
+        return Ok(value);
+    }
     let Some(value) = state.place_value(place) else {
         return Ok(None);
     };
@@ -122,6 +165,9 @@ pub(crate) async fn write(
                 }
             });
     }
+    if place.name == "PIPESTATUS" || state.borrow().stack_array(&place.name) {
+        return Err(2.into());
+    }
     let value = state.borrow().case_value(&place.name, value)?;
     let update = BindingUpdate::Element {
         index: place.index.unwrap(),
@@ -143,4 +189,34 @@ pub(crate) async fn is_set(
     let place = select(reference, state, cancel, max, work).await?;
     let state = state.borrow();
     Ok(state.dynamic_parameter(&place.name) || state.place_value(&place).is_some())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::exec::StorageBudget;
+    use futures::FutureExt;
+
+    #[test]
+    fn typed_reference_projected_array_store_never_creates_an_ordinary_binding() {
+        for name in ["PIPESTATUS", "FUNCNAME", "BASH_SOURCE", "BASH_ARGV"] {
+            let memory = StorageBudget::new(65_536);
+            let state = State::with_memory(memory.clone()).shared();
+            let place = Place {
+                name: name.into(),
+                index: Some(9),
+                owner: state.borrow().reference_owner(name),
+            };
+            let before = memory.observation().0;
+            let mut work = Work::new(65_536, 65_536, 0);
+            assert!(matches!(
+                write(&place, "ignored".into(), &state, &Cancel::new(), &mut work).now_or_never(),
+                Some(Err(Error::Status(2)))
+            ));
+            assert!(!state.borrow().raw_bindings().contains_key(name));
+            assert_eq!(memory.observation().0, before);
+            drop(state);
+            assert_eq!(memory.observation().0, 0);
+        }
+    }
 }

@@ -136,3 +136,82 @@ fn typed_reference_dynamic_scope_is_resolved_at_use_not_declaration() {
         "changed:changed\nglobal:global\n",
     );
 }
+
+// Causal refinements of the frozen array/nameref and lazy-scalar contracts.
+// These are invariant tests, not newly recorded Bash oracle observations.
+#[test]
+fn typed_reference_arithmetic_recursion_distinguishes_selected_elements() {
+    check("a[0]='a[1]+1'; a[1]=2; echo \"$((a[0]))\"", "3\n");
+}
+
+#[test]
+fn typed_reference_lazy_operators_read_the_selected_element() {
+    check(
+        "a=(old); declare -n r='a[0]'; echo \"${r:-fallback}:${r+present}:${r:=new}:${a[0]}\"",
+        "old:present:old:old\n",
+    );
+}
+
+#[test]
+fn typed_reference_lazy_operators_distinguish_set_empty() {
+    check(
+        "a=(''); declare -n r='a[0]'; echo \"${r-word}:${r:-word}:${r+yes}:${r:+yes}:${r=new}\"; echo \"${r:=filled}:${a[0]}\"",
+        ":word:yes::\nfilled:filled\n",
+    );
+}
+
+#[test]
+fn typed_reference_lazy_assignment_selects_once_and_writes_the_element() {
+    check(
+        "a=(); i=0; declare -n r='a[i++]'; echo \"${r:=new}\"; echo \"$i:${a[0]}\"; declare -p r",
+        "new\n1:new\ndeclare -n r=\"a[i++]\"\n",
+    );
+}
+
+#[test]
+fn typed_reference_lazy_operands_skip_inactive_effects() {
+    check(
+        "a=(old); i=0; declare -n r='a[0]'; echo \"${r:-$((i++))}:${r:=$((i++))}:${r:?$((i++))}\"; unset 'a[0]'; echo \"${r+$((i++))}:$i\"",
+        "old:old:old\n:0\n",
+    );
+}
+
+#[test]
+fn typed_reference_lazy_assignment_keeps_completed_rhs_effects() {
+    check(
+        "a=(); declare -n r='a[1]'; echo \"${r:=${a:=base}}\"; echo \"${a[0]}:${a[1]}\"",
+        "base\nbase:base\n",
+    );
+}
+
+#[test]
+fn typed_reference_direct_funcname_default_uses_existing_projection() {
+    check(
+        "echo \"${FUNCNAME[0]:-top}\"; f() { echo \"name=${FUNCNAME[0]:-top}:${FUNCNAME[9]:-missing}\"; }; f; echo \"${FUNCNAME[0]:-top}\"",
+        "top\nname=f:missing\ntop\n",
+    );
+}
+
+#[test]
+fn typed_reference_special_subscript_declaration_refuses_before_publication() {
+    check(
+        "r=kept; declare -n r='PIPESTATUS[0]'; echo \"status=$?:$r\"; declare -p r; declare -n s='FUNCNAME[0]'; echo \"status=$?\"; test -R s; echo \"ref=$?\"",
+        "status=2:kept\ndeclare -- r=\"kept\"\nstatus=2\nref=1\n",
+    );
+}
+
+#[test]
+fn typed_reference_sparse_declaration_preserves_existing_attributes() {
+    check(
+        "a=(old); readonly a; export a; declare -p a; declare -l b; b=(ABC); declare -p b; declare -u c; c=(abc); declare -p c",
+        "declare -arx a=([0]=\"old\")\ndeclare -al b=([0]=\"abc\")\ndeclare -au c=([0]=\"ABC\")\n",
+    );
+}
+
+#[test]
+fn typed_reference_direct_special_defaults_keep_existing_array_reads() {
+    check(
+        "outer() { local -n ref=FUNCNAME; echo \"${ref[0]}:${ref[0]:-fallback}\"; }; outer; false | true; echo \"${PIPESTATUS[0]:-missing}:${PIPESTATUS[1]:-missing}:${PIPESTATUS[8]:-missing}\"",
+        "outer:outer\n1:0:missing\n",
+    );
+}

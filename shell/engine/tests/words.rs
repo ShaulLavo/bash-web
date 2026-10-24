@@ -4403,3 +4403,51 @@ mod aliases;
 
 #[path = "words/array_slicing.rs"]
 mod array_slicing;
+
+#[test]
+fn typed_reference_operator_errors_preserve_diagnostic_and_flow() {
+    for source in [
+        "a=(); args \"${a[-1]:-fallback}\"; args AFTER",
+        "a=(); declare -n r='a[-1]'; args \"${r:-fallback}\"; args AFTER",
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 1, "{source}");
+        assert_eq!(
+            rig.errors.bytes(),
+            b"/usr/bin/bash: line 1: a[-1]: bad array subscript\n"
+        );
+        assert!(rig.calls.borrow().is_empty(), "{source}");
+    }
+}
+
+#[test]
+fn typed_reference_operator_readonly_keeps_rhs_effect_but_not_destination_write() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(kept); readonly a; declare -n r='a[1]'"), 0);
+    assert_eq!(rig.run("args \"${r:=${side:=done}}\"; args AFTER"), 1);
+    assert_eq!(rig.value("side").as_deref(), Some("done"));
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: line 1: a: readonly variable\n"
+    );
+    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.run("args \"${a[@]}\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["kept"]]);
+}
+
+#[test]
+fn typed_reference_operator_cycles_are_selected_element_cycles() {
+    for source in [
+        "a[0]='a[0]'; args \"$((a[0]))\"; args AFTER",
+        "a[0]='a'; args \"$((a[0]))\"; args AFTER",
+        "a[0]='a[1]'; a[1]='a[0]'; args \"$((a[0]))\"; args AFTER",
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 1, "{source}");
+        assert_eq!(
+            rig.errors.bytes(),
+            b"/usr/bin/bash: line 1: arithmetic expression: expression recursion level exceeded\n"
+        );
+        assert!(rig.calls.borrow().is_empty(), "{source}");
+    }
+}

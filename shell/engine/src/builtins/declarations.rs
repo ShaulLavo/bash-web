@@ -121,33 +121,29 @@ async fn snapshot(
     let bytes = state
         .borrow()
         .declaration(name)
-        .map_err(|()| 2)?
         .and_then(|view| view.value)
         .map_or(0, str::len);
     scan_bytes(bytes, context, work).await?;
     let state = state.borrow();
-    let Some(DeclarationView {
-        value,
-        nameref,
-        readonly,
-        exported,
-        case,
-    }) = state.declaration(name).map_err(|()| 2)?
-    else {
+    let Some(view) = state.declaration(name) else {
         return Ok(None);
     };
-    work.admit_storage(value.map_or(0, str::len))
+    work.admit_storage(view.value.map_or(0, str::len))
         .map_err(error_status)?;
     Ok(Some(DeclarationSnapshot {
-        value: value.map(str::to_owned),
-        attributes: [
-            nameref,
-            readonly,
-            exported,
-            case == crate::state::CaseMapping::Lower,
-            case == crate::state::CaseMapping::Upper,
-        ],
+        value: view.value.map(str::to_owned),
+        attributes: attributes(view),
     }))
+}
+
+fn attributes(view: DeclarationView<'_>) -> [bool; 5] {
+    [
+        view.nameref,
+        view.readonly,
+        view.exported,
+        view.case == crate::state::CaseMapping::Lower,
+        view.case == crate::state::CaseMapping::Upper,
+    ]
 }
 
 async fn missing(
@@ -286,7 +282,18 @@ async fn print_stack_array(
     crate::state::State::admit_scalar_access(state, name, &context.cancel, work)
         .await
         .map_err(error_status)?;
-    write(fds, b"declare -a ", context).await?;
+    let attributes = state
+        .borrow()
+        .declaration(name)
+        .map(attributes)
+        .unwrap_or([false; 5]);
+    write(fds, b"declare -a", context).await?;
+    for (index, flag) in [(3, b'l'), (0, b'n'), (1, b'r'), (4, b'u'), (2, b'x')] {
+        if attributes[index] {
+            write(fds, &[flag], context).await?;
+        }
+    }
+    write(fds, b" ", context).await?;
     write(fds, name.as_bytes(), context).await?;
     let count = state.borrow().array_count(name);
     if count == 0 {

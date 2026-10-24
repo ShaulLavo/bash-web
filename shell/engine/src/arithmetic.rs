@@ -564,7 +564,8 @@ async fn read_place(
             .await?
             .unwrap_or_default()
     };
-    work.enter_scalar_arithmetic(&place.name, cancel).await?;
+    work.enter_scalar_arithmetic(&place.name, place.index.unwrap_or(0), cancel)
+        .await?;
     let result = expression(&value, state, cancel, max, work, depth).await;
     work.leave_scalar_arithmetic();
     result

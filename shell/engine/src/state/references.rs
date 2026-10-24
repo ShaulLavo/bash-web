@@ -141,14 +141,21 @@ impl State {
     }
     pub(crate) fn place_value(&self, place: &Place) -> Option<&str> {
         match place.index {
-            Some(index) => self
-                .variables
-                .get(&place.name)
-                .and_then(|v| v.element(index)),
+            Some(index) => self.array_element(&place.name, index),
             None => self.scalar_parameter(&place.name),
         }
     }
     pub(crate) fn place_index(&self, name: &str, index: i64) -> Option<i64> {
+        if self.stack_array(name) || name == "PIPESTATUS" {
+            return if index < 0 {
+                self.array_last_index(name)?
+                    .checked_add(1)?
+                    .checked_add(index)
+                    .filter(|index| *index >= 0)
+            } else {
+                Some(index)
+            };
+        }
         self.variables
             .get(name)
             .map_or((index >= 0).then_some(index), |v| v.resolve_index(index))

@@ -987,13 +987,23 @@ async fn nameref_declaration(
             .await
             .map_err(error_status)?;
     }
-    // Array targets, unbound reference declarations and broad attributes are
-    // explicit prerequisites for later units, never target-string parsing.
     if target.is_empty() || target == "PIPESTATUS" || key == "PIPESTATUS" {
         return Err(2);
     }
-    if crate::state::Reference::parse(&target).is_none() {
+    let Some(reference) = crate::state::Reference::parse(&target) else {
         return Err(if target.contains(['[', ']']) { 2 } else { 1 });
+    };
+    // Special arrays have projected reads, not the ordinary element write
+    // contract. Refuse their subscripted declarations before publishing a local.
+    let unsupported = {
+        let state = state.borrow();
+        state.reference(reference).ok().is_some_and(|target| {
+            target.subscript.is_some()
+                && (target.name == "PIPESTATUS" || state.stack_array(target.name))
+        })
+    };
+    if unsupported {
+        return Err(2);
     }
     state
         .borrow_mut()

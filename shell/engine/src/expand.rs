@@ -59,7 +59,7 @@ pub(crate) struct Work {
     execution: crate::exec::Work,
     frame_scope: Option<crate::exec::Scope>,
     arithmetic_depth: usize,
-    arithmetic_names: Vec<(String, u64)>,
+    arithmetic_names: Vec<(String, i64, u64)>,
     pub(crate) arithmetic_writes: u64,
     /// Runs command substitutions; absent where a word cannot run commands.
     pub(crate) substitutions: Option<crate::interpreter::Substitutions>,
@@ -121,12 +121,14 @@ impl Work {
     pub(crate) async fn enter_scalar_arithmetic(
         &mut self,
         name: &str,
+        element: i64,
         cancel: &Cancel,
     ) -> Result<(), Error> {
         for index in 0..self.arithmetic_names.len() {
             self.checkpoint(cancel).await?;
             if self.arithmetic_names[index].0 == name
-                && self.arithmetic_names[index].1 == self.arithmetic_writes
+                && self.arithmetic_names[index].1 == element
+                && self.arithmetic_names[index].2 == self.arithmetic_writes
             {
                 return crate::exec::fault("expression recursion level exceeded", self);
             }
@@ -134,7 +136,7 @@ impl Work {
         if self.arithmetic_names.len() == self.arithmetic_names.capacity() {
             let capacity = self.arithmetic_names.capacity().saturating_mul(2).max(1);
             let bytes = (capacity - self.arithmetic_names.capacity())
-                * std::mem::size_of::<(String, u64)>();
+                * std::mem::size_of::<(String, i64, u64)>();
             self.admit_storage(bytes)?;
             self.arithmetic_names
                 .try_reserve_exact(capacity - self.arithmetic_names.len())
@@ -142,7 +144,7 @@ impl Work {
         }
         self.admit_storage(name.len())?;
         self.arithmetic_names
-            .push((name.to_owned(), self.arithmetic_writes));
+            .push((name.to_owned(), element, self.arithmetic_writes));
         Ok(())
     }
     pub(crate) fn leave_scalar_arithmetic(&mut self) {
@@ -1520,7 +1522,19 @@ impl Expansion<'_> {
             depth,
         } = context;
         self.slice_boundaries(operand).await?;
-        if error_pointer.is_none() && !operand::parameter_name(name) || depth >= operand::MAX_DEPTH
+        let indexed = matches!(
+            operator,
+            ParameterOp::UseDefault
+                | ParameterOp::UseReplacement
+                | ParameterOp::AssignDefault
+                | ParameterOp::Error
+        ) && Reference::parse(name).is_some_and(|reference| {
+            reference
+                .subscript
+                .is_some_and(|index| !matches!(index, "@" | "*"))
+        });
+        if error_pointer.is_none() && !operand::parameter_name(name) && !indexed
+            || depth >= operand::MAX_DEPTH
         {
             return Err(2.into());
         }
@@ -1601,7 +1615,22 @@ impl Expansion<'_> {
             _ => return Err(2.into()),
         };
         State::admit_scalar_access(state, name, self.cancel, self.work).await?;
-        let absent = {
+        let place =
+            references::parameter_place(name, state, self.cancel, self.snapshot_max(), self.work)
+                .await?;
+        let selected = if let Some(place) = &place {
+            // The selector can mutate IFS. Do not reuse a pre-selector split view.
+            self.ifs = None;
+            self.ifs_changed = true;
+            references::read(place, state, self.cancel, self.snapshot_max(), self.work).await?
+        } else {
+            None
+        };
+        let absent = if place.is_some() {
+            selected
+                .as_ref()
+                .is_none_or(|value| colon && value.is_empty())
+        } else {
             let s = state.borrow();
             !s.dynamic_parameter(name)
                 && s.scalar_parameter(name)
@@ -1609,7 +1638,14 @@ impl Expansion<'_> {
         };
         if absent && matches!(operator, ParameterOp::AssignDefault | ParameterOp::Error) {
             return self
-                .effect_operand(name, operator, operand, colon, context, error_pointer)
+                .effect_operand(
+                    (name, place.as_ref()),
+                    operator,
+                    operand,
+                    colon,
+                    context,
+                    error_pointer,
+                )
                 .await;
         }
         if replacement != absent {
@@ -1620,6 +1656,8 @@ impl Expansion<'_> {
         let max = self.snapshot_max();
         let value = if replacement {
             String::new()
+        } else if place.is_some() {
+            selected.unwrap_or_default()
         } else {
             let s = state.borrow();
             parameter_snapshot(&s, name, max, self.pattern_snapshots, self.work)?
@@ -1754,7 +1792,7 @@ impl Expansion<'_> {
     }
     async fn effect_operand(
         &mut self,
-        name: &str,
+        (name, place): (&str, Option<&crate::state::Place>),
         operator: &ParameterOp,
         source: &str,
         colon: bool,
@@ -1835,7 +1873,7 @@ impl Expansion<'_> {
         if replacement_output {
             self.admit_replacement_output().await?;
         }
-        if !operand::scalar_name(name) {
+        if place.is_none() && !operand::scalar_name(name) {
             self.work
                 .admit_storage(name.len().saturating_mul(2).saturating_add(128))?;
             return Err(Error::SpecialAssignment {
@@ -1843,26 +1881,19 @@ impl Expansion<'_> {
                 line: None,
             });
         }
-        admit_assignment(state, name, captured.value.len(), self.cancel, self.work).await?;
-        State::admit_scalar_access(state, "IFS", self.cancel, self.work).await?;
-        let ifs_changed = ifs_changed || state.borrow().shares_scalar_binding(name, "IFS")?;
-        self.work.admit_storage(captured.value.len())?;
-        // A prefix frame may also retain the durable value it will restore.
-        if state.borrow().prefix_saved(name) {
-            self.work
-                .admit_storage(name.len().saturating_add(captured.value.len()))?;
+        if place.is_none() {
+            admit_assignment(state, name, captured.value.len(), self.cancel, self.work).await?;
         }
-        let assigned = state
-            .borrow_mut()
-            .assign_parameter(name.to_owned(), captured.value.clone());
-        if assigned.is_err() {
-            self.work
-                .admit_storage(name.len().saturating_mul(2).saturating_add(160))?;
-            return Err(Error::Readonly {
-                name: name.to_owned(),
-                line: None,
-                expansion: true,
-            });
+        State::admit_scalar_access(state, "IFS", self.cancel, self.work).await?;
+        let target = place.map_or(name, |place| place.name.as_str());
+        let ifs_changed = ifs_changed || state.borrow().shares_scalar_binding(target, "IFS")?;
+        self.work.admit_storage(captured.value.len())?;
+        if let Some(place) = place {
+            references::write(place, captured.value.clone(), state, self.cancel, self.work)
+                .await
+                .map_err(Error::in_expansion)?;
+        } else {
+            self.assign_scalar_operand(name, &captured.value, state)?;
         }
         self.ifs_changed |= ifs_changed;
         if ifs_changed {
@@ -1874,6 +1905,32 @@ impl Expansion<'_> {
             scalar || quoted,
         )
         .await
+    }
+    fn assign_scalar_operand(
+        &mut self,
+        name: &str,
+        value: &str,
+        state: &SharedState,
+    ) -> Result<(), Error> {
+        // A prefix frame may also retain the durable value it will restore.
+        if state.borrow().prefix_saved(name) {
+            self.work
+                .admit_storage(name.len().saturating_add(value.len()))?;
+        }
+        if state
+            .borrow_mut()
+            .assign_parameter(name.to_owned(), value.to_owned())
+            .is_ok()
+        {
+            return Ok(());
+        }
+        self.work
+            .admit_storage(name.len().saturating_mul(2).saturating_add(160))?;
+        Err(Error::Readonly {
+            name: name.to_owned(),
+            line: None,
+            expansion: true,
+        })
     }
     async fn diagnostic_operand(
         &mut self,
