@@ -1994,6 +1994,7 @@ impl Expansion<'_> {
             Ifs::admit_access(state, self.cancel, self.work).await?;
         }
         match piece {
+            operand::Piece::Home => tilde::operand(self, state).await,
             operand::Piece::Text { value, protected } => {
                 self.segment(
                     value,

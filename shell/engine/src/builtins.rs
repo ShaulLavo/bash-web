@@ -566,6 +566,8 @@ async fn loop_control(
         .await
         .map_err(error_status)?;
     let depth = context.loop_depth();
+    let options_ended = args.first().is_some_and(|value| value == "--");
+    let args = if options_ended { &args[1..] } else { args };
     let (code, flow, value, message) = if depth == 0 {
         (
             0,
@@ -573,6 +575,14 @@ async fn loop_control(
             None,
             "only meaningful in a `for', `while', or `until' loop",
         )
+    } else if !options_ended && args.first().is_some_and(|value| value == "--help") {
+        let help: &[u8] = if name == "break" {
+            b"break: break [n]\n    Exit for, while, or until loops.\n"
+        } else {
+            b"continue: continue [n]\n    Resume for, while, or until loops.\n"
+        };
+        write(fds, help, context).await?;
+        return Ok(Outcome::status(2));
     } else if args.len() > 1 {
         (1, Flow::Exit, None, "too many arguments")
     } else {
