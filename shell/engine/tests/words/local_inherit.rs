@@ -39,3 +39,68 @@ fn local_inherit_target_errors_continue_but_nameref_append_stays_fatal() {
     assert_eq!(rig.run("f() { local -In r+=target after=yes; }; f"), 2);
     assert_eq!(rig.value("after"), None);
 }
+
+#[test]
+fn local_inherit_keeps_case_mapping_and_restores_export_flags() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("declare -u v=outer; f() { local -Ix v+=more; v=mixed; declare -p v; }; f; declare -p v; f() { local -I v; unset v; local -I v; printf '%s\\n' \"${v-unset}\"; }; f; declare -p v"), 0);
+    assert_eq!(
+        rig.output.bytes(),
+        b"declare -xu v=\"MIXED\"\ndeclare -u v=\"OUTER\"\nunset\ndeclare -u v=\"OUTER\"\n"
+    );
+}
+
+#[test]
+fn local_inherit_prefix_owner_is_not_an_ordinary_unset_declaration() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("v=global; inner() { local -I v; printf '%s\\n' \"$v\"; }; outer() { local v; inner; unset v; local -I v; inner; }; v=prefix outer; printf '%s\\n' \"$v\""), 0);
+    assert_eq!(rig.output.bytes(), b"prefix\n\nglobal\n");
+}
+
+#[test]
+fn inherited_local_cancellation_and_dropped_observer_restore_the_caller() {
+    for drop_observer in [false, true] {
+        let rig = Rig::new(Limits::default());
+        register_inherited_park(&rig.host);
+        let job = rig.shell.start("export v=outer; n=0; f() { local -I v+=x; n=$((n+1)); case $n in 32) park_inherited;; *) f;; esac; }; f").unwrap();
+        rig.drive_until_value(10_000, "n", "32");
+        if drop_observer {
+            drop(job);
+            rig.shell.interrupt();
+        } else {
+            rig.interrupt_without_calls(job);
+        }
+        rig.ex.drive(10_000);
+        assert_eq!(rig.run("declare -p v; unset -f f"), 0);
+        assert_eq!(rig.output.bytes(), b"declare -x v=\"outer\"\n");
+        assert_eq!(rig.host.active_count(), 0);
+        assert_eq!(rig.host.retained_count(), 0);
+        assert_eq!(rig.ex.drive(64).pending, 0);
+    }
+}
+
+#[test]
+fn inherited_local_copy_yields_before_mutation_and_can_be_cancelled() {
+    let rig = Rig::new(Limits::default());
+    let outer = "x".repeat(128 * 1024);
+    rig.variable("v", &outer);
+    let job = rig.start_until_value(
+        "f() { ready=yes; local -I v; v=changed; }; f; args bad",
+        10_000,
+        "ready",
+        "yes",
+    );
+    rig.interrupt_after_counting_yields(job);
+    assert_eq!(rig.value("v"), Some(outer));
+    assert_eq!(rig.ex.drive(64).pending, 0);
+}
+
+fn register_inherited_park(host: &InProcessHost) {
+    host.register("/home/guest/park_inherited", |_, cancel| {
+        async move {
+            cancel.cancelled().await;
+            130
+        }
+        .boxed_local()
+    });
+}

@@ -35,4 +35,36 @@ for (const line of selected.concat(neighbors)) {
     assert.deepEqual(actual.stdout, Buffer.from(entry.bash.stdout, "base64"));
   });
 }
+// These are authored ownership controls, not additional Bash oracle recordings.
+const ownershipControls = [
+  {
+    name: "caller scalar is copied and restored",
+    code: "v=global; inner() { local -I v+=tail; printf '%s\\n' \"$v\"; }; outer() { local v=caller; inner; printf '%s\\n' \"$v\"; }; outer; printf '%s\\n' \"$v\"",
+    stdout: "callertail\ncaller\nglobal\n",
+  },
+  {
+    name: "function prefix and current unset local have different owners",
+    code: "v=global; inner() { local -I v; printf '[%s]\\n' \"$v\"; }; outer() { local v; inner; unset v; local -I v; inner; }; v=prefix outer; printf '[%s]\\n' \"$v\"",
+    stdout: "[prefix]\n[]\n[global]\n",
+  },
+  {
+    name: "case and export flags return to the caller",
+    code: "declare -u v=outer; f() { local -Ix v; v=mixed; declare -p v; }; f; declare -p v",
+    stdout: 'declare -xu v="MIXED"\ndeclare -u v="OUTER"\n',
+  },
+  {
+    name: "ordinary operand failure aggregates and later operands still run",
+    code: "f() { local -I 'bad-name=x' v=ok; printf '%s:%s\\n' \"$?\" \"$v\"; }; f; printf '%s\\n' \"${v-unset}\"",
+    stdout: "1:ok\nunset\n",
+  },
+];
+for (const control of ownershipControls) {
+  test(`local inheritance ownership: ${control.name}`, async () => {
+    const actual = await run(control.code);
+    assert.equal(actual.crash, undefined);
+    assert.equal(actual.outputLimit, undefined);
+    assert.equal(actual.status, 0);
+    assert.equal(actual.stdout.toString(), control.stdout);
+  });
+}
 after(() => assert.equal(liveNodeWorkers(), 0));
