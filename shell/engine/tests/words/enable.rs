@@ -178,3 +178,45 @@ fn enable_hash_mask_and_table_snapshot_independently_but_functions_share_both() 
     assert!(rig.calls.borrow().is_empty());
     assert_eq!(rig.host.active_count(), 0);
 }
+
+#[test]
+fn enable_main_boundary_noexec_preserves_registry_hash_and_skips_expansion() {
+    let rig = Rig::new(Limits::default());
+    rig.fs
+        .write_file("/home/guest/lib", b"loaded=yes\n")
+        .unwrap();
+    assert_eq!(rig.run("enable -n printf; hash -p /kept printf"), 0);
+    assert_eq!(
+        rig.run("! set -n; enable printf; hash -r; printf '%f' \"$(args BAD)\" > blocked; . ./lib"),
+        1
+    );
+    assert_eq!(rig.run("set +n; enable printf"), 1);
+    assert!(rig.shell.state().borrow().noexec);
+    assert_eq!(rig.value("loaded"), None);
+    assert!(rig.output.bytes().is_empty());
+    assert!(rig.calls.borrow().is_empty());
+    rig.shell.state().borrow_mut().noexec = false;
+    assert_eq!(rig.run("type -t printf; echo type:$?; hash -t printf; enable printf; command printf '%.2f' 1.25"), 0);
+    assert_eq!(rig.output.bytes(), b"file\ntype:0\n/kept\n1.25");
+    assert!(rig.errors.bytes().is_empty());
+}
+
+#[test]
+fn enable_main_boundary_interactive_options_and_child_state_stay_independent() {
+    let rig = Rig::new(Limits::default());
+    rig.shell.state().borrow_mut().interactive = true;
+    assert_eq!(rig.run("hash -p /parent printf; enable -n printf; (enable printf; set -n; command printf '%.1f' 2.5); { enable printf; hash -r; set -o noexec; enable -n printf; args BAD; } & wait; command -v printf; hash -t printf; enable printf; set -o noexec; builtin printf '%.1f' 3.5"), 0);
+    assert_eq!(rig.output.bytes(), b"2.5/parent\n/parent\n3.5");
+    assert!(rig.shell.state().borrow().interactive);
+    assert!(!rig.shell.state().borrow().noexec);
+    assert!(rig.calls.borrow().is_empty());
+    assert!(rig.errors.bytes().is_empty());
+}
+
+#[test]
+fn enable_main_boundary_float_wrappers_and_disabled_external_hash_lookup() {
+    check_external_printf(
+        "printf '%.2f|' 1.25; builtin printf '%+.1f|' 2.5; command printf '%g|' 1.5; enable -n printf; hash printf; command printf external; echo status:$?; enable printf; command printf '%.1e\\n' 2.5; hash -t printf",
+        b"1.25|+2.5|1.5|status:7\n2.5e+00\n/home/guest/printf\n",
+    );
+}
