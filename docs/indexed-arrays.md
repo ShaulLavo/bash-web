@@ -6,6 +6,12 @@ Supported assignments include dense compound lists, individual numeric subscript
 
 Direct element expansion, `[@]`, `[*]`, element counts, and element lengths use the same binding. Quoted `[@]` preserves separate fields and empty elements. Quoted `[*]` joins with the first scalar IFS character. Array-valued IFS disables field splitting, including when the array is empty. Raw-byte star-join behavior for array-valued IFS remains outside this UTF-8 representation. Sparse traversal follows ascending numeric indices. Indexed `PIPESTATUS` lengths read the pipeline-status producer rather than the ordinary binding map. Checked negative indices are relative to the producer length; invalid negative indices report status 1. Missing positive elements still have length zero under nounset.
 
+## Slices
+
+`${a[@]:offset:length}` and `${a[*]:offset:length}` select a sparse numeric start and then count present elements. Omitted length selects all remaining elements. Negative offsets count back from one past the highest index. Negative lengths fail with status 1. Empty sources skip both arithmetic expressions. Starts beyond the highest index skip the length expression. Bounds share arithmetic side effects and cancellation with other expansions.
+
+Quoted `[@]` keeps separate fields, including empty elements. Quoted `[*]` joins with IFS. Scalar bindings use text slicing even when referenced as `[@]` or `[*]`. `PIPESTATUS` slices read its existing producer. The read-only adapter admits only selected values before copying them and never clones the indexed map. It adds no durable producer publication API.
+
 ## Storage and restoration
 
 `state/binding.rs` defines `Binding::Scalar` and `Binding::Indexed`. Indexed bindings hold an `Rc` of an ordered sparse map with cached string capacities and value lengths. State is the sole mutation owner. A unique indexed write replaces one element or appends staged entries in place. A genuinely shared tree pays full copy admission before copy-on-write. Subshell snapshots, local bindings and builtin prefixes retain complete bindings, not just element zero. Readonly checks remain in state.
@@ -22,7 +28,7 @@ On the pinned native compiler, leaves request 368 bytes and internal nodes 464 b
 
 ## Durable writes from builtins and expansions
 
-Arithmetic element assignment, `read -a` and `mapfile` write arrays durably: an enclosing assignment-only command's rollback keeps them, like `assign_parameter` for scalars. `state/indexed_writes.rs` owns them. Each write is an async admission followed, with no await in between, by a synchronous publication:
+This internal API is not wired to a production consumer yet. Arithmetic element assignment, `read -a` and `mapfile` are future consumers. An enclosing assignment-only command's rollback keeps admitted durable writes, like `assign_parameter` for scalars. `state/indexed_writes.rs` owns them. Each write is an async admission followed, with no await in between, by a synchronous publication:
 
 - `State::indexed_write_index(name, index)` resolves a write subscript; a negative index counts back from the last element. `None` is Bash's "bad array subscript".
 - `State::admit_indexed_element(state, name, index, value_bytes, cancel, work)`, then `State::assign_indexed_element(name, index, value)` for a nonnegative index.
@@ -38,7 +44,7 @@ Callers produce Bash's diagnostics (`name: readonly variable`, `name[i]: bad arr
 
 ## Remaining forms
 
-Explicit compound subscripts such as `a=([5]=value)` and `a+=([5]+=value)` remain deferred. Unquoted syntactic entries reject with status 2 rather than becoming silent literal data. Quoted or escaped spellings remain ordinary elements. Array slices, index-name expansion, array operators and transformations, indexed `unset`, declaration array flags, associative arrays and arithmetic array lvalues are also outside this bounded implementation; the durable writes above are their publication path. Indexed and append assignments used as temporary command prefixes remain unsupported.
+Explicit compound subscripts such as `a=([5]=value)` and `a+=([5]+=value)` remain deferred. Unquoted syntactic entries reject with status 2 rather than becoming silent literal data. Quoted or escaped spellings remain ordinary elements. Array operators and transformations, indexed `unset`, declaration array flags, associative arrays and arithmetic array lvalues are also outside this bounded implementation; the durable writes above are their publication path. Indexed and append assignments used as temporary command prefixes remain unsupported.
 
 Known bounded follow-ups remain. A negative out-of-range read returns an empty field without Bash's stderr diagnostic. With `set -u`, an unset array count uses the engine's generic unbound-variable status 127 rather than Bash's status 1. Circular indexed nameref writes report status 1 without Bash's warning or successful status. Indexed `unset` still leaves the element intact. Raw custom observations and exact commands are in `/work/reports/bash-web/hill-climb/variables/indexed/residual-probes.ts/.jsonl`; no scored IDs or promised gains are inferred from them. These do not broaden this storage/assignment PR into nameref lifecycle or declaration handling.
 

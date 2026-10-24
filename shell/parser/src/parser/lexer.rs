@@ -203,6 +203,11 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    pub(crate) fn start_at(&mut self, position: Position) {
+        self.chars = self.input[position.offset..].chars().peekable();
+        self.position = position;
+    }
+
     pub(crate) fn limit_exceeded(&self) -> Option<crate::limits::LimitExceeded> {
         self.limit_exceeded
     }
@@ -286,9 +291,7 @@ impl<'a> Lexer<'a> {
             self.chars.next()
         };
         if let Some(c) = ch {
-            if from_alias {
-                self.finish_used_aliases();
-            } else {
+            if !from_alias {
                 self.position.advance(c);
             }
             // The re-read rest of a here-document's command line is used
@@ -325,7 +328,7 @@ impl<'a> Lexer<'a> {
     pub(crate) fn alias_active(&self, name: &str) -> bool {
         self.alias_stack
             .iter()
-            .any(|(n, end, _)| n == name && self.alias_front > *end)
+            .any(|(n, _, _)| n == name)
     }
 
     /// Read `text`, the value of alias `name`, before the rest of the input.
@@ -512,6 +515,7 @@ impl<'a> Lexer<'a> {
         self.token_substitutions.clear();
         self.unterminated_substitution = None;
         self.skip_whitespace();
+        self.finish_used_aliases();
         let start = self.position;
         self.raw_buf.clear();
         let after_blank_alias = std::mem::take(&mut self.blank_alias_pending);

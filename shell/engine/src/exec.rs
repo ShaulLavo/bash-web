@@ -7,7 +7,7 @@ use futures::{
 };
 use shell_parser::limits::{ExecutionBudget, ExecutionLimits};
 use std::{
-    cell::Cell,
+    cell::{Cell, OnceCell},
     future::Future,
     mem::{size_of, size_of_val},
     ops::Deref,
@@ -153,21 +153,42 @@ impl Drop for StorageAllocation {
 
 pub(crate) type RetainedStorage = Rc<StorageAllocation>;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct Source {
-    text: Rc<str>,
-    storage: Option<RetainedStorage>,
+    reader: Rc<SourceReader>,
+}
+
+#[derive(Debug)]
+struct SourceReader {
+    text: Box<str>,
+    storage: OnceCell<RetainedStorage>,
 }
 
 impl Source {
     pub(crate) fn retained(&self) -> Option<RetainedStorage> {
-        self.storage.clone()
+        self.reader.storage.get().cloned()
+    }
+
+    /// Root inputs were borrowed during parsing. Charge their shared reader
+    /// once before a stored function keeps that input past the submission.
+    pub(crate) fn retain_root(&self, budget: &StorageBudget) -> Result<(), i32> {
+        let storage = &self.reader.storage;
+        if storage.get().is_some() {
+            return Ok(());
+        }
+        let metadata =
+            4 * size_of::<usize>() + size_of::<SourceReader>() + size_of::<StorageAllocation>();
+        let bytes = self.len().checked_add(metadata).ok_or(RESOURCE_STATUS)?;
+        let ticket = Rc::new(budget.admit(bytes)?);
+        storage.set(ticket).map_err(|_| RESOURCE_STATUS)
     }
 
     pub(crate) fn root(text: &str) -> Self {
         Self {
-            text: Rc::from(text),
-            storage: None,
+            reader: Rc::new(SourceReader {
+                text: text.into(),
+                storage: OnceCell::new(),
+            }),
         }
     }
 }
@@ -176,7 +197,7 @@ impl Deref for Source {
     type Target = str;
 
     fn deref(&self) -> &str {
-        &self.text
+        &self.reader.text
     }
 }
 
@@ -196,8 +217,10 @@ impl JoinedSource {
 
     pub(crate) fn retain(self) -> Source {
         Source {
-            text: Rc::from(self.text),
-            storage: Some(Rc::new(self.storage)),
+            reader: Rc::new(SourceReader {
+                text: self.text.into_boxed_str(),
+                storage: OnceCell::from(Rc::new(self.storage)),
+            }),
         }
     }
 }
@@ -586,11 +609,31 @@ mod tests {
     }
 
     #[test]
+    fn stored_root_source_is_admitted_once_and_released_with_last_clone() {
+        assert_eq!(size_of::<Source>(), size_of::<usize>());
+        let source = Source::root("source");
+        let child = source.clone();
+        let bytes =
+            6 + 4 * size_of::<usize>() + size_of::<SourceReader>() + size_of::<StorageAllocation>();
+        let small = StorageBudget::new(bytes - 1);
+        assert!(source.retain_root(&small).is_err());
+        assert_eq!(small.observation().0, 0);
+        let budget = StorageBudget::new(bytes);
+        source.retain_root(&budget).unwrap();
+        child.retain_root(&budget).unwrap();
+        assert_eq!(budget.observation().0, bytes);
+        drop(source);
+        assert_eq!(budget.observation().0, bytes);
+        drop(child);
+        assert_eq!(budget.observation().0, 0);
+    }
+
+    #[test]
     fn source_clones_and_descendants_share_the_retained_owner_without_copying_text() {
         let storage = StorageBudget::new(64);
         let source = JoinedSource::new("body".to_owned(), storage.admit(64).unwrap()).retain();
         let clone = source.clone();
-        assert!(Rc::ptr_eq(&source.text, &clone.text));
+        assert!(Rc::ptr_eq(&source.reader, &clone.reader));
         let scope = Scope::new(1024, storage.clone(), StorageBudget::new(1024))
             .with_retained(source.retained());
         let child = scope.new_task().function_body();
