@@ -2755,9 +2755,16 @@ mod tests {
         let cancel = Cancel::new();
         for (bytes, accepted) in [(3, false), (4, true)] {
             let mut work = Work::new(65536, 1024 * 1024, 1);
-            let result = fields_admitted(&word, &state, &cancel, bytes, 1, bytes, &mut work)
-                .now_or_never()
-                .expect("short prompt must not suspend");
+            let result = fields(
+                &word,
+                &state,
+                &cancel,
+                FieldContext::ForList,
+                (bytes, 1, bytes),
+                &mut work,
+            )
+            .now_or_never()
+            .expect("short prompt must not suspend");
             match (accepted, result) {
                 (true, Ok(value)) => assert_eq!(value, ["abcd"]),
                 (false, Err(Error::Status(2))) => (),
