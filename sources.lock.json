@@ -2105,6 +2105,23 @@
     "namedFunctions": "Original named declare -f adapter needed by the existing timed-function GNU Bash 5.3.15 recordings. Reuses the command/type bounded AST renderer and its shared work, cancellation and live-storage admission without copying or executing function bodies. All-functions enumeration and function attributes remain unsupported. Original bounded-output, cancellation and drop controls accompany the adapter.",
     "qualification": "Targeted production-Waffle evidence only at this checkpoint. Parent owns independent review, serialized main integration, full frozen replay and baseline recomputation."
   },
+  "shellDeclarationAppend": {
+    "classification": "Original Rust scalar declaration append adapter and scope-aware state view. GNU Bash is a behavior oracle; no upstream implementation copied or adapted.",
+    "oracle": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+    "implementationDestinations": [
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/declarations.rs",
+      "shell/engine/src/state/declarations.rs",
+      "shell/engine/src/state.rs"
+    ],
+    "testDestinations": [
+      "shell/engine/tests/words/declarations.rs",
+      "scripts/test-own-shell-declarations.ts",
+      "scripts/fixtures/shell-declaration-append.json",
+      "scripts/fixtures/shell-declaration-append-scope.json"
+    ],
+    "strategy": "Recognize scalar += declaration words without splitting their RHS. Resolve current local namerefs before selecting the target scope. Read only the current local or inherited function-prefix value for a local append; ordinary declarations read the visible scalar target. Admit and cooperatively scan before state-owned assignment for repeated locals, preserving indexed element zero and raw references. Record prefix-owner provenance separately from ordinary locals. Compound array declarations and explicit -n appends remain separate work."
+  },
   "shellTilde": {
     "classification": "Original HOME-only tilde adapter and controls. GNU Bash 5.3.15 is a behavior oracle; no upstream implementation copied or adapted.",
     "baseRevision": "93fdf762f2a694427440d07156c7a8c458ecc995",
