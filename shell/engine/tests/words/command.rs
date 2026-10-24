@@ -79,7 +79,7 @@ fn register_gated(rig: &Rig, bytes: &'static [u8], linger: bool) -> (Cancel, Rc<
     (release, progress)
 }
 
-fn register_status_gate(rig: &Rig, name: &str, status: i32) -> Cancel {
+pub(super) fn register_status_gate(rig: &Rig, name: &str, status: i32) -> Cancel {
     let release = Cancel::new();
     let gate = release.clone();
     rig.host
@@ -94,7 +94,7 @@ fn register_status_gate(rig: &Rig, name: &str, status: i32) -> Cancel {
     release
 }
 
-fn shutdown_and_check(rig: &Rig) {
+pub(super) fn shutdown_and_check(rig: &Rig) {
     let shutdown = rig.shell.shutdown();
     futures::pin_mut!(shutdown);
     for _ in 0..1000 {
