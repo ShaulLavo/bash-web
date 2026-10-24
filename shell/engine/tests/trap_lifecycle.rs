@@ -1,6 +1,5 @@
 //! Frozen lifecycle witnesses from docs/evidence/own-shell-oracle.json.
 //! No host Bash, new recording, fixture identity or baseline change is involved.
-//! Missing lifecycle behavior stays explicitly ignored until the contract lands.
 use std::{
     process::{Child, Command, Output, Stdio},
     thread::sleep,
@@ -48,7 +47,6 @@ fn check(id: &str, source: &str, status: i32, stdout: &str) {
 }
 
 #[test]
-#[ignore = "pending trap lifecycle contract implementation"]
 fn exit_at_actual_cli_eof() {
     check(
         "oils:builtin-trap:51",
@@ -63,7 +61,6 @@ hi
 }
 
 #[test]
-#[ignore = "pending trap lifecycle contract implementation"]
 fn explicit_exit_preserves_trigger_status() {
     check(
         "oils:builtin-trap:395",
@@ -80,7 +77,6 @@ FOO
 }
 
 #[test]
-#[ignore = "pending trap lifecycle contract implementation"]
 fn inherited_child_exit_is_query_only() {
     check(
         "brush-suite:builtins/trap:27",
@@ -99,7 +95,6 @@ trap -- 'echo "[exit]"' EXIT
 }
 
 #[test]
-#[ignore = "pending trap lifecycle contract implementation"]
 fn child_installed_exit_runs_at_child_completion() {
     check(
         "brush-suite:builtins/trap:30",
@@ -119,7 +114,6 @@ back in parent
 }
 
 #[test]
-#[ignore = "pending trap lifecycle contract implementation"]
 fn capture_queries_inherited_exit_without_running_it() {
     check(
         "brush-suite:builtins/trap:35",
@@ -136,7 +130,6 @@ inside
 }
 
 #[test]
-#[ignore = "pending trap lifecycle contract implementation"]
 fn capture_includes_child_installed_exit_before_eof() {
     check(
         "brush-suite:builtins/trap:36",
@@ -153,7 +146,6 @@ echo "result: $result"
 }
 
 #[test]
-#[ignore = "pending trap lifecycle contract implementation"]
 fn background_inherited_exit_does_not_duplicate_parent() {
     check(
         "brush-suite:builtins/trap:47",
@@ -190,7 +182,6 @@ after func
 }
 
 #[test]
-#[ignore = "pending trap lifecycle contract implementation"]
 fn traced_nested_returns_see_live_function_frames() {
     check(
         "brush-suite:builtins/trap:56",
@@ -235,7 +226,6 @@ done
 }
 
 #[test]
-#[ignore = "pending trap lifecycle contract implementation"]
 fn exit_inside_exit_handler_transfers_once() {
     check(
         "brush-suite:builtins/trap:82",
@@ -248,7 +238,6 @@ exit 99
 }
 
 #[test]
-#[ignore = "pending trap lifecycle contract implementation"]
 fn pipeline_debug_runs_in_parent_before_each_stage() {
     check(
         "brush-suite:builtins/trap:91",
@@ -268,7 +257,6 @@ debug: trap - DEBUG
 }
 
 #[test]
-#[ignore = "pending trap lifecycle contract implementation"]
 fn err_runs_with_errexit_off_at_function_call_boundary() {
     check(
         "bashkit-suite:bashbox-err-trap:13",
@@ -298,7 +286,6 @@ end
 }
 
 #[test]
-#[ignore = "pending trap lifecycle contract implementation"]
 fn err_runs_in_unsuppressed_compound_bodies() {
     check(
         "bashkit-suite:bashbox-err-trap:92",
@@ -315,7 +302,6 @@ end
 }
 
 #[test]
-#[ignore = "pending trap lifecycle contract implementation"]
 fn function_err_scope_merges_without_losing_parent_handler() {
     check(
         "bashkit-suite:trap-scope:81",
@@ -337,7 +323,6 @@ trap -- 'echo B' ERR
 }
 
 #[test]
-#[ignore = "pending trap lifecycle contract implementation"]
 fn source_and_function_return_order_preserves_live_frames() {
     check(
         "bashkit-suite:trap-scope:110",
@@ -361,7 +346,6 @@ ret f
 }
 
 #[test]
-#[ignore = "pending trap lifecycle contract implementation"]
 fn normal_return_handler_preserves_trigger_status() {
     check(
         "bashkit-suite:trap-scope:128",

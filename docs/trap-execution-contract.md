@@ -13,7 +13,7 @@ let outcome = traps::after(outcome, failure_policy, ...).await;
 // Persistent embedders call Session::finish(status) at actual EOF, not per start().
 ```
 
-Status: awaiting parent acceptance before bulk handler code. This replaces the
+Status: accepted by parent for implementation. This replaces the
 incorrect root-only EXIT rule in the first draft. The stored bindings currently
 execute no actions. The study's 173 candidates and 130–170 estimate are not gains.
 
@@ -69,8 +69,8 @@ small planning API above are design inferences, not existing implementation.
 The first executable scaffold is `shell/engine/tests/trap_lifecycle.rs`, copied
 from unchanged frozen oracle rows, not a new Bash recording. It spans Oils EXIT,
 Brush child EXIT/query/background/DEBUG, and Bashkit ERR suppression plus live
-function/source RETURN. Missing behavior is explicitly ignored pending this
-contract and can be run with `--ignored`; passing suppression controls stay on.
+function/source RETURN. All witnesses are ordinary active tests, including missing behavior. Passing
+suppression controls stay on.
 Next causal checks cover handler-replaces-handler, nested return/exit, lastpipe,
 original PIPESTATUS, pre-entry admission failure, cancellation while blocked,
 post-side-effect resource failure, snapshot isolation and final refunds.
