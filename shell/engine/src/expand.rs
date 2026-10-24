@@ -1381,7 +1381,7 @@ impl Expansion<'_> {
             let value = substring_snapshot(&s, name, self.raw_remaining, self.work)?;
             let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
                 .iter()
-                .filter_map(|name| s.bindings().get(*name))
+                .filter_map(|name| s.bindings().get(name))
                 .find(|v| !v.is_empty());
             (value, locale.is_some_and(|v| utf8_locale(v)))
         };
@@ -1489,7 +1489,7 @@ impl Expansion<'_> {
             )?;
             let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
                 .iter()
-                .filter_map(|name| s.bindings().get(*name))
+                .filter_map(|name| s.bindings().get(name))
                 .find(|value| !value.is_empty());
             (value, locale.is_some_and(|value| utf8_locale(value)))
         };

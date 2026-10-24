@@ -2450,19 +2450,22 @@ impl Drop for PrefixFrame {
             state.star_separator = self.star_separator;
             state.ifs_members = self.ifs_members;
         }
+        if matches!(
+            self.bindings,
+            PrefixBindings::Builtin {
+                restore_epoch_realtime: true,
+                ..
+            }
+        ) {
+            state.restore_epoch_realtime();
+        }
         match &mut self.bindings {
             PrefixBindings::Expansion => {
                 let saved = state.prefixes.pop().unwrap();
                 let mut amendments = state.prefixes.pop_memory();
                 restore_expansion_prefix(&mut state, saved, amendments.as_mut());
             }
-            PrefixBindings::Builtin {
-                saved,
-                restore_epoch_realtime,
-            } => {
-                if *restore_epoch_realtime {
-                    state.restore_epoch_realtime();
-                }
+            PrefixBindings::Builtin { saved, .. } => {
                 restore_builtin_prefix(&mut state, std::mem::take(saved));
             }
         }
