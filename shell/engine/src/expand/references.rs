@@ -189,6 +189,9 @@ pub(crate) async fn removal_place(
             work.checkpoint(cancel).await?;
         }
         let bare_key = Reference::parse(subscript).is_some_and(|key| key.subscript.is_none());
+        if bare_key {
+            State::admit_scalar_access(state, subscript, cancel, work).await?;
+        }
         if bare_key && !state.borrow().scalar_is_set(subscript) {
             return Ok(None);
         }

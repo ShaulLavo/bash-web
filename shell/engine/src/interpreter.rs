@@ -1120,15 +1120,19 @@ fn execute(
     if context.cancel.is_cancelled() {
         return futures::future::Either::Left(futures::future::ready(Outcome::status(130)));
     }
-    let evaluation = match context.evaluation.descend() {
-        Ok(scope) => scope,
+    if state.borrow().noexec {
+        // A skipped command leaves `$?` at the last status that actually ran.
+        let status = state.borrow().status();
+        return futures::future::Either::Left(futures::future::ready(Outcome::status(status)));
+    }
+    let context = match context.evaluation.descend() {
+        Ok(evaluation) => Context {
+            evaluation,
+            ..context
+        },
         Err(code) => {
             return futures::future::Either::Left(futures::future::ready(Outcome::status(code)));
         }
-    };
-    let context = Context {
-        evaluation,
-        ..context
     };
     let evaluation = context.evaluation.clone();
     evaluation.frame(
@@ -1137,7 +1141,16 @@ fn execute(
             if context.cancel.is_cancelled() {
                 return Outcome::status(130);
             }
-            let preserve = matches!(command, Command::Pipeline(_) | Command::List(_));
+            let preserve = matches!(
+                command,
+                Command::Pipeline(_)
+                    | Command::List(_)
+                    | Command::Function(_)
+                    | Command::Compound(
+                        CompoundCommand::BraceGroup(_) | CompoundCommand::Case(_),
+                        _
+                    )
+            );
             let check_errexit = !context.ignore_errexit
                 && matches!(
                     &command,
@@ -2173,7 +2186,11 @@ async fn launch_background(
     }
     let mut work = expansion_work(context);
     let child = match State::snapshot(state, &context.cancel, &mut work).await {
-        Ok(child) => child.shared(),
+        Ok(mut child) => {
+            // An asynchronous child is never an interactive shell.
+            child.interactive = false;
+            child.shared()
+        }
         Err(error) => return expansion_failure(error.into(), fds, context).await,
     };
     let job = JobId(context.core.allocate_id());
@@ -5175,6 +5192,27 @@ mod residual_review_tests {
 }
 
 #[cfg(test)]
+pub(crate) mod printer_controls {
+    use super::*;
+
+    pub(crate) fn assert_parked(ex: &Executor, job: &JoinHandle<i32>) {
+        for _ in 0..100_000 {
+            let turn = ex.drive(1);
+            if !turn.runnable && !job.is_finished() {
+                return;
+            }
+        }
+        panic!("printer must block behind the full pipe");
+    }
+
+    pub(crate) fn read_available(reader: &io::Endpoint, length: usize) -> Vec<u8> {
+        let mut bytes = vec![0; length];
+        assert_eq!(reader.read(&mut bytes).now_or_never(), Some(Ok(length)));
+        bytes
+    }
+}
+
+#[cfg(test)]
 mod function_measurements {
     use super::*;
 
@@ -5282,16 +5320,28 @@ mod function_measurements {
             .expect("bounded review control completes")
     }
 
-    #[test]
-    fn review_shift_refunds_dropped_strings_but_keeps_vector_allocation() {
+    fn review_session(limits: Limits) -> (Executor, crate::process::InProcessHost, Session) {
         let ex = Executor::new();
         let host = crate::process::InProcessHost::new(ex.clone());
         let session = Session::new(
             ex.clone(),
-            Rc::new(host),
+            Rc::new(host.clone()),
             Rc::new(io::MemoryFs::new(1024)),
-            Limits::default(),
+            limits,
         );
+        (ex, host, session)
+    }
+
+    fn assert_review_idle(ex: &Executor, host: &crate::process::InProcessHost, session: &Session) {
+        assert_eq!(session.core.execution_storage.observation().0, 0);
+        assert_eq!(host.active_count(), 0);
+        assert_eq!(host.retained_count(), 0);
+        assert_eq!(ex.drive(64).pending, 0);
+    }
+
+    #[test]
+    fn review_shift_refunds_dropped_strings_but_keeps_vector_allocation() {
+        let (ex, _host, session) = review_session(Limits::default());
         assert_eq!(
             finish_review(
                 &ex,
@@ -5348,17 +5398,10 @@ mod function_measurements {
 
     #[test]
     fn review_shift_releases_memory_for_nested_call_and_later_session_start() {
-        let ex = Executor::new();
-        let host = crate::process::InProcessHost::new(ex.clone());
-        let session = Session::new(
-            ex.clone(),
-            Rc::new(host),
-            Rc::new(io::MemoryFs::new(1024)),
-            Limits {
-                execution_bytes: 160 * 1024,
-                ..Limits::default()
-            },
-        );
+        let (ex, _host, session) = review_session(Limits {
+            execution_bytes: 160 * 1024,
+            ..Limits::default()
+        });
         session
             .state
             .borrow_mut()
@@ -5394,6 +5437,62 @@ mod function_measurements {
             session.state.borrow().prefix_capacity_bytes()
         );
         assert_eq!(ex.drive(64).pending, 0);
+    }
+
+    #[test]
+    fn pipeline_status_printer_cancellation_releases_snapshot_and_borrow() {
+        let (ex, host, session) = review_session(Limits::default());
+        let (reader, writer) = io::pipe();
+        let filler = vec![b'!'; io::PIPE_CAPACITY];
+        assert_eq!(writer.write(&filler).now_or_never(), Some(Ok(filler.len())));
+        let mut fds = FdTable::default();
+        fds.insert(1, writer);
+        fds.insert(2, io::Endpoint::null());
+        session.set_descriptors(fds).unwrap();
+        assert_eq!(
+            finish_review(
+                &ex,
+                session
+                    .start("export PIPESTATUS; readonly PIPESTATUS; false | true")
+                    .unwrap(),
+            ),
+            0
+        );
+        let job = session.start("declare -p PIPESTATUS").unwrap();
+        printer_controls::assert_parked(&ex, &job);
+        {
+            let state = session.state.try_borrow_mut().unwrap();
+            assert_eq!(state.pipeline_status(), [1, 0]);
+            let view = state.declaration("PIPESTATUS").unwrap().unwrap();
+            assert!(view.readonly && view.exported);
+        }
+        assert!(session.core.execution_storage.observation().0 >= 13);
+        session.interrupt();
+        assert_eq!(finish_review(&ex, job), 130);
+        assert_eq!(session.core.execution_storage.observation().0, 0);
+        assert_eq!(
+            printer_controls::read_available(&reader, filler.len()),
+            filler
+        );
+        let (out, output) = io::capture(4096);
+        let mut fds = FdTable::default();
+        fds.insert(1, out);
+        fds.insert(2, io::Endpoint::null());
+        session.set_descriptors(fds).unwrap();
+        assert_eq!(
+            finish_review(
+                &ex,
+                session
+                    .start("false | true; declare -p PIPESTATUS")
+                    .unwrap()
+            ),
+            0
+        );
+        assert_eq!(
+            output.bytes(),
+            b"declare -arx PIPESTATUS=([0]=\"1\" [1]=\"0\")\n"
+        );
+        assert_review_idle(&ex, &host, &session);
     }
 
     #[test]
@@ -5551,14 +5650,7 @@ mod function_measurements {
         for increment in ["n=$((n+1))", "eval 'n=$((n+1))'"] {
             let mut first = None;
             for goal in [1, 32, 128, 512] {
-                let ex = Executor::new();
-                let host = crate::process::InProcessHost::new(ex.clone());
-                let session = Session::new(
-                    ex.clone(),
-                    Rc::new(host),
-                    Rc::new(io::MemoryFs::new(1024)),
-                    Limits::default(),
-                );
+                let (ex, _host, session) = review_session(Limits::default());
                 let source = format!(
                     "n=0; seen=0; unwound=0; leaf=0; f() {{ local d=$1; {increment}; seen=$((seen+1)); case $n in {goal}) leaf=$n;; *) f child;; esac; unwound=$((unwound+1)); }}; f root"
                 );

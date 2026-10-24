@@ -29,6 +29,7 @@ pub(super) async fn append_scalar(
     name: &str,
     value: String,
     local: bool,
+    inherit: bool,
     state: &SharedState,
     context: &Context,
     work: &mut Work,
@@ -40,11 +41,13 @@ pub(super) async fn append_scalar(
     }
     let bytes = state
         .borrow()
-        .declaration_append_base(name, local)
+        .declaration_append_base(name, local, inherit)
         .map_or(0, str::len);
     scan_bytes(bytes, context, work).await?;
     let state = state.borrow();
-    let old = state.declaration_append_base(name, local).unwrap_or("");
+    let old = state
+        .declaration_append_base(name, local, inherit)
+        .unwrap_or("");
     let bytes = old.len().checked_add(value.len()).ok_or(2)?;
     if bytes > context.limits().expansion_bytes {
         return Err(2);
@@ -76,6 +79,10 @@ pub(super) async fn print<'a>(
     for name in names {
         count += 1;
         scan_bytes(name.len(), context, work).await?;
+        if name == "PIPESTATUS" {
+            print_pipeline_status(state, fds, context, work).await?;
+            continue;
+        }
         let indexed = matches!(
             state.borrow().raw_bindings().get(name),
             Some(crate::state::Binding::Indexed(_))
@@ -132,11 +139,11 @@ async fn snapshot(
         .map_err(error_status)?;
     Ok(Some(DeclarationSnapshot {
         value: view.value.map(str::to_owned),
-        attributes: attributes(view),
+        attributes: declaration_attributes(view),
     }))
 }
 
-fn attributes(view: DeclarationView<'_>) -> [bool; 5] {
+fn declaration_attributes(view: DeclarationView<'_>) -> [bool; 5] {
     [
         view.nameref,
         view.readonly,
@@ -272,6 +279,51 @@ fn encode<'a>(
     std::str::from_utf8(&buffer[..bytes.len() * 4]).expect("octal escapes are ASCII")
 }
 
+async fn print_pipeline_status(
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    let bytes = state
+        .borrow()
+        .pipeline_status()
+        .len()
+        .checked_mul(std::mem::size_of::<i32>())
+        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<[bool; 5]>()))
+        .ok_or(2)?;
+    work.admit_storage(bytes).map_err(error_status)?;
+    scan_bytes(bytes, context, work).await?;
+    let (statuses, attributes) = {
+        let state = state.borrow();
+        let attributes = state
+            .declaration("PIPESTATUS")
+            .map(declaration_attributes)
+            .unwrap_or([false; 5]);
+        (state.pipeline_status().to_vec(), attributes)
+    };
+    write(fds, b"declare -a", context).await?;
+    for (set, flag) in attributes.into_iter().zip(*b"nrxlu") {
+        if set {
+            write(fds, &[flag], context).await?;
+        }
+    }
+    write(fds, b" PIPESTATUS=(", context).await?;
+    for (index, code) in statuses.iter().enumerate() {
+        work.admit_storage(48).map_err(error_status)?;
+        scan_bytes(48, context, work).await?;
+        let separator = if index == 0 { "" } else { " " };
+        let line = format!("{separator}[{index}]=\"{code}\"");
+        write(fds, line.as_bytes(), context).await?;
+        drop(line);
+        work.release_storage(48);
+    }
+    write(fds, b")\n", context).await?;
+    drop(statuses);
+    work.release_storage(bytes);
+    Ok(())
+}
+
 async fn print_stack_array(
     name: &str,
     state: &SharedState,
@@ -285,7 +337,7 @@ async fn print_stack_array(
     let attributes = state
         .borrow()
         .declaration(name)
-        .map(attributes)
+        .map(declaration_attributes)
         .unwrap_or([false; 5]);
     write(fds, b"declare -a", context).await?;
     for (index, flag) in [(3, b'l'), (0, b'n'), (1, b'r'), (4, b'u'), (2, b'x')] {

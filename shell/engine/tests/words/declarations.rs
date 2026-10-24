@@ -52,17 +52,7 @@ fn declarations_match_recording(recording: &str) {
     for item in fixture["cases"].as_array().unwrap() {
         let rig = Rig::new(Limits::default());
         rig.variable("LC_ALL", "C.UTF-8");
-        let code = item["code"].as_str().unwrap();
-        assert_eq!(
-            rig.run(code),
-            item["status"].as_i64().unwrap() as i32,
-            "{code}"
-        );
-        assert_eq!(
-            rig.output.bytes(),
-            decode_base64(item["stdout"].as_str().unwrap()),
-            "{code}"
-        );
+        rig.check_recorded(item, &decode_base64(item["stdout"].as_str().unwrap()));
     }
 }
 
