@@ -11,7 +11,7 @@ use crate::{
 };
 use std::{mem::size_of, rc::Rc};
 const USAGE: &str = "trap: usage: trap [-Plp] [[action] signal_spec ...]\n";
-const NAMES: [&str; SLOTS] = [
+pub(super) const NAMES: [&str; SLOTS] = [
     "EXIT",
     "SIGHUP",
     "SIGINT",

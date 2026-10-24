@@ -84,7 +84,7 @@ async fn body(
             control::LoopStep::Stop(outcome) => return outcome,
             control::LoopStep::Normal(_) | control::LoopStep::Continue => (),
         }
-        let mut work = expansion_work(context.limits());
+        let mut work = expansion_work(&context);
         if let Err(error) =
             State::admit_scalar_access(&state, "REPLY", &context.cancel, &mut work).await
         {
@@ -134,13 +134,16 @@ async fn choices(
     let mut choices = Vec::new();
     let mut remaining = context.limits().expansion_bytes;
     for word in &command.words {
-        let fields = expand::fields_admitted(
+        let fields = expand::fields(
             word,
             state,
             &context.cancel,
-            context.limits().expansion_bytes,
-            context.limits().arguments.saturating_sub(choices.len()),
-            remaining,
+            expand::FieldContext::ForList,
+            (
+                context.limits().expansion_bytes,
+                context.limits().arguments.saturating_sub(choices.len()),
+                remaining,
+            ),
             work,
         )
         .await?;
@@ -195,7 +198,7 @@ async fn read_reply_body(
     context: &Context,
     line: usize,
 ) -> Result<String, Outcome> {
-    let mut work = expansion_work(context.limits());
+    let mut work = expansion_work(context);
     if let Err(code) = prompt(choices, menu, state, fds, context, &mut work).await {
         return Err(Outcome::status(code));
     }
@@ -297,7 +300,7 @@ async fn assign_body(
     context: &Context,
     line: usize,
 ) -> Result<(), Outcome> {
-    let mut work = expansion_work(context.limits());
+    let mut work = expansion_work(context);
     if let Err(error) =
         expand::admit_assignment(state, name, value.len(), &context.cancel, &mut work).await
     {

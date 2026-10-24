@@ -183,5 +183,5 @@ test("committed oracle and baseline preserve exact identities, skips and counts"
   verifyOracle(oracle);
   validateScore(oracle, baseline);
   compareScores(baseline, baseline, { requireMembership: true });
-  assert.equal(oracle.environment.nodeVersion, "v26.7.0");
+  assert.equal(oracle.environment.nodeVersion, "v26.12.1");
 });

@@ -1,4 +1,7 @@
 //! Bash builtins. External commands are installed by the embedding runtime.
+mod alias;
+mod caller;
+mod completion;
 mod declarations;
 mod directories;
 mod getopts;
@@ -107,11 +110,20 @@ pub(crate) async fn run(
     work: &mut Work,
 ) -> Result<Outcome, i32> {
     match builtin {
+        Builtin::Completion => {
+            return completion::run(name, &args, state, fds, context, work).await;
+        }
         Builtin::Noop => {}
         Builtin::False => return Err(1),
         Builtin::Test => return test::run(name, &args, &state, &fds, &context, work).await,
         Builtin::Trap => return trap::run(&args, &state, &fds, &context, work).await,
         Builtin::Getopts => return getopts::run(&args, &state, &fds, &context, work).await,
+        Builtin::Alias => {
+            return alias::run(name, &args, &state, &fds, &context, work)
+                .await
+                .map(Outcome::status);
+        }
+        Builtin::Caller => return caller::run(&args, &state, &fds, &context, work).await,
         Builtin::Shopt => return shopt(&args, &state, &fds, &context, work).await,
         Builtin::LoopControl => {
             return loop_control(name, &args, &fds, &context, work).await;
@@ -342,11 +354,20 @@ fn error_status(error: Error) -> i32 {
     }
 }
 
-const SHOPT_OPTIONS: [&str; 4] = ["extglob", "inherit_errexit", "lastpipe", "nullglob"];
+const SHOPT_OPTIONS: [&str; 6] = [
+    "expand_aliases",
+    "extdebug",
+    "extglob",
+    "inherit_errexit",
+    "lastpipe",
+    "nullglob",
+];
 
 fn shopt_value(state: &State, option: &str) -> Option<bool> {
     match option {
+        "expand_aliases" => Some(state.expand_aliases),
         "extglob" => Some(state.extglob),
+        "extdebug" => Some(state.extdebug),
         "inherit_errexit" => Some(state.inherit_errexit),
         "nullglob" => Some(state.nullglob),
         "lastpipe" => Some(state.lastpipe),
@@ -357,6 +378,35 @@ fn shopt_value(state: &State, option: &str) -> Option<bool> {
 /// Original streaming shopt adapter. Only options with actual state/consumers
 /// are accepted; unknown names fail rather than pretending to enable a feature.
 /// Extended-pattern matching itself may still reject unsupported syntax with 2.
+async fn set_shopt_option(
+    option: &str,
+    enabled: bool,
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    if option == "extdebug" && enabled {
+        State::initialize_arguments(state, &context.cancel, work)
+            .await
+            .map_err(error_status)?;
+    }
+    let mut state = state.borrow_mut();
+    match option {
+        "expand_aliases" => state.expand_aliases = enabled,
+        "extglob" => state.extglob = enabled,
+        "extdebug" => {
+            state.extdebug = enabled;
+            state.functrace = enabled;
+            state.errtrace = enabled;
+        }
+        "inherit_errexit" => state.inherit_errexit = enabled,
+        "nullglob" => state.nullglob = enabled,
+        "lastpipe" => state.lastpipe = enabled,
+        _ => unreachable!("validated shell option"),
+    }
+    Ok(())
+}
+
 async fn shopt(
     args: &[String],
     state: &SharedState,
@@ -411,7 +461,7 @@ async fn shopt(
     let options = if operands.is_empty() {
         SHOPT_OPTIONS.map(Some)
     } else {
-        [None; 4]
+        [None; 6]
     };
     let mut status = 0;
     // A fixed iterator over known names avoids allocating or copying argv.
@@ -438,14 +488,7 @@ async fn shopt(
             continue;
         };
         if !operands.is_empty() && (set || unset) {
-            let mut state = state.borrow_mut();
-            match option {
-                "extglob" => state.extglob = set,
-                "inherit_errexit" => state.inherit_errexit = set,
-                "nullglob" => state.nullglob = set,
-                "lastpipe" => state.lastpipe = set,
-                _ => unreachable!("validated shell option"),
-            }
+            set_shopt_option(option, set, state, context, work).await?;
             continue;
         }
         if !operands.is_empty() && !enabled {
@@ -593,10 +636,10 @@ async fn set(
             nounset: state.nounset,
             pipefail: state.pipefail,
             errexit: state.errexit,
-            errtrace: state.errtrace,
-            functrace: state.functrace,
             monitor: state.monitor,
             noglob: state.noglob,
+            functrace: state.functrace,
+            errtrace: state.errtrace,
         }
     };
     let mut index = 0;
@@ -635,20 +678,20 @@ async fn set(
     state.nounset = flags.nounset;
     state.pipefail = flags.pipefail;
     state.errexit = flags.errexit;
-    state.errtrace = flags.errtrace;
-    state.functrace = flags.functrace;
     state.monitor = flags.monitor;
     state.noglob = flags.noglob;
+    state.functrace = flags.functrace;
+    state.errtrace = flags.errtrace;
     Ok(Outcome::status(0))
 }
 
 /// `set` options staged until every argument has been validated.
 struct SetFlags {
+    functrace: bool,
+    errtrace: bool,
     nounset: bool,
     pipefail: bool,
     errexit: bool,
-    errtrace: bool,
-    functrace: bool,
     monitor: bool,
     noglob: bool,
 }
@@ -658,10 +701,10 @@ fn set_option(option: &str, enabled: bool, flags: &mut SetFlags) -> Result<(), i
         "nounset" => flags.nounset = enabled,
         "pipefail" => flags.pipefail = enabled,
         "errexit" => flags.errexit = enabled,
-        "errtrace" => flags.errtrace = enabled,
-        "functrace" => flags.functrace = enabled,
         "monitor" => flags.monitor = enabled,
         "noglob" => flags.noglob = enabled,
+        "functrace" => flags.functrace = enabled,
+        "errtrace" => flags.errtrace = enabled,
         _ => return Err(2),
     }
     Ok(())
@@ -681,10 +724,10 @@ async fn set_short_options(
         match flag {
             b'u' => flags.nounset = enabled,
             b'e' => flags.errexit = enabled,
-            b'E' => flags.errtrace = enabled,
-            b'T' => flags.functrace = enabled,
             b'm' => flags.monitor = enabled,
             b'f' => flags.noglob = enabled,
+            b'T' => flags.functrace = enabled,
+            b'E' => flags.errtrace = enabled,
             _ => return Err(2),
         }
     }
@@ -700,36 +743,24 @@ async fn declarations(
     work: &mut Work,
 ) -> Result<Outcome, i32> {
     let mut args = args.into_iter().peekable();
-    let mut print = false;
-    let mut nameref = false;
-    let mut readonly = false;
-    let mut exported = false;
     if name == "local" && state.borrow().function_calls == 0 {
         return Err(1);
     }
-    if matches!(name, "local" | "declare" | "typeset") {
-        while let Some(option) = args.next_if(|arg| arg.starts_with('-')) {
-            if option == "--" {
-                break;
-            }
-            for flag in option[1..].bytes() {
-                work.checkpoint(&context.cancel)
-                    .await
-                    .map_err(error_status)?;
-                match flag {
-                    b'p' if matches!(name, "declare" | "typeset") => print = true,
-                    b'n' => nameref = true,
-                    b'r' => readonly = true,
-                    b'x' => exported = true,
-                    _ => return Err(2),
-                }
-            }
-        }
+    let DeclarationOptions {
+        print,
+        function_names,
+        nameref,
+        readonly,
+        exported,
+        case,
+    } = declaration_options(name, &mut args, context, work).await?;
+    if function_names {
+        return declarations::function_names(args, state, fds, context, work).await;
     }
     if print {
         return declarations::print(name, args, state, fds, context, work).await;
     }
-    if nameref && (readonly || exported) {
+    if nameref && (readonly || exported || case.specified()) {
         return Err(2);
     }
     if args.peek().is_none() && (nameref || matches!(name, "declare" | "typeset")) {
@@ -773,12 +804,7 @@ async fn declarations(
         }
         if nameref {
             let result = nameref_declaration(&key, value, local, state, context, work).await;
-            status |= i32::from(result.is_err());
-            if let Err(code) = result
-                && matches!(code, 2 | crate::exec::RESOURCE_STATUS)
-            {
-                return Err(code);
-            }
+            status |= declaration_status(result)?;
             continue;
         }
         if let Some(value) = &value
@@ -795,17 +821,15 @@ async fn declarations(
         } else {
             key
         };
-        let result = apply_declaration(name, &key, value, &mut state.borrow_mut());
-        if result == Err(crate::exec::RESOURCE_STATUS) {
-            return result.map(|()| Outcome::status(0));
-        }
-        if result.is_ok() {
-            if exported {
-                state.borrow_mut().export(key.clone(), None)?;
-            }
-            if readonly {
-                state.borrow_mut().readonly(key.clone(), None)?;
-            }
+        let result = if case.specified() {
+            state
+                .borrow_mut()
+                .declare_case(key.clone(), value, local, case, work)
+        } else {
+            apply_declaration(name, &key, value, &mut state.borrow_mut())
+        };
+        if declaration_status(result)? == 0 {
+            declaration_attributes(&key, exported, readonly, &mut state.borrow_mut())?;
             continue;
         }
         status = 1;
@@ -814,6 +838,83 @@ async fn declarations(
         }
     }
     Ok(Outcome::status(status))
+}
+
+fn declaration_status(result: Result<(), i32>) -> Result<i32, i32> {
+    match result {
+        Ok(()) => Ok(0),
+        Err(code @ (2 | crate::exec::RESOURCE_STATUS)) => Err(code),
+        Err(_) => Ok(1),
+    }
+}
+
+fn declaration_attributes(
+    key: &str,
+    exported: bool,
+    readonly: bool,
+    state: &mut crate::state::State,
+) -> Result<(), i32> {
+    if exported {
+        state.export(key.to_owned(), None)?;
+    }
+    if readonly {
+        state.readonly(key.to_owned(), None)?;
+    }
+    Ok(())
+}
+
+#[derive(Default)]
+struct DeclarationOptions {
+    print: bool,
+    function_names: bool,
+    nameref: bool,
+    readonly: bool,
+    exported: bool,
+    case: crate::state::CaseOptions,
+}
+
+async fn declaration_options(
+    name: &str,
+    args: &mut std::iter::Peekable<std::vec::IntoIter<String>>,
+    context: &Context,
+    work: &mut Work,
+) -> Result<DeclarationOptions, i32> {
+    let mut flags = DeclarationOptions::default();
+    if !matches!(name, "local" | "declare" | "typeset") {
+        return Ok(flags);
+    }
+    while let Some(option) = args.next_if(|arg| arg.starts_with(['-', '+'])) {
+        if option == "--" {
+            break;
+        }
+        declaration_option(name, &option, &mut flags, context, work).await?;
+    }
+    Ok(flags)
+}
+
+async fn declaration_option(
+    name: &str,
+    option: &str,
+    flags: &mut DeclarationOptions,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    let enabled = option.starts_with('-');
+    for flag in option[1..].bytes() {
+        work.checkpoint(&context.cancel)
+            .await
+            .map_err(error_status)?;
+        match flag {
+            b'p' if enabled && name != "local" => flags.print = true,
+            b'F' if enabled && name != "local" => flags.function_names = true,
+            b'n' if enabled => flags.nameref = true,
+            b'r' if enabled => flags.readonly = true,
+            b'x' if enabled => flags.exported = true,
+            b'l' | b'u' => flags.case.flag(flag == b'u', enabled),
+            _ => return Err(2),
+        }
+    }
+    Ok(())
 }
 
 async fn nameref_declaration(
