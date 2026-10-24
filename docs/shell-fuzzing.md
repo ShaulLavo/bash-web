@@ -17,8 +17,8 @@ binary. Build scratch is removed on exit. Useful options are:
 
 ```sh
 npm run fuzz:shell-words -- --count 3000 --seed 42 --timeout-ms 2000 \
-  --output /work/tmp/bash-web-fuzz-seed-42.json
-npm run fuzz:shell-words -- --shell /work/tmp/bash-web-climb-parameter-replace-target/debug/shell-engine \
+  --output fuzz-seed-42.json
+npm run fuzz:shell-words -- --shell shell/target/debug/shell-engine \
   --count 3000 --seed 42
 ```
 

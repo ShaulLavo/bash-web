@@ -316,8 +316,7 @@ targets, replacements, substring/arithmetic, substitutions, tilde, pathname and
 brace expansion remain outside the slice. The parser correction below retains
 the license and all upstream assertions. No process-host, browser transport or output buffering code
 is copied or changed. Fixed oracle, scorer, cases, classifications, exclusions,
-baseline and plan scores remain unchanged; runtime and corpus results await the
-coordinator's CI.
+baseline and scores remain unchanged.
 
 The trim review repairs are original adapters in `shell/engine/src/expand.rs`
 and `expand/operand.rs`, plus an original `ParameterHeader` helper in the
@@ -338,10 +337,9 @@ versions are unchanged. Original regressions in `shell/engine/tests/words.rs`
 and `shell/parser/tests/api.rs` use focused GNU Bash `C.UTF-8` controls for all
 four trims, scalar and lazy contexts, partial protection, malformed brackets,
 quoted error messages and unrelated parser paths. They also check that nested
-length inputs share snapshot storage while ordinary PR20 length behavior keeps
+length inputs share snapshot storage while ordinary length behavior keeps
 its existing limits. `shellParser.changeLog` and
 `shellParameterTrim.reviewCorrections` classify the paths and local changes.
-Fresh runtime and corpus checks for these repairs remain coordinator-owned CI.
 
 ## Scalar parameter case modification
 
@@ -372,7 +370,7 @@ first-form tails remain unchanged. This does not claim full Unicode or locale
 collation compatibility. Pattern effects precede locale selection and final IFS
 splitting; shared bounds, cooperative yields and cancellation-safe frames remain
 in force. No process host, browser transport or output buffering is copied or
-changed. Versions and fixed measurement metadata remain coordinator-owned.
+changed. Versions and fixed measurement metadata are unchanged.
 
 The original integration also reserves actual matcher vector capacities and case
 result String capacities before allocation, including spare slots. Exact-budget
