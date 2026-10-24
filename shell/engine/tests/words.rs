@@ -4458,3 +4458,6 @@ fn typed_reference_operator_cycles_are_selected_element_cycles() {
         assert!(rig.calls.borrow().is_empty(), "{source}");
     }
 }
+
+#[path = "words/command_hash.rs"]
+mod command_hash;
