@@ -63,9 +63,9 @@ pub(super) enum FunctionFormat {
 
 /// Named `declare -f` operands use the same bounded AST printer as `type`.
 /// Function bodies remain shared and are never copied or executed here.
-pub(super) async fn functions(
+pub(super) async fn functions<'a>(
     format: FunctionFormat,
-    names: impl Iterator<Item = String>,
+    names: impl Iterator<Item = &'a String>,
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
@@ -75,8 +75,8 @@ pub(super) async fn functions(
     for name in names {
         scan_bytes(name.len(), context, work).await?;
         let found = match format {
-            FunctionFormat::Definition => print_function(&name, state, fds, context, work).await?,
-            FunctionFormat::Name => print_function_name(&name, state, fds, context, work).await?,
+            FunctionFormat::Definition => print_function(name, state, fds, context, work).await?,
+            FunctionFormat::Name => print_function_name(name, state, fds, context, work).await?,
         };
         if !found {
             status = 1;
@@ -109,9 +109,9 @@ struct DeclarationSnapshot {
     attributes: [bool; 5],
 }
 
-pub(super) async fn print(
+pub(super) async fn print<'a>(
     builtin: &str,
-    names: impl Iterator<Item = String>,
+    names: impl Iterator<Item = &'a String>,
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
@@ -124,19 +124,19 @@ pub(super) async fn print(
     for name in names {
         count += 1;
         scan_bytes(name.len(), context, work).await?;
-        if state.borrow().stack_array(&name) && !state.borrow().is_nameref(&name) {
-            print_stack_array(&name, state, fds, context, work).await?;
+        if state.borrow().stack_array(name) && !state.borrow().is_nameref(name) {
+            print_stack_array(name, state, fds, context, work).await?;
             continue;
         }
         let Some(DeclarationSnapshot { value, attributes }) =
-            snapshot(&name, state, context, work).await?
+            snapshot(name, state, context, work).await?
         else {
-            missing(builtin, &name, fds, context, work).await?;
+            missing(builtin, name, fds, context, work).await?;
             status = 1;
             continue;
         };
         let line = render(
-            &name,
+            name,
             value.as_deref(),
             attributes,
             utf8,

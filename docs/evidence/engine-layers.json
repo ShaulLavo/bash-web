@@ -2,7 +2,7 @@
   "schema": 1,
   "identity": {
     "kind": "lexical-source-scan",
-    "engineSourceSha256": "6c28228c871b088a47de5374d111b8b12608bedbacc8bb56732f5075e8a41922",
+    "engineSourceSha256": "da38730a65ae9f038aaaed9190144eda7044ed3500ea8c5b392e447d5892e1a5",
     "binaryBuild": null
   },
   "contract": {
@@ -424,7 +424,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/builtins.rs",
-        "line": 907,
+        "line": 914,
         "column": 25
       }
     },
@@ -594,7 +594,7 @@
       "scope": "production",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 1663,
+        "line": 1664,
         "column": 33
       }
     },
@@ -944,7 +944,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3892,
+        "line": 4241,
         "column": 25
       }
     },
@@ -954,7 +954,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 5217,
+        "line": 5594,
         "column": 17
       }
     },
@@ -974,7 +974,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3878,
+        "line": 4227,
         "column": 17
       }
     },
@@ -984,7 +984,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/interpreter.rs",
-        "line": 3873,
+        "line": 4222,
         "column": 24
       }
     },
@@ -1004,7 +1004,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/io.rs",
-        "line": 1060,
+        "line": 1061,
         "column": 9
       }
     },
@@ -1084,7 +1084,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 1125,
+        "line": 1182,
         "column": 63
       }
     },
@@ -1094,7 +1094,7 @@
       "scope": "testOnly",
       "location": {
         "path": "shell/engine/src/state.rs",
-        "line": 2304,
+        "line": 2361,
         "column": 9
       }
     }

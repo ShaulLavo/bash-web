@@ -232,7 +232,7 @@ fn read_count_invalid_scalar_names_leave_all_input_unread() {
             b"[old]:1\n[abcdef]:0\n",
         );
     }
-    for name in ["a", "_", "a0", "_a_9"] {
+    for name in ["a", "a0", "_a_9"] {
         check(
             &format!(
                 "{{ read -n3 {name}; echo \"[${name}]:$?\"; read -r tail; echo \"[$tail]:$?\"; }} <<<abcdef"
@@ -240,6 +240,14 @@ fn read_count_invalid_scalar_names_leave_all_input_unread() {
             b"[abc]:0\n[def]:0\n",
         );
     }
+}
+
+#[test]
+fn read_count_underscore_is_replaced_by_last_argument() {
+    check(
+        r#"{ read -n3 _; echo "[$_]:$?"; read -r tail; echo "[$tail]:$?"; } <<<abcdef"#,
+        b"[_]:0\n[def]:0\n",
+    );
 }
 
 #[test]
