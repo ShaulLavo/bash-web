@@ -1,12 +1,14 @@
 # 004: Our own WASM-first shell
 
-Status: Approved (owner, 2026-10-16)
+Status: Approved. Current-product finish line updated by the owner on 2026-10-25. The full 90% compatibility program is Approved and PARKED for the next product.
 
 ## Goal
 
-The browser dev environment from plan 001 gets a bash-compatible shell we design ourselves, written for single-threaded `wasm32-wasip1` from the start. It runs real programs (`bun`, `grep`, `sed`) as child processes and streams their output live: `bun dev | grep error` shows each matching line as it happens. Correctness is measured against GNU bash, and the score only goes up.
+Ship the first product, StackBlitz on our stack, with bash-web beating Brush on all three frozen corpora. Land or close the open PRs, prove real Ctrl+C stops a long-running program through the production runtime, then wind down this shell push. Keep streaming, shared-filesystem, resource, and no-regression requirements intact. Runtime capabilities belong to Waffle.
 
-Brush stays the working shell in this repository until step 6 replaces it.
+The broader traps, variable model, list expansion, and patterns program is Approved for the next product, agents in the browser. It is not current work or an Idea. Resume it through [007: Agent-shell compatibility](007-agent-shell-compatibility.md).
+
+The remaining sections preserve dated decisions, measurements, and follow-ups. They do not expand the current-product finish line or establish current support and scores.
 
 ## Decision
 
