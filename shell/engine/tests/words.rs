@@ -4406,6 +4406,8 @@ mod getopts;
 
 #[path = "words/declarations.rs"]
 mod declarations;
+#[path = "words/help.rs"]
+mod help;
 #[path = "words/local_inherit.rs"]
 mod local_inherit;
 #[path = "words/select.rs"]
@@ -4488,3 +4490,6 @@ mod pipeline_status;
 
 #[path = "words/command_hash.rs"]
 mod command_hash;
+
+#[path = "words/printf_invalid_format.rs"]
+mod printf_invalid_format;
