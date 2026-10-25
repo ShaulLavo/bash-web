@@ -177,6 +177,7 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+    use super::super::bindings_tests::finish;
     use super::*;
 
     fn state(limit: usize) -> (State, StorageBudget) {
@@ -189,12 +190,13 @@ mod tests {
         Ok(())
     }
     fn snapshot(state: &super::super::SharedState) -> State {
-        use futures::FutureExt;
         let mut work = crate::exec::Work::new(65_536, 65_536, 0);
-        State::snapshot(state, &crate::executor::Cancel::new(), &mut work)
-            .now_or_never()
-            .expect("small snapshot does not yield")
-            .unwrap_or_else(|_| panic!("snapshot fits"))
+        finish(State::snapshot(
+            state,
+            &crate::executor::Cancel::new(),
+            &mut work,
+        ))
+        .unwrap_or_else(|_| panic!("snapshot fits"))
     }
     fn used(budget: &StorageBudget) -> usize {
         budget.observation().0

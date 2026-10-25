@@ -184,3 +184,17 @@ for (const script of scripts)
     assert.deepEqual(actual.stderr, bash.stderr);
     assert.equal(liveNodeWorkers(), 0);
   });
+
+const negativeFixture: { bash: string; cases: Recorded[] } = JSON.parse(
+  readFileSync(new URL("fixtures/shell-negative-extglob.json", import.meta.url), "utf8"),
+);
+assert.equal(negativeFixture.bash, "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)");
+for (const entry of negativeFixture.cases)
+  test(`production Waffle negative extglob: ${entry.script}`, { timeout: 10000 }, async () => {
+    const actual = await run(entry.script);
+    assert.equal(actual.crash, undefined);
+    assert.equal(actual.status, entry.status);
+    assert.deepEqual(actual.stdout, Buffer.from(entry.stdoutBase64, "base64"));
+    assert.deepEqual(actual.stderr, Buffer.from(entry.stderrBase64, "base64"));
+    assert.equal(liveNodeWorkers(), 0);
+  });

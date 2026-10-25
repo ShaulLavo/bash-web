@@ -1,0 +1,94 @@
+{
+  "schema": 1,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "provenance": {
+    "binarySha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+    "scope": "new full-pattern negative-extglob controls, not the frozen oracle"
+  },
+  "cases": [
+    {
+      "script": "[[ --oops == --!(help|verbose) ]]; echo $?; [[ --help == --!(help|verbose) ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAoxCg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "[[ '' == !(x) ]]; echo $?; [[ x == !(x) ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAoxCg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "[[ d == !(*d)d ]]; echo $?; [[ ad == !(a)d ]]; echo $?; [[ bd == !(a)d ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAoxCjAK",
+      "stderrBase64": ""
+    },
+    {
+      "script": "[[ c == @(!(a)|b) ]]; echo $?; [[ a == @(!(a)) ]]; echo $?; [[ ab == !(x)? ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAoxCjAK",
+      "stderrBase64": ""
+    },
+    {
+      "script": "[[ abab == !(x)+(ab) ]]; echo $?; [[ aaa == !(z)*(a|aa) ]]; echo $?; [[ x == !(z)+(a) ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAowCjEK",
+      "stderrBase64": ""
+    },
+    {
+      "script": "for v in '' a b ab; do [[ $v == !(!(a)) ]]; echo $v:$?; done",
+      "status": 0,
+      "stdoutBase64": "OjEKYTowCmI6MQphYjoxCg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "for v in '' a b ab; do [[ $v == *(!(a)) ]]; echo $v:$?; [[ $v == +(!(a)) ]]; echo $v:$?; done",
+      "status": 0,
+      "stdoutBase64": "OjAKOjAKYToxCmE6MQpiOjAKYjowCmFiOjAKYWI6MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='!([a-c]|x)'; for v in '' a d x é 🙂; do [[ $v == $p ]]; echo $v:$?; done",
+      "status": 0,
+      "stdoutBase64": "OjAKYToxCmQ6MAp4OjEKw6k6MArwn5mCOjAK",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='!(a|b)'; [[ c == \"$p\" ]]; echo $?; [[ '!(a|b)' == \"$p\" ]]; echo $?; [[ '!(a)' == \"!(a)\" ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MQowCjAK",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='!(a)'; shopt -u extglob; case b in $p) echo no;; *) echo off;; esac; shopt -s extglob; case b in $p) echo on;; *) echo no;; esac",
+      "status": 0,
+      "stdoutBase64": "b2ZmCm9uCg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='!(@(a|b)|+(c))'; for v in '' a b c cc d; do [[ $v == $p ]]; echo $v:$?; done",
+      "status": 0,
+      "stdoutBase64": "OjAKYToxCmI6MQpjOjEKY2M6MQpkOjAK",
+      "stderrBase64": ""
+    },
+    {
+      "script": "p='!([|a)'; [[ '!([|a)' == $p ]]; echo $?; [[ a == $p ]]; echo $?",
+      "status": 0,
+      "stdoutBase64": "MAoxCg==",
+      "stderrBase64": ""
+    },
+    {
+      "script": "shopt -s extglob; printf x >zz_one; printf x >zz_two; printf x >zz_other; compgen -G 'zz_!(other)'",
+      "status": 0,
+      "stdoutBase64": "enpfb25lCnp6X3R3bwo=",
+      "stderrBase64": ""
+    },
+    {
+      "script": "shopt -s extglob; p='!(a\\|b|c)'; for v in 'a|b' c a d; do [[ $v == $p ]]; echo $v:$?; done",
+      "status": 0,
+      "stdoutBase64": "YXxiOjEKYzoxCmE6MApkOjAK",
+      "stderrBase64": ""
+    }
+  ]
+}
