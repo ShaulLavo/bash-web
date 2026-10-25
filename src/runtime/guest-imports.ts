@@ -18,8 +18,8 @@ export function shellTerminalImports(
     phase(phase: number) {
       if (!buffer) return;
       const bridge = new SharedBridge(buffer);
-      if (!bridge.closed() && (phase === 1 || phase === 2))
-        Atomics.store(bridge.state, control.phase, phase);
+      if (bridge.closed() || (phase !== 1 && phase !== 2)) return;
+      if (Atomics.exchange(bridge.state, control.phase, phase) !== phase) bridge.signal();
     },
   };
 }

@@ -46,6 +46,20 @@ shared runtime without creating a process service. The application remains
 responsible for `await runtime.dispose()` once the shared runtime is no longer
 needed.
 
+## Demo terminal activity
+
+The demo requires `Atomics.waitAsync` on the page. It subscribes to the bridge's
+wake counter instead of polling an idle terminal. Output, freed input capacity,
+phase changes and shutdown publish activity. Each task drains at most 32 KiB,
+then schedules another task if output remains. Bursts share one scheduled task.
+Sampling the counter before draining prevents a publication during subscription
+from being missed. Closing the session releases its pending wait and suppresses
+later callbacks. Final output drains before the exited or failed state is shown.
+Memory metrics update on activity, not on a separate sampling timer.
+
+This policy belongs to the demo's `BrowserSession`, not to `createShell` or the
+borrowed Waffle runtime. There is no polling fallback for older browsers.
+
 ## Storage ownership, waiting and disposal
 
 The application owns storage selection and the runtime lifetime; Waffle owns
@@ -412,6 +426,27 @@ The normal-exit raw-guest → shell → next-guest terminal handoff case is reta
 not excluded. Shell-owned terminal-ring, terminal-metadata and output-transform
 unit regressions remain here; Bun host-slot, nested-Bun and guest-libc internals
 belong to the external guest package rather than copied owner-internal suites.
+
+### Inherited descriptor ownership
+
+`Runtime::stdio` borrows launch bindings by duplicating them. Its caller still owns
+and must close the originals. The shell guest instead calls `Runtime::take_stdio`
+once. That operation duplicates every launch binding before closing the originals.
+If duplication fails, it releases the partial copies and leaves the originals intact.
+After transfer, both bootstrap methods reject reuse of the launch snapshot.
+
+The session owns the resulting logical table. Genuine aliases retain their shared
+open description until the last alias closes. Private directory preopens are not
+launch bindings and remain with the WASI adapter. Duplication preserves file offsets.
+
+The interactive editor borrows current stdin and stdout only while reading a
+command, then drops those references before execution. Diagnostics borrow current
+stderr only while writing. Closing or replacing the final inherited pipe binding
+therefore delivers EOF or EPIPE without waiting for shell exit. The standalone
+Node fixture in `scripts/test-own-shell-inherited-ownership.ts` runs the compiled
+guest against pinned Waffle descriptors, pipes and polling. It checks peers while
+the guest is paused and resumes it afterward. It does not replace worker or browser
+transport coverage.
 
 ### Descriptor predicates
 

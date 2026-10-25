@@ -50,6 +50,7 @@ export class BrowserSession {
   private disposed = false;
   private disposal?: Promise<void>;
   private failed = false;
+  private failureMessage = "Shared terminal failed; the session was stopped.";
   private queued: Uint8Array[] = [];
   private queuedBytes = 0;
   private pendingDiscard = false;
@@ -75,6 +76,8 @@ export class BrowserSession {
         "Shared memory requires HTTPS or localhost and COOP: same-origin / COEP: require-corp headers.",
       );
     }
+    if (typeof Atomics.waitAsync !== "function")
+      throw new Error("The terminal demo requires Atomics.waitAsync support.");
     options.signal?.throwIfAborted();
     const session = new BrowserSession(options);
     options.signal?.addEventListener("abort", session.cancel, { once: true });
@@ -130,7 +133,9 @@ export class BrowserSession {
     if (this.disposed) throw new Error("Shell startup was cancelled.");
     this.shell = shell;
     void shell.done.then((result) => {
-      if (result.error && !this.disposed) this.fail(result.error);
+      if (this.disposed) return;
+      if (result.error) this.failureMessage = result.error;
+      this.bridge.signal();
     });
     return { wasmBytes: shell.process.wasmBytes };
   }
@@ -186,7 +191,10 @@ export class BrowserSession {
     this.bridge.signal();
   }
   crash() {
-    this.fail("Worker stopped unexpectedly. Restart the session to recover.");
+    if (this.disposed || this.failed) return;
+    this.failureMessage = "Worker stopped unexpectedly. Restart the session to recover.";
+    Atomics.store(this.bridge.state, control.phase, 4);
+    this.bridge.signal();
   }
   dispose(): Promise<void> {
     if (this.disposal) return this.disposal;
@@ -252,6 +260,7 @@ export class BrowserSession {
   }
   private pump() {
     if (this.disposed || this.failed) return;
+    const sequence = Atomics.load(this.bridge.state, control.wake);
     this.flushInput();
     const startedAt = this.options.trace ? performance.timeOrigin + performance.now() : 0;
     const queuedBytes = this.options.trace
@@ -276,8 +285,15 @@ export class BrowserSession {
     if (this.disposed || this.failed) return;
     this.metrics.memoryBytes = Atomics.load(this.bridge.state, control.memory);
     const phase = Atomics.load(this.bridge.state, control.phase);
+    const outputPending =
+      Atomics.load(this.bridge.state, control.outputWrite) !==
+      Atomics.load(this.bridge.state, control.outputRead);
+    if (phase >= 3 && outputPending) {
+      this.schedulePump();
+      return;
+    }
     if (phase === 4) {
-      this.fail("Shared terminal failed; the session was stopped.");
+      this.fail(this.failureMessage);
       return;
     }
     if (phase !== this.phase && !this.bridge.cancelled()) {
@@ -295,7 +311,20 @@ export class BrowserSession {
       void this.dispose();
       return;
     }
-    this.timer = setTimeout(() => this.pump(), 8);
+    if (outputPending) this.schedulePump();
+    else this.waitForActivity(sequence);
+  }
+  private schedulePump() {
+    if (this.disposed || this.failed || this.timer !== undefined) return;
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      this.pump();
+    }, 0);
+  }
+  private waitForActivity(sequence: number) {
+    const wait = Atomics.waitAsync(this.bridge.state, control.wake, sequence);
+    if (wait.async) void wait.value.then(() => this.schedulePump());
+    else this.schedulePump();
   }
   private deliver(bytes: Uint8Array) {
     this.metrics.outputBytes += bytes.length;

@@ -304,7 +304,7 @@ async fn arithmetic_clause_body(
     if source.trim().is_empty() {
         return Ok(0);
     }
-    let mut work = substitution_work(context, fds);
+    let mut work = substitution_work(context, fds, None);
     match arithmetic::evaluate(
         source,
         state,

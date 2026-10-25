@@ -28,11 +28,14 @@ to `shell/engine/` unless explicitly repository-root paths.
 - Ordinary functions share caller state. Pipeline stages (with more than one
   stage), subshells and background jobs copy shell state. Positional arguments,
   local declarations and local export attributes have cancellation-safe guards.
-  `lastpipe` is not implemented; no stage of a multistage pipeline runs in the
-  caller's environment.
+  With `lastpipe` enabled and job control disabled, the final pipeline stage
+  runs in the caller's environment.
 - Descriptor tables clone references to open endpoints, including a shared file
   offset for duplicated file descriptors, never endpoint data. Redirections are
-  scoped; `exec` changes the current descriptor table across session commands.
+  scoped. Persistent `exec` edits survive functions, eval, source, redirected
+  compounds, and caller-owned lastpipe stages. Temporary surrounding bindings,
+  including lastpipe stdin, restore without undoing unrelated persistent edits.
+  Caller links retain no endpoints; isolated tasks never publish their edits.
   Arbitrary descriptor numbers reach `ProcessHost::spawn`, not only 0, 1 and 2.
 - `ProcessHost` accepts argv, exported environment, cwd, descriptor bindings and
   job/parent identity. Spawn/kill return without waiting; waits register exit
