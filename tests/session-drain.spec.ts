@@ -111,8 +111,9 @@ test.beforeAll(async () => {
   producer = worker.outputFiles[0].text;
 });
 
-test.beforeEach(async ({ page }) => {
-  await page.route("**/drain-fixture", (route) =>
+test.beforeEach(async ({ page, context }) => {
+  page.on("pageerror", (error) => console.error(error.message));
+  await context.route("**/drain-fixture", (route) =>
     route.fulfill({
       contentType: "text/html",
       headers: {
@@ -122,10 +123,10 @@ test.beforeEach(async ({ page }) => {
       body: '<script type="module" src="/drain-fixture.js"></script>',
     }),
   );
-  await page.route("**/drain-fixture.js", (route) =>
+  await context.route("**/drain-fixture.js", (route) =>
     route.fulfill({ contentType: "text/javascript", body: fixture }),
   );
-  await page.route("**/drain-producer.js", (route) =>
+  await context.route("**/drain-producer.js", (route) =>
     route.fulfill({ contentType: "text/javascript", body: producer }),
   );
   await page.goto("/drain-fixture");
