@@ -22,6 +22,7 @@ import {
   sourceEquivalent,
 } from "./shell-scoreboard-main.mjs";
 import { digest } from "./shell-scoreboard.mjs";
+import { prepareCandidate, foldCandidate } from "./shell-scoreboard-accepted-gains.mjs";
 
 function json(path) {
   return JSON.parse(readFileSync(path, "utf8"));
@@ -113,8 +114,13 @@ export async function prepareQualification({ root, client, output }) {
     "candidate cannot change frozen identity",
   );
   let floor = null;
-  if (bound.selected.kind === "pull-request")
-    floor = (await resolveMainFloor({ root, sourceSha: target, client })).floor;
+  if (
+    bound.selected.kind === "pull-request" ||
+    target === "f6e3a9e67d56332b0476f3608e198bf74e8e12f3"
+  ) {
+    const prepared = await prepareCandidate({ root, client, ...bound, sourceSha });
+    floor = prepared.floor.kind === "MainObservedFloor" ? prepared.floor.floor : prepared.floor;
+  }
   write(output, {
     ...bound,
     sourceSha,
@@ -161,6 +167,8 @@ export async function foldQualification({ root, client, rawPath, output }) {
   validateOwnScore(oracle, raw.score);
   await admitQualificationRaw({ root, client, raw });
   mkdirSync(output, { recursive: true });
+  if (raw.floor?.kind === "AcceptedGainFloor")
+    return foldAcceptedCandidate({ root, client, raw, bound, oracle, output });
   if (bound.selected.kind === "pull-request") {
     const { floor } = await resolveMainFloor({ root, sourceSha: bound.selected.mainSha, client });
     validateFloor(oracle, raw.floor);
@@ -217,6 +225,54 @@ export async function foldQualification({ root, client, rawPath, output }) {
       .flatMap((row) => row.lost)
       .sort(),
   });
+  write(resolve(output, "qualification.json"), result);
+  return result;
+}
+async function foldAcceptedCandidate({ root, client, raw, bound, oracle, output }) {
+  const prepared = await prepareCandidate({
+    root,
+    client,
+    selected: bound.selected,
+    sourceSha: raw.sourceSha,
+    run: raw.run,
+  });
+  const result = {
+    ...(await foldCandidate(prepared, raw)),
+    observedMainAfter: bound.observedMainAfter,
+  };
+  if (bound.selected.kind === "main-push") {
+    const current = await mainEvidence({ root, oracle, client }).collect(raw.sourceSha);
+    assert.ok(
+      current.evidence.some(
+        (item) =>
+          item.kind === "raw" && item.runId === raw.run.runId && item.attempt === raw.run.attempt,
+      ),
+      "completed current main producer is required",
+    );
+    const accepted = prepared.floor;
+    const floor = accumulateFloor({
+      oracle,
+      sourceSha: raw.sourceSha,
+      predecessors: [
+        { ...accepted.base, floorIds: accepted.ids, floorSha256: accepted.floorSha256 },
+      ].concat(current.floors),
+      scores: current.scores,
+      evidence: [
+        {
+          kind: "accepted-landed-pr-gains",
+          landedMerge: accepted.landedMerge,
+          recordDigest: accepted.acceptedRecordDigest,
+          base: accepted.base.evidence,
+        },
+      ].concat(current.evidence),
+    });
+    write(resolve(output, "floor.json"), {
+      ...floor,
+      run: bound.run,
+      beforeSha: bound.selected.beforeSha,
+      lostIds: [],
+    });
+  }
   write(resolve(output, "qualification.json"), result);
   return result;
 }

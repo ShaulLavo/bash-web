@@ -23,6 +23,12 @@ const contracts = {
     upload: "Upload complete raw score",
     prefix: "own-shell-raw",
   },
+  qualification: {
+    job: "score-floor",
+    observe: "Fold main floor and qualification",
+    upload: "Upload gained and lost IDs",
+    prefix: "own-shell-qualification",
+  },
   floor: {
     job: "score-floor",
     observe: "Fold main floor and qualification",

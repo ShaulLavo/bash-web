@@ -41,6 +41,7 @@ One page per feature, each stating exactly what is supported and what is left ou
 - [Development](development.md): Set up, build, test, and find your way around the repository
 - [Bash compatibility](bash-compatibility.md): Read how the score is produced and held
 - [Shell fuzzing](shell-fuzzing.md): Run and record the differential fuzzers
+- [Accepted-gain recovery](accepted-gain-recovery.md): One-gap recovery without relabeling PR observations
 - [CI inputs and job ownership](ci.md): See what each CI job owns and caches
 - [Code quality gates](code-quality.md): Run lint, types, duplicate, and Rust quality checks
 
