@@ -577,8 +577,12 @@ mod tests {
     fn declaration_bridge_combined_flag_admission_precedes_value_and_attributes() {
         let mut state = State::default();
         state.assign_parameter("v".into(), "outer".into()).unwrap();
-        let bytes = state.declaration_attribute_storage("v", false).unwrap()
-            + state.declaration_attribute_storage("v", true).unwrap();
+        let bytes = state
+            .declaration_attribute_storage("v", false)
+            .unwrap_or_else(|_| panic!("attribute size fits"))
+            + state
+                .declaration_attribute_storage("v", true)
+                .unwrap_or_else(|_| panic!("attribute size fits"));
         let prepared = state
             .prepare_declaration(request(Some("inner"), DeclarationOperation::Assignment))
             .unwrap_or_else(|_| panic!("valid request"));
