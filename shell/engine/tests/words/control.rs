@@ -671,13 +671,18 @@ const ARGUMENT_ERRORS: [ArgumentErrorCase; 7] = [
     },
 ];
 
+fn interactive_argument_rig() -> Rig {
+    let rig = Rig::new(Limits::default());
+    rig.shell.state().borrow_mut().interactive = true;
+    rig.variable("KEEP", "kept");
+    rig
+}
+
 #[test]
 fn builtin_argument_errors_preserve_interactive_sessions() {
     let mut requested_exits = Vec::new();
     for case in &ARGUMENT_ERRORS {
-        let rig = Rig::new(Limits::default());
-        rig.shell.state().borrow_mut().interactive = true;
-        rig.variable("KEEP", "kept");
+        let rig = interactive_argument_rig();
         assert_eq!(
             rig.run(&format!("{}; TRAILING=bad", case.source)),
             case.status
@@ -725,9 +730,7 @@ fn interactive_argument_aborts_unwind_nested_readers_and_function_scopes() {
         "exit 7 8 || INNER=bad",
         "! exit 7 8",
     ] {
-        let rig = Rig::new(Limits::default());
-        rig.shell.state().borrow_mut().interactive = true;
-        rig.variable("KEEP", "kept");
+        let rig = interactive_argument_rig();
         assert_eq!(rig.run(&format!("{source}; TRAILING=bad")), 1, "{source}");
         assert!(!rig.shell.exit_requested(), "{source}");
         assert_eq!(rig.value("TRAILING"), None);
