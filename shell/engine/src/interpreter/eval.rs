@@ -331,6 +331,7 @@ pub(super) async fn read(
     let context = Context {
         evaluation: evaluation.with_retained(source.retained()),
         source,
+        trace: context.trace.nested(),
         ..context
     };
     // A joined reader task breaks the recursive poll/drop chain. Keep the

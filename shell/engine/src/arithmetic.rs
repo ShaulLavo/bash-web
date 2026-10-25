@@ -221,7 +221,15 @@ pub(crate) fn evaluate<'a>(
             }
             let expanded;
             let source = if source.contains(['$', '"', '\\', '`']) {
-                expanded = expand::arithmetic_text(source, state, cancel, max, work).await?;
+                expanded = expand::scalar_text(
+                    expand::ScalarSyntax::Arithmetic,
+                    source,
+                    state,
+                    cancel,
+                    max,
+                    work,
+                )
+                .await?;
                 expanded.as_str()
             } else {
                 source

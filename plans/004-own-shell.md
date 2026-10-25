@@ -3264,6 +3264,41 @@ and its sibling evidence directory.
 Neither note is a fixed bug, an accepted Bash match or a frozen gain of this
 integration. PR59 leaves the caller and target-scan cancellation logic unchanged.
 
+## Follow-up: decode PS4 with the shared prompt decoder, 2026-10-23
+
+PS4 expansion currently preserves prompt escapes rather than decoding them. Reuse
+`expand`'s prompt decoder from the `${x@P}` unit after it lands. Do not add a second
+decoder to `interpreter/xtrace.rs`. Decode before scalar expansion and retain its
+work, cancellation, storage and fatal-error rules.
+
+GNU Bash 5.3.15 control: `PS4='\n\e\a\r\\ '; set -x; echo hi; set +x` emits a
+newline, ESC, BEL, CR and one backslash before each command. The current trace
+writer emits literal escape spellings. An escaped double quote also retains an
+extra backslash. Record exact stderr bytes and test both cases through real Waffle
+when integrating the shared decoder. PR #68 review evidence is under
+`/work/reports/wave-20261022/shell/review68-r1-evidence/`.
+
+`$$` and `${$}` in PS4 no longer reject the command, but the engine adapter still
+has no shell self-PID fact. Its existing scalar lookup returns empty for `$`.
+A later runtime identity unit must provide the real identity for ordinary and
+prompt expansion together, never a made-up numeric value.
+
+## Follow-up: nested array-list expansion in PS4, 2026-10-23
+
+PS4 special-parameter support does not yet cover nested array-list expansion.
+The GNU Bash 5.3.15 control
+`a=("two words" x); PS4='${a[@]} '; set -x; echo hi; set +x` exits 0, prints
+`hi\n`, and traces `two words x echo hi\ntwo words x set +x\n`. PR #68 at
+`6643546aa089757561234163862f0a408301ecee` instead exits 2 with empty output.
+The independent review's `prompt-nested-array` probe records both observations in
+`/work/reports/wave-20261022/shell/review68-takeover-r2-evidence/waffle-probes.json`.
+
+Handle this in the prompt-expansion unit after the shared prompt decoder lands.
+Record the array control and quoted, empty, and IFS neighbors before changing the
+scalar prompt/list boundary. Preserve `operand_piece`'s admitted `part_frame`
+boxing, depth limits, cancellation, and storage accounting. This is not part of
+the declaration fatal-error repair and has no claimed scoreboard gain.
+
 ## Declared-but-unset local names in prefix expansion, 2026-10-23
 
 Status: Approved follow-up. Owner: expansion family. Nonblocking PR70 review

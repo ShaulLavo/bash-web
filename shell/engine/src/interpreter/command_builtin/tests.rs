@@ -193,6 +193,7 @@ impl Rig {
             parameter_error_status: 127,
             loop_depth: 0,
             ignore_errexit: false,
+            trace: super::super::xtrace::Trace::default(),
             compound_child: false,
             core,
         }

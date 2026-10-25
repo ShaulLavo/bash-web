@@ -30,8 +30,9 @@ fn builtin(state: &SharedState, assigned: &[(String, String)]) -> PrefixFrame {
 }
 
 fn assert_startup_defaults(state: &State) {
-    assert_eq!(state.bindings().len(), 5);
+    assert_eq!(state.bindings().len(), 6);
     assert_eq!(state.bindings()["_"], "bash");
+    assert_eq!(state.bindings()["PS4"], "+ ");
     assert_eq!(state.bindings()["OPTIND"], "1");
     assert_eq!(state.bindings()["OPTERR"], "1");
 }
@@ -52,6 +53,7 @@ fn cli_environment_adds_nonexported_shell_defaults() {
     inherited
         .initialize_cli_environment([("PATH".into(), String::new()), ("IFS".into(), ":".into())]);
     assert_eq!(inherited.bindings()["PATH"], "");
+    assert_eq!(inherited.bindings()["PS4"], "+ ");
     assert_eq!(
         inherited.environment(),
         BTreeMap::from([("PATH".into(), String::new()), ("IFS".into(), ":".into())])
@@ -77,6 +79,7 @@ fn runtime_environment_extends_defaults_exports_ifs_and_does_not_invent_path() {
     let mut inherited = State::default();
     inherited.inherit_environment([("IFS".into(), ":".into()), ("PATH".into(), String::new())]);
     assert_eq!(inherited.bindings()["IFS"], ":");
+    assert_eq!(inherited.bindings()["PS4"], "+ ");
     assert_eq!(inherited.environment()["PATH"], "");
 }
 

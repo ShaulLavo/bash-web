@@ -1,0 +1,348 @@
+{
+  "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "cases": [
+    {
+      "id": "xtrace-simple",
+      "code": "{ set -x; echo 'a b' '' \"it's\" '*' a# '#a' '~x' x~ \"'\" $'\\001' 'a=~b'; set +x; } 2>&1 >/dev/null",
+      "status": 0,
+      "stdout": "+ echo 'a b' '' 'it'\\''s' '*' a# '#a' '~x' x~ \\' $'\\001' 'a=~b'\n+ set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-empty-ps4",
+      "code": "{ PS4=''; set -x; echo quiet >/dev/null; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "echo quiet\nset +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-prefix",
+      "code": "{ set -x; V=1 echo hi 2>/dev/null; set +x; } 2>&1 >/dev/null",
+      "status": 0,
+      "stdout": "+ V=1\n+ echo hi\n+ set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-assignment",
+      "code": "{ set -x; a=1; b=\"x y\"; c=; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "+ a=1\n+ b='x y'\n+ c=\n+ set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-parameter",
+      "code": "{ p=trace; PS4='$p '; set -x; echo hi; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "trace echo hi\nhi\ntrace set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-arithmetic",
+      "code": "{ PS4='+$((1+1)) '; set -x; echo hi; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "+2 echo hi\nhi\n+2 set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-quote",
+      "code": "{ PS4='\"hello\" '; set -x; echo hi; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "\"hello\" echo hi\nhi\n\"hello\" set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-substitution",
+      "code": "{ PS4='$(printf prefix) '; set -x; echo hi; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "prefix echo hi\nhi\nprefix set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-substitution",
+      "code": "{ set -x; x=$(echo sub); echo \"$x\"; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "++ echo sub\n+ x=sub\n+ echo sub\nsub\n+ set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-eval",
+      "code": "{ set -x; eval 'echo hi'; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "+ eval 'echo hi'\n++ echo hi\nhi\n+ set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-redirect",
+      "code": "{ set -x; echo hi 2>/dev/null; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "+ echo hi\nhi\n+ set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-disable",
+      "code": "{ set -x; echo hi; set +x; echo bye; } 2>&1",
+      "status": 0,
+      "stdout": "+ echo hi\nhi\n+ set +x\nbye\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-closed-stderr",
+      "code": "{ set -x; echo hi; set +x; } 2>&-",
+      "status": 0,
+      "stdout": "hi\n",
+      "stderr": ""
+    },
+    {
+      "id": "flags-lazy",
+      "code": "set -uf; echo \"${missing-$-}\" \"${-}\"",
+      "status": 0,
+      "stdout": "fhuBc fhuBc\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-declarations",
+      "code": "{ set -x; export a=1 b=\"two words\"; readonly q=3; declare d=4; set +x; } 2>&1",
+      "status": 0,
+      "stdout": "+ export a=1 'b=two words'\n+ a=1\n+ b='two words'\n+ readonly q=3\n+ q=3\n+ declare d=4\n+ set +x\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-declaration-redirect",
+      "code": "{ set -x; export a=1 2>out; set +x; printf 'out:'; cat out; } 2>&1",
+      "status": 0,
+      "stdout": "+ export a=1\n+ set +x\nout:+ a=1\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-nounset",
+      "code": "{ PS4='$missing '; set -eux; echo hi; set +x; } 2>/dev/null",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-required",
+      "code": "{ PS4='${missing:?oops} '; set -ex; echo hi; set +x; } 2>/dev/null",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-nounset-continue",
+      "code": "{ PS4='$missing '; set -ux; echo hi; set +x; } 2>/dev/null",
+      "status": 0,
+      "stdout": "hi\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-required-continue",
+      "code": "{ PS4='${missing:?oops} '; set -x; echo hi; set +x; } 2>/dev/null",
+      "status": 0,
+      "stdout": "hi\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-tested-function",
+      "code": "f() { PS4='$missing '; set -eux; echo hi; set +x; }; if f 2>/dev/null; then echo bad; fi",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-assignment-abort",
+      "code": "{ PS4='$missing '; set -eux; a=1; echo bad; } 2>/dev/null",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-assignment-continue",
+      "code": "{ PS4='$missing '; set -ux; a=1; set +x; echo $a; } 2>/dev/null",
+      "status": 0,
+      "stdout": "1\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-arithmetic-continue",
+      "code": "{ PS4='$((1/0)) '; set -ex; echo hi; set +x; } 2>/dev/null",
+      "status": 0,
+      "stdout": "hi\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-closed-stderr-abort",
+      "code": "{ PS4='$missing '; set -eux; echo hi; set +x; } 2>&-",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-closed-stderr-effects",
+      "code": "{ PS4='$((a+=1)) '; a=0; set -x; echo hi; set +x; echo $a; } 2>&-",
+      "status": 0,
+      "stdout": "hi\n2\n",
+      "stderr": ""
+    },
+    {
+      "id": "flags",
+      "code": "echo \"$-\"; set -euxf; echo \"$-\"; set +euxf; echo \"$-\"",
+      "status": 0,
+      "stdout": "hBc\nefhuxBc\nhBc\n",
+      "stderr": "+ echo efhuxBc\n+ set +euxf\n"
+    },
+    {
+      "id": "combined-pipefail",
+      "code": "set -euo pipefail; echo \"$-\"; false | true; echo bad",
+      "status": 1,
+      "stdout": "ehuBc\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-ps4-at",
+      "code": "set -- a b; PS4='$@ '; set -x; echo hi; set +x",
+      "status": 0,
+      "stdout": "hi\n",
+      "stderr": "a b echo hi\na b set +x\n"
+    },
+    {
+      "id": "xtrace-ps4-special-ifs",
+      "code": "set -- a b; IFS=:; PS4='$@|$*|${@}|${*} '; set -x; echo hi; set +x",
+      "status": 0,
+      "stdout": "hi\n",
+      "stderr": "a b|a:b|a b|a:b echo hi\na b|a:b|a b|a:b set +x\n"
+    },
+    {
+      "id": "xtrace-ps4-empty-at",
+      "code": "set --; PS4='$@ '; set -ux; echo hi; set +x",
+      "status": 0,
+      "stdout": "hi\n",
+      "stderr": " echo hi\n set +x\n"
+    },
+    {
+      "id": "xtrace-ps4-dollar-executes",
+      "code": "{ PS4='$$ ${$} '; set -x; echo hi; set +x; } 2>/dev/null",
+      "status": 0,
+      "stdout": "hi\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-export-abort-tested",
+      "code": "{ unset p; PS4='${p:+${missing:?oops}}${p:=1} '; set -ex; if export a=1; then :; fi; } 2>/dev/null",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-readonly-abort-tested",
+      "code": "{ unset p; PS4='${p:+${missing:?oops}}${p:=1} '; set -ex; if readonly a=1; then :; fi; } 2>/dev/null",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-export-abort-and",
+      "code": "{ unset p; PS4='${p:+${missing:?oops}}${p:=1} '; set -ex; export a=1 && :; echo BAD; } 2>/dev/null",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-export-error-continues",
+      "code": "{ unset p; PS4='${p:+${missing:?oops}}${p:=1} '; set -x; export a=1; set +x; echo \"$a\"; } 2>/dev/null",
+      "status": 127,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-prefix-binding",
+      "code": "PS4='$A '; A=old; set -x; A=new echo hi; set +x; echo $A",
+      "status": 0,
+      "stdout": "hi\nold\n",
+      "stderr": "new A=new\nold echo hi\nold set +x\n"
+    },
+    {
+      "id": "xtrace-prefix-each-binding",
+      "code": "PS4='$A:$B '; A=old; B=outer; set -x; A=new B=inner :; set +x; echo \"$A:$B\"",
+      "status": 0,
+      "stdout": "old:outer\n",
+      "stderr": "new:outer A=new\nnew:inner B=inner\nold:outer :\nold:outer set +x\n"
+    },
+    {
+      "id": "xtrace-prefix-repeated-binding",
+      "code": "PS4='$A '; A=old; set -x; A=new A=more echo hi; set +x; echo $A",
+      "status": 0,
+      "stdout": "hi\nold\n",
+      "stderr": "new A=new\nmore A=more\nold echo hi\nold set +x\n"
+    },
+    {
+      "id": "xtrace-prefix-prompt-binding",
+      "code": "PS4='old '; set -x; PS4='new ' echo hi; set +x",
+      "status": 0,
+      "stdout": "hi\n",
+      "stderr": "new PS4='new '\nold echo hi\nold set +x\n"
+    },
+    {
+      "id": "xtrace-prefix-effects",
+      "code": "PS4='$((A+=1)) '; A=0; set -x; A=10 :; set +x; echo $A",
+      "status": 0,
+      "stdout": "13\n",
+      "stderr": "11 A=11\n12 :\n13 set +x\n"
+    },
+    {
+      "id": "xtrace-redirect-failed-effects",
+      "code": "{ PS4='$((a+=1)) '; a=0; set -x; echo hi >/missing/out; set +x; echo $a; } 2>/dev/null",
+      "status": 0,
+      "stdout": "2\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-exec-effects",
+      "code": "PS4='$((a+=1)) '; a=0; set -x; exec 3>out; set +x; echo $a",
+      "status": 0,
+      "stdout": "2\n",
+      "stderr": "1 exec\n2 set +x\n"
+    },
+    {
+      "id": "xtrace-redirect-substitution-order",
+      "code": "set -x; echo hi >$(echo out); set +x; cat out",
+      "status": 0,
+      "stdout": "hi\n",
+      "stderr": "+ echo hi\n++ echo out\n+ set +x\n"
+    },
+    {
+      "id": "xtrace-prefix-redirect-order",
+      "code": "PS4='$A '; A=old; set -x; A=new echo hi >$(echo out); set +x; cat out",
+      "status": 0,
+      "stdout": "hi\n",
+      "stderr": "new A=new\nold echo hi\noold echo out\nold set +x\n"
+    },
+    {
+      "id": "xtrace-prefix-rhs-redirect-order",
+      "code": "PS4='$A '; A=old; set -x; A=$(echo new) echo hi >$(echo out); set +x; cat out",
+      "status": 0,
+      "stdout": "hi\n",
+      "stderr": "oold echo new\nnew A=new\nold echo hi\noold echo out\nold set +x\n"
+    },
+    {
+      "id": "xtrace-prefix-failed-redirect-effects",
+      "code": "{ a=0; set -x; A=$((a+=1)) : >/missing/out; set +x; echo $a; } 2>/dev/null",
+      "status": 0,
+      "stdout": "1\n",
+      "stderr": ""
+    },
+    {
+      "id": "xtrace-redirect-fatal-first",
+      "code": "{ PS4='${missing:?oops} '; set -ex; if echo hi >/missing/out; then :; fi; set +x; echo BAD; } 2>/dev/null",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-fatal-before-redirect",
+      "code": "{ ( a=${missing:?oops} echo hi 2>errors ); } 2>/dev/null; if test -e errors; then echo created; else echo absent; fi",
+      "status": 0,
+      "stdout": "absent\n",
+      "stderr": ""
+    }
+  ]
+}
