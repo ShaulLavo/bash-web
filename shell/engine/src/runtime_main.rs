@@ -64,6 +64,7 @@ mod guest {
             let mut state = state.borrow_mut();
             state.interactive = command.is_none();
             state.inherit_environment(std::env::vars());
+            state.command_string = command.is_some();
             if let Ok(cwd) = std::env::var("PWD") {
                 state.cwd = cwd;
             }

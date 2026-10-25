@@ -3381,7 +3381,10 @@ fn fatal_errors_keep_completed_effects_and_route_diagnostics() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("a=${u:?bad} args 2>errors; args after"), 127);
     assert_eq!(rig.errors.bytes(), b"/usr/bin/bash: line 1: u: bad\n");
-    assert!(rig.fs.read_file("/home/guest/errors").unwrap().is_empty());
+    assert!(matches!(
+        rig.fs.read_file("/home/guest/errors"),
+        Err(shell_engine::io::IoError::NotFound)
+    ));
 }
 
 #[test]

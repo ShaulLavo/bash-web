@@ -33,6 +33,8 @@ mod source;
 #[cfg(test)]
 mod trap_tests;
 mod type_builtin;
+mod xtrace;
+pub(crate) use xtrace::builtin_assignment;
 
 #[derive(Clone, Debug)]
 pub struct Limits {
@@ -286,6 +288,7 @@ pub(crate) struct Context {
     evaluation: crate::exec::Scope,
     loop_depth: usize,
     ignore_errexit: bool,
+    trace: xtrace::Trace,
 }
 impl Context {
     fn root(
@@ -310,7 +313,19 @@ impl Context {
             compound_child: false,
             loop_depth: 0,
             ignore_errexit: false,
+            trace: xtrace::Trace::default(),
             evaluation,
+        }
+    }
+    fn substitution(&self, cancel: Cancel, signal: Rc<Cell<Option<i32>>>, group: GroupId) -> Self {
+        Self {
+            cancel,
+            signal,
+            group,
+            parameter_error_status: 1,
+            compound_child: false,
+            trace: self.trace.nested(),
+            ..self.isolated()
         }
     }
 
@@ -1933,6 +1948,12 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
     };
     let (name, message, line, status) = match error {
         expand::Error::Status(code) => return Outcome::status(code),
+        expand::Error::Abort(code) => {
+            return Outcome {
+                code,
+                flow: Flow::Abort,
+            };
+        }
         expand::Error::AssignmentDepth => return Outcome { code: 1, flow },
         expand::Error::SpecialAssignment { name, line } => {
             (name, "cannot assign in this way".to_owned(), line, 1)
@@ -2254,6 +2275,7 @@ async fn launch_background(
         evaluation: context.evaluation.new_task(),
         loop_depth: 0,
         ignore_errexit: context.ignore_errexit,
+        trace: context.trace,
     };
     let fds = Rc::new(RefCell::new(fds.borrow().clone()));
     let parent_scope = context.scope.clone();
@@ -2422,14 +2444,9 @@ impl Substitutions {
         let parent = self.context.cancel.clone();
         let parent_signal = self.context.signal.clone();
         let parent_scope = self.context.scope.clone();
-        let context = Context {
-            cancel: cancel.clone(),
-            signal: signal.clone(),
-            group,
-            parameter_error_status: 1,
-            compound_child: false,
-            ..self.context.isolated()
-        };
+        let context = self
+            .context
+            .substitution(cancel.clone(), signal.clone(), group);
         let link = cancel.clone();
         let link_signal = signal.clone();
         let capture_complete = Cancel::new();
@@ -2566,14 +2583,9 @@ impl Substitutions {
         let cancel = Cancel::new();
         let group = core.host.allocate_background_group();
         let signal = Rc::new(Cell::new(None));
-        let context = Context {
-            cancel: cancel.clone(),
-            signal: signal.clone(),
-            group,
-            parameter_error_status: 1,
-            compound_child: false,
-            ..self.context.isolated()
-        };
+        let context = self
+            .context
+            .substitution(cancel.clone(), signal.clone(), group);
         let parent = self.context.cancel.clone();
         let parent_signal = self.context.signal.clone();
         let parent_scope = self.context.scope.clone();
@@ -3022,8 +3034,8 @@ async fn prepare_execution_body(
     mut work: expand::Work,
 ) -> Result<PreparedExecution, CommandError> {
     let line = simple.expansion_line;
-    // Bash expands command words first. Assignment-only commands then assign
-    // before redirects; named commands redirect before expanding prefix RHSs.
+    // Bash expands command words first. Prefix assignments must finish before
+    // redirects so a fatal RHS does not create the command's output files.
     if argv.is_empty() {
         assignments(
             simple.assignments,
@@ -3031,8 +3043,11 @@ async fn prepare_execution_body(
             context,
             &mut bytes,
             &mut work,
-            true,
-            None,
+            AssignmentMode {
+                commit: true,
+                diagnostics: None,
+                fds: &fds,
+            },
         )
         .await?;
         let fds = redirects(&simple.redirects, state, fds, context, &mut work, Some(1)).await?;
@@ -3044,6 +3059,21 @@ async fn prepare_execution_body(
             work,
         });
     }
+    let function_prefix = state.borrow().functions().contains_key(&argv[0]);
+    let assigned = assignments(
+        simple.assignments,
+        state,
+        context,
+        &mut bytes,
+        &mut work,
+        AssignmentMode {
+            commit: false,
+            diagnostics: function_prefix.then_some(&fds),
+            fds: &fds,
+        },
+    )
+    .await?;
+    xtrace::command(argv, state, &fds, context).await?;
     let name = &argv[0];
     let shell_command = state.borrow().functions().contains_key(name)
         || (commands::enabled(name, state.borrow().disabled_builtins)
@@ -3056,17 +3086,6 @@ async fn prepare_execution_body(
         context,
         &mut work,
         heredoc_status,
-    )
-    .await?;
-    let function_prefix = state.borrow().functions().contains_key(name);
-    let assigned = assignments(
-        simple.assignments,
-        state,
-        context,
-        &mut bytes,
-        &mut work,
-        false,
-        function_prefix.then_some(&fds),
     )
     .await?;
     work.substitutions = None;
@@ -3772,14 +3791,20 @@ async fn literal_arithmetic_failure(
     result
 }
 
+#[derive(Clone, Copy)]
+struct AssignmentMode<'a> {
+    commit: bool,
+    diagnostics: Option<&'a Descriptors>,
+    fds: &'a Descriptors,
+}
+
 async fn assignments(
     assignments: Vec<Assignment>,
     state: &SharedState,
     context: &Context,
     bytes: &mut usize,
     work: &mut expand::Work,
-    commit: bool,
-    function_diagnostics: Option<&Descriptors>,
+    mode: AssignmentMode<'_>,
 ) -> Result<Vec<(String, String)>, expand::Error> {
     if assignments.is_empty() {
         return Ok(Vec::new());
@@ -3791,7 +3816,7 @@ async fn assignments(
         context,
         bytes,
         work,
-        (commit, function_diagnostics),
+        mode,
         &mut completed,
     )
     .await;
@@ -3812,10 +3837,14 @@ async fn assignments_body(
     context: &Context,
     bytes: &mut usize,
     work: &mut expand::Work,
-    mode: (bool, Option<&Descriptors>),
+    mode: AssignmentMode<'_>,
     completed: &mut crate::state::AssignmentFrame,
 ) -> Result<Vec<(String, String)>, expand::Error> {
-    let (commit, function_diagnostics) = mode;
+    let AssignmentMode {
+        commit,
+        diagnostics: function_diagnostics,
+        fds,
+    } = mode;
     if assignments.is_empty() {
         return Ok(Vec::new());
     }
@@ -3890,6 +3919,9 @@ async fn assignments_body(
         } else {
             value
         };
+        if commit {
+            xtrace::assignment(&assignment.name, &value, state, fds, context).await?;
+        }
         let assignment_name = assignment.name.clone();
         if let Err(name) = frame.set(assignment.name, value) {
             if let Some(fds) = function_diagnostics {
@@ -3908,6 +3940,9 @@ async fn assignments_body(
                 line: None,
                 expansion: true,
             });
+        }
+        if !commit {
+            xtrace::prefix_assignment(&assignment_name, state, fds, context).await?;
         }
         names.push(assignment_name);
         if commit {
@@ -4217,6 +4252,7 @@ mod scope_tests {
             compound_child: false,
             loop_depth: 0,
             ignore_errexit: false,
+            trace: xtrace::Trace::default(),
         };
         (session.state(), session.core.descriptors.clone(), context)
     }
