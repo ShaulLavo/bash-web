@@ -3709,6 +3709,21 @@ argument initialization and indexed compound initializers remain with their
 existing owners and are not duplicated here.
 
 
+### Inherited malformed-header scanner nesting, October 24, 2026
+
+Approved follow-up, not part of the time/recovery integration. Independent review
+`/work/reports/wave-20261022/shell/review83-time-recovery-repair-r2.md` approved
+`af55222bcfcf565224691733460eeef3c1992f74` with no blocking findings. Its source
+`bad_brace_parameter_length` in `shell/parser/src/parser/mod.rs:6354-6447`,
+especially lines 6390-6407, retains subscript and length-prefix branches deeper
+than the three-block rule. Those branches already existed in
+`bad_brace_parameter` before the allocation-free extraction. The review's
+`review83-time-recovery-repair-r2-evidence/` records the source comparison and
+52 native plus matching patched-WASI checks. On the next change to this helper,
+extract the balanced-subscript scan and length-prefix classification, then rerun
+malformed-header and valid-unsupported status controls. Do not widen recovery or
+rewrite the parser as part of this follow-up.
+
 ## Source call-stack and eval-prefix composition follow-ups, 2026-10-24
 
 Status: Approved, separate from PR91's negative-pattern integration. Owners:

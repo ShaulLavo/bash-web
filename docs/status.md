@@ -73,7 +73,7 @@ Observed at commit `a745a96` with the native `shell-engine`. Each row is a one-l
 | Array elements in arithmetic | `arr=(1 2 3); echo $(( arr[0] + arr[2] ))` | status 2, no output | prints `4` |
 | `printf` floating point | `printf "%5.2f\n" 3.14159` | `unsupported format conversion`, status 2 | prints ` 3.14` |
 | Traps running | `trap "echo bye" EXIT; echo hi` | prints `hi` only. `trap` stores and prints bindings, and no event runs one. | prints `hi` then `bye` |
-| `time` and `coproc` | `time true` | status 2 | runs |
+| `coproc` | `coproc true` | status 2 | runs |
 | `$$`, `BASHPID`, `RANDOM`, `SECONDS` | `echo "[$$] [$BASHPID] [$RANDOM] [$SECONDS]"` | empty values | numbers |
 
 The feature pages list more gaps. Each page ends with what it leaves out: [printf](printf-options.md), [read](read.md), [indexed arrays](indexed-arrays.md), [traps](trap-registration.md), and [completion](completion.md). `[[ =~ ]]` works only in `C`, `POSIX`, `C.UTF-8`, and `C.utf8` locales and returns status 2 elsewhere. The browser host sets `LANG=C.UTF-8`.

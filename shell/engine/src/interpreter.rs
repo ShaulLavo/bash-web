@@ -30,6 +30,7 @@ mod indexed;
 mod reader;
 mod select;
 mod source;
+mod timing;
 #[cfg(test)]
 mod trap_tests;
 mod type_builtin;
@@ -83,6 +84,9 @@ pub(crate) enum Flow {
     Break(usize),
     Continue(usize),
     DiscardReadUnit,
+    // Bash's report_error: the failing command's `execute` frame turns this
+    // into DiscardReadUnit, or into Abort when errexit is set.
+    ReportedError,
     Resource,
 }
 #[derive(Clone, Copy, Debug)]
@@ -290,6 +294,11 @@ pub(crate) struct Context {
     ignore_errexit: bool,
     trace: xtrace::Trace,
 }
+pub(crate) struct RenderedFunction {
+    pub(crate) text: String,
+    _storage: crate::exec::Allocation,
+}
+
 impl Context {
     fn root(
         core: Rc<Core>,
@@ -359,6 +368,39 @@ impl Context {
         bytes: usize,
     ) -> Result<crate::exec::Allocation, i32> {
         self.evaluation.admit_execution(bytes)
+    }
+    pub(crate) fn render_function(
+        &self,
+        name: &str,
+        function: &StoredFunction,
+        work: &mut expand::Work,
+    ) -> Result<RenderedFunction, i32> {
+        let limit = self
+            .limits()
+            .expansion_bytes
+            .min(work.storage_left())
+            .min(self.evaluation.execution_available());
+        // Reserve the printer's entire possible live buffer before allocation.
+        let storage = self.evaluation.admit_execution(limit)?;
+        let text = function_string_bounded(
+            name,
+            &function.body,
+            &Cell::new(limit),
+            limit,
+            Some(&self.parser_budget()),
+        )
+        .map_err(|_| {
+            if self.cancel.is_cancelled() {
+                self.cancel_status()
+            } else {
+                2
+            }
+        })?;
+        work.admit_storage(text.len()).map_err(admission_status)?;
+        Ok(RenderedFunction {
+            text,
+            _storage: storage,
+        })
     }
     fn parser_budget(&self) -> shell_parser::limits::ExecutionBudget {
         let core = self.core.clone();
@@ -1162,7 +1204,9 @@ fn execute(
                     | Command::List(_)
                     | Command::Function(_)
                     | Command::Compound(
-                        CompoundCommand::BraceGroup(_) | CompoundCommand::Case(_),
+                        CompoundCommand::Time(_)
+                            | CompoundCommand::BraceGroup(_)
+                            | CompoundCommand::Case(_),
                         _
                     )
             );
@@ -1179,6 +1223,7 @@ fn execute(
                         )
                 );
             let mut result = command_body(command, state.clone(), fds, context).await;
+            result.flow = settle_reported_error(result.flow, &state);
             if check_errexit
                 && result.flow == Flow::Normal
                 && result.code != 0
@@ -1190,6 +1235,16 @@ fn execute(
         },
         Outcome::status,
     )
+}
+
+/// Bash's report_error ends the script under errexit and otherwise discards
+/// the rest of the read unit, even where errexit is otherwise ignored.
+fn settle_reported_error(flow: Flow, state: &SharedState) -> Flow {
+    match flow {
+        Flow::ReportedError if state.borrow().errexit => Flow::Abort,
+        Flow::ReportedError => Flow::DiscardReadUnit,
+        flow => flow,
+    }
 }
 
 fn finish_command(state: &SharedState, result: Outcome, preserve_pipeline: bool) -> Outcome {
@@ -1550,6 +1605,7 @@ fn execute_compound_body<'a>(
         CompoundCommand::Case(case_) => {
             evaluation.frame(run_case(case_, state, fds, context, work), Outcome::status)
         }
+        CompoundCommand::Time(time) => timing::run(*time, state, fds, context),
         _ => futures::future::Either::Left(futures::future::ready(Outcome::status(2))),
     }
 }
@@ -1941,6 +1997,8 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
             }
     ) {
         Flow::DiscardReadUnit
+    } else if matches!(error, expand::Error::BadSubstitution { .. }) {
+        Flow::ReportedError
     } else {
         // Abort this submitted script, not the persistent interactive session.
         // Only the explicit exit builtin requests session shutdown.
@@ -4218,21 +4276,26 @@ async fn redirects(
 }
 
 #[cfg(test)]
+fn isolated_session(limits: Limits, filesystem_bytes: usize) -> (Session, GroupId) {
+    let executor = Executor::new();
+    let host = Rc::new(crate::process::InProcessHost::new(executor.clone()));
+    let group = host.allocate_group();
+    let session = Session::new(
+        executor,
+        host,
+        Rc::new(crate::io::MemoryFs::new(filesystem_bytes)),
+        limits,
+    );
+    (session, group)
+}
+
+#[cfg(test)]
 mod scope_tests {
     use super::*;
-    use crate::{io::MemoryFs, process::InProcessHost};
     use futures::FutureExt;
 
     fn replay_context() -> (SharedState, Descriptors, Context) {
-        let executor = Executor::new();
-        let host = Rc::new(InProcessHost::new(executor.clone()));
-        let group = host.allocate_group();
-        let session = Session::new(
-            executor,
-            host,
-            Rc::new(MemoryFs::new(4096)),
-            Limits::default(),
-        );
+        let (session, group) = isolated_session(Limits::default(), 4096);
         let context = Context {
             evaluation: crate::exec::Scope::new(
                 session.core.limits.source_bytes,

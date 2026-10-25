@@ -804,14 +804,43 @@ async fn declarations(
     let DeclarationOptions {
         print,
         function_names,
+        functions,
         inherit,
         nameref,
         readonly,
         exported,
         case,
     } = declaration_options(name, &mut args, context, work).await?;
+    if functions {
+        if function_names
+            || nameref
+            || readonly
+            || exported
+            || case.specified()
+            || args.peek().is_none()
+        {
+            return Err(2);
+        }
+        return declarations::functions(
+            declarations::FunctionFormat::Definition,
+            args,
+            state,
+            fds,
+            context,
+            work,
+        )
+        .await;
+    }
     if function_names {
-        return declarations::function_names(args, state, fds, context, work).await;
+        return declarations::functions(
+            declarations::FunctionFormat::Name,
+            args,
+            state,
+            fds,
+            context,
+            work,
+        )
+        .await;
     }
     if print {
         return declarations::print(name, args, state, fds, context, work).await;
@@ -978,6 +1007,7 @@ fn declaration_attributes(
 struct DeclarationOptions {
     print: bool,
     function_names: bool,
+    functions: bool,
     inherit: bool,
     nameref: bool,
     readonly: bool,
@@ -1019,6 +1049,7 @@ async fn declaration_option(
         match flag {
             b'p' if enabled && name != "local" => flags.print = true,
             b'F' if enabled && name != "local" => flags.function_names = true,
+            b'f' if enabled && name != "local" => flags.functions = true,
             b'I' if enabled && name == "local" => flags.inherit = true,
             b'n' if enabled => flags.nameref = true,
             b'r' if enabled => flags.readonly = true,

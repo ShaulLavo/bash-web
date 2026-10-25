@@ -259,7 +259,7 @@ fn scalar_default_apostrophe_spans_defer_substitution_lookalikes() {
 }
 
 #[test]
-fn selected_malformed_lazy_substitutions_are_fatal_status_one() {
+fn selected_malformed_lazy_substitutions_discard_their_line_with_status_one() {
     for source in [
         r#"unset v; args "${v:-'${'}" following; args after"#,
         r#"unset v; args "${v-'$('}" following; args after"#,
@@ -270,8 +270,9 @@ fn selected_malformed_lazy_substitutions_are_fatal_status_one() {
         r#"unset v; args "${v:="${v:-'$('}"}" following; args after"#,
     ] {
         let rig = Rig::new(Limits::default());
-        assert_eq!(rig.run(source), 1, "{source}");
-        assert!(rig.calls.borrow().is_empty(), "{source}");
+        let source = format!("{source}\nargs next $?");
+        assert_eq!(rig.run(&source), 0, "{source}");
+        assert_eq!(*rig.calls.borrow(), [["next", "1"]], "{source}");
         assert!(rig.output.bytes().is_empty(), "{source}");
         assert!(
             String::from_utf8(rig.errors.bytes())

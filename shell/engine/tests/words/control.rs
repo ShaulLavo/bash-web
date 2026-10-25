@@ -378,6 +378,175 @@ fn exec_in_an_unredirected_loop_changes_the_surrounding_descriptor_bindings() {
 }
 
 #[test]
+fn time_reports_real_time_after_the_pipeline_and_keeps_its_status() {
+    let rig = Rig::new(Limits::default());
+    let script = "TIMEFORMAT='%0R|%0lR|%%|x%'; time true | false";
+    assert_eq!(rig.run(script), 1);
+    assert_eq!(rig.errors.bytes(), b"0|0m0s|%|x%\n");
+}
+
+#[test]
+fn time_default_reports_omit_cpu_lines_the_runtime_cannot_measure() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("time true"), 0);
+    let report = String::from_utf8(rig.errors.bytes()).unwrap();
+    assert!(report.starts_with("\nreal\t0m0."), "{report:?}");
+    assert!(
+        report.ends_with("s\n") && !report.contains("user"),
+        "{report:?}"
+    );
+}
+
+#[test]
+fn time_rejects_cpu_and_unknown_directives_without_a_report() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("TIMEFORMAT='a %U b'; time true; TIMEFORMAT='%X'; time true"),
+        0
+    );
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: TIMEFORMAT: `U': CPU time is unavailable\n/usr/bin/bash: TIMEFORMAT: `X': invalid format character\n"
+    );
+}
+
+#[test]
+fn time_takes_only_bash_options_and_reports_once_for_nested_keywords() {
+    let rig = Rig::new(Limits::default());
+    let script =
+        "TIMEFORMAT=T; time -p -- args a; time -- args b; time time args c; time -p -p args d";
+    assert_eq!(rig.run(script), 127);
+    assert_eq!(*rig.calls.borrow(), [vec!["a"], vec!["b"], vec!["c"]]);
+    let errors = String::from_utf8(rig.errors.bytes()).unwrap();
+    assert_eq!(errors.matches("real ").count(), 3, "{errors:?}");
+    assert_eq!(errors.matches("T\n").count(), 1, "{errors:?}");
+}
+
+#[test]
+fn bad_substitution_discards_its_line_or_exits_under_errexit() {
+    let rig = Rig::new(Limits::default());
+    let script = "f() { args ${x!}; args in; }\nf; args same\n( args ${x!}; args in ); args sub $?\nargs next $?";
+    assert_eq!(rig.run(script), 0);
+    assert_eq!(*rig.calls.borrow(), [vec!["sub", "1"], vec!["next", "0"]]);
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run("set -e; f() { args ${x!}; }; f || args handled\nargs after"),
+        1
+    );
+    assert!(rig.calls.borrow().is_empty());
+}
+
+#[test]
+fn timed_function_declarations_keep_bash_printing() {
+    for (script, expected) in [
+        (
+            "f() { time -- echo a; }; declare -f f",
+            "f () \n{ \n    time -p echo a\n}\n",
+        ),
+        (
+            "f() { time -p true | false; }; declare -f f",
+            "f () \n{ \n    time -p true | false\n}\n",
+        ),
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(script), 0, "{script}: {:?}", rig.errors.bytes());
+        assert_eq!(rig.output.bytes(), expected.as_bytes(), "{script}");
+    }
+}
+
+#[test]
+fn nested_bad_substitution_discards_its_line_with_status_one() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("echo ${x:-${y!}}\necho after $?"), 0);
+    assert_eq!(rig.output.bytes(), b"after 1\n");
+    assert!(
+        String::from_utf8(rig.errors.bytes())
+            .unwrap()
+            .contains("bad substitution")
+    );
+}
+
+#[test]
+fn timed_function_declarations_reject_large_reports_and_refund_storage() {
+    let rig = Rig::new(Limits {
+        execution_bytes: 64 * 1024,
+        ..Limits::default()
+    });
+    assert_eq!(rig.run("f() { time -- echo a; }"), 0);
+    assert_eq!(
+        rig.run(&format!(
+            "large() {{ time echo '{}'; }}; declare -f large",
+            "x".repeat(100 * 1024)
+        )),
+        2
+    );
+    assert!(rig.output.bytes().is_empty());
+    assert_eq!(rig.run("declare -f f"), 0);
+    assert_eq!(rig.output.bytes(), b"f () \n{ \n    time -p echo a\n}\n");
+    assert_eq!(rig.ex.drive(64).pending, 0);
+}
+
+#[test]
+fn time_reporting_quota_failure_preserves_the_command_outcome() {
+    for (command, status) in [("true", 0), ("false", 1)] {
+        let rig = Rig::new(Limits {
+            expansion_bytes: 35,
+            ..Limits::default()
+        });
+        assert_eq!(rig.run(&format!("TIMEFORMAT='%U'; time {command}")), status);
+        assert!(rig.output.bytes().is_empty());
+        assert!(rig.errors.bytes().is_empty(), "{:?}", rig.errors.bytes());
+    }
+}
+
+#[test]
+fn time_reporting_tight_formats_cannot_emit_unadmitted_text() {
+    for (format, source, bytes) in [
+        (None, "time false", 160),
+        (None, "time -p false", 128),
+        (Some("T"), "time false", 17),
+        (Some("%U"), "time false", 57),
+        (Some("%S"), "time false", 57),
+        (Some("%P"), "time false", 57),
+        (Some("%X"), "time false", 58),
+        (Some("%💥"), "time false", 85),
+        (Some(""), "time false", 35),
+    ] {
+        let rig = Rig::new(Limits {
+            expansion_bytes: bytes,
+            ..Limits::default()
+        });
+        if let Some(format) = format {
+            rig.variable("TIMEFORMAT", format);
+        }
+        assert_eq!(rig.run(source), 1, "{format:?} {source} {bytes}");
+        assert!(
+            rig.errors.bytes().is_empty(),
+            "{format:?}: {:?}",
+            rig.errors.bytes()
+        );
+        assert!(rig.output.bytes().is_empty());
+    }
+}
+
+#[test]
+fn time_reporting_unicode_and_long_invalid_formats_keep_exact_diagnostics() {
+    for (format, directive) in [
+        ("%💥".to_owned(), "💥"),
+        (format!("{}%X", "💥".repeat(1024)), "X"),
+    ] {
+        let rig = Rig::new(Limits::default());
+        rig.variable("TIMEFORMAT", &format);
+        assert_eq!(rig.run("time false"), 1);
+        assert_eq!(
+            rig.errors.bytes(),
+            format!("/usr/bin/bash: TIMEFORMAT: `{directive}': invalid format character\n")
+                .as_bytes()
+        );
+    }
+}
+
+#[test]
 fn noexec_skips_execution_and_persists_across_submitted_read_units() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("x=before; set -n; x=after; args BAD; echo BAD"), 0);

@@ -1,0 +1,598 @@
+{
+  "schema": 1,
+  "bash": "5.3.15(1)-release",
+  "cases": [
+    {
+      "id": "oils:errexit:111",
+      "script": "set -o errexit\ntime false\necho status=$?\n\n",
+      "bash": {
+        "status": 1,
+        "stdout": ""
+      }
+    },
+    {
+      "id": "brush-suite:options/set-e:133",
+      "script": "set -e\ntime false\necho \"should not print\"\n",
+      "bash": {
+        "status": 1,
+        "stdout": ""
+      }
+    },
+    {
+      "id": "brush-suite:options/set-e:136",
+      "script": "set -e\ntime true | false\necho \"after\"\n",
+      "bash": {
+        "status": 1,
+        "stdout": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:bashbox-interpreter-core:858",
+      "script": "time echo hi\n",
+      "bash": {
+        "status": 0,
+        "stdout": "aGkK"
+      }
+    },
+    {
+      "id": "bashkit-suite:bashbox-interpreter-core:865",
+      "script": "time -p true\n",
+      "bash": {
+        "status": 0,
+        "stdout": ""
+      }
+    },
+    {
+      "id": "bashkit-suite:bashbox-parser:77",
+      "script": "time -p echo hi\n",
+      "bash": {
+        "status": 0,
+        "stdout": "aGkK"
+      }
+    },
+    {
+      "id": "bashkit-suite:time:1",
+      "script": "time echo hello\n",
+      "bash": {
+        "status": 0,
+        "stdout": "aGVsbG8K"
+      }
+    },
+    {
+      "id": "bashkit-suite:time:8",
+      "script": "time true\necho $?\n",
+      "bash": {
+        "status": 0,
+        "stdout": "MAo="
+      }
+    },
+    {
+      "id": "bashkit-suite:time:16",
+      "script": "time false\necho $?\n",
+      "bash": {
+        "status": 0,
+        "stdout": "MQo="
+      }
+    },
+    {
+      "id": "bashkit-suite:time:24",
+      "script": "time\necho done\n",
+      "bash": {
+        "status": 0,
+        "stdout": "ZG9uZQo="
+      }
+    },
+    {
+      "id": "bashkit-suite:time:39",
+      "script": "time -p echo hello\n",
+      "bash": {
+        "status": 0,
+        "stdout": "aGVsbG8K"
+      }
+    },
+    {
+      "id": "bashkit-suite:time:46",
+      "script": "time (echo one; echo two)\n",
+      "bash": {
+        "status": 0,
+        "stdout": "b25lCnR3bwo="
+      }
+    },
+    {
+      "id": "bashkit-suite:time:54",
+      "script": "time { echo a; echo b; }\n",
+      "bash": {
+        "status": 0,
+        "stdout": "YQpiCg=="
+      }
+    },
+    {
+      "id": "bashkit-suite:time:62",
+      "script": "time for i in 1 2; do echo $i; done\n",
+      "bash": {
+        "status": 0,
+        "stdout": "MQoyCg=="
+      }
+    },
+    {
+      "id": "bashkit-suite:time:70",
+      "script": "msg=\"world\"\ntime echo hello $msg\n",
+      "bash": {
+        "status": 0,
+        "stdout": "aGVsbG8gd29ybGQK"
+      }
+    },
+    {
+      "id": "bashkit-suite:time:78",
+      "script": "time true | false\necho $?\n",
+      "bash": {
+        "status": 0,
+        "stdout": "MQo="
+      }
+    },
+    {
+      "id": "bashkit-suite:time:86",
+      "script": "TIMEFORMAT='t=%0R%%'\n{ time true; } 2>&1\nTIMEFORMAT=\n{ time true; } 2>&1\necho end\n",
+      "bash": {
+        "status": 0,
+        "stdout": "dD0wJQplbmQK"
+      }
+    },
+    {
+      "id": "time-control-0",
+      "script": "time true | false; echo $? ${PIPESTATUS[@]}",
+      "bash": {
+        "status": 0,
+        "stdout": "MSAwIDEK"
+      }
+    },
+    {
+      "id": "time-control-1",
+      "script": "TIMEFORMAT='%0R|%0lR|%0E%%|x%'; { time true; } 2>&1",
+      "bash": {
+        "status": 0,
+        "stdout": "MHwwbTBzfDAlfHglCg=="
+      }
+    },
+    {
+      "id": "time-control-2",
+      "script": "TIMEFORMAT='a %X b'; { time true; } 2>/dev/null; echo st=$?",
+      "bash": {
+        "status": 0,
+        "stdout": "c3Q9MAo="
+      }
+    },
+    {
+      "id": "time-control-3",
+      "script": "time -f x echo hi 2>/dev/null; echo $?",
+      "bash": {
+        "status": 0,
+        "stdout": "MTI3Cg=="
+      }
+    },
+    {
+      "id": "time-control-4",
+      "script": "TIMEFORMAT=T; { time -- echo hi; } 2>&1 | { read -r line; echo \"$line\"; }",
+      "bash": {
+        "status": 0,
+        "stdout": "aGkK"
+      }
+    },
+    {
+      "id": "time-control-5",
+      "script": "TIMEFORMAT=T; { time -p -- echo hi; } 2>&1 | { read -r line; echo \"$line\"; }",
+      "bash": {
+        "status": 0,
+        "stdout": "aGkK"
+      }
+    },
+    {
+      "id": "time-control-6",
+      "script": "time -p -p echo hi 2>/dev/null; echo $?",
+      "bash": {
+        "status": 0,
+        "stdout": "MTI3Cg=="
+      }
+    },
+    {
+      "id": "time-control-7",
+      "script": "time -- -p echo hi 2>/dev/null; echo $?",
+      "bash": {
+        "status": 0,
+        "stdout": "MTI3Cg=="
+      }
+    },
+    {
+      "id": "time-control-8",
+      "script": "TIMEFORMAT=T; { time\necho done; } 2>&1",
+      "bash": {
+        "status": 0,
+        "stdout": "VApkb25lCg=="
+      }
+    },
+    {
+      "id": "time-control-9",
+      "script": "TIMEFORMAT=T; { time; echo done; } 2>&1",
+      "bash": {
+        "status": 0,
+        "stdout": "VApkb25lCg=="
+      }
+    },
+    {
+      "id": "time-control-10",
+      "script": "TIMEFORMAT=T; { time & wait; } 2>&1; echo $?",
+      "bash": {
+        "status": 0,
+        "stdout": "VAowCg=="
+      }
+    },
+    {
+      "id": "time-control-11",
+      "script": "TIMEFORMAT=T; time ! false; echo $?",
+      "bash": {
+        "status": 0,
+        "stdout": "MAo="
+      }
+    },
+    {
+      "id": "time-control-12",
+      "script": "TIMEFORMAT=T; ! time false; echo $?",
+      "bash": {
+        "status": 0,
+        "stdout": "MAo="
+      }
+    },
+    {
+      "id": "time-control-13",
+      "script": "TIMEFORMAT=T; ! time true; echo $?",
+      "bash": {
+        "status": 0,
+        "stdout": "MQo="
+      }
+    },
+    {
+      "id": "time-control-14",
+      "script": "TIMEFORMAT=T; set -e; { time false; } 2>&1; echo no",
+      "bash": {
+        "status": 1,
+        "stdout": "VAo="
+      }
+    },
+    {
+      "id": "time-control-15",
+      "script": "TIMEFORMAT=T; time false && echo and || echo or",
+      "bash": {
+        "status": 0,
+        "stdout": "b3IK"
+      }
+    },
+    {
+      "id": "time-control-16",
+      "script": "TIMEFORMAT=T; f() { return 3; }; time f; echo $?",
+      "bash": {
+        "status": 0,
+        "stdout": "Mwo="
+      }
+    },
+    {
+      "id": "time-control-17",
+      "script": "TIMEFORMAT=T; { time exit 4; } 2>&1; echo no",
+      "bash": {
+        "status": 4,
+        "stdout": "VAo="
+      }
+    },
+    {
+      "id": "time-control-18",
+      "script": "TIMEFORMAT=T; { time echo a; } 2>&1; echo b",
+      "bash": {
+        "status": 0,
+        "stdout": "YQpUCmIK"
+      }
+    },
+    {
+      "id": "time-control-19",
+      "script": "TIMEFORMAT=T; { time { echo in; } >/dev/null; } 2>&1; echo after",
+      "bash": {
+        "status": 0,
+        "stdout": "VAphZnRlcgo="
+      }
+    },
+    {
+      "id": "time-control-20",
+      "script": "TIMEFORMAT=T; { time time echo x; } 2>&1",
+      "bash": {
+        "status": 0,
+        "stdout": "eApUCg=="
+      }
+    },
+    {
+      "id": "time-control-21",
+      "script": "TIMEFORMAT=T; for i in 1 2; do time break; done; echo $i",
+      "bash": {
+        "status": 0,
+        "stdout": "MQo="
+      }
+    },
+    {
+      "id": "time-control-22",
+      "script": "TIMEFORMAT=T; x=$( { time echo sub; } 2>&1 ); echo \"<$x>\"",
+      "bash": {
+        "status": 0,
+        "stdout": "PHN1YgpUPgo="
+      }
+    },
+    {
+      "id": "time-control-23",
+      "script": "TIMEFORMAT=T; time (exit 5); echo $?",
+      "bash": {
+        "status": 0,
+        "stdout": "NQo="
+      }
+    },
+    {
+      "id": "time-control-24",
+      "script": "TIMEFORMAT=T; false; time; echo $?",
+      "bash": {
+        "status": 0,
+        "stdout": "MAo="
+      }
+    },
+    {
+      "id": "time-control-25",
+      "script": "TIMEFORMAT=T; { time echo a & wait; } 2>&1",
+      "bash": {
+        "status": 0,
+        "stdout": "YQpUCg=="
+      }
+    },
+    {
+      "id": "time-control-26",
+      "script": "TIMEFORMAT=T; time x=2; echo $x",
+      "bash": {
+        "status": 0,
+        "stdout": "Mgo="
+      }
+    },
+    {
+      "id": "time-control-27",
+      "script": "TIMEFORMAT=$'a\\nb'; { time true; } 2>&1",
+      "bash": {
+        "status": 0,
+        "stdout": "YQpiCg=="
+      }
+    },
+    {
+      "id": "time-control-28",
+      "script": "TIMEFORMAT=; { time true; } 2>&1; echo end",
+      "bash": {
+        "status": 0,
+        "stdout": "ZW5kCg=="
+      }
+    },
+    {
+      "id": "time-control-29",
+      "script": "time && echo x",
+      "bash": {
+        "status": 2,
+        "stdout": ""
+      }
+    },
+    {
+      "id": "time-control-30",
+      "script": "time | echo piped",
+      "bash": {
+        "status": 2,
+        "stdout": ""
+      }
+    },
+    {
+      "id": "time-control-31",
+      "script": "case x in x) time;; esac; echo ok",
+      "bash": {
+        "status": 2,
+        "stdout": ""
+      }
+    },
+    {
+      "id": "time-control-32",
+      "script": "(time); echo ok",
+      "bash": {
+        "status": 2,
+        "stdout": ""
+      }
+    },
+    {
+      "id": "time-control-33",
+      "script": "TIMEFORMAT=T; { case x in x) time\n;; esac; } 2>&1; echo ok",
+      "bash": {
+        "status": 0,
+        "stdout": "VApvawo="
+      }
+    },
+    {
+      "id": "time-control-34",
+      "script": "TIMEFORMAT=T; { (time\n); } 2>&1; echo ok",
+      "bash": {
+        "status": 0,
+        "stdout": "VApvawo="
+      }
+    },
+    {
+      "id": "time-control-35",
+      "script": "f() { time -- echo a; }; declare -f f",
+      "bash": {
+        "status": 0,
+        "stdout": "ZiAoKSAKeyAKICAgIHRpbWUgLXAgZWNobyBhCn0K"
+      }
+    },
+    {
+      "id": "time-control-36",
+      "script": "f() { time -p true | false; }; declare -f f",
+      "bash": {
+        "status": 0,
+        "stdout": "ZiAoKSAKeyAKICAgIHRpbWUgLXAgdHJ1ZSB8IGZhbHNlCn0K"
+      }
+    },
+    {
+      "id": "bashkit-suite:bashbox-interpreter-core:256",
+      "script": "echo ${x!}\necho after $?\n",
+      "bash": {
+        "status": 0,
+        "stdout": "YWZ0ZXIgMQo="
+      }
+    },
+    {
+      "id": "bashkit-suite:bashbox-interpreter-core:264",
+      "script": "f() { echo ${x!}; echo in; }\nf; echo same\necho next\n",
+      "bash": {
+        "status": 0,
+        "stdout": "bmV4dAo="
+      }
+    },
+    {
+      "id": "bashkit-suite:bashbox-line-number:49",
+      "script": "for i in 1; do\n  echo $((1/0))\ndone; echo same\necho next\necho a; for i in 1; do echo ${x/}; done; echo same\necho next\n{ echo a; echo ${y!}; echo b; }; echo same\nif true; then\necho ${x!}; fi; echo same\necho last\n",
+      "bash": {
+        "status": 0,
+        "stdout": "bmV4dAphCgpzYW1lCm5leHQKYQpsYXN0Cg=="
+      }
+    },
+    {
+      "id": "brush-suite:word_expansion/params:57",
+      "script": "echo before\necho ${x!}\necho \"rc=$?\"\nx=\"a ${y!} b\"\necho \"rc=$? x=$x\"\n",
+      "bash": {
+        "status": 0,
+        "stdout": "YmVmb3JlCnJjPTEKcmM9MSB4PQo="
+      }
+    },
+    {
+      "id": "substitution-control-0",
+      "script": "echo ${x!}; echo same\necho after $?",
+      "bash": {
+        "status": 0,
+        "stdout": "YWZ0ZXIgMQo="
+      }
+    },
+    {
+      "id": "substitution-control-1",
+      "script": "echo ${#x:}\necho after $?",
+      "bash": {
+        "status": 0,
+        "stdout": "YWZ0ZXIgMQo="
+      }
+    },
+    {
+      "id": "substitution-control-2",
+      "script": "echo ${x:-${y!}}\necho after $?",
+      "bash": {
+        "status": 0,
+        "stdout": "YWZ0ZXIgMQo="
+      }
+    },
+    {
+      "id": "substitution-control-3",
+      "script": "echo \"${a[}\"\necho after $?",
+      "bash": {
+        "status": 0,
+        "stdout": "YWZ0ZXIgMQo="
+      }
+    },
+    {
+      "id": "substitution-control-4",
+      "script": "unset v; echo \"${v:-'${'}\" following\necho after $?",
+      "bash": {
+        "status": 0,
+        "stdout": "YWZ0ZXIgMQo="
+      }
+    },
+    {
+      "id": "substitution-control-5",
+      "script": "f() { echo ${x!}; echo in; }\nf; echo same\necho next $?",
+      "bash": {
+        "status": 0,
+        "stdout": "bmV4dCAxCg=="
+      }
+    },
+    {
+      "id": "substitution-control-6",
+      "script": "( echo ${x!}; echo in ); echo sub $?\necho next",
+      "bash": {
+        "status": 0,
+        "stdout": "c3ViIDEKbmV4dAo="
+      }
+    },
+    {
+      "id": "substitution-control-7",
+      "script": "x=$(echo ${y!}; echo in); echo \"cs $? <$x>\"\necho next",
+      "bash": {
+        "status": 0,
+        "stdout": "Y3MgMSA8PgpuZXh0Cg=="
+      }
+    },
+    {
+      "id": "substitution-control-8",
+      "script": "eval \"echo \\${x!}; echo in\"; echo ev $?\necho next",
+      "bash": {
+        "status": 0,
+        "stdout": "ZXYgMQpuZXh0Cg=="
+      }
+    },
+    {
+      "id": "substitution-control-9",
+      "script": "for i in 1 2; do echo ${x!}; done; echo same\necho next",
+      "bash": {
+        "status": 0,
+        "stdout": "bmV4dAo="
+      }
+    },
+    {
+      "id": "substitution-control-10",
+      "script": "set -e; echo ${x!}\necho after $?",
+      "bash": {
+        "status": 1,
+        "stdout": ""
+      }
+    },
+    {
+      "id": "substitution-control-11",
+      "script": "x=\"a ${y!} b\"\necho \"rc=$? x=$x\"",
+      "bash": {
+        "status": 0,
+        "stdout": "cmM9MSB4PQo="
+      }
+    },
+    {
+      "id": "substitution-control-12",
+      "script": "echo ${x:?unset}\necho after $?",
+      "bash": {
+        "status": 127,
+        "stdout": ""
+      }
+    },
+    {
+      "id": "substitution-control-13",
+      "script": "set -e; f() { echo ${x!}; }; f || echo handled\necho after $?",
+      "bash": {
+        "status": 1,
+        "stdout": ""
+      }
+    },
+    {
+      "id": "substitution-control-14",
+      "script": "set -e; if echo ${x!}; then :; fi\necho after $?",
+      "bash": {
+        "status": 1,
+        "stdout": ""
+      }
+    },
+    {
+      "id": "substitution-control-15",
+      "script": "set -e; (echo ${x!}; echo in); echo sub $?\necho after",
+      "bash": {
+        "status": 1,
+        "stdout": ""
+      }
+    }
+  ]
+}

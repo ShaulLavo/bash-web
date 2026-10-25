@@ -246,7 +246,7 @@ static COMMANDS: &[Command] = &[
     keyword("done", Availability::Included),
     keyword("in", Availability::Included),
     keyword("function", Availability::Included),
-    keyword("time", Availability::UnsupportedSyntax),
+    keyword("time", Availability::Included),
     keyword("{", Availability::Included),
     keyword("}", Availability::Included),
     keyword("!", Availability::Included),
