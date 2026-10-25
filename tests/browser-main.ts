@@ -1,7 +1,7 @@
-// Acceptance/demo composition. Bun cases remain individually pending until bun-wasm
-// publishes installBunAdapters(runtime, { workerUrl }) and bun-wasm/worker.
-// Then compose createBunRuntimeLease from ./helpers/bun-fixture using that installer
-// and import workerUrl from "bun-wasm/worker?worker&url". No old guest is substituted.
+// Acceptance/demo composition. Bun's public async installer and worker exports exist.
+// Bun cases stay disabled pending a verified Bun package, shared Waffle commit, and
+// matching receipted guest. Then compose createBunRuntimeLease with that installer
+// and workerUrl from "bun-wasm/worker?worker&url". No old guest is substituted.
 import { createRuntime, type SharedFilesystemOptions } from "waffle";
 import { withVfsImplementation } from "../node_modules/waffle/fs/vfs-internal.ts";
 import { mountBrowser, type BrowserRuntimeLease } from "../src/browser/main";

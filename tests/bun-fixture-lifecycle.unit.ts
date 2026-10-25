@@ -45,10 +45,38 @@ function browserOwner(context: TestContext) {
 
 const turn = () => new Promise<void>((resolve) => setImmediate(resolve));
 
+test("async Bun installation finishes before readiness and disposal", async (context) => {
+  const create = browserOwner(context);
+  const installation = Promise.withResolvers<void>();
+  const events: string[] = [];
+  const dispose = () => {
+    assert.equal(lease.runtime.disposed, true);
+    events.push("adapter-disposed");
+  };
+  const lease = create(async () => {
+    await installation.promise;
+    events.push("installed");
+    return { dispose };
+  });
+  const ready = lease.ready.then(() => events.push("ready"));
+  const cleanup = Promise.allSettled([lease.dispose()]);
+  try {
+    await turn();
+    assert.deepEqual(events, [], "ready and disposal must wait for installation");
+    assert.equal(lease.runtime.disposed, false);
+  } finally {
+    installation.resolve();
+    await ready;
+    await cleanup;
+  }
+  assert.deepEqual(events, ["installed", "ready", "adapter-disposed"]);
+  assert.deepEqual(await cleanup, [{ status: "fulfilled", value: undefined }]);
+});
+
 test("Bun adapter cleanup sees runtime revocation before it starts", async (context) => {
   const create = browserOwner(context);
   let disposed = false;
-  const lease = create((runtime) => ({
+  const lease = create(async (runtime) => ({
     async dispose() {
       assert.equal(runtime.disposed, true, "storage cancellation must precede adapter cleanup");
       await turn();
@@ -70,7 +98,7 @@ test("a failing adapter still awaits the runtime's physical teardown", async (co
   });
   let stopping = false;
   const failure = new Error("Adapter cleanup failed");
-  const lease = create((runtime) => {
+  const lease = create(async (runtime) => {
     runtime.retainConsumer({
       filesystem: createFilesystemIdentity(undefined, 1024 * 1024),
       revoke() {},
@@ -109,7 +137,7 @@ test("failed adapter installation still disposes the runtime and preserves its e
   const create = browserOwner(context);
   const failure = new Error("Adapter installation failed");
   let borrowed: Runtime | undefined;
-  const lease = create((runtime) => {
+  const lease = create(async (runtime) => {
     borrowed = runtime;
     throw failure;
   });

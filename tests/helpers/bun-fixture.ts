@@ -1,5 +1,5 @@
-// Expected public bun-wasm integration contract. This fixture is not enabled until
-// the root package and bun-wasm/worker export are published against our Waffle peer.
+// Public bun-wasm exports an async installer and worker. This fixture stays disabled
+// until its Bun package, shared Waffle commit, and matching receipted guest are verified.
 // No Bun implementation or internal ABI is copied into this repository.
 import { createRuntime, type Runtime } from "waffle";
 import type { BrowserRuntimeLease } from "../../src/browser/main";
@@ -7,7 +7,7 @@ import type { BrowserRuntimeLease } from "../../src/browser/main";
 export type InstallBunAdapters = (
   runtime: Runtime,
   options: { workerUrl: string; wasmUrl?: string },
-) => { dispose(): void | Promise<void> };
+) => Promise<{ dispose(): void | Promise<void> }>;
 
 export function createBunRuntimeLease(
   installBunAdapters: InstallBunAdapters,
@@ -16,9 +16,9 @@ export function createBunRuntimeLease(
   const runtime = createRuntime();
   // The published installer selects and verifies its matching guest by default.
   // Do not reuse the old independently pinned guest without compatibility evidence.
-  let installed: ReturnType<InstallBunAdapters> | undefined;
-  const ready = Promise.resolve().then(() => {
-    installed = installBunAdapters(runtime, { workerUrl });
+  let installed: Awaited<ReturnType<InstallBunAdapters>> | undefined;
+  const ready = Promise.resolve().then(async () => {
+    installed = await installBunAdapters(runtime, { workerUrl });
   });
   async function disposeLease() {
     // Cleanup must run even after installation fails; propagate that failure afterward.

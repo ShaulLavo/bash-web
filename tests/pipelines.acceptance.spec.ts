@@ -52,19 +52,88 @@ for (const [name, source, expected] of [
   });
 }
 
-test("pipeline forwards ticker lines while the producer is running", async ({ page }, info) => {
+async function interruptResources(page: Page) {
+  const runtime = await page.evaluate(() => {
+    const snapshot = window.bashWeb!.runtimeSnapshot()!;
+    return {
+      filesystemWorkers: snapshot.filesystemWorkers,
+      droppedTerminalBytes: snapshot.droppedTerminalBytes,
+      terminal: snapshot.terminal,
+      roots: snapshot.roots.map((root) => ({
+        pid: root.pid,
+        workers: root.workers,
+        processes: root.processes,
+        liveProcesses: root.liveProcesses,
+        liveJobs: root.liveJobs,
+        retainedSlots: root.retainedSlots,
+        pipes: root.pipes,
+        records: root.records,
+      })),
+    };
+  });
+  return { workers: page.workers().length, runtime };
+}
+
+async function tickerLines(page: Page) {
+  return page.evaluate(() =>
+    window.bashWeb!.readLines().filter((line) => /^CTRL_C_TICK \d+$/.test(line.trim())),
+  );
+}
+
+test("pipeline Ctrl+C stops a real WASI ticker and reuses the shell without leaks or late output", async ({
+  page,
+}, info) => {
   await open(page);
-  await command(page, "test-guest ticker 0 500 tick | grep tick");
-  await output(page, "tick 0");
+  const before = await interruptResources(page);
+  await command(
+    page,
+    "export KEEP=retained; test-guest ticker 0 250 CTRL_C_TICK | grep CTRL_C_TICK; echo BAD_AFTER_INTERRUPT",
+  );
+  await output(page, "CTRL_C_TICK 0");
   expect(await page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("running");
-  await output(page, "tick 1");
-  await output(page, "tick 2");
+  await output(page, "CTRL_C_TICK 1");
+  await output(page, "CTRL_C_TICK 2");
+  const running = await interruptResources(page);
+  expect(running.workers).toBe(before.workers + 2);
+  expect(running.runtime.roots[0].liveProcesses).toBe(before.runtime.roots[0].liveProcesses + 2);
+  expect(running.runtime.roots[0].pipes).toBeGreaterThan(before.runtime.roots[0].pipes);
   await page.screenshot({ path: info.outputPath("live-pipeline.png") });
   await page.keyboard.press("Control+c");
   await ready(page);
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
-  await command(page, "echo INTERRUPT:$?");
-  await output(page, "INTERRUPT:130");
+  const stoppedLines = await tickerLines(page);
+  await expect.poll(() => interruptResources(page)).toEqual(before);
+  const stopped = await interruptResources(page);
+  const sleepStartedAt = performance.now();
+  await command(
+    page,
+    `printf 'INTERRUPT:%s:%s\\n' "$?" "$KEEP"; test-guest sleep 750; echo SLEEP_STATUS:$?`,
+  );
+  await output(page, "INTERRUPT:130:retained");
+  await output(page, "SLEEP_STATUS:0");
+  const sleepElapsedMs = performance.now() - sleepStartedAt;
+  expect(sleepElapsedMs).toBeGreaterThanOrEqual(750);
+  await ready(page);
+  expect(await tickerLines(page)).toEqual(stoppedLines);
+  await command(page, `test-guest emit $'NEXT_CHILD_OK\\n' | test-guest cat; echo NEXT_STATUS:$?`);
+  await output(page, "NEXT_CHILD_OK");
+  await output(page, "NEXT_STATUS:0");
+  await ready(page);
+  await expect.poll(() => interruptResources(page)).toEqual(before);
+  expect(await tickerLines(page)).toEqual(stoppedLines);
+  expect(
+    await page.evaluate(() => window.bashWeb!.readLines().map((line) => line.trim())),
+  ).not.toContain("BAD_AFTER_INTERRUPT");
+  await info.attach("ctrl-c-runtime-evidence", {
+    body: JSON.stringify({
+      before,
+      running,
+      stopped,
+      after: await interruptResources(page),
+      stoppedLines,
+      sleepElapsedMs,
+    }),
+    contentType: "application/json",
+  });
 });
 
 for (const [name, producer, consumer, expected] of [
@@ -143,7 +212,7 @@ test("early downstream exit finishes a yielding Bun producer with EPIPE status",
 }) => {
   test.skip(
     true,
-    "Missing public bun-wasm API: installBunAdapters(runtime, { workerUrl }) and bun-wasm/worker with its matching verified guest artifact; no public launcher package is available yet and copied Bun host code is not shipped.",
+    "Public bun-wasm installer and worker exports exist; pending verification of an aligned Bun package, shared Waffle commit, and matching receipted guest; copied Bun host code is not shipped.",
   );
   await open(page);
   // Native Bun 1.4.2 and Node 26.7.0 ignore SIGPIPE: a tight write loop
