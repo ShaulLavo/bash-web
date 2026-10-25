@@ -1,4 +1,5 @@
 use super::{CaseLocale, SnapshotValue, State, snapshot_node_bytes};
+#[cfg(test)]
 use crate::exec::Work;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -26,7 +27,7 @@ impl CaseOptions {
     pub(crate) fn specified(self) -> bool {
         self.set != 0 || self.clear != 0
     }
-    fn apply(self, previous: CaseMapping) -> CaseMapping {
+    pub(super) fn apply(self, previous: CaseMapping) -> CaseMapping {
         let mapping = match self.set {
             1 => CaseMapping::Lower,
             2 => CaseMapping::Upper,
@@ -51,10 +52,21 @@ impl State {
     pub(crate) fn case_mapping(&self, name: &str) -> CaseMapping {
         self.case_attributes.get(name).copied().unwrap_or_default()
     }
-    pub(crate) fn case_value(&self, name: &str, mut value: String) -> Result<String, i32> {
+    pub(crate) fn case_value(&self, name: &str, value: String) -> Result<String, i32> {
         let name = self.scalar_target(name)?.ok_or(1)?;
-        let mapping = self.case_mapping(name);
-        if mapping == CaseMapping::Unchanged || self.is_readonly(name) {
+        let mapping = if self.is_readonly(name) {
+            CaseMapping::Unchanged
+        } else {
+            self.case_mapping(name)
+        };
+        self.case_value_with_mapping(value, mapping)
+    }
+    pub(super) fn case_value_with_mapping(
+        &self,
+        mut value: String,
+        mapping: CaseMapping,
+    ) -> Result<String, i32> {
+        if mapping == CaseMapping::Unchanged {
             return Ok(value);
         }
         let locale = CaseLocale::from_state(self).map_err(|_| 2)?;
@@ -77,6 +89,7 @@ impl State {
         }
         Ok(mapped)
     }
+    #[cfg(test)]
     pub(crate) fn declare_case(
         &mut self,
         name: String,
@@ -85,26 +98,15 @@ impl State {
         options: CaseOptions,
         work: &mut Work,
     ) -> Result<(), i32> {
-        let name = if local {
-            name
-        } else {
-            self.assignment_name(name)?
+        let request = super::DeclarationRequest {
+            key: name,
+            value,
+            operation: super::DeclarationOperation::Case { local, options },
+            attributes: super::DeclarationAttributes::default(),
         };
-        if self.is_readonly(&name) {
-            return Err(1);
-        }
-        let bytes = name
-            .len()
-            .saturating_add(snapshot_node_bytes::<CaseMapping>().map_err(|_| 2)?);
-        work.admit_storage(bytes).map_err(|_| 2)?;
-        if local {
-            self.declare_local(name.clone(), None)?;
-        }
-        let mapping = options.apply(self.case_mapping(&name));
-        self.case_attributes.insert(name.clone(), mapping);
-        if let Some(value) = value {
-            self.assign_parameter(name, value)?;
-        }
+        let prepared = self.prepare_declaration(request)?;
+        let admitted = self.admit_declaration(prepared, work)?;
+        self.commit_declaration(admitted);
         Ok(())
     }
     pub(super) fn saved_case_storage(&self, name: &str) -> usize {

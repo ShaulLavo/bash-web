@@ -104,3 +104,41 @@ fn register_inherited_park(host: &InProcessHost) {
         .boxed_local()
     });
 }
+
+#[test]
+fn local_inherit_ifs_restores_the_caller_separator() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run(r#"IFS=:; f() { local -I IFS; IFS=,; set -- a b; printf '<%s>\n' "$*"; }; f; set -- a b; printf '<%s>\n' "$*""#),
+        0
+    );
+    assert_eq!(rig.output.bytes(), b"<a,b>\n<a:b>\n");
+}
+
+#[test]
+fn declaration_bridge_inherited_copy_cancellation_publishes_no_requested_attributes() {
+    let rig = Rig::new(Limits::default());
+    let outer = "x".repeat(128 * 1024);
+    rig.variable("v", &outer);
+    let job = rig.start_until_value(
+        "f() { ready=yes; local -Ixr v; }; f; args bad",
+        10_000,
+        "ready",
+        "yes",
+    );
+    rig.interrupt_after_counting_yields(job);
+    assert_eq!(rig.value("v"), Some(outer));
+    assert!(!rig.shell.state().borrow().exported_bindings().contains("v"));
+    assert!(!rig.shell.state().borrow().readonly_bindings().contains("v"));
+    assert_eq!(rig.ex.drive(64).pending, 0);
+}
+
+#[test]
+fn declaration_bridge_refused_operand_keeps_earlier_operand_and_caller_metadata() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("readonly locked=outer; f() { local -Ixr before=kept locked=bad after=last; printf '%s:%s:%s:%s\n' \"$?\" \"$before\" \"$locked\" \"$after\"; }; f 2>/dev/null; declare -p locked; printf '%s:%s\n' \"${before-unset}\" \"${after-unset}\""), 0);
+    assert_eq!(
+        rig.output.bytes(),
+        b"1:kept:outer:last\ndeclare -r locked=\"outer\"\nunset:unset\n"
+    );
+}

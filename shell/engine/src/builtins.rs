@@ -957,19 +957,38 @@ async fn declarations(
                 .map_or(0, str::len);
             scan_bytes(bytes, context, work).await?;
         }
-        let result = if inherit {
-            state
-                .borrow_mut()
-                .declare_inherited_local(key.clone(), value, work)
+        let operation = if inherit {
+            crate::state::DeclarationOperation::Local { inherit: true }
         } else if case.specified() {
-            state
-                .borrow_mut()
-                .declare_case(key.clone(), value, local, case, work)
+            crate::state::DeclarationOperation::Case {
+                local,
+                options: case,
+            }
         } else {
-            apply_declaration(name, &key, value, append, &mut state.borrow_mut())
+            match name {
+                "export" => crate::state::DeclarationOperation::Export,
+                "readonly" => crate::state::DeclarationOperation::Readonly,
+                _ if local && (!append || !state.borrow().is_current_local(&key)) => {
+                    crate::state::DeclarationOperation::Local { inherit: false }
+                }
+                _ => crate::state::DeclarationOperation::Assignment,
+            }
+        };
+        let result = {
+            let mut state = state.borrow_mut();
+            let request = crate::state::DeclarationRequest {
+                key: key.clone(),
+                value,
+                operation,
+                attributes: crate::state::DeclarationAttributes { exported, readonly },
+            };
+            state.prepare_declaration(request).and_then(|prepared| {
+                let admitted = state.admit_declaration(prepared, work)?;
+                state.commit_declaration(admitted);
+                Ok(())
+            })
         };
         if declaration_status(result)? == 0 {
-            declaration_attributes(&key, exported, readonly, &mut state.borrow_mut())?;
             continue;
         }
         status = 1;
@@ -986,21 +1005,6 @@ fn declaration_status(result: Result<(), i32>) -> Result<i32, i32> {
         Err(code @ (2 | crate::exec::RESOURCE_STATUS)) => Err(code),
         Err(_) => Ok(1),
     }
-}
-
-fn declaration_attributes(
-    key: &str,
-    exported: bool,
-    readonly: bool,
-    state: &mut crate::state::State,
-) -> Result<(), i32> {
-    if exported {
-        state.export(key.to_owned(), None)?;
-    }
-    if readonly {
-        state.readonly(key.to_owned(), None)?;
-    }
-    Ok(())
 }
 
 #[derive(Default)]
@@ -1110,32 +1114,16 @@ async fn nameref_declaration(
     if unsupported {
         return Err(2);
     }
-    state
-        .borrow_mut()
-        .declare_nameref(key.to_owned(), target, local)
-}
-
-fn apply_declaration(
-    name: &str,
-    key: &str,
-    value: Option<String>,
-    append: bool,
-    state: &mut crate::state::State,
-) -> Result<(), i32> {
-    if name == "readonly" {
-        return state.readonly(key.to_owned(), value);
-    }
-    if name == "export" {
-        return state.export(key.to_owned(), value);
-    }
-    let local =
-        name == "local" || matches!(name, "declare" | "typeset") && state.in_function_scope();
-    if local && (!append || !state.is_current_local(key)) {
-        return state.declare_local(key.to_owned(), value);
-    }
-    if let Some(value) = value {
-        state.assign_parameter(key.to_owned(), value)?;
-    }
+    let mut state = state.borrow_mut();
+    let request = crate::state::DeclarationRequest {
+        key: key.to_owned(),
+        value: Some(target),
+        operation: crate::state::DeclarationOperation::Nameref { local },
+        attributes: crate::state::DeclarationAttributes::default(),
+    };
+    let prepared = state.prepare_declaration(request)?;
+    let admitted = state.admit_declaration(prepared, work)?;
+    state.commit_declaration(admitted);
     Ok(())
 }
 

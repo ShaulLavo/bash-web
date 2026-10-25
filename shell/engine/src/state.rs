@@ -22,7 +22,9 @@ pub(crate) use case::Locale as CaseLocale;
 pub(crate) use case_attributes::{CaseMapping, CaseOptions};
 mod declarations;
 use call_stack::CallStack;
-pub(crate) use declarations::DeclarationView;
+pub(crate) use declarations::{
+    DeclarationAttributes, DeclarationOperation, DeclarationRequest, DeclarationView,
+};
 mod binding;
 mod prefixes;
 mod references;
@@ -91,6 +93,14 @@ pub(crate) struct LocalVariable {
     origin: LocalOrigin,
     storage_base: usize,
     memory: Option<Rc<RefCell<crate::exec::StorageAllocation>>>,
+}
+
+struct ScalarPublication {
+    owner: references::Owner,
+    journal_bytes: usize,
+    prefix_bytes: usize,
+    held: usize,
+    reservation: Option<crate::exec::StorageAllocation>,
 }
 
 /// Original constant-size cursor. OPTIND's visible binding can be readonly or local.
@@ -1173,17 +1183,26 @@ impl State {
             return Err(1);
         }
         let value = self.case_value(&name, value)?;
-        let owner = self.reference_owner(&name);
+        let prepared = self.prepare_scalar_publication(&name, &value)?;
+        self.commit_scalar_publication(name, value, kind, prepared);
+        Ok(())
+    }
+    fn prepare_scalar_publication(
+        &self,
+        name: &str,
+        value: &str,
+    ) -> Result<ScalarPublication, i32> {
+        let owner = self.reference_owner(name);
         let changes = self.assignment_undo.0.upgrade();
         let journal_bytes = changes.as_ref().map_or(0, |changes| {
             changes
                 .borrow()
-                .scalar_effect_bytes(&name, value.len(), owner)
+                .scalar_effect_bytes(name, value.len(), owner)
         });
         let prefix_bytes = self
             .prefixes
             .last()
-            .and_then(|saved| saved.get(name.as_ref()))
+            .and_then(|saved| saved.get(name))
             .filter(|saved| saved.owner == owner)
             .map_or(0, |saved| {
                 saved
@@ -1193,14 +1212,37 @@ impl State {
                     .saturating_add(value.len())
                     .saturating_add(Binding::node_bytes())
             });
-        let held = self.scalar_assignment_value_bytes(&name, value.len());
-        let local_growth = self.getopts_local_growth(&name, held)?;
+        let held = self.scalar_assignment_value_bytes(name, value.len());
+        let local_growth = self.getopts_local_growth(name, held)?;
         let reservation = self.admit_temporary(
             journal_bytes
                 .saturating_add(prefix_bytes)
                 .saturating_add(local_growth),
         )?;
+        Ok(ScalarPublication {
+            owner,
+            journal_bytes,
+            prefix_bytes,
+            held,
+            reservation,
+        })
+    }
+    fn commit_scalar_publication(
+        &mut self,
+        name: Cow<'_, str>,
+        value: String,
+        kind: AssignmentKind,
+        prepared: ScalarPublication,
+    ) {
+        let ScalarPublication {
+            owner,
+            journal_bytes,
+            prefix_bytes,
+            held,
+            reservation,
+        } = prepared;
         drop(reservation);
+        let changes = self.assignment_undo.0.upgrade();
         if let Some(changes) = &changes {
             changes
                 .borrow_mut()
@@ -1243,7 +1285,6 @@ impl State {
         if direct_ifs {
             self.refresh_star_separator();
         }
-        Ok(())
     }
     fn scalar_assignment_value_bytes(&self, name: &str, bytes: usize) -> usize {
         self.variables
@@ -1394,30 +1435,23 @@ impl State {
             .and_then(|locals| locals.get(name))
             .is_some_and(|local| local.readonly)
     }
+    #[cfg(test)]
     pub(crate) fn readonly(&mut self, name: String, value: Option<String>) -> Result<(), i32> {
-        let name = self.assignment_name(name)?;
-        if let Some(value) = value {
-            self.assign_parameter(name.clone(), value)?;
-        }
-        let owner = self
-            .locals
-            .iter_mut()
-            .rev()
-            .find_map(|locals| locals.get_mut(&name));
-        if let Some(local) = owner {
-            local.readonly = true;
-            return Ok(());
-        }
-        self.readonly.insert(name);
-        Ok(())
+        self.test_declaration(DeclarationRequest {
+            key: name,
+            value,
+            operation: DeclarationOperation::Readonly,
+            attributes: DeclarationAttributes::default(),
+        })
     }
+    #[cfg(test)]
     pub(crate) fn export(&mut self, name: String, value: Option<String>) -> Result<(), i32> {
-        let name = self.assignment_name(name)?;
-        if let Some(value) = value {
-            self.assign_parameter(name.clone(), value)?;
-        }
-        self.exported.insert(name);
-        Ok(())
+        self.test_declaration(DeclarationRequest {
+            key: name,
+            value,
+            operation: DeclarationOperation::Export,
+            attributes: DeclarationAttributes::default(),
+        })
     }
     /// Resolve attributes and values to one binding. Admit the retained set
     /// node and all temporary/assignment keys before copying the target name.
@@ -1433,17 +1467,21 @@ impl State {
         let ScalarResolution::Target(target) = state.resolve_scalar_target(name) else {
             return Err(1.into());
         };
-        let present = if readonly {
-            state.locals.iter().any(|frame| frame.contains_key(target))
-                || state.readonly.contains(target)
-        } else {
-            state.exported.contains(target)
-        };
-        work.admit_storage(target.len().saturating_mul(3))?;
-        if !present {
-            work.admit_storage(snapshot_node_bytes::<()>()?)?;
-        }
+        work.admit_storage(state.declaration_attribute_storage(target, readonly)?)?;
         Ok(target.to_owned())
+    }
+    fn declaration_attribute_storage(&self, name: &str, readonly: bool) -> Result<usize, Error> {
+        let present = if readonly {
+            self.locals.iter().any(|frame| frame.contains_key(name)) || self.readonly.contains(name)
+        } else {
+            self.exported.contains(name)
+        };
+        let keys = name.len().saturating_mul(3);
+        Ok(if present {
+            keys
+        } else {
+            keys.saturating_add(snapshot_node_bytes::<()>()?)
+        })
     }
     pub(crate) fn environment(&self) -> BTreeMap<String, String> {
         self.exported
@@ -1640,62 +1678,80 @@ impl State {
         Ok(())
     }
     fn save_local(&mut self, name: &str, value_bytes: usize) -> Result<(), i32> {
-        if self.readonly.contains(name) || self.current_local_readonly(name) {
-            return Err(1);
-        }
-        if self.locals.is_empty() {
-            return Err(1);
-        }
-        if !self.locals.last().unwrap().contains_key(name) {
-            let storage_base = snapshot_node_bytes::<LocalVariable>()
-                .map_err(|_| 2)?
-                .checked_add(snapshot_node_bytes::<Binding>().map_err(|_| 2)?)
-                .ok_or(2)?
-                .checked_add(name.len().checked_mul(3).ok_or(2)?)
-                .ok_or(2)?
-                .checked_add(self.variables.get(name).map_or(0, Binding::storage_bytes))
-                .ok_or(2)?
-                .checked_add(self.namerefs.get(name).map_or(0, String::len))
-                .ok_or(2)?
-                .checked_add(self.saved_case_storage(name))
-                .ok_or(2)?;
-            let memory = self
-                .memory
-                .as_ref()
-                .map(|memory| {
-                    memory
-                        .admit(storage_base.checked_add(value_bytes).ok_or(2)?)
-                        .map_err(|_| crate::exec::RESOURCE_STATUS)
-                })
-                .transpose()?
-                .map(|ticket| Rc::new(RefCell::new(ticket)));
-            let origin = self
-                .locals
-                .iter()
-                .rev()
-                .nth(1)
-                .and_then(|frame| frame.get(name))
-                .filter(|binding| binding.origin == LocalOrigin::FunctionPrefix)
-                .map_or(LocalOrigin::Declaration, |_| LocalOrigin::PrefixOwner);
-            self.next_local_incarnation = self.next_local_incarnation.checked_add(1).ok_or(2)?;
-            let previous = LocalVariable {
-                incarnation: self.next_local_incarnation,
-                getopts: (name == "OPTIND").then_some((self.getopts, self.getopts_numeric)),
-                previous: self.variables.remove(name),
-                nameref: self.namerefs.remove(name),
-                exported: self.exported.contains(name),
-                case_mapping: self.case_attributes.remove(name),
-                readonly: false,
-                origin,
-                storage_base,
-                memory,
-            };
-            self.locals
-                .last_mut()
-                .unwrap()
-                .insert(name.to_owned(), previous);
-        }
+        let prepared = self.prepare_local_save(name, value_bytes)?;
+        self.commit_local_save(name, prepared);
         Ok(())
+    }
+    fn prepare_local_save(
+        &self,
+        name: &str,
+        value_bytes: usize,
+    ) -> Result<Option<LocalVariable>, i32> {
+        if self.readonly.contains(name)
+            || self.current_local_readonly(name)
+            || self.locals.is_empty()
+        {
+            return Err(1);
+        }
+        if self.is_current_local(name) {
+            return Ok(None);
+        }
+        let storage_base = snapshot_node_bytes::<LocalVariable>()
+            .map_err(|_| 2)?
+            .checked_add(snapshot_node_bytes::<Binding>().map_err(|_| 2)?)
+            .ok_or(2)?
+            .checked_add(name.len().checked_mul(3).ok_or(2)?)
+            .ok_or(2)?
+            .checked_add(self.variables.get(name).map_or(0, Binding::storage_bytes))
+            .ok_or(2)?
+            .checked_add(self.namerefs.get(name).map_or(0, String::len))
+            .ok_or(2)?
+            .checked_add(self.saved_case_storage(name))
+            .ok_or(2)?;
+        let memory = self
+            .memory
+            .as_ref()
+            .map(|memory| {
+                memory
+                    .admit(storage_base.checked_add(value_bytes).ok_or(2)?)
+                    .map_err(|_| crate::exec::RESOURCE_STATUS)
+            })
+            .transpose()?
+            .map(|ticket| Rc::new(RefCell::new(ticket)));
+        let origin = self
+            .locals
+            .iter()
+            .rev()
+            .nth(1)
+            .and_then(|frame| frame.get(name))
+            .filter(|binding| binding.origin == LocalOrigin::FunctionPrefix)
+            .map_or(LocalOrigin::Declaration, |_| LocalOrigin::PrefixOwner);
+        let incarnation = self.next_local_incarnation.checked_add(1).ok_or(2)?;
+        Ok(Some(LocalVariable {
+            incarnation,
+            getopts: (name == "OPTIND").then_some((self.getopts, self.getopts_numeric)),
+            previous: None,
+            nameref: None,
+            exported: self.exported.contains(name),
+            case_mapping: None,
+            readonly: false,
+            origin,
+            storage_base,
+            memory,
+        }))
+    }
+    fn commit_local_save(&mut self, name: &str, prepared: Option<LocalVariable>) {
+        let Some(mut saved) = prepared else {
+            return;
+        };
+        self.next_local_incarnation = saved.incarnation;
+        saved.previous = self.variables.remove(name);
+        saved.nameref = self.namerefs.remove(name);
+        saved.case_mapping = self.case_attributes.remove(name);
+        self.locals
+            .last_mut()
+            .expect("admitted local scope")
+            .insert(name.to_owned(), saved);
     }
     fn restore_locals(&mut self, locals: BTreeMap<String, LocalVariable>) {
         for (name, local) in locals {
@@ -1717,35 +1773,19 @@ impl State {
     }
     /// `declare -n` is local inside a function, like `local -n`. Only ordinary
     /// scalar targets are admitted by the declaration adapter.
+    #[cfg(test)]
     pub(crate) fn declare_nameref(
         &mut self,
         name: String,
         target: String,
         local: bool,
     ) -> Result<(), i32> {
-        if self.readonly.contains(&name) || self.current_local_readonly(&name) {
-            return Err(1);
-        }
-        if name == target && !local {
-            return Err(1);
-        }
-        if local {
-            if self
-                .locals
-                .last()
-                .is_some_and(|frame| frame.contains_key(&name))
-            {
-                self.reserve_local_value(&name, target.len())?;
-            }
-            self.save_local(&name, target.len())?;
-        }
-        let is_ifs = name == "IFS";
-        self.variables.remove(&name);
-        self.namerefs.insert(name, target);
-        if is_ifs {
-            self.refresh_star_separator();
-        }
-        Ok(())
+        self.test_declaration(DeclarationRequest {
+            key: name,
+            value: Some(target),
+            operation: DeclarationOperation::Nameref { local },
+            attributes: DeclarationAttributes::default(),
+        })
     }
     pub(crate) fn declaration_storage(&self, name: &str, local: bool) -> Result<usize, Error> {
         let mut bytes = snapshot_node_bytes::<Binding>()?.saturating_add(name.len());
