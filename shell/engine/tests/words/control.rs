@@ -378,6 +378,18 @@ fn exec_in_an_unredirected_loop_changes_the_surrounding_descriptor_bindings() {
 }
 
 #[test]
+fn exec_with_a_prefix_assignment_keeps_its_redirect_and_restores_the_binding() {
+    let rig = Rig::new(Limits::default());
+    rig.variable("value", "outer");
+    assert_eq!(rig.run("value=temporary exec 3>saved"), 0);
+    assert_eq!(rig.value("value").as_deref(), Some("outer"));
+    assert_eq!(rig.run("printf '%s' \"$value\" >&3"), 0);
+    assert_eq!(rig.run("exec 3>&-"), 0);
+    assert_eq!(rig.fs.read_file("/home/guest/saved").unwrap(), b"outer");
+    assert!(rig.errors.bytes().is_empty());
+}
+
+#[test]
 fn time_reports_real_time_after_the_pipeline_and_keeps_its_status() {
     let rig = Rig::new(Limits::default());
     let script = "TIMEFORMAT='%0R|%0lR|%%|x%'; time true | false";
