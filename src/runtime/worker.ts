@@ -90,7 +90,10 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
       memory =
         instance.exports.memory instanceof WebAssembly.Memory ? instance.exports.memory : undefined;
       sampleMemory();
-      if (bridge && memory) Atomics.store(bridge.state, control.phase, 1);
+      if (bridge && memory) {
+        Atomics.store(bridge.state, control.phase, 1);
+        bridge.signal();
+      }
     },
     beforeFinish: sampleMemory,
     run: preview1Executor.run,

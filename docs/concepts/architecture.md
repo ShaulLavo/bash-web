@@ -27,7 +27,7 @@ There is no `fork` in the browser, so the engine does not pretend. It runs one a
 
 ## Page, worker, and bridge
 
-The shell runs in a worker, because only a worker may block. The page never waits on the shell. The two sides share a `SharedBridge`: a `SharedArrayBuffer` with a 64 KiB input ring, a 256 KiB output ring, and a small control block. The page writes key bytes into the input ring and drains the output ring on a timer. If the page stops draining, the shell's writes block until there is room. That is the backpressure, and it is why the page needs cross-origin isolation.
+The shell runs in a worker, because only a worker may block. The page never waits on the shell. The two sides share a `SharedBridge`: a `SharedArrayBuffer` with a 64 KiB input ring, a 256 KiB output ring, and a small control block. The page writes key bytes into the input ring and drains the output ring in bounded tasks triggered by bridge activity. If the page stops draining, the shell's writes block until there is room. That is the backpressure, and it is why the page needs cross-origin isolation.
 
 The terminal UI is a host concern. The bridge carries bytes. The shell guest owns the prompt, history, and line editing. Rendering is up to the page. The demo in `src/browser/` shows one way to do it.
 

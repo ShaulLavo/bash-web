@@ -46,6 +46,20 @@ shared runtime without creating a process service. The application remains
 responsible for `await runtime.dispose()` once the shared runtime is no longer
 needed.
 
+## Demo terminal activity
+
+The demo requires `Atomics.waitAsync` on the page. It subscribes to the bridge's
+wake counter instead of polling an idle terminal. Output, freed input capacity,
+phase changes and shutdown publish activity. Each task drains at most 32 KiB,
+then schedules another task if output remains. Bursts share one scheduled task.
+Sampling the counter before draining prevents a publication during subscription
+from being missed. Closing the session releases its pending wait and suppresses
+later callbacks. Final output drains before the exited or failed state is shown.
+Memory metrics update on activity, not on a separate sampling timer.
+
+This policy belongs to the demo's `BrowserSession`, not to `createShell` or the
+borrowed Waffle runtime. There is no polling fallback for older browsers.
+
 ## Storage ownership, waiting and disposal
 
 The application owns storage selection and the runtime lifetime; Waffle owns
