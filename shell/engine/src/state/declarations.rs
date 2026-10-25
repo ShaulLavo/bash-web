@@ -102,6 +102,12 @@ impl State {
             .map(Option::unwrap_or_default)
             .unwrap_or_else(|| self.case_mapping(&target));
         let value = match value {
+            Some(value)
+                if matches!(operation, DeclarationOperation::Local { inherit: false })
+                    && self.is_current_local(&key) =>
+            {
+                Some(self.case_value(&key, value)?)
+            }
             Some(value) if !nameref => Some(self.case_value_with_mapping(value, effective)?),
             value => value,
         };
@@ -571,6 +577,38 @@ mod tests {
         assert!(!borrowed.declaration("v").unwrap().exported);
         assert!(!borrowed.declaration("v").unwrap().readonly);
         assert_eq!(memory.observation().0, 0);
+    }
+
+    #[test]
+    fn declaration_bridge_current_local_reference_keeps_existing_case_preparation() {
+        let state = State::default().shared();
+        state
+            .borrow_mut()
+            .case_attributes
+            .insert("target".into(), CaseMapping::Upper);
+        let frame = FunctionFrame::enter(state.clone(), Vec::new(), 8).unwrap();
+        let mut borrowed = state.borrow_mut();
+        borrowed
+            .declare_nameref("v".into(), "target".into(), true)
+            .unwrap();
+        let mut work = Work::new(100, 4096, 0);
+        let prepared = borrowed
+            .prepare_declaration(DeclarationRequest {
+                key: "v".into(),
+                value: Some("mixed".into()),
+                operation: DeclarationOperation::Local { inherit: false },
+                attributes: DeclarationAttributes::default(),
+            })
+            .unwrap_or_else(|_| panic!("valid local replacement"));
+        let admitted = borrowed
+            .admit_declaration(prepared, &mut work)
+            .unwrap_or_else(|_| panic!("admitted local replacement"));
+        borrowed.commit_declaration(admitted);
+        assert_eq!(borrowed.parameter("v"), "MIXED");
+        assert!(!borrowed.namerefs.contains_key("v"));
+        assert!(!borrowed.variables.contains_key("target"));
+        drop(borrowed);
+        drop(frame);
     }
 
     #[test]
