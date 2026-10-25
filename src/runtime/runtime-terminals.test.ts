@@ -206,3 +206,22 @@ test("input arriving after an empty snapshot still takes the cooked normalizatio
     assert.equal(destination[1], 91);
   }
 });
+
+test("a mixed input cursor snapshot cannot grow cooked scratch beyond ring capacity", () => {
+  const { input } = cookedTerminal();
+  const destination = new Uint8Array(1024 * 1024);
+  const original = SharedBridge.prototype.availableInput;
+  let first = true;
+  SharedBridge.prototype.availableInput = function () {
+    if (!first) return original.call(this);
+    first = false;
+    return 0xffff_ffff;
+  };
+  try {
+    const measured = measureByteAllocations(() => input.tryRead!([destination]));
+    assert.equal(measured.value, -6);
+    assert.ok(measured.lengths.every((length) => length <= INPUT_CAPACITY));
+  } finally {
+    SharedBridge.prototype.availableInput = original;
+  }
+});
