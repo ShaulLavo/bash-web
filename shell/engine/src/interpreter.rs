@@ -161,6 +161,9 @@ impl From<i32> for CommandError {
     }
 }
 
+mod descriptors;
+use descriptors::CallerDescriptors;
+
 type Descriptors = Rc<RefCell<FdTable>>;
 const TASK_METADATA_BYTES: usize = 4096;
 /// Shared forwarding keeps descendants attached when several isolated scopes
@@ -294,6 +297,7 @@ pub(crate) struct Context {
     loop_depth: usize,
     ignore_errexit: bool,
     trace: xtrace::Trace,
+    caller_descriptors: Option<Rc<CallerDescriptors>>,
 }
 pub(crate) struct RenderedFunction {
     pub(crate) text: String,
@@ -324,6 +328,7 @@ impl Context {
             loop_depth: 0,
             ignore_errexit: false,
             trace: xtrace::Trace::default(),
+            caller_descriptors: None,
             evaluation,
         }
     }
@@ -439,6 +444,7 @@ impl Context {
     fn isolated(&self) -> Self {
         Self {
             loop_depth: 0,
+            caller_descriptors: None,
             scope: Scope::new(self.core.allocate_id()),
             evaluation: self.evaluation.new_task(),
             ..self.clone()
@@ -1314,6 +1320,14 @@ async fn pipeline_command(
         let state = state.borrow();
         state.lastpipe && !state.monitor
     };
+    let last_context = if share_last {
+        match context.with_caller_descriptors(Rc::downgrade(&fds), vec![0], Rc::new(Cell::new(0))) {
+            Ok(context) => context,
+            Err(code) => return Outcome::status(code),
+        }
+    } else {
+        context.clone()
+    };
     let mut work = expansion_work(&context);
     let children = match pipeline_children(count, &state, &context, &mut work).await {
         Ok(children) => children,
@@ -1366,9 +1380,9 @@ async fn pipeline_command(
         let shared_stage = count == 1 || (share_last && index + 1 == count);
         let stage_context = if shared_stage {
             if pipeline.negated {
-                context.condition()
+                last_context.condition()
             } else {
-                context.clone()
+                last_context.clone()
             }
         } else {
             let child = context.isolated_command(&command);
@@ -1494,25 +1508,41 @@ async fn compound_command(
     fds: Descriptors,
     context: Context,
 ) -> Outcome {
-    // Without compound redirections, `exec` inside a branch or loop changes
-    // the surrounding shell's bindings. A redirected compound restores its
-    // caller's table when its body finishes, including after `exec`.
+    let caller = Rc::downgrade(&fds);
     let fds = if redirs.is_empty() {
         fds
     } else {
         let table = fds.borrow().clone();
-        // Shadowing alone retains the incoming table until this body returns.
-        // A redirected background loop must release its old capture writer
-        // before running, even if the loop itself never finishes.
         drop(fds);
         Rc::new(RefCell::new(table))
     };
-    let mut work = substitution_work(&context, &fds);
+    let generated = Rc::new(Cell::new(0));
+    let mut work = substitution_work(&context, &fds, Some(generated.clone()));
     let fds = match command_redirects(&redirs, &state, fds, &context, &mut work).await {
         Err(outcome) => return outcome,
         Ok(fds) => fds,
     };
-    let context = context.compound_body();
+    let expands = matches!(
+        compound,
+        CompoundCommand::Arithmetic(_)
+            | CompoundCommand::Case(_)
+            | CompoundCommand::For(_)
+            | CompoundCommand::Select(_)
+            | CompoundCommand::ArithmeticFor(_)
+            | CompoundCommand::Test(_)
+    );
+    let temporary = match descriptors::redirected(&redirs, &mut work) {
+        Ok(temporary) => temporary,
+        Err(error) => return expansion_failure(error, &fds, &context).await,
+    };
+    let context = if redirs.is_empty() && !expands {
+        context.compound_body()
+    } else {
+        match context.with_caller_descriptors(caller, temporary, generated.clone()) {
+            Ok(context) => context.compound_body(),
+            Err(code) => return Outcome::status(code),
+        }
+    };
     // Unredirected compounds share shell bindings so exec persists, but their
     // process-substitution descriptors still belong only to this command.
     let allocation = match context.evaluation.admit_execution(
@@ -1521,25 +1551,16 @@ async fn compound_command(
         Ok(allocation) => allocation,
         Err(code) => return Outcome::status(code),
     };
-    let process_fds = Rc::new(ProcessSubstitutionFds {
+    let _process_fds = Rc::new(ProcessSubstitutionFds {
         fds: fds.clone(),
-        opened: Cell::new(0),
+        opened: generated.clone(),
         _allocation: allocation,
     });
     // Other bodies must release the expansion reader's descriptor references.
-    work.substitutions = matches!(
-        compound,
-        CompoundCommand::Arithmetic(_)
-            | CompoundCommand::Case(_)
-            | CompoundCommand::For(_)
-            | CompoundCommand::Select(_)
-            | CompoundCommand::ArithmeticFor(_)
-            | CompoundCommand::Test(_)
-    )
-    .then(|| Substitutions {
+    work.substitutions = expands.then(|| Substitutions {
         context: context.clone(),
         fds: fds.clone(),
-        process_fds: Some(process_fds.clone()),
+        generated_fds: Some(generated.clone()),
     });
     execute_compound_body(compound, state, fds, context, &mut work).await
 }
@@ -1769,7 +1790,7 @@ fn loop_arithmetic<'a>(
             }
             let table = fds.borrow().clone();
             let fds = Rc::new(RefCell::new(table));
-            let mut work = substitution_work(&context, &fds);
+            let mut work = substitution_work(&context, &fds, None);
             let result = match cache {
                 Some(cache) => {
                     arithmetic_command_program(&cache.program, state, &fds, &context, &mut work)
@@ -2131,7 +2152,7 @@ async fn subshell(
         work.substitutions = Some(Substitutions {
             context: child_context.clone(),
             fds: child_fds.clone(),
-            process_fds: None,
+            generated_fds: None,
         });
         let result =
             match command_redirects(&redirs, &child, child_fds, &child_context, &mut work).await {
@@ -2341,6 +2362,7 @@ async fn launch_background(
         loop_depth: 0,
         ignore_errexit: context.ignore_errexit,
         trace: context.trace,
+        caller_descriptors: None,
     };
     let fds = Rc::new(RefCell::new(fds.borrow().clone()));
     let parent_scope = context.scope.clone();
@@ -2431,12 +2453,16 @@ fn expansion_work(context: &Context) -> expand::Work {
 }
 /// Expansion work that can run command substitutions with `fds` (the
 /// descriptors in effect before the command's own redirections).
-fn substitution_work(context: &Context, fds: &Descriptors) -> expand::Work {
+fn substitution_work(
+    context: &Context,
+    fds: &Descriptors,
+    generated_fds: Option<Rc<Cell<u64>>>,
+) -> expand::Work {
     let mut work = expansion_work(context);
     work.substitutions = Some(Substitutions {
         context: context.clone(),
         fds: fds.clone(),
-        process_fds: None,
+        generated_fds,
     });
     work
 }
@@ -2444,7 +2470,7 @@ fn substitution_work(context: &Context, fds: &Descriptors) -> expand::Work {
 /// Compound-local descriptor cleanup without retaining individual pipe ends.
 struct ProcessSubstitutionFds {
     fds: Descriptors,
-    opened: Cell<u64>,
+    opened: Rc<Cell<u64>>,
     _allocation: crate::exec::Allocation,
 }
 impl Drop for ProcessSubstitutionFds {
@@ -2468,7 +2494,7 @@ impl Drop for ProcessSubstitutionFds {
 pub(crate) struct Substitutions {
     context: Context,
     fds: Descriptors,
-    process_fds: Option<Rc<ProcessSubstitutionFds>>,
+    generated_fds: Option<Rc<Cell<u64>>>,
 }
 impl Substitutions {
     pub(crate) fn filesystem(&self) -> Rc<dyn FileSystem> {
@@ -2694,10 +2720,8 @@ impl Substitutions {
             },
         );
         self.fds.borrow_mut().insert(fd, parent_end);
-        if let Some(process_fds) = &self.process_fds {
-            process_fds
-                .opened
-                .set(process_fds.opened.get() | (1u64 << fd));
+        if let Some(generated_fds) = &self.generated_fds {
+            generated_fds.set(generated_fds.get() | (1u64 << fd));
         }
         parent_state.borrow_mut().publish_async_identity(identity);
         Ok(fd)
@@ -2802,6 +2826,7 @@ async fn retain_declaration_syntax(
 struct PreparedCommand {
     argv: Vec<String>,
     execution: Result<PreparedExecution, CommandError>,
+    generated_fds: u64,
 }
 
 struct PreparedExecution {
@@ -2809,6 +2834,7 @@ struct PreparedExecution {
     assigned: Vec<(String, String)>,
     fds: Option<Descriptors>,
     work: expand::Work,
+    redirected: Vec<u32>,
 }
 
 async fn simple_command(
@@ -2835,8 +2861,19 @@ async fn simple_command(
         return exec_prepared_command(&mut prepared, &state, original_fds, &context, parent_stderr)
             .await;
     }
+    let context = match descriptors::command_context(
+        prepared.as_mut().unwrap(),
+        &state,
+        &original_fds,
+        &context,
+    ) {
+        Ok(context) => context,
+        Err(code) => return Outcome::status(code),
+    };
     drop(original_fds);
-    let PreparedCommand { argv, execution } = prepared.as_mut().unwrap();
+    let PreparedCommand {
+        argv, execution, ..
+    } = prepared.as_mut().unwrap();
     let argv = Cell::new(std::mem::take(argv));
     let mut last_storage = None;
     let builtin_prefix = Cell::new(None);
@@ -2885,7 +2922,12 @@ async fn exec_prepared_command_body(
     let result = match prepared.execution {
         Err(error) => expansion_failure(error, &original_fds, &context).await,
         Ok(execution) if prepared.argv.len() == 1 && execution.assigned.is_empty() => {
-            *original_fds.borrow_mut() = execution.fds.unwrap().borrow().clone();
+            context.persist_descriptors(
+                &execution.redirected,
+                prepared.generated_fds,
+                &execution.fds.unwrap().borrow(),
+                &original_fds,
+            );
             Outcome::status(0)
         }
         Ok(_) => Outcome::status(2),
@@ -3025,7 +3067,12 @@ async fn prepare_simple_command_body(
     let mut budget = Budget::default();
     // Process substitutions open descriptors for this command only.
     let fds = Rc::new(RefCell::new(fds.borrow().clone()));
-    let mut work = substitution_work(context, &fds);
+    // Fixed descriptor metadata uses the active execution pool, not expansion bytes.
+    let _generated_allocation = context
+        .evaluation
+        .admit_execution(std::mem::size_of::<Cell<u64>>() + 2 * std::mem::size_of::<usize>())?;
+    let generated_fds = Rc::new(Cell::new(0));
+    let mut work = substitution_work(context, &fds, Some(generated_fds.clone()));
     let mut argv = expand::fields(
         &simple.name,
         state,
@@ -3086,7 +3133,11 @@ async fn prepare_simple_command_body(
     let execution = prepare_execution_body(simple, &argv, state, fds, context, bytes, work)
         .await
         .map_err(|error| error.at_line(line));
-    Ok(PreparedCommand { argv, execution })
+    Ok(PreparedCommand {
+        argv,
+        execution,
+        generated_fds: generated_fds.get(),
+    })
 }
 
 async fn prepare_execution_body(
@@ -3116,12 +3167,14 @@ async fn prepare_execution_body(
         )
         .await?;
         let fds = redirects(&simple.redirects, state, fds, context, &mut work, Some(1)).await?;
+        let redirected = descriptors::redirected(&simple.redirects, &mut work)?;
         work.substitutions = None;
         return Ok(PreparedExecution {
             line,
             assigned: Vec::new(),
             fds: Some(fds),
             work,
+            redirected,
         });
     }
     let function_prefix = state.borrow().functions().contains_key(&argv[0]);
@@ -3153,12 +3206,14 @@ async fn prepare_execution_body(
         heredoc_status,
     )
     .await?;
+    let redirected = descriptors::redirected(&simple.redirects, &mut work)?;
     work.substitutions = None;
     Ok(PreparedExecution {
         line,
         assigned,
         fds: Some(fds),
         work,
+        redirected,
     })
 }
 
@@ -3565,7 +3620,7 @@ async fn dispatch_arguments(
             work.substitutions = Some(Substitutions {
                 context: context.clone(),
                 fds: fds.clone(),
-                process_fds: None,
+                generated_fds: None,
             });
         }
         let bindings = fds.borrow().clone();
@@ -4228,8 +4283,7 @@ async fn redirects(
                 | RedirectKind::HereString
                 | RedirectKind::ReadWrite
         );
-        let fd = redirect.fd.unwrap_or(if input { 0 } else { 1 });
-        let fd = u32::try_from(fd).map_err(|_| 2)?;
+        let fd = descriptors::redirect_fd(redirect)?;
         match redirect.kind {
             RedirectKind::DupInput | RedirectKind::DupOutput => {
                 if target == "-" {
@@ -4331,6 +4385,7 @@ mod scope_tests {
             loop_depth: 0,
             ignore_errexit: false,
             trace: xtrace::Trace::default(),
+            caller_descriptors: None,
         };
         (session.state(), session.core.descriptors.clone(), context)
     }
