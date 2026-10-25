@@ -1,6 +1,6 @@
 # Scalar read
 
-`read [-r] [-u fd] [-n count] [name ...]` reads one logical line. It assigns
+`read [-r] [-u fd] [-n count] [-N count] [name ...]` reads one logical line. It assigns
 successive IFS fields to scalar destinations, clears destinations beyond the
 available fields, and gives the final destination the remaining source text.
 IFS whitespace collapses; other IFS delimiters preserve empty fields. Empty IFS
@@ -37,7 +37,16 @@ Assignments copy only their final bytes, so local values cannot retain the
 record's unused capacity. Every input byte and field scan uses cooperative work;
 reads use cancellable endpoints without read-ahead or descriptor probing.
 
-Arrays, `-N`, `-d`, timers, terminal editing and descriptor errno diagnostics
+Raw exact-count reads with `-r -N count` in C/POSIX locale request chunks of at
+most 4096 bytes. Each request stays within the remaining count and stops no later
+than the first byte beyond `line_bytes`. NUL bytes do not count. The scratch
+buffer is admitted against command storage and live memory before any input.
+Per-byte cooperative checkpoints remain active, so cancellation can consume at
+most one in-flight chunk beyond the last checkpoint. No unread buffer survives
+the command, and aliases observe the next byte immediately. Delimiter, UTF-8 and
+non-raw reads retain one-byte requests.
+
+Arrays, `-d`, timers, terminal editing and descriptor errno diagnostics
 remain outside this implementation. The frozen ruler compares stdout bytes and
 status, not stderr. General attributes and nameref behavior belong to state.
 

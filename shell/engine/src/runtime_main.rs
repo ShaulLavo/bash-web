@@ -172,6 +172,7 @@ mod guest {
                         return session.state().borrow().status();
                     }
                     Err(IoError::Cancelled) => {
+                        session.state().borrow_mut().publish_status(130);
                         editor.clear();
                         *input_cancel.borrow_mut() = Cancel::new();
                         if write(&output, b"^C\r\n").await.is_err() {
@@ -203,6 +204,7 @@ mod guest {
                         break Some(source);
                     }
                     Action::Interrupt => {
+                        session.state().borrow_mut().publish_status(130);
                         let _ = write(&output, b"^C\r\n").await;
                         break None;
                     }
