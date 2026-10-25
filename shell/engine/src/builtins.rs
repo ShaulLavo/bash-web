@@ -5,6 +5,7 @@ mod completion;
 mod declarations;
 mod directories;
 mod getopts;
+mod help;
 mod printf;
 mod read;
 pub(crate) mod test;
@@ -121,6 +122,7 @@ pub(crate) async fn run(
             };
             return completion::run(kind, args, state, fds, context, work).await;
         }
+        Builtin::Help => return help::run(args, state, fds, context, work).await,
         Builtin::Noop => {}
         Builtin::False => return Err(1),
         Builtin::Test => return test::run(name, args, state, fds, context, work).await,

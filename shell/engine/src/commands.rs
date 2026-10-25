@@ -4,6 +4,7 @@
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Builtin {
+    Help,
     Noop,
     False,
     Echo,
@@ -159,6 +160,7 @@ static COMMANDS: &[Command] = &[
     ),
     special(":", Handler::Builtin(Builtin::Noop)),
     regular("true", Builtin::Noop),
+    regular("help", Builtin::Help),
     regular("false", Builtin::False),
     regular("echo", Builtin::Echo),
     regular("printf", Builtin::Printf),
