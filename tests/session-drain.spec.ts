@@ -1,0 +1,198 @@
+import { test, expect } from "./helpers/browser-test";
+import { build } from "esbuild";
+
+let fixture = "";
+let producer = "";
+
+declare global {
+  interface Window {
+    sessionDrain: {
+      output: number[];
+      states: string[];
+      turns: number;
+      disposed: number;
+      acknowledgements: number;
+      consumed: number[];
+      maximumDelivery: number;
+      input(bytes: number[]): void;
+      action(kind: string, bytes?: number[]): void;
+      dispose(): Promise<void>;
+    };
+  }
+}
+
+const fixtureSource = `
+import { BrowserSession } from "./src/browser/session";
+import { SharedBridge } from "./src/bridge";
+const output = [], states = [], consumed = [];
+let turns = 0, disposed = 0, maximumDelivery = 0, acknowledgements = 0;
+const drain = SharedBridge.prototype.drain;
+SharedBridge.prototype.drain = function(...args) { turns++; return drain.apply(this,args); };
+const session = await BrowserSession.create({
+  runtime: {filesystem:{state:{status:"ready"}}}, cols:80, rows:24,
+  onOutput(bytes) { maximumDelivery = Math.max(maximumDelivery,bytes.length); for(const byte of bytes) output.push(byte); },
+  onState(state) { states.push(state); }
+});
+const worker = new Worker("/drain-producer.js",{type:"module"});
+worker.onmessage = ({data}) => { acknowledgements++; if(data.bytes) consumed.push(...data.bytes); };
+worker.postMessage({kind:"init",buffer:globalThis.drainBridge.buffer});
+window.sessionDrain = {
+  output, states, consumed,
+  get turns() { return turns; }, get disposed() { return disposed; },
+  get maximumDelivery() { return maximumDelivery; }, get acknowledgements() { return acknowledgements; },
+  input(bytes) {session.input(new Uint8Array(bytes));},
+  action(kind,bytes) {worker.postMessage({kind,bytes});},
+  async dispose() {await session.dispose(); disposed++; worker.terminate();}
+};
+`;
+
+const stub = `
+export { SharedBridge } from "./src/bridge";
+export function runtimeSnapshot() { return {}; }
+export async function createShell({terminal}) {
+  globalThis.drainBridge = terminal;
+  Atomics.store(terminal.state,11,1);
+  return {process:{wasmBytes:0},done:new Promise(()=>{}),interrupt(){},async dispose(){}};
+}
+`;
+
+const producerSource = `
+import { SharedBridge, control } from "./src/bridge";
+import { shellTerminalImports } from "./src/runtime/guest-imports";
+let bridge;
+onmessage = ({data}) => {
+  if(data.kind === "init") {bridge = new SharedBridge(data.buffer); postMessage({}); return;}
+  if(data.kind === "write") bridge.write(new Uint8Array(data.bytes));
+  if(data.kind === "burst") for(let i=0;i<1000;i++) bridge.tryWrite([Uint8Array.of(i%256)]);
+  if(data.kind === "phase") shellTerminalImports(bridge.buffer).phase(data.bytes[0]);
+  if(data.kind === "receive") {postMessage({bytes:Array.from(bridge.receive(65536))}); return;}
+  if(data.kind === "lock") Atomics.store(bridge.state,control.inputLock,1);
+  if(data.kind === "unlock") {Atomics.store(bridge.state,control.inputLock,0);bridge.signal();}
+  if(data.kind === "exit" || data.kind === "fail") {
+    bridge.write(new Uint8Array(data.bytes));
+    Atomics.store(bridge.state,control.phase,data.kind === "exit" ? 3 : 4);
+    bridge.signal();
+  }
+  postMessage({});
+};
+`;
+
+test.beforeAll(async () => {
+  const output = await build({
+    stdin: { contents: fixtureSource, resolveDir: process.cwd(), sourcefile: "drain-fixture.js" },
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    write: false,
+    plugins: [
+      {
+        name: "shell-admission-fixture",
+        setup(builder) {
+          builder.onResolve({ filter: /^\.\.\/index$/ }, () => ({
+            path: "shell-admission-fixture",
+            namespace: "fixture",
+          }));
+          builder.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({
+            contents: stub,
+            resolveDir: process.cwd(),
+          }));
+        },
+      },
+    ],
+  });
+  fixture = output.outputFiles[0].text;
+  const worker = await build({
+    stdin: { contents: producerSource, resolveDir: process.cwd(), sourcefile: "drain-producer.js" },
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    write: false,
+  });
+  producer = worker.outputFiles[0].text;
+});
+
+test.beforeEach(async ({ page }) => {
+  await page.route("**/drain-fixture", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      headers: {
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "Cross-Origin-Embedder-Policy": "require-corp",
+      },
+      body: '<script type="module" src="/drain-fixture.js"></script>',
+    }),
+  );
+  await page.route("**/drain-fixture.js", (route) =>
+    route.fulfill({ contentType: "text/javascript", body: fixture }),
+  );
+  await page.route("**/drain-producer.js", (route) =>
+    route.fulfill({ contentType: "text/javascript", body: producer }),
+  );
+  await page.goto("/drain-fixture");
+  await page.waitForFunction(() => window.sessionDrain?.acknowledgements === 1);
+});
+
+test.afterEach(async ({ page }) => {
+  await page.evaluate(() => window.sessionDrain?.dispose());
+});
+
+test("an idle session has no repeated drain turns", async ({ page }) => {
+  await page.waitForTimeout(100);
+  const before = await page.evaluate(() => window.sessionDrain.turns);
+  await page.waitForTimeout(1000);
+  const turns = await page.evaluate(() => window.sessionDrain.turns);
+  console.log(JSON.stringify({ idleMs: 1000, drainTurns: turns - before }));
+  expect(turns - before).toBe(0);
+});
+
+test("worker output and phase-only changes wake a settled session", async ({ page }) => {
+  await page.evaluate(() => window.sessionDrain.action("phase", [2]));
+  await expect.poll(() => page.evaluate(() => window.sessionDrain.states.at(-1))).toBe("running");
+  await page.evaluate(() => window.sessionDrain.action("write", [1, 2, 3]));
+  await expect.poll(() => page.evaluate(() => window.sessionDrain.output)).toEqual([1, 2, 3]);
+  await page.evaluate(() => window.sessionDrain.action("phase", [1]));
+  await expect.poll(() => page.evaluate(() => window.sessionDrain.states.at(-1))).toBe("ready");
+});
+
+test("full-ring paste resumes when the worker frees capacity without output", async ({ page }) => {
+  await page.evaluate(() => window.sessionDrain.input(Array.from({ length: 196608 }, (_, i) => i % 251)));
+  for (let part = 1; part <= 3; part++) {
+    await page.evaluate(() => window.sessionDrain.action("receive"));
+    await expect.poll(() => page.evaluate(() => window.sessionDrain.consumed.length)).toBe(part * 65536);
+  }
+  expect(await page.evaluate(() => window.sessionDrain.consumed)).toEqual(
+    Array.from({ length: 196608 }, (_, i) => i % 251),
+  );
+});
+
+test("burst output coalesces and each delivery stays bounded", async ({ page }) => {
+  const before = await page.evaluate(() => window.sessionDrain.turns);
+  await page.evaluate(() => window.sessionDrain.action("burst"));
+  await expect.poll(() => page.evaluate(() => window.sessionDrain.output.length)).toBe(1000);
+  expect(await page.evaluate(() => window.sessionDrain.output)).toEqual(
+    Array.from({ length: 1000 }, (_, i) => i % 256),
+  );
+  expect(await page.evaluate(() => window.sessionDrain.turns)).toBeLessThan(before + 20);
+  expect(await page.evaluate(() => window.sessionDrain.maximumDelivery)).toBeLessThanOrEqual(32768);
+});
+
+for (const kind of ["exit", "fail"]) {
+  test(`${kind} retains final output larger than one drain`, async ({ page }) => {
+    await page.evaluate((kind) => window.sessionDrain.action(kind, Array.from({ length: 100000 }, (_, i) => i % 251)), kind);
+    await expect.poll(() => page.evaluate(() => window.sessionDrain.output.length)).toBe(100000);
+    expect(await page.evaluate(() => window.sessionDrain.output)).toEqual(
+      Array.from({ length: 100000 }, (_, i) => i % 251),
+    );
+    expect(await page.evaluate(() => window.sessionDrain.states.at(-1))).toMatch(/exited|failed:/);
+  });
+}
+
+test("dispose suppresses pending wake callbacks", async ({ page }) => {
+  await page.evaluate(async () => {
+    window.sessionDrain.action("burst");
+    await window.sessionDrain.dispose();
+  });
+  const before = await page.evaluate(() => ({ turns: window.sessionDrain.turns, output: window.sessionDrain.output.length, states: window.sessionDrain.states.length }));
+  await page.waitForTimeout(100);
+  expect(await page.evaluate(() => ({ turns: window.sessionDrain.turns, output: window.sessionDrain.output.length, states: window.sessionDrain.states.length }))).toEqual(before);
+});
