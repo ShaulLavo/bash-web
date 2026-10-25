@@ -4399,6 +4399,8 @@ mod getopts;
 
 #[path = "words/declarations.rs"]
 mod declarations;
+#[path = "words/help.rs"]
+mod help;
 #[path = "words/local_inherit.rs"]
 mod local_inherit;
 #[path = "words/select.rs"]

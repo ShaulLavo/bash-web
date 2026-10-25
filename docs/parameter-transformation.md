@@ -25,12 +25,38 @@ Bash fixes the locale when `LC_ALL`, `LC_CTYPE` or `LANG` is assigned, so a
 consulted locale variable that is a nameref is unsupported and fails with status 2.
 
 Not supported, and failing closed with status 2: arrays (including `PIPESTATUS`
-and namerefs to subscripts), `${@@op}`, `${*@op}`, `${!name@op}`, prompt expansion `@P`, transformations nested inside another
-operand such as `${v:-${x@Q}}`, and invalid operators on set names. Bash reports
-the last as a bad substitution. `${#@op}` never reaches this code: the shell
+and namerefs to subscripts), `${@@op}`, `${*@op}`, `${!name@op}`, and invalid
+operators on set names. Bash reports invalid operators as a bad substitution. `${#@op}` never reaches this code: the shell
 exits with status 1 and "bad substitution: invalid parameter expansion" when the
 expansion is reached; earlier commands still run. Attributes the state does not store (integer,
 case, array) are not reported.
+
+Scalar transformations also work inside selected parameter operands, including
+`${v:-${x@Q}}`.
+
+## Prompt decoding
+
+`P` decodes prompt escapes before expanding parameters, arithmetic, command
+substitutions, and backticks. Quotes in the prompt remain literal. The result
+then follows the enclosing expansion's quoting and splitting rules.
+`shopt -u promptvars` disables the substitution step, including in subshells.
+
+Supported escapes are `\a`, `\e`, `\n`, `\r`, `\\`, three-digit octal bytes,
+`\[`, `\]`, `\s`, `\w`, and `\W`. Octal output must form UTF-8; NUL bytes
+are skipped. `\D{literal}` accepts a nonempty format without `%` directives.
+Working directories come from shell state. `HOME` abbreviates their prefix,
+and a positive `PROMPT_DIRTRIM` limits the trailing directory components.
+Directory and identity text cannot introduce new substitutions.
+
+`\u`, `\h`, `\H`, and `\$` require nonempty `USER`, `HOSTNAME`, or a numeric
+`EUID` from shell state. Missing facts fail with status 2. These variables are
+not initialized with invented user names, host names, or IDs. Bash obtains
+some of these facts outside the environment; that host integration remains open.
+Time and date directives, history and command numbers, job count, terminal name,
+and shell-version escapes are unsupported and fail with status 2.
+Prompt decoding and nested expansion share the existing work, storage, recursion,
+and cancellation limits. Recorded production-Waffle tests run with
+`node --test scripts/test-own-shell-prompt.ts`.
 
 Original Rust in `shell/engine/src/expand/transformation.rs`, observed against
 GNU Bash 5.3.15. Tests are in `shell/engine/tests/words/transformation.rs`;
