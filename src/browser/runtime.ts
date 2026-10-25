@@ -45,9 +45,6 @@ export function acquireBrowserRuntime(
   const runtime = createRuntime({
     filesystem: { mode, workerURL: creation.workerURL },
     onStartupStage: creation.onStartupStage,
-    onProcessAdmission(event) {
-      console.log("process-admission", JSON.stringify(event));
-    },
   });
   return { runtime, ready: Promise.resolve(), dispose: () => runtime.dispose() };
 }
