@@ -424,6 +424,45 @@ fn cwd_storage(cwd: &str, path: &str) -> Result<usize, i32> {
     cwd.len().checked_add(path.len()).ok_or(2)
 }
 
+pub(super) async fn hashed(
+    name: &str,
+    state: &SharedState,
+    context: &Context,
+    work: &mut expand::Work,
+) -> Result<Option<Rc<crate::state::command_hash::Entry>>, i32> {
+    if name.contains('/') {
+        return Ok(None);
+    }
+    let table = state.borrow().command_hash.clone();
+    table
+        .find(name, &context.cancel, work)
+        .await
+        .map_err(admission_status)
+}
+pub(super) async fn hash_description(
+    name: &str,
+    path: &str,
+    verbose: bool,
+    fds: &Descriptors,
+    context: &Context,
+    work: &mut expand::Work,
+) -> Result<(), i32> {
+    for _ in path.bytes() {
+        work.checkpoint(&context.cancel)
+            .await
+            .map_err(admission_status)?;
+    }
+    if verbose {
+        output(fds, context, name.as_bytes()).await?;
+        output(fds, context, b" is hashed (").await?;
+    }
+    output(fds, context, path.as_bytes()).await?;
+    if verbose {
+        output(fds, context, b")").await?;
+    }
+    output(fds, context, b"\n").await
+}
+
 pub(super) async fn query(
     args: &[String],
     options: &Options,
@@ -469,7 +508,7 @@ pub(super) async fn query(
             if options.verbose {
                 function_description(name, &function, fds, context, work).await?;
             }
-        } else if command.is_some_and(commands::Command::query_builtin) {
+        } else if commands::enabled(name, state.borrow().disabled_builtins) {
             output(fds, context, name.as_bytes()).await?;
             output(
                 fds,
@@ -481,6 +520,8 @@ pub(super) async fn query(
                 },
             )
             .await?;
+        } else if let Some(entry) = hashed(name, state, context, work).await? {
+            hash_description(name, &entry.path, options.verbose, fds, context, work).await?;
         } else {
             let resolution = executable(
                 name,
@@ -542,27 +583,11 @@ pub(super) async fn function_description(
     context: &Context,
     work: &mut expand::Work,
 ) -> Result<(), i32> {
-    let limit = context
-        .limits()
-        .expansion_bytes
-        .min(work.storage_left())
-        .min(context.evaluation.execution_available());
-    // The printer enforces its ceiling before appending. Reserve
-    // that full possible live buffer before it allocates anything.
-    let _render_storage = context.evaluation.admit_execution(limit)?;
-    let rendered = match function_string_bounded(
-        name,
-        &function.body,
-        &Cell::new(limit),
-        limit,
-        Some(&context.parser_budget()),
-    ) {
+    let rendered = match context.render_function(name, function, work) {
         Ok(rendered) => rendered,
         Err(_) => return function_description_failure(fds, context).await,
     };
-    work.admit_storage(rendered.len())
-        .map_err(admission_status)?;
-    output(fds, context, rendered.as_bytes()).await?;
+    output(fds, context, rendered.text.as_bytes()).await?;
     output(fds, context, b"\n").await?;
     Ok(())
 }

@@ -109,6 +109,15 @@ impl Rig {
     fn run(&self, source: &str) -> i32 {
         self.finish(self.shell.start(source).unwrap())
     }
+    fn check_recorded(&self, case: &serde_json::Value, expected: &[u8]) {
+        let code = case["code"].as_str().unwrap();
+        assert_eq!(
+            self.run(code),
+            case["status"].as_i64().unwrap() as i32,
+            "{code}"
+        );
+        assert_eq!(self.output.bytes(), expected, "{code}");
+    }
     fn variable(&self, name: &str, value: &str) {
         self.shell
             .state()
@@ -177,6 +186,15 @@ fn check_output(source: &str, expected: &str) {
     assert_eq!(rig.output.bytes(), expected.as_bytes(), "{source}");
 }
 
+fn recorded_bash_fixture(source: &str) -> serde_json::Value {
+    let fixture: serde_json::Value = serde_json::from_str(source).unwrap();
+    assert_eq!(
+        fixture["bash"],
+        "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)"
+    );
+    fixture
+}
+
 // Scalar replacements adapt the pinned Bashkit specs; Bash 5.3 controls also
 // cover default patsub_replacement semantics and bounded engine behavior.
 #[test]
@@ -241,7 +259,7 @@ fn scalar_default_apostrophe_spans_defer_substitution_lookalikes() {
 }
 
 #[test]
-fn selected_malformed_lazy_substitutions_are_fatal_status_one() {
+fn selected_malformed_lazy_substitutions_discard_their_line_with_status_one() {
     for source in [
         r#"unset v; args "${v:-'${'}" following; args after"#,
         r#"unset v; args "${v-'$('}" following; args after"#,
@@ -252,8 +270,9 @@ fn selected_malformed_lazy_substitutions_are_fatal_status_one() {
         r#"unset v; args "${v:="${v:-'$('}"}" following; args after"#,
     ] {
         let rig = Rig::new(Limits::default());
-        assert_eq!(rig.run(source), 1, "{source}");
-        assert!(rig.calls.borrow().is_empty(), "{source}");
+        let source = format!("{source}\nargs next $?");
+        assert_eq!(rig.run(&source), 0, "{source}");
+        assert_eq!(*rig.calls.borrow(), [["next", "1"]], "{source}");
         assert!(rig.output.bytes().is_empty(), "{source}");
         assert!(
             String::from_utf8(rig.errors.bytes())
@@ -2150,11 +2169,21 @@ fn scalar_operators_work_in_assignments_declarations_command_names_and_redirects
 }
 
 #[test]
+fn selected_element_default_distinguishes_missing_and_set_empty() {
+    check(
+        r#"args ${a[0]-x}; a[0]=; args "${a[0]-x}" "${a[0]:-x}"; a[0]=kept; args "${a[0]-x}""#,
+        &[&["x"], &["", "x"], &["kept"]],
+    );
+}
+
+#[test]
 fn selected_unsupported_operands_and_operator_targets_fail_without_dispatch() {
+    check(
+        r#"args ${u:-$@}; set -- a "b c"; args ${u:-$@}; args "${u:-$@}""#,
+        &[&[], &["a", "b", "c"], &["a", "b c"]],
+    );
     for source in [
-        "args ${u:-$@}",
         "args ${u:-${PIPESTATUS[@]}}",
-        "args ${a[0]-x}",
         "args ${1-x}",
         "args ${u:-~}",
         "args ${u:-*}",
@@ -2773,8 +2802,9 @@ fn deferred_list_separators_keep_raw_output_and_field_bounds() {
         expansion_bytes: 8,
         ..Limits::default()
     });
+    rig.variable("IFS", "");
     assert_eq!(
-        rig.run(r#"f() { IFS=; args "$@"${IFS:= }; }; f '' '' '' '' '' '' '' '' '' ''"#),
+        rig.run(r#"f() { args "$@"${IFS:= }; }; f '' '' '' '' '' '' '' '' '' ''"#),
         2
     );
     assert!(rig.calls.borrow().is_empty());
@@ -2784,10 +2814,8 @@ fn deferred_list_separators_keep_raw_output_and_field_bounds() {
             expansion_bytes: bytes,
             ..Limits::default()
         });
-        assert_eq!(
-            rig.run(r#"f() { IFS=; args "$@"${IFS:=:}; }; f aa bb"#),
-            status
-        );
+        rig.variable("IFS", "");
+        assert_eq!(rig.run(r#"f() { args "$@"${IFS:=:}; }; f aa bb"#), status);
         if status == 0 {
             assert_eq!(*rig.calls.borrow(), &[vec!["aa bb"]]);
         } else {
@@ -2798,7 +2826,8 @@ fn deferred_list_separators_keep_raw_output_and_field_bounds() {
         arguments: 3,
         ..Limits::default()
     });
-    assert_eq!(rig.run(r#"f() { IFS=; args $@${IFS:=:}; }; f a:b c:d"#), 2);
+    rig.variable("IFS", "");
+    assert_eq!(rig.run(r#"f() { args $@${IFS:=:}; }; f a:b c:d"#), 2);
     assert!(rig.calls.borrow().is_empty());
 }
 
@@ -2951,11 +2980,10 @@ fn assignment_and_error_operands_are_lazy_including_unsupported_syntax() {
     assert_eq!(*rig.calls.borrow(), &[vec!["diagnostic"]]);
     assert_eq!(rig.errors.bytes(), b"/usr/bin/bash: line 1: u: failure\n");
     assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
-    let source = "args ${u:=$@}";
-    let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run(source), 2, "{source}");
-    assert!(rig.calls.borrow().is_empty());
-    assert!(!rig.shell.state().borrow().bindings().contains_key("u"));
+    check(
+        r#"args ${u:=$@}; args "${u+x}" "$u"; set -- a "b c"; unset u; args "${u:=$@}" "$u""#,
+        &[&[], &["x", ""], &["a b c", "a b c"]],
+    );
 }
 
 #[test]
@@ -3361,7 +3389,10 @@ fn fatal_errors_keep_completed_effects_and_route_diagnostics() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("a=${u:?bad} args 2>errors; args after"), 127);
     assert_eq!(rig.errors.bytes(), b"/usr/bin/bash: line 1: u: bad\n");
-    assert!(rig.fs.read_file("/home/guest/errors").unwrap().is_empty());
+    assert!(matches!(
+        rig.fs.read_file("/home/guest/errors"),
+        Err(shell_engine::io::IoError::NotFound)
+    ));
 }
 
 #[test]
@@ -4032,6 +4063,8 @@ mod transformation;
 mod printf_escaped_fields;
 #[path = "words/printf_fields.rs"]
 mod printf_fields;
+#[path = "words/printf_float.rs"]
+mod printf_float;
 #[path = "words/printf_integers.rs"]
 mod printf_integers;
 #[path = "words/printf_unsigned.rs"]
@@ -4377,6 +4410,10 @@ mod getopts;
 
 #[path = "words/declarations.rs"]
 mod declarations;
+#[path = "words/help.rs"]
+mod help;
+#[path = "words/local_inherit.rs"]
+mod local_inherit;
 #[path = "words/select.rs"]
 mod select;
 
@@ -4405,21 +4442,60 @@ mod aliases;
 mod array_slicing;
 
 #[test]
-fn scalar_integer_initial_value_uses_arithmetic_precedence() {
-    let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run("declare -i x=2*3+4; echo $x"), 0);
-    assert_eq!(rig.output.bytes(), b"10\n");
-    assert!(rig.errors.bytes().is_empty());
+fn typed_reference_operator_errors_preserve_diagnostic_and_flow() {
+    for source in [
+        "a=(); args \"${a[-1]:-fallback}\"; args AFTER",
+        "a=(); declare -n r='a[-1]'; args \"${r:-fallback}\"; args AFTER",
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 1, "{source}");
+        assert_eq!(
+            rig.errors.bytes(),
+            b"/usr/bin/bash: line 1: a[-1]: bad array subscript\n"
+        );
+        assert!(rig.calls.borrow().is_empty(), "{source}");
+    }
 }
 
 #[test]
-fn scalar_integer_plain_assignments_keep_arithmetic_side_effects() {
+fn typed_reference_operator_readonly_keeps_rhs_effect_but_not_destination_write() {
     let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(kept); readonly a; declare -n r='a[1]'"), 0);
+    assert_eq!(rig.run("args \"${r:=${side:=done}}\"; args AFTER"), 1);
+    assert_eq!(rig.value("side").as_deref(), Some("done"));
     assert_eq!(
-        rig.run("declare -i x; x=20+5; echo \"x: $x\"; x=\"3*4\"; echo \"x: $x\"; x=\"10/3\"; echo \"x: $x\"; x=\"y=7, y+3\"; echo \"x: $x\""),
-        0
+        rig.errors.bytes(),
+        b"/usr/bin/bash: line 1: a: readonly variable\n"
     );
-    assert_eq!(rig.output.bytes(), b"x: 25\nx: 12\nx: 3\nx: 10\n");
-    assert_eq!(rig.value("y").as_deref(), Some("7"));
-    assert!(rig.errors.bytes().is_empty());
+    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.run("args \"${a[@]}\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["kept"]]);
 }
+
+#[test]
+fn typed_reference_operator_cycles_are_selected_element_cycles() {
+    for source in [
+        "a[0]='a[0]'; args \"$((a[0]))\"; args AFTER",
+        "a[0]='a'; args \"$((a[0]))\"; args AFTER",
+        "a[0]='a[1]'; a[1]='a[0]'; args \"$((a[0]))\"; args AFTER",
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 1, "{source}");
+        assert_eq!(
+            rig.errors.bytes(),
+            b"/usr/bin/bash: line 1: arithmetic expression: expression recursion level exceeded\n"
+        );
+        assert!(rig.calls.borrow().is_empty(), "{source}");
+    }
+}
+
+#[path = "words/enable.rs"]
+mod enable;
+#[path = "words/pipeline_status.rs"]
+mod pipeline_status;
+
+#[path = "words/command_hash.rs"]
+mod command_hash;
+
+#[path = "words/printf_invalid_format.rs"]
+mod printf_invalid_format;

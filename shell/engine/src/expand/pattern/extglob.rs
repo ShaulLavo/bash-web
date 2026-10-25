@@ -1,6 +1,8 @@
-//! Positive full-pattern groups compiled to an epsilon-NFA, without backtracking.
+//! Full-pattern groups compiled to an epsilon-NFA, without backtracking.
 use super::{Atom, Cancel, Error, Pattern, Work, admit_vec_slot};
 use crate::expand::admit_vec_exact;
+
+mod negative;
 
 #[derive(Clone, Copy)]
 enum Instruction {
@@ -8,6 +10,7 @@ enum Instruction {
     Split(usize, usize),
     Jump(usize),
     Accept,
+    Negate(usize, usize),
 }
 
 struct Group {
@@ -32,19 +35,19 @@ impl Compiler {
     }
 
     fn open(&mut self, operator: char, work: &mut Work) -> Result<(), Error> {
-        if operator == '!' {
-            return Err(2.into());
-        }
         let exit = self.emit(Instruction::Accept, work)?;
         let choice = self.emit(Instruction::Accept, work)?;
         let arm = self.emit(Instruction::Accept, work)?;
         self.code[self.tail] = match operator {
+            '!' => Instruction::Negate(choice, exit),
             '?' | '*' => Instruction::Split(choice, exit),
             _ => Instruction::Jump(choice),
         };
         self.code[choice] = Instruction::Jump(arm);
         let repeat = if matches!(operator, '*' | '+') {
             self.emit(Instruction::Split(choice, exit), work)?
+        } else if operator == '!' {
+            self.emit(Instruction::Accept, work)?
         } else {
             exit
         };
@@ -223,6 +226,19 @@ async fn literal_tail(
     Ok(pattern.chars.len())
 }
 
+async fn initialize_flags(
+    flags: &mut Vec<bool>,
+    count: usize,
+    work: &mut Work,
+    cancel: &Cancel,
+) -> Result<(), Error> {
+    for _ in 0..count {
+        work.checkpoint(cancel).await?;
+        flags.push(false);
+    }
+    Ok(())
+}
+
 struct States {
     live: Vec<bool>,
     pending: Vec<usize>,
@@ -233,10 +249,7 @@ impl States {
         let mut pending = Vec::new();
         admit_vec_exact(&mut live, count, work)?;
         admit_vec_exact(&mut pending, count, work)?;
-        for _ in 0..count {
-            work.checkpoint(cancel).await?;
-            live.push(false);
-        }
+        initialize_flags(&mut live, count, work, cancel).await?;
         Ok(Self { live, pending })
     }
 
@@ -291,6 +304,12 @@ pub(super) async fn matches(
     cancel: &Cancel,
 ) -> Result<bool, Error> {
     let code = compile(pattern, work, cancel).await?;
+    for instruction in &code {
+        work.checkpoint(cancel).await?;
+        if matches!(instruction, Instruction::Negate(..)) {
+            return negative::matches(pattern, &code, value, work, cancel).await;
+        }
+    }
     let mut current = States::new(code.len(), work, cancel).await?;
     let mut next = States::new(code.len(), work, cancel).await?;
     current.insert(0);
@@ -382,6 +401,96 @@ mod tests {
         assert!(pending.as_mut().now_or_never().is_none());
         cancel.cancel();
         assert!(matches!(finish(pending), Err(Error::Status(130))));
+    }
+
+    #[test]
+    fn negative_groups_match_empty_nested_repeated_and_suffix_languages() {
+        assert_cases(&[
+            ("!(a)", "", true),
+            ("!(a)", "a", false),
+            ("!(a)", "b", true),
+            ("!(*)", "", false),
+            ("!(*)", "a", false),
+            ("!()", "", false),
+            ("!()", "a", true),
+            ("!(a|b)", "ab", true),
+            ("--!(help|verbose)", "--help", false),
+            ("--!(help|verbose)", "--oops", true),
+            ("!(*d)d", "d", true),
+            ("!(a)d", "ad", false),
+            ("!(a)d", "bd", true),
+            ("@(!(a)|b)", "c", true),
+            ("@(!(a))", "a", false),
+            ("!(x)?", "ab", true),
+            ("!(!(a))", "a", true),
+            ("!(!(a))", "b", false),
+            ("*(!(a))", "", true),
+            ("+(!(a))", "", true),
+            ("*(!(a))", "a", false),
+            ("*(!(a))", "ab", true),
+            ("!(x)+(ab)", "abab", true),
+            ("!(z)*(a|aa)", "aaa", true),
+            ("!(z)+(a)", "x", false),
+            ("!([a-c]|x)", "é🙂", true),
+            ("!([a-c]|x)", "a", false),
+        ]);
+    }
+
+    fn assert_deep_group_matches(operator: &str, depth: usize) {
+        let source = format!(
+            "{}a{}",
+            format!("{operator}(").repeat(depth),
+            ")".repeat(depth)
+        );
+        let mut work = Work::new(1000000, 4000000, 16);
+        assert_eq!(
+            finish(pattern(&source).matches_full("a", &mut work, &Cancel::new())).ok(),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn nested_negative_groups_do_not_recurse_or_backtrack() {
+        assert_deep_group_matches("!", 128);
+    }
+
+    #[test]
+    fn negative_storage_work_and_cancellation_fail_as_errors_not_misses() {
+        let source = pattern("!(a|aa)*(!(b))");
+        let cancel = Cancel::new();
+        let mut denied = Work::new(1000000, 0, 16);
+        assert!(matches!(
+            finish(matches(&source, "abc", &mut denied, &cancel)),
+            Err(Error::Status(2))
+        ));
+        let mut exhausted = Work::new(1000, 1000000, 16);
+        assert!(matches!(
+            finish(matches(&source, &"a".repeat(64), &mut exhausted, &cancel)),
+            Err(Error::Status(2))
+        ));
+        let mut work = Work::new(10000000, 10000000, 16);
+        assert_cancelled_after_yield(
+            matches(&source, &"a".repeat(256), &mut work, &cancel),
+            &cancel,
+        );
+    }
+
+    #[test]
+    fn negative_cost_is_bounded_for_overlapping_and_nullable_alternatives() {
+        for length in [8, 16, 32, 64] {
+            let source = pattern("!(*(a|aa|aaa|aaaa))z");
+            let value = format!("{}z", "a".repeat(length));
+            let mut work = Work::new(10000000, 10000000, 16);
+            assert_eq!(
+                finish(matches(&source, &value, &mut work, &Cancel::new())).ok(),
+                Some(false)
+            );
+            let steps = 10000000 - work.remaining;
+            let storage = 10000000 - work.storage_remaining;
+            eprintln!("negative-cost length={length} steps={steps} storage={storage}");
+            assert!(steps < 300 * (length + 2) * (length + 2));
+            assert!(storage < 1000 * (length + 2) * (length + 2));
+        }
     }
 
     #[test]
@@ -538,20 +647,15 @@ mod tests {
             finish(pattern("@(a)").remove("abc", true, true, &mut work, &Cancel::new())),
             Err(Error::Status(2))
         ));
-        assert!(matches!(
-            finish(pattern("!(a)").matches_full("b", &mut work, &Cancel::new())),
-            Err(Error::Status(2))
-        ));
+        assert_eq!(
+            finish(pattern("!(a)").matches_full("b", &mut work, &Cancel::new())).ok(),
+            Some(true)
+        );
     }
 
     #[test]
     fn deep_groups_compile_and_match_without_recursive_stack() {
-        let source = format!("{}a{}", "@(".repeat(4096), ")".repeat(4096));
-        let mut work = Work::new(1000000, 4000000, 16);
-        assert_eq!(
-            finish(pattern(&source).matches_full("a", &mut work, &Cancel::new())).ok(),
-            Some(true)
-        );
+        assert_deep_group_matches("@", 4096);
     }
 
     #[test]

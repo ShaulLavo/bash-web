@@ -70,10 +70,10 @@
   },
   "waffle": {
     "repository": "https://github.com/ShaulLavo/waffle",
-    "revision": "b20fad173ebaa225cb87c51776f35edaaafd4a40",
+    "revision": "250967060c0268950266fc5afb85be2170fb8ed3",
     "package": "waffle",
-    "version": "0.0.67",
-    "specifier": "git+https://github.com/ShaulLavo/waffle.git#b20fad173ebaa225cb87c51776f35edaaafd4a40",
+    "version": "0.0.90",
+    "specifier": "git+https://github.com/ShaulLavo/waffle.git#250967060c0268950266fc5afb85be2170fb8ed3",
     "license": "MIT",
     "descriptorAdapter": "Original local Rust logical-to-physical fd translation and WASI path_open flags/rights adapter, from docs/host-abi.md at the selected revision. No copied runtime implementation. Native MemoryFs uses its own same-node/new-description operation; unexported buffers retain their explicit boundary. See docs/descriptor-reopening.md and plan 004.",
     "permissionAdapter": "Original local Rust adapter from runtime_fs.path_permissions_get documentation at the selected revision. No copied upstream implementation. Preserve the four-word supported-mode/access contract; query metadata without opening payloads. Test-only storage conformance imports fs/vfs-internal.ts from the same pinned source module as SharedFilesystem; product composition stays default FAST and the frozen runner stays public memory.",
@@ -734,6 +734,28 @@
         ],
         "change": "Add a recovering single-read-unit entry point with an original-source continuation and no full-source AST copy. Preserve compound, multiline quote, heredoc, recovery and shared execution-budget handling.",
         "reason": "Alias changes must re-read only the next complete input unit instead of charging and copying every remaining alias expansion on each change."
+      },
+      {
+        "paths": [
+          "shell/parser/src/parser/ast.rs",
+          "shell/parser/src/parser/mod.rs"
+        ],
+        "change": "Parse `time` with Bash's grammar: only `-p` and one `--` are options, a bare `--` selects the POSIX report, other words start the timed pipeline, and a newline, `;`, `&` or end of input right after them times nothing. Remove the GNU-time format, output, append, verbose and deferred option-error fields.",
+        "reason": "GNU Bash 5.3.15 runs `time -f x cmd` as the command `-f`, reports a bare `time` before the next line, and rejects `time &&` or `time |`. No upstream test removed."
+      },
+      {
+        "paths": [
+          "shell/parser/src/parser/mod.rs"
+        ],
+        "change": "Expose the word parser's malformed parameter-header classification as an allocation-free scan for already-admitted lazy operand tokens. Preserve the same word-parser diagnostic text and grammar.",
+        "reason": "The existing GNU Bash 5.3.15 nested ${x:-${y!}} recording requires bad-substitution status 1, not the status 2 used for valid but unsupported parameter forms. No upstream test removed."
+      },
+      {
+        "paths": [
+          "shell/parser/src/parser/mod.rs"
+        ],
+        "change": "Enumerate malformed-substitution header characters instead of maintaining a loop counter.",
+        "reason": "Pass the blocking explicit_counter_loop lint while preserving Unicode character offsets and existing recovery decisions."
       }
     ],
     "removedUpstreamTests": [
@@ -1656,6 +1678,9 @@
       "shell/engine/tests/words/select.rs",
       "scripts/test-own-shell-select.ts",
       "scripts/fixtures/shell-select.json",
+      "shell/engine/src/interpreter/timing.rs",
+      "scripts/test-own-shell-interpreter-core.ts",
+      "scripts/fixtures/shell-interpreter-core.json",
       "shell/engine/tests/words/conditional.rs",
       "shell/engine/tests/words/test_builtin.rs",
       "shell/engine/tests/cli.rs",
@@ -1735,6 +1760,7 @@
       "scripts/fixtures/shell-printf-seed-42.json"
     ],
     "characterConversion": "Original %c first-byte conversion observed against GNU Bash 5.3.15, not copied or adapted upstream code. Borrows one byte or static NUL, consumes but ignores precision, and reuses the existing string field padding and signed-32 star rules. Two-pass admission, fixed-chunk delivery, cancellation and diagnostic ordering remain. Invalid input byte identity is already lost in word decoding and remains outside scope. See docs/printf-character.md.",
+    "floatingConversions": "Original pure-Rust %e/%E/%f/%F/%g/%G implementation observed against Linux GNU Bash 5.3.15, not copied or adapted upstream code. Private bounded binary integers round to a software binary80 value; exact rational decimal prefixes and finite decimal expansion avoid host libc and new dependencies. Existing Printer owns two-pass admission, fixed-chunk padding, diagnostics, cancellation and scalar assignment. Exact-version recorded native and production Waffle controls are in scripts/fixtures/shell-printf-float.json. Scope and arithmetic are described in docs/printf-float.md.",
     "integerFields": "Original integer flag/width/precision formatting observed against GNU Bash 5.3.15, not copied or adapted upstream code. The existing string field/count parser is shared, with unchanged signed-32 star and signed/unsigned-64 operand policies. Fixed 22-byte digits, borrowed sign/radix prefixes and fixed-chunk zero/space fill preserve two-pass admission, cancellation and stream ordering. See docs/printf-integer-fields.md for scope and focused native/WASI/production-Waffle evidence.",
     "unsignedIntegers": "Original bare %u/%o/%x/%X unsigned-64 operand conversion observed against GNU Bash 5.3.15, not copied or adapted upstream code. Checked accumulation distinguishes exact u64::MAX from overflow; separate unsigned, signed-64 and star signed-32 range policies preserve their different fallback values. Fixed 22-byte radix rendering reuses two-pass admission and cancellation. Original native/WASI tests and production Waffle measurements are described in docs/printf-unsigned-radix.md.",
     "signedIntegers": "Original bare %d/%i signed-64 operand conversion observed against GNU Bash 5.3.15, not copied or adapted upstream code. Shared lexical parsing retains distinct star signed-32 fallback. Fixed 22-byte shared integer rendering reuses two-pass admission, diagnostic ordering and cancellation. Original native/WASI tests and production real-Waffle measurements are described in docs/printf-integer-operands.md.",
@@ -2077,6 +2103,7 @@
     ],
     "strategy": "Borrow only the visible named declaration, with raw immediate nameref target and local-unset metadata; admit a single scalar snapshot and bounded cooperative declaration escaping before descriptor output. No binding mutation or whole-map/array snapshot.",
     "documentation": "docs/declaration-printing.md",
+    "namedFunctions": "Original named declare -f adapter needed by the existing timed-function GNU Bash 5.3.15 recordings. Reuses the command/type bounded AST renderer and its shared work, cancellation and live-storage admission without copying or executing function bodies. All-functions enumeration and function attributes remain unsupported. Original bounded-output, cancellation and drop controls accompany the adapter.",
     "qualification": "Targeted production-Waffle evidence only at this checkpoint. Parent owns independent review, serialized main integration, full frozen replay and baseline recomputation."
   },
   "shellDeclarationAppend": {
@@ -2154,6 +2181,71 @@
       "Existing closed-descriptor diagnostic and Bash diagnostic line-prefix mismatches retained as strict pending reproductions"
     ]
   },
+  "shellLastArgument": {
+    "classification": "Original command-completion adapter. GNU Bash 5.3.15 is a behavior oracle; no upstream implementation copied or adapted. Thirty fixture scripts are adapted from the frozen Brush corpus.",
+    "baseRevision": "e6430b1554de7d2efad092f40751858292cb071d",
+    "implementationDestinations": [
+      "shell/engine/src/interpreter.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/builtins.rs",
+      "shell/engine/src/builtins/declarations.rs",
+      "shell/engine/src/builtins/getopts.rs",
+      "shell/engine/src/interpreter/eval.rs"
+    ],
+    "testDestinations": [
+      "scripts/test-own-shell-special-params.ts",
+      "scripts/fixtures/shell-special-params.json",
+      "shell/engine/src/state/bindings_tests.rs",
+      "shell/engine/tests/words/read_count.rs",
+      "shell/engine/tests/words/getopts.rs",
+      "shell/engine/tests/words/declarations.rs",
+      "scripts/fixtures/shell-special-params-publication.json"
+    ],
+    "testSources": [
+      {
+        "repository": "https://github.com/reubeno/brush",
+        "revision": "4cfba081f2f8bcda8150010a57203d020f14f0cc",
+        "path": "brush-shell/tests/cases/compat/special_parameters.yaml",
+        "sha256": "cb564f8142f6a22417050a1e5adba9a8ca1afd5f813a17423ea687cacccab8fc",
+        "license": "MIT",
+        "caseIds": [
+          "brush-suite:special_parameters:1",
+          "brush-suite:special_parameters:2",
+          "brush-suite:special_parameters:3",
+          "brush-suite:special_parameters:4",
+          "brush-suite:special_parameters:5",
+          "brush-suite:special_parameters:6",
+          "brush-suite:special_parameters:7",
+          "brush-suite:special_parameters:10",
+          "brush-suite:special_parameters:11",
+          "brush-suite:special_parameters:12",
+          "brush-suite:special_parameters:13",
+          "brush-suite:special_parameters:14",
+          "brush-suite:special_parameters:15",
+          "brush-suite:special_parameters:16",
+          "brush-suite:special_parameters:17",
+          "brush-suite:special_parameters:18",
+          "brush-suite:special_parameters:19",
+          "brush-suite:special_parameters:20",
+          "brush-suite:special_parameters:21",
+          "brush-suite:special_parameters:22",
+          "brush-suite:special_parameters:23",
+          "brush-suite:special_parameters:24",
+          "brush-suite:special_parameters:25",
+          "brush-suite:special_parameters:26",
+          "brush-suite:special_parameters:28",
+          "brush-suite:special_parameters:29",
+          "brush-suite:special_parameters:30",
+          "brush-suite:special_parameters:32",
+          "brush-suite:special_parameters:34",
+          "brush-suite:special_parameters:35"
+        ]
+      }
+    ],
+    "strategy": "Retain the admitted expanded last argument, then publish it through ordinary binding storage after dispatch. Builtin prefix frames remain active until publication reaches their temporary nameref targets, then restore the caller bindings. Automatic publication uses the existing numeric OPTIND publication policy without applying explicit-assignment cursor resets. External dispatch clones its retained command name once for argv and borrows the original for diagnostics. Assignment-only commands publish an empty value. Preserve internal dispatch errors, terminal cancellation and resource outcomes, pipeline/subshell isolation, readonly target diagnostics and export clearing. Startup uses the actual shell name unless the environment supplied _. No runtime facts or command add-ons are introduced.",
+    "oracle": "Local GNU Bash 5.3.15(1)-release observations. CI replays the recording through production Waffle, without invoking host Bash. Frozen oracle, baseline, exclusions and scoring are unchanged.",
+    "deferred": "Other special parameters and well-known variables, including BASHPID, UID, EUID and LINENO."
+  },
   "shellCompletion": {
     "repository": "https://github.com/everruns/bashkit",
     "revision": "491c3281f668b76d64b15210b8f5d7bf97244be0",
@@ -2230,31 +2322,22 @@
     ],
     "implementation": "Sparse numeric offsets seek through the existing borrowed state reader. Length counts present entries, not holes. Empty sources and out-of-range offsets skip bound arithmetic. Selected strings are admitted before copying and emitted through shared quote/list/IFS logic with cooperative cancellation and command-wide limits. Scalar bindings keep existing text slicing. PIPESTATUS reads its existing producer. No indexed state mutation or durable producer publication API changes."
   },
-  "shellScalarIntegers": {
-    "classification": "Original plain scalar integer metadata and assignment adapters. Reuses the existing upstream-derived arithmetic evaluator unchanged. No new upstream implementation copied or adapted.",
-    "oracle": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
-    "implementationDestinations": [
-      "shell/engine/src/state/integer.rs",
+  "shellPromptTransformation": {
+    "classification": "Original prompt decoder and scanner context; GNU Bash 5.3.15 is a behavior oracle. No upstream implementation copied or adapted.",
+    "baseRevision": "e6430b1554de7d2efad092f40751858292cb071d",
+    "paths": [
+      "shell/engine/src/expand/prompt.rs",
+      "shell/engine/src/expand/operand.rs",
+      "shell/engine/src/expand/transformation.rs",
       "shell/engine/src/state.rs",
-      "shell/engine/src/state/declarations.rs",
       "shell/engine/src/builtins.rs",
-      "shell/engine/src/builtins/declarations.rs",
-      "shell/engine/src/interpreter/integer.rs",
-      "shell/engine/src/interpreter.rs"
+      "shell/engine/tests/words/transformation.rs",
+      "scripts/test-own-shell-prompt.ts",
+      "scripts/fixtures/shell-prompt.json",
+      "docs/parameter-transformation.md"
     ],
-    "strategy": "State owns integer metadata, supported scalar classification, lifecycle and publication. The interpreter evaluates already expanded scalar values through arithmetic::evaluate_literal, then retains the existing State assignment frame and declaration write paths.",
-    "fixture": {
-      "path": "scripts/fixtures/shell-scalar-integer.json",
-      "sha256": "909d2b04ccff2429e1ca72bbd403bbdb661760a8835a0c5ec099df8bb9e7fdb5",
-      "sourceOracleSha256": "90c9ddafface903c3af1eee3039c949d6cb5062cf2ee17f64010b6431b772b06"
-    },
-    "deferred": [
-      "integer namerefs and local declarations",
-      "temporary command prefixes, integer append and arrays",
-      "read and printf integer destinations",
-      "nounset and arithmetic-error recovery",
-      "integer parameter-transform rendering"
-    ],
-    "documentation": "docs/declaration-printing.md"
+    "implementation": "Decode scalar @P escapes into admitted UTF-8 bytes, then expand through the existing bounded substitution scanner with literal prompt quotes. State owns promptvars and inherits it into subshells. Cwd, HOME and PROMPT_DIRTRIM determine directory escapes; available USER, HOSTNAME and EUID bindings supply identity escapes without synthesized facts. Protect fact text before substitution scanning. Existing outer field rules apply to the final result. Nested scalar transformations use the operand scanner.",
+    "deferred": "Time/date formatting, history and command numbers, terminal and job facts, version escapes, missing identity bindings, invalid UTF-8, arrays and indirect transformation names. No live runtime identity or clock contract is added.",
+    "gate": "Pinned Bash 5.3.15 recordings through production Waffle, native recursion/output/cancellation/missing-fact controls, and the unchanged hosted frozen 9221-case replay."
   }
 }

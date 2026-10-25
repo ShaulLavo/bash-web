@@ -3,11 +3,17 @@ use std::{collections::BTreeMap, ops::Deref, rc::Rc};
 /// Original binding model. Indexed values are ordered and sparse; a scalar
 /// assignment to an existing array replaces only element zero.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Binding {
+pub(crate) enum Binding {
     Scalar(String),
     Indexed(Rc<Indexed>),
 }
 impl Binding {
+    pub(super) fn detached(&self) -> Self {
+        match self {
+            Self::Scalar(value) => Self::Scalar(value.clone()),
+            Self::Indexed(values) => Self::Indexed(Rc::new((**values).clone())),
+        }
+    }
     pub fn as_str(&self) -> &str {
         self.scalar().map(String::as_str).unwrap_or("")
     }
@@ -211,6 +217,7 @@ pub(crate) enum BindingUpdate {
     Replace(Binding),
     Element { index: i64, value: String },
     Append(Indexed),
+    Remove { index: i64 },
 }
 impl BindingUpdate {
     pub(crate) fn value_bytes(&self) -> usize {
@@ -218,6 +225,7 @@ impl BindingUpdate {
             Self::Replace(value) => value.value_bytes(),
             Self::Element { value, .. } => value.len(),
             Self::Append(values) => values.value_bytes,
+            Self::Remove { .. } => 0,
         }
     }
     pub(crate) fn staged_bytes(&self) -> usize {
@@ -225,6 +233,7 @@ impl BindingUpdate {
             Self::Replace(value) => value.storage_bytes(),
             Self::Element { value, .. } => value.capacity(),
             Self::Append(values) => values.storage_bytes() + Binding::indexed_header_bytes(),
+            Self::Remove { .. } => 0,
         }
     }
     pub(crate) fn copy_bytes(&self, old: Option<&Binding>) -> usize {
@@ -260,6 +269,11 @@ impl BindingUpdate {
                 count += values.values.len();
                 bytes = bytes.saturating_add(values.bytes);
             }
+            Self::Remove { index } => {
+                let prior = old.and_then(|old| old.slot(*index));
+                count = count.saturating_sub(usize::from(prior.is_some()));
+                bytes = bytes.saturating_sub(prior.map_or(0, String::capacity));
+            }
         }
         Binding::indexed_header_bytes() + Indexed::tree_bytes(count) + bytes
     }
@@ -273,6 +287,7 @@ impl BindingUpdate {
                 count + usize::from(old.and_then(|v| v.element(*index)).is_none())
             }
             Self::Append(values) => count + values.values.len(),
+            Self::Remove { .. } => count,
             Self::Replace(_) => unreachable!(),
         };
         let prior_tree = if matches!(old, Some(Binding::Indexed(_))) {
@@ -287,7 +302,7 @@ impl BindingUpdate {
 }
 
 /// Inverse changes retain only overwritten elements for uniquely owned arrays.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) enum BindingUndo {
     Restore(Option<Binding>),
     Element {
@@ -302,6 +317,13 @@ pub(crate) enum BindingUndo {
     },
 }
 impl BindingUndo {
+    pub(super) fn storage_bytes(&self) -> usize {
+        match self {
+            Self::Restore(old) => old.as_ref().map_or(0, Binding::storage_bytes),
+            Self::Element { old, .. } => old.as_ref().map_or(0, String::capacity),
+            Self::Append { .. } => 0,
+        }
+    }
     pub(crate) fn scalar_effect_bytes(&self, value_bytes: usize) -> usize {
         match self {
             Self::Restore(Some(binding @ Binding::Indexed(_))) => value_bytes
@@ -404,8 +426,42 @@ impl BindingUpdate {
                     keep_zero: false,
                 }
             }
+            Self::Remove { index } => BindingUndo::Element {
+                index,
+                old: values.remove(index),
+                scalar,
+            },
             Self::Replace(_) => unreachable!(),
         };
         (binding, restore.unwrap_or(undo))
+    }
+}
+
+impl BindingUpdate {
+    /// Preparation uses detached images. The commit itself only moves them.
+    pub(crate) fn image(&self, binding: Option<&Binding>) -> Option<Binding> {
+        let mut binding = binding.cloned();
+        match self {
+            Self::Element { index, value } => {
+                let target =
+                    binding.get_or_insert_with(|| Binding::Indexed(Rc::new(Indexed::default())));
+                if let Binding::Scalar(old) = target {
+                    *target = Binding::Indexed(Rc::new(Indexed::from_scalar(std::mem::take(old))));
+                }
+                let Binding::Indexed(values) = target else {
+                    unreachable!()
+                };
+                Rc::make_mut(values).insert(*index, value.clone());
+            }
+            Self::Remove { index } => match &mut binding {
+                Some(Binding::Scalar(_)) if *index == 0 => binding = None,
+                Some(Binding::Indexed(values)) => {
+                    Rc::make_mut(values).remove(*index);
+                }
+                _ => {}
+            },
+            _ => unreachable!("durable element effect"),
+        }
+        binding
     }
 }

@@ -183,18 +183,8 @@ pub struct CoprocCommand {
 /// Time command - wraps a pipeline and measures its execution.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TimeCommand {
-    /// Use POSIX output format (-p flag)
+    /// Use POSIX output format (`-p`, or a bare `--` as in Bash)
     pub posix_format: bool,
-    /// GNU-compatible custom report format.
-    pub format: Option<Word>,
-    /// Write the report to this VFS path instead of stderr.
-    pub output: Option<Word>,
-    /// Append rather than atomically replacing the output file.
-    pub append: bool,
-    /// Emit Bashkit's truthful verbose report.
-    pub verbose: bool,
-    /// Option diagnostic deferred to execution so syntax remains shell-valid.
-    pub option_error: Option<String>,
     /// The command to time (optional - timing with no command is valid)
     pub command: Option<Box<Command>>,
     /// Source span of this command
@@ -1563,11 +1553,6 @@ mod tests {
     fn time_command_construction() {
         let cmd = TimeCommand {
             posix_format: true,
-            format: None,
-            output: None,
-            append: false,
-            verbose: false,
-            option_error: None,
             command: None,
             span: Span::new(),
         };

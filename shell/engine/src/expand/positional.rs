@@ -1,7 +1,122 @@
-use super::{Error, Expansion, Protection};
+use super::{Error, Expansion, OperandContext, Protection};
 use crate::{arithmetic, state::SharedState};
+use shell_parser::parser::{ParameterOp, WordPart};
 
 impl Expansion<'_> {
+    pub(super) fn positional_part<'a>(
+        &'a mut self,
+        name: &'a str,
+        operator: &'a ParameterOp,
+        source: &'a str,
+        colon: bool,
+        context: OperandContext<'a>,
+    ) -> crate::exec::ResultFuture<'a, ()> {
+        self.local_frame(self.admit_frames, move |expansion| async move {
+            let OperandContext {
+                state,
+                quoted,
+                scalar,
+                depth,
+            } = context;
+            if !scalar && !quoted {
+                super::Ifs::admit_access(state, expansion.cancel, expansion.work).await?;
+            }
+            expansion.segments.needs_split |= !scalar && !quoted;
+            expansion.slice_boundaries(source).await?;
+            if depth >= super::operand::MAX_DEPTH {
+                return Err(2.into());
+            }
+            expansion
+                .local_frame(expansion.admit_frames, |expansion| {
+                    expansion.positional_parameter(name, operator, source, colon, context)
+                })
+                .await
+        })
+    }
+
+    pub(super) async fn positional_parameter(
+        &mut self,
+        name: &str,
+        operator: &ParameterOp,
+        source: &str,
+        colon: bool,
+        context: OperandContext<'_>,
+    ) -> Result<(), Error> {
+        let OperandContext {
+            state,
+            quoted,
+            scalar,
+            depth,
+        } = context;
+        let absent = self.positional_absent(name == "@", colon, context).await?;
+        let scalar = scalar || self.captured.is_some();
+        if absent && matches!(operator, ParameterOp::AssignDefault | ParameterOp::Error) {
+            return self
+                .effect_operand((name, None), operator, source, colon, context, None)
+                .await;
+        }
+        let replacement = matches!(operator, ParameterOp::UseReplacement);
+        if replacement != absent {
+            return self
+                .operand(source, state, quoted, scalar, depth + 1, false)
+                .await;
+        }
+        if replacement {
+            let keep = scalar || quoted && (name == "*" || !state.borrow().positional().is_empty());
+            return self.segment("", Protection::All, keep).await;
+        }
+        self.work.admit_storage(name.len())?;
+        self.elements(&WordPart::Variable(name.to_owned()), state, quoted, scalar)
+            .await
+    }
+
+    async fn positional_absent(
+        &mut self,
+        at: bool,
+        colon: bool,
+        context: OperandContext<'_>,
+    ) -> Result<bool, Error> {
+        let OperandContext {
+            state,
+            quoted,
+            scalar,
+            ..
+        } = context;
+        self.work.checkpoint(self.cancel).await?;
+        let count = state.borrow().positional().len();
+        if count == 0 {
+            return Ok(true);
+        }
+        if !colon {
+            return Ok(false);
+        }
+        let assignment = !quoted && (scalar || self.captured.is_some());
+        if at {
+            return Ok(!assignment && count == 1 && state.borrow().positional()[0].is_empty());
+        }
+        let separator = if assignment || count > 1 {
+            self.positional_star_separator(state).await?
+        } else {
+            None
+        };
+        if assignment && separator.is_some() {
+            return Ok(false);
+        }
+        if count == 1 {
+            return Ok(state.borrow().positional()[0].is_empty());
+        }
+        if !quoted && !assignment || separator.is_some() {
+            return Ok(false);
+        }
+        for index in 0..count {
+            self.work.checkpoint(self.cancel).await?;
+            if !state.borrow().positional()[index].is_empty() {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
     pub(super) async fn indexed_element(
         &mut self,
         name: &str,
@@ -245,4 +360,35 @@ fn slice_start(offset: i64, count: usize) -> Option<usize> {
     usize::try_from(offset)
         .ok()
         .filter(|&offset| offset <= count)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{executor::Cancel, state::State};
+    use futures::FutureExt;
+
+    #[test]
+    fn alternate_does_not_snapshot_unused_positional_payloads() {
+        let mut state = State::default();
+        state
+            .replace_positional(vec!["x".repeat(128 * 1024)])
+            .unwrap();
+        let state = state.shared();
+        let word = shell_parser::Parser::parse_word_string("${@:+small}");
+        let cancel = Cancel::new();
+        let mut work = super::super::Work::new(4096, 65536, 1);
+        let result = super::super::fields(
+            &word,
+            &state,
+            &cancel,
+            super::super::FieldContext::ForList,
+            (16, 1, 16),
+            &mut work,
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap_or_else(|_| panic!("small expansion succeeds"));
+        assert_eq!(result, ["small"]);
+        assert_eq!(state.borrow().positional()[0].len(), 128 * 1024);
+    }
 }

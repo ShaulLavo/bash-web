@@ -38,11 +38,12 @@ fn basic_name(name: &str) -> bool {
     scalar_name(name)
         || name == "?"
         || name == "#"
-        || name == "!"
+        || matches!(name, "!" | "-" | "@" | "*")
         || name.bytes().all(|c| c.is_ascii_digit()) && !name.is_empty()
 }
 
 pub(super) enum Piece<'a> {
+    Home,
     Text {
         value: &'a str,
         protected: bool,
@@ -69,6 +70,8 @@ enum Context {
     Operand,
     /// Quote removal cannot join an arithmetic expansion's dollar to an opener.
     Arithmetic,
+    /// Prompt quote characters are data, not shell quote delimiters.
+    Prompt,
 }
 
 pub(super) struct Scanner<'a> {
@@ -101,9 +104,20 @@ impl<'a> Scanner<'a> {
             context: Context::Operand,
         }
     }
-    pub(super) fn arithmetic(source: &'a str) -> Self {
+    pub(super) fn scalar(source: &'a str, syntax: &super::ScalarSyntax) -> Self {
+        let (context, pattern) = match syntax {
+            super::ScalarSyntax::Arithmetic => (Context::Arithmetic, true),
+            super::ScalarSyntax::Prompt => (Context::Prompt, false),
+        };
         Self {
-            context: Context::Arithmetic,
+            context,
+            ..Self::new(source, true, pattern, false)
+        }
+    }
+    pub(super) fn prompt(source: &'a str) -> Self {
+        Self {
+            context: Context::Prompt,
+            case_positionals: true,
             ..Self::new(source, true, true, false)
         }
     }
@@ -150,7 +164,7 @@ impl<'a> Scanner<'a> {
         if ch == '\\' && self.quote != Quote::Single {
             return self.escape(value).map(Some);
         }
-        if ch == '"' && self.quote != Quote::Single {
+        if ch == '"' && self.quote != Quote::Single && self.context != Context::Prompt {
             self.quote = if self.quote == Quote::Double {
                 Quote::None
             } else {
@@ -166,7 +180,11 @@ impl<'a> Scanner<'a> {
             };
             return Ok(Some(self.text("", true)));
         }
-        if ch == '\'' && self.quote == Quote::None && self.outer_quoted {
+        if ch == '\''
+            && self.quote == Quote::None
+            && self.outer_quoted
+            && self.context != Context::Prompt
+        {
             self.literal_single = !self.literal_single;
         }
         if self.quote == Quote::Single {
@@ -193,6 +211,15 @@ impl<'a> Scanner<'a> {
                 protected: false,
             }));
         }
+        if ch == '~'
+            && start == 0
+            && !self.outer_quoted
+            && self.context == Context::Operand
+            && !self.case_positionals
+            && self.peek().is_none_or(|next| matches!(next, '/' | ':'))
+        {
+            return Ok(Some(Piece::Home));
+        }
         self.check_literal(ch)?;
         // Bash protects source spaces in a pattern, but not source tabs/newlines.
         // Expansion-provided spaces retain the expansion's existing IFS rules.
@@ -200,12 +227,21 @@ impl<'a> Scanner<'a> {
         Ok(Some(self.text(value, protected)))
     }
     fn escape(&mut self, slash: &'a str) -> Result<Piece<'a>, Error> {
-        let next = self.peek().ok_or(2)?;
+        let Some(next) = self.peek() else {
+            return if self.context == Context::Prompt {
+                Ok(self.text(slash, true))
+            } else {
+                Err(2.into())
+            };
+        };
         let double = self.outer_quoted || self.quote == Quote::Double;
         if double
             && !matches!(next, '$' | '`' | '"' | '\\' | '\n')
             && !(self.outer_quoted && next == '}')
         {
+            return Ok(self.text(slash, true));
+        }
+        if self.context == Context::Prompt && next == '"' {
             return Ok(self.text(slash, true));
         }
         let value = self.take().ok_or(2)?;
@@ -221,7 +257,8 @@ impl<'a> Scanner<'a> {
         }
         if !self.protected()
             && !self.outer_quoted
-            && (ch == '~' || !self.pattern && matches!(ch, '*' | '?' | '['))
+            && (ch == '~' && self.case_positionals
+                || !self.pattern && matches!(ch, '~' | '*' | '?' | '['))
         {
             return Err(2.into());
         }
@@ -251,7 +288,7 @@ impl<'a> Scanner<'a> {
             }
             Some('{') => self.braced(work, cancel).await?,
             Some(c) if c.is_ascii_alphabetic() || c == '_' => self.identifier(work, cancel).await?,
-            Some(c) if c.is_ascii_digit() || matches!(c, '?' | '#') => {
+            Some(c) if c.is_ascii_digit() || matches!(c, '?' | '#' | '-') => {
                 self.take();
             }
             Some('(') => {
@@ -270,10 +307,19 @@ impl<'a> Scanner<'a> {
                     protected: self.protected(),
                 });
             }
+            Some('@' | '*' | '$') if self.context == Context::Prompt => {
+                self.take();
+            }
+            Some('@' | '*') if !self.pattern && !self.pattern_source => {
+                self.take();
+            }
             Some('!') => {
                 self.take();
             }
-            Some('\'' | '"' | '@' | '*' | '$' | '-') => return Err(2.into()),
+            Some('\'' | '"') if self.context == Context::Prompt => {
+                return Ok(self.text("$", true));
+            }
+            Some('\'' | '"' | '@' | '*' | '$') => return Err(2.into()),
             _ => return Ok(self.text("$", self.protected())),
         }
         let token = self.token(start, joined, work, cancel).await?;
@@ -284,8 +330,23 @@ impl<'a> Scanner<'a> {
                 protected: self.protected(),
             });
         }
-        validate_token(token, work)?;
+        if self.context == Context::Prompt {
+            let name = match token {
+                "$@" | "${@}" => Some("@"),
+                "$*" | "${*}" => Some("*"),
+                "$$" | "${$}" => Some("$"),
+                _ => None,
+            };
+            if let Some(name) = name {
+                work.admit_storage(std::mem::size_of::<WordPart>() + name.len())?;
+                return Ok(Piece::Expansion {
+                    part: WordPart::Variable(name.to_owned()),
+                    protected: true,
+                });
+            }
+        }
         work.admit_parse(token.len(), cancel).await?;
+        validate_token(token, work)?;
         // Bound the scalar AST's owned strings and parser token allocations
         // before entering the synchronous, byte-capped parser.
         if work.arithmetic_depth != 0 || matches_substring(token) {
@@ -311,7 +372,7 @@ impl<'a> Scanner<'a> {
             part
         };
         work.checkpoint(cancel).await?;
-        if !supported(&part) {
+        if !supported(&part, !self.pattern && !self.pattern_source) {
             return Err(2.into());
         }
         Ok(Piece::Expansion {
@@ -507,7 +568,7 @@ impl<'a> Scanner<'a> {
 
 // Only a selected operand reaches these EOF failures. Unsupported complete
 // substitutions and every byte/work/depth/cancellation limit retain their own
-// status; malformed lazy substitution syntax is Bash's fatal status 1.
+// status; malformed lazy substitution syntax fails its read unit with status 1.
 fn bad_substitution(message: &'static str, work: &mut Work) -> Result<(), Error> {
     // The renderer owns name/message and their formatted diagnostic together.
     work.admit_storage(("bad substitution".len() + message.len()) * 2 + 96)?;
@@ -546,6 +607,13 @@ fn validate_token(token: &str, work: &mut Work) -> Result<(), Error> {
     if basic_name(body) {
         return Ok(());
     }
+    if let Some(prefix) = body
+        .strip_prefix('!')
+        .and_then(|s| s.strip_suffix(['@', '*']))
+        && scalar_name(prefix)
+    {
+        return Ok(());
+    }
     let indirect = body.starts_with('!');
     let body = body.strip_prefix('!').unwrap_or(body);
     if basic_name(body) && (!indirect || scalar_name(body)) {
@@ -566,7 +634,7 @@ fn validate_token(token: &str, work: &mut Work) -> Result<(), Error> {
     {
         return bad_substitution("invalid length parameter", work);
     }
-    let name_end = if body.starts_with(['#', '?', '@']) {
+    let name_end = if body.starts_with(['#', '?', '@', '*']) {
         1
     } else {
         body.find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
@@ -574,29 +642,44 @@ fn validate_token(token: &str, work: &mut Work) -> Result<(), Error> {
     };
     let name = &body[..name_end];
     let suffix = &body[name_end..];
+    if !indirect && basic_name(name) && suffix.starts_with('@') && suffix.len() == 2 {
+        return Ok(());
+    }
     let operator = suffix.strip_prefix(':').unwrap_or(suffix);
     let trim = suffix.starts_with(['#', '%', '/', '^', ',']);
     let substring =
         !indirect && suffix.starts_with(':') && !operator.starts_with(['-', '+', '=', '?']);
-    if !(scalar_name(name) || substring && (length_name(name) || name == "@"))
+    let lazy_list =
+        !indirect && matches!(name, "@" | "*") && operator.starts_with(['-', '+', '=', '?']);
+    if !(scalar_name(name) || lazy_list || substring && (length_name(name) || name == "@"))
         || !(substring || !indirect && trim || operator.starts_with(['-', '+', '=', '?']))
     {
+        if parse::bad_parameter_token(token) {
+            return bad_substitution("invalid parameter expansion", work);
+        }
         return Err(2.into());
     }
     Ok(())
 }
-fn supported(part: &WordPart) -> bool {
+fn supported(part: &WordPart, lists: bool) -> bool {
     match part {
         WordPart::ArithmeticExpansion(_) | WordPart::BadSubstitution(_) => true,
         WordPart::Substring { name, .. } => length_name(name) || name == "@",
-        WordPart::Variable(name) => basic_name(name),
+        WordPart::Variable(name) => {
+            basic_name(name) && (lists || !matches!(name.as_str(), "@" | "*"))
+        }
+        WordPart::Transformation { name, .. } => {
+            basic_name(name) && !matches!(name.as_str(), "@" | "*")
+        }
+        WordPart::PrefixMatch { prefix, .. } => lists && scalar_name(prefix),
         WordPart::Length(name) => length_operand_name(name),
         WordPart::IndirectExpansion { name, operator, .. } => {
             name.is_empty() && operator.is_none()
                 || scalar_name(name) && operator.as_ref().is_none_or(indirect_operator)
         }
         WordPart::ParameterExpansion { name, operator, .. } => {
-            parameter_name(name)
+            (parameter_name(name)
+                || lists && matches!(name.as_str(), "@" | "*") && indirect_operator(operator))
                 && matches!(
                     operator,
                     ParameterOp::UseDefault
@@ -657,6 +740,34 @@ fn admit_syntax(text: &str, work: &mut Work) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn malformed_headers_do_not_reclassify_valid_unsupported_parameters() {
+        for token in [
+            "${#0}",
+            "${#@}",
+            "${#*}",
+            "${PIPESTATUS[@]}",
+            "${a[0]-x}",
+            "${1-x}",
+        ] {
+            let mut work = Work::new(1, 1024, 1);
+            assert!(
+                matches!(validate_token(token, &mut work), Err(Error::Status(2))),
+                "{token}"
+            );
+        }
+        let mut work = Work::new(1, 1024, 1);
+        assert!(matches!(
+            validate_token("${y!}", &mut work),
+            Err(Error::BadSubstitution { .. })
+        ));
+        let mut work = Work::new(1, 0, 1);
+        assert!(matches!(
+            validate_token("${y!}", &mut work),
+            Err(Error::Status(2))
+        ));
+    }
 
     #[test]
     fn malformed_diagnostics_admit_both_owned_and_formatted_copies() {

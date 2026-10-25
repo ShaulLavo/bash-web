@@ -162,15 +162,12 @@ fn transformation_invalid_operators_on_unset_names_expand_to_nothing() {
 #[test]
 fn transformation_unsupported_forms_fail_closed() {
     for (setup, form) in [
-        ("x=a", "${x@P}"),
         ("x=a", "${x@Z}"),
         ("x='\\777'", "${x@E}"),
         ("x='\\uD800'", "${x@E}"),
         ("LC_ALL=C; x='\\u00e9'", "${x@E}"),
         ("LC_ALL=C.UTF-8; x=μ", "${x@U}"),
         ("p=x; x=a", "${!p@Q}"),
-        ("x=a", "${w:-${x@Q}}"),
-        ("x=a", "${x#${x@Q}}"),
     ] {
         let rig = Rig::new(Limits::default());
         let source = format!("{setup}; args {form}");
@@ -236,4 +233,75 @@ fn transformation_array_backed_parameters_fail_closed() {
         r#"a=(global); f() { local a=scalar; args "${a@A}" "${a@a}"; }; f"#,
         &[&["declare a='scalar'", ""]],
     );
+}
+
+#[test]
+fn transformation_prompt_decodes_then_expands_without_shell_quote_removal() {
+    check(
+        r#"p='\000a\400b\12c\1d\0455'; args "${p@P}""#,
+        &[&[r"ab\12c\1d%5"]],
+    );
+    check(
+        r#"x=value; p='"$x" a'"'"'b \[n\] $((1+2))'; args "${p@P}"; shopt -u promptvars; args "${p@P}""#,
+        &[&["\"value\" a'b n 3"], &["\"$x\" a'b n $((1+2))"]],
+    );
+    check(
+        r#"p='done'; a='${p@P}'; b='${a@P}'; args "${b@P}"; p='\000A\1004\555\0455'; args "${p@P}""#,
+        &[&["done"], &["A@4m%5"]],
+    );
+    check(r#"p='${v@Q}'; v="a'b"; args "${p@P}""#, &[&[r"'a'\''b'"]]);
+    check(
+        r#"x=a; args "${w:-${x@Q}}" "${x#${x@Q}}""#,
+        &[&["'a'", "a"]],
+    );
+}
+
+#[test]
+fn transformation_prompt_recursive_values_are_bounded() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run(r#"p='${p@P}'; args "${p@P}""#), 2);
+    assert!(rig.calls.borrow().is_empty());
+}
+
+#[test]
+fn transformation_prompt_uses_available_identity_and_rejects_unknown_facts() {
+    check(
+        r#"USER='prompt-user'; HOSTNAME='prompt.host.test'; p='\u@\h|\H'; args "${p@P}""#,
+        &[&["prompt-user@prompt|prompt.host.test"]],
+    );
+    check(
+        r#"p='\303\251\360\237\231\202'; args "${p@P}""#,
+        &[&["é🙂"]],
+    );
+    for code in [
+        "u", "h", "H", "$", "d", "t", "j", "#", "v", "D{%Y}", "D{}", "777",
+    ] {
+        let rig = Rig::new(Limits::default());
+        let source = format!(r#"p='\{code}'; args "${{p@P}}""#);
+        assert_eq!(rig.run(&source), 2, "{source}");
+        assert!(rig.calls.borrow().is_empty());
+    }
+}
+
+#[test]
+fn transformation_prompt_output_and_scanning_obey_limits_and_cancellation() {
+    let rig = Rig::new(Limits {
+        expansion_bytes: 32,
+        ..Limits::default()
+    });
+    rig.variable("p", &"a".repeat(40));
+    assert_eq!(rig.run(r#"args "${p@P}""#), 2);
+    assert!(rig.calls.borrow().is_empty());
+    let rig = Rig::new(Limits::default());
+    rig.variable("p", &"a".repeat(100_000));
+    let job = rig
+        .shell
+        .start(r#"f() { local v=inner; args "${p@P}"; }; f arg"#)
+        .unwrap();
+    rig.drive_until_value(200, "v", "inner");
+    let peer = rig.ex.spawn(async { 42 });
+    rig.ex.drive(4);
+    assert!(peer.is_finished());
+    rig.interrupt_without_calls(job);
+    assert_eq!(rig.value("v"), None);
 }

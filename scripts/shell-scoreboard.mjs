@@ -115,6 +115,11 @@ export function compareScores(base, next, { requireMembership = false } = {}) {
 }
 
 export function validateScore(oracle, score) {
+  for (const item of score.cases)
+    assert.ok(
+      ["pass", "fail", "skip", "timeout", "crash"].includes(item.outcome),
+      `invalid case outcome: ${item.outcome}`,
+    );
   if (score.counts)
     assert.deepEqual(score.counts, summarize(score), "stored counts differ from case outcomes");
   const expected = {

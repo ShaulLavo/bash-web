@@ -62,7 +62,9 @@ mod guest {
         {
             let state = session.state();
             let mut state = state.borrow_mut();
+            state.interactive = command.is_none();
             state.inherit_environment(std::env::vars());
+            state.command_string = command.is_some();
             if let Ok(cwd) = std::env::var("PWD") {
                 state.cwd = cwd;
             }
@@ -153,8 +155,8 @@ mod guest {
                 .borrow()
                 .bindings()
                 .get("PS1")
-                .cloned()
-                .unwrap_or_else(|| "$ ".into());
+                .map(ToString::to_string)
+                .unwrap_or_else(|| "$ ".to_owned());
             editor.begin(&prompt, unsafe { columns() }.max(2) as usize);
             if write(&output, prompt.as_bytes()).await.is_err() {
                 return 1;

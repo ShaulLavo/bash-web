@@ -148,10 +148,35 @@ impl Rig {
         cancel: Cancel,
         line: Option<usize>,
     ) -> JoinHandle<Result<Outcome, i32>> {
+        let context = self.context(cancel);
+        let execution = PreparedExecution {
+            line,
+            assigned: Vec::new(),
+            fds: Some(self.session.core.descriptors.clone()),
+            work: expand::Work::new(steps, 0, 0),
+        };
+        let state = self.session.state.clone();
+        self.executor.spawn(async move {
+            let argv = Cell::new(argv);
+            let builtin_prefix = Cell::new(None);
+            let mut execution = Ok(execution);
+            dispatch_simple_command(
+                &argv,
+                &mut None,
+                &builtin_prefix,
+                &mut execution,
+                &state,
+                &context,
+                WeakStderr::Closed,
+            )
+            .await
+        })
+    }
+    fn context(&self, cancel: Cancel) -> Context {
         let core = self.session.core.clone();
         let group = self.host.allocate_group();
         let signal = Rc::new(Cell::new(None));
-        let context = Context {
+        Context {
             evaluation: crate::exec::Scope::new(
                 core.limits.source_bytes,
                 core.eval_storage.clone(),
@@ -168,22 +193,10 @@ impl Rig {
             parameter_error_status: 127,
             loop_depth: 0,
             ignore_errexit: false,
+            trace: super::super::xtrace::Trace::default(),
             compound_child: false,
             core,
-        };
-        let prepared = PreparedCommand {
-            line,
-            argv,
-            assigned: Vec::new(),
-            fds: self.session.core.descriptors.clone(),
-            work: expand::Work::new(steps, 0, 0),
-        };
-        self.executor.spawn(dispatch_simple_command(
-            prepared,
-            self.session.state.clone(),
-            context,
-            WeakStderr::Closed,
-        ))
+        }
     }
     fn path(&self, value: &str) {
         self.session
@@ -320,14 +333,17 @@ fn lookup_global_admission_rejects_before_copying_large_path_requests() {
 #[test]
 fn lookup_pending_request_keeps_shared_tickets_and_cancel_refunds_them() {
     for source in ["command -v probe", "type -p probe", "type -aP probe"] {
-        pending_lookup_refunds(source);
+        pending_lookup_refunds(source, None);
     }
 }
-fn pending_lookup_refunds(source: &str) {
+fn pending_lookup_refunds(source: &str, hash_path: Option<&str>) {
     let rig = Rig::new(Limits {
         execution_bytes: 1024 * 1024,
         ..Limits::default()
     });
+    if let Some(path) = hash_path {
+        assert_eq!(rig.run(&format!("hash -p {path} probe")), 0);
+    }
     assert_eq!(rig.run(&format!("PATH={}", "p".repeat(96 * 1024))), 0);
     let before = rig.session.core.execution_storage.observation().0;
     rig.host.stall.set(true);
@@ -354,6 +370,12 @@ fn pending_lookup_refunds(source: &str) {
     assert_eq!(rig.session.core.execution_storage.observation().0, before);
     rig.host.stall.set(false);
     assert_eq!(rig.run("PATH=a; probe"), 7);
+    if let Some(path) = hash_path {
+        assert_eq!(
+            rig.session.state.borrow().command_hash.entries()[0].path,
+            path
+        );
+    }
     rig.shutdown();
     assert!(
         charged >= 3 * 96 * 1024,
@@ -476,21 +498,9 @@ fn builtin_wrapper_blocked_diagnostic_cancellation_releases_all_frames() {
 fn builtin_wrapper_usage_diagnostic_cancellation_and_broken_pipe() {
     let rig = Rig::new(Limits::default());
     let before = rig.session.core.execution_storage.observation().0;
-    let (reader, writer) = io::pipe();
-    assert_eq!(
-        writer.write(&vec![0; io::PIPE_CAPACITY]).now_or_never(),
-        Some(Ok(io::PIPE_CAPACITY))
-    );
-    let mut fds = rig.session.core.descriptors.borrow().clone();
-    fds.insert(2, writer);
-    rig.session.set_descriptors(fds).unwrap();
+    let reader = block_output(&rig, 2);
     let job = rig.session.start("a=temporary builtin -z").unwrap();
-    rig.executor.drive(1024);
-    assert!(!job.is_finished());
-    rig.session.interrupt();
-    assert_eq!(finish(&rig.executor, job), 130);
-    assert_eq!(rig.session.core.execution_storage.observation().0, before);
-    assert!(!rig.session.state.borrow().bindings().contains_key("a"));
+    cancel_prefix_and_refund(&rig, job, before);
     drop(reader);
     assert_eq!(rig.run("builtin -z"), 141);
     assert_eq!(rig.host.requests.get(), 0);
@@ -528,4 +538,198 @@ fn builtin_wrapper_unknown_line_omits_numeric_label() {
         assert_eq!(rig.host.spawns.get(), 0);
         rig.shutdown();
     }
+}
+
+#[test]
+fn command_hash_pending_lookup_cancels_and_refunds_requests() {
+    pending_lookup_refunds("hash probe", Some("/kept"));
+}
+
+#[test]
+fn command_hash_blocked_listing_cancellation_keeps_entries_and_refunds_prefixes() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("hash -p /literal probe"), 0);
+    let before = rig.session.core.execution_storage.observation().0;
+    let reader = block_output(&rig, 1);
+    let job = rig.session.start("a=temporary hash -l").unwrap();
+    cancel_prefix_and_refund(&rig, job, before);
+    assert_eq!(
+        rig.session.state.borrow().command_hash.entries()[0].path,
+        "/literal"
+    );
+    drop(reader);
+    assert_eq!(rig.run("hash -l"), 141);
+    assert_eq!(rig.host.requests.get(), 0);
+    assert_eq!(rig.host.spawns.get(), 0);
+    assert_eq!(rig.run("hash -r"), 0);
+    assert!(rig.session.core.execution_storage.observation().0 < before);
+    rig.shutdown();
+}
+
+fn block_output(rig: &Rig, fd: u32) -> Endpoint {
+    let (reader, writer) = io::pipe();
+    assert_eq!(
+        writer.write(&vec![0; io::PIPE_CAPACITY]).now_or_never(),
+        Some(Ok(io::PIPE_CAPACITY))
+    );
+    let mut fds = rig.session.core.descriptors.borrow().clone();
+    fds.insert(fd, writer);
+    rig.session.set_descriptors(fds).unwrap();
+    reader
+}
+
+fn cancel_prefix_and_refund(rig: &Rig, job: JoinHandle<i32>, before: usize) {
+    let capacity_before = rig.session.state.borrow().prefix_capacity_bytes();
+    rig.executor.drive(1024);
+    assert!(!job.is_finished());
+    rig.session.interrupt();
+    assert_eq!(finish(&rig.executor, job), 130);
+    let retained = rig.session.state.borrow().prefix_capacity_bytes() - capacity_before;
+    assert_eq!(
+        rig.session.core.execution_storage.observation().0,
+        before + retained
+    );
+    assert!(!rig.session.state.borrow().bindings().contains_key("a"));
+}
+
+#[test]
+fn command_hash_empty_invocation_requires_work_admission() {
+    let rig = Rig::new(Limits::default());
+    let before = rig.session.core.execution_storage.observation().0;
+    let context = rig.context(Cancel::new());
+    let state = rig.session.state.clone();
+    let fds = rig.session.core.descriptors.clone();
+    let job = rig.executor.spawn(async move {
+        let mut work = expand::Work::new(0, 0, 0);
+        super::super::hash_builtin::run(&[], &state, &fds, &context, &mut work).await
+    });
+    assert_eq!(finish(&rig.executor, job).unwrap_err(), 2);
+    assert!(rig.output.bytes().is_empty());
+    assert_eq!(rig.session.core.execution_storage.observation().0, before);
+    rig.shutdown();
+}
+
+#[test]
+fn timed_function_declaration_output_releases_storage_on_cancel_and_drop() {
+    for interrupt in [true, false] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run("f() { time -- echo a; }"), 0);
+        let before = rig.session.core.execution_storage.observation().0;
+        let storage = rig.session.core.execution_storage.clone();
+        let state = rig.session.state.clone();
+        let reader = block_output(&rig, 1);
+        let job = rig.session.start("a=temporary declare -f f").unwrap();
+        rig.executor.drive(1024);
+        assert!(!job.is_finished(), "function output must backpressure");
+        assert!(storage.observation().0 > before);
+        let Rig {
+            executor,
+            session,
+            host,
+            output: _,
+        } = rig;
+        if interrupt {
+            session.interrupt();
+            assert_eq!(finish(&executor, job), 130);
+            drop(session);
+        } else {
+            drop(session);
+            assert_eq!(finish(&executor, job), 130);
+        }
+        assert_eq!(executor.drive(1024).pending, 0);
+        assert!(!state.borrow().bindings().contains_key("a"));
+        assert!(state.borrow().functions().contains_key("f"));
+        assert_eq!(host.requests.get(), 0);
+        assert_eq!(host.spawns.get(), 0);
+        assert_eq!(storage.observation().0, before);
+        drop(reader);
+    }
+}
+
+#[derive(Clone, Copy)]
+enum TimingEnd {
+    Ready,
+    Cancel,
+    Drop,
+}
+
+#[test]
+fn timing_reports_keep_their_frames_through_pending_and_release_on_every_exit() {
+    for (format, source) in [
+        (None, "time false"),
+        (Some("%U"), "time -p false"),
+        (Some("literal %0R"), "time false"),
+        (Some("%U"), "time false"),
+        (Some("%S"), "time false"),
+        (Some("%P"), "time false"),
+        (Some("%X"), "time false"),
+        (Some("%💥"), "time false"),
+    ] {
+        check_timing_lifetimes(format, source);
+    }
+    check_timing_lifetimes(Some(&format!("{}%X", "💥".repeat(1024))), "time false");
+}
+
+fn check_timing_lifetimes(format: Option<&str>, source: &str) {
+    for ending in [TimingEnd::Ready, TimingEnd::Cancel, TimingEnd::Drop] {
+        check_timing_exit(format, source, ending);
+    }
+}
+
+fn check_timing_exit(format: Option<&str>, source: &str, ending: TimingEnd) {
+    let rig = Rig::new(Limits::default());
+    if let Some(format) = format {
+        rig.session
+            .state
+            .borrow_mut()
+            .assign_parameter("TIMEFORMAT".into(), format.into())
+            .unwrap();
+    }
+    let storage = rig.session.core.execution_storage.clone();
+    let before = storage.observation().0;
+    let executor = rig.executor.clone();
+    let reader = block_output(&rig, 2);
+    let job = rig.session.start(source).unwrap();
+    executor.drive(4096);
+    assert!(!job.is_finished(), "report must backpressure: {format:?}");
+    assert!(storage.observation().0 > before);
+    match ending {
+        TimingEnd::Ready => {
+            assert_eq!(
+                reader.read(&mut vec![0; io::PIPE_CAPACITY]).now_or_never(),
+                Some(Ok(io::PIPE_CAPACITY))
+            );
+            assert_eq!(finish(&executor, job), 1);
+            let mut text = [0; 128];
+            assert!(reader.read(&mut text).now_or_never().unwrap().unwrap() > 0);
+            rig.shutdown();
+        }
+        TimingEnd::Cancel => {
+            rig.session.interrupt();
+            assert_eq!(finish(&executor, job), 130);
+            rig.shutdown();
+        }
+        TimingEnd::Drop => {
+            drop(rig.session);
+            assert_eq!(finish(&executor, job), 130);
+        }
+    }
+    assert_eq!(executor.drive(4096).pending, 0);
+    assert_eq!(storage.observation().0, before);
+}
+
+#[test]
+fn recursive_timing_frames_reject_at_the_existing_execution_bound_and_refund() {
+    let rig = Rig::new(Limits {
+        execution_bytes: 64 * 1024,
+        ..Limits::default()
+    });
+    assert_eq!(rig.run("TIMEFORMAT=''; f() { time f; }"), 0);
+    let storage = rig.session.core.execution_storage.clone();
+    let before = storage.observation().0;
+    assert_eq!(rig.run("f"), 2);
+    assert!(storage.observation().1 <= 64 * 1024);
+    assert_eq!(storage.observation().0, before);
+    assert_eq!(rig.run("true"), 0);
+    rig.shutdown();
 }

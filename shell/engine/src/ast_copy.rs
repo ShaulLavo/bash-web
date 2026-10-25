@@ -198,21 +198,9 @@ pub(crate) async fn admit(
                     work.admit_storage(size_of::<TimeCommand>())?;
                     let TimeCommand {
                         posix_format: _,
-                        format,
-                        output,
-                        append: _,
-                        verbose: _,
-                        option_error,
                         command,
                         span: _,
                     } = time.as_ref();
-                    if let Some(format) = format {
-                        push(&mut stack, Visit::Word(format), work)?;
-                    }
-                    if let Some(output) = output {
-                        push(&mut stack, Visit::Word(output), work)?;
-                    }
-                    push_optional_text(&mut stack, option_error, work)?;
                     if let Some(command) = command {
                         push_boxed_command(&mut stack, command, work)?;
                     }

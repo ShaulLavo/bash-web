@@ -254,9 +254,10 @@ fn substring_utf8_and_special_scalars() {
 }
 
 #[test]
-fn arithmetic_array_lvalues_and_element_slices_remain_explicit() {
+fn arithmetic_array_lvalues_are_supported_but_element_slices_remain_explicit() {
     let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run("args \"$((a[0]))\""), 2);
+    assert_eq!(rig.run("args \"$((a[0]))\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["0"]]);
     assert_eq!(rig.run("args \"${array[1]:1:2}\""), 2);
 }
 

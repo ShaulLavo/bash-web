@@ -1,6 +1,6 @@
 //! Original indexed assignment execution; binding storage stays state-owned.
 use super::*;
-use crate::state::{Binding, BindingUpdate, Indexed};
+use crate::state::{Binding, BindingUpdate, Indexed, Reference};
 
 pub(super) async fn assign(
     assignment: &Assignment,
@@ -11,15 +11,11 @@ pub(super) async fn assign(
     bytes: &mut usize,
     completed: &mut crate::state::AssignmentFrame,
 ) -> Result<(), expand::Error> {
-    let update = value(assignment, state, context, work).await?;
-    let (copy, storage) = state
-        .borrow()
-        .admit_binding_update(&assignment.name, &update, work)?;
-    let undo_bytes = update.undo_bytes(state.borrow().binding(&assignment.name));
-    completed.reserve(&assignment.name, undo_bytes)?;
-    frame
-        .reserve(&assignment.name, storage)
-        .map_err(expand::Error::from)?;
+    let (name, update) = value(assignment, state, context, work).await?;
+    let (copy, storage) = state.borrow().admit_binding_update(&name, &update, work)?;
+    let undo_bytes = update.undo_bytes(state.borrow().binding(&name));
+    completed.reserve(&name, undo_bytes)?;
+    frame.reserve(&name, storage).map_err(expand::Error::from)?;
     for _ in 0..copy {
         work.checkpoint(&context.cancel).await?;
     }
@@ -30,7 +26,7 @@ pub(super) async fn assign(
     if *bytes > context.limits().expansion_bytes {
         return Err(2.into());
     }
-    frame.commit_update(assignment.name.clone(), update, completed)
+    frame.commit_update(name, update, completed)
 }
 
 async fn value(
@@ -38,7 +34,7 @@ async fn value(
     state: &SharedState,
     context: &Context,
     work: &mut expand::Work,
-) -> Result<BindingUpdate, expand::Error> {
+) -> Result<(String, BindingUpdate), expand::Error> {
     State::admit_scalar_access(state, &assignment.name, &context.cancel, work).await?;
     match &assignment.value {
         AssignmentValue::Scalar(word) => scalar(assignment, word, state, context, work).await,
@@ -52,42 +48,32 @@ async fn scalar(
     state: &SharedState,
     context: &Context,
     work: &mut expand::Work,
-) -> Result<BindingUpdate, expand::Error> {
+) -> Result<(String, BindingUpdate), expand::Error> {
     let limit = context.limits().expansion_bytes;
     let value = expand::assignment(word, state, &context.cancel, limit, limit, work).await?;
-    let index = match &assignment.index {
-        Some(index) => {
-            crate::arithmetic::evaluate(index, state, &context.cancel, limit, work).await?
-        }
-        None => 0,
-    };
+    let place = expand::references::select(
+        Reference {
+            name: &assignment.name,
+            subscript: assignment.index.as_deref(),
+        },
+        state,
+        &context.cancel,
+        limit,
+        work,
+    )
+    .await?;
+    let index = place.index.unwrap_or(0);
     let state = state.borrow();
-    let old = state.binding(&assignment.name);
-    let Some(index) = old.map_or((index >= 0).then_some(index), |value| {
-        value.resolve_index(index)
-    }) else {
-        let subscript = assignment.index.as_deref().unwrap_or("0");
-        work.admit_storage(
-            assignment
-                .name
-                .len()
-                .saturating_add(subscript.len())
-                .saturating_add(160),
-        )?;
-        return Err(expand::Error::BadArraySubscript {
-            name: format!("{}[{subscript}]", assignment.name),
-            line: None,
-        });
-    };
+    let old = state.binding(&place.name);
     let previous = old.and_then(|old| old.slot(index));
     let value = append(previous, value, assignment.append, limit, work)?;
     let value = state
-        .case_value(&assignment.name, value)
+        .case_value(&place.name, value)
         .map_err(expand::Error::from)?;
-    if assignment.index.is_none() && !matches!(old, Some(Binding::Indexed(_))) {
-        return Ok(BindingUpdate::Replace(value.into()));
+    if place.index.is_none() && !matches!(old, Some(Binding::Indexed(_))) {
+        return Ok((place.name, BindingUpdate::Replace(value.into())));
     }
-    Ok(BindingUpdate::Element { index, value })
+    Ok((place.name, BindingUpdate::Element { index, value }))
 }
 
 fn append(
@@ -118,14 +104,28 @@ async fn compound(
     state: &SharedState,
     context: &Context,
     work: &mut expand::Work,
-) -> Result<BindingUpdate, expand::Error> {
+) -> Result<(String, BindingUpdate), expand::Error> {
     if assignment.index.is_some() {
+        return Err(2.into());
+    }
+    let place = expand::references::select(
+        Reference {
+            name: &assignment.name,
+            subscript: None,
+        },
+        state,
+        &context.cancel,
+        context.limits().expansion_bytes,
+        work,
+    )
+    .await?;
+    if place.index.is_some() {
         return Err(2.into());
     }
     let mut index = if assignment.append {
         state
             .borrow()
-            .binding(&assignment.name)
+            .binding(&place.name)
             .map_or(Some(0), |old| {
                 old.last_index().map_or(Some(0), |i| i.checked_add(1))
             })
@@ -151,13 +151,16 @@ async fn compound(
         )
         .await?;
         bytes = bytes.saturating_add(fields.iter().map(String::len).sum::<usize>());
-        let fields = case_fields(fields, &assignment.name, state)?;
+        let fields = case_fields(fields, &place.name, state)?;
         insert_fields(&mut values, &mut index, fields, work, &context.cancel).await?;
     }
     if assignment.append {
-        Ok(BindingUpdate::Append(values))
+        Ok((place.name, BindingUpdate::Append(values)))
     } else {
-        Ok(BindingUpdate::Replace(Binding::Indexed(Rc::new(values))))
+        Ok((
+            place.name,
+            BindingUpdate::Replace(Binding::Indexed(Rc::new(values))),
+        ))
     }
 }
 
@@ -212,42 +215,8 @@ fn explicit_subscript(word: &Word) -> bool {
     let Some(raw) = word.raw.as_deref().filter(|raw| raw.starts_with('[')) else {
         return false;
     };
-    let mut quote = None;
-    let mut escaped = false;
-    let mut depth = 0usize;
-    for (offset, ch) in raw.char_indices() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        if ch == '\\' && quote != Some('\'') {
-            escaped = true;
-            continue;
-        }
-        if quote == Some(ch) {
-            quote = None;
-            continue;
-        }
-        if quote.is_some() {
-            continue;
-        }
-        if matches!(ch, '\'' | '"') {
-            quote = Some(ch);
-            continue;
-        }
-        if ch == '[' {
-            depth += 1;
-            continue;
-        }
-        if ch != ']' {
-            continue;
-        }
-        depth -= 1;
-        if depth != 0 {
-            continue;
-        }
-        let suffix = &raw[offset + 1..];
-        return suffix.starts_with('=') || suffix.starts_with("+=");
-    }
-    false
+    Reference::end(raw, 0).is_some_and(|end| {
+        let suffix = &raw[end..];
+        suffix.starts_with('=') || suffix.starts_with("+=")
+    })
 }

@@ -22,6 +22,32 @@ fn status(arguments: &[&str], expected: i32) {
 }
 
 #[test]
+fn scalar_test_argv_matches_recorded_bash_5_3_15() {
+    let fixture = recorded_bash_fixture(include_str!(
+        "../../../../scripts/fixtures/shell-test-argv.json"
+    ));
+    for case in fixture["cases"].as_array().unwrap() {
+        let rig = Rig::new(Limits::default());
+        let script = case["script"].as_str().unwrap();
+        assert_eq!(
+            rig.run(script),
+            case["status"].as_i64().unwrap() as i32,
+            "{script}"
+        );
+        assert_eq!(
+            rig.output.bytes(),
+            case["stdout"].as_str().unwrap().as_bytes(),
+            "{script}"
+        );
+        assert_eq!(
+            rig.errors.bytes().is_empty(),
+            case["stderr"].as_str().unwrap().is_empty(),
+            "{script}"
+        );
+    }
+}
+
+#[test]
 fn empty_single_and_small_argument_counts_match_bash() {
     for (arguments, expected) in [
         (&[][..], 1),
@@ -556,10 +582,10 @@ fn positive_extglob_case_match_and_miss_preserve_errexit_status() {
 }
 
 #[test]
-fn extglob_option_does_not_pretend_unsupported_patterns_matched_or_missed() {
+fn negative_extglob_case_match_and_miss_preserve_errexit_status() {
     check_output(
-        "set -e\nshopt -s extglob\ncase xyz in a!(b)c) echo forbidden;; esac\nsaved=$?; echo status:$saved; echo after",
-        "status:2\nafter\n",
+        "set -e\nshopt -s extglob\ncase xyz in a!(b)c) echo forbidden;; esac\nsaved=$?; echo status:$saved; case abc in a!(b)c) echo forbidden;; esac; echo excluded:$?; case axc in a!(b)c) echo matched;; esac; echo matched:$?; echo after",
+        "status:0\nexcluded:0\nmatched\nmatched:0\nafter\n",
     );
 }
 

@@ -165,7 +165,7 @@ async fn shell_classifications(
     if found && !options.all {
         return Ok(true);
     }
-    if command.is_some_and(commands::Command::query_builtin) {
+    if commands::enabled(name, state.borrow().disabled_builtins) {
         classification(name, "builtin", options.mode, fds, context).await?;
         found = true;
     }
@@ -183,6 +183,24 @@ async fn describe(
 ) -> Result<bool, i32> {
     let mut found = shell_classifications(name, options, state, fds, context, work).await?;
     if found && !options.all {
+        return Ok(true);
+    }
+    if !options.all
+        && let Some(entry) = command_builtin::hashed(name, state, context, work).await?
+    {
+        if options.mode == Mode::Type {
+            output(fds, context, b"file\n").await?;
+        } else {
+            command_builtin::hash_description(
+                name,
+                &entry.path,
+                options.mode == Mode::Describe,
+                fds,
+                context,
+                work,
+            )
+            .await?;
+        }
         return Ok(true);
     }
     let mut search =

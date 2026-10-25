@@ -52,17 +52,7 @@ fn declarations_match_recording(recording: &str) {
     for item in fixture["cases"].as_array().unwrap() {
         let rig = Rig::new(Limits::default());
         rig.variable("LC_ALL", "C.UTF-8");
-        let code = item["code"].as_str().unwrap();
-        assert_eq!(
-            rig.run(code),
-            item["status"].as_i64().unwrap() as i32,
-            "{code}"
-        );
-        assert_eq!(
-            rig.output.bytes(),
-            decode_base64(item["stdout"].as_str().unwrap()),
-            "{code}"
-        );
+        rig.check_recorded(item, &decode_base64(item["stdout"].as_str().unwrap()));
     }
 }
 
@@ -111,28 +101,38 @@ fn declaration_inspection_yields_and_cancels_without_mutation() {
 }
 
 #[test]
-fn indexed_declarations_reject_without_scalar_projection_or_mutation() {
-    for setup in ["a=(zero one)", "a=()", "a=(); a[7]=seven"] {
+fn indexed_declarations_print_sparse_values_without_mutation() {
+    for (setup, expected) in [
+        ("a=(zero one)", "declare -a a=([0]=\"zero\" [1]=\"one\")\n"),
+        ("a=()", "declare -a a=()\n"),
+        ("a=(); a[7]=seven", "declare -a a=([7]=\"seven\")\n"),
+    ] {
         let rig = Rig::new(Limits::default());
         assert_eq!(rig.run(setup), 0, "{setup}");
-        let before = rig.shell.state().borrow().bindings()["a"].clone();
-        assert_eq!(rig.run("declare -p a"), 2, "{setup}");
-        assert!(rig.output.bytes().is_empty(), "{setup}");
+        let before = rig.shell.state().borrow().bindings()["a"].to_string();
+        assert_eq!(rig.run("declare -p a"), 0, "{setup}");
+        assert_eq!(rig.output.bytes(), expected.as_bytes(), "{setup}");
         assert_eq!(rig.shell.state().borrow().bindings()["a"], before);
     }
 }
 
 #[test]
-fn indexed_declaration_rejection_preserves_local_and_raw_reference() {
+fn indexed_declaration_preserves_local_scope_and_raw_reference() {
     let rig = Rig::new(Limits::default());
     assert_eq!(
         rig.run("a=(global); f() { local a; a=(local); declare -p a; }; f"),
-        2
+        0
     );
     assert_eq!(rig.run("printf '%s\\n' \"${a[@]}\""), 0);
-    assert_eq!(rig.output.bytes(), b"global\n");
+    assert_eq!(
+        rig.output.bytes(),
+        b"declare -a a=([0]=\"local\")\nglobal\n"
+    );
     assert_eq!(rig.run("declare -n r=a; declare -p r"), 0);
-    assert_eq!(rig.output.bytes(), b"global\ndeclare -n r=\"a\"\n");
+    assert_eq!(
+        rig.output.bytes(),
+        b"declare -a a=([0]=\"local\")\nglobal\ndeclare -n r=\"a\"\n"
+    );
 }
 
 #[test]
@@ -206,4 +206,59 @@ fn interrupted_case_declaration_preserves_previous_attributes() {
     rig.interrupt_after_counting_yields(job);
     assert_eq!(rig.run("v=MIXED; printf '%s' \"$v\""), 0);
     assert_eq!(rig.output.bytes(), b"mixed");
+}
+
+#[test]
+fn last_argument_publication_uses_builtin_prefix_target_before_restore() {
+    for (source, expected) in [
+        (
+            r#"x='_=x'; declare -n _=x; x=temp : last; printf '%s\n' "$x""#,
+            "_=x\n",
+        ),
+        (
+            r#"x='_=ref'; declare -n ref=x; declare -n _=ref; x=temp : last; printf '%s\n' "$x""#,
+            "_=ref\n",
+        ),
+        (r#"x=outer; x=temp : last; printf '%s\n' "$x""#, "outer\n"),
+    ] {
+        check_output(source, expected);
+    }
+}
+
+#[test]
+fn declaration_append_source_eval_preserves_arguments_and_publication() {
+    let rig = Rig::new(Limits::default());
+    rig.fs.write_file(
+        "/home/guest/lib",
+        b"local t+=tail; eval 'local t+=eval'; : inner; printf 'in:%s:%s:%s\\n' \"$t\" \"$1\" \"$_\"",
+    ).unwrap();
+    assert_eq!(rig.run("t=outer; f(){ local t=base; . ./lib supplied; printf 'done:%s:%s\\n' \"$t\" \"$_\"; }; f caller; printf 'outer:%s:%s\\n' \"$t\" \"$_\""), 0);
+    assert_eq!(
+        rig.output.bytes(),
+        b"in:basetaileval:supplied:inner\ndone:basetaileval:supplied\nouter:outer:caller\n"
+    );
+    assert!(rig.errors.bytes().is_empty());
+}
+
+#[test]
+fn declaration_append_source_eval_keeps_automatic_getopts_cursor() {
+    let rig = Rig::new(Limits::default());
+    rig.fs
+        .write_file("/home/guest/lib", b"local x+=source; : 1")
+        .unwrap();
+    assert_eq!(rig.run("f(){ set -- -ab; getopts ab opt; declare -n _=OPTIND; local x=base; eval 'local x+=tail'; . ./lib 1; getopts ab opt; printf '%s:%s:%s\\n' \"$opt\" \"$OPTIND\" \"$x\"; }; f"), 0);
+    assert_eq!(rig.output.bytes(), b"b:0:basetailsource\n");
+    assert!(rig.errors.bytes().is_empty());
+}
+
+#[test]
+fn declaration_append_source_eval_keeps_explicit_nameref_failure_fatal() {
+    let rig = Rig::new(Limits::default());
+    rig.fs
+        .write_file("/home/guest/lib", b"eval 'local -n r+=t after=yes'")
+        .unwrap();
+    assert_eq!(rig.run("f(){ . ./lib; }; f"), 2);
+    assert_eq!(rig.value("after"), None);
+    assert!(rig.output.bytes().is_empty());
+    assert_eq!(rig.run(": recovered"), 0);
 }

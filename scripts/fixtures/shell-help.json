@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "cases": [
+    {
+      "script": "help -s true false :",
+      "status": 0,
+      "stdoutBase64": "dHJ1ZTogdHJ1ZQpmYWxzZTogZmFsc2UKOjogOgo="
+    },
+    {
+      "script": "help -s false true false",
+      "status": 0,
+      "stdoutBase64": "ZmFsc2U6IGZhbHNlCnRydWU6IHRydWUKZmFsc2U6IGZhbHNlCg=="
+    },
+    {
+      "script": "help -s -- : true false",
+      "status": 0,
+      "stdoutBase64": "OjogOgp0cnVlOiB0cnVlCmZhbHNlOiBmYWxzZQo="
+    },
+    {
+      "script": "help -s tru",
+      "status": 0,
+      "stdoutBase64": "dHJ1ZTogdHJ1ZQo="
+    },
+    {
+      "script": "help -s 'tru*'",
+      "status": 0,
+      "stdoutBase64": "U2hlbGwgY29tbWFuZHMgbWF0Y2hpbmcga2V5d29yZCBgdHJ1KicKCnRydWU6IHRydWUK"
+    },
+    {
+      "script": "help -s 'fals?'",
+      "status": 0,
+      "stdoutBase64": "U2hlbGwgY29tbWFuZHMgbWF0Y2hpbmcga2V5d29yZCBgZmFscz8nCgpmYWxzZTogZmFsc2UK"
+    },
+    {
+      "script": "help -s absenttopic",
+      "status": 1,
+      "stdoutBase64": ""
+    },
+    {
+      "script": "help -s absenttopic true",
+      "status": 0,
+      "stdoutBase64": "dHJ1ZTogdHJ1ZQo="
+    },
+    {
+      "script": "help -s true absenttopic",
+      "status": 0,
+      "stdoutBase64": "dHJ1ZTogdHJ1ZQo="
+    },
+    {
+      "script": "help -s -z true",
+      "status": 2,
+      "stdoutBase64": ""
+    },
+    {
+      "script": "help -ds true",
+      "status": 0,
+      "stdoutBase64": "dHJ1ZSAtIFJldHVybiBhIHN1Y2Nlc3NmdWwgcmVzdWx0Lgo="
+    },
+    {
+      "script": "help -sd false",
+      "status": 0,
+      "stdoutBase64": "ZmFsc2UgLSBSZXR1cm4gYW4gdW5zdWNjZXNzZnVsIHJlc3VsdC4K"
+    },
+    {
+      "script": "help -d true false :",
+      "status": 0,
+      "stdoutBase64": "dHJ1ZSAtIFJldHVybiBhIHN1Y2Nlc3NmdWwgcmVzdWx0LgpmYWxzZSAtIFJldHVybiBhbiB1bnN1Y2Nlc3NmdWwgcmVzdWx0Lgo6IC0gTnVsbCBjb21tYW5kLgo="
+    },
+    {
+      "script": "help -s true; help -s false; help -s :",
+      "status": 0,
+      "stdoutBase64": "dHJ1ZTogdHJ1ZQpmYWxzZTogZmFsc2UKOjogOgo="
+    }
+  ]
+}

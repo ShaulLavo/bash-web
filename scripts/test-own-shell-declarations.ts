@@ -17,7 +17,6 @@ const fixtures: Fixture[] = [
   "shell-declare-attrs.json",
   "shell-declaration-append.json",
   "shell-declaration-append-scope.json",
-  "shell-scalar-integer.json",
 ].map((file) => JSON.parse(readFileSync(new URL(`fixtures/${file}`, import.meta.url), "utf8")));
 const fixture = fixtures[0];
 for (const recording of fixtures) {

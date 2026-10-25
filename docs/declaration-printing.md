@@ -1,7 +1,7 @@
 # Named scalar declaration printing
 
 `declare -p name...` and `typeset -p name...` inspect existing named scalar
-bindings. Both print `declare`, with existing `i`, `n`, `r`, `x`, `l`, and `u` attributes.
+bindings. Both print `declare`, with existing `n`, `r`, `x`, `l`, and `u` attributes.
 Inspection never creates a binding, changes an attribute, or makes a function
 local. A nameref prints its immediate raw target, including chains and cycles.
 Represented local unset values print without `=`, unlike an empty string.
@@ -29,19 +29,10 @@ stdout/stderr bytes, and statuses are recorded in
 TypeScript regressions read that recording, not the CI host's Bash.
 
 Global enumeration, new global declared-unset storage, indexed/associative
-arrays and new special-variable support are excluded. Plain scalar integer
-attributes are described below.
-The frozen 24-case scalar selection is targeted diagnostic evidence only.
+arrays, integer attributes, and new special-variable support are excluded.
 Indexed bindings now reject with status 2 instead of printing element zero as a
 scalar. Direct, empty, sparse, local and raw-nameref controls cover this boundary.
-Full replay and baseline updates use the hosted frozen-ruler artifact during the
-parent lane's serialized landing slot.
-
-The integrated-source hosted replay gained 5 Oils, 45 Brush-suite and 7 Bashkit
-suite passes with no losses or new abnormal outcomes on all 9,221 frozen cases.
-The candidate baseline preserves every nongained historical row. Exact source,
-artifact and review identities are in the declaration-printing evidence receipt;
-final-head CI and merge are separate acceptance gates.
+The full 9,221-case frozen replay gains 5 Oils, 45 Brush-suite and 7 Bashkit-suite passes, with no losses or new abnormal outcomes. The baseline keeps every nongained historical row. Exact source and artifact identities are in the declaration-printing evidence receipt.
 
 ## Scalar case attributes
 
@@ -57,30 +48,8 @@ Case metadata belongs to state, alongside readonly and export attributes.
 ASCII conversion reuses the owned value. Non-ASCII input uses the same bounded
 C/POSIX or C.UTF-8 Latin-1 mapper as expansion case operators, with admitted
 temporary storage before allocation. Other locales or Unicode input outside that
-mapper reject explicitly. Declaring array attributes,
+mapper reject explicitly. Declaring array attributes, integer conversion,
 `-g`, export removal, and global enumeration remain separate work.
 
 The case controls are recorded in `scripts/fixtures/shell-declare-attrs.json`.
 Both native and real-Waffle tests replay the exact Bash 5.3.15 observations.
-
-## Plain scalar integer attributes
-
-`declare -i` and `typeset -i` mark ordinary scalars for arithmetic assignment.
-Initial values and later standalone `name=value` assignments use the existing scalar
-arithmetic evaluator. For example, `declare -i x=2*3+4` stores `10`.
-Variable operands and arithmetic side effects use existing state operations.
-An attribute-only declaration preserves the current value. `+i` removes the
-attribute, `unset` clears it, and named declaration printing includes `i`.
-
-State owns the metadata and binding publication. The interpreter evaluates an
-already expanded value before the existing assignment frame publishes it.
-Subshell snapshots admit and copy the metadata. Local shadowing and restoration
-preserve outer metadata without adding local integer declarations.
-Noninteger values take the owned-string path without arithmetic work or copies.
-
-The eleven frozen Bash 5.3.15 observations in
-`scripts/fixtures/shell-scalar-integer.json` cover this bounded family. Integer
-namerefs, local declarations, temporary command prefixes, append, arrays,
-`read` and `printf` destinations,
-nounset behavior, and arithmetic-error recovery remain outside this change.
-Integer parameter-transform rendering is also deferred.
