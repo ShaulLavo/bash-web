@@ -2410,6 +2410,32 @@ or case attributes, `@P` or indirect names. See
 [the behavior notes](../docs/parameter-transformation.md) and
 [the receipt](../docs/evidence/parameter-transformation.json).
 
+## Follow-up: `@P` prompt expansion corners, 2026-10-24
+
+Status: Approved. These are corners found in the review of PR #73 (scalar `${p@P}`). They
+are not scored cases yet. Each expected value below is a GNU Bash 5.3.15
+recording in `/work/reports/wave-20261022/shell/review73-takeover-r1-evidence/neighbor-oracle.json`,
+made before the host moved to 5.3.20. The "ours" values were observed at PR #73 head
+`e7e17257`. Fix them in `expand/prompt.rs`. Keep the prompt work in its own
+boxed frame (`Expansion::prompt`), outside the recursive `part` poll.
+
+- Errors inside prompt expansion must not abort. Bash prints the diagnostic, keeps
+  the unexpanded text and returns 0.
+  - `p='${missing:?oops}'; printf '<%s>\n' "${p@P}"; printf 'after=%s\n' "$?"`
+    gives `<${missing:?oops}>` and `after=0`. Ours exits 127.
+  - The same happens for `p='$((1/0))'` (ours exits 1).
+  - It also happens for `p='$missing'; set -u` (Bash `<$missing>`, `after=0`; ours exits 127).
+  - With `p='${x:=before}${missing:?oops}'`, the `x=before` assignment survives.
+- `$?` from a prompt command substitution must not leak:
+  `p='$(false)'; true; printf '<%s>\n' "${p@P}" "$?"` gives `<>` and `<0>`. Ours gives `<1>`.
+- `\D{...}` literal text must not be reparsed: `p='\D{plain$HOME}'` gives `<plain$HOME>`.
+  Ours gives `<plain/home/user>`. The cause is in `prompt.rs`, where the format text is pushed unprotected.
+- `\}` must keep its backslash: `p='\}'` gives `<\}>`. Ours gives `<}>`, because of the
+  operand `}` escape rule in `operand.rs`.
+- Unrecorded source differences, which need a 5.3.15 recording before any change: `\w`/`\W` read
+  `state.cwd`, while Bash reads `$PWD`. `\u`/`\h` read `USER`/`HOSTNAME`, while Bash uses
+  getpwuid/gethostname.
+
 ## Follow-up: all-zero and overflowing digit parameters, 2026-10-22
 
 Status: Approved. Fix this in the direct parameter adapter, not in indirection.
@@ -2679,6 +2705,34 @@ single Approved byte-fields item above remains canonical for its four proven
 scored prerequisites. No pathname/noglob, tilde or rematch branch was copied.
 
 The sole integration-review P2 is repaired by rejecting resolved indexed bindings before scalar transformation projection. Nounset ordering and local scalar behavior are unchanged. Seventeen recorded unsupported-family/nounset controls pass on fresh native and Waffle artifacts; these are not scored gains. The initial replay and scoreboard attempts hit the host light queue's cgroup memory ceiling. Their failed logs remain separate from the completed suite-class final evidence, with no guest limit or gate changes.
+
+### Nested array operands in positional alternates
+
+Status: Approved follow-up. Owner: expansion family. Independent PR70 r6
+review at `4c8791dee8ff755b6ed262a3bd56b4dc6b2b26a0` records two
+nonblocking compositions in the existing unsupported general-array operand
+scanner. These are not lost ordinary computed-array slice controls. Do not
+expand this family in the PR70 quality-only repair.
+
+```bash
+a=(zero one two); i=0; set -- yes; printf '<%s>\n' "${@:+${a[@]:i+=1:1}}"; printf '%s\n' "$i"
+```
+
+Reviewed native and production Waffle print `0\n`, rather than the intended
+`<one>\n1\n`.
+
+```bash
+g() { set -- yes; printf '<%s>\n' "${@:+${FUNCNAME[@]:0:2}}"; }; f() { g; }; f
+```
+
+Reviewed native and production Waffle exit 2 without output, rather than
+printing `<g>\n<f>\n`. Both inputs reach the unchanged approved operand
+scanner. Preserve positional laziness, computed-array slicing, arithmetic
+side effects and all existing resource/cancellation limits when this family
+is implemented. These are copied review observations, not fresh oracle
+recordings or scored gains. Evidence:
+`/work/reports/wave-20261022/shell/review70-actual75-integration-r6.md` and
+`review70-actual75-integration-r6-evidence/interaction-probes.json`.
 
 ### Inherited extglob parse-option timing
 
@@ -3210,6 +3264,111 @@ and its sibling evidence directory.
 Neither note is a fixed bug, an accepted Bash match or a frozen gain of this
 integration. PR59 leaves the caller and target-scan cancellation logic unchanged.
 
+## Follow-up: decode PS4 with the shared prompt decoder, 2026-10-23
+
+PS4 expansion currently preserves prompt escapes rather than decoding them. Reuse
+`expand`'s prompt decoder from the `${x@P}` unit after it lands. Do not add a second
+decoder to `interpreter/xtrace.rs`. Decode before scalar expansion and retain its
+work, cancellation, storage and fatal-error rules.
+
+GNU Bash 5.3.15 control: `PS4='\n\e\a\r\\ '; set -x; echo hi; set +x` emits a
+newline, ESC, BEL, CR and one backslash before each command. The current trace
+writer emits literal escape spellings. An escaped double quote also retains an
+extra backslash. Record exact stderr bytes and test both cases through real Waffle
+when integrating the shared decoder. PR #68 review evidence is under
+`/work/reports/wave-20261022/shell/review68-r1-evidence/`.
+
+`$$` and `${$}` in PS4 no longer reject the command, but the engine adapter still
+has no shell self-PID fact. Its existing scalar lookup returns empty for `$`.
+A later runtime identity unit must provide the real identity for ordinary and
+prompt expansion together, never a made-up numeric value.
+
+## Follow-up: nested array-list expansion in PS4, 2026-10-23
+
+PS4 special-parameter support does not yet cover nested array-list expansion.
+The GNU Bash 5.3.15 control
+`a=("two words" x); PS4='${a[@]} '; set -x; echo hi; set +x` exits 0, prints
+`hi\n`, and traces `two words x echo hi\ntwo words x set +x\n`. PR #68 at
+`6643546aa089757561234163862f0a408301ecee` instead exits 2 with empty output.
+The independent review's `prompt-nested-array` probe records both observations in
+`/work/reports/wave-20261022/shell/review68-takeover-r2-evidence/waffle-probes.json`.
+
+Handle this in the prompt-expansion unit after the shared prompt decoder lands.
+Record the array control and quoted, empty, and IFS neighbors before changing the
+scalar prompt/list boundary. Preserve `operand_piece`'s admitted `part_frame`
+boxing, depth limits, cancellation, and storage accounting. This is not part of
+the declaration fatal-error repair and has no claimed scoreboard gain.
+
+## Declared-but-unset local names in prefix expansion, 2026-10-23
+
+Status: Approved follow-up. Owner: expansion family. Nonblocking PR70 review
+finding, reproduced on its pinned head `2abf0c8` in native and production Waffle.
+
+```sh
+param_a=x
+f() { local param_a; set -- "${!param_@}"; printf '%s\n' "$#"; }
+f
+```
+
+Bash `5.3.15(1)-release` prints `1\n` and exits 0. The candidate prints `0\n`
+and exits 0. `expand/prefix.rs:next_name` traverses binding and nameref keys;
+a declared-but-unset local shadow has neither key. This is declaration presence,
+not a need to resolve or copy the shadowed value. Preserve bounded name-only
+traversal, dynamic scope, IFS joining and existing work/storage/field controls.
+The same script and exact Bash stdout/status/stderr are recorded in
+`/work/reports/wave-20261022/shell/review70-takeover-r1-evidence/minimal-oracle.json`.
+The repair replay is in `expansion-params-fix-takeover-r1-evidence/minimal-red.json`
+beside that directory. No prefix implementation change belongs to the captured
+positional-operator status repair.
+
+## Unquoted outer defaults flatten nested lists, 2026-10-23
+
+Status: Approved follow-up. Owner: expansion family. Nonblocking PR70 round-two
+findings at `39e43223396093659720492237b291d42f83c199`. Do not fold these into the
+selected-assignment ordering repair.
+
+```sh
+param_a=1 param_b=2; IFS=:; set -- ${u:-${!param_@}}; printf '<%s>\n' "$@"
+set -- a b; IFS=:; set -- ${u:-${@-fallback}}; printf '<%s>\n' "$@"
+```
+
+Run each line in a fresh shell. Bash `5.3.15(1)-release` prints
+`<param_a param_b>\n` for the first and `<a b>\n` for the second. Production
+Waffle prints `<param_a>\n<param_b>\n` and `<a>\n<b>\n`. Both exit 0 with empty
+stderr. `expand/prefix.rs` and `expand/positional.rs` retain list boundaries
+where the unquoted scalar-default operand must join `@` with spaces before
+outer IFS splitting. These are new-feature corners, not measured main losses.
+
+Preserve the distinct quoted and `*` controls. Quoting the first outer default
+or replacing `param_@` with `param_*` prints `<param_a>\n<param_b>\n` in Bash.
+Keep the existing positional quoting, `@`/`*`, capture, IFS, field/storage/work
+and cancellation controls. Evidence and exact scripts are in
+`/work/reports/wave-20261022/shell/review70-takeover-r2-evidence/extra-oracle.json`
+and `production-results.json`, rows `prefix-default-unquoted`,
+`positional-default-unquoted`, `prefix-default-quoted`, and `prefix-default-star`.
+
+## Numeric and indirect assignment targets, 2026-10-24
+
+Status: Approved follow-up. Owner: expansion family. Found while repairing the
+PR70 selected-assignment ordering at `39e43223396093659720492237b291d42f83c199`.
+The repair rejects a direct `@` or `*` assignment target before its operand
+expands. These neighbouring targets do not reach that path yet.
+
+```sh
+set --; printf '<%s>\n' "${u:=${1="${y:?nested}"}}"; echo after
+set --; ( printf '<%s>\n' "${u:=${1:="$(printf evaluated >&3)"}}" ) 3>&1; echo "status=$?"
+r=@; set -- ""; ( : "${!r:="$(printf evaluated >&3)"}" ) 3>&1; echo "status=$?"
+```
+
+Run each line in a fresh shell. Bash `5.3.15(1)-release` exits 1 with
+`$1: cannot assign in this way` for the first. It prints `status=1` with the same
+diagnostic for the second, and `status=0` for the third, without evaluating
+either operand. The native head engine prints `after` and exits 0 for the
+first, and prints `status=2` for the other two. Bash validates an indirect
+target only after expanding its operand: `r=1; set --; : ${!r:=$(echo E >&2)}`
+prints `E`, then `1: invalid variable name`. Keep that order for indirect
+targets. Do not move it into the direct-target rejection.
+
 ## Local append scope-chain follow-ups from PR71 review
 
 Status: Approved. Owner: VARIABLES assignment/scope family. Keep these separate
@@ -3278,6 +3437,29 @@ Implement bounded complement groups without recursive backtracking, preserve
 work/storage admission and cancellation, and add nested and suffix controls.
 That matcher change is larger than passing an option through completion's glob
 lookup. No frozen case, oracle, exclusion or baseline change is authorized.
+### Bounded full-pattern complement implementation, 2026-10-24
+
+Status: Approved. Implementation prepared for independent review in the negative
+extglob family, based on reviewed PR75 source `91ced064`. The core pattern layer
+now compiles detached complement bodies and evaluates admitted substring
+relations without recursive backtracking. Positive-only matching, ordinary argv
+pathname expansion, scalar trim/replacement, limits, and runtime contracts stay
+separate. See `docs/negative-extglob.md` for the algorithm and explicit cost bounds.
+
+New GNU Bash 5.3.15 recordings in `shell-negative-extglob.json` cover nested
+negation, suffixes, repetition, quoting, Unicode, malformed groups, case option
+state, and completion. The existing completion pending recording remains intact.
+The author reports only targeted real-Waffle measurements; full qualification,
+source review, baseline membership updates, and merge belong to the coordinator.
+
+Scalar trim/replacement remains a separate prerequisite. Frozen scored cases
+`bashkit-suite:bashbox-shopt-pattern:31` and `:131` still enter the basic scalar
+compiler, which rejects extglob operators. Their complete scripts and exact
+Bash 5.3.15 bytes remain in the frozen oracle. A minimal strict reproducer is
+`shopt -s extglob; x=abc; echo "${x#!(*)}"`: Bash prints `abc\n` with status 0;
+reviewed-source Waffle returns 2 without output. This implementation does not
+change that path or claim either case as a gain.
+
 ## Case-attribute review follow-ups, 2026-10-23
 
 Status: Approved. Owner: VARIABLES declaration family. PR77's independent review
@@ -3400,6 +3582,109 @@ GNU Bash 5.3.15 prints `.zz_a\nzz_a\nstatus:0\n`. Reviewed source prints
 excluding hidden entries. Keep implicit hidden-name exclusion and ordinary
 argv matching unchanged. Add nested and suffix controls before the fix.
 
+## Parameter assignment context follow-ups, 2026-10-24
+
+Status: Approved follow-ups. Owner: expansion family. Independent PR70 round-five
+review approved `cce2c3518ea8c7ba638f23d726d17610311be220`. These are nonblocking
+new-feature corners, unchanged against its base and prior head. Keep numeric
+and indirect assignment targets, pattern semantics, diagnostic coordinates and
+arithmetic behavior outside the direct illegal-target ordering repair.
+
+The following exact inputs and observations come from recorded GNU Bash
+`5.3.15(1)-release` data, not the host's installed Bash 5.3.20. Run each input
+in a fresh shell. JSON strings below preserve newlines and empty streams.
+
+### indirect-numeric
+
+```sh
+r=1; set --; : ${!r:=$(echo E >&2)}; echo after
+```
+
+Bash 5.3.15: status 1, stdout `""`, stderr `"E\n/usr/bin/bash: line 1: 1: invalid variable name\n"`.
+Reviewed native engine: status 0, stdout `"after\n"`, stderr `""`.
+
+### pattern-ctx
+
+```sh
+set --; v=abc; echo ${v#${@:=$(echo E >&2)}}; echo after
+```
+
+Bash 5.3.15: status 1, stdout `""`, stderr `"/usr/bin/bash: line 1: $@: cannot assign in this way\n"`.
+Reviewed native engine: status 0, stdout `"after\n"`, stderr `""`.
+
+### case-word
+
+```sh
+set --; case ${*:=$(echo E >&2)} in *) echo in;; esac; echo after
+```
+
+Bash 5.3.15: status 1, stdout `""`, stderr `"/usr/bin/bash: line 1: $*: cannot assign in this way\n"`.
+Reviewed native engine: status 1, stdout `""`, stderr `"/usr/bin/bash: $*: cannot assign in this way\n"`.
+
+### for-word
+
+```sh
+set --; for w in ${@:=$(echo E >&2)}; do echo $w; done; echo after
+```
+
+Bash 5.3.15: status 1, stdout `""`, stderr `"/usr/bin/bash: line 1: $@: cannot assign in this way\n"`.
+Reviewed native engine: status 1, stdout `""`, stderr `"/usr/bin/bash: $@: cannot assign in this way\n"`.
+
+### arith-ctx
+
+```sh
+set --; echo $(( ${#:=1} + 1 )); echo after
+```
+
+Bash 5.3.15: status 0, stdout `"1\nafter\n"`, stderr `""`.
+Reviewed native engine: status 0, stdout `"after\n"`, stderr `""`.
+
+The indirect numeric item records the missing error and operand side effect,
+not only their ordering. The case and for items reject before evaluating `E`
+but omit `line 1:`. The arithmetic recording ends with `echo after`; the
+review's status-reporting form ends with `echo "after $?"` and prints
+`after 2` instead of Bash's `1` followed by `after 0`. Preserve direct
+`AssignDefault` rejection before the operand, selected `Error` operand
+evaluation, and the distinct indirect operand-first path. Do not broaden
+unsupported target or pattern semantics as part of integration.
+
+Evidence: `/work/reports/wave-20261022/shell/review70-opus-refusal-r5.md` and
+`review70-opus-refusal-r5-evidence/{probes.json,native-compare.json,oracle.json}`.
+Existing numeric-direct, indirect-at, outer-default flattening and unset-local
+prefix-shadow follow-ups above remain approved and unchanged. Record focused
+failing-first controls against current native and production Waffle before
+repairing these corners. Preserve all work, storage, field, output, cancellation
+and stack limits and the frozen oracle and scoreboard.
+
+
+## Completion group slash boundary follow-up, 2026-10-24
+
+Status: Approved. Owner: `lite-completion-group-boundary-r1`. Independent PR91
+review N1 found a pre-existing caller gap at `expand/glob.rs:570-585`, where
+`text.split_inclusive('/')` splits inside an active extended-pattern group.
+This follow-up belongs to that separate lane, not PR91's CI repair.
+
+```bash
+shopt -s extglob
+printf x >a
+printf x >b
+compgen -G '!(a/b)'
+```
+
+GNU Bash 5.3.15 prints `a\nb\n` and returns 0. Actual main
+`7e1e15b3f2e0b5155f09160b26c725fa5bd813bb` and reviewed PR91
+`0886f025f06fb968acd23495a5248722890c74eb` print nothing and return 1.
+The review also reproduces identical candidate/base failures for `!(*/*)`,
+`!(a|a/b)`, `@(!(a/b)|a)`, `!(@(a/b|b))`, `!(a/b)a`, `d/!(a/b)`, and the
+positive control `@(a/b|a)`. Preserve passing outside-group slash controls:
+`!(d)/b` returns `e/b`, `d/!(a)` returns `d/b`, and `d/!(!(a))` returns `d/a`.
+Keep hidden-name policy unchanged. Repair component boundary recognition in the
+owning lane without expanding this CI repair's matcher scope.
+
+Exact report: `/work/reports/wave-20261022/shell/review91-negative-extglob-r1.md`.
+Its sibling evidence directory retains `candidate-boundaries.json`,
+`base-boundaries.json`, and the deterministic `boundaries.py` reproducer.
+
 
 ## Durable indexed-write accounting follow-ups, 2026-10-24
 
@@ -3455,6 +3740,125 @@ retained-source ownership, parser admission and cancellation. Late extdebug
 argument initialization and indexed compound initializers remain with their
 existing owners and are not duplicated here.
 
+
+### Inherited malformed-header scanner nesting, October 24, 2026
+
+Approved follow-up, not part of the time/recovery integration. Independent review
+`/work/reports/wave-20261022/shell/review83-time-recovery-repair-r2.md` approved
+`af55222bcfcf565224691733460eeef3c1992f74` with no blocking findings. Its source
+`bad_brace_parameter_length` in `shell/parser/src/parser/mod.rs:6354-6447`,
+especially lines 6390-6407, retains subscript and length-prefix branches deeper
+than the three-block rule. Those branches already existed in
+`bad_brace_parameter` before the allocation-free extraction. The review's
+`review83-time-recovery-repair-r2-evidence/` records the source comparison and
+52 native plus matching patched-WASI checks. On the next change to this helper,
+extract the balanced-subscript scan and length-prefix classification, then rerun
+malformed-header and valid-unsupported status controls. Do not widen recovery or
+rewrite the parser as part of this follow-up.
+
+## Source call-stack and eval-prefix composition follow-ups, 2026-10-24
+
+Status: Approved, separate from PR91's negative-pattern integration. Owners:
+BUILTINS source/call-stack and eval-prefix families. No repair is included here.
+
+A function defined by a sourced file retains its source text but reports the
+shell name in BASH_SOURCE. Minimal exact probe:
+
+```bash
+printf '%s\n' 'f() { printf "%s|%s\n" "${FUNCNAME[*]}" "${BASH_SOURCE[*]}"; }' > lib
+. ./lib; f
+```
+
+GNU Bash 5.3.15 prints `f|./lib\n`. Exact actual main69
+`d61989ad342a47545c73cb665781f9c8cf971015` and PR91 integration
+`2a60ff0aac80045404a6c55343c3eed2c80203d7` print `f|bash\n`.
+All return 0 with empty stderr. A positive-pattern counterpart and the full
+source/negative-pattern/array-slicing probe isolate the same filename gap.
+`state/call_stack.rs:277` fills CallSite.source from state.shell_name, while
+`interpreter/function_names.rs:47-50` retains the function's source and reader.
+Carry the real definition filename through the admitted call frame in its owning
+family. Preserve frame/storage accounting, cancellation and retained ownership.
+
+Prefix assignments before eval remain explicitly unsupported. For example,
+`f() { local value=axc; value=abc eval 'echo eval:$value'; printf 'eval-status:%s|value:%s\n' "$?" "$value"; }; f`
+prints `eval:abc\neval-status:0|value:axc\n` in Bash 5.3.15, but both exact
+main69 and the integration print `eval-status:2|value:axc\n`. The rejection at
+`interpreter.rs:3123-3124` and native `command_metadata.rs:146` assertion are
+unchanged. Implement this separately without removing that existing guard before
+its supported replacement is independently qualified.
+
+Evidence and exact recorded streams/statuses are in
+`/work/reports/wave-20261022/shell/pr91-actual69-integration-r3-reboot-evidence/`:
+`interaction-records.json`, `diagnosis-records.json`, and
+`prefix-diagnosis-records.json`. The initial strict oracle comparison remains a
+recorded failure, not a waived check or a claimed Bash-compatible pass. N1's
+completion group/slash boundary stays with its existing separate owner.
+
+## Sourced function BASH_SOURCE filename, 2026-10-24
+
+Status: Approved follow-up. Owner: source/call-stack family. No semantic repair
+is included in PR73's bounded integration.
+
+The exact actual-main `d61989ad342a47545c73cb665781f9c8cf971015` production release
+on Waffle prints `source=7\n<later:f:bash>\n` for this probe:
+
+```bash
+p='$1'
+printf '%s\n' 'f() { printf "<%s:%s:%s>\n" "$1" "${FUNCNAME[0]}" "${BASH_SOURCE[0]}"; }; return 7' > lib
+. ./lib sourced
+printf 'source=%s\n' "$?"
+f later
+unset -f f
+```
+
+PR73's integrated production release prints the same output when the first
+`printf` argument in `f` is `${p@P}`. There is no crash or stderr, and status is
+zero on both. This preserves actual-main behavior; it does not establish GNU
+Bash correctness. A supplemental expectation of `./lib` failed. No new Bash
+oracle recording was made.
+
+`state/call_stack.rs:278` initializes `CallSite.source` from `state.shell_name`.
+`interpreter.rs:3074-3081` traces the function before installing its retained
+`body.reader` in the execution context. Both files retain those main behaviors.
+A separate owner should first record the exact supported Bash result, then
+repair filename attribution without changing retained-reader/source ownership,
+call-site offsets, cancellation, storage admission or last-owner refunds.
+Evidence and paired release reproductions are in
+`/work/reports/wave-20261022/shell/pr73-actual69-integration-r1-evidence/` under
+`source-location-main.json`, `interactions-source.mjs`, `waffle-interactions.log`
+and `attempt3/waffle-interactions.log`.
+
+## Interactive bare-function noexec follow-up from PR66 review, 2026-10-24
+
+Status: Approved follow-up, not implemented in PR66. Owner: CONTROL interpreter
+background execution and option state. Independent review
+`/work/reports/wave-20261022/shell/review66-prepared-integration-r3.md` approves
+prepared source `a4141698807e53bde9be1238313ad83c6016b99c` but records this rare
+remaining interaction. Clearing the interactive flag on every background child
+is too broad for Bash's bare simple-function form.
+
+Run in an interactive session:
+
+```bash
+f(){ set -o noexec; echo BAD; }; f & wait; echo parent; (set -n; echo foreground); true | { set -n; echo pipeline; }; echo last
+```
+
+Signed GNU Bash 5.3.15 prints `BAD\nparent\nforeground\npipeline\nlast\n`.
+Reviewed native and patched WASI print `parent\nforeground\npipeline\nlast\n`.
+Both exit 0. The relevant source at that commit is
+`shell/engine/src/interpreter.rs:2157-2161` and `builtins.rs:684`.
+Brace/subshell async forms suppress `BAD` in Bash and the candidate; foreground
+subshells and pipeline stages still ignore noexec. Preserve those controls.
+Bare async eval was oracle-sampled only, not a separate candidate finding.
+
+Evidence is in `review66-prepared-integration-r3-evidence/` beside the report:
+`guard.rs`, both `guards-*-build.log` files, `interactive-oracle.json` and
+`probe-classification.json`. The guard's candidate-output assertion is not
+oracle agreement. Reproduce the exact input against signed Bash 5.3.15, native
+and production Waffle before a bounded repair; add bare-function, brace and
+subshell controls without weakening existing noexec assertions. No runtime fix,
+new score, or Bash parity claim is made by this publication note.
+
 ## Explicit command hash review follow-ups, 2026-10-24
 
 Status: Approved, deferred beyond PR88 integration. Preserve the immutable AVL,
@@ -3478,3 +3882,18 @@ The reviewed repair does not add automatic hashing or execution through entries.
 - Alias queries remain the existing PR75 follow-up above. Lexical alias
   expansion and hash-query precedence are separate paths. Do not implement
   alias introspection or redirect execution through hash entries in this merge.
+
+## printf invalid-star diagnostic ordering, 2026-10-24
+
+Status: Approved, deferred to numeric printf work, outside the nonnumeric
+invalid-format family. `printf '%*Y' bad x` returns status 1 and no stdout in
+GNU Bash 5.3.15. Stderr reports `bad: invalid number` before reporting
+`Y': invalid format character`. Production Waffle reports only the latter.
+The valid star-operand controls pass; this difference needs an invalid star
+operand together with an invalid conversion. `Field::parse` rejects the
+conversion before `Field::resolve` consumes the star operand in
+`shell/engine/src/builtins/printf/fields.rs`. Keep that consumption and warning
+order inside the admitted two-pass printer when repairing it. Do not change
+format validation, streaming or cancellation to hide the missing warning.
+The exact oracle and production streams are recorded in
+`/work/reports/wave-20261022/shell/printf-invalid-format-main75-r1-evidence/star-diagnostic-boundary.json`.

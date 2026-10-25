@@ -37,13 +37,8 @@ impl Expansion<'_> {
             let Some((next, value)) = self.array_slice_next(name, previous, state)? else {
                 break;
             };
-            if self.elements_remaining == 0 {
-                return Err(2.into());
-            }
-            self.elements_remaining -= 1;
-            self.element_boundary(index, list, separator, quoted || scalar)
+            self.element(index, list, separator, &value, protection, quoted || scalar)
                 .await?;
-            self.segment(&value, protection, quoted || scalar).await?;
             previous = Some(next);
         }
         Ok(())

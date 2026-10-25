@@ -29,6 +29,7 @@ pub(super) async fn append_scalar(
     name: &str,
     value: String,
     local: bool,
+    inherit: bool,
     state: &SharedState,
     context: &Context,
     work: &mut Work,
@@ -40,11 +41,13 @@ pub(super) async fn append_scalar(
     }
     let bytes = state
         .borrow()
-        .declaration_append_base(name, local)
+        .declaration_append_base(name, local, inherit)
         .map_or(0, str::len);
     scan_bytes(bytes, context, work).await?;
     let state = state.borrow();
-    let old = state.declaration_append_base(name, local).unwrap_or("");
+    let old = state
+        .declaration_append_base(name, local, inherit)
+        .unwrap_or("");
     let bytes = old.len().checked_add(value.len()).ok_or(2)?;
     if bytes > context.limits().expansion_bytes {
         return Err(2);
@@ -54,6 +57,54 @@ pub(super) async fn append_scalar(
     joined.push_str(old);
     joined.push_str(&value);
     Ok(joined)
+}
+
+pub(super) enum FunctionFormat {
+    Definition,
+    Name,
+}
+
+/// Named `declare -f` operands use the same bounded AST printer as `type`.
+/// Function bodies remain shared and are never copied or executed here.
+pub(super) async fn functions<'a>(
+    format: FunctionFormat,
+    names: impl Iterator<Item = &'a String>,
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<Outcome, i32> {
+    let mut status = 0;
+    for name in names {
+        scan_bytes(name.len(), context, work).await?;
+        let found = match format {
+            FunctionFormat::Definition => print_function(name, state, fds, context, work).await?,
+            FunctionFormat::Name => print_function_name(name, state, fds, context, work).await?,
+        };
+        if !found {
+            status = 1;
+        }
+    }
+    Ok(Outcome::status(status))
+}
+
+async fn print_function(
+    name: &str,
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<bool, i32> {
+    let Some(function) = state.borrow().functions().get(name).cloned() else {
+        return Ok(false);
+    };
+    let rendered = context.render_function(name, &function, work)?;
+    write(fds, rendered.text.as_bytes(), context).await?;
+    write(fds, b"\n", context).await?;
+    let bytes = rendered.text.len();
+    drop(rendered);
+    work.release_storage(bytes);
+    Ok(true)
 }
 
 struct DeclarationSnapshot {
@@ -76,7 +127,15 @@ pub(super) async fn print<'a>(
     for name in names {
         count += 1;
         scan_bytes(name.len(), context, work).await?;
-        if state.borrow().stack_array(name) && !state.borrow().is_nameref(name) {
+        if name == "PIPESTATUS" {
+            print_pipeline_status(state, fds, context, work).await?;
+            continue;
+        }
+        let indexed = matches!(
+            state.borrow().raw_bindings().get(name),
+            Some(crate::state::Binding::Indexed(_))
+        );
+        if (state.borrow().stack_array(name) || indexed) && !state.borrow().is_nameref(name) {
             print_stack_array(name, state, fds, context, work).await?;
             continue;
         }
@@ -117,33 +176,29 @@ async fn snapshot(
     let bytes = state
         .borrow()
         .declaration(name)
-        .map_err(|()| 2)?
         .and_then(|view| view.value)
         .map_or(0, str::len);
     scan_bytes(bytes, context, work).await?;
     let state = state.borrow();
-    let Some(DeclarationView {
-        value,
-        nameref,
-        readonly,
-        exported,
-        case,
-    }) = state.declaration(name).map_err(|()| 2)?
-    else {
+    let Some(view) = state.declaration(name) else {
         return Ok(None);
     };
-    work.admit_storage(value.map_or(0, str::len))
+    work.admit_storage(view.value.map_or(0, str::len))
         .map_err(error_status)?;
     Ok(Some(DeclarationSnapshot {
-        value: value.map(str::to_owned),
-        attributes: [
-            nameref,
-            readonly,
-            exported,
-            case == crate::state::CaseMapping::Lower,
-            case == crate::state::CaseMapping::Upper,
-        ],
+        value: view.value.map(str::to_owned),
+        attributes: declaration_attributes(view),
     }))
+}
+
+fn declaration_attributes(view: DeclarationView<'_>) -> [bool; 5] {
+    [
+        view.nameref,
+        view.readonly,
+        view.exported,
+        view.case == crate::state::CaseMapping::Lower,
+        view.case == crate::state::CaseMapping::Upper,
+    ]
 }
 
 async fn missing(
@@ -272,6 +327,51 @@ fn encode<'a>(
     std::str::from_utf8(&buffer[..bytes.len() * 4]).expect("octal escapes are ASCII")
 }
 
+async fn print_pipeline_status(
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<(), i32> {
+    let bytes = state
+        .borrow()
+        .pipeline_status()
+        .len()
+        .checked_mul(std::mem::size_of::<i32>())
+        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<[bool; 5]>()))
+        .ok_or(2)?;
+    work.admit_storage(bytes).map_err(error_status)?;
+    scan_bytes(bytes, context, work).await?;
+    let (statuses, attributes) = {
+        let state = state.borrow();
+        let attributes = state
+            .declaration("PIPESTATUS")
+            .map(declaration_attributes)
+            .unwrap_or([false; 5]);
+        (state.pipeline_status().to_vec(), attributes)
+    };
+    write(fds, b"declare -a", context).await?;
+    for (set, flag) in attributes.into_iter().zip(*b"nrxlu") {
+        if set {
+            write(fds, &[flag], context).await?;
+        }
+    }
+    write(fds, b" PIPESTATUS=(", context).await?;
+    for (index, code) in statuses.iter().enumerate() {
+        work.admit_storage(48).map_err(error_status)?;
+        scan_bytes(48, context, work).await?;
+        let separator = if index == 0 { "" } else { " " };
+        let line = format!("{separator}[{index}]=\"{code}\"");
+        write(fds, line.as_bytes(), context).await?;
+        drop(line);
+        work.release_storage(48);
+    }
+    write(fds, b")\n", context).await?;
+    drop(statuses);
+    work.release_storage(bytes);
+    Ok(())
+}
+
 async fn print_stack_array(
     name: &str,
     state: &SharedState,
@@ -282,7 +382,18 @@ async fn print_stack_array(
     crate::state::State::admit_scalar_access(state, name, &context.cancel, work)
         .await
         .map_err(error_status)?;
-    write(fds, b"declare -a ", context).await?;
+    let attributes = state
+        .borrow()
+        .declaration(name)
+        .map(declaration_attributes)
+        .unwrap_or([false; 5]);
+    write(fds, b"declare -a", context).await?;
+    for (index, flag) in [(3, b'l'), (0, b'n'), (1, b'r'), (4, b'u'), (2, b'x')] {
+        if attributes[index] {
+            write(fds, &[flag], context).await?;
+        }
+    }
+    write(fds, b" ", context).await?;
     write(fds, name.as_bytes(), context).await?;
     let count = state.borrow().array_count(name);
     if count == 0 {
@@ -296,8 +407,26 @@ async fn print_stack_array(
     write(fds, b"=(", context).await?;
     let utf8 = super::printf::character_locale(state, context, work).await?;
     let printability = Printability::new(utf8)?;
-    for index in 0..count {
-        print_stack_element(name, index, &printability, utf8, state, fds, context, work).await?;
+    let mut previous = None;
+    loop {
+        let next = state
+            .borrow()
+            .array_next(name, previous)
+            .map(|(index, _)| index);
+        let Some(index) = next else { break };
+        print_stack_element(
+            name,
+            index,
+            previous.is_none(),
+            &printability,
+            utf8,
+            state,
+            fds,
+            context,
+            work,
+        )
+        .await?;
+        previous = Some(index);
     }
     write(fds, b")\n", context).await
 }
@@ -305,7 +434,8 @@ async fn print_stack_array(
 #[allow(clippy::too_many_arguments)]
 async fn print_stack_element(
     name: &str,
-    index: usize,
+    index: i64,
+    first: bool,
     printability: &Printability,
     utf8: bool,
     state: &SharedState,
@@ -313,19 +443,15 @@ async fn print_stack_element(
     context: &Context,
     work: &mut Work,
 ) -> Result<(), i32> {
-    let bytes = state
-        .borrow()
-        .array_element(name, index as i64)
-        .ok_or(2)?
-        .len();
+    let bytes = state.borrow().array_element(name, index).ok_or(2)?.len();
     work.admit_storage(bytes + 24).map_err(error_status)?;
     scan_bytes(bytes + 24, context, work).await?;
     let value = state
         .borrow()
-        .array_element(name, index as i64)
+        .array_element(name, index)
         .ok_or(2)?
         .to_owned();
-    let mut line = if index == 0 {
+    let mut line = if first {
         format!("[{index}]")
     } else {
         format!(" [{index}]")
@@ -340,36 +466,31 @@ async fn print_stack_element(
     Ok(())
 }
 
-pub(super) async fn function_names<'a>(
-    names: impl Iterator<Item = &'a String>,
+async fn print_function_name(
+    name: &str,
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
-) -> Result<Outcome, i32> {
-    let mut status = 0;
-    for name in names {
-        scan_bytes(name.len(), context, work).await?;
-        let Some(line) = state
-            .borrow()
-            .functions()
-            .get(name)
-            .map(|function| function.line)
-        else {
-            status = 1;
-            continue;
-        };
-        let bytes = name.len() + state.borrow().shell_name.len() + 24;
-        work.admit_storage(bytes).map_err(error_status)?;
-        scan_bytes(bytes, context, work).await?;
-        let output = if state.borrow().extdebug {
-            format!("{name} {line} {}\n", state.borrow().shell_name)
-        } else {
-            format!("{name}\n")
-        };
-        write(fds, output.as_bytes(), context).await?;
-        drop(output);
-        work.release_storage(bytes);
-    }
-    Ok(Outcome::status(status))
+) -> Result<bool, i32> {
+    let Some(line) = state
+        .borrow()
+        .functions()
+        .get(name)
+        .map(|function| function.line)
+    else {
+        return Ok(false);
+    };
+    let bytes = name.len() + state.borrow().shell_name.len() + 24;
+    work.admit_storage(bytes).map_err(error_status)?;
+    scan_bytes(bytes, context, work).await?;
+    let output = if state.borrow().extdebug {
+        format!("{name} {line} {}\n", state.borrow().shell_name)
+    } else {
+        format!("{name}\n")
+    };
+    write(fds, output.as_bytes(), context).await?;
+    drop(output);
+    work.release_storage(bytes);
+    Ok(true)
 }

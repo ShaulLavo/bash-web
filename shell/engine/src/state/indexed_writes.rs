@@ -17,7 +17,10 @@ use crate::{
 };
 use std::{cell::RefCell, collections::BTreeSet, rc::Rc};
 
-use super::binding::{kept_insertion_steps, tree_bytes};
+use super::{
+    binding::{kept_insertion_steps, tree_bytes},
+    references::Owner,
+};
 
 #[derive(Default)]
 struct ElementEffectCost {
@@ -78,12 +81,13 @@ impl State {
         let (target, destination) = self.indexed_target(name)?;
         let image = self.destination_binding(target, destination);
         let copy = Binding::shared_bytes(image);
+        let owner = self.reference_owner(target);
         let journal =
             self.durable_journal(destination)
                 .map_or_else(ElementEffectCost::default, |changes| {
                     changes
                         .borrow()
-                        .element_effect_cost(target, index, value_bytes)
+                        .element_effect_cost(target, owner, index, value_bytes)
                 });
         work.admit_storage(
             Binding::element_write_bytes(image, index)
@@ -114,7 +118,7 @@ impl State {
         let effect = journal.as_ref().map_or(0, |changes| {
             changes
                 .borrow()
-                .element_effect_cost(&name, index, value.len())
+                .element_effect_cost(&name, self.reference_owner(&name), index, value.len())
                 .storage
         });
         let mut reservation = self.admit_temporary(effect)?;
@@ -124,7 +128,7 @@ impl State {
         if let Some(changes) = journal {
             let mut changes = changes.borrow_mut();
             changes.absorb(reservation.as_mut());
-            changes.element_effect(&name, index, &value);
+            changes.element_effect(&name, self.reference_owner(&name), index, &value);
         }
         let ifs = name == "IFS";
         match self.destination_binding_mut(name, destination) {
@@ -152,7 +156,9 @@ impl State {
                     .saturating_add(state.indexed_key_bytes(name, target)?),
             )?;
             state.durable_journal(destination).map_or(0, |changes| {
-                changes.borrow().replacement_effect_steps(target)
+                changes
+                    .borrow()
+                    .replacement_effect_steps(target, state.reference_owner(target))
             })
         };
         snapshot_steps(steps, cancel, work).await
@@ -168,7 +174,9 @@ impl State {
         let binding = Binding::Indexed(Rc::new(values));
         self.reserve_local_value(&name, binding.storage_bytes())?;
         if let Some(changes) = self.durable_journal(destination) {
-            changes.borrow_mut().supersede(&name);
+            changes
+                .borrow_mut()
+                .supersede(&name, self.reference_owner(&name));
         }
         let ifs = name == "IFS";
         match self.destination_binding_mut(name, destination) {
@@ -197,15 +205,21 @@ impl State {
             .saturating_add(snapshot_node_bytes::<Binding>()?))
     }
     fn indexed_destination(&self, target: &str) -> Destination {
-        match self.prefixes.last().and_then(|frame| frame.get(target)) {
-            None => Destination::Live,
-            Some(Some(_)) => Destination::Saved,
-            Some(None) => Destination::Temporary,
+        let Some(saved) = self.prefixes.last().and_then(|frame| frame.get(target)) else {
+            return Destination::Live;
+        };
+        if saved.owner != self.reference_owner(target) {
+            return Destination::Live;
+        }
+        if saved.value.is_some() {
+            Destination::Saved
+        } else {
+            Destination::Temporary
         }
     }
     fn destination_binding(&self, target: &str, destination: Destination) -> Option<&Binding> {
         if destination == Destination::Saved {
-            return self.prefixes.last()?.get(target)?.as_ref();
+            return self.prefixes.last()?.get(target)?.value.as_ref();
         }
         self.variables.get(target)
     }
@@ -216,7 +230,7 @@ impl State {
         destination: Destination,
     ) -> Option<&mut Binding> {
         if destination == Destination::Saved {
-            return self.prefixes.last_mut()?.get_mut(&target)?.as_mut();
+            return self.prefixes.last_mut()?.get_mut(&target)?.value.as_mut();
         }
         Some(
             self.variables
@@ -235,13 +249,19 @@ impl State {
 }
 
 impl AssignmentChanges {
-    fn element_effect_cost(&self, name: &str, index: i64, value_bytes: usize) -> ElementEffectCost {
+    fn element_effect_cost(
+        &self,
+        name: &str,
+        owner: Owner,
+        index: i64,
+        value_bytes: usize,
+    ) -> ElementEffectCost {
         let mut cost = ElementEffectCost::default();
-        for (target, undo) in &self.undo {
+        for (target, undo, saved) in &self.undo {
             cost.steps = cost
                 .steps
                 .saturating_add(target.len().saturating_add(name.len()).saturating_mul(3));
-            if target != name {
+            if target != name || *saved != owner {
                 continue;
             }
             let effect = undo.element_effect_cost(index, value_bytes);
@@ -250,14 +270,18 @@ impl AssignmentChanges {
         }
         cost
     }
-    fn element_effect(&mut self, name: &str, index: i64, value: &str) {
-        for (_, undo) in self.undo.iter_mut().filter(|(target, _)| target == name) {
+    fn element_effect(&mut self, name: &str, owner: Owner, index: i64, value: &str) {
+        for (_, undo, _saved) in self
+            .undo
+            .iter_mut()
+            .filter(|(target, _, saved)| target == name && *saved == owner)
+        {
             undo.element_effect(index, value);
         }
     }
-    fn replacement_effect_steps(&self, name: &str) -> usize {
+    fn replacement_effect_steps(&self, name: &str, owner: Owner) -> usize {
         let mut steps = 0usize;
-        for (target, undo) in &self.undo {
+        for (target, undo, saved) in &self.undo {
             // Both this estimate and publication visit and compare each name.
             steps = steps.saturating_add(
                 target
@@ -266,15 +290,19 @@ impl AssignmentChanges {
                     .saturating_mul(2)
                     .saturating_add(2),
             );
-            if target == name {
+            if target == name && *saved == owner {
                 steps = steps.saturating_add(undo.supersede_steps());
             }
         }
         steps
     }
     /// A durable replacement leaves nothing earlier for rollback to restore.
-    fn supersede(&mut self, name: &str) {
-        for (_, undo) in self.undo.iter_mut().filter(|(target, _)| target == name) {
+    fn supersede(&mut self, name: &str, owner: Owner) {
+        for (_, undo, _saved) in self
+            .undo
+            .iter_mut()
+            .filter(|(target, _, saved)| target == name && *saved == owner)
+        {
             *undo = BindingUndo::Superseded;
         }
     }

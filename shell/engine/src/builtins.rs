@@ -4,7 +4,9 @@ mod caller;
 mod completion;
 mod declarations;
 mod directories;
+mod enable;
 mod getopts;
+mod help;
 mod printf;
 mod read;
 pub(crate) mod test;
@@ -12,7 +14,7 @@ mod trap;
 use crate::{
     commands::{self, Builtin, Declaration},
     executor::Budget,
-    expand::{Error, Work},
+    expand::{self, Error, Work},
     interpreter::{Context, Flow, JobSelector, Outcome},
     io::{Endpoint, FdTable, IoError},
     state::{SharedState, State},
@@ -121,6 +123,12 @@ pub(crate) async fn run(
             };
             return completion::run(kind, args, state, fds, context, work).await;
         }
+        Builtin::Enable => {
+            return enable::run(args, state, fds, context, work)
+                .await
+                .map(Outcome::status);
+        }
+        Builtin::Help => return help::run(args, state, fds, context, work).await,
         Builtin::Noop => {}
         Builtin::False => return Err(1),
         Builtin::Test => return test::run(name, args, state, fds, context, work).await,
@@ -360,24 +368,26 @@ fn ascii_eq_ignore_case(value: &str, expected: &str) -> bool {
 
 fn error_status(error: Error) -> i32 {
     match error {
-        Error::Status(code) => code,
+        Error::Status(code) | Error::Abort(code) => code,
         _ => 2,
     }
 }
 
-const SHOPT_OPTIONS: [&str; 7] = [
+const SHOPT_OPTIONS: [&str; 8] = [
     "expand_aliases",
     "extdebug",
     "extglob",
     "inherit_errexit",
     "lastpipe",
     "nullglob",
+    "promptvars",
     "sourcepath",
 ];
 
 fn shopt_value(state: &State, option: &str) -> Option<bool> {
     match option {
         "expand_aliases" => Some(state.expand_aliases),
+        "promptvars" => Some(state.promptvars),
         "extglob" => Some(state.extglob),
         "extdebug" => Some(state.extdebug),
         "inherit_errexit" => Some(state.inherit_errexit),
@@ -406,6 +416,7 @@ async fn set_shopt_option(
     let mut state = state.borrow_mut();
     match option {
         "expand_aliases" => state.expand_aliases = enabled,
+        "promptvars" => state.promptvars = enabled,
         "extglob" => state.extglob = enabled,
         "extdebug" => {
             state.extdebug = enabled;
@@ -662,6 +673,8 @@ async fn set(
             errexit: state.errexit,
             monitor: state.monitor,
             noglob: state.noglob,
+            noexec: state.noexec,
+            xtrace: state.xtrace,
             functrace: state.functrace,
             errtrace: state.errtrace,
         }
@@ -691,7 +704,17 @@ async fn set(
             index += 1;
             continue;
         }
-        set_short_options(option, enabled, &mut flags, context, work).await?;
+        let named = option.ends_with('o');
+        let short = if named {
+            &option[..option.len() - 1]
+        } else {
+            option
+        };
+        set_short_options(short, enabled, &mut flags, context, work).await?;
+        if named {
+            set_option(args.get(index).ok_or(2)?, enabled, &mut flags)?;
+            index += 1;
+        }
     }
     // All options and work admission complete before any state changes.
     let mut state = state.borrow_mut();
@@ -704,6 +727,8 @@ async fn set(
     state.errexit = flags.errexit;
     state.monitor = flags.monitor;
     state.noglob = flags.noglob;
+    state.noexec = flags.noexec && !state.interactive;
+    state.xtrace = flags.xtrace;
     state.functrace = flags.functrace;
     state.errtrace = flags.errtrace;
     Ok(Outcome::status(0))
@@ -718,6 +743,8 @@ struct SetFlags {
     errexit: bool,
     monitor: bool,
     noglob: bool,
+    noexec: bool,
+    xtrace: bool,
 }
 
 fn set_option(option: &str, enabled: bool, flags: &mut SetFlags) -> Result<(), i32> {
@@ -727,6 +754,8 @@ fn set_option(option: &str, enabled: bool, flags: &mut SetFlags) -> Result<(), i
         "errexit" => flags.errexit = enabled,
         "monitor" => flags.monitor = enabled,
         "noglob" => flags.noglob = enabled,
+        "noexec" => flags.noexec = enabled,
+        "xtrace" => flags.xtrace = enabled,
         "functrace" => flags.functrace = enabled,
         "errtrace" => flags.errtrace = enabled,
         _ => return Err(2),
@@ -750,6 +779,8 @@ async fn set_short_options(
             b'e' => flags.errexit = enabled,
             b'm' => flags.monitor = enabled,
             b'f' => flags.noglob = enabled,
+            b'n' => flags.noexec = enabled,
+            b'x' => flags.xtrace = enabled,
             b'T' => flags.functrace = enabled,
             b'E' => flags.errtrace = enabled,
             _ => return Err(2),
@@ -773,16 +804,49 @@ async fn declarations(
     let DeclarationOptions {
         print,
         function_names,
+        functions,
+        inherit,
         nameref,
         readonly,
         exported,
         case,
     } = declaration_options(name, &mut args, context, work).await?;
+    if functions {
+        if function_names
+            || nameref
+            || readonly
+            || exported
+            || case.specified()
+            || args.peek().is_none()
+        {
+            return Err(2);
+        }
+        return declarations::functions(
+            declarations::FunctionFormat::Definition,
+            args,
+            state,
+            fds,
+            context,
+            work,
+        )
+        .await;
+    }
     if function_names {
-        return declarations::function_names(args, state, fds, context, work).await;
+        return declarations::functions(
+            declarations::FunctionFormat::Name,
+            args,
+            state,
+            fds,
+            context,
+            work,
+        )
+        .await;
     }
     if print {
         return declarations::print(name, args, state, fds, context, work).await;
+    }
+    if inherit && (nameref || case.specified()) {
+        return Err(2);
     }
     if nameref && (readonly || exported || case.specified()) {
         return Err(2);
@@ -823,11 +887,12 @@ async fn declarations(
         }
         let local = name == "local"
             || matches!(name, "declare" | "typeset") && state.borrow().in_function_scope();
-        let target = if append && local && !nameref && state.borrow().is_current_local(&key) {
-            declarations::local_append_target(key, state, context, work).await
-        } else {
-            Ok(key)
-        };
+        let target =
+            if append && local && !nameref && !inherit && state.borrow().is_current_local(&key) {
+                declarations::local_append_target(key, state, context, work).await
+            } else {
+                Ok(key)
+            };
         if target == Err(1) {
             status = 1;
             continue;
@@ -850,8 +915,16 @@ async fn declarations(
         }
         let value = if append {
             Some(
-                declarations::append_scalar(&key, value.ok_or(2)?, local, state, context, work)
-                    .await?,
+                declarations::append_scalar(
+                    &key,
+                    value.ok_or(2)?,
+                    local,
+                    inherit,
+                    state,
+                    context,
+                    work,
+                )
+                .await?,
             )
         } else {
             value
@@ -870,7 +943,25 @@ async fn declarations(
         } else {
             key
         };
-        let result = if case.specified() {
+        if matches!(name, "export" | "readonly")
+            && let Some(value) = &value
+            && let Err(outcome) =
+                crate::interpreter::builtin_assignment(&key, value, state, fds, context).await
+        {
+            return Ok(outcome);
+        }
+        if inherit && value.is_none() && !state.borrow().is_current_local(&key) {
+            let bytes = state
+                .borrow()
+                .declaration_append_base(&key, true, true)
+                .map_or(0, str::len);
+            scan_bytes(bytes, context, work).await?;
+        }
+        let result = if inherit {
+            state
+                .borrow_mut()
+                .declare_inherited_local(key.clone(), value, work)
+        } else if case.specified() {
             state
                 .borrow_mut()
                 .declare_case(key.clone(), value, local, case, work)
@@ -916,6 +1007,8 @@ fn declaration_attributes(
 struct DeclarationOptions {
     print: bool,
     function_names: bool,
+    functions: bool,
+    inherit: bool,
     nameref: bool,
     readonly: bool,
     exported: bool,
@@ -956,6 +1049,8 @@ async fn declaration_option(
         match flag {
             b'p' if enabled && name != "local" => flags.print = true,
             b'F' if enabled && name != "local" => flags.function_names = true,
+            b'f' if enabled && name != "local" => flags.functions = true,
+            b'I' if enabled && name == "local" => flags.inherit = true,
             b'n' if enabled => flags.nameref = true,
             b'r' if enabled => flags.readonly = true,
             b'x' if enabled => flags.exported = true,
@@ -983,7 +1078,7 @@ async fn nameref_declaration(
                 .get(key)
                 .or_else(|| {
                     state
-                        .bindings()
+                        .raw_bindings()
                         .get(key)
                         .and_then(crate::state::Binding::scalar)
                 })
@@ -997,17 +1092,23 @@ async fn nameref_declaration(
             .await
             .map_err(error_status)?;
     }
-    // Array targets, unbound reference declarations and broad attributes are
-    // explicit prerequisites for later units, never target-string parsing.
-    if target.is_empty()
-        || target.contains(['[', ']'])
-        || target == "PIPESTATUS"
-        || key == "PIPESTATUS"
-    {
+    if target.is_empty() || target == "PIPESTATUS" || key == "PIPESTATUS" {
         return Err(2);
     }
-    if !valid_name(&target) {
-        return Err(1);
+    let Some(reference) = crate::state::Reference::parse(&target) else {
+        return Err(if target.contains(['[', ']']) { 2 } else { 1 });
+    };
+    // Special arrays have projected reads, not the ordinary element write
+    // contract. Refuse their subscripted declarations before publishing a local.
+    let unsupported = {
+        let state = state.borrow();
+        state.reference(reference).ok().is_some_and(|target| {
+            target.subscript.is_some()
+                && (target.name == "PIPESTATUS" || state.stack_array(target.name))
+        })
+    };
+    if unsupported {
+        return Err(2);
     }
     state
         .borrow_mut()
@@ -1084,7 +1185,7 @@ async fn unset(
     let mut budget = Budget::default();
     for name in names {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-        if !valid_name(name) {
+        if crate::state::Reference::parse(name).is_none() {
             continue;
         }
         if functions {
@@ -1094,8 +1195,39 @@ async fn unset(
         let removed = if namerefs {
             state.borrow_mut().unset_nameref(name)
         } else {
-            admit_unset_target(name, state, context, work).await?;
-            state.borrow_mut().unset_variable(name)
+            let Some(place) = expand::references::removal_place(
+                expand::references::syntax(name).map_err(error_status)?,
+                state,
+                &context.cancel,
+                context.limits().expansion_bytes,
+                work,
+            )
+            .await
+            .map_err(error_status)?
+            else {
+                continue;
+            };
+            if let Some(index) = place.index {
+                let existed = state.borrow().place_value(&place).is_some();
+                let result = State::write_element(
+                    state,
+                    &place,
+                    crate::state::BindingUpdate::Remove { index },
+                    &context.cancel,
+                    work,
+                )
+                .await;
+                match result {
+                    Ok(()) => Ok(existed),
+                    Err(crate::exec::Error::Readonly { .. }) => Err(1),
+                    Err(error) => return Err(error_status(error)),
+                }
+            } else {
+                admit_unset_target(&place.name, state, context, work).await?;
+                state
+                    .borrow_mut()
+                    .unset_selected(&place.name, name == "IFS")
+            }
         };
         match removed {
             Err(_) => {

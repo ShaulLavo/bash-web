@@ -1,0 +1,196 @@
+{
+  "schema": 1,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "cases": [
+    {
+      "script": "prompt='$ '\necho \"Prompt: '${prompt@P}'\"\n\nprompt='a\\r\\n> '\necho \"Prompt: '${prompt@P}'\"\n\nprompt='\\\\'\necho \"Prompt: '${prompt@P}'\"\n\nprompt='\\?'\necho \"Prompt: '${prompt@P}'\"\n\nprompt='\\81'\necho \"Prompt: '${prompt@P}'\"\n",
+      "status": 0,
+      "stdoutBase64": "UHJvbXB0OiAnJCAnClByb21wdDogJ2ENCj4gJwpQcm9tcHQ6ICdcJwpQcm9tcHQ6ICdcPycKUHJvbXB0OiAnXDgxJwo="
+    },
+    {
+      "script": "prompt='\\[\\]Prompt>\\[\\]'\necho \"Prompt: '${prompt@P}'\"\n",
+      "status": 0,
+      "stdoutBase64": "UHJvbXB0OiAnUHJvbXB0PicK"
+    },
+    {
+      "script": "prompt='\\D{something}'\necho \"Date format with plain string: '${prompt@P}'\"\n",
+      "status": 0,
+      "stdoutBase64": "RGF0ZSBmb3JtYXQgd2l0aCBwbGFpbiBzdHJpbmc6ICdzb21ldGhpbmcnCg=="
+    },
+    {
+      "script": "var=value\n\nprompt=\"\\$var\"\n\nshopt -s promptvars\necho \"Prompt (dollar-sign not escaped, with promptvars): ${prompt@P}\"\n\nshopt -u promptvars\necho \"Prompt (dollar-sign not escaped, without promptvars): ${prompt@P}\"\n\nprompt=\"\\\\\\$var\"\n\nshopt -s promptvars\necho \"Prompt (dollar-sign escaped, with promptvars): ${prompt@P}\"\n\nshopt -u promptvars\necho \"Prompt (dollar-sign escaped, without promptvars): ${prompt@P}\"\n",
+      "status": 0,
+      "stdoutBase64": "UHJvbXB0IChkb2xsYXItc2lnbiBub3QgZXNjYXBlZCwgd2l0aCBwcm9tcHR2YXJzKTogdmFsdWUKUHJvbXB0IChkb2xsYXItc2lnbiBub3QgZXNjYXBlZCwgd2l0aG91dCBwcm9tcHR2YXJzKTogJHZhcgpQcm9tcHQgKGRvbGxhci1zaWduIGVzY2FwZWQsIHdpdGggcHJvbXB0dmFycyk6ICR2YXIKUHJvbXB0IChkb2xsYXItc2lnbiBlc2NhcGVkLCB3aXRob3V0IHByb21wdHZhcnMpOiAkdmFyCg=="
+    },
+    {
+      "script": "HOME=$(pwd)\n\nprompt='~'\n\nshopt -s promptvars\necho \"Prompt (with promptvars): ${prompt@P}\"\n\nshopt -u promptvars\necho \"Prompt (without promptvars): ${prompt@P}\"\n",
+      "status": 0,
+      "stdoutBase64": "UHJvbXB0ICh3aXRoIHByb21wdHZhcnMpOiB+ClByb21wdCAod2l0aG91dCBwcm9tcHR2YXJzKTogfgo="
+    },
+    {
+      "script": "prompt='$(echo Hello)'\necho \"Without spaces: ${prompt@P}\"\n\nprompt=' $(echo Hello) '\necho \"With spaces: ${prompt@P}\"\n",
+      "status": 0,
+      "stdoutBase64": "V2l0aG91dCBzcGFjZXM6IEhlbGxvCldpdGggc3BhY2VzOiAgSGVsbG8gCg=="
+    },
+    {
+      "script": "prompt='`echo Hello`'\necho \"Without spaces: ${prompt@P}\"\n\nprompt=' `echo Hello` '\necho \"With spaces: ${prompt@P}\"\n",
+      "status": 0,
+      "stdoutBase64": "V2l0aG91dCBzcGFjZXM6IEhlbGxvCldpdGggc3BhY2VzOiAgSGVsbG8gCg=="
+    },
+    {
+      "script": "var=value\nprompt=\"\\${var:+\\[text\\]}\"\necho \"Conditional (set): '${prompt@P}'\"\n\nvar=\nprompt=\"\\${var:+\\[text\\]}\"\necho \"Conditional (unset): '${prompt@P}'\"\n",
+      "status": 0,
+      "stdoutBase64": "Q29uZGl0aW9uYWwgKHNldCk6ICd0ZXh0JwpDb25kaXRpb25hbCAodW5zZXQpOiAnJwo="
+    },
+    {
+      "script": "p0='done'\np1='${p0@P}'\np2='${p1@P}'\necho \"${p2@P}|${p2@P}\"\n",
+      "status": 0,
+      "stdoutBase64": "ZG9uZXxkb25lCg=="
+    },
+    {
+      "script": "PS1='[\\045]\\1004$ \\555 \\0455'\necho \"${PS1@P}\"\n",
+      "status": 0,
+      "stdoutBase64": "WyVdQDQkIG0gJTUK"
+    },
+    {
+      "script": "PS1='\\\\ \\z'\necho \"${PS1@P}\"\n",
+      "status": 0,
+      "stdoutBase64": "XCBcego="
+    },
+    {
+      "script": "PS1='\\[x\\]y'\necho \"${PS1@P}\"\n",
+      "status": 0,
+      "stdoutBase64": "eHkK"
+    },
+    {
+      "script": "x='\\'\ny='h'\nPS1='$x$y'\necho \"${PS1@P}\"\n",
+      "status": 0,
+      "stdoutBase64": "XGgK"
+    },
+    {
+      "script": "cd /tmp\nPS1='\\w|\\W'\necho \"${PS1@P}\"\ncd /\necho \"${PS1@P}\"\n",
+      "status": 0,
+      "stdoutBase64": "L3RtcHx0bXAKL3wvCg=="
+    },
+    {
+      "script": "HOME=/tmp\ncd /tmp\nPS1='\\w \\W'\necho \"${PS1@P}\"\n",
+      "status": 0,
+      "stdoutBase64": "fiB+Cg=="
+    },
+    {
+      "script": "PS1='\"q\" a'\"'\"'b $((1+2)) $(echo cs)'\necho \"${PS1@P}\"\n",
+      "status": 0,
+      "stdoutBase64": "InEiIGEnYiAzIGNzCg=="
+    },
+    {
+      "script": "shopt -u promptvars\nPS1='$HOME \\\\'\necho \"${PS1@P}\"\n",
+      "status": 0,
+      "stdoutBase64": "JEhPTUUgXAo="
+    },
+    {
+      "script": "p='\\a\\e\\r\\n\\\\\\z\\[x\\]'; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "WwcbDQpcenhdCg=="
+    },
+    {
+      "script": "p='\\000a\\400b\\12c\\1d\\0455'; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "W2FiXDEyY1wxZCU1XQo="
+    },
+    {
+      "script": "p='\"$x\" a'\"'\"'b'; x='a b'; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "WyJhIGIiIGEnYl0K"
+    },
+    {
+      "script": "p='${x:-\"a b\"}'; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "W2EgYl0K"
+    },
+    {
+      "script": "p='$@|$*'; set -- a 'b c'; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "W2EgYiBjfGEgYiBjXQo="
+    },
+    {
+      "script": "p='a* ~ \"q\"'; IFS=:; printf '[%s]\\n' \"${p@P}\"; printf '[%s]\\n' ${p@P}",
+      "status": 0,
+      "stdoutBase64": "W2EqIH4gInEiXQpbYSogfiAicSJdCg=="
+    },
+    {
+      "script": "p='${x:=changed}'; printf '[%s]\\n' \"${p@P}\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "W2NoYW5nZWRdCltjaGFuZ2VkXQo="
+    },
+    {
+      "script": "p='\\w|\\W'; HOME=/tmp; cd /tmp; printf '[%s]\\n' \"${p@P}\"; (shopt -u promptvars; p='$HOME'; printf '[%s]\\n' \"${p@P}\"); p='$HOME'; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "W358fl0KWyRIT01FXQpbL3RtcF0K"
+    },
+    {
+      "script": "p='\\w|\\W'; HOME=/usr; cd /usr/local/bin; PROMPT_DIRTRIM=1; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "W34vLi4uL2JpbnxiaW5dCg=="
+    },
+    {
+      "script": "p='\\w'; HOME=/; cd /tmp; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "Wy90bXBdCg=="
+    },
+    {
+      "script": "p='\\w'; HOME=/usr; cd /usr/local/bin; PROMPT_DIRTRIM=2; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "W34vbG9jYWwvYmluXQo="
+    },
+    {
+      "script": "p='$x'; x='\\h'; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "W1xoXQo="
+    },
+    {
+      "script": "p='\\'; printf '[%s]\\n' \"${p@P}\"; shopt -u promptvars; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "W1xdCltcXQo="
+    },
+    {
+      "script": "p=\"\\$'literal'\"; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "WyQnbGl0ZXJhbCddCg=="
+    },
+    {
+      "script": "p='\\w'; HOME=/tmp; mkdir '/tmp/bash-web-expansion-transform-prompt-$((2+3))'; cd '/tmp/bash-web-expansion-transform-prompt-$((2+3))'; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "W34vYmFzaC13ZWItZXhwYW5zaW9uLXRyYW5zZm9ybS1wcm9tcHQtJCgoMiszKSldCg=="
+    },
+    {
+      "script": "p='\\303\\251\\360\\237\\231\\202'; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "W8Op8J+Zgl0K"
+    },
+    {
+      "script": "p='\\044x|\\140echo CS\\140'; x=VALUE; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "W1ZBTFVFfENTXQo="
+    },
+    {
+      "script": "p='\\\\$HOME'; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "WyRIT01FXQo="
+    },
+    {
+      "script": "p='${v@Q}'; v=\"a'b\"; printf '[%s]\\n' \"${p@P}\"",
+      "status": 0,
+      "stdoutBase64": "WydhJ1wnJ2InXQo="
+    },
+    {
+      "script": "p='done'; a='${p@P}'; b='${a@P}'; printf '[%s]\\n' \"${b@P}\"",
+      "status": 0,
+      "stdoutBase64": "W2RvbmVdCg=="
+    },
+    {
+      "script": "x=a; printf '[%s]\\n' \"${w:-${x@Q}}\" \"${x#${x@Q}}\"",
+      "status": 0,
+      "stdoutBase64": "WydhJ10KW2FdCg=="
+    }
+  ]
+}

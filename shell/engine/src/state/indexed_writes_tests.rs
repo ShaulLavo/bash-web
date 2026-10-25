@@ -85,7 +85,7 @@ fn check_pending_admission<T>(
     assert!(poll_once(admission.as_mut()).is_pending());
     assert!(state.try_borrow_mut().is_ok());
     if let Some(completed) = completed {
-        assert!(completed.changes.try_borrow_mut().is_ok());
+        assert!(completed.changes.as_ref().unwrap().try_borrow_mut().is_ok());
     }
     if cancelled {
         cancel.cancel();
@@ -136,7 +136,7 @@ fn scalar(state: &SharedState, name: &str, value: &str) {
 fn declare(state: &SharedState, name: &str) -> String {
     let state = state.borrow();
     let mut flags = String::new();
-    let binding = state.bindings().get(name).unwrap();
+    let binding = state.raw_bindings().get(name).unwrap();
     let indexed = matches!(binding, Binding::Indexed(_));
     if indexed {
         flags.push('a');
@@ -177,7 +177,7 @@ fn journal_update(
     completed
         .reserve(name, retained)
         .unwrap_or_else(|_| panic!("undo fits"));
-    let frame = PrefixFrame::enter(state.clone());
+    let frame = enter_prefix(&state);
     frame.reserve(name, storage).unwrap();
     frame
         .commit_update(name.into(), update, completed)
@@ -199,6 +199,10 @@ fn run(first: i64, fields: &[&str]) -> Indexed {
 
 fn enter(state: &SharedState) -> AssignmentFrame {
     AssignmentFrame::enter(state.clone()).unwrap_or_else(|_| panic!("journal fits"))
+}
+
+fn enter_prefix(state: &SharedState) -> PrefixFrame {
+    PrefixFrame::test_enter(state.clone())
 }
 
 #[test]
@@ -345,17 +349,17 @@ fn prefix_element_writes_change_the_variable_that_outlives_the_prefix() {
             Some(fields) => replace(&state, "a", fields).unwrap(),
             None => scalar(&state, "a", "g"),
         }
-        let frame = PrefixFrame::enter(state.clone());
+        let frame = enter_prefix(&state);
         frame.set("a".into(), "tmp".into()).unwrap();
-        let temporary = state.borrow().bindings()["a"].clone();
+        let temporary = state.borrow().binding("a").cloned().unwrap();
         element(&state, "a", 1, "5").unwrap();
         // Bash's later RHS still sees only the temporary ("prefix-later-rhs-saved").
-        assert_eq!(state.borrow().bindings()["a"], temporary);
+        assert_eq!(state.borrow().binding("a").cloned(), Some(temporary));
         drop(frame);
         assert_eq!(declare(&state, "a"), bash(id));
     }
     let state = State::default().shared();
-    let frame = PrefixFrame::enter(state.clone());
+    let frame = enter_prefix(&state);
     frame.set("a".into(), "tmp".into()).unwrap();
     element(&state, "a", 1, "5").unwrap();
     let a = state.borrow().binding("a").cloned().unwrap();
@@ -417,6 +421,9 @@ fn kept_assignment_commands_keep_journaled_and_durable_writes() {
 /// Rollback undoes the command's own writes and keeps durable ones.
 #[test]
 fn rollback_keeps_durable_elements_over_every_inverse_kind() {
+    check_durable_owner_incarnation();
+    check_recreated_owner_ignores_old_journal();
+    check_typed_effect_after_kept_and_superseded();
     let state = State::default().shared();
     // Same-slot and unrelated-slot element inverses, on an original scalar.
     scalar(&state, "s", "str");
@@ -502,6 +509,185 @@ fn rollback_keeps_durable_elements_over_every_inverse_kind() {
     assert_eq!(declare(&state, "a"), bash("read-a-replaces"));
 }
 
+fn check_durable_owner_incarnation() {
+    let (memory, state, outer) = scoped_state(1 << 22);
+    state
+        .borrow_mut()
+        .local("a".into(), "outer".into())
+        .unwrap();
+    let mut completed = enter(&state);
+    journal_update(
+        &state,
+        &mut completed,
+        "a",
+        BindingUpdate::Append(run(1, &["x", "y"])),
+    );
+    element(&state, "a", 2, "kept").unwrap();
+    let prefix = enter_prefix(&state);
+    prefix.reserve("a", 1024).unwrap();
+    prefix.set("a".into(), "prefix".into()).unwrap();
+    let prior_owner = state.borrow().reference_owner("a");
+    let inner = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    state
+        .borrow_mut()
+        .local("a".into(), "inner".into())
+        .unwrap();
+    assert_ne!(state.borrow().reference_owner("a"), prior_owner);
+    let inverses = format!("{:?}", completed.changes.as_ref().unwrap().borrow().undo);
+    element(&state, "a", 1, "inner-element").unwrap();
+    assert_eq!(state.borrow().array_element("a", 1), Some("inner-element"));
+    replace(&state, "a", &["inner-replacement"]).unwrap();
+    assert_eq!(
+        state.borrow().array_element("a", 0),
+        Some("inner-replacement")
+    );
+    assert_eq!(
+        format!("{:?}", completed.changes.as_ref().unwrap().borrow().undo),
+        inverses
+    );
+    drop(inner);
+    assert_eq!(state.borrow().scalar_parameter("a"), Some("prefix"));
+    drop(prefix);
+    let filler = memory.admit((1 << 22) - memory.observation().0).unwrap();
+    drop(completed);
+    assert_eq!(state.borrow().array_element("a", 0), Some("outer"));
+    assert_eq!(state.borrow().array_element("a", 1), None);
+    assert_eq!(state.borrow().array_element("a", 2), Some("kept"));
+    drop(filler);
+    drop(outer);
+    assert_eq!(
+        memory.observation().0,
+        state.borrow().prefix_capacity_bytes()
+    );
+    drop(state);
+    assert_eq!(memory.observation().0, 0);
+}
+
+fn check_recreated_owner_ignores_old_journal() {
+    let (memory, state, outer) = scoped_state(1 << 22);
+    state
+        .borrow_mut()
+        .local("a".into(), "original".into())
+        .unwrap();
+    let mut completed = enter(&state);
+    journal_update(
+        &state,
+        &mut completed,
+        "a",
+        BindingUpdate::Replace("assigned".into()),
+    );
+    let prefix = enter_prefix(&state);
+    prefix.reserve("a", 1024).unwrap();
+    prefix.set("a".into(), "prefix".into()).unwrap();
+    let prior_owner = state.borrow().reference_owner("a");
+    let inner = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    state.borrow_mut().unset_variable("a").unwrap();
+    drop(inner);
+    state
+        .borrow_mut()
+        .local("a".into(), "recreated".into())
+        .unwrap();
+    assert_ne!(state.borrow().reference_owner("a"), prior_owner);
+    let inverses = format!("{:?}", completed.changes.as_ref().unwrap().borrow().undo);
+    element(&state, "a", 2, "element").unwrap();
+    assert_eq!(state.borrow().array_element("a", 0), Some("recreated"));
+    assert_eq!(state.borrow().array_element("a", 2), Some("element"));
+    replace(&state, "a", &["replacement"]).unwrap();
+    assert_eq!(
+        format!("{:?}", completed.changes.as_ref().unwrap().borrow().undo),
+        inverses
+    );
+    let filler = memory.admit((1 << 22) - memory.observation().0).unwrap();
+    drop(prefix);
+    drop(completed);
+    assert_eq!(state.borrow().array_element("a", 0), Some("replacement"));
+    drop(filler);
+    drop(outer);
+    assert_eq!(
+        memory.observation().0,
+        state.borrow().prefix_capacity_bytes()
+    );
+    drop(state);
+    assert_eq!(memory.observation().0, 0);
+}
+
+fn typed_update(state: &SharedState, update: BindingUpdate) {
+    let place = references::Place {
+        name: "a".into(),
+        index: Some(1),
+        owner: state.borrow().reference_owner("a"),
+    };
+    finish(State::write_element(
+        state,
+        &place,
+        update,
+        &Cancel::new(),
+        &mut work(),
+    ))
+    .unwrap_or_else(|_| panic!("typed effect fits"));
+}
+
+fn check_typed_effect_after_kept_and_superseded() {
+    let (memory, state, function) = scoped_state(1 << 22);
+    state
+        .borrow_mut()
+        .local("a".into(), "outer".into())
+        .unwrap();
+    let mut completed = enter(&state);
+    journal_update(
+        &state,
+        &mut completed,
+        "a",
+        BindingUpdate::Append(run(1, &["x", "y"])),
+    );
+    element(&state, "a", 2, "kept").unwrap();
+    assert_eq!(
+        completed.changes.as_ref().unwrap().borrow().undo[0]
+            .1
+            .storage_bytes(),
+        super::binding::tree_bytes::<()>(1)
+    );
+    typed_update(&state, BindingUpdate::Remove { index: 1 });
+    let filler = memory.admit((1 << 22) - memory.observation().0).unwrap();
+    drop(completed);
+    assert_eq!(state.borrow().array_element("a", 1), None);
+    assert_eq!(state.borrow().array_element("a", 2), Some("kept"));
+    drop(filler);
+    let mut completed = enter(&state);
+    journal_update(
+        &state,
+        &mut completed,
+        "a",
+        BindingUpdate::Replace("temporary".into()),
+    );
+    replace(&state, "a", &["replacement"]).unwrap();
+    assert_eq!(
+        completed.changes.as_ref().unwrap().borrow().undo[0]
+            .1
+            .storage_bytes(),
+        0
+    );
+    typed_update(
+        &state,
+        BindingUpdate::Element {
+            index: 1,
+            value: "typed".into(),
+        },
+    );
+    let filler = memory.admit((1 << 22) - memory.observation().0).unwrap();
+    drop(completed);
+    assert_eq!(state.borrow().array_element("a", 0), Some("replacement"));
+    assert_eq!(state.borrow().array_element("a", 1), Some("typed"));
+    drop(filler);
+    drop(function);
+    assert_eq!(
+        memory.observation().0,
+        state.borrow().prefix_capacity_bytes()
+    );
+    drop(state);
+    assert_eq!(memory.observation().0, 0);
+}
+
 #[test]
 fn durable_write_to_a_shared_array_copies_once_and_leaves_the_snapshot() {
     let state = State::default().shared();
@@ -513,7 +699,9 @@ fn durable_write_to_a_shared_array_copies_once_and_leaves_the_snapshot() {
         Binding::Indexed(values) => Rc::as_ptr(values),
         Binding::Scalar(_) => panic!("array expected"),
     };
-    let shared = address(&child);
+    assert_ne!(address(&state.borrow()), address(&child));
+    let reader = state.borrow().binding("a").cloned().unwrap();
+    let shared = array_address(&reader);
     assert_eq!(address(&state.borrow()), shared);
     element(&state, "a", 1, "5").unwrap();
     let copied = address(&state.borrow());
@@ -603,6 +791,11 @@ fn exhausted_session_storage_rejects_without_partial_effects() {
     drop(completed);
     assert_eq!(declare(&state, "a"), "declare -- a=\"o\"\n");
     drop(function);
+    assert_eq!(
+        memory.observation().0,
+        state.borrow().prefix_capacity_bytes()
+    );
+    drop(state);
     assert_eq!(memory.observation().0, 0);
 }
 
@@ -659,6 +852,11 @@ fn rollback_after_durable_element_write_under_exhausted_budget_refunds_exactly()
     }
     drop(filler);
     drop(function);
+    assert_eq!(
+        memory.observation().0,
+        state.borrow().prefix_capacity_bytes()
+    );
+    drop(state);
     assert_eq!(memory.observation().0, 0);
 }
 #[test]
@@ -667,6 +865,7 @@ fn review86_shared_journal_copy_must_consume_work() {
     let large = "x".repeat(131_072);
     replace(&state, "a", &[&large, "old"]).unwrap();
     let snapshot = snapshot(&state);
+    let reader = state.borrow().binding("a").cloned().unwrap();
     let mut completed = enter(&state);
     journal_update(
         &state,
@@ -699,6 +898,7 @@ fn review86_shared_journal_copy_must_consume_work() {
     }
     drop(completed);
     assert_eq!(snapshot.array_element("a", 1), Some("old"));
+    assert_eq!(reader.element(1), Some("old"));
     assert_eq!(
         state.borrow().array_element("a", 1),
         if accepted { Some("z") } else { Some("old") }
@@ -778,6 +978,11 @@ fn review86_append_keep_tracking_has_bounded_storage_and_work() {
     assert_eq!(state.borrow().array_element("a", 1024), Some("e"));
     drop(filler);
     drop(function);
+    assert_eq!(
+        memory.observation().0,
+        state.borrow().prefix_capacity_bytes(),
+    );
+    drop(state);
     assert_eq!(memory.observation().0, 0);
 }
 
@@ -913,7 +1118,7 @@ fn review86_saved_prefix_local_and_boundary_indexes_refund_exactly() {
         .borrow_mut()
         .local("a".into(), "scalar".into())
         .unwrap();
-    let frame = PrefixFrame::enter(state.clone());
+    let frame = enter_prefix(&state);
     frame.reserve("a", 1024).unwrap();
     frame.set("a".into(), "tmp".into()).unwrap();
     element(&state, "a", i64::MAX, "max").unwrap();
@@ -930,11 +1135,17 @@ fn review86_saved_prefix_local_and_boundary_indexes_refund_exactly() {
     );
     drop(filler);
     drop(function);
+    assert_eq!(
+        memory.observation().0,
+        state.borrow().prefix_capacity_bytes(),
+    );
+    drop(state);
     assert_eq!(memory.observation().0, 0);
 }
 
-fn snapshot_then_replace(state: &SharedState) -> (State, AssignmentFrame) {
+fn snapshot_then_replace(state: &SharedState) -> (State, AssignmentFrame, Binding) {
     let snapshot = snapshot(state);
+    let reader = state.borrow().binding("a").cloned().unwrap();
     let mut completed = enter(state);
     journal_update(
         state,
@@ -942,7 +1153,7 @@ fn snapshot_then_replace(state: &SharedState) -> (State, AssignmentFrame) {
         "a",
         BindingUpdate::Replace("temporary".into()),
     );
-    (snapshot, completed)
+    (snapshot, completed, reader)
 }
 
 #[test]
@@ -950,7 +1161,7 @@ fn retained_inverse_copy_work_has_an_exact_prepublication_boundary() {
     let (memory, state, function) = scoped_state(1 << 22);
     state.borrow_mut().declare_local("a".into(), None).unwrap();
     replace(&state, "a", &[&"x".repeat(131_072), "old"]).unwrap();
-    let (snapshot, completed) = snapshot_then_replace(&state);
+    let (snapshot, completed, reader) = snapshot_then_replace(&state);
     let copy = snapshot.binding("a").unwrap().storage_bytes();
     let used = memory.observation().0;
     let mut measured = work();
@@ -1006,7 +1217,13 @@ fn retained_inverse_copy_work_has_an_exact_prepublication_boundary() {
         "retained_inverse_copy_bytes={copy} admitted_steps={steps} short_work_status=2 exact_work_remaining=0"
     );
     drop(snapshot);
+    drop(reader);
     drop(function);
+    assert_eq!(
+        memory.observation().0,
+        state.borrow().prefix_capacity_bytes()
+    );
+    drop(state);
     assert_eq!(memory.observation().0, 0);
 }
 
@@ -1021,7 +1238,7 @@ fn check_pending_retained_copy(cancelled: bool) {
     let (memory, state, function) = scoped_state(1 << 22);
     state.borrow_mut().declare_local("a".into(), None).unwrap();
     replace(&state, "a", &[&"x".repeat(131_072), "old"]).unwrap();
-    let (snapshot, completed) = snapshot_then_replace(&state);
+    let (snapshot, completed, reader) = snapshot_then_replace(&state);
     let held = state.borrow().held_local_value("a");
     let used = memory.observation().0;
     let cancel = Cancel::new();
@@ -1040,7 +1257,13 @@ fn check_pending_retained_copy(cancelled: bool) {
     );
     drop(filler);
     drop(snapshot);
+    drop(reader);
     drop(function);
+    assert_eq!(
+        memory.observation().0,
+        state.borrow().prefix_capacity_bytes()
+    );
+    drop(state);
     assert_eq!(memory.observation().0, 0);
 }
 
@@ -1086,6 +1309,11 @@ fn append_tracking_rejection_preserves_inverse_value_and_session_storage() {
     assert_eq!(state.borrow().array_count("a"), 1);
     drop(filler);
     drop(function);
+    assert_eq!(
+        memory.observation().0,
+        state.borrow().prefix_capacity_bytes()
+    );
+    drop(state);
     assert_eq!(memory.observation().0, 0);
 }
 
@@ -1103,7 +1331,7 @@ fn review86r5_replacement_supersession_must_consume_work() {
             BindingUpdate::Replace(index.to_string().into()),
         );
     }
-    let inverse_count = completed.changes.borrow().undo.len();
+    let inverse_count = completed.changes.as_ref().unwrap().borrow().undo.len();
     let mut fuel = Work::new(0, 1 << 22, 0);
     let admitted = finish(State::admit_indexed_replacement(
         &state,
@@ -1174,10 +1402,12 @@ fn review86r7_replacement_exact_work_preserves_snapshot_and_full_budget_refunds(
     assert!(
         completed
             .changes
+            .as_ref()
+            .unwrap()
             .borrow()
             .undo
             .iter()
-            .all(|(_, undo)| !matches!(undo, BindingUndo::Superseded))
+            .all(|(_, undo, _)| !matches!(undo, BindingUndo::Superseded))
     );
     let mut exact = Work::new(steps, limit, 0);
     finish(State::admit_indexed_replacement(
@@ -1203,6 +1433,11 @@ fn review86r7_replacement_exact_work_preserves_snapshot_and_full_budget_refunds(
     drop(filler);
     drop(snapshot);
     drop(function);
+    assert_eq!(
+        memory.observation().0,
+        state.borrow().prefix_capacity_bytes()
+    );
+    drop(state);
     assert_eq!(memory.observation().0, 0);
 }
 
@@ -1227,20 +1462,27 @@ fn review86r7_replacement_pending_cancel_and_drop_leave_journal_unchanged() {
         assert_eq!(state.borrow().scalar_parameter("a"), Some("511"));
         assert_eq!(state.borrow().held_local_value("a"), held);
         assert_eq!(memory.observation().0, used);
-        assert_eq!(completed.changes.borrow().undo.len(), 512);
+        assert_eq!(completed.changes.as_ref().unwrap().borrow().undo.len(), 512);
         assert!(
             completed
                 .changes
+                .as_ref()
+                .unwrap()
                 .borrow()
                 .undo
                 .iter()
-                .all(|(_, undo)| !matches!(undo, BindingUndo::Superseded))
+                .all(|(_, undo, _)| !matches!(undo, BindingUndo::Superseded))
         );
         let filler = memory.admit((1 << 22) - used).unwrap();
         drop(completed);
         assert_eq!(state.borrow().scalar_parameter("a"), Some("original"));
         drop(filler);
         drop(function);
+        assert_eq!(
+            memory.observation().0,
+            state.borrow().prefix_capacity_bytes()
+        );
+        drop(state);
         assert_eq!(memory.observation().0, 0);
     }
 }
@@ -1253,13 +1495,30 @@ fn review86r7_replacement_prices_only_matching_inverse_payload_drops() {
         getopts: None,
         memory: None,
         undo: vec![
-            ("a".into(), BindingUndo::Restore(None)),
-            ("a".into(), BindingUndo::Restore(Some("scalar".into()))),
-            ("a".into(), BindingUndo::Restore(Some(array.clone()))),
-            ("a".into(), BindingUndo::Restore(Some(array))),
+            (
+                "a".into(),
+                BindingUndo::Restore(None),
+                references::Owner::default(),
+            ),
+            (
+                "a".into(),
+                BindingUndo::Restore(Some("scalar".into())),
+                references::Owner::default(),
+            ),
+            (
+                "a".into(),
+                BindingUndo::Restore(Some(array.clone())),
+                references::Owner::default(),
+            ),
+            (
+                "a".into(),
+                BindingUndo::Restore(Some(array)),
+                references::Owner::default(),
+            ),
             (
                 "other".into(),
                 BindingUndo::Restore(Some(Binding::Indexed(Rc::new(values(&["x"; 128]))))),
+                references::Owner::default(),
             ),
             (
                 "a".into(),
@@ -1268,6 +1527,7 @@ fn review86r7_replacement_prices_only_matching_inverse_payload_drops() {
                     old: Some("old".into()),
                     scalar: false,
                 },
+                references::Owner::default(),
             ),
             (
                 "a".into(),
@@ -1277,8 +1537,13 @@ fn review86r7_replacement_prices_only_matching_inverse_payload_drops() {
                     keep_zero: false,
                     kept,
                 },
+                references::Owner::default(),
             ),
-            ("a".into(), BindingUndo::Superseded),
+            (
+                "a".into(),
+                BindingUndo::Superseded,
+                references::Owner::default(),
+            ),
         ],
     };
     let matching_updates = 1 + 1 + 4 + 4 + 1 + 5 + 1;
@@ -1327,7 +1592,7 @@ fn review86r7_replacement_alias_and_saved_prefix_admit_resolved_journal() {
             BindingUpdate::Replace("assigned".into()),
         );
     }
-    let prefix = PrefixFrame::enter(state.clone());
+    let prefix = enter_prefix(&state);
     prefix.set("a".into(), "prefix".into()).unwrap();
     let reference = state.borrow().reference_work("alias").unwrap();
     let expected = reference + 2 * 6 + 1 + 2;
@@ -1346,11 +1611,11 @@ fn review86r7_replacement_alias_and_saved_prefix_admit_resolved_journal() {
         .unwrap();
     assert_eq!(state.borrow().scalar_parameter("a"), Some("prefix"));
     assert!(matches!(
-        completed.changes.borrow().undo[0].1,
+        completed.changes.as_ref().unwrap().borrow().undo[0].1,
         BindingUndo::Superseded
     ));
     assert!(!matches!(
-        completed.changes.borrow().undo[1].1,
+        completed.changes.as_ref().unwrap().borrow().undo[1].1,
         BindingUndo::Superseded
     ));
     drop(prefix);
@@ -1371,7 +1636,7 @@ fn review86r7_temporary_replacement_skips_outer_journal() {
             BindingUpdate::Replace(index.to_string().into()),
         );
     }
-    let prefix = PrefixFrame::enter(state.clone());
+    let prefix = enter_prefix(&state);
     prefix.set("a".into(), "prefix".into()).unwrap();
     let mut fuel = Work::new(0, 1 << 22, 0);
     finish(State::admit_indexed_replacement(
@@ -1388,10 +1653,12 @@ fn review86r7_temporary_replacement_skips_outer_journal() {
     assert!(
         completed
             .changes
+            .as_ref()
+            .unwrap()
             .borrow()
             .undo
             .iter()
-            .all(|(_, undo)| !matches!(undo, BindingUndo::Superseded))
+            .all(|(_, undo, _)| !matches!(undo, BindingUndo::Superseded))
     );
     drop(prefix);
     drop(completed);
@@ -1449,8 +1716,8 @@ fn durable_writes_and_command_hash_snapshots_cancel_and_refund_independently() {
         state.borrow_mut().declare_local("a".into(), None).unwrap();
         replace(&state, "a", &[&"x".repeat(131_072), "old"]).unwrap();
         set_command_hash_path(&state, "/parent");
-        let cloned = state.borrow().clone();
-        let (saved, completed) = snapshot_then_replace(&state);
+        let cloned = snapshot(&state);
+        let (saved, completed, reader) = snapshot_then_replace(&state);
         let saved = saved.shared();
         let entry = state.borrow().command_hash.entries()[0].clone();
         assert!(Rc::ptr_eq(&entry, &cloned.command_hash.entries()[0]));
@@ -1484,6 +1751,8 @@ fn durable_writes_and_command_hash_snapshots_cancel_and_refund_independently() {
         drop(filler);
         drop(saved);
         drop(cloned);
+        assert_eq!(reader.element(1), Some("old"));
+        drop(reader);
         drop(function);
         drop(state);
         assert_eq!(memory.observation().0, 0);

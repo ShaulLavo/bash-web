@@ -6,7 +6,7 @@ use crate::{
     exec::{ResultFuture, fault},
     executor::Cancel,
     expand::{self, Error, Work},
-    state::{SharedState, State},
+    state::{Place, Reference, SharedState, State},
 };
 use futures::{
     FutureExt,
@@ -95,6 +95,13 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 self.cursor += 1;
+            }
+            if !number && bytes.get(self.cursor) == Some(&b'[') {
+                let end = Reference::end(self.source, self.cursor).ok_or(2)?;
+                for _ in self.cursor..end {
+                    work.checkpoint(cancel).await?;
+                }
+                self.cursor = end;
             }
             let text = &self.source[start..self.cursor];
             return Ok(if number {
@@ -214,7 +221,15 @@ pub(crate) fn evaluate<'a>(
             }
             let expanded;
             let source = if source.contains(['$', '"', '\\', '`']) {
-                expanded = expand::arithmetic_text(source, state, cancel, max, work).await?;
+                expanded = expand::scalar_text(
+                    expand::ScalarSyntax::Arithmetic,
+                    source,
+                    state,
+                    cancel,
+                    max,
+                    work,
+                )
+                .await?;
                 expanded.as_str()
             } else {
                 source
@@ -351,10 +366,11 @@ fn parse<'a, 's: 'a>(
         {
             p.advance(work, cancel).await?;
             p.advance(work, cancel).await?;
+            let place = place(name, active, state, cancel, max, work).await?;
             let old = if op == "=" {
                 0
             } else {
-                read(name, active, state, cancel, max, work, depth + 1).await?
+                read_place(place.as_ref(), state, cancel, max, work, depth + 1).await?
             };
             let rhs = parse(p, (1, active), state, cancel, max, work, depth + 1).await?;
             let result = if op == "=" {
@@ -362,7 +378,7 @@ fn parse<'a, 's: 'a>(
             } else {
                 binary(&op[..op.len() - 1], old, rhs, active, work)?
             };
-            store(name, result, active, state, cancel, max, work).await?;
+            store_place(place.as_ref(), result, state, cancel, max, work).await?;
             result
         } else {
             unary(p, active, state, cancel, max, work, depth + 1).await?
@@ -452,13 +468,14 @@ fn unary<'a, 's: 'a>(
             if let Token::Ident(name) = p.next {
                 p.advance(work, cancel).await?;
                 p.advance(work, cancel).await?;
-                let old = read(name, active, state, cancel, max, work, depth + 1).await?;
+                let place = place(name, active, state, cancel, max, work).await?;
+                let old = read_place(place.as_ref(), state, cancel, max, work, depth + 1).await?;
                 let value = if op == "++" {
                     old.wrapping_add(1)
                 } else {
                     old.wrapping_sub(1)
                 };
-                store(name, value, active, state, cancel, max, work).await?;
+                store_place(place.as_ref(), value, state, cancel, max, work).await?;
                 return Ok(value);
             }
             // Two unary signs when there is no identifier after the token.
@@ -488,17 +505,17 @@ fn unary<'a, 's: 'a>(
             }
             Token::Ident(name) => {
                 p.advance(work, cancel).await?;
-                let value = read(name, active, state, cancel, max, work, depth + 1).await?;
+                let place = place(name, active, state, cancel, max, work).await?;
+                let value = read_place(place.as_ref(), state, cancel, max, work, depth + 1).await?;
                 if let Token::Op(op @ ("++" | "--")) = p.current {
                     p.advance(work, cancel).await?;
-                    store(
-                        name,
+                    store_place(
+                        place.as_ref(),
                         if op == "++" {
                             value.wrapping_add(1)
                         } else {
                             value.wrapping_sub(1)
                         },
-                        active,
                         state,
                         cancel,
                         max,
@@ -523,72 +540,65 @@ fn unary<'a, 's: 'a>(
     })
 }
 
-async fn read(
+async fn place(
     name: &str,
     active: bool,
+    state: &SharedState,
+    cancel: &Cancel,
+    max: usize,
+    work: &mut Work,
+) -> Result<Option<Place>, Error> {
+    if !active {
+        return Ok(None);
+    }
+    expand::references::select(expand::references::syntax(name)?, state, cancel, max, work)
+        .await
+        .map(Some)
+}
+async fn read_place(
+    place: Option<&Place>,
     state: &SharedState,
     cancel: &Cancel,
     max: usize,
     work: &mut Work,
     depth: usize,
 ) -> Result<i64, Error> {
-    if !active {
-        return Ok(0);
-    }
-    State::admit_scalar_access(state, name, cancel, work).await?;
-    let value = {
-        let s = state.borrow();
-        if s.dynamic_parameter(name) {
-            work.admit_storage(State::DYNAMIC_PARAMETER_BYTES)?;
-            s.parameter(name).into_owned()
-        } else {
-            let value = s.scalar_parameter(name).unwrap_or("");
-            if value.len() > max {
-                return Err(2.into());
-            }
-            work.admit_storage(value.len())?;
-            value.to_owned()
-        }
+    let Some(place) = place else { return Ok(0) };
+    let value = if place.index.is_none() && state.borrow().dynamic_parameter(&place.name) {
+        work.admit_storage(State::DYNAMIC_PARAMETER_BYTES)?;
+        state.borrow().parameter(&place.name).into_owned()
+    } else {
+        expand::references::read(place, state, cancel, max, work)
+            .await?
+            .unwrap_or_default()
     };
-    work.enter_scalar_arithmetic(name, cancel).await?;
+    work.enter_scalar_arithmetic(&place.name, place.index.unwrap_or(0), cancel)
+        .await?;
     let result = expression(&value, state, cancel, max, work, depth).await;
     work.leave_scalar_arithmetic();
     result
 }
-async fn store(
-    name: &str,
+async fn store_place(
+    place: Option<&Place>,
     value: i64,
-    active: bool,
     state: &SharedState,
     cancel: &Cancel,
     max: usize,
     work: &mut Work,
 ) -> Result<(), Error> {
-    if !active {
-        return Ok(());
-    }
+    let Some(place) = place else { return Ok(()) };
     let digits = if value == 0 {
         1
     } else {
         value.unsigned_abs().ilog10() as usize + 1
     } + usize::from(value < 0);
-    if name.len() > max || digits > max {
+    if place.name.len() > max || digits > max {
         return Err(2.into());
     }
-    State::admit_assignment(state, name, digits, cancel, work).await?;
-    // State insertion and an active prefix frame may both retain the value.
-    work.admit_storage(name.len().saturating_mul(2).saturating_add(80 + 128))?;
+    work.admit_storage(digits)?;
     let text = value.to_string();
-    let mut state = state.borrow_mut();
-    let changed = state.scalar_parameter(name) != Some(text.as_str());
-    if state.assign_parameter(name.to_owned(), text).is_err() {
-        work.admit_storage(name.len().saturating_mul(2).saturating_add(160))?;
-        return Err(Error::Readonly {
-            name: name.to_owned(),
-            line: None,
-            expansion: false,
-        });
-    }
+    let changed = state.borrow().place_value(place) != Some(text.as_str());
+    expand::references::write(place, text, state, cancel, work).await?;
     work.arithmetic_writes = work.arithmetic_writes.wrapping_add(u64::from(changed));
     Ok(())
 }

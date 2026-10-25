@@ -312,3 +312,23 @@ fn reader_budget_admission_matches_old_call_at_every_work_boundary() {
         }
     }
 }
+
+#[test]
+fn malformed_parameter_headers_use_the_word_parser_classification() {
+    for token in ["${y!}", "${}", "${ x}", "${#x:}"] {
+        assert!(bad_parameter_token(token), "{token}");
+        assert!(matches!(
+            lazy_parameter(token, false, false).unwrap(),
+            WordPart::BadSubstitution(_)
+        ));
+    }
+    for token in [
+        "${#0}",
+        "${PIPESTATUS[@]}",
+        "${a[0]-x}",
+        "${x:-${y!}}",
+        "${y!}tail",
+    ] {
+        assert!(!bad_parameter_token(token), "{token}");
+    }
+}

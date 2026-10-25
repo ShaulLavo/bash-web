@@ -508,7 +508,7 @@ pub(super) async fn query(
             if options.verbose {
                 function_description(name, &function, fds, context, work).await?;
             }
-        } else if command.is_some_and(commands::Command::query_builtin) {
+        } else if commands::enabled(name, state.borrow().disabled_builtins) {
             output(fds, context, name.as_bytes()).await?;
             output(
                 fds,
@@ -583,27 +583,11 @@ pub(super) async fn function_description(
     context: &Context,
     work: &mut expand::Work,
 ) -> Result<(), i32> {
-    let limit = context
-        .limits()
-        .expansion_bytes
-        .min(work.storage_left())
-        .min(context.evaluation.execution_available());
-    // The printer enforces its ceiling before appending. Reserve
-    // that full possible live buffer before it allocates anything.
-    let _render_storage = context.evaluation.admit_execution(limit)?;
-    let rendered = match function_string_bounded(
-        name,
-        &function.body,
-        &Cell::new(limit),
-        limit,
-        Some(&context.parser_budget()),
-    ) {
+    let rendered = match context.render_function(name, function, work) {
         Ok(rendered) => rendered,
         Err(_) => return function_description_failure(fds, context).await,
     };
-    work.admit_storage(rendered.len())
-        .map_err(admission_status)?;
-    output(fds, context, rendered.as_bytes()).await?;
+    output(fds, context, rendered.text.as_bytes()).await?;
     output(fds, context, b"\n").await?;
     Ok(())
 }

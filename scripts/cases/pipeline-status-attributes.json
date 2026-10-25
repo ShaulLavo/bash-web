@@ -1,0 +1,53 @@
+{
+  "contract": "Invariants from the existing shell-declare-print.json attribute and local-scope contract, applied to the actual PIPESTATUS list. Not new Bash observations.",
+  "cases": [
+    {
+      "id": "global readonly",
+      "code": "readonly PIPESTATUS; false | true; declare -p PIPESTATUS",
+      "status": 0,
+      "stdout": "declare -ar PIPESTATUS=([0]=\"1\" [1]=\"0\")\n"
+    },
+    {
+      "id": "global export",
+      "code": "export PIPESTATUS; false | true; declare -p PIPESTATUS",
+      "status": 0,
+      "stdout": "declare -ax PIPESTATUS=([0]=\"1\" [1]=\"0\")\n"
+    },
+    {
+      "id": "global combined repeated read",
+      "code": "export PIPESTATUS; readonly PIPESTATUS; false | true; declare -p PIPESTATUS PIPESTATUS; printf \"%s:%s\\n\" \"$?\" \"${PIPESTATUS[*]}\"",
+      "status": 0,
+      "stdout": "declare -arx PIPESTATUS=([0]=\"1\" [1]=\"0\")\ndeclare -arx PIPESTATUS=([0]=\"1\" [1]=\"0\")\n0:0\n"
+    },
+    {
+      "id": "local readonly shadow and restore",
+      "code": "f(){ local PIPESTATUS; readonly PIPESTATUS; false | true; declare -p PIPESTATUS; g(){ local PIPESTATUS; false | true; declare -p PIPESTATUS; }; g; false | true; declare -p PIPESTATUS; }; f; false | true; declare -p PIPESTATUS",
+      "status": 0,
+      "stdout": "declare -ar PIPESTATUS=([0]=\"1\" [1]=\"0\")\ndeclare -a PIPESTATUS=([0]=\"1\" [1]=\"0\")\ndeclare -ar PIPESTATUS=([0]=\"1\" [1]=\"0\")\ndeclare -a PIPESTATUS=([0]=\"1\" [1]=\"0\")\n"
+    },
+    {
+      "id": "exported global local shadow",
+      "code": "export PIPESTATUS; f(){ local PIPESTATUS; false | true; declare -p PIPESTATUS; }; f; false | true; declare -p PIPESTATUS",
+      "status": 0,
+      "stdout": "declare -ax PIPESTATUS=([0]=\"1\" [1]=\"0\")\ndeclare -ax PIPESTATUS=([0]=\"1\" [1]=\"0\")\n"
+    },
+    {
+      "id": "nested local unset attributes",
+      "code": "f(){ local -rx PIPESTATUS; g(){ false | true; declare -p PIPESTATUS; }; g; }; f; false | true; declare -p PIPESTATUS",
+      "status": 0,
+      "stdout": "declare -arx PIPESTATUS=([0]=\"1\" [1]=\"0\")\ndeclare -a PIPESTATUS=([0]=\"1\" [1]=\"0\")\n"
+    },
+    {
+      "id": "local export restore",
+      "code": "f(){ local -x PIPESTATUS; false | true; declare -p PIPESTATUS; }; f; false | true; declare -p PIPESTATUS",
+      "status": 0,
+      "stdout": "declare -ax PIPESTATUS=([0]=\"1\" [1]=\"0\")\ndeclare -a PIPESTATUS=([0]=\"1\" [1]=\"0\")\n"
+    },
+    {
+      "id": "closed output recovery",
+      "code": "export PIPESTATUS; readonly PIPESTATUS; false | true; declare -p PIPESTATUS 1>&-; printf \"status:%s stages:%s\\n\" \"$?\" \"${PIPESTATUS[*]}\"; false | true; declare -p PIPESTATUS",
+      "status": 0,
+      "stdout": "status:1 stages:1\ndeclare -arx PIPESTATUS=([0]=\"1\" [1]=\"0\")\n"
+    }
+  ]
+}

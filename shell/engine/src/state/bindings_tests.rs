@@ -3,7 +3,7 @@ use super::*;
 use futures::{FutureExt, task::noop_waker};
 use std::{future::Future, task::Context};
 
-fn finish<T>(future: impl Future<Output = T>) -> T {
+pub(super) fn finish<T>(future: impl Future<Output = T>) -> T {
     let mut future = Box::pin(future);
     let waker = noop_waker();
     let mut context = Context::from_waker(&waker);
@@ -30,8 +30,9 @@ fn builtin(state: &SharedState, assigned: &[(String, String)]) -> PrefixFrame {
 }
 
 fn assert_startup_defaults(state: &State) {
-    assert_eq!(state.bindings().len(), 5);
+    assert_eq!(state.bindings().len(), 6);
     assert_eq!(state.bindings()["_"], "bash");
+    assert_eq!(state.bindings()["PS4"], "+ ");
     assert_eq!(state.bindings()["OPTIND"], "1");
     assert_eq!(state.bindings()["OPTERR"], "1");
 }
@@ -52,6 +53,7 @@ fn cli_environment_adds_nonexported_shell_defaults() {
     inherited
         .initialize_cli_environment([("PATH".into(), String::new()), ("IFS".into(), ":".into())]);
     assert_eq!(inherited.bindings()["PATH"], "");
+    assert_eq!(inherited.bindings()["PS4"], "+ ");
     assert_eq!(
         inherited.environment(),
         BTreeMap::from([("PATH".into(), String::new()), ("IFS".into(), ":".into())])
@@ -77,6 +79,7 @@ fn runtime_environment_extends_defaults_exports_ifs_and_does_not_invent_path() {
     let mut inherited = State::default();
     inherited.inherit_environment([("IFS".into(), ":".into()), ("PATH".into(), String::new())]);
     assert_eq!(inherited.bindings()["IFS"], ":");
+    assert_eq!(inherited.bindings()["PS4"], "+ ");
     assert_eq!(inherited.environment()["PATH"], "");
 }
 
@@ -109,7 +112,7 @@ fn expansion_checks_readonly_but_builtin_replay_and_restore_are_privileged() {
         .borrow_mut()
         .readonly("locked".into(), Some("caller".into()))
         .unwrap();
-    let expansion = PrefixFrame::enter(state.clone());
+    let expansion = PrefixFrame::test_enter(state.clone());
     assert_eq!(
         expansion.set("locked".into(), "rejected".into()),
         Err("locked".into())
@@ -184,7 +187,7 @@ fn builtin_ifs_replay_keeps_cache_while_expansion_refreshes_and_restores_it() {
     assert_eq!(state.borrow().parameter("IFS"), ":");
     assert_eq!(state.borrow().cached_ifs_members(), Some(members));
 
-    let frame = PrefixFrame::enter(state.clone());
+    let frame = PrefixFrame::test_enter(state.clone());
     frame.set("IFS".into(), ",".into()).unwrap();
     // The effective target is sep, not IFS: even expansion leaves the IFS
     // special-variable cache alone when writing through this alias.
@@ -196,7 +199,7 @@ fn builtin_ifs_replay_keeps_cache_while_expansion_refreshes_and_restores_it() {
         .borrow_mut()
         .assign_parameter("IFS".into(), ":".into())
         .unwrap();
-    let frame = PrefixFrame::enter(direct.clone());
+    let frame = PrefixFrame::test_enter(direct.clone());
     frame.set("IFS".into(), ",".into()).unwrap();
     assert_eq!(direct.borrow().positional_separator(), Some(','));
     drop(frame);
@@ -228,9 +231,9 @@ fn builtin_inside_expansion_routes_durable_writes_to_only_the_last_expansion_sav
         .borrow_mut()
         .declare_nameref("alias".into(), "x".into(), false)
         .unwrap();
-    let outer = PrefixFrame::enter(state.clone());
+    let outer = PrefixFrame::test_enter(state.clone());
     outer.set("x".into(), "outer".into()).unwrap();
-    let inner = PrefixFrame::enter(state.clone());
+    let inner = PrefixFrame::test_enter(state.clone());
     inner.set("alias".into(), "inner".into()).unwrap();
     let frame = builtin(
         &state,
@@ -342,7 +345,7 @@ fn indexed_commit_moves_unique_rc_and_copies_only_shared_snapshots() {
         value: "new".into(),
     };
     assert_eq!(update.copy_bytes(state.borrow().binding("a")), 0);
-    PrefixFrame::enter(state.clone())
+    PrefixFrame::test_enter(state.clone())
         .commit_update("a".into(), update, &mut completed)
         .unwrap_or_else(|_| panic!("admitted update fits"));
     assert_eq!(address(&state), original);
@@ -355,7 +358,7 @@ fn indexed_commit_moves_unique_rc_and_copies_only_shared_snapshots() {
         update.copy_bytes(state.borrow().binding("a")),
         saved.storage_bytes()
     );
-    PrefixFrame::enter(state.clone())
+    PrefixFrame::test_enter(state.clone())
         .commit_update("a".into(), update, &mut completed)
         .unwrap_or_else(|_| panic!("admitted update fits"));
     assert_ne!(address(&state), original);
@@ -375,7 +378,7 @@ fn indexed_commit_local_admission_failure_refunds_frame_without_mutation() {
         .unwrap();
     let before = memory.observation().0;
     for _ in 0..8 {
-        let frame = PrefixFrame::enter(state.clone());
+        let frame = PrefixFrame::test_enter(state.clone());
         let mut completed =
             AssignmentFrame::enter(state.clone()).unwrap_or_else(|_| panic!("undo frame fits"));
         frame.reserve("a", 0).unwrap();
@@ -389,8 +392,13 @@ fn indexed_commit_local_admission_failure_refunds_frame_without_mutation() {
         ));
         assert_eq!(state.borrow().scalar_parameter("a"), Some("saved"));
         drop(completed);
-        assert_eq!(memory.observation().0, before);
+        assert_eq!(
+            memory.observation().0,
+            before + state.borrow().prefix_capacity_bytes()
+        );
     }
+    drop(state);
+    assert_eq!(memory.observation().0, 0);
 }
 
 fn commit_test_update(state: &SharedState, completed: &mut AssignmentFrame, update: BindingUpdate) {
@@ -403,7 +411,7 @@ fn commit_test_update(state: &SharedState, completed: &mut AssignmentFrame, upda
     completed
         .reserve("a", retained)
         .unwrap_or_else(|_| panic!("undo fits"));
-    let frame = PrefixFrame::enter(state.clone());
+    let frame = PrefixFrame::test_enter(state.clone());
     frame.reserve("a", storage).unwrap();
     frame
         .commit_update("a".into(), update, completed)
@@ -411,7 +419,7 @@ fn commit_test_update(state: &SharedState, completed: &mut AssignmentFrame, upda
 }
 
 #[test]
-fn completed_undo_is_excluded_from_snapshots_and_state_clones() {
+fn completed_undo_is_excluded_from_admitted_snapshots() {
     let state = State::default().shared();
     state
         .borrow_mut()
@@ -431,7 +439,6 @@ fn completed_undo_is_excluded_from_snapshots_and_state_clones() {
     let mut child = finish(State::snapshot(&state, &Cancel::new(), &mut work))
         .unwrap_or_else(|_| panic!("snapshot fits"));
     assert!(child.assignment_undo.0.upgrade().is_none());
-    assert!(state.borrow().clone().assignment_undo.0.upgrade().is_none());
     child.assign_parameter("a".into(), "child".into()).unwrap();
     drop(child);
     drop(completed);
@@ -460,10 +467,13 @@ fn completed_local_undo_restores_all_updates_and_refunds_exact_storage() {
         }
         drop(completed);
         assert_eq!(state.borrow().scalar_parameter("a"), Some("old"));
-        assert_eq!(memory.observation().0, before);
+        assert_eq!(
+            memory.observation().0,
+            before + state.borrow().prefix_capacity_bytes()
+        );
     }
     drop(function);
-    assert_eq!(memory.observation().0, 0);
+    assert_state_drop_refunds(&memory, state);
 }
 
 #[test]
@@ -558,14 +568,7 @@ fn rollback_with_full_budget(
 #[test]
 fn durable_scalar_preserves_unrelated_local_undo_capacity_until_rollback() {
     let (memory, state, function, mut completed) = local_array_assignment();
-    commit_test_update(
-        &state,
-        &mut completed,
-        BindingUpdate::Element {
-            index: 9,
-            value: "small".into(),
-        },
-    );
+    replace_large_slot(&state, &mut completed);
     let before = state.borrow().held_local_value("a");
     durable_scalar(&state);
     // The durable write prices only the live array, so the local ticket no
@@ -573,7 +576,7 @@ fn durable_scalar_preserves_unrelated_local_undo_capacity_until_rollback() {
     assert!(state.borrow().held_local_value("a") < before);
     rollback_with_full_budget(&memory, &state, completed);
     drop(function);
-    assert_eq!(memory.observation().0, 0);
+    assert_state_drop_refunds(&memory, state);
 }
 
 #[test]
@@ -589,20 +592,13 @@ fn durable_scalar_preserves_replaced_local_array_until_rollback() {
     durable_scalar(&state);
     rollback_with_full_budget(&memory, &state, completed);
     drop(function);
-    assert_eq!(memory.observation().0, 0);
+    assert_state_drop_refunds(&memory, state);
 }
 
 #[test]
 fn kept_assignments_under_an_exhausted_budget_only_shrink_local_tickets() {
     let (memory, state, function, mut completed) = local_array_assignment();
-    commit_test_update(
-        &state,
-        &mut completed,
-        BindingUpdate::Element {
-            index: 9,
-            value: "small".into(),
-        },
-    );
+    replace_large_slot(&state, &mut completed);
     durable_scalar(&state);
     let filler = memory
         .admit(LOCAL_ARRAY_MEMORY_LIMIT - memory.observation().0)
@@ -615,5 +611,215 @@ fn kept_assignments_under_an_exhausted_budget_only_shrink_local_tickets() {
     assert_eq!(state.borrow().held_local_value("a"), live);
     drop(filler);
     drop(function);
+    assert_state_drop_refunds(&memory, state);
+}
+
+pub(super) fn assert_state_drop_refunds(memory: &crate::exec::StorageBudget, state: SharedState) {
+    assert_eq!(
+        memory.observation().0,
+        state.borrow().prefix_capacity_bytes()
+    );
+    drop(state);
     assert_eq!(memory.observation().0, 0);
+}
+
+#[test]
+fn typed_reference_snapshot_reader_does_not_force_allocating_small_inverse_rollback() {
+    let (memory, state, function, mut completed) = local_array_assignment();
+    replace_large_slot(&state, &mut completed);
+    let mut work = Work::new(100_000, 100_000, 0);
+    let reader = finish(State::snapshot(&state, &Cancel::new(), &mut work))
+        .unwrap_or_else(|_| panic!("snapshot fits"));
+    {
+        let state = state.borrow();
+        let Binding::Indexed(values) = &state.variables["a"] else {
+            panic!("array expected")
+        };
+        assert_eq!(
+            Rc::strong_count(values),
+            1,
+            "public snapshot detached the live tree"
+        );
+    }
+    let pressure = memory
+        .admit(LOCAL_ARRAY_MEMORY_LIMIT - memory.observation().0)
+        .unwrap();
+    drop(completed);
+    assert_eq!(state.borrow().array_element("a", 9), Some("z"));
+    assert_eq!(reader.array_element("a", 9), Some("small"));
+    drop(pressure);
+    drop(reader);
+    drop(function);
+    assert_state_drop_refunds(&memory, state);
+}
+
+fn write_selected(state: &SharedState, place: &Place, value: &str) -> Result<(), Error> {
+    let mut work = Work::new(2_000_000, 2_000_000, 0);
+    finish(State::write_element(
+        state,
+        place,
+        BindingUpdate::Element {
+            index: place.index.unwrap(),
+            value: value.into(),
+        },
+        &Cancel::new(),
+        &mut work,
+    ))
+}
+
+#[test]
+fn typed_reference_durable_element_amends_nested_prefixes_and_completed_inverse() {
+    let memory = crate::exec::StorageBudget::new(4_194_304);
+    let state = State::with_memory(memory.clone()).shared();
+    let function = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    local_array_with_large_slot(&state);
+    let mut completed =
+        AssignmentFrame::enter(state.clone()).unwrap_or_else(|_| panic!("undo fits"));
+    commit_test_update(
+        &state,
+        &mut completed,
+        BindingUpdate::Element {
+            index: 0,
+            value: "temporary".into(),
+        },
+    );
+    let outer = PrefixFrame::test_enter(state.clone());
+    outer.reserve("a", 16_384).unwrap();
+    outer.set("a".into(), "outer".into()).unwrap();
+    let inner = PrefixFrame::test_enter(state.clone());
+    inner.reserve("a", 16_384).unwrap();
+    inner.set("a".into(), "inner".into()).unwrap();
+    let place = Place {
+        name: "a".into(),
+        index: Some(9),
+        owner: state.borrow().reference_owner("a"),
+    };
+    write_selected(&state, &place, "durable").unwrap_or_else(|_| panic!("selected store fits"));
+    drop(inner);
+    assert_eq!(state.borrow().scalar_parameter("a"), Some("outer"));
+    assert_eq!(state.borrow().array_element("a", 9), Some("durable"));
+    drop(outer);
+    drop(completed);
+    assert_eq!(state.borrow().scalar_parameter("a"), Some("zero"));
+    assert_eq!(state.borrow().array_element("a", 9), Some("durable"));
+    drop(function);
+    assert_state_drop_refunds(&memory, state);
+}
+
+#[test]
+fn typed_reference_selected_index_survives_current_local_recreation_and_owner_reveal() {
+    let memory = crate::exec::StorageBudget::new(65_536);
+    let state = State::with_memory(memory.clone()).shared();
+    state
+        .borrow_mut()
+        .assign_parameter("a".into(), "global".into())
+        .unwrap();
+    let outer = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    state
+        .borrow_mut()
+        .local("a".into(), "local".into())
+        .unwrap();
+    let place = Place {
+        name: "a".into(),
+        index: Some(2),
+        owner: state.borrow().reference_owner("a"),
+    };
+    state.borrow_mut().unset_variable("a").unwrap();
+    write_selected(&state, &place, "recreated").unwrap_or_else(|_| panic!("selected store fits"));
+    assert_eq!(state.borrow().array_element("a", 2), Some("recreated"));
+    let prefix = PrefixFrame::test_enter(state.clone());
+    prefix.set("a".into(), "temporary".into()).unwrap();
+    let inner = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+    state.borrow_mut().unset_variable("a").unwrap();
+    assert_ne!(state.borrow().reference_owner("a"), place.owner);
+    write_selected(&state, &place, "revealed").unwrap_or_else(|_| panic!("selected store fits"));
+    drop(inner);
+    drop(prefix);
+    drop(outer);
+    assert_eq!(state.borrow().scalar_parameter("a"), Some("global"));
+    assert_eq!(state.borrow().array_element("a", 2), Some("revealed"));
+    assert_state_drop_refunds(&memory, state);
+}
+
+#[test]
+fn typed_reference_readonly_owner_blocks_element_store_and_removal() {
+    let state = State::default().shared();
+    state
+        .borrow_mut()
+        .readonly("a".into(), Some("locked".into()))
+        .unwrap();
+    let place = Place {
+        name: "a".into(),
+        index: Some(0),
+        owner: state.borrow().reference_owner("a"),
+    };
+    for update in [
+        BindingUpdate::Remove { index: 0 },
+        BindingUpdate::Element {
+            index: 0,
+            value: "bad".into(),
+        },
+    ] {
+        let mut work = Work::new(65_536, 65_536, 0);
+        let result = finish(State::write_element(
+            &state,
+            &place,
+            update,
+            &Cancel::new(),
+            &mut work,
+        ));
+        assert!(matches!(result, Err(Error::Readonly { name, .. }) if name == "a"));
+        assert_eq!(state.borrow().scalar_parameter("a"), Some("locked"));
+    }
+}
+
+#[test]
+fn typed_reference_effect_cancel_after_yield_and_outside_refusal_are_atomic() {
+    let (memory, state, function, completed) = local_array_assignment();
+    let place = Place {
+        name: "a".into(),
+        index: Some(9),
+        owner: state.borrow().reference_owner("a"),
+    };
+    let before = memory.observation().0;
+    let cancel = Cancel::new();
+    let mut work = Work::new(2_000_000, 2_000_000, 0);
+    let mut pending = Box::pin(State::write_element(
+        &state,
+        &place,
+        BindingUpdate::Remove { index: 9 },
+        &cancel,
+        &mut work,
+    ));
+    let waker = noop_waker();
+    assert!(
+        pending
+            .as_mut()
+            .poll(&mut Context::from_waker(&waker))
+            .is_pending()
+    );
+    cancel.cancel();
+    assert!(matches!(finish(pending), Err(Error::Status(130))));
+    assert_eq!(memory.observation().0, before);
+    let pressure = memory.admit(LOCAL_ARRAY_MEMORY_LIMIT - before).unwrap();
+    assert!(matches!(
+        write_selected(&state, &place, "rejected"),
+        Err(Error::Status(crate::exec::RESOURCE_STATUS))
+    ));
+    assert_eq!(state.borrow().array_element("a", 9), Some("z"));
+    drop(pressure);
+    drop(completed);
+    drop(function);
+    assert_state_drop_refunds(&memory, state);
+}
+
+fn replace_large_slot(state: &SharedState, completed: &mut AssignmentFrame) {
+    commit_test_update(
+        state,
+        completed,
+        BindingUpdate::Element {
+            index: 9,
+            value: "small".into(),
+        },
+    );
 }

@@ -127,7 +127,7 @@ fn printf_assignment_cancellation_before_commit_is_atomic_and_session_recovers()
 #[test]
 fn printf_assignment_unsupported_conversion_keeps_the_existing_formatter_boundary() {
     let rig = Rig::new(Limits::default());
-    assert_eq!(rig.run("printf -v x 'prefix%f' 3"), 2);
+    assert_eq!(rig.run("printf -v x 'prefix%a' 3"), 2);
     assert_eq!(rig.shell.state().borrow().bindings()["x"], "prefix");
     assert_eq!(
         rig.errors.bytes(),
@@ -154,7 +154,7 @@ fn printf_assignment_nul_truncated_locals_keep_only_their_stored_capacity() {
         let state = rig.shell.state();
         let state = state.borrow();
         let value = &state.bindings()[name];
-        (value.len(), value.scalar().unwrap().capacity())
+        (value.len(), state.bindings().scalar_capacity(name).unwrap())
     });
     assert_eq!(sizes, [(1, 1), (0, 0)]);
     rig.shell.interrupt();
