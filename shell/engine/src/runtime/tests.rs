@@ -598,13 +598,17 @@ fn setup() -> (Executor, Rc<Fake>, Runtime) {
     (executor, fake, runtime)
 }
 fn runtime_session(executor: &Executor, runtime: &Runtime) -> Rc<Session> {
+    runtime_session_with_fds(executor, runtime, runtime.stdio().unwrap())
+}
+fn runtime_session_with_fds(executor: &Executor, runtime: &Runtime, fds: FdTable) -> Rc<Session> {
+    let host = Rc::new(runtime.clone());
     let session = Rc::new(Session::new(
         executor.clone(),
-        Rc::new(runtime.clone()),
-        Rc::new(runtime.clone()),
+        host.clone(),
+        host,
         Limits::default(),
     ));
-    session.set_descriptors(runtime.stdio().unwrap()).unwrap();
+    session.set_descriptors(fds).unwrap();
     session
 }
 fn shutdown_session(executor: &Executor, runtime: &Runtime, fake: &Fake, session: Rc<Session>) {
@@ -3737,5 +3741,4 @@ fn runtime_permissions_keep_supported_denial_separate_from_unknown_bits() {
     assert_eq!(metadata.owned_by_effective_uid, None);
 }
 
-#[path = "inherited_tests.rs"]
-mod inherited_tests;
+mod inherited;

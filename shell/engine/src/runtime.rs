@@ -348,6 +348,7 @@ struct State {
     children: RefCell<BTreeMap<ProcessId, Rc<Child>>>,
     waits: WaitRegistry,
     input_slots: Rc<Cell<usize>>,
+    inherited_transferred: Cell<bool>,
     inputs: RefCell<Vec<InputPump>>,
 }
 #[derive(Clone)]
@@ -364,6 +365,7 @@ impl Runtime {
             children: RefCell::new(BTreeMap::new()),
             waits: RefCell::new(BTreeMap::new()),
             input_slots: Rc::new(Cell::new(0)),
+            inherited_transferred: Cell::new(false),
             inputs: RefCell::new(Vec::new()),
         }))
     }
@@ -375,11 +377,25 @@ impl Runtime {
         }))
     }
     /// Bootstrap the shell's logical namespace with every inherited binding,
-    /// not just stdio. Private physical duplicates keep endpoint ownership separate.
+    /// not just stdio. The caller retains ownership of the original bindings.
     pub fn stdio(&self) -> Result<FdTable, IoError> {
+        if self.0.inherited_transferred.get() {
+            return Err(IoError::BadDescriptor);
+        }
         let mut fds = FdTable::default();
         for fd in self.0.abi.inherited_fds() {
             fds.insert(fd, self.endpoint(self.0.abi.dup(fd).map_err(io_error)?));
+        }
+        Ok(fds)
+    }
+    /// Transfer launch bindings to the guest once. Duplicate everything before
+    /// closing originals, so a failed bootstrap leaves the caller's handles intact.
+    /// Private preopens are absent from inherited_fds and remain ABI-owned.
+    pub fn take_stdio(&self) -> Result<FdTable, IoError> {
+        let fds = self.stdio()?;
+        self.0.inherited_transferred.set(true);
+        for fd in self.0.abi.inherited_fds() {
+            self.0.abi.close(fd);
         }
         Ok(fds)
     }
