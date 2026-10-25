@@ -198,7 +198,7 @@ function assertRun(run, record) {
   assert.equal(run.event, "pull_request");
   assert.equal(run.head_sha, original.binding.headSha);
 }
-function assertGit(root, record, pr) {
+export function assertLandedIdentity(record, pr, facts) {
   const { landed, original } = record;
   assert.equal(pr.number, landed.pr);
   assert.equal(pr.merged, true, "unmerged record cannot certify candidate");
@@ -208,36 +208,32 @@ function assertGit(root, record, pr) {
   assert.equal(pr.head.sha, original.binding.headSha);
   assert.equal(pr.merge_commit_sha, merge);
   assert.equal(landed.mergeCommit, merge);
-  assert.deepEqual(
-    git(root, ["show", "-s", "--format=%P", merge]).split(" "),
-    [landed.firstParent],
-    "wrong landed parent",
-  );
-  assert.equal(git(root, ["rev-parse", `${merge}^{tree}`]), landed.tree);
+  assert.deepEqual(facts.parents, [landed.firstParent], "wrong landed parent");
+  assert.equal(facts.tree, landed.tree, "wrong landed tree");
   assert.equal(original.binding.baseSha, original.binding.mainSha);
-  const { baseSha, headSha, testedMergeSha } = original.binding;
-  git(root, ["fetch", "--no-tags", "origin", fullSha(testedMergeSha)]);
   assert.deepEqual(
-    git(root, ["show", "-s", "--format=%P", testedMergeSha]).split(" "),
-    [baseSha, headSha],
+    facts.originalParents,
+    [original.binding.baseSha, original.binding.headSha],
     "original topology",
   );
-  assert.equal(
-    git(root, ["rev-parse", `${testedMergeSha}^{tree}`]),
-    original.tree,
-    "original C tree",
-  );
-  assert.equal(
-    git(root, ["merge-base", baseSha, landed.firstParent]),
-    baseSha,
-    "original base is not an ancestor",
-  );
-  assert.equal(
-    git(root, ["merge-tree", "--write-tree", landed.firstParent, headSha]),
-    landed.tree,
-    "unclean/different landed composition",
-  );
-  assert.equal(digest(scoringInputs(root, testedMergeSha)), original.inputsSha256);
+  assert.equal(facts.originalTree, original.tree, "original C tree");
+  assert.equal(facts.ancestor, original.binding.baseSha, "original base is not an ancestor");
+  assert.equal(facts.composedTree, landed.tree, "unclean/different landed composition");
+  assert.equal(facts.inputsSha256, original.inputsSha256);
+}
+function assertGit(root, record, pr) {
+  const { landed, original } = record;
+  const { baseSha, headSha, testedMergeSha } = original.binding;
+  git(root, ["fetch", "--no-tags", "origin", fullSha(testedMergeSha)]);
+  assertLandedIdentity(record, pr, {
+    parents: git(root, ["show", "-s", "--format=%P", merge]).split(" "),
+    tree: git(root, ["rev-parse", `${merge}^{tree}`]),
+    originalParents: git(root, ["show", "-s", "--format=%P", testedMergeSha]).split(" "),
+    originalTree: git(root, ["rev-parse", `${testedMergeSha}^{tree}`]),
+    ancestor: git(root, ["merge-base", baseSha, landed.firstParent]),
+    composedTree: git(root, ["merge-tree", "--write-tree", landed.firstParent, headSha]),
+    inputsSha256: digest(scoringInputs(root, testedMergeSha)),
+  });
 }
 async function jobsFor(client, run) {
   return complete(
@@ -451,23 +447,7 @@ function comparisonFloor(floor) {
   // Only the comparator needs a main-floor-shaped set. Its source remains actual base d6, never f6.
   return { ...floor.base, floorIds: floor.ids, floorSha256: floor.floorSha256 };
 }
-async function freshObservation(prepared, raw, context) {
-  assert.deepEqual(raw.selected, prepared.selected, "observation binding");
-  assert.equal(raw.sourceSha, prepared.sourceSha);
-  assert.deepEqual(raw.run, prepared.run, "observation run/attempt");
-  assert.equal(raw.inputsSha256, digest(scoringInputs(context.root, raw.sourceSha)));
-  assert.equal(raw.resultSha256, digest(raw.score));
-  validateOwnScore(context.oracle, raw.score);
-  await admitQualificationRaw({ root: context.root, client: context.client, raw });
-  const host = await context.client.request(
-    `/actions/runs/${raw.run.runId}/attempts/${raw.run.attempt}`,
-  );
-  const jobs = await jobsFor(context.client, host);
-  const producer = unique(
-    jobs,
-    (item) => item.name === "own-shell-compatibility",
-    "fresh Waffle producer",
-  );
+export function assertFreshObservation(raw, producer) {
   const bound = step(producer, "Bind qualification and resolve PR main floor");
   const observed = step(producer, "Observe compatibility with the same-job node build");
   const sealed = step(producer, "Seal complete raw score");
@@ -482,6 +462,29 @@ async function freshObservation(prepared, raw, context) {
       time(observed.completed_at) <= time(sealed.started_at),
     "stale Waffle observation",
   );
+}
+async function freshObservation(prepared, raw, context) {
+  assert.deepEqual(raw.selected, prepared.selected, "observation binding");
+  assert.equal(raw.sourceSha, prepared.sourceSha);
+  assert.deepEqual(raw.run, prepared.run, "observation run/attempt");
+  assert.equal(raw.inputsSha256, digest(scoringInputs(context.root, raw.sourceSha)));
+  assert.equal(raw.resultSha256, digest(raw.score));
+  validateOwnScore(context.oracle, raw.score);
+  const evidence = await admitQualificationRaw({ root: context.root, client: context.client, raw });
+  const metadata = await context.client.request(`/actions/artifacts/${evidence.artifactId}`);
+  assert.equal(metadata.id, evidence.artifactId);
+  assert.equal(metadata.expired, false, "expired observation artifact");
+  assert.ok(time(metadata.expires_at) > Date.now(), "observation artifact expired by timestamp");
+  const host = await context.client.request(
+    `/actions/runs/${raw.run.runId}/attempts/${raw.run.attempt}`,
+  );
+  const jobs = await jobsFor(context.client, host);
+  const producer = unique(
+    jobs,
+    (item) => item.name === "own-shell-compatibility",
+    "fresh Waffle producer",
+  );
+  assertFreshObservation(raw, producer);
   assert.equal(context.oracle.environment.runner, "waffle-node", "real Waffle instrument required");
   const observation = Object.freeze({});
   observations.set(observation, structuredClone(raw));

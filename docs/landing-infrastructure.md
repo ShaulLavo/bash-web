@@ -15,3 +15,5 @@ The resolver checks exact repository, workflow, main event, source, run, attempt
 PR qualification records the head, tested merge, event base and resolved main separately. Later unrelated main changes follow the normal no-retest policy. The post-merge main check uses its actual predecessor.
 
 Compact floor artifacts expire after 90 days. Retained complete scores need only a cheap fold. A genuinely missing non-equivalent score needs an explicit exact-source qualification, and older workflows may make that unavailable. Parent landing reports own retained run and digest references; CI owns uploaded evidence. No evidence writer branch or extra credential is required.
+
+See [Accepted-gain recovery](accepted-gain-recovery.md) for the single landed-PR gap supported by candidate qualification.

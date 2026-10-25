@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  assertFreshObservation,
+  assertLandedIdentity,
   assertHistoricalJobs,
   assertRecordAppend,
   assertTerminalBlock,
@@ -328,5 +330,139 @@ test("A01 authenticated read errors never become evidence absence", async () => 
       (error) => error === failure,
     );
     assert.equal(seen.length, 1, "no record or older-floor lookup after evidence error");
+  }
+});
+
+function landed() {
+  const record = JSON.parse(
+    readFileSync(new URL(`../scoreboard/accepted-gains/${merge}.json`, import.meta.url)),
+  );
+  const pr = {
+    number: 102,
+    merged: true,
+    merge_commit_sha: merge,
+    base: { ref: "main", repo: { id: authority.repositoryId } },
+    head: { sha: record.original.binding.headSha, repo: { id: authority.repositoryId } },
+  };
+  const facts = {
+    parents: [record.landed.firstParent],
+    tree: record.landed.tree,
+    originalParents: [record.original.binding.baseSha, record.original.binding.headSha],
+    originalTree: record.original.tree,
+    ancestor: record.original.binding.baseSha,
+    composedTree: record.landed.tree,
+    inputsSha256: record.original.inputsSha256,
+  };
+  return { record, pr, facts };
+}
+test("A05/A06 landed identity rejects self-certification, different trees, topology and composition", () => {
+  const check = (v) => assertLandedIdentity(v.record, v.pr, v.facts);
+  assert.doesNotThrow(() => check(landed()));
+  for (const change of [
+    (v) => {
+      v.pr.number = 105;
+    },
+    (v) => {
+      v.pr.merged = false;
+    },
+    (v) => {
+      v.pr.merge_commit_sha = "other";
+    },
+    (v) => {
+      v.pr.base.repo.id++;
+    },
+    (v) => {
+      v.pr.head.repo.id++;
+    },
+    (v) => {
+      v.pr.head.sha = "other";
+    },
+    (v) => {
+      v.facts.parents = ["other"];
+    },
+    (v) => {
+      v.facts.tree = "other";
+    },
+    (v) => {
+      v.facts.originalParents.reverse();
+    },
+    (v) => {
+      v.facts.originalTree = v.record.landed.tree;
+    },
+    (v) => {
+      v.facts.ancestor = "other";
+    },
+    (v) => {
+      v.facts.composedTree = v.record.original.tree;
+    },
+    (v) => {
+      v.facts.inputsSha256 = "other";
+    },
+    (v) => {
+      v.record.original.binding.mainSha = "other";
+    },
+  ]) {
+    const value = landed();
+    change(value);
+    assert.throws(() => check(value), assert.AssertionError);
+  }
+});
+function fresh() {
+  const raw = { capturedAt: "2026-10-25T00:00:01Z" };
+  const producer = {
+    steps: [
+      {
+        name: "Bind qualification and resolve PR main floor",
+        started_at: "2026-10-25T00:00:00Z",
+        completed_at: "2026-10-25T00:00:02Z",
+      },
+      {
+        name: "Observe compatibility with the same-job node build",
+        started_at: "2026-10-25T00:00:03Z",
+        completed_at: "2026-10-25T00:00:04Z",
+      },
+      {
+        name: "Seal complete raw score",
+        started_at: "2026-10-25T00:00:05Z",
+        completed_at: "2026-10-25T00:00:06Z",
+      },
+    ].map((step, index) => ({
+      ...step,
+      number: index + 1,
+      status: "completed",
+      conclusion: "success",
+    })),
+  };
+  return { raw, producer };
+}
+test("A12 observation must follow captured preparation and finish before sealing", () => {
+  const check = (v) => assertFreshObservation(v.raw, v.producer);
+  assert.doesNotThrow(() => check(fresh()));
+  for (const change of [
+    (v) => {
+      v.raw.capturedAt = "2026-10-24T00:00:00Z";
+    },
+    (v) => {
+      v.raw.capturedAt = "invalid";
+    },
+    (v) => {
+      v.producer.steps[1].number = 1;
+    },
+    (v) => {
+      v.producer.steps[1].started_at = v.raw.capturedAt;
+    },
+    (v) => {
+      v.producer.steps[1].completed_at = "2026-10-25T00:00:07Z";
+    },
+    (v) => {
+      v.producer.steps[1].conclusion = "skipped";
+    },
+    (v) => {
+      v.producer.steps[2].status = "in_progress";
+    },
+  ]) {
+    const value = fresh();
+    change(value);
+    assert.throws(() => check(value), assert.AssertionError);
   }
 });
