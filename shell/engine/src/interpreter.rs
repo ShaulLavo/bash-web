@@ -2877,7 +2877,7 @@ async fn exec_prepared_command_body(
 ) -> Outcome {
     let result = match prepared.execution {
         Err(error) => expansion_failure(error, &original_fds, &context).await,
-        Ok(execution) if prepared.argv.len() == 1 && execution.assigned.is_empty() => {
+        Ok(execution) if prepared.argv.len() == 1 => {
             *original_fds.borrow_mut() = execution.fds.unwrap().borrow().clone();
             Outcome::status(0)
         }
