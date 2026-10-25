@@ -466,3 +466,12 @@ test("A12 observation must follow captured preparation and finish before sealing
     assert.throws(() => check(value), assert.AssertionError);
   }
 });
+
+test("same-second host timestamps still prove fresh ordered observation without a CI cycle", () => {
+  const value = fresh();
+  value.raw.capturedAt = "2026-10-25T00:00:02.500Z";
+  value.producer.steps[1].started_at = "2026-10-25T00:00:02Z";
+  assert.doesNotThrow(() => assertFreshObservation(value.raw, value.producer));
+  value.producer.steps[1].completed_at = "2026-10-25T00:00:02Z";
+  assert.throws(() => assertFreshObservation(value.raw, value.producer), /stale Waffle/);
+});

@@ -458,7 +458,8 @@ export function assertFreshObservation(raw, producer) {
     "preparation time outside bound job",
   );
   assert.ok(
-    time(observed.started_at) > time(raw.capturedAt) &&
+    time(observed.started_at) >= time(bound.completed_at) &&
+      time(observed.completed_at) > time(raw.capturedAt) &&
       time(observed.completed_at) <= time(sealed.started_at),
     "stale Waffle observation",
   );
@@ -473,6 +474,7 @@ async function freshObservation(prepared, raw, context) {
   const evidence = await admitQualificationRaw({ root: context.root, client: context.client, raw });
   const metadata = await context.client.request(`/actions/artifacts/${evidence.artifactId}`);
   assert.equal(metadata.id, evidence.artifactId);
+  assert.equal(metadata.digest, `sha256:${evidence.archiveSha256}`, "observation metadata digest");
   assert.equal(metadata.expired, false, "expired observation artifact");
   assert.ok(time(metadata.expires_at) > Date.now(), "observation artifact expired by timestamp");
   const host = await context.client.request(
