@@ -641,7 +641,12 @@ fn timed_function_declaration_output_releases_storage_on_cancel_and_drop() {
         assert!(state.borrow().functions().contains_key("f"));
         assert_eq!(host.requests.get(), 0);
         assert_eq!(host.spawns.get(), 0);
-        assert_eq!(storage.observation().0, before);
+        assert_eq!(
+            storage.observation().0,
+            before + state.borrow().prefix_capacity_bytes()
+        );
+        drop(state);
+        assert_eq!(storage.observation().0, 0);
         drop(reader);
     }
 }
