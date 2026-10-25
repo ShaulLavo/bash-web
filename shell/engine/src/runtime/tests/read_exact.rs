@@ -4,6 +4,29 @@ fn input(fake: &Fake, bytes: Vec<u8>) {
     fake.fds.borrow_mut().insert(0, Endpoint::bytes(bytes));
 }
 
+fn assert_script_output(
+    executor: &Executor,
+    fake: &Fake,
+    runtime: &Runtime,
+    session: &Session,
+    source: &str,
+    expected: &[u8],
+) {
+    assert_eq!(finish(executor, runtime, session.start(source).unwrap()), 0);
+    assert_eq!(fake.output.bytes(), expected);
+}
+
+fn cancel_exact_read(
+    executor: &Executor,
+    runtime: &Runtime,
+    session: &Session,
+    job: crate::executor::JoinHandle<i32>,
+) {
+    session.interrupt();
+    assert_eq!(finish(executor, runtime, job), 130);
+    assert_eq!(value(session, "x").as_deref(), Some("old"));
+}
+
 #[test]
 fn raw_exact_c_read_batches_runtime_calls_without_consuming_an_alias_sentinel() {
     let (executor, fake, runtime) = setup();
@@ -13,11 +36,7 @@ fn raw_exact_c_read_batches_runtime_calls_without_consuming_an_alias_sentinel() 
     );
     let session = runtime_session(&executor, &runtime);
     let source = "LC_ALL=C; exec 3<&0; read -r -N65536 value; printf '%s:%s:' \"$?\" \"${#value}\"; read -r -u3 tail; printf '%s' \"$tail\"; exec 3<&-";
-    assert_eq!(
-        finish(&executor, &runtime, session.start(source).unwrap()),
-        0
-    );
-    assert_eq!(fake.output.bytes(), b"0:65536:!");
+    assert_script_output(&executor, &fake, &runtime, &session, source, b"0:65536:!");
     let reads = fake.reads.borrow();
     let requests: Vec<_> = reads.iter().map(|(_, length)| *length).collect();
     eprintln!(
@@ -48,11 +67,7 @@ fn raw_exact_short_reads_and_eof_keep_counts_and_assign_partial_input() {
     input(&fake, vec![b'a'; 100]);
     let session = runtime_session(&executor, &runtime);
     let source = "LC_ALL=C; read -rN99 x; printf '%s:%s:' \"$?\" \"${#x}\"; read -rN2 y; printf '%s:%s' \"$?\" \"$y\"";
-    assert_eq!(
-        finish(&executor, &runtime, session.start(source).unwrap()),
-        0
-    );
-    assert_eq!(fake.output.bytes(), b"0:99:1:a");
+    assert_script_output(&executor, &fake, &runtime, &session, source, b"0:99:1:a");
     assert_eq!(fake.reads.borrow().len(), 17);
     assert_eq!(fake.reads.borrow()[0].1, 99);
     shutdown_session(&executor, &runtime, &fake, session);
@@ -65,11 +80,7 @@ fn raw_exact_nuls_do_not_count_or_consume_an_alias_suffix() {
     input(&fake, bytes);
     let session = runtime_session(&executor, &runtime);
     let source = "LC_ALL=C; exec 3<&0; read -rN4096 x; read -r -u3 tail; printf '%s:%s' \"${#x}\" \"$tail\"; exec 3<&-";
-    assert_eq!(
-        finish(&executor, &runtime, session.start(source).unwrap()),
-        0
-    );
-    assert_eq!(fake.output.bytes(), b"4096:!");
+    assert_script_output(&executor, &fake, &runtime, &session, source, b"4096:!");
     assert!(fake.reads.borrow().len() < 20);
     shutdown_session(&executor, &runtime, &fake, session);
 }
@@ -112,30 +123,15 @@ fn raw_exact_invalid_utf8_preserves_assignment_and_suffix() {
     input(&fake, b"ab\xff!".to_vec());
     let session = runtime_session(&executor, &runtime);
     let source = "LC_ALL=C; x=old; read -rN3 x; printf '%s:%s:' \"$?\" \"$x\"; read -rN1 tail; printf '%s' \"$tail\"";
-    assert_eq!(
-        finish(&executor, &runtime, session.start(source).unwrap()),
-        0
-    );
-    assert_eq!(fake.output.bytes(), b"2:old:!");
+    assert_script_output(&executor, &fake, &runtime, &session, source, b"2:old:!");
     shutdown_session(&executor, &runtime, &fake, session);
-}
-
-fn limited_session(executor: &Executor, runtime: &Runtime, limits: Limits) -> Rc<Session> {
-    let session = Rc::new(Session::new(
-        executor.clone(),
-        Rc::new(runtime.clone()),
-        Rc::new(runtime.clone()),
-        limits,
-    ));
-    session.set_descriptors(runtime.stdio().unwrap()).unwrap();
-    session
 }
 
 #[test]
 fn raw_exact_line_limit_stops_at_the_first_excess_byte() {
     let (executor, fake, runtime) = setup();
     input(&fake, b"abcdEz".to_vec());
-    let session = limited_session(
+    let session = runtime_session_with_limits(
         &executor,
         &runtime,
         Limits {
@@ -144,11 +140,7 @@ fn raw_exact_line_limit_stops_at_the_first_excess_byte() {
         },
     );
     let source = "LC_ALL=C; x=old; read -rN99 x; printf '%s:%s:' \"$?\" \"$x\"; read -rN1 tail; printf '%s' \"$tail\"";
-    assert_eq!(
-        finish(&executor, &runtime, session.start(source).unwrap()),
-        0
-    );
-    assert_eq!(fake.output.bytes(), b"2:old:z");
+    assert_script_output(&executor, &fake, &runtime, &session, source, b"2:old:z");
     assert_eq!(
         fake.reads
             .borrow()
@@ -164,7 +156,7 @@ fn raw_exact_line_limit_stops_at_the_first_excess_byte() {
 fn raw_exact_admission_and_zero_count_do_not_read() {
     let (executor, fake, runtime) = setup();
     input(&fake, b"a!".to_vec());
-    let session = limited_session(
+    let session = runtime_session_with_limits(
         &executor,
         &runtime,
         Limits {
@@ -219,9 +211,7 @@ fn raw_exact_pending_eagain_cancels_without_assignment_and_releases_waiters() {
             .iter()
             .all(|(_, length)| *length <= 4096)
     );
-    session.interrupt();
-    assert_eq!(finish(&executor, &runtime, job), 130);
-    assert_eq!(value(&session, "x").as_deref(), Some("old"));
+    cancel_exact_read(&executor, &runtime, &session, job);
     assert_eq!(
         finish(&executor, &runtime, session.start("true").unwrap()),
         0
@@ -235,11 +225,7 @@ fn raw_exact_pipe_backpressure_and_short_reads_make_progress() {
     let (executor, fake, runtime) = setup();
     let session = runtime_session(&executor, &runtime);
     let source = "LC_ALL=C; printf '%065536d!\\n' 0 | { exec 3<&0; read -rN65536 x; printf '%s:%s:' \"$?\" \"${#x}\"; read -r -u3 tail; printf '%s' \"$tail\"; exec 3<&-; }";
-    assert_eq!(
-        finish(&executor, &runtime, session.start(source).unwrap()),
-        0
-    );
-    assert_eq!(fake.output.bytes(), b"0:65536:!");
+    assert_script_output(&executor, &fake, &runtime, &session, source, b"0:65536:!");
     let reads = fake.reads.borrow();
     eprintln!(
         "bounded fake-runtime pipe: calls={} max={}",
@@ -278,9 +264,7 @@ fn raw_exact_ready_input_yields_and_cancels_with_bounded_consumption() {
     executor.drive(2);
     assert!(peer.is_finished());
     assert!(!job.is_finished());
-    session.interrupt();
-    assert_eq!(finish(&executor, &runtime, job), 130);
-    assert_eq!(value(&session, "x").as_deref(), Some("old"));
+    cancel_exact_read(&executor, &runtime, &session, job);
     assert_eq!(
         fake.reads
             .borrow()

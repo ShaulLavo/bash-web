@@ -605,11 +605,18 @@ fn setup() -> (Executor, Rc<Fake>, Runtime) {
     (executor, fake, runtime)
 }
 fn runtime_session(executor: &Executor, runtime: &Runtime) -> Rc<Session> {
+    runtime_session_with_limits(executor, runtime, Limits::default())
+}
+fn runtime_session_with_limits(
+    executor: &Executor,
+    runtime: &Runtime,
+    limits: Limits,
+) -> Rc<Session> {
     let session = Rc::new(Session::new(
         executor.clone(),
         Rc::new(runtime.clone()),
         Rc::new(runtime.clone()),
-        Limits::default(),
+        limits,
     ));
     session.set_descriptors(runtime.stdio().unwrap()).unwrap();
     session
