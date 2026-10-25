@@ -161,7 +161,7 @@ async fn prompt(
 ) -> Result<String, expand::Error> {
     let mut prompt_context = context.clone();
     prompt_context.trace.prompt = true;
-    let mut work = substitution_work(&prompt_context, fds);
+    let mut work = substitution_work(&prompt_context, fds, None);
     let raw = {
         let state = state.borrow();
         let value = state.parameter("PS4");

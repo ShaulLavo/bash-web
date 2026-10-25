@@ -154,6 +154,7 @@ impl Rig {
             assigned: Vec::new(),
             fds: Some(self.session.core.descriptors.clone()),
             work: expand::Work::new(steps, 0, 0),
+            redirected: Vec::new(),
         };
         let state = self.session.state.clone();
         self.executor.spawn(async move {
@@ -195,6 +196,7 @@ impl Rig {
             ignore_errexit: false,
             trace: super::super::xtrace::Trace::default(),
             compound_child: false,
+            caller_descriptors: None,
             core,
         }
     }
