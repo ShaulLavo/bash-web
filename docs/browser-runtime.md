@@ -427,6 +427,27 @@ not excluded. Shell-owned terminal-ring, terminal-metadata and output-transform
 unit regressions remain here; Bun host-slot, nested-Bun and guest-libc internals
 belong to the external guest package rather than copied owner-internal suites.
 
+### Inherited descriptor ownership
+
+`Runtime::stdio` borrows launch bindings by duplicating them. Its caller still owns
+and must close the originals. The shell guest instead calls `Runtime::take_stdio`
+once. That operation duplicates every launch binding before closing the originals.
+If duplication fails, it releases the partial copies and leaves the originals intact.
+After transfer, both bootstrap methods reject reuse of the launch snapshot.
+
+The session owns the resulting logical table. Genuine aliases retain their shared
+open description until the last alias closes. Private directory preopens are not
+launch bindings and remain with the WASI adapter. Duplication preserves file offsets.
+
+The interactive editor borrows current stdin and stdout only while reading a
+command, then drops those references before execution. Diagnostics borrow current
+stderr only while writing. Closing or replacing the final inherited pipe binding
+therefore delivers EOF or EPIPE without waiting for shell exit. The standalone
+Node fixture in `scripts/test-own-shell-inherited-ownership.ts` runs the compiled
+guest against pinned Waffle descriptors, pipes and polling. It checks peers while
+the guest is paused and resumes it afterward. It does not replace worker or browser
+transport coverage.
+
 ### Descriptor predicates
 
 The shared `test`, `[` and `[[ ]]` unary predicates query open descriptions.

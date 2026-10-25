@@ -684,13 +684,20 @@ fn runtime_session_with_limits(
     runtime: &Runtime,
     limits: Limits,
 ) -> Rc<Session> {
-    let session = Rc::new(Session::new(
-        executor.clone(),
-        Rc::new(runtime.clone()),
-        Rc::new(runtime.clone()),
-        limits,
-    ));
-    session.set_descriptors(runtime.stdio().unwrap()).unwrap();
+    runtime_session_with_fds_and_limits(executor, runtime, runtime.stdio().unwrap(), limits)
+}
+fn runtime_session_with_fds(executor: &Executor, runtime: &Runtime, fds: FdTable) -> Rc<Session> {
+    runtime_session_with_fds_and_limits(executor, runtime, fds, Limits::default())
+}
+fn runtime_session_with_fds_and_limits(
+    executor: &Executor,
+    runtime: &Runtime,
+    fds: FdTable,
+    limits: Limits,
+) -> Rc<Session> {
+    let host = Rc::new(runtime.clone());
+    let session = Rc::new(Session::new(executor.clone(), host.clone(), host, limits));
+    session.set_descriptors(fds).unwrap();
     session
 }
 fn shutdown_session(executor: &Executor, runtime: &Runtime, fake: &Fake, session: Rc<Session>) {
@@ -4005,4 +4012,5 @@ fn runtime_permissions_keep_supported_denial_separate_from_unknown_bits() {
     assert_eq!(metadata.owned_by_effective_uid, None);
 }
 
+mod inherited;
 mod read_exact;

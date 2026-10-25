@@ -69,18 +69,15 @@ mod guest {
                 state.cwd = cwd;
             }
         }
-        let fds = runtime.stdio().unwrap_or_else(|error| report(error));
-        let input = fds.get(0);
-        let output = fds.get(1);
-        let errors = fds.get(2);
+        let fds = runtime.take_stdio().unwrap_or_else(|error| report(error));
         session
             .set_descriptors(fds)
-            .unwrap_or_else(|error| report(error));
+            .unwrap_or_else(|error| report_runtime(&session, error));
         let editor_cancel = Rc::new(RefCell::new(Cancel::new()));
         let shell = session.clone();
         let input_cancel = editor_cancel.clone();
         let root = executor.spawn(async move {
-            let result = run(shell.clone(), input, output, errors, command, input_cancel).await;
+            let result = run(shell.clone(), command, input_cancel).await;
             set_phase(0);
             shell.shutdown().await;
             result
@@ -99,7 +96,7 @@ mod guest {
             // ONLY blocking operation; interruption is also checked in budgets.
             runtime
                 .poll(if turn.runnable { 0 } else { -1 })
-                .unwrap_or_else(|errno| report(format!("poll errno {errno}")));
+                .unwrap_or_else(|errno| report_runtime(&session, format!("poll errno {errno}")));
         }
         let status = root.now_or_never().unwrap();
         // Session shutdown awaited every owned job. Finish host-owned cleanup
@@ -111,23 +108,29 @@ mod guest {
             }
             runtime
                 .poll(if turn.runnable { 0 } else { -1 })
-                .unwrap_or_else(|errno| report(format!("cleanup poll errno {errno}")));
+                .unwrap_or_else(|errno| {
+                    report_runtime(&session, format!("cleanup poll errno {errno}"))
+                });
         }
         std::process::exit(status);
+    }
+    fn report_runtime(session: &Session, error: impl std::fmt::Display) -> ! {
+        if let Some(endpoint) = session.descriptor(2) {
+            let bytes = format!("shell-runtime: {error}\n");
+            let _ = endpoint.write(bytes.as_bytes()).now_or_never();
+        }
+        std::process::exit(2);
     }
     async fn write(endpoint: &Endpoint, bytes: &[u8]) -> Result<(), IoError> {
         endpoint.write_all(bytes, &Cancel::new()).await
     }
-    async fn diagnostic(endpoint: &Option<Endpoint>, bytes: &[u8]) {
-        if let Some(endpoint) = endpoint {
-            let _ = write(endpoint, bytes).await;
+    async fn diagnostic(session: &Session, bytes: &[u8]) {
+        if let Some(endpoint) = session.descriptor(2) {
+            let _ = write(&endpoint, bytes).await;
         }
     }
     async fn run(
         session: Rc<Session>,
-        input: Option<Endpoint>,
-        output: Option<Endpoint>,
-        errors: Option<Endpoint>,
         command: Option<String>,
         input_cancel: Rc<RefCell<Cancel>>,
     ) -> i32 {
@@ -136,19 +139,17 @@ mod guest {
             return match session.start(&source) {
                 Ok(job) => job.await,
                 Err(error) => {
-                    diagnostic(&errors, format!("shell: {error}\n").as_bytes()).await;
+                    diagnostic(&session, format!("shell: {error}\n").as_bytes()).await;
                     error.status()
                 }
             };
         }
-        // A -c script needs only the descriptors it actually uses. The interactive
-        // editor, unlike a script, cannot operate without both input and output.
-        let (Some(input), Some(output)) = (input, output) else {
-            return 1;
-        };
         let mut editor = Editor::default();
         let mut skip_lf = false;
         loop {
+            let (Some(input), Some(output)) = (session.descriptor(0), session.descriptor(1)) else {
+                return 1;
+            };
             *input_cancel.borrow_mut() = Cancel::new();
             let prompt = session
                 .state()
@@ -219,11 +220,13 @@ mod guest {
                     Action::None => {}
                 }
             };
+            drop(input);
+            drop(output);
             let Some(source) = source else { continue };
             let source = match String::from_utf8(source) {
                 Ok(source) => source,
                 Err(_) => {
-                    diagnostic(&errors, b"shell: command is not UTF-8\n").await;
+                    diagnostic(&session, b"shell: command is not UTF-8\n").await;
                     continue;
                 }
             };
@@ -239,7 +242,7 @@ mod guest {
                     }
                 }
                 Err(error) => {
-                    diagnostic(&errors, format!("shell: {error}\n").as_bytes()).await;
+                    diagnostic(&session, format!("shell: {error}\n").as_bytes()).await;
                     session.state().borrow_mut().publish_status(error.status());
                 }
             }

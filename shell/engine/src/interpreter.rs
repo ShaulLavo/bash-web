@@ -5,7 +5,7 @@ use crate::{
     arithmetic, builtins,
     executor::{Budget, Cancel, Executor, JoinHandle, yield_now},
     expand,
-    io::{self, FdTable, FileSystem, OpenOptions},
+    io::{self, Endpoint, FdTable, FileSystem, OpenOptions},
     parse::{self, ParseFailure},
     process::{GroupId, ProcessError, ProcessGroup, ProcessHost, SpawnRequest},
     state::{FunctionFrame, PrefixFrame, SharedState, State, StoredFunction, absolute},
@@ -813,6 +813,11 @@ impl Session {
             }
             job.cancel.cancel();
         }
+    }
+    /// Borrow a current shell binding for one host operation. Do not retain it
+    /// across command execution, where exec may close or replace the binding.
+    pub fn descriptor(&self, fd: u32) -> Option<Endpoint> {
+        self.core.descriptors.borrow().get(fd)
     }
     pub fn set_descriptors(&self, fds: FdTable) -> Result<(), String> {
         if self.core.foreground.borrow().is_some() {
