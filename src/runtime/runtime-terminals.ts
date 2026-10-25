@@ -40,7 +40,9 @@ export function createBridgeTerminal(
       }
       const length = chunks.reduce((total, chunk) => total + chunk.length, 0);
       if (!length) return 0;
-      const raw = new Uint8Array(length);
+      const available = bridge.availableInput();
+      if (!available) return bridge.tryRead(chunks);
+      const raw = new Uint8Array(Math.min(length, available));
       const count = bridge.tryRead([raw]);
       if (count <= 0) return count;
       let written = 0;
