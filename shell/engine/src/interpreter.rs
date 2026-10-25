@@ -2751,13 +2751,10 @@ async fn simple_command(
         None => WeakStderr::Closed,
     };
     // Only exec retains the original table; diagnostic ownership stays weak.
-    if prepared
-        .as_ref()
-        .unwrap()
-        .argv
-        .first()
-        .is_some_and(|name| commands::handler(name) == Some(commands::Handler::Exec))
-    {
+    if prepared.as_ref().unwrap().argv.first().is_some_and(|name| {
+        commands::enabled_handler(name, state.borrow().disabled_builtins)
+            == Some(commands::Handler::Exec)
+    }) {
         return exec_prepared_command(&mut prepared, &state, original_fds, &context, parent_stderr)
             .await;
     }
@@ -3049,7 +3046,8 @@ async fn prepare_execution_body(
     }
     let name = &argv[0];
     let shell_command = state.borrow().functions().contains_key(name)
-        || commands::lookup(name).is_some_and(commands::Command::shell_heredoc_errors);
+        || (commands::enabled(name, state.borrow().disabled_builtins)
+            && commands::lookup(name).is_some_and(commands::Command::shell_heredoc_errors));
     let heredoc_status = (!shell_command).then_some(context.parameter_error_status);
     let fds = redirects(
         &simple.redirects,
@@ -3248,14 +3246,15 @@ async fn dispatch_arguments(
     let mut default_path = false;
     let mut builtin_only = false;
     while matches!(
-        commands::handler(name),
+        commands::enabled_handler(name, state.borrow().disabled_builtins),
         Some(commands::Handler::Command | commands::Handler::BuiltinWrapper)
     ) && (bypass_functions || !state.borrow().functions().contains_key(name))
     {
         work.checkpoint(&context.cancel)
             .await
             .map_err(admission_status)?;
-        builtin_only = commands::handler(name) == Some(commands::Handler::BuiltinWrapper);
+        builtin_only = commands::enabled_handler(name, state.borrow().disabled_builtins)
+            == Some(commands::Handler::BuiltinWrapper);
         let mut options = if builtin_only {
             builtin_wrapper::options(fields.as_slice(), line, &fds, context).await?
         } else {
@@ -3421,7 +3420,7 @@ async fn dispatch_arguments(
         }
         return Ok(outcome);
     }
-    let handler = commands::handler(name);
+    let handler = commands::enabled_handler(name, state.borrow().disabled_builtins);
     if handler == Some(commands::Handler::Let) {
         if !assigned.is_empty() {
             return Err(2);

@@ -154,6 +154,7 @@ pub struct State {
     directories: DirectoryStack,
     aliases: Aliases,
     pub expand_aliases: bool,
+    pub(crate) disabled_builtins: u128,
     pub(crate) completions: completion::CompletionTable,
     pub(crate) command_hash: command_hash::CommandHash,
     /// Function bodies are immutable. Isolated shells copy bindings, not ASTs.
@@ -221,6 +222,7 @@ impl Default for State {
             directories: DirectoryStack::default(),
             aliases: Aliases::default(),
             expand_aliases: false,
+            disabled_builtins: 0,
             completions: completion::CompletionTable::default(),
             command_hash: command_hash::CommandHash::default(),
             functions: BTreeMap::new(),
@@ -470,6 +472,7 @@ impl State {
             directories,
             aliases: state.aliases.clone(),
             expand_aliases: state.expand_aliases,
+            disabled_builtins: state.disabled_builtins,
             completions: state.completions.clone(),
             command_hash: state.command_hash.clone(),
             functions,
@@ -2511,6 +2514,37 @@ mod tests {
             .now_or_never()
             .expect("short IFS classification does not yield")
             .unwrap_or_else(|_| panic!("fixed-size IFS classification needs no heap storage"))
+    }
+
+    #[test]
+    fn enable_snapshot_isolates_inline_registry_and_admits_complete_state() {
+        let state = State::default().shared();
+        state.borrow_mut().disabled_builtins = 8;
+        state.borrow_mut().noexec = true;
+        state.borrow_mut().interactive = true;
+        let mut measured = Work::new(100_000, 100_000, 0);
+        finish_snapshot(&state, &Cancel::new(), &mut measured)
+            .unwrap_or_else(|_| panic!("registry snapshot fits"));
+        let bytes = 100_000 - measured.storage_left();
+        let mut child = snapshot_at_exact_limit(&state, bytes);
+        assert!(child.disabled_builtins == 8);
+        assert!(child.noexec);
+        assert!(child.interactive);
+        child.noexec = false;
+        child.interactive = false;
+        assert!(state.borrow().noexec);
+        assert!(state.borrow().interactive);
+        child.disabled_builtins = 0;
+        assert!(child.disabled_builtins == 0);
+        assert!(state.borrow().disabled_builtins == 8);
+        let cancel = Cancel::new();
+        cancel.cancel();
+        let mut work = Work::new(1, 0, 0);
+        assert!(matches!(
+            finish_snapshot(&state, &cancel, &mut work),
+            Err(Error::Status(130))
+        ));
+        assert!(state.borrow().disabled_builtins == 8);
     }
 
     #[test]

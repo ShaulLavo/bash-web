@@ -202,21 +202,22 @@ async fn action_candidates(
     work: &mut Work,
 ) -> Result<(), i32> {
     let mut generated = Candidates::new(context);
+    let disabled = state.borrow().disabled_builtins;
     match action {
         "function" | "variable" | "export" | "arrayvar" => {
             names(action, prefix, state, &mut generated, context, work).await?
         }
-        "builtin" | "enabled" | "keyword" | "helptopic" => {
-            catalogue(action, prefix, &mut generated, context, work).await?
+        "builtin" | "enabled" | "disabled" | "keyword" | "helptopic" => {
+            catalogue(action, prefix, disabled, &mut generated, context, work).await?
         }
         "command" => {
-            catalogue("keyword", prefix, output, context, work).await?;
+            catalogue("keyword", prefix, disabled, output, context, work).await?;
             names("function", prefix, state, &mut generated, context, work).await?;
             generated.sort(context, work).await?;
             for value in generated.values {
                 output.add(&value, "", work)?;
             }
-            catalogue("builtin", prefix, output, context, work).await?;
+            catalogue("enabled", prefix, disabled, output, context, work).await?;
             return filesystem::commands(prefix, state, output, context, work).await;
         }
         "file" => {
@@ -264,7 +265,7 @@ async fn action_candidates(
                 generated.add(value, prefix, work)?;
             }
         }
-        "alias" | "disabled" => {}
+        "alias" => {}
         _ => return Err(2),
     }
     if !matches!(action, "keyword" | "signal" | "setopt" | "shopt") {
@@ -278,6 +279,7 @@ async fn action_candidates(
 async fn catalogue(
     action: &str,
     prefix: &str,
+    disabled: u128,
     output: &mut Candidates,
     context: &Context,
     work: &mut Work,
@@ -289,6 +291,8 @@ async fn catalogue(
             .map_err(error_status)?;
         let selected = match action {
             "keyword" => command.query_keyword(),
+            "enabled" => commands::enabled(command.name, disabled),
+            "disabled" => command.query_builtin() && !commands::enabled(command.name, disabled),
             "helptopic" => command.query_builtin() || command.query_keyword(),
             _ => command.query_builtin(),
         };

@@ -1,0 +1,19 @@
+{
+  "version": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "cases": [
+    {
+      "id": "brush-suite:builtins/enable:2",
+      "code": "enable -n",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "brush-suite:builtins/enable:4",
+      "code": "type printf\n\n# Disable the builtin\nPATH=\nenable -n printf\n\n# Check\ntype printf\nprint \"Gone\\n\"\n\n# Re-enable\nenable printf\n\n# Re-check\ntype printf\nprintf \"Back\\n\"\n",
+      "status": 0,
+      "stdout": "printf is a shell builtin\nprintf is a shell builtin\nBack\n",
+      "stderr": "/usr/bin/bash: line 8: type: printf: not found\n/usr/bin/bash: line 9: print: command not found\n"
+    }
+  ]
+}
