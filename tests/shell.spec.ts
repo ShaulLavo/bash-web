@@ -98,6 +98,7 @@ test("resize editing restores a usable prompt", async ({ page }) => {
 });
 
 test("bounded heavy streaming keeps the main thread responsive", async ({ page }) => {
+  page.on("console", (message) => console.log(`browser: ${message.text()}`));
   await open(page);
   await command(page, "seq 1000000");
   await page.waitForTimeout(250);
