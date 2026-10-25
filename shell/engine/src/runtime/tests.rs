@@ -19,6 +19,9 @@ struct Fake {
     executor: Executor,
     fds: RefCell<BTreeMap<u32, Endpoint>>,
     directories: RefCell<BTreeMap<u32, Rc<dyn io::Directory>>>,
+    wasi_directories: RefCell<BTreeMap<u32, Rc<Vec<(u64, Vec<u8>)>>>>,
+    named_wasi_directories: RefCell<BTreeMap<String, Rc<Vec<(u64, Vec<u8>)>>>>,
+    readdir_calls: RefCell<Vec<(u32, u64, usize)>>,
     inherited: RefCell<Vec<u32>>,
     next_fd: Cell<u32>,
     next_pid: Cell<u32>,
@@ -63,6 +66,9 @@ impl Fake {
                 (2, Endpoint::null()),
             ])),
             directories: RefCell::new(BTreeMap::new()),
+            wasi_directories: RefCell::new(BTreeMap::new()),
+            named_wasi_directories: RefCell::new(BTreeMap::new()),
+            readdir_calls: RefCell::new(Vec::new()),
             inherited: RefCell::new(vec![0, 1, 2]),
             next_fd: Cell::new(10),
             next_pid: Cell::new(100),
@@ -125,6 +131,78 @@ impl Fake {
         fd
     }
 }
+
+fn fake_directory_record(next_cookie: u64, name: &[u8]) -> Vec<u8> {
+    let mut record = vec![0; 24 + name.len()];
+    record[..8].copy_from_slice(&next_cookie.to_le_bytes());
+    record[16..20].copy_from_slice(&(name.len() as u32).to_le_bytes());
+    record[24..].copy_from_slice(name);
+    record
+}
+
+fn fake_wasi_page(
+    entries: &[(u64, Vec<u8>)],
+    cookie: u64,
+    output: &mut [u8],
+) -> Result<usize, i32> {
+    let start = if cookie == 0 {
+        0
+    } else {
+        entries
+            .iter()
+            .position(|(next, _)| *next == cookie)
+            .map(|index| index + 1)
+            .ok_or(28)?
+    };
+    let mut used = 0;
+    for (next, name) in &entries[start..] {
+        let record = fake_directory_record(*next, name);
+        let remaining = output.len() - used;
+        if remaining == 0 {
+            break;
+        }
+        let count = remaining.min(record.len());
+        output[used..used + count].copy_from_slice(&record[..count]);
+        used += count;
+        if count < record.len() {
+            break;
+        }
+    }
+    Ok(used)
+}
+
+fn fake_first_directory_entry(
+    output: &[u8],
+    used: usize,
+    cookie: u64,
+) -> Result<Option<io::DirectoryEntry>, i32> {
+    if used == 0 {
+        return Ok(None);
+    }
+    if used < 24 || used > output.len() {
+        return Err(48);
+    }
+    let next_cookie = u64::from_le_bytes(output[..8].try_into().unwrap());
+    let length = u32::from_le_bytes(output[16..20].try_into().unwrap()) as usize;
+    let end = 24usize.checked_add(length).ok_or(48)?;
+    if end > used || next_cookie == cookie {
+        return Err(48);
+    }
+    Ok(Some(io::DirectoryEntry {
+        next_cookie,
+        name: 24..end,
+    }))
+}
+
+impl Fake {
+    fn read_wasi_page(&self, fd: u32, cookie: u64, output: &mut [u8]) -> Result<usize, i32> {
+        let entries = self.wasi_directories.borrow().get(&fd).cloned().ok_or(8)?;
+        let used = fake_wasi_page(&entries, cookie, output)?;
+        self.readdir_calls.borrow_mut().push((fd, cookie, used));
+        Ok(used)
+    }
+}
+
 impl Abi for Fake {
     fn access_start(&self, path: &str, cwd: &str) -> Result<u32, i32> {
         if let Some(errno) = self.access_start_error.get() {
@@ -466,6 +544,7 @@ impl Abi for Fake {
         self.closed.borrow_mut().push(fd);
         self.fds.borrow_mut().remove(&fd);
         self.directories.borrow_mut().remove(&fd);
+        self.wasi_directories.borrow_mut().remove(&fd);
     }
     fn mkdir(&self, path: &str, allow_existing: bool) -> Result<(), i32> {
         self.fs
@@ -487,6 +566,12 @@ impl Abi for Fake {
             })
     }
     fn open_dir(&self, path: &str) -> Result<u32, i32> {
+        if let Some(entries) = self.named_wasi_directories.borrow().get(path).cloned() {
+            let fd = self.next_fd.get();
+            self.next_fd.set(fd + 1);
+            self.wasi_directories.borrow_mut().insert(fd, entries);
+            return Ok(fd);
+        }
         let directory = FileSystem::open_dir(&self.fs, path)
             .now_or_never()
             .unwrap()
@@ -506,6 +591,10 @@ impl Abi for Fake {
         cookie: u64,
         output: &mut [u8],
     ) -> Result<Option<io::DirectoryEntry>, i32> {
+        if self.wasi_directories.borrow().contains_key(&fd) {
+            let used = self.read_wasi_page(fd, cookie, output)?;
+            return fake_first_directory_entry(output, used, cookie);
+        }
         let directory = self.directories.borrow().get(&fd).cloned().ok_or(8)?;
         directory
             .read_entry(cookie, output)
@@ -515,6 +604,30 @@ impl Abi for Fake {
                 IoError::LimitExceeded => 48,
                 _ => 28,
             })
+    }
+    fn read_dir(&self, fd: u32, cookie: u64, output: &mut [u8]) -> Result<usize, i32> {
+        if self.wasi_directories.borrow().contains_key(&fd) {
+            return self.read_wasi_page(fd, cookie, output);
+        }
+        if output.len() < 24 {
+            return Err(48);
+        }
+        let directory = self.directories.borrow().get(&fd).cloned().ok_or(8)?;
+        let entry = directory
+            .read_entry(cookie, &mut output[24..])
+            .now_or_never()
+            .unwrap()
+            .map_err(|error| match error {
+                IoError::LimitExceeded => 48,
+                _ => 28,
+            })?;
+        let Some(entry) = entry else {
+            return Ok(0);
+        };
+        let length = entry.name.len();
+        output[..8].copy_from_slice(&entry.next_cookie.to_le_bytes());
+        output[16..20].copy_from_slice(&(length as u32).to_le_bytes());
+        Ok(24 + length)
     }
     fn open(&self, path: &str, options: &OpenOptions) -> Result<u32, i32> {
         let Some(fd) = io::descriptor_number(path) else {
@@ -2604,6 +2717,88 @@ fn interrupt_and_shutdown_drain_live_capture_and_blocked_input_writers() {
         );
         shutdown_session(&executor, &runtime, &fake, session);
     }
+}
+
+fn open_fake_wasi_directory(
+    executor: &Executor,
+    runtime: &Runtime,
+    fake: &Fake,
+    path: &str,
+    entries: Vec<(u64, Vec<u8>)>,
+) -> Rc<dyn io::Directory> {
+    fake.named_wasi_directories
+        .borrow_mut()
+        .insert(path.to_owned(), Rc::new(entries));
+    let guest = runtime.clone();
+    let path = path.to_owned();
+    let job = executor.spawn(async move { FileSystem::open_dir(&guest, &path).await });
+    finish(executor, runtime, job).unwrap()
+}
+
+fn read_fake_wasi_entry(
+    executor: &Executor,
+    runtime: &Runtime,
+    directory: Rc<dyn io::Directory>,
+    cookie: u64,
+) -> Result<Option<(u64, Vec<u8>)>, IoError> {
+    let job = executor.spawn(async move {
+        let mut output = vec![0; io::MAX_PATH_BYTES + 24];
+        let entry = directory.read_entry(cookie, &mut output).await?;
+        Ok(entry.map(|entry| {
+            let name = output[entry.name].to_vec();
+            (entry.next_cookie, name)
+        }))
+    });
+    finish(executor, runtime, job)
+}
+
+fn fake_wasi_names(
+    executor: &Executor,
+    runtime: &Runtime,
+    directory: Rc<dyn io::Directory>,
+) -> Result<Vec<Vec<u8>>, IoError> {
+    let mut cookie = 0;
+    let mut names = Vec::new();
+    loop {
+        let Some((next, name)) =
+            read_fake_wasi_entry(executor, runtime, directory.clone(), cookie)?
+        else {
+            return Ok(names);
+        };
+        assert_ne!(next, cookie);
+        cookie = next;
+        names.push(name);
+    }
+}
+
+#[test]
+fn runtime_directory_consumes_a_full_wasi_page_before_refilling() {
+    let (executor, fake, runtime) = setup();
+    let entries: Vec<_> = (0..1000)
+        .map(|index| {
+            (
+                42 + (index as u64 + 1) * 7919,
+                format!("n{index:08}").into_bytes(),
+            )
+        })
+        .collect();
+    let directory = open_fake_wasi_directory(
+        &executor,
+        &runtime,
+        &fake,
+        "/tmp/wasi-pages",
+        entries.clone(),
+    );
+    let names = fake_wasi_names(&executor, &runtime, directory.clone()).unwrap();
+    let expected: Vec<_> = entries.into_iter().map(|(_, name)| name).collect();
+    assert_eq!(names, expected);
+    let calls = fake.readdir_calls.borrow();
+    assert_eq!(calls.len(), 10);
+    assert_eq!(calls.iter().map(|(_, _, used)| used).sum::<usize>(), 33224);
+    let fd = calls[0].0;
+    drop(calls);
+    drop(directory);
+    assert!(fake.closed.borrow().contains(&fd));
 }
 
 #[test]

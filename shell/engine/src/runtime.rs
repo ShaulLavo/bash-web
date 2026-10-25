@@ -211,6 +211,9 @@ pub trait Abi {
     ) -> Result<Option<crate::io::DirectoryEntry>, i32> {
         Err(58)
     }
+    fn read_dir(&self, _fd: u32, _cookie: u64, _output: &mut [u8]) -> Result<usize, i32> {
+        Err(58)
+    }
     fn open(&self, path: &str, options: &OpenOptions) -> Result<u32, i32>;
     fn read(&self, fd: u32, output: &mut [u8]) -> Result<usize, i32>;
     fn write(&self, fd: u32, input: &[u8]) -> Result<usize, i32>;
