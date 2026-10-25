@@ -756,3 +756,45 @@ fn valid_return_and_exit_retain_their_interactive_control_flow() {
     assert!(rig.shell.exit_requested());
     assert_eq!(rig.value("TRAILING"), None);
 }
+
+fn readonly_argument_error(case: &ArgumentErrorCase, interactive: bool) -> Rig {
+    let rig = interactive_argument_rig();
+    rig.shell.state().borrow_mut().interactive = interactive;
+    let source = format!(": >err; {{ {}; printf BAD_OUTER; }} 2<err", case.source);
+    assert_eq!(rig.run(&source), case.status, "{source}");
+    assert!(rig.output.bytes().is_empty(), "{source}");
+    assert_eq!(rig.value("INNER"), None, "{source}");
+    assert_eq!(rig.shell.exit_requested(), !interactive, "{source}");
+    rig
+}
+
+#[test]
+fn readonly_stderr_preserves_interactive_argument_aborts() {
+    for case in &ARGUMENT_ERRORS {
+        let rig = readonly_argument_error(case, true);
+        assert_eq!(rig.run(r#"printf 'ALIVE:%s:%s\n' "$?" "$KEEP""#), 0);
+        assert_eq!(
+            rig.output.bytes(),
+            format!("ALIVE:{}:kept\n", case.status).as_bytes()
+        );
+    }
+}
+
+#[test]
+fn readonly_stderr_preserves_noninteractive_argument_exits() {
+    for case in &ARGUMENT_ERRORS {
+        readonly_argument_error(case, false);
+    }
+}
+
+#[test]
+fn readonly_stderr_keeps_nonpositive_loop_counts_as_loop_breaks() {
+    for interactive in [false, true] {
+        let rig = interactive_argument_rig();
+        rig.shell.state().borrow_mut().interactive = interactive;
+        assert_eq!(rig.run(r#": >err; for x in a b; do for y in c d; do continue 0 2<err; INNER=bad; done; INNER=bad; done; printf 'LOOP:%s\n' "$?""#), 0);
+        assert_eq!(rig.output.bytes(), b"LOOP:1\n");
+        assert_eq!(rig.value("INNER"), None);
+        assert!(!rig.shell.exit_requested());
+    }
+}
