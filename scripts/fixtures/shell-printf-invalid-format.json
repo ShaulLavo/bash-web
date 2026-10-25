@@ -1,0 +1,503 @@
+{
+  "schema": 1,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "env": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "LC_ALL": "C",
+    "LANG": "C"
+  },
+  "cases": [
+    {
+      "id": "oils:builtin-printf:777",
+      "script": "printf '%z' 42\necho status=$?\nprintf '%-z' 42\necho status=$?\n",
+      "status": 0,
+      "stdout": "status=1\nstatus=1\n",
+      "stderr": "/usr/bin/bash: line 1: printf: `%z': missing format character\n/usr/bin/bash: line 3: printf: `%-z': missing format character\n"
+    },
+    {
+      "id": "brush-suite:builtins/printf:59",
+      "script": "printf \"%z\\n\" \"test\"\n",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `\\': invalid format character\n"
+    },
+    {
+      "id": "invalid-0",
+      "script": "printf % 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%': missing format character\n"
+    },
+    {
+      "id": "invalid-1",
+      "script": "printf %- 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%-': missing format character\n"
+    },
+    {
+      "id": "invalid-2",
+      "script": "printf %. 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%.': missing format character\n"
+    },
+    {
+      "id": "invalid-3",
+      "script": "printf %5. 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%5.': missing format character\n"
+    },
+    {
+      "id": "invalid-4",
+      "script": "printf %Y 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `Y': invalid format character\n"
+    },
+    {
+      "id": "invalid-5",
+      "script": "printf %-Y 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `Y': invalid format character\n"
+    },
+    {
+      "id": "invalid-6",
+      "script": "printf '%#08.2Y' 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `Y': invalid format character\n"
+    },
+    {
+      "id": "invalid-7",
+      "script": "printf %..s 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `.': invalid format character\n"
+    },
+    {
+      "id": "invalid-8",
+      "script": "printf %5% 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%': invalid format character\n"
+    },
+    {
+      "id": "invalid-9",
+      "script": "printf '%*Y' 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `Y': invalid format character\n"
+    },
+    {
+      "id": "invalid-10",
+      "script": "printf '%.*Y' 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `Y': invalid format character\n"
+    },
+    {
+      "id": "invalid-11",
+      "script": "printf %h 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%h': missing format character\n"
+    },
+    {
+      "id": "invalid-12",
+      "script": "printf %hh 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%hh': missing format character\n"
+    },
+    {
+      "id": "invalid-13",
+      "script": "printf %l 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%l': missing format character\n"
+    },
+    {
+      "id": "invalid-14",
+      "script": "printf %ll 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%ll': missing format character\n"
+    },
+    {
+      "id": "invalid-15",
+      "script": "printf %L 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%L': missing format character\n"
+    },
+    {
+      "id": "invalid-16",
+      "script": "printf %j 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%j': missing format character\n"
+    },
+    {
+      "id": "invalid-17",
+      "script": "printf %z 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%z': missing format character\n"
+    },
+    {
+      "id": "invalid-18",
+      "script": "printf %t 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%t': missing format character\n"
+    },
+    {
+      "id": "invalid-19",
+      "script": "printf %hljztL 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%hljztL': missing format character\n"
+    },
+    {
+      "id": "invalid-20",
+      "script": "printf %hY 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `Y': invalid format character\n"
+    },
+    {
+      "id": "invalid-21",
+      "script": "printf '%h\\n' 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `\\': invalid format character\n"
+    },
+    {
+      "id": "invalid-22",
+      "script": "printf %llY 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `Y': invalid format character\n"
+    },
+    {
+      "id": "invalid-23",
+      "script": "printf '%ll\\n' 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `\\': invalid format character\n"
+    },
+    {
+      "id": "invalid-24",
+      "script": "printf %LY 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `Y': invalid format character\n"
+    },
+    {
+      "id": "invalid-25",
+      "script": "printf '%L\\n' 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `\\': invalid format character\n"
+    },
+    {
+      "id": "invalid-26",
+      "script": "printf %jY 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `Y': invalid format character\n"
+    },
+    {
+      "id": "invalid-27",
+      "script": "printf '%j\\n' 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `\\': invalid format character\n"
+    },
+    {
+      "id": "invalid-28",
+      "script": "printf %zY 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `Y': invalid format character\n"
+    },
+    {
+      "id": "invalid-29",
+      "script": "printf '%z\\n' 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `\\': invalid format character\n"
+    },
+    {
+      "id": "invalid-30",
+      "script": "printf %tY 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `Y': invalid format character\n"
+    },
+    {
+      "id": "invalid-31",
+      "script": "printf '%t\\n' 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `\\': invalid format character\n"
+    },
+    {
+      "id": "invalid-32",
+      "script": "printf %5.2z 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%5.2z': missing format character\n"
+    },
+    {
+      "id": "invalid-33",
+      "script": "printf '%*z' 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%*z': missing format character\n"
+    },
+    {
+      "id": "invalid-34",
+      "script": "printf '%.*z' 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%.*z': missing format character\n"
+    },
+    {
+      "id": "invalid-35",
+      "script": "printf %-5.2z 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `%-5.2z': missing format character\n"
+    },
+    {
+      "id": "invalid-36",
+      "script": "printf %-5.2zY 3 4 value",
+      "status": 1,
+      "stdout": "",
+      "stderr": "/usr/bin/bash: line 1: printf: `Y': invalid format character\n"
+    },
+    {
+      "id": "prefix-0-39",
+      "script": "printf prefix%z 42",
+      "status": 1,
+      "stdout": "prefix",
+      "stderr": "/usr/bin/bash: line 1: printf: `%z': missing format character\n"
+    },
+    {
+      "id": "prefix-0-40",
+      "script": "printf prefix%z 42 2>&-",
+      "status": 1,
+      "stdout": "prefix",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-0-41",
+      "script": "printf prefix%z 42 1>&- 2>&-",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "assignment-0",
+      "script": "x=old; printf -v x prefix%z 42; echo \"$?:$x\"",
+      "status": 0,
+      "stdout": "1:prefix\n",
+      "stderr": "/usr/bin/bash: line 1: printf: `%z': missing format character\n"
+    },
+    {
+      "id": "stop-0",
+      "script": "printf %b%z 'kept\\c'; echo :$?",
+      "status": 0,
+      "stdout": "kept:0\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-1-44",
+      "script": "printf prefix%Y 42",
+      "status": 1,
+      "stdout": "prefix",
+      "stderr": "/usr/bin/bash: line 1: printf: `Y': invalid format character\n"
+    },
+    {
+      "id": "prefix-1-45",
+      "script": "printf prefix%Y 42 2>&-",
+      "status": 1,
+      "stdout": "prefix",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-1-46",
+      "script": "printf prefix%Y 42 1>&- 2>&-",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "assignment-1",
+      "script": "x=old; printf -v x prefix%Y 42; echo \"$?:$x\"",
+      "status": 0,
+      "stdout": "1:prefix\n",
+      "stderr": "/usr/bin/bash: line 1: printf: `Y': invalid format character\n"
+    },
+    {
+      "id": "stop-1",
+      "script": "printf %b%Y 'kept\\c'; echo :$?",
+      "status": 0,
+      "stdout": "kept:0\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-2-49",
+      "script": "printf prefix%-z 42",
+      "status": 1,
+      "stdout": "prefix",
+      "stderr": "/usr/bin/bash: line 1: printf: `%-z': missing format character\n"
+    },
+    {
+      "id": "prefix-2-50",
+      "script": "printf prefix%-z 42 2>&-",
+      "status": 1,
+      "stdout": "prefix",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-2-51",
+      "script": "printf prefix%-z 42 1>&- 2>&-",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "assignment-2",
+      "script": "x=old; printf -v x prefix%-z 42; echo \"$?:$x\"",
+      "status": 0,
+      "stdout": "1:prefix\n",
+      "stderr": "/usr/bin/bash: line 1: printf: `%-z': missing format character\n"
+    },
+    {
+      "id": "stop-2",
+      "script": "printf %b%-z 'kept\\c'; echo :$?",
+      "status": 0,
+      "stdout": "kept:0\n",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-3-54",
+      "script": "printf 'prefix%z\\n' 42",
+      "status": 1,
+      "stdout": "prefix",
+      "stderr": "/usr/bin/bash: line 1: printf: `\\': invalid format character\n"
+    },
+    {
+      "id": "prefix-3-55",
+      "script": "printf 'prefix%z\\n' 42 2>&-",
+      "status": 1,
+      "stdout": "prefix",
+      "stderr": ""
+    },
+    {
+      "id": "prefix-3-56",
+      "script": "printf 'prefix%z\\n' 42 1>&- 2>&-",
+      "status": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "assignment-3",
+      "script": "x=old; printf -v x 'prefix%z\\n' 42; echo \"$?:$x\"",
+      "status": 0,
+      "stdout": "1:prefix\n",
+      "stderr": "/usr/bin/bash: line 1: printf: `\\': invalid format character\n"
+    },
+    {
+      "id": "stop-3",
+      "script": "printf '%b%z\\n' 'kept\\c'; echo :$?",
+      "status": 0,
+      "stdout": "kept:0\n",
+      "stderr": ""
+    },
+    {
+      "id": "repeat",
+      "script": "printf '%s:%Y' first second; echo :$?",
+      "status": 0,
+      "stdout": "first::1\n",
+      "stderr": "/usr/bin/bash: line 1: printf: `Y': invalid format character\n"
+    },
+    {
+      "id": "trailing-invalid",
+      "script": "printf '%s%%:%' kept; echo :$?",
+      "status": 0,
+      "stdout": "kept%::1\n",
+      "stderr": "/usr/bin/bash: line 1: printf: `%': missing format character\n"
+    },
+    {
+      "id": "empty",
+      "script": "printf '' ignored",
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "escaped-percent",
+      "script": "printf '%%z|%%Y|%%'",
+      "status": 0,
+      "stdout": "%z|%Y|%",
+      "stderr": ""
+    },
+    {
+      "id": "field-reuse",
+      "script": "printf '[%-5.2s]' abc def; echo",
+      "status": 0,
+      "stdout": "[ab   ][de   ]\n",
+      "stderr": ""
+    },
+    {
+      "id": "character",
+      "script": "printf '[%3c]' xyz; echo",
+      "status": 0,
+      "stdout": "[  x]\n",
+      "stderr": ""
+    },
+    {
+      "id": "escaped-field",
+      "script": "printf '[%5b]' 'a\\tb'; echo",
+      "status": 0,
+      "stdout": "[  a\tb]\n",
+      "stderr": ""
+    },
+    {
+      "id": "quoted",
+      "script": "printf '%q|%Q' 'a b' 'c d'",
+      "status": 0,
+      "stdout": "a\\ b|c\\ d",
+      "stderr": ""
+    },
+    {
+      "id": "assignment-valid",
+      "script": "printf -v x '%s|' a b; echo \"$?:$x\"",
+      "status": 0,
+      "stdout": "0:a|b|\n",
+      "stderr": ""
+    },
+    {
+      "id": "option-status",
+      "script": "printf -x; echo :$?",
+      "status": 0,
+      "stdout": ":2\n",
+      "stderr": "/usr/bin/bash: line 1: printf: -x: invalid option\nprintf: usage: printf [-v var] format [arguments]\n"
+    },
+    {
+      "id": "missing-format",
+      "script": "printf; echo :$?",
+      "status": 0,
+      "stdout": ":2\n",
+      "stderr": "printf: usage: printf [-v var] format [arguments]\n"
+    }
+  ]
+}

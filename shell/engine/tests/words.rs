@@ -4435,3 +4435,6 @@ mod pipeline_status;
 
 #[path = "words/command_hash.rs"]
 mod command_hash;
+
+#[path = "words/printf_invalid_format.rs"]
+mod printf_invalid_format;
