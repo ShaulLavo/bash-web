@@ -142,4 +142,23 @@ if (recordPath) {
       assert.equal(actual.stderr.toString(), Buffer.from(entry.stderrBase64, "base64").toString());
       assert.equal(liveNodeWorkers(), 0);
     });
+  test(
+    "production Waffle pathname expansion consumes packed pages",
+    { timeout: 20000 },
+    async () => {
+      const actual = await run(`cd "$TMP"
+for i in {000..179}; do : > "f$i"; done
+: > "é中"
+set -- f*
+printf '%s %s %s %s\n' "$#" "$1" "$2" "\${@: -1}"
+set -- é*
+printf '<%s>\n' "$1"
+`);
+      assert.equal(actual.crash, undefined);
+      assert.equal(actual.status, 0);
+      assert.equal(actual.stdout.toString(), "180 f000 f001 f179\n<é中>\n");
+      assert.equal(actual.stderr.toString(), "");
+      assert.equal(liveNodeWorkers(), 0);
+    },
+  );
 }

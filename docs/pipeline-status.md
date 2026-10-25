@@ -19,6 +19,8 @@ isolated state snapshots.
 `$?` remains the pipeline's aggregate result. `pipefail` selects the rightmost
 nonzero stage status; `!` negates the aggregate, not the stage list. The engine
 uses its joined stage outcomes and does not infer success for missing children.
+It captures `pipefail` before any stage runs. A shared final stage can change the
+option for later pipelines, not the one already running.
 
 The list is bounded by the engine's pipeline-stage limit, 128 by default.
 Other control-command wrappers keep their existing behavior. Unsupported

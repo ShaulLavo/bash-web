@@ -203,12 +203,7 @@ pub trait Abi {
     fn open_dir(&self, _path: &str) -> Result<u32, i32> {
         Err(58)
     }
-    fn read_dir_entry(
-        &self,
-        _fd: u32,
-        _cookie: u64,
-        _output: &mut [u8],
-    ) -> Result<Option<crate::io::DirectoryEntry>, i32> {
+    fn read_dir(&self, _fd: u32, _cookie: u64, _output: &mut [u8]) -> Result<usize, i32> {
         Err(58)
     }
     fn open(&self, path: &str, options: &OpenOptions) -> Result<u32, i32>;
@@ -739,10 +734,118 @@ impl HostEndpoint for RuntimeEndpoint {
         .boxed_local()
     }
 }
+const DIRECTORY_PAGE_BYTES: usize = crate::io::MAX_PATH_BYTES + 24;
+
+struct DirectoryPage {
+    bytes: Vec<u8>,
+    used: usize,
+    offset: usize,
+    cookie: u64,
+}
+
+impl DirectoryPage {
+    fn new() -> Result<Self, IoError> {
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(DIRECTORY_PAGE_BYTES)
+            .map_err(|_| IoError::LimitExceeded)?;
+        bytes.resize(DIRECTORY_PAGE_BYTES, 0);
+        Ok(Self {
+            bytes,
+            used: 0,
+            offset: 0,
+            cookie: 0,
+        })
+    }
+}
+
+enum DirectoryParse {
+    Entry(crate::io::DirectoryEntry),
+    Tail,
+}
+
 struct RuntimeDirectory {
     runtime: Runtime,
     fd: u32,
+    page: RefCell<DirectoryPage>,
 }
+
+impl RuntimeDirectory {
+    fn refill(&self, cookie: u64, page: &mut DirectoryPage) -> Result<(), IoError> {
+        let used = self
+            .runtime
+            .0
+            .abi
+            .read_dir(self.fd, cookie, &mut page.bytes)
+            .map_err(io_error)?;
+        if used > page.bytes.len() {
+            return Err(IoError::LimitExceeded);
+        }
+        page.used = used;
+        page.offset = 0;
+        page.cookie = cookie;
+        Ok(())
+    }
+
+    fn read(
+        &self,
+        cookie: u64,
+        output: &mut [u8],
+    ) -> Result<Option<crate::io::DirectoryEntry>, IoError> {
+        let mut page = self.page.borrow_mut();
+        loop {
+            if page.cookie != cookie || page.offset == page.used {
+                self.refill(cookie, &mut page)?;
+            }
+            if page.used == 0 {
+                return Ok(None);
+            }
+            let parsed = parse_directory_entry(&mut page, cookie, output)?;
+            if let DirectoryParse::Entry(entry) = parsed {
+                return Ok(Some(entry));
+            }
+            page.offset = page.used;
+        }
+    }
+}
+
+fn parse_directory_entry(
+    page: &mut DirectoryPage,
+    cookie: u64,
+    output: &mut [u8],
+) -> Result<DirectoryParse, IoError> {
+    let remaining = page.used - page.offset;
+    if remaining < 24 {
+        if page.offset == 0 {
+            return Err(IoError::LimitExceeded);
+        }
+        return Ok(DirectoryParse::Tail);
+    }
+    let header = page.offset;
+    let next_cookie = u64::from_le_bytes(page.bytes[header..header + 8].try_into().unwrap());
+    let length =
+        u32::from_le_bytes(page.bytes[header + 16..header + 20].try_into().unwrap()) as usize;
+    let end = (header + 24)
+        .checked_add(length)
+        .ok_or(IoError::LimitExceeded)?;
+    if end > page.used {
+        if page.offset == 0 {
+            return Err(IoError::LimitExceeded);
+        }
+        return Ok(DirectoryParse::Tail);
+    }
+    if next_cookie == cookie || length > output.len() {
+        return Err(IoError::LimitExceeded);
+    }
+    output[..length].copy_from_slice(&page.bytes[header + 24..end]);
+    page.offset = end;
+    page.cookie = next_cookie;
+    Ok(DirectoryParse::Entry(crate::io::DirectoryEntry {
+        next_cookie,
+        name: 0..length,
+    }))
+}
+
 impl Drop for RuntimeDirectory {
     fn drop(&mut self) {
         self.runtime.0.abi.close(self.fd);
@@ -756,11 +859,7 @@ impl crate::io::Directory for RuntimeDirectory {
     ) -> LocalBoxFuture<'a, Result<Option<crate::io::DirectoryEntry>, IoError>> {
         async move {
             crate::executor::yield_now().await;
-            self.runtime
-                .0
-                .abi
-                .read_dir_entry(self.fd, cookie, output)
-                .map_err(io_error)
+            self.read(cookie, output)
         }
         .boxed_local()
     }
@@ -778,10 +877,12 @@ impl FileSystem for Runtime {
                 return Err(IoError::InvalidPath);
             }
             crate::executor::yield_now().await;
+            let page = DirectoryPage::new()?;
             let fd = self.0.abi.open_dir(path).map_err(io_error)?;
             Ok(Rc::new(RuntimeDirectory {
                 runtime: self.clone(),
                 fd,
+                page: RefCell::new(page),
             }) as Rc<dyn crate::io::Directory>)
         }
         .boxed_local()

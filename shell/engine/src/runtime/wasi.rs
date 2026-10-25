@@ -288,33 +288,16 @@ impl Abi for WasiAbi {
         }
         Ok(fd)
     }
-    fn read_dir_entry(
-        &self,
-        fd: u32,
-        cookie: u64,
-        output: &mut [u8],
-    ) -> Result<Option<crate::io::DirectoryEntry>, i32> {
+    fn read_dir(&self, fd: u32, cookie: u64, output: &mut [u8]) -> Result<usize, i32> {
         let mut used = 0;
         let errno = unsafe { fd_readdir(fd, output.as_mut_ptr(), output.len(), cookie, &mut used) };
         if errno != 0 {
             return Err(errno as i32);
         }
-        if used == 0 {
-            return Ok(None);
-        }
-        if used < 24 || used > output.len() {
+        if used > output.len() {
             return Err(48);
         }
-        let next_cookie = u64::from_le_bytes(output[..8].try_into().unwrap());
-        let length = u32::from_le_bytes(output[16..20].try_into().unwrap()) as usize;
-        let end = 24usize.checked_add(length).ok_or(48)?;
-        if end > used || next_cookie == cookie {
-            return Err(48);
-        }
-        Ok(Some(crate::io::DirectoryEntry {
-            next_cookie,
-            name: 24..end,
-        }))
+        Ok(used)
     }
     fn open(&self, path: &str, options: &OpenOptions) -> Result<u32, i32> {
         if !path.starts_with('/') || path.contains('\0') || path.len() > crate::io::MAX_PATH_BYTES {
