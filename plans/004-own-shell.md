@@ -3437,6 +3437,29 @@ Implement bounded complement groups without recursive backtracking, preserve
 work/storage admission and cancellation, and add nested and suffix controls.
 That matcher change is larger than passing an option through completion's glob
 lookup. No frozen case, oracle, exclusion or baseline change is authorized.
+### Bounded full-pattern complement implementation, 2026-10-24
+
+Status: Approved. Implementation prepared for independent review in the negative
+extglob family, based on reviewed PR75 source `91ced064`. The core pattern layer
+now compiles detached complement bodies and evaluates admitted substring
+relations without recursive backtracking. Positive-only matching, ordinary argv
+pathname expansion, scalar trim/replacement, limits, and runtime contracts stay
+separate. See `docs/negative-extglob.md` for the algorithm and explicit cost bounds.
+
+New GNU Bash 5.3.15 recordings in `shell-negative-extglob.json` cover nested
+negation, suffixes, repetition, quoting, Unicode, malformed groups, case option
+state, and completion. The existing completion pending recording remains intact.
+The author reports only targeted real-Waffle measurements; full qualification,
+source review, baseline membership updates, and merge belong to the coordinator.
+
+Scalar trim/replacement remains a separate prerequisite. Frozen scored cases
+`bashkit-suite:bashbox-shopt-pattern:31` and `:131` still enter the basic scalar
+compiler, which rejects extglob operators. Their complete scripts and exact
+Bash 5.3.15 bytes remain in the frozen oracle. A minimal strict reproducer is
+`shopt -s extglob; x=abc; echo "${x#!(*)}"`: Bash prints `abc\n` with status 0;
+reviewed-source Waffle returns 2 without output. This implementation does not
+change that path or claim either case as a gain.
+
 ## Case-attribute review follow-ups, 2026-10-23
 
 Status: Approved. Owner: VARIABLES declaration family. PR77's independent review
@@ -3634,6 +3657,35 @@ repairing these corners. Preserve all work, storage, field, output, cancellation
 and stack limits and the frozen oracle and scoreboard.
 
 
+## Completion group slash boundary follow-up, 2026-10-24
+
+Status: Approved. Owner: `lite-completion-group-boundary-r1`. Independent PR91
+review N1 found a pre-existing caller gap at `expand/glob.rs:570-585`, where
+`text.split_inclusive('/')` splits inside an active extended-pattern group.
+This follow-up belongs to that separate lane, not PR91's CI repair.
+
+```bash
+shopt -s extglob
+printf x >a
+printf x >b
+compgen -G '!(a/b)'
+```
+
+GNU Bash 5.3.15 prints `a\nb\n` and returns 0. Actual main
+`7e1e15b3f2e0b5155f09160b26c725fa5bd813bb` and reviewed PR91
+`0886f025f06fb968acd23495a5248722890c74eb` print nothing and return 1.
+The review also reproduces identical candidate/base failures for `!(*/*)`,
+`!(a|a/b)`, `@(!(a/b)|a)`, `!(@(a/b|b))`, `!(a/b)a`, `d/!(a/b)`, and the
+positive control `@(a/b|a)`. Preserve passing outside-group slash controls:
+`!(d)/b` returns `e/b`, `d/!(a)` returns `d/b`, and `d/!(!(a))` returns `d/a`.
+Keep hidden-name policy unchanged. Repair component boundary recognition in the
+owning lane without expanding this CI repair's matcher scope.
+
+Exact report: `/work/reports/wave-20261022/shell/review91-negative-extglob-r1.md`.
+Its sibling evidence directory retains `candidate-boundaries.json`,
+`base-boundaries.json`, and the deterministic `boundaries.py` reproducer.
+
+
 ## Eval call-site line offsets from PR75 integration review, 2026-10-24
 
 Status: Approved follow-up. Owner: BUILTINS eval/call-stack family, separate from
@@ -3655,6 +3707,45 @@ offsets only under an independently assigned bounded family owner. Preserve
 retained-source ownership, parser admission and cancellation. Late extdebug
 argument initialization and indexed compound initializers remain with their
 existing owners and are not duplicated here.
+
+
+## Source call-stack and eval-prefix composition follow-ups, 2026-10-24
+
+Status: Approved, separate from PR91's negative-pattern integration. Owners:
+BUILTINS source/call-stack and eval-prefix families. No repair is included here.
+
+A function defined by a sourced file retains its source text but reports the
+shell name in BASH_SOURCE. Minimal exact probe:
+
+```bash
+printf '%s\n' 'f() { printf "%s|%s\n" "${FUNCNAME[*]}" "${BASH_SOURCE[*]}"; }' > lib
+. ./lib; f
+```
+
+GNU Bash 5.3.15 prints `f|./lib\n`. Exact actual main69
+`d61989ad342a47545c73cb665781f9c8cf971015` and PR91 integration
+`2a60ff0aac80045404a6c55343c3eed2c80203d7` print `f|bash\n`.
+All return 0 with empty stderr. A positive-pattern counterpart and the full
+source/negative-pattern/array-slicing probe isolate the same filename gap.
+`state/call_stack.rs:277` fills CallSite.source from state.shell_name, while
+`interpreter/function_names.rs:47-50` retains the function's source and reader.
+Carry the real definition filename through the admitted call frame in its owning
+family. Preserve frame/storage accounting, cancellation and retained ownership.
+
+Prefix assignments before eval remain explicitly unsupported. For example,
+`f() { local value=axc; value=abc eval 'echo eval:$value'; printf 'eval-status:%s|value:%s\n' "$?" "$value"; }; f`
+prints `eval:abc\neval-status:0|value:axc\n` in Bash 5.3.15, but both exact
+main69 and the integration print `eval-status:2|value:axc\n`. The rejection at
+`interpreter.rs:3123-3124` and native `command_metadata.rs:146` assertion are
+unchanged. Implement this separately without removing that existing guard before
+its supported replacement is independently qualified.
+
+Evidence and exact recorded streams/statuses are in
+`/work/reports/wave-20261022/shell/pr91-actual69-integration-r3-reboot-evidence/`:
+`interaction-records.json`, `diagnosis-records.json`, and
+`prefix-diagnosis-records.json`. The initial strict oracle comparison remains a
+recorded failure, not a waived check or a claimed Bash-compatible pass. N1's
+completion group/slash boundary stays with its existing separate owner.
 
 ## Sourced function BASH_SOURCE filename, 2026-10-24
 
