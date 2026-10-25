@@ -26,6 +26,8 @@ struct Fake {
     requests: RefCell<Vec<RuntimeSpawn>>,
     closed: RefCell<Vec<u32>>,
     polls: RefCell<Vec<(i32, Vec<Subscription>)>>,
+    reads: RefCell<Vec<(u32, usize)>>,
+    read_limit: Cell<usize>,
     signals: RefCell<Vec<(bool, u32, i32)>>,
     held_jobs: RefCell<BTreeSet<u32>>,
     reaped_jobs: RefCell<Vec<u32>>,
@@ -70,6 +72,8 @@ impl Fake {
             requests: RefCell::new(Vec::new()),
             closed: RefCell::new(Vec::new()),
             polls: RefCell::new(Vec::new()),
+            reads: RefCell::new(Vec::new()),
+            read_limit: Cell::new(usize::MAX),
             signals: RefCell::new(Vec::new()),
             held_jobs: RefCell::new(BTreeSet::new()),
             reaped_jobs: RefCell::new(Vec::new()),
@@ -531,6 +535,9 @@ impl Abi for Fake {
         Ok(self.fd(endpoint))
     }
     fn read(&self, fd: u32, output: &mut [u8]) -> Result<usize, i32> {
+        self.reads.borrow_mut().push((fd, output.len()));
+        let length = output.len().min(self.read_limit.get());
+        let output = &mut output[..length];
         let endpoint = self.fds.borrow().get(&fd).cloned().ok_or(8)?;
         endpoint
             .read(output)
@@ -3736,3 +3743,6 @@ fn runtime_permissions_keep_supported_denial_separate_from_unknown_bits() {
     assert_eq!(metadata.uid, None);
     assert_eq!(metadata.owned_by_effective_uid, None);
 }
+
+#[path = "tests/read_exact.rs"]
+mod read_exact;
