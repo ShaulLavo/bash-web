@@ -11,10 +11,13 @@ test("the real shell stays idle and resumes ordered output after silence", async
   await page.addInitScript(() => {
     window.idlePumpTimers = 0;
     const schedule = window.setTimeout;
-    window.setTimeout = (handler, timeout, ...args) => {
-      if (timeout === 8) window.idlePumpTimers++;
-      return schedule(handler, timeout, ...args);
-    };
+    window.setTimeout = Object.assign(
+      (handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+        if (timeout === 8) window.idlePumpTimers++;
+        return schedule(handler, timeout, ...args);
+      },
+      schedule,
+    );
   });
   await page.goto("/?test=1&renderer=canvas&engine=own-shell");
   await startupReady(page);
