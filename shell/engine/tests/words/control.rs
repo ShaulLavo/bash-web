@@ -630,3 +630,208 @@ fn loop_control_terminator_keeps_nested_targets_and_operand_failures() {
         assert!(rig.output.bytes().is_empty());
     }
 }
+
+struct ArgumentErrorCase {
+    source: &'static str,
+    name: &'static str,
+    status: i32,
+    message: &'static str,
+}
+
+const ARGUMENT_ERRORS: [ArgumentErrorCase; 7] = [
+    ArgumentErrorCase {
+        source: "exit 7 8",
+        name: "exit",
+        status: 1,
+        message: "too many arguments",
+    },
+    ArgumentErrorCase {
+        source: "f(){ local KEEP=local; return 7 8; INNER=bad; }; f",
+        name: "return",
+        status: 1,
+        message: "too many arguments",
+    },
+    ArgumentErrorCase {
+        source: "set -- a b; shift 1 2",
+        name: "shift",
+        status: 1,
+        message: "too many arguments",
+    },
+    ArgumentErrorCase {
+        source: "for i in 1 2; do break 1 2; INNER=bad; done",
+        name: "break",
+        status: 1,
+        message: "too many arguments",
+    },
+    ArgumentErrorCase {
+        source: "for i in 1 2; do continue 1 2; INNER=bad; done",
+        name: "continue",
+        status: 1,
+        message: "too many arguments",
+    },
+    ArgumentErrorCase {
+        source: "for i in 1 2; do break nope; INNER=bad; done",
+        name: "break",
+        status: 2,
+        message: "nope: numeric argument required",
+    },
+    ArgumentErrorCase {
+        source: "for i in 1 2; do continue nope; INNER=bad; done",
+        name: "continue",
+        status: 2,
+        message: "nope: numeric argument required",
+    },
+];
+
+fn interactive_argument_rig() -> Rig {
+    let rig = Rig::new(Limits::default());
+    rig.shell.state().borrow_mut().interactive = true;
+    rig.variable("KEEP", "kept");
+    rig
+}
+
+fn assert_interactive_argument_reuse(rig: &Rig, status: i32) {
+    assert_eq!(rig.run(r#"printf 'ALIVE:%s:%s\n' "$?" "$KEEP""#), 0);
+    assert_eq!(
+        rig.output.bytes(),
+        format!("ALIVE:{status}:kept\n").as_bytes()
+    );
+}
+
+#[test]
+fn builtin_argument_errors_preserve_interactive_sessions() {
+    let mut requested_exits = Vec::new();
+    for case in &ARGUMENT_ERRORS {
+        let rig = interactive_argument_rig();
+        assert_eq!(
+            rig.run(&format!("{}; TRAILING=bad", case.source)),
+            case.status
+        );
+        requested_exits.push((case.source, rig.shell.exit_requested()));
+        assert_eq!(rig.value("TRAILING"), None);
+        assert_eq!(rig.value("INNER"), None);
+        assert_interactive_argument_reuse(&rig, case.status);
+    }
+    assert!(
+        requested_exits.iter().all(|(_, exit)| !exit),
+        "{requested_exits:?}"
+    );
+}
+
+#[test]
+fn builtin_argument_errors_keep_noninteractive_fatal_semantics_and_diagnostics() {
+    for case in &ARGUMENT_ERRORS {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(
+            rig.run(&format!("{}; TRAILING=bad\nLATER=bad", case.source)),
+            case.status
+        );
+        assert!(rig.shell.exit_requested(), "{}", case.source);
+        assert_eq!(rig.value("TRAILING"), None);
+        assert_eq!(rig.value("LATER"), None);
+        assert_eq!(rig.value("INNER"), None);
+        assert_eq!(
+            rig.errors.bytes(),
+            format!("/usr/bin/bash: {}: {}\n", case.name, case.message).as_bytes()
+        );
+    }
+}
+
+#[test]
+fn interactive_argument_aborts_unwind_nested_readers_and_function_scopes() {
+    for source in [
+        "f(){ local KEEP=local; eval 'exit 7 8; INNER=bad'; INNER=bad; }; f",
+        "printf '%s\n' 'return 7 8; INNER=bad' > args.sh; . ./args.sh",
+        "if exit 7 8; then INNER=bad; fi",
+        "exit 7 8 || INNER=bad",
+        "! exit 7 8",
+    ] {
+        let rig = interactive_argument_rig();
+        assert_eq!(rig.run(&format!("{source}; TRAILING=bad")), 1, "{source}");
+        assert!(!rig.shell.exit_requested(), "{source}");
+        assert_eq!(rig.value("TRAILING"), None);
+        assert_eq!(rig.value("INNER"), None);
+        assert_eq!(rig.value("KEEP").as_deref(), Some("kept"));
+        assert_eq!(rig.run(r#"printf 'ALIVE:%s\n' "$KEEP""#), 0);
+        assert_eq!(rig.output.bytes(), b"ALIVE:kept\n");
+    }
+}
+
+#[test]
+fn valid_return_and_exit_retain_their_interactive_control_flow() {
+    let rig = Rig::new(Limits::default());
+    rig.shell.state().borrow_mut().interactive = true;
+    assert_eq!(
+        rig.run(r#"f(){ return 7; INNER=bad; }; f; printf 'RETURN:%s\n' "$?""#),
+        0
+    );
+    assert_eq!(rig.output.bytes(), b"RETURN:7\n");
+    assert_eq!(rig.value("INNER"), None);
+    assert!(!rig.shell.exit_requested());
+    assert_eq!(rig.run("exit 9; TRAILING=bad"), 9);
+    assert!(rig.shell.exit_requested());
+    assert_eq!(rig.value("TRAILING"), None);
+}
+
+fn readonly_argument_error(case: &ArgumentErrorCase, interactive: bool) -> Rig {
+    let rig = interactive_argument_rig();
+    rig.shell.state().borrow_mut().interactive = interactive;
+    let source = format!(": >err; {{ {}; printf BAD_OUTER; }} 2<err", case.source);
+    assert_eq!(rig.run(&source), case.status, "{source}");
+    assert!(rig.output.bytes().is_empty(), "{source}");
+    assert_eq!(rig.value("INNER"), None, "{source}");
+    assert_eq!(rig.shell.exit_requested(), !interactive, "{source}");
+    rig
+}
+
+#[test]
+fn readonly_stderr_preserves_interactive_argument_aborts() {
+    for case in &ARGUMENT_ERRORS {
+        let rig = readonly_argument_error(case, true);
+        assert_interactive_argument_reuse(&rig, case.status);
+    }
+}
+
+#[test]
+fn readonly_stderr_preserves_noninteractive_argument_exits() {
+    for case in &ARGUMENT_ERRORS {
+        readonly_argument_error(case, false);
+    }
+}
+
+#[test]
+fn readonly_stderr_keeps_nonpositive_loop_counts_as_loop_breaks() {
+    for interactive in [false, true] {
+        let rig = interactive_argument_rig();
+        rig.shell.state().borrow_mut().interactive = interactive;
+        assert_eq!(rig.run(r#": >err; for x in a b; do for y in c d; do continue 0 2<err; INNER=bad; done; INNER=bad; done; printf 'LOOP:%s\n' "$?""#), 0);
+        assert_eq!(rig.output.bytes(), b"LOOP:1\n");
+        assert_eq!(rig.value("INNER"), None);
+        assert!(!rig.shell.exit_requested());
+    }
+}
+
+#[test]
+fn control_diagnostics_preserve_backpressure_cancellation() {
+    for case in &ARGUMENT_ERRORS {
+        printf::assert_diagnostic_backpressure_cancellation(case.source, 2);
+    }
+}
+
+#[test]
+fn control_diagnostics_preserve_resource_failure() {
+    for case in &ARGUMENT_ERRORS {
+        let rig = interactive_argument_rig();
+        let (stderr, _) = capture(0);
+        let mut fds = FdTable::default();
+        fds.insert(0, Endpoint::null());
+        fds.insert(1, Endpoint::null());
+        fds.insert(2, stderr);
+        rig.shell.set_descriptors(fds).unwrap();
+        assert_eq!(rig.run(&format!("{}; TRAILING=bad", case.source)), 2);
+        assert_eq!(rig.value("TRAILING"), None);
+        assert_eq!(rig.value("INNER"), None);
+        assert!(!rig.shell.exit_requested());
+        assert_eq!(rig.run("true"), 0);
+    }
+}

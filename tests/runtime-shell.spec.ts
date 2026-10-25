@@ -540,6 +540,66 @@ test("an interactive expansion error aborts its command but preserves the sessio
   await expect.poll(() => page.workers().length).toBe(baseline);
 });
 
+test("recoverable builtin argument errors reuse the same interactive shell", async ({ page }) => {
+  const baseline = await open(page);
+  await command(page, "KEEP=kept");
+  await ready(page);
+  const cases = [
+    { source: "exit 7 8", name: "exit", status: 1, reason: "too many arguments" },
+    {
+      source: "f(){ local KEEP=local; return 7 8; echo BAD_INNER_ARGUMENTS; }; f",
+      name: "return",
+      status: 1,
+      reason: "too many arguments",
+    },
+    { source: "set -- a b; shift 1 2", name: "shift", status: 1, reason: "too many arguments" },
+    {
+      source: "for i in 1 2; do break 1 2; echo BAD_INNER_ARGUMENTS; done",
+      name: "break",
+      status: 1,
+      reason: "too many arguments",
+    },
+    {
+      source: "for i in 1 2; do continue 1 2; echo BAD_INNER_ARGUMENTS; done",
+      name: "continue",
+      status: 1,
+      reason: "too many arguments",
+    },
+    {
+      source: "for i in 1 2; do break nope; echo BAD_INNER_ARGUMENTS; done",
+      name: "break",
+      status: 2,
+      reason: "nope: numeric argument required",
+    },
+    {
+      source: "for i in 1 2; do continue nope; echo BAD_INNER_ARGUMENTS; done",
+      name: "continue",
+      status: 2,
+      reason: "nope: numeric argument required",
+    },
+  ];
+  for (const [index, scenario] of cases.entries()) {
+    await command(page, `${scenario.source}; echo BAD_TRAILING_ARGUMENTS`);
+    await output(page, `/usr/bin/bash: ${scenario.name}: ${scenario.reason}`);
+    await ready(page);
+    await command(page, `printf 'ARGUMENT_${index}:%s:%s\\n' "$?" "$KEEP"`);
+    await output(page, `ARGUMENT_${index}:${scenario.status}:kept`);
+    await ready(page);
+  }
+  await command(
+    page,
+    `f(){ return 7; echo BAD_RETURN_ARGUMENTS; }; f; printf 'VALID_RETURN:%s\\n' "$?"`,
+  );
+  await output(page, "VALID_RETURN:7");
+  await ready(page);
+  const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
+  for (const forbidden of ["BAD_TRAILING_ARGUMENTS", "BAD_INNER_ARGUMENTS", "BAD_RETURN_ARGUMENTS"])
+    expect(lines).not.toContain(forbidden);
+  await expect.poll(() => page.workers().length).toBe(baseline);
+  await command(page, "exit 9; echo BAD_EXIT_ARGUMENTS");
+  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("exited");
+});
+
 test("nested WASI spawn inherits the live pipeline and reaps its child", async ({ page }) => {
   const baseline = await open(page);
   await command(

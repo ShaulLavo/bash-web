@@ -76,6 +76,7 @@ impl Default for Limits {
 pub(crate) enum Flow {
     Normal,
     Exit,
+    /// Unwind the submitted command without requesting permanent session exit.
     Abort,
     // Unlike isolated errexit, a failed fork aborts the invoking reader even
     // when it happened in a non-last stage of a pipeline.
