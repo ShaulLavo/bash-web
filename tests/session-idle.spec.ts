@@ -1,5 +1,5 @@
 import { test, expect } from "./helpers/browser-test";
-import { startupReady, ready } from "./helpers/readiness";
+import { startupReady } from "./helpers/readiness";
 
 declare global {
   interface Window {
@@ -30,11 +30,11 @@ test("the real shell stays idle and resumes ordered output after silence", async
   await page.locator("textarea").focus();
   await page.keyboard.insertText("printf 'WAKE_FIRST\\nWAKE_SECOND\\n'");
   await page.keyboard.press("Enter");
-  await ready(page);
-  const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
-  expect(lines).toBeDefined();
-  if (!lines) throw new Error("Shell lines unavailable");
-  expect(lines).toContain("WAKE_FIRST");
-  expect(lines).toContain("WAKE_SECOND");
-  expect(lines.indexOf("WAKE_FIRST")).toBeLessThan(lines.indexOf("WAKE_SECOND"));
+  const lines = () => page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
+  await expect.poll(lines).toContain("WAKE_FIRST");
+  await expect.poll(lines).toContain("WAKE_SECOND");
+  const ordered = await lines();
+  expect(ordered).toBeDefined();
+  if (!ordered) throw new Error("Shell lines unavailable");
+  expect(ordered.indexOf("WAKE_FIRST")).toBeLessThan(ordered.indexOf("WAKE_SECOND"));
 });
