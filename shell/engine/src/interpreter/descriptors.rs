@@ -41,10 +41,14 @@ impl Context {
     pub(super) fn persist_descriptors(
         &self,
         targets: &[u32],
+        generated_fds: u64,
         prepared: &FdTable,
         live: &Descriptors,
     ) {
         for &fd in targets {
+            if generated(generated_fds, fd) {
+                continue;
+            }
             let endpoint = prepared.get(fd);
             replace_binding(&mut live.borrow_mut(), fd, endpoint.clone());
             self.persist_caller_descriptor(fd, endpoint);
@@ -106,8 +110,7 @@ pub(super) fn command_context(
     let Ok(execution) = &mut prepared.execution else {
         return Ok(context.clone());
     };
-    let fds = execution.fds.as_ref().unwrap().borrow();
-    let generated = open_mask(&fds) & !open_mask(&caller.borrow());
+    let generated = prepared.generated_fds;
     context.with_caller_descriptors(
         Rc::downgrade(caller),
         std::mem::take(&mut execution.redirected),
@@ -143,13 +146,4 @@ pub(super) fn redirect_fd(redirect: &Redirect) -> Result<u32, CommandError> {
             | RedirectKind::ReadWrite
     );
     u32::try_from(redirect.fd.unwrap_or(if input { 0 } else { 1 })).map_err(|_| 2.into())
-}
-
-pub(super) fn open_mask(fds: &FdTable) -> u64 {
-    fds.iter().fold(
-        0,
-        |mask, (&fd, _)| {
-            if fd < 64 { mask | (1u64 << fd) } else { mask }
-        },
-    )
 }

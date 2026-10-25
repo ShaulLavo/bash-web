@@ -1502,7 +1502,6 @@ async fn compound_command(
     context: Context,
 ) -> Outcome {
     let caller = Rc::downgrade(&fds);
-    let inherited = descriptors::open_mask(&fds.borrow());
     let fds = if redirs.is_empty() {
         fds
     } else {
@@ -1510,14 +1509,12 @@ async fn compound_command(
         drop(fds);
         Rc::new(RefCell::new(table))
     };
-    let mut work = substitution_work(&context, &fds);
+    let generated = Rc::new(Cell::new(0));
+    let mut work = substitution_work(&context, &fds, Some(generated.clone()));
     let fds = match command_redirects(&redirs, &state, fds, &context, &mut work).await {
         Err(outcome) => return outcome,
         Ok(fds) => fds,
     };
-    let generated = Rc::new(Cell::new(
-        descriptors::open_mask(&fds.borrow()) & !inherited,
-    ));
     let expands = matches!(
         compound,
         CompoundCommand::Arithmetic(_)
@@ -1547,16 +1544,16 @@ async fn compound_command(
         Ok(allocation) => allocation,
         Err(code) => return Outcome::status(code),
     };
-    let process_fds = Rc::new(ProcessSubstitutionFds {
+    let _process_fds = Rc::new(ProcessSubstitutionFds {
         fds: fds.clone(),
-        opened: generated,
+        opened: generated.clone(),
         _allocation: allocation,
     });
     // Other bodies must release the expansion reader's descriptor references.
     work.substitutions = expands.then(|| Substitutions {
         context: context.clone(),
         fds: fds.clone(),
-        process_fds: Some(process_fds.clone()),
+        generated_fds: Some(generated.clone()),
     });
     execute_compound_body(compound, state, fds, context, &mut work).await
 }
@@ -1786,7 +1783,7 @@ fn loop_arithmetic<'a>(
             }
             let table = fds.borrow().clone();
             let fds = Rc::new(RefCell::new(table));
-            let mut work = substitution_work(&context, &fds);
+            let mut work = substitution_work(&context, &fds, None);
             let result = match cache {
                 Some(cache) => {
                     arithmetic_command_program(&cache.program, state, &fds, &context, &mut work)
@@ -2148,7 +2145,7 @@ async fn subshell(
         work.substitutions = Some(Substitutions {
             context: child_context.clone(),
             fds: child_fds.clone(),
-            process_fds: None,
+            generated_fds: None,
         });
         let result =
             match command_redirects(&redirs, &child, child_fds, &child_context, &mut work).await {
@@ -2449,12 +2446,16 @@ fn expansion_work(context: &Context) -> expand::Work {
 }
 /// Expansion work that can run command substitutions with `fds` (the
 /// descriptors in effect before the command's own redirections).
-fn substitution_work(context: &Context, fds: &Descriptors) -> expand::Work {
+fn substitution_work(
+    context: &Context,
+    fds: &Descriptors,
+    generated_fds: Option<Rc<Cell<u64>>>,
+) -> expand::Work {
     let mut work = expansion_work(context);
     work.substitutions = Some(Substitutions {
         context: context.clone(),
         fds: fds.clone(),
-        process_fds: None,
+        generated_fds,
     });
     work
 }
@@ -2486,7 +2487,7 @@ impl Drop for ProcessSubstitutionFds {
 pub(crate) struct Substitutions {
     context: Context,
     fds: Descriptors,
-    process_fds: Option<Rc<ProcessSubstitutionFds>>,
+    generated_fds: Option<Rc<Cell<u64>>>,
 }
 impl Substitutions {
     pub(crate) fn filesystem(&self) -> Rc<dyn FileSystem> {
@@ -2712,10 +2713,8 @@ impl Substitutions {
             },
         );
         self.fds.borrow_mut().insert(fd, parent_end);
-        if let Some(process_fds) = &self.process_fds {
-            process_fds
-                .opened
-                .set(process_fds.opened.get() | (1u64 << fd));
+        if let Some(generated_fds) = &self.generated_fds {
+            generated_fds.set(generated_fds.get() | (1u64 << fd));
         }
         parent_state.borrow_mut().publish_async_identity(identity);
         Ok(fd)
@@ -2820,6 +2819,7 @@ async fn retain_declaration_syntax(
 struct PreparedCommand {
     argv: Vec<String>,
     execution: Result<PreparedExecution, CommandError>,
+    generated_fds: u64,
 }
 
 struct PreparedExecution {
@@ -2864,7 +2864,9 @@ async fn simple_command(
         Err(code) => return Outcome::status(code),
     };
     drop(original_fds);
-    let PreparedCommand { argv, execution } = prepared.as_mut().unwrap();
+    let PreparedCommand {
+        argv, execution, ..
+    } = prepared.as_mut().unwrap();
     let argv = Cell::new(std::mem::take(argv));
     let mut last_storage = None;
     let builtin_prefix = Cell::new(None);
@@ -2915,6 +2917,7 @@ async fn exec_prepared_command_body(
         Ok(execution) if prepared.argv.len() == 1 && execution.assigned.is_empty() => {
             context.persist_descriptors(
                 &execution.redirected,
+                prepared.generated_fds,
                 &execution.fds.unwrap().borrow(),
                 &original_fds,
             );
@@ -3057,7 +3060,9 @@ async fn prepare_simple_command_body(
     let mut budget = Budget::default();
     // Process substitutions open descriptors for this command only.
     let fds = Rc::new(RefCell::new(fds.borrow().clone()));
-    let mut work = substitution_work(context, &fds);
+    let generated_fds = Rc::new(Cell::new(0));
+    let mut work = substitution_work(context, &fds, Some(generated_fds.clone()));
+    work.admit_storage(std::mem::size_of::<Rc<Cell<u64>>>() + std::mem::size_of::<Cell<u64>>())?;
     let mut argv = expand::fields(
         &simple.name,
         state,
@@ -3118,7 +3123,11 @@ async fn prepare_simple_command_body(
     let execution = prepare_execution_body(simple, &argv, state, fds, context, bytes, work)
         .await
         .map_err(|error| error.at_line(line));
-    Ok(PreparedCommand { argv, execution })
+    Ok(PreparedCommand {
+        argv,
+        execution,
+        generated_fds: generated_fds.get(),
+    })
 }
 
 async fn prepare_execution_body(
@@ -3601,7 +3610,7 @@ async fn dispatch_arguments(
             work.substitutions = Some(Substitutions {
                 context: context.clone(),
                 fds: fds.clone(),
-                process_fds: None,
+                generated_fds: None,
             });
         }
         let bindings = fds.borrow().clone();
