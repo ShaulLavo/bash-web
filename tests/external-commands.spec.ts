@@ -35,7 +35,7 @@ test("external WASI guest streams before exit", async ({ page }) => {
 test("external bun executes through normal command lookup", async ({ page }) => {
   test.skip(
     true,
-    "Missing public bun-wasm API: installBunAdapters(runtime, { workerUrl }) and bun-wasm/worker with its matching verified guest artifact; this case exercises the real Bun executable, not the generic WASI guest.",
+    "Public bun-wasm installer and worker exports exist; pending verification of an aligned Bun package, shared Waffle commit, and matching receipted guest; this case exercises the real Bun executable, not the generic WASI guest.",
   );
   await open(page);
   await command(page, `bun -e 'console.log("EXTERNAL_OK")'`);
@@ -137,7 +137,7 @@ test("child files are shared after nonzero exit, with cwd and exported environme
 }) => {
   test.skip(
     true,
-    "Missing public bun-wasm API: installBunAdapters(runtime, { workerUrl }) and bun-wasm/worker with its matching verified guest artifact; this case verifies Bun's Node filesystem APIs and process context.",
+    "Public bun-wasm installer and worker exports exist; pending verification of an aligned Bun package, shared Waffle commit, and matching receipted guest; this case verifies Bun's Node filesystem APIs and process context.",
   );
   await open(page);
   await command(

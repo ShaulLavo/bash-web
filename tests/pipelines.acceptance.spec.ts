@@ -212,7 +212,7 @@ test("early downstream exit finishes a yielding Bun producer with EPIPE status",
 }) => {
   test.skip(
     true,
-    "Missing public bun-wasm API: installBunAdapters(runtime, { workerUrl }) and bun-wasm/worker with its matching verified guest artifact; no public launcher package is available yet and copied Bun host code is not shipped.",
+    "Public bun-wasm installer and worker exports exist; pending verification of an aligned Bun package, shared Waffle commit, and matching receipted guest; copied Bun host code is not shipped.",
   );
   await open(page);
   // Native Bun 1.4.2 and Node 26.7.0 ignore SIGPIPE: a tight write loop

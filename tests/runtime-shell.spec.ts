@@ -558,7 +558,7 @@ test("nested WASI spawn inherits the live pipeline and reaps its child", async (
 test("nested Bun stdin inheritance retains the generic parent's pipe", async ({ page }) => {
   test.skip(
     true,
-    "Missing public bun-wasm API: installBunAdapters(runtime, { workerUrl }) and bun-wasm/worker with its matching verified guest artifact; no public launcher package is available yet and copied Bun host code is not shipped.",
+    "Public bun-wasm installer and worker exports exist; pending verification of an aligned Bun package, shared Waffle commit, and matching receipted guest; copied Bun host code is not shipped.",
   );
   const baseline = await open(page);
   await file(page, "stdin-reader.ts", 'console.log("NESTED_STDIN:"+await Bun.stdin.text())');
