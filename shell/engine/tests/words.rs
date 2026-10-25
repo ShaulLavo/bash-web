@@ -4485,6 +4485,8 @@ fn typed_reference_operator_cycles_are_selected_element_cycles() {
     }
 }
 
+#[path = "words/enable.rs"]
+mod enable;
 #[path = "words/pipeline_status.rs"]
 mod pipeline_status;
 

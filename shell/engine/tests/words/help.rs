@@ -90,3 +90,39 @@ fn help_hash_topic_preserves_real_command_recognition_and_hash_entries() {
     assert!(rig.calls.borrow().is_empty());
     assert_eq!(rig.host.active_count(), 0);
 }
+
+#[test]
+fn help_enable_topic_only_advertises_implemented_flags() {
+    check_output(
+        "help -s enable; builtin help -d enable; command builtin help -m enable; enable -f library printf; echo load:$?; enable -d printf; echo unload:$?; enable -q; echo flag:$?; type -t printf",
+        "enable: enable [-anps] [name ...]\nenable - Enable or disable shell builtins, or list their state.\nNAME\n    enable - Enable or disable shell builtins, or list their state.\n\nSYNOPSIS\n    enable [-anps] [name ...]\n\nDESCRIPTION\n    Enable or disable shell builtins, or list their state.\n\nIMPLEMENTATION\n    bash-web\nload:2\nunload:2\nflag:2\nbuiltin\n",
+    );
+}
+
+#[test]
+fn help_enable_dispatch_wrappers_and_hash_keep_registry_precedence() {
+    let rig = Rig::new(Limits::default());
+    let calls = rig.calls.clone();
+    rig.host.register("/home/guest/help", move |request, _| {
+        calls.borrow_mut().push(request.argv[1..].to_vec());
+        async { 0 }.boxed_local()
+    });
+    assert_eq!(
+        rig.run("hash -p /home/guest/args help; command -v help; enable -n help; command -v help; type -t help; compgen -A disabled help; help direct; command help command; builtin help -s true; echo builtin:$?; enable help; command -v help; command builtin help -s true; help -s false; hash -t help"),
+        0
+    );
+    assert_eq!(
+        rig.output.bytes(),
+        b"help\n/home/guest/args\nfile\nhelp\nbuiltin:1\nhelp\ntrue: true\nfalse: false\n/home/guest/args\n"
+    );
+    assert_eq!(*rig.calls.borrow(), &[vec!["direct"], vec!["command"]]);
+    assert_eq!(rig.host.active_count(), 0);
+}
+
+#[test]
+fn help_enable_masks_remain_independent_in_shell_children() {
+    check_output(
+        "enable -n help; (enable help; help -s true); command -v help; echo parent:$?; enable help; (enable -n help; command -v help; echo child:$?); help -s false; x=$(enable -n help; command -v help; echo substitution:$?); printf '%s\\n' \"$x\"; help -s :",
+        "true: true\nparent:1\nchild:1\nfalse: false\nsubstitution:1\n:: :\n",
+    );
+}
