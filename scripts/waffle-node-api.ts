@@ -1,4 +1,10 @@
 export { createRuntime } from "waffle";
+export { Wasi } from "waffle/core/wasi";
+export { MemFS } from "waffle/fs/memory";
+export { ProcessABI } from "waffle/proc/abi";
+export { PipeController } from "waffle/proc/pipes";
+export { ExecutableRegistry } from "waffle/proc/registry";
+export { ProcessSupervisor } from "waffle/proc/supervisor";
 export {
   createWorkerProcessTransport,
   workerProcessSlots,

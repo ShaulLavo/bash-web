@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import { Wasi } from "waffle/core/wasi";
-import { MemFS } from "waffle/fs/memory";
-import { ProcessABI } from "waffle/proc/abi";
-import { PipeController, type PipeEndpoint } from "waffle/proc/pipes";
-import { ExecutableRegistry } from "waffle/proc/registry";
-import { ProcessSupervisor } from "waffle/proc/supervisor";
+import type { PipeEndpoint } from "waffle/proc/pipes";
+import type * as Api from "./waffle-node-api.ts";
+
+const {
+  Wasi,
+  MemFS,
+  ProcessABI,
+  PipeController,
+  ExecutableRegistry,
+  ProcessSupervisor,
+}: typeof Api = await import(new URL("../.build/node/api.mjs", import.meta.url).href);
 
 const guest = await WebAssembly.compile(
   await readFile(
