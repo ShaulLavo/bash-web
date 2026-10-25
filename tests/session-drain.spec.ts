@@ -35,7 +35,8 @@ const session = await BrowserSession.create({
   onOutput(bytes) { maximumDelivery = Math.max(maximumDelivery,bytes.length); for(const byte of bytes) output.push(byte); },
   onState(state) { states.push(state); if(state === "exited" || state.startsWith("failed:")) terminalBytes = output.length; }
 });
-const worker = new Worker("/drain-producer.js",{type:"module"});
+const workerURL = URL.createObjectURL(new Blob([PRODUCER], {type:"text/javascript"}));
+const worker = new Worker(workerURL,{type:"module"});
 worker.onmessage = ({data}) => { acknowledgements++; if(data.bytes) consumed.push(...data.bytes); };
 worker.postMessage({kind:"init",buffer:globalThis.drainBridge.buffer});
 window.sessionDrain = {
@@ -54,7 +55,7 @@ window.sessionDrain = {
   get maximumDelivery() { return maximumDelivery; }, get acknowledgements() { return acknowledgements; },
   input(bytes) {session.input(new Uint8Array(bytes));},
   action(kind,bytes) {worker.postMessage({kind,bytes});},
-  async dispose() {await session.dispose(); disposed++; worker.terminate();}
+  async dispose() {await session.dispose(); disposed++; worker.terminate(); URL.revokeObjectURL(workerURL);}
 };
 `;
 
@@ -91,8 +92,20 @@ onmessage = ({data}) => {
 `;
 
 test.beforeAll(async () => {
+  const worker = await build({
+    stdin: { contents: producerSource, resolveDir: process.cwd(), sourcefile: "drain-producer.js" },
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    write: false,
+  });
+  producer = worker.outputFiles[0].text;
   const output = await build({
-    stdin: { contents: fixtureSource, resolveDir: process.cwd(), sourcefile: "drain-fixture.js" },
+    stdin: {
+      contents: fixtureSource.replace("PRODUCER", JSON.stringify(producer)),
+      resolveDir: process.cwd(),
+      sourcefile: "drain-fixture.js",
+    },
     bundle: true,
     format: "esm",
     platform: "browser",
@@ -114,14 +127,6 @@ test.beforeAll(async () => {
     ],
   });
   fixture = output.outputFiles[0].text;
-  const worker = await build({
-    stdin: { contents: producerSource, resolveDir: process.cwd(), sourcefile: "drain-producer.js" },
-    bundle: true,
-    format: "esm",
-    platform: "browser",
-    write: false,
-  });
-  producer = worker.outputFiles[0].text;
 });
 
 test.beforeEach(async ({ page, context }) => {
@@ -133,16 +138,11 @@ test.beforeEach(async ({ page, context }) => {
         "Cross-Origin-Opener-Policy": "same-origin",
         "Cross-Origin-Embedder-Policy": "require-corp",
       },
-      body: '<script type="module" src="/drain-fixture.js"></script>',
+      body: "<!doctype html>",
     }),
   );
-  await context.route("**/drain-fixture.js", (route) =>
-    route.fulfill({ contentType: "text/javascript", body: fixture }),
-  );
-  await context.route("**/drain-producer.js", (route) =>
-    route.fulfill({ contentType: "text/javascript", body: producer }),
-  );
   await page.goto("/drain-fixture");
+  await page.addScriptTag({ type: "module", content: fixture });
   await page.waitForFunction(() => window.sessionDrain?.acknowledgements === 1);
 });
 
