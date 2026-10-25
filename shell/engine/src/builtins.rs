@@ -571,16 +571,37 @@ async fn too_many_arguments(
     fds: &FdTable,
     context: &Context,
 ) -> Result<Outcome, i32> {
-    diagnose(
+    control_diagnostic(
         fds,
-        &format!("/usr/bin/bash: {name}: too many arguments\n"),
+        &["/usr/bin/bash: ", name, ": too many arguments\n"],
         context,
+        Outcome {
+            code: 1,
+            flow: argument_error_flow(state),
+        },
     )
-    .await?;
-    Ok(Outcome {
-        code: 1,
-        flow: argument_error_flow(state),
-    })
+    .await
+}
+
+// Diagnostic delivery cannot replace the control outcome it describes.
+async fn control_diagnostic(
+    fds: &FdTable,
+    pieces: &[&str],
+    context: &Context,
+    outcome: Outcome,
+) -> Result<Outcome, i32> {
+    let Some(stderr) = fds.get(2) else {
+        return Ok(outcome);
+    };
+    for piece in pieces {
+        match stderr.write_all(piece.as_bytes(), &context.cancel).await {
+            Ok(()) => {}
+            Err(IoError::Cancelled) => return Err(130),
+            Err(IoError::LimitExceeded) => return Err(crate::exec::RESOURCE_STATUS),
+            Err(_) => return Ok(outcome),
+        }
+    }
+    Ok(outcome)
 }
 
 /// Original bounded loop-control adapter. Counts use Bash's signed decimal
@@ -652,32 +673,21 @@ async fn loop_control(
             ),
         }
     };
-    let output = endpoint(fds, 2)?;
-    for piece in ["/usr/bin/bash: ", name, ": "] {
-        output
-            .write_all(piece.as_bytes(), &context.cancel)
-            .await
-            .map_err(|error| error.status())?;
-    }
-    if let Some(value) = value {
-        output
-            .write_all(value.as_bytes(), &context.cancel)
-            .await
-            .map_err(|error| error.status())?;
-        output
-            .write_all(b": ", &context.cancel)
-            .await
-            .map_err(|error| error.status())?;
-    }
-    output
-        .write_all(message.as_bytes(), &context.cancel)
-        .await
-        .map_err(|error| error.status())?;
-    output
-        .write_all(b"\n", &context.cancel)
-        .await
-        .map_err(|error| error.status())?;
-    Ok(Outcome { code, flow })
+    control_diagnostic(
+        fds,
+        &[
+            "/usr/bin/bash: ",
+            name,
+            ": ",
+            value.map_or("", String::as_str),
+            if value.is_some() { ": " } else { "" },
+            message,
+            "\n",
+        ],
+        context,
+        Outcome { code, flow },
+    )
+    .await
 }
 
 /// Original streaming adapter for Bashkit builtins/vars.rs Set. Expanded argv

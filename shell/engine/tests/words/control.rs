@@ -678,6 +678,14 @@ fn interactive_argument_rig() -> Rig {
     rig
 }
 
+fn assert_interactive_argument_reuse(rig: &Rig, status: i32) {
+    assert_eq!(rig.run(r#"printf 'ALIVE:%s:%s\n' "$?" "$KEEP""#), 0);
+    assert_eq!(
+        rig.output.bytes(),
+        format!("ALIVE:{status}:kept\n").as_bytes()
+    );
+}
+
 #[test]
 fn builtin_argument_errors_preserve_interactive_sessions() {
     let mut requested_exits = Vec::new();
@@ -690,11 +698,7 @@ fn builtin_argument_errors_preserve_interactive_sessions() {
         requested_exits.push((case.source, rig.shell.exit_requested()));
         assert_eq!(rig.value("TRAILING"), None);
         assert_eq!(rig.value("INNER"), None);
-        assert_eq!(rig.run(r#"printf 'ALIVE:%s:%s\n' "$?" "$KEEP""#), 0);
-        assert_eq!(
-            rig.output.bytes(),
-            format!("ALIVE:{}:kept\n", case.status).as_bytes()
-        );
+        assert_interactive_argument_reuse(&rig, case.status);
     }
     assert!(
         requested_exits.iter().all(|(_, exit)| !exit),
@@ -772,11 +776,7 @@ fn readonly_argument_error(case: &ArgumentErrorCase, interactive: bool) -> Rig {
 fn readonly_stderr_preserves_interactive_argument_aborts() {
     for case in &ARGUMENT_ERRORS {
         let rig = readonly_argument_error(case, true);
-        assert_eq!(rig.run(r#"printf 'ALIVE:%s:%s\n' "$?" "$KEEP""#), 0);
-        assert_eq!(
-            rig.output.bytes(),
-            format!("ALIVE:{}:kept\n", case.status).as_bytes()
-        );
+        assert_interactive_argument_reuse(&rig, case.status);
     }
 }
 
@@ -796,5 +796,30 @@ fn readonly_stderr_keeps_nonpositive_loop_counts_as_loop_breaks() {
         assert_eq!(rig.output.bytes(), b"LOOP:1\n");
         assert_eq!(rig.value("INNER"), None);
         assert!(!rig.shell.exit_requested());
+    }
+}
+
+#[test]
+fn control_diagnostics_preserve_backpressure_cancellation() {
+    for case in &ARGUMENT_ERRORS {
+        printf::assert_diagnostic_backpressure_cancellation(case.source, 2);
+    }
+}
+
+#[test]
+fn control_diagnostics_preserve_resource_failure() {
+    for case in &ARGUMENT_ERRORS {
+        let rig = interactive_argument_rig();
+        let (stderr, _) = capture(0);
+        let mut fds = FdTable::default();
+        fds.insert(0, Endpoint::null());
+        fds.insert(1, Endpoint::null());
+        fds.insert(2, stderr);
+        rig.shell.set_descriptors(fds).unwrap();
+        assert_eq!(rig.run(&format!("{}; TRAILING=bad", case.source)), 2);
+        assert_eq!(rig.value("TRAILING"), None);
+        assert_eq!(rig.value("INNER"), None);
+        assert!(!rig.shell.exit_requested());
+        assert_eq!(rig.run("true"), 0);
     }
 }

@@ -7,8 +7,9 @@ Counts larger than the active loop depth target the outermost loop.
 
 A nonpositive count leaves every enclosing loop with status 1. A nonnumeric or
 out-of-range integer exits the reader with status 2. Extra operands exit with
-status 1. In an interactive shell, these errors abort the submitted command
-without closing the session. Outside a loop, both commands return success before
+status 1. In an interactive shell, excess or nonnumeric operands abort the
+submitted command without closing the session. Nonpositive counts still only
+leave the enclosing loops. Outside a loop, both commands return success before
 checking operands.
 Function and subshell boundaries retain their existing loop-target rules.
 
