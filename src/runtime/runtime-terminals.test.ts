@@ -41,7 +41,10 @@ test("empty cooked read retries do not allocate byte buffers for guest capacity"
   t.diagnostic(
     `100 empty reads: ${measured.lengths.length} byte buffers, ${totalBytes(measured.lengths)} bytes`,
   );
-  assert.deepEqual(measured.value, Array.from({ length: 100 }, () => -6));
+  assert.deepEqual(
+    measured.value,
+    Array.from({ length: 100 }, () => -6),
+  );
   assert.equal(totalBytes(measured.lengths), 0);
 });
 
