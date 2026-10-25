@@ -56,9 +56,9 @@ Do not revive `c68ca9e85f52ca425199fc35f1af9575e11a8316` or its early attribute 
 
 Retain the packet limitation. Its whole-document oracle comparison fails against newer runtime metadata, although all 11 recorded scripts and byte/status observations match the main source examined by Unit 1. Do not rewrite the packet, frozen oracle, or baseline to hide that mismatch. The known readonly-integer redeclaration continuation gap remains later work.
 
-### PR101 still needs the parent's decision
+### PR101 is closed and deferred to the next product
 
-At this handoff PR101 is open at `121f443b66ab27b019890c9f797d59656bcff8a1`, tree `c1072ea566f5287a483ace39d997a4d0891ac495`. Trap review is approved. CI remains unresolved because main f6 is native-red, with the tiny PR105 hotfix pending. Do not call PR101 parked, closed, or merged until the parent decides and records its actual disposition.
+The parent closed PR101 unmerged under the owner's current-product scope at `2026-10-25T04:59:29Z`. Closure comment `6393684291` defers it as Approved next-product work. Preserve head `121f443b66ab27b019890c9f797d59656bcff8a1`, tree `c1072ea566f5287a483ace39d997a4d0891ac495`, and the approved trap review. Closure does not establish full qualification or delivery.
 
 Read `/work/reports/wave-20261022/shell/owner-plan-20261024/after103/pr101-after-landed102-integration.md` and the parent's subsequent review and landing receipts. Preserve submission versus EOF, explicit completion, root Exit and Abort reuse, isolated-child behavior, descriptor ownership, and live RETURN frames. Bounded integration checks are not final hosted qualification. The separate timed-function cancellation `151 vs 103` failure belongs to the hotfix owner, not a trap or declaration workaround.
 
@@ -113,7 +113,13 @@ git show --no-patch 121f443b66ab27b019890c9f797d59656bcff8a1
 git log --oneline f6e3a9e67d56332b0476f3608e198bf74e8e12f3..origin/main
 git worktree add /work/worktrees/bash-web/agent-shell-resume -b next/agent-shell-resume origin/main
 cd /work/worktrees/bash-web/agent-shell-resume
-git show HEAD:AGENTS.md
+if [ -f AGENTS.md ]; then
+	cat AGENTS.md
+elif [ -f CLAUDE.md ]; then
+	cat CLAUDE.md
+else
+	cat ~/.agents/AGENTS.md
+fi
 git status --short --branch
 jq '.identity' docs/evidence/own-shell-oracle.json
 jq '.identity' docs/evidence/own-shell-baseline.json

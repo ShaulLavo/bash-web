@@ -100,14 +100,21 @@ test("pipeline Ctrl+C stops a real WASI ticker and reuses the shell without leak
   await page.screenshot({ path: info.outputPath("live-pipeline.png") });
   await page.keyboard.press("Control+c");
   await ready(page);
+  const stoppedLines = await tickerLines(page);
   await expect.poll(() => interruptResources(page)).toEqual(before);
   const stopped = await interruptResources(page);
-  const stoppedLines = await tickerLines(page);
+  const sleepStartedAt = performance.now();
   await command(
     page,
-    `printf 'INTERRUPT:%s:%s\\n' "$?" "$KEEP"; test-guest sleep 750; test-guest emit $'NEXT_CHILD_OK\\n' | test-guest cat; echo NEXT_STATUS:$?`,
+    `printf 'INTERRUPT:%s:%s\\n' "$?" "$KEEP"; test-guest sleep 750; echo SLEEP_STATUS:$?`,
   );
   await output(page, "INTERRUPT:130:retained");
+  await output(page, "SLEEP_STATUS:0");
+  const sleepElapsedMs = performance.now() - sleepStartedAt;
+  expect(sleepElapsedMs).toBeGreaterThanOrEqual(750);
+  await ready(page);
+  expect(await tickerLines(page)).toEqual(stoppedLines);
+  await command(page, `test-guest emit $'NEXT_CHILD_OK\\n' | test-guest cat; echo NEXT_STATUS:$?`);
   await output(page, "NEXT_CHILD_OK");
   await output(page, "NEXT_STATUS:0");
   await ready(page);
@@ -123,6 +130,7 @@ test("pipeline Ctrl+C stops a real WASI ticker and reuses the shell without leak
       stopped,
       after: await interruptResources(page),
       stoppedLines,
+      sleepElapsedMs,
     }),
     contentType: "application/json",
   });
