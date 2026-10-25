@@ -14,6 +14,8 @@ declare global {
       acknowledgements: number;
       consumed: number[];
       maximumDelivery: number;
+      terminalBytes: number;
+      race(): void;
       input(bytes: number[]): void;
       action(kind: string, bytes?: number[]): void;
       dispose(): Promise<void>;
@@ -25,13 +27,13 @@ const fixtureSource = `
 import { BrowserSession } from "./src/browser/session";
 import { SharedBridge } from "./src/bridge";
 const output = [], states = [], consumed = [];
-let turns = 0, disposed = 0, maximumDelivery = 0, acknowledgements = 0;
+let turns = 0, disposed = 0, maximumDelivery = 0, acknowledgements = 0, terminalBytes = -1;
 const drain = SharedBridge.prototype.drain;
 SharedBridge.prototype.drain = function(...args) { turns++; return drain.apply(this,args); };
 const session = await BrowserSession.create({
   runtime: {filesystem:{state:{status:"ready"}}}, cols:80, rows:24,
   onOutput(bytes) { maximumDelivery = Math.max(maximumDelivery,bytes.length); for(const byte of bytes) output.push(byte); },
-  onState(state) { states.push(state); }
+  onState(state) { states.push(state); if(state === "exited" || state.startsWith("failed:")) terminalBytes = output.length; }
 });
 const worker = new Worker("/drain-producer.js",{type:"module"});
 worker.onmessage = ({data}) => { acknowledgements++; if(data.bytes) consumed.push(...data.bytes); };
@@ -39,6 +41,16 @@ worker.postMessage({kind:"init",buffer:globalThis.drainBridge.buffer});
 window.sessionDrain = {
   output, states, consumed,
   get turns() { return turns; }, get disposed() { return disposed; },
+  get terminalBytes() {return terminalBytes;},
+  race() {
+    const wait = Atomics.waitAsync;
+    Atomics.waitAsync = (...args) => {
+      Atomics.waitAsync = wait;
+      globalThis.drainBridge.tryWrite([Uint8Array.of(77)]);
+      return wait(...args);
+    };
+    globalThis.drainBridge.signal();
+  },
   get maximumDelivery() { return maximumDelivery; }, get acknowledgements() { return acknowledgements; },
   input(bytes) {session.input(new Uint8Array(bytes));},
   action(kind,bytes) {worker.postMessage({kind,bytes});},
@@ -65,6 +77,7 @@ onmessage = ({data}) => {
   if(data.kind === "write") bridge.write(new Uint8Array(data.bytes));
   if(data.kind === "burst") for(let i=0;i<1000;i++) bridge.tryWrite([Uint8Array.of(i%256)]);
   if(data.kind === "phase") shellTerminalImports(bridge.buffer).phase(data.bytes[0]);
+  if(data.kind === "consume") {const bytes = new Uint8Array(65536);const count = bridge.tryRead([bytes]);postMessage({bytes:Array.from(bytes.subarray(0,Math.max(0,count)))});return;}
   if(data.kind === "receive") {postMessage({bytes:Array.from(bridge.receive(65536))}); return;}
   if(data.kind === "lock") Atomics.store(bridge.state,control.inputLock,1);
   if(data.kind === "unlock") {Atomics.store(bridge.state,control.inputLock,0);bridge.signal();}
@@ -155,16 +168,22 @@ test("worker output and phase-only changes wake a settled session", async ({ pag
   await expect.poll(() => page.evaluate(() => window.sessionDrain.states.at(-1))).toBe("ready");
 });
 
-test("full-ring paste resumes when the worker frees capacity without output", async ({ page }) => {
-  await page.evaluate(() => window.sessionDrain.input(Array.from({ length: 196608 }, (_, i) => i % 251)));
-  for (let part = 1; part <= 3; part++) {
-    await page.evaluate(() => window.sessionDrain.action("receive"));
-    await expect.poll(() => page.evaluate(() => window.sessionDrain.consumed.length)).toBe(part * 65536);
-  }
-  expect(await page.evaluate(() => window.sessionDrain.consumed)).toEqual(
-    Array.from({ length: 196608 }, (_, i) => i % 251),
-  );
-});
+for (const reader of ["receive", "consume"]) {
+  test(`full-ring paste resumes through ${reader} without output`, async ({ page }) => {
+    await page.evaluate(() =>
+      window.sessionDrain.input(Array.from({ length: 196608 }, (_, i) => i % 251)),
+    );
+    for (let part = 1; part <= 3; part++) {
+      await page.evaluate((reader) => window.sessionDrain.action(reader), reader);
+      await expect
+        .poll(() => page.evaluate(() => window.sessionDrain.consumed.length))
+        .toBe(part * 65536);
+    }
+    expect(await page.evaluate(() => window.sessionDrain.consumed)).toEqual(
+      Array.from({ length: 196608 }, (_, i) => i % 251),
+    );
+  });
+}
 
 test("burst output coalesces and each delivery stays bounded", async ({ page }) => {
   const before = await page.evaluate(() => window.sessionDrain.turns);
@@ -179,12 +198,20 @@ test("burst output coalesces and each delivery stays bounded", async ({ page }) 
 
 for (const kind of ["exit", "fail"]) {
   test(`${kind} retains final output larger than one drain`, async ({ page }) => {
-    await page.evaluate((kind) => window.sessionDrain.action(kind, Array.from({ length: 100000 }, (_, i) => i % 251)), kind);
+    await page.evaluate(
+      (kind) =>
+        window.sessionDrain.action(
+          kind,
+          Array.from({ length: 100000 }, (_, i) => i % 251),
+        ),
+      kind,
+    );
     await expect.poll(() => page.evaluate(() => window.sessionDrain.output.length)).toBe(100000);
     expect(await page.evaluate(() => window.sessionDrain.output)).toEqual(
       Array.from({ length: 100000 }, (_, i) => i % 251),
     );
     expect(await page.evaluate(() => window.sessionDrain.states.at(-1))).toMatch(/exited|failed:/);
+    expect(await page.evaluate(() => window.sessionDrain.terminalBytes)).toBe(100000);
   });
 }
 
@@ -193,7 +220,36 @@ test("dispose suppresses pending wake callbacks", async ({ page }) => {
     window.sessionDrain.action("burst");
     await window.sessionDrain.dispose();
   });
-  const before = await page.evaluate(() => ({ turns: window.sessionDrain.turns, output: window.sessionDrain.output.length, states: window.sessionDrain.states.length }));
+  const before = await page.evaluate(() => ({
+    turns: window.sessionDrain.turns,
+    output: window.sessionDrain.output.length,
+    states: window.sessionDrain.states.length,
+  }));
   await page.waitForTimeout(100);
-  expect(await page.evaluate(() => ({ turns: window.sessionDrain.turns, output: window.sessionDrain.output.length, states: window.sessionDrain.states.length }))).toEqual(before);
+  expect(
+    await page.evaluate(() => ({
+      turns: window.sessionDrain.turns,
+      output: window.sessionDrain.output.length,
+      states: window.sessionDrain.states.length,
+    })),
+  ).toEqual(before);
+});
+
+test("publication between sampling and wait subscription is not missed", async ({ page }) => {
+  await page.evaluate(() => window.sessionDrain.race());
+  await expect.poll(() => page.evaluate(() => window.sessionDrain.output)).toEqual([77]);
+});
+
+test("interrupt clears a full paste after a contended reader unlocks", async ({ page }) => {
+  await page.evaluate(() => window.sessionDrain.action("lock"));
+  await expect.poll(() => page.evaluate(() => window.sessionDrain.acknowledgements)).toBe(2);
+  await page.evaluate(() => {
+    window.sessionDrain.input(Array.from({ length: 196608 }, () => 65));
+    window.sessionDrain.input([3]);
+  });
+  await page.evaluate(() => window.sessionDrain.action("unlock"));
+  await expect.poll(() => page.evaluate(() => window.sessionDrain.states.at(-1))).toBe("ready");
+  await page.evaluate(() => window.sessionDrain.input([42, 43]));
+  await page.evaluate(() => window.sessionDrain.action("receive"));
+  await expect.poll(() => page.evaluate(() => window.sessionDrain.consumed)).toEqual([42, 43]);
 });
