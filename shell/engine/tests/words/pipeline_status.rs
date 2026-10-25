@@ -175,9 +175,7 @@ fn lastpipe_option_mutation_does_not_mask_cancellation() {
                 "ready",
                 "yes",
             );
-            assert!(!job.is_finished());
-            rig.shell.interrupt();
-            assert_eq!(rig.finish(job), 130);
+            rig.interrupt_without_calls(job);
             assert!(rig.output.bytes().is_empty());
             assert_eq!(rig.shell.state().borrow().pipefail, policy);
             assert_eq!(rig.run(r#"printf '%s:%s\n' "$?" "${PIPESTATUS[*]}""#), 0,);
