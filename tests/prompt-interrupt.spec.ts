@@ -49,11 +49,12 @@ for (const { path, input, previous } of cases) {
     await ready(page);
     await expect.poll(async () => (await resources(page)).workers).toBe(baseline.workers + 1);
     const background = await resources(page);
-    await command(page, previous);
+    await command(page, `PS1='I114_READY> '; ${previous}`);
+    await output(page, "I114_READY>");
     await ready(page);
     if (input === "typed") {
       await page.keyboard.insertText("KEEP=discarded");
-      await output(page, "$ KEEP=discarded");
+      await output(page, "I114_READY> KEEP=discarded");
     }
     const cancellations = (await lines(page)).filter((line) => line.endsWith("^C")).length;
     const inputBytes = await page.evaluate(() => window.bashWeb!.metrics()!.inputBytes);
