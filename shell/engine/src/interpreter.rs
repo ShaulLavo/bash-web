@@ -2921,7 +2921,7 @@ async fn exec_prepared_command_body(
 ) -> Outcome {
     let result = match prepared.execution {
         Err(error) => expansion_failure(error, &original_fds, &context).await,
-        Ok(execution) if prepared.argv.len() == 1 && execution.assigned.is_empty() => {
+        Ok(execution) if prepared.argv.len() == 1 => {
             context.persist_descriptors(
                 &execution.redirected,
                 prepared.generated_fds,
