@@ -104,7 +104,10 @@ test("bounded heavy streaming keeps the main thread responsive", async ({ page }
   const responsive = await page.evaluate(() => ({
     time: performance.now(),
     bytes: window.bashWeb?.metrics()?.outputBytes,
+    snapshot: window.bashWeb?.snapshot(),
+    terminal: window.bashWeb?.runtimeSnapshot()?.terminal,
   }));
+  console.log(JSON.stringify({ streamingSample: responsive }));
   expect(responsive.bytes).toBeGreaterThan(1000);
   await page.keyboard.press("Control+c");
   await ready(page);
@@ -217,7 +220,20 @@ test("long wrapped prompt survives resizing while editing and streaming", async 
   await page.keyboard.press("Enter");
   await output(page, "wrap-edited");
   await command(page, "seq 1000000");
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("running");
+  try {
+    await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("running");
+  } catch (error) {
+    console.log(
+      JSON.stringify({
+        wrappedStreamingState: await page.evaluate(() => ({
+          snapshot: window.bashWeb?.snapshot(),
+          terminal: window.bashWeb?.runtimeSnapshot()?.terminal,
+          metrics: window.bashWeb?.metrics(),
+        })),
+      }),
+    );
+    throw error;
+  }
   await page.setViewportSize({ width: 950, height: 700 });
   await page.keyboard.press("Control+c");
   await ready(page);
