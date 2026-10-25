@@ -3736,3 +3736,6 @@ fn runtime_permissions_keep_supported_denial_separate_from_unknown_bits() {
     assert_eq!(metadata.uid, None);
     assert_eq!(metadata.owned_by_effective_uid, None);
 }
+
+#[path = "inherited_tests.rs"]
+mod inherited_tests;
