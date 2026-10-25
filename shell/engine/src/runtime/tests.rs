@@ -171,29 +171,6 @@ fn fake_wasi_page(
     Ok(used)
 }
 
-fn fake_first_directory_entry(
-    output: &[u8],
-    used: usize,
-    cookie: u64,
-) -> Result<Option<io::DirectoryEntry>, i32> {
-    if used == 0 {
-        return Ok(None);
-    }
-    if used < 24 || used > output.len() {
-        return Err(48);
-    }
-    let next_cookie = u64::from_le_bytes(output[..8].try_into().unwrap());
-    let length = u32::from_le_bytes(output[16..20].try_into().unwrap()) as usize;
-    let end = 24usize.checked_add(length).ok_or(48)?;
-    if end > used || next_cookie == cookie {
-        return Err(48);
-    }
-    Ok(Some(io::DirectoryEntry {
-        next_cookie,
-        name: 24..end,
-    }))
-}
-
 impl Fake {
     fn read_wasi_page(&self, fd: u32, cookie: u64, output: &mut [u8]) -> Result<usize, i32> {
         let entries = self.wasi_directories.borrow().get(&fd).cloned().ok_or(8)?;
@@ -584,26 +561,6 @@ impl Abi for Fake {
         self.next_fd.set(fd + 1);
         self.directories.borrow_mut().insert(fd, directory);
         Ok(fd)
-    }
-    fn read_dir_entry(
-        &self,
-        fd: u32,
-        cookie: u64,
-        output: &mut [u8],
-    ) -> Result<Option<io::DirectoryEntry>, i32> {
-        if self.wasi_directories.borrow().contains_key(&fd) {
-            let used = self.read_wasi_page(fd, cookie, output)?;
-            return fake_first_directory_entry(output, used, cookie);
-        }
-        let directory = self.directories.borrow().get(&fd).cloned().ok_or(8)?;
-        directory
-            .read_entry(cookie, output)
-            .now_or_never()
-            .unwrap()
-            .map_err(|error| match error {
-                IoError::LimitExceeded => 48,
-                _ => 28,
-            })
     }
     fn read_dir(&self, fd: u32, cookie: u64, output: &mut [u8]) -> Result<usize, i32> {
         if self.wasi_directories.borrow().contains_key(&fd) {
@@ -2799,6 +2756,106 @@ fn runtime_directory_consumes_a_full_wasi_page_before_refilling() {
     drop(calls);
     drop(directory);
     assert!(fake.closed.borrow().contains(&fd));
+}
+
+#[test]
+fn runtime_directory_retries_partial_headers_and_names_without_losing_entries() {
+    let cases = [
+        (
+            vec![
+                (11, vec![b'a'; 4000]),
+                (29, vec![b'b'; 62]),
+                (47, b"tail".to_vec()),
+            ],
+            3,
+        ),
+        (
+            vec![
+                (101, b"alpha".to_vec()),
+                (202, "é中".as_bytes().to_vec()),
+                (303, vec![b'x'; io::MAX_PATH_BYTES]),
+                (404, b"last".to_vec()),
+            ],
+            4,
+        ),
+    ];
+    for (entries, expected_calls) in cases {
+        let (executor, fake, runtime) = setup();
+        let directory = open_fake_wasi_directory(
+            &executor,
+            &runtime,
+            &fake,
+            "/tmp/wasi-partials",
+            entries.clone(),
+        );
+        let names = fake_wasi_names(&executor, &runtime, directory).unwrap();
+        let expected: Vec<_> = entries.into_iter().map(|(_, name)| name).collect();
+        assert_eq!(names, expected);
+        assert_eq!(fake.readdir_calls.borrow().len(), expected_calls);
+    }
+}
+
+#[test]
+fn runtime_directory_rejects_an_incomplete_first_record() {
+    let (executor, fake, runtime) = setup();
+    let directory = open_fake_wasi_directory(
+        &executor,
+        &runtime,
+        &fake,
+        "/tmp/wasi-incomplete",
+        vec![(77, vec![b'x'; io::MAX_PATH_BYTES + 1])],
+    );
+    let result = read_fake_wasi_entry(&executor, &runtime, directory, 0);
+    assert!(matches!(result, Err(IoError::LimitExceeded)));
+    assert_eq!(fake.readdir_calls.borrow().len(), 1);
+}
+
+#[test]
+fn runtime_directory_rejects_stalled_cookies_before_copying_names() {
+    let (executor, fake, runtime) = setup();
+    let directory = open_fake_wasi_directory(
+        &executor,
+        &runtime,
+        &fake,
+        "/tmp/wasi-stalled",
+        vec![(101, b"first".to_vec()), (101, b"second".to_vec())],
+    );
+    let first = read_fake_wasi_entry(&executor, &runtime, directory.clone(), 0).unwrap();
+    assert_eq!(first, Some((101, b"first".to_vec())));
+    let second = read_fake_wasi_entry(&executor, &runtime, directory, 101);
+    assert!(matches!(second, Err(IoError::LimitExceeded)));
+    assert_eq!(fake.readdir_calls.borrow().len(), 1);
+}
+
+#[test]
+fn runtime_directory_cancellation_closes_a_retained_page() {
+    let (executor, fake, runtime) = setup();
+    let session = runtime_session(&executor, &runtime);
+    fake.fs.mkdir("/tmp/wasi-cancel", true).unwrap();
+    let entries = (0..100)
+        .map(|index| (index + 1, format!("name-{index}").into_bytes()))
+        .collect();
+    fake.named_wasi_directories
+        .borrow_mut()
+        .insert("/tmp/wasi-cancel".into(), Rc::new(entries));
+    let job = session
+        .start("cd /tmp/wasi-cancel; for f in *; do echo \"$f\"; done")
+        .unwrap();
+    for _ in 0..1000 {
+        executor.drive(1);
+        runtime.poll(0).unwrap();
+        if !fake.readdir_calls.borrow().is_empty() {
+            break;
+        }
+    }
+    assert_eq!(fake.readdir_calls.borrow().len(), 1);
+    assert!(!job.is_finished());
+    let fd = fake.readdir_calls.borrow()[0].0;
+    session.interrupt();
+    assert_eq!(finish(&executor, &runtime, job), 130);
+    assert!(fake.wasi_directories.borrow().is_empty());
+    assert!(fake.closed.borrow().contains(&fd));
+    shutdown_session(&executor, &runtime, &fake, session);
 }
 
 #[test]

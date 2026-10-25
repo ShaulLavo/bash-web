@@ -46,6 +46,18 @@ PATH=/usr/bin:/usr/bin compgen -c argv
   );
 });
 
+test("production Waffle completion consumes packed directory pages", async () => {
+  const actual = await runner(`cd "$TMP"
+for i in {000..179}; do : > "f$i"; done
+compgen -f -- f
+`);
+  const expected = Array.from({ length: 180 }, (_, index) => `f${String(index).padStart(3, "0")}`);
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.status, 0);
+  assert.equal(actual.stdout.toString(), `${expected.join("\n")}\n`);
+  assert.equal(actual.stderr.toString(), "");
+});
+
 test("completion stays in the core without utility add-ons", async () => {
   const core = await createShellFixtureRunner({ utilities: false });
   const actual = await core(`
