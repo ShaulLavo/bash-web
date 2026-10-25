@@ -38,7 +38,9 @@ test("empty cooked read retries do not allocate byte buffers for guest capacity"
   const measured = measureByteAllocations(() =>
     Array.from({ length: 100 }, () => input.tryRead!(chunks)),
   );
-  t.diagnostic(`100 empty reads: ${measured.lengths.length} byte buffers, ${totalBytes(measured.lengths)} bytes`);
+  t.diagnostic(
+    `100 empty reads: ${measured.lengths.length} byte buffers, ${totalBytes(measured.lengths)} bytes`,
+  );
   assert.deepEqual(measured.value, Array.from({ length: 100 }, () => -6));
   assert.equal(totalBytes(measured.lengths), 0);
 });
@@ -50,7 +52,9 @@ test("tiny cooked input bounds storage despite large guest vectors", (t) => {
   const chunks = [new Uint8Array(0), first, new Uint8Array(0), rest];
   assert.equal(bridge.send(Uint8Array.of(65)), true);
   const measured = measureByteAllocations(() => input.tryRead!(chunks));
-  t.diagnostic(`one byte read: ${measured.lengths.length} byte buffers, ${totalBytes(measured.lengths)} bytes`);
+  t.diagnostic(
+    `one byte read: ${measured.lengths.length} byte buffers, ${totalBytes(measured.lengths)} bytes`,
+  );
   assert.equal(measured.value, 1);
   assert.equal(first[0], 65);
   assert.equal(rest[0], 91);
@@ -79,7 +83,10 @@ test("zero-length cooked vectors preserve queued bytes and split CRLF state", ()
   assert.equal(bridge.send(Uint8Array.of(13, 10, 66)), true);
   assert.equal(input.tryRead!([empty, byte]), 1);
   assert.equal(byte[0], 10);
-  const measured = measureByteAllocations(() => [input.tryRead!([]), input.tryRead!([empty, empty])]);
+  const measured = measureByteAllocations(() => [
+    input.tryRead!([]),
+    input.tryRead!([empty, empty]),
+  ]);
   assert.deepEqual(measured.value, [0, 0]);
   assert.equal(totalBytes(measured.lengths), 0);
   assert.equal(bridge.availableInput(), 2);
