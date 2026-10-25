@@ -69,6 +69,7 @@ export class SharedBridge {
     const read = Atomics.load(this.state, control.inputRead);
     const bytes = copyFromRing(this.input, read, Math.min(limit, this.availableInput()));
     Atomics.store(this.state, control.inputRead, read + bytes.length);
+    if (bytes.length) this.signal();
     return bytes;
   }
   /** Drops bytes already queued for a cancelled foreground line without touching output. */
@@ -92,6 +93,7 @@ export class SharedBridge {
   tryRead(chunks: readonly Uint8Array[]): number {
     if (!chunks.some((chunk) => chunk.length)) return 0;
     if (Atomics.compareExchange(this.state, control.inputLock, 0, 1) !== 0) return -6;
+    let consumed = false;
     try {
       let read = Atomics.load(this.state, control.inputRead);
       let available = this.availableInput();
@@ -106,10 +108,11 @@ export class SharedBridge {
         if (!available) break;
       }
       Atomics.store(this.state, control.inputRead, read);
-      this.signal();
+      consumed = true;
       return total;
     } finally {
       Atomics.store(this.state, control.inputLock, 0);
+      if (consumed || this.cancelled()) this.signal();
     }
   }
   tryWrite(chunks: readonly Uint8Array[]): number {
@@ -174,6 +177,7 @@ export class SharedBridge {
       const length = Math.min(free, bytes.length);
       copyIntoRing(this.output, write, bytes.subarray(0, length));
       Atomics.store(this.state, control.outputWrite, write + length);
+      this.signal();
       return length;
     } finally {
       Atomics.store(this.state, control.outputLock, 0);

@@ -253,6 +253,7 @@ export async function startShell(
     if (Atomics.load(terminal.state, control.phase) !== 4) {
       Atomics.store(terminal.state, control.status, status);
       Atomics.store(terminal.state, control.phase, result.error ? 4 : 3);
+      terminal.signal();
     }
     if (result.error) rejectStarted(new Error(result.error));
     else resolveStarted();
