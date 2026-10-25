@@ -170,22 +170,31 @@ async fn scan(
     work.checkpoint(&context.cancel)
         .await
         .map_err(error_status)?;
-    let directory = context
+    let storage = 2 * (MAX_PATH_BYTES + 24);
+    work.admit_storage(storage).map_err(error_status)?;
+    let opened = context
         .cancel
         .run(context.fs().open_dir(query.directory))
-        .await
-        .map_err(|_| 130)?;
-    let directory = match directory {
-        Ok(directory) => directory,
-        Err(error) if absent(&error) => return Ok(()),
-        Err(error) => return Err(io_status(error)),
+        .await;
+    let directory = match opened {
+        Ok(Ok(directory)) => directory,
+        Ok(Err(error)) if absent(&error) => {
+            work.release_storage(storage);
+            return Ok(());
+        }
+        Ok(Err(error)) => {
+            work.release_storage(storage);
+            return Err(io_status(error));
+        }
+        Err(_) => {
+            work.release_storage(storage);
+            return Err(130);
+        }
     };
-    let scratch = MAX_PATH_BYTES + 24;
-    work.admit_storage(scratch).map_err(error_status)?;
-    let mut buffer = vec![0; scratch];
+    let mut buffer = vec![0; MAX_PATH_BYTES + 24];
     let result = entries(directory, &query, cwd, output, &mut buffer, context, work).await;
     drop(buffer);
-    work.release_storage(scratch);
+    work.release_storage(storage);
     result
 }
 async fn entries(

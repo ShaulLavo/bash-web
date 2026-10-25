@@ -628,7 +628,10 @@ async fn matches(
             let Some(path) = absolute(cwd, prefix, raw, work)? else {
                 continue;
             };
-            let open_storage = path.len().saturating_mul(2).saturating_add(512);
+            let open_storage = path
+                .len()
+                .saturating_mul(2)
+                .saturating_add(512 + crate::io::MAX_PATH_BYTES + 24);
             work.admit_storage(open_storage)?;
             let open = fs.open_dir(&path);
             let opened = match select(open, cancel.cancelled().boxed_local()).await {
