@@ -3800,3 +3800,18 @@ The reviewed repair does not add automatic hashing or execution through entries.
 - Alias queries remain the existing PR75 follow-up above. Lexical alias
   expansion and hash-query precedence are separate paths. Do not implement
   alias introspection or redirect execution through hash entries in this merge.
+
+## printf invalid-star diagnostic ordering, 2026-10-24
+
+Status: Approved, deferred to numeric printf work, outside the nonnumeric
+invalid-format family. `printf '%*Y' bad x` returns status 1 and no stdout in
+GNU Bash 5.3.15. Stderr reports `bad: invalid number` before reporting
+`Y': invalid format character`. Production Waffle reports only the latter.
+The valid star-operand controls pass; this difference needs an invalid star
+operand together with an invalid conversion. `Field::parse` rejects the
+conversion before `Field::resolve` consumes the star operand in
+`shell/engine/src/builtins/printf/fields.rs`. Keep that consumption and warning
+order inside the admitted two-pass printer when repairing it. Do not change
+format validation, streaming or cancellation to hide the missing warning.
+The exact oracle and production streams are recorded in
+`/work/reports/wave-20261022/shell/printf-invalid-format-main75-r1-evidence/star-diagnostic-boundary.json`.

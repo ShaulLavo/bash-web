@@ -197,13 +197,13 @@ fn printf_missing_hex_digits_are_diagnostics_not_command_failure() {
 
 #[test]
 fn printf_unsupported_conversions_do_not_become_supported_by_escape_decoding() {
-    for source in [
-        r"printf 'prefix%08a' x",
-        r"printf 'prefix%z' x",
-        r"printf 'prefix%'",
+    for (source, status) in [
+        (r"printf 'prefix%08a' x", 2),
+        (r"printf 'prefix%z' x", 1),
+        (r"printf 'prefix%'", 1),
     ] {
         let rig = Rig::new(Limits::default());
-        assert_eq!(rig.run(source), 2, "{source}");
+        assert_eq!(rig.run(source), status, "{source}");
         assert_eq!(rig.run("echo recovered"), 0);
         assert!(rig.output.bytes().ends_with(b"recovered\n"));
     }
