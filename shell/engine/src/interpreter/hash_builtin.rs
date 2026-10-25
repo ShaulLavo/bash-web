@@ -204,7 +204,7 @@ async fn lookup_name(
     if name.contains('/') {
         return Ok(0);
     }
-    if commands::lookup(name).is_some_and(commands::Command::query_builtin)
+    if commands::enabled(name, state.borrow().disabled_builtins)
         || state.borrow().functions().contains_key(name)
     {
         return Ok(0);

@@ -4430,6 +4430,8 @@ mod aliases;
 #[path = "words/array_slicing.rs"]
 mod array_slicing;
 
+#[path = "words/enable.rs"]
+mod enable;
 #[path = "words/pipeline_status.rs"]
 mod pipeline_status;
 
