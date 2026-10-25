@@ -15,12 +15,14 @@ struct FakeChild {
     cancel: Cancel,
     signal: Rc<Cell<i32>>,
 }
+type WasiDirectoryEntries = Rc<Vec<(u64, Vec<u8>)>>;
+
 struct Fake {
     executor: Executor,
     fds: RefCell<BTreeMap<u32, Endpoint>>,
     directories: RefCell<BTreeMap<u32, Rc<dyn io::Directory>>>,
-    wasi_directories: RefCell<BTreeMap<u32, Rc<Vec<(u64, Vec<u8>)>>>>,
-    named_wasi_directories: RefCell<BTreeMap<String, Rc<Vec<(u64, Vec<u8>)>>>>,
+    wasi_directories: RefCell<BTreeMap<u32, WasiDirectoryEntries>>,
+    named_wasi_directories: RefCell<BTreeMap<String, WasiDirectoryEntries>>,
     readdir_calls: RefCell<Vec<(u32, u64, usize)>>,
     inherited: RefCell<Vec<u32>>,
     next_fd: Cell<u32>,
