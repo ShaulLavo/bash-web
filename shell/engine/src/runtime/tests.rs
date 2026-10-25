@@ -3744,5 +3744,4 @@ fn runtime_permissions_keep_supported_denial_separate_from_unknown_bits() {
     assert_eq!(metadata.owned_by_effective_uid, None);
 }
 
-#[path = "tests/read_exact.rs"]
 mod read_exact;
