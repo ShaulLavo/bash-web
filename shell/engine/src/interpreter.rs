@@ -1303,6 +1303,7 @@ async fn pipeline_command(
         state.borrow_mut().publish_pipeline_status(vec![2]);
         return Outcome::status(2);
     }
+    let pipefail = state.borrow().pipefail;
     let share_last = count > 1 && {
         let state = state.borrow();
         state.lastpipe && !state.monitor
@@ -1390,7 +1391,7 @@ async fn pipeline_command(
     drop(previous);
     let results = join_all(tasks).await;
     let codes: Vec<_> = results.iter().map(|r| r.code).collect();
-    let mut code = if state.borrow().pipefail {
+    let mut code = if pipefail {
         codes.iter().rev().copied().find(|&n| n != 0).unwrap_or(0)
     } else {
         *codes.last().unwrap()
