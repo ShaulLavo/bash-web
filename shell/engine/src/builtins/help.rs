@@ -70,6 +70,10 @@ fn builtin_topic(builtin: Builtin, name: &str) -> (&'static str, &'static str) {
             " [-dms] [pattern ...]",
             "Display information about builtin commands.",
         ),
+        Builtin::Enable => (
+            " [-anps] [name ...]",
+            "Enable or disable shell builtins, or list their state.",
+        ),
         Builtin::Noop if name == ":" => ("", "Null command."),
         Builtin::Noop => ("", "Return a successful result."),
         Builtin::False => ("", "Return an unsuccessful result."),

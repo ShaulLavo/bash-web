@@ -36,3 +36,10 @@ export function assertShellFixtureOutput(
   assert.equal(actual.status, expected.status);
   assert.equal(actual.stdout.toString(), expected.stdout);
 }
+
+export function assertShellControlOutput(actual: WaffleCaseResult, expected: { stdout: string }) {
+  assert.equal(actual.crash, undefined);
+  assert.equal(actual.outputLimit, undefined);
+  assert.equal(actual.status, 0);
+  assert.equal(actual.stdout.toString(), expected.stdout);
+}

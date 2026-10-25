@@ -508,7 +508,7 @@ pub(super) async fn query(
             if options.verbose {
                 function_description(name, &function, fds, context, work).await?;
             }
-        } else if command.is_some_and(commands::Command::query_builtin) {
+        } else if commands::enabled(name, state.borrow().disabled_builtins) {
             output(fds, context, name.as_bytes()).await?;
             output(
                 fds,
