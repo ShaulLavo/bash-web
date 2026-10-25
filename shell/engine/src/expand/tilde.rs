@@ -260,7 +260,7 @@ pub(super) fn operand<'a>(
     expansion: &'a mut Expansion<'_>,
     state: &'a SharedState,
 ) -> crate::exec::ResultFuture<'a, ()> {
-    expansion.part_frame(move |expansion| async move {
+    expansion.local_frame(expansion.admit_frames, move |expansion| async move {
         State::admit_scalar_access(state, "HOME", expansion.cancel, expansion.work).await?;
         let home = home_snapshot(expansion, state)?.ok_or(2)?;
         let result = expansion.segment(&home, Protection::All, true).await;

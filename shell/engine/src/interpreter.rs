@@ -30,10 +30,13 @@ mod indexed;
 mod reader;
 mod select;
 mod source;
+mod timing;
 #[cfg(test)]
 mod trap_tests;
 mod traps;
 mod type_builtin;
+mod xtrace;
+pub(crate) use xtrace::builtin_assignment;
 
 #[derive(Clone, Debug)]
 pub struct Limits {
@@ -85,6 +88,9 @@ pub(crate) enum Flow {
     Break(usize),
     Continue(usize),
     DiscardReadUnit,
+    // Bash's report_error: the failing command's `execute` frame turns this
+    // into DiscardReadUnit, or into Abort when errexit is set.
+    ReportedError,
     Resource,
     // Redirect setup failed before a compound body could execute. The command
     // boundary classifies ERR/errexit once, independently of body eligibility.
@@ -324,7 +330,13 @@ pub(crate) struct Context {
     skip_debug: bool,
     return_boundary: bool,
     completion_descriptors: Option<Rc<CompletionDescriptors>>,
+    trace: xtrace::Trace,
 }
+pub(crate) struct RenderedFunction {
+    pub(crate) text: String,
+    _storage: crate::exec::Allocation,
+}
+
 impl Context {
     fn root(
         core: Rc<Core>,
@@ -352,7 +364,19 @@ impl Context {
             skip_debug: false,
             return_boundary: false,
             completion_descriptors: None,
+            trace: xtrace::Trace::default(),
             evaluation,
+        }
+    }
+    fn substitution(&self, cancel: Cancel, signal: Rc<Cell<Option<i32>>>, group: GroupId) -> Self {
+        Self {
+            cancel,
+            signal,
+            group,
+            parameter_error_status: 1,
+            compound_child: false,
+            trace: self.trace.nested(),
+            ..self.isolated()
         }
     }
 
@@ -386,6 +410,39 @@ impl Context {
         bytes: usize,
     ) -> Result<crate::exec::Allocation, i32> {
         self.evaluation.admit_execution(bytes)
+    }
+    pub(crate) fn render_function(
+        &self,
+        name: &str,
+        function: &StoredFunction,
+        work: &mut expand::Work,
+    ) -> Result<RenderedFunction, i32> {
+        let limit = self
+            .limits()
+            .expansion_bytes
+            .min(work.storage_left())
+            .min(self.evaluation.execution_available());
+        // Reserve the printer's entire possible live buffer before allocation.
+        let storage = self.evaluation.admit_execution(limit)?;
+        let text = function_string_bounded(
+            name,
+            &function.body,
+            &Cell::new(limit),
+            limit,
+            Some(&self.parser_budget()),
+        )
+        .map_err(|_| {
+            if self.cancel.is_cancelled() {
+                self.cancel_status()
+            } else {
+                2
+            }
+        })?;
+        work.admit_storage(text.len()).map_err(admission_status)?;
+        Ok(RenderedFunction {
+            text,
+            _storage: storage,
+        })
     }
     fn parser_budget(&self) -> shell_parser::limits::ExecutionBudget {
         let core = self.core.clone();
@@ -870,22 +927,21 @@ impl Session {
                 context.clone(),
             )
             .await;
-            let result = match result.flow {
-                Flow::Complete if !context.cancel.is_cancelled() => {
-                    context.core.exit_requested.set(true);
-                    finish_environment(
-                        result,
-                        state.clone(),
-                        context.core.descriptors.clone(),
-                        context.clone(),
-                    )
-                    .await
-                }
-                Flow::Exit if !context.cancel.is_cancelled() => {
-                    context.core.exit_requested.set(true);
-                    result
-                }
-                _ => result,
+            let stopping = !context.cancel.is_cancelled()
+                && matches!(result.flow, Flow::Complete | Flow::Exit);
+            if stopping {
+                context.core.exit_requested.set(true);
+            }
+            let result = if stopping && result.flow == Flow::Complete {
+                finish_environment(
+                    result,
+                    state.clone(),
+                    context.core.descriptors.clone(),
+                    context.clone(),
+                )
+                .await
+            } else {
+                result
             };
             let code = context.finish_group(&mut processes, result).await;
             state.borrow_mut().publish_status(code);
@@ -1290,7 +1346,9 @@ fn execute(
                     | Command::List(_)
                     | Command::Function(_)
                     | Command::Compound(
-                        CompoundCommand::BraceGroup(_) | CompoundCommand::Case(_),
+                        CompoundCommand::Time(_)
+                            | CompoundCommand::BraceGroup(_)
+                            | CompoundCommand::Case(_),
                         _
                     )
             );
@@ -1320,7 +1378,8 @@ fn execute(
             // Later function registration changes future commands, not this call's eligibility.
             let err_at_entry = traps::active(traps::Event::Err, &state, &context);
             let boundary_fds = Rc::downgrade(&fds);
-            let result = command_body(command, state.clone(), fds, body_context).await;
+            let mut result = command_body(command, state.clone(), fds, body_context).await;
+            result.flow = settle_reported_error(result.flow, &state);
             let setup_failed = result.flow == Flow::RedirectFailed;
             let result = if setup_failed {
                 Outcome::status(result.code)
@@ -1340,6 +1399,16 @@ fn execute(
         },
         Outcome::status,
     )
+}
+
+/// Bash's report_error ends the script under errexit and otherwise discards
+/// the rest of the read unit, even where errexit is otherwise ignored.
+fn settle_reported_error(flow: Flow, state: &SharedState) -> Flow {
+    match flow {
+        Flow::ReportedError if state.borrow().errexit => Flow::Abort,
+        Flow::ReportedError => Flow::DiscardReadUnit,
+        flow => flow,
+    }
 }
 
 fn finish_command(state: &SharedState, result: Outcome, preserve_pipeline: bool) -> Outcome {
@@ -1720,6 +1789,7 @@ fn execute_compound_body<'a>(
         CompoundCommand::Case(case_) => {
             evaluation.frame(run_case(case_, state, fds, context, work), Outcome::status)
         }
+        CompoundCommand::Time(time) => timing::run(*time, state, fds, context),
         _ => futures::future::Either::Left(futures::future::ready(Outcome::status(2))),
     }
 }
@@ -2130,6 +2200,8 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
             }
     ) {
         Flow::DiscardReadUnit
+    } else if matches!(error, expand::Error::BadSubstitution { .. }) {
+        Flow::ReportedError
     } else {
         // Abort this submitted script, not the persistent interactive session.
         // Only the explicit exit builtin requests session shutdown.
@@ -2137,6 +2209,12 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
     };
     let (name, message, line, status) = match error {
         expand::Error::Status(code) => return Outcome::status(code),
+        expand::Error::Abort(code) => {
+            return Outcome {
+                code,
+                flow: Flow::Abort,
+            };
+        }
         expand::Error::AssignmentDepth => return Outcome { code: 1, flow },
         expand::Error::SpecialAssignment { name, line } => {
             (name, "cannot assign in this way".to_owned(), line, 1)
@@ -2471,6 +2549,7 @@ async fn launch_background(
         skip_debug: false,
         return_boundary: false,
         completion_descriptors: completion_descriptors.clone(),
+        trace: context.trace,
     };
     let parent_scope = context.scope.clone();
     let join = context.core.executor.spawn(async move {
@@ -2663,14 +2742,9 @@ impl Substitutions {
         let parent = self.context.cancel.clone();
         let parent_signal = self.context.signal.clone();
         let parent_scope = self.context.scope.clone();
-        let context = Context {
-            cancel: cancel.clone(),
-            signal: signal.clone(),
-            group,
-            parameter_error_status: 1,
-            compound_child: false,
-            ..self.context.isolated()
-        };
+        let context = self
+            .context
+            .substitution(cancel.clone(), signal.clone(), group);
         let link = cancel.clone();
         let link_signal = signal.clone();
         let capture_complete = Cancel::new();
@@ -2806,14 +2880,9 @@ impl Substitutions {
         let cancel = Cancel::new();
         let group = core.host.allocate_background_group();
         let signal = Rc::new(Cell::new(None));
-        let context = Context {
-            cancel: cancel.clone(),
-            signal: signal.clone(),
-            group,
-            parameter_error_status: 1,
-            compound_child: false,
-            ..self.context.isolated()
-        };
+        let context = self
+            .context
+            .substitution(cancel.clone(), signal.clone(), group);
         let parent = self.context.cancel.clone();
         let parent_signal = self.context.signal.clone();
         let parent_scope = self.context.scope.clone();
@@ -2999,13 +3068,10 @@ async fn simple_command(
         None => WeakStderr::Closed,
     };
     // Only exec retains the original table; diagnostic ownership stays weak.
-    if prepared
-        .as_ref()
-        .unwrap()
-        .argv
-        .first()
-        .is_some_and(|name| commands::handler(name) == Some(commands::Handler::Exec))
-    {
+    if prepared.as_ref().unwrap().argv.first().is_some_and(|name| {
+        commands::enabled_handler(name, state.borrow().disabled_builtins)
+            == Some(commands::Handler::Exec)
+    }) {
         return exec_prepared_command(&mut prepared, &state, original_fds, &context, parent_stderr)
             .await;
     }
@@ -3273,8 +3339,8 @@ async fn prepare_execution_body(
     mut work: expand::Work,
 ) -> Result<PreparedExecution, CommandError> {
     let line = simple.expansion_line;
-    // Bash expands command words first. Assignment-only commands then assign
-    // before redirects; named commands redirect before expanding prefix RHSs.
+    // Bash expands command words first. Prefix assignments must finish before
+    // redirects so a fatal RHS does not create the command's output files.
     if argv.is_empty() {
         assignments(
             simple.assignments,
@@ -3282,8 +3348,11 @@ async fn prepare_execution_body(
             context,
             &mut bytes,
             &mut work,
-            true,
-            None,
+            AssignmentMode {
+                commit: true,
+                diagnostics: None,
+                fds: &fds,
+            },
         )
         .await?;
         let fds = redirects(&simple.redirects, state, fds, context, &mut work, Some(1)).await?;
@@ -3295,9 +3364,25 @@ async fn prepare_execution_body(
             work,
         });
     }
+    let function_prefix = state.borrow().functions().contains_key(&argv[0]);
+    let assigned = assignments(
+        simple.assignments,
+        state,
+        context,
+        &mut bytes,
+        &mut work,
+        AssignmentMode {
+            commit: false,
+            diagnostics: function_prefix.then_some(&fds),
+            fds: &fds,
+        },
+    )
+    .await?;
+    xtrace::command(argv, state, &fds, context).await?;
     let name = &argv[0];
     let shell_command = state.borrow().functions().contains_key(name)
-        || commands::lookup(name).is_some_and(commands::Command::shell_heredoc_errors);
+        || (commands::enabled(name, state.borrow().disabled_builtins)
+            && commands::lookup(name).is_some_and(commands::Command::shell_heredoc_errors));
     let heredoc_status = (!shell_command).then_some(context.parameter_error_status);
     let fds = redirects(
         &simple.redirects,
@@ -3306,17 +3391,6 @@ async fn prepare_execution_body(
         context,
         &mut work,
         heredoc_status,
-    )
-    .await?;
-    let function_prefix = state.borrow().functions().contains_key(name);
-    let assigned = assignments(
-        simple.assignments,
-        state,
-        context,
-        &mut bytes,
-        &mut work,
-        false,
-        function_prefix.then_some(&fds),
     )
     .await?;
     work.substitutions = None;
@@ -3516,14 +3590,15 @@ async fn dispatch_arguments(
     let mut default_path = false;
     let mut builtin_only = false;
     while matches!(
-        commands::handler(name),
+        commands::enabled_handler(name, state.borrow().disabled_builtins),
         Some(commands::Handler::Command | commands::Handler::BuiltinWrapper)
     ) && (bypass_functions || !state.borrow().functions().contains_key(name))
     {
         work.checkpoint(&context.cancel)
             .await
             .map_err(admission_status)?;
-        builtin_only = commands::handler(name) == Some(commands::Handler::BuiltinWrapper);
+        builtin_only = commands::enabled_handler(name, state.borrow().disabled_builtins)
+            == Some(commands::Handler::BuiltinWrapper);
         let mut options = if builtin_only {
             builtin_wrapper::options(fields.as_slice(), line, &fds, context).await?
         } else {
@@ -3690,7 +3765,7 @@ async fn dispatch_arguments(
         }
         return Ok(outcome);
     }
-    let handler = commands::handler(name);
+    let handler = commands::enabled_handler(name, state.borrow().disabled_builtins);
     if handler == Some(commands::Handler::Let) {
         if !assigned.is_empty() {
             return Err(2);
@@ -4042,14 +4117,20 @@ async fn literal_arithmetic_failure(
     result
 }
 
+#[derive(Clone, Copy)]
+struct AssignmentMode<'a> {
+    commit: bool,
+    diagnostics: Option<&'a Descriptors>,
+    fds: &'a Descriptors,
+}
+
 async fn assignments(
     assignments: Vec<Assignment>,
     state: &SharedState,
     context: &Context,
     bytes: &mut usize,
     work: &mut expand::Work,
-    commit: bool,
-    function_diagnostics: Option<&Descriptors>,
+    mode: AssignmentMode<'_>,
 ) -> Result<Vec<(String, String)>, expand::Error> {
     if assignments.is_empty() {
         return Ok(Vec::new());
@@ -4061,7 +4142,7 @@ async fn assignments(
         context,
         bytes,
         work,
-        (commit, function_diagnostics),
+        mode,
         &mut completed,
     )
     .await;
@@ -4082,20 +4163,32 @@ async fn assignments_body(
     context: &Context,
     bytes: &mut usize,
     work: &mut expand::Work,
-    mode: (bool, Option<&Descriptors>),
+    mode: AssignmentMode<'_>,
     completed: &mut crate::state::AssignmentFrame,
 ) -> Result<Vec<(String, String)>, expand::Error> {
-    let (commit, function_diagnostics) = mode;
+    let AssignmentMode {
+        commit,
+        diagnostics: function_diagnostics,
+        fds,
+    } = mode;
     if assignments.is_empty() {
         return Ok(Vec::new());
     }
-    let mut frame = PrefixFrame::enter(state.clone());
+    let mut frame = PrefixFrame::enter(state.clone(), work)?;
     let mut names = Vec::new();
     let initial_bytes = *bytes;
     let mut budget = Budget::default();
     for assignment in assignments {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-        let indexed = assignment.index.is_some()
+        let element_reference = state
+            .borrow()
+            .reference(crate::state::Reference {
+                name: &assignment.name,
+                subscript: None,
+            })
+            .is_ok_and(|r| r.subscript.is_some());
+        let indexed = element_reference
+            || assignment.index.is_some()
             || assignment.append
             || matches!(assignment.value, AssignmentValue::Array(_))
             || (commit
@@ -4108,7 +4201,7 @@ async fn assignments_body(
         }
         if indexed {
             indexed::assign(&assignment, state, context, work, frame, bytes, completed).await?;
-            frame = PrefixFrame::enter(state.clone());
+            frame = PrefixFrame::enter_prepared(state.clone());
             continue;
         }
         let AssignmentValue::Scalar(word) = assignment.value else {
@@ -4160,6 +4253,9 @@ async fn assignments_body(
         } else {
             value
         };
+        if commit {
+            xtrace::assignment(&assignment.name, &value, state, fds, context).await?;
+        }
         let assignment_name = assignment.name.clone();
         if let Err(name) = frame.set(assignment.name, value) {
             if let Some(fds) = function_diagnostics {
@@ -4179,10 +4275,13 @@ async fn assignments_body(
                 expansion: true,
             });
         }
+        if !commit {
+            xtrace::prefix_assignment(&assignment_name, state, fds, context).await?;
+        }
         names.push(assignment_name);
         if commit {
             frame.commit(Some(completed)).map_err(expand::Error::from)?;
-            frame = PrefixFrame::enter(state.clone());
+            frame = PrefixFrame::enter_prepared(state.clone());
         }
     }
     if commit {
@@ -4453,21 +4552,26 @@ async fn redirects(
 }
 
 #[cfg(test)]
+fn isolated_session(limits: Limits, filesystem_bytes: usize) -> (Session, GroupId) {
+    let executor = Executor::new();
+    let host = Rc::new(crate::process::InProcessHost::new(executor.clone()));
+    let group = host.allocate_group();
+    let session = Session::new(
+        executor,
+        host,
+        Rc::new(crate::io::MemoryFs::new(filesystem_bytes)),
+        limits,
+    );
+    (session, group)
+}
+
+#[cfg(test)]
 mod scope_tests {
     use super::*;
-    use crate::{io::MemoryFs, process::InProcessHost};
     use futures::FutureExt;
 
     fn replay_context() -> (SharedState, Descriptors, Context) {
-        let executor = Executor::new();
-        let host = Rc::new(InProcessHost::new(executor.clone()));
-        let group = host.allocate_group();
-        let session = Session::new(
-            executor,
-            host,
-            Rc::new(MemoryFs::new(4096)),
-            Limits::default(),
-        );
+        let (session, group) = isolated_session(Limits::default(), 4096);
         let context = Context {
             evaluation: crate::exec::Scope::new(
                 session.core.limits.source_bytes,
@@ -4491,6 +4595,7 @@ mod scope_tests {
             skip_debug: false,
             return_boundary: false,
             completion_descriptors: None,
+            trace: xtrace::Trace::default(),
         };
         (session.state(), session.core.descriptors.clone(), context)
     }
@@ -5568,7 +5673,10 @@ mod function_measurements {
         assert_eq!(ex.drive(64).pending, 0);
         assert_eq!(host.active_count(), 0);
         assert_eq!(host.retained_count(), 0);
-        assert_eq!(session.core.execution_storage.observation().0, 0);
+        assert_eq!(
+            session.core.execution_storage.observation().0,
+            session.state.borrow().prefix_capacity_bytes()
+        );
     }
 
     fn finish_review(ex: &Executor, job: JoinHandle<i32>) -> i32 {
@@ -5677,18 +5785,27 @@ mod function_measurements {
             .retained()
             .unwrap()
             .bytes();
-        assert_eq!(session.core.execution_storage.observation().0, source_bytes);
+        assert_eq!(
+            session.core.execution_storage.observation().0,
+            source_bytes + session.state.borrow().prefix_capacity_bytes()
+        );
         assert_eq!(
             finish_review(&ex, session.start("f \"$payload\"").unwrap()),
             0
         );
         assert_eq!(session.state.borrow().bindings()["seen"], "2");
-        assert_eq!(session.core.execution_storage.observation().0, source_bytes);
+        assert_eq!(
+            session.core.execution_storage.observation().0,
+            source_bytes + session.state.borrow().prefix_capacity_bytes()
+        );
         assert_eq!(
             finish_review(&ex, session.start("unset -f f g").unwrap()),
             0
         );
-        assert_eq!(session.core.execution_storage.observation().0, 0);
+        assert_eq!(
+            session.core.execution_storage.observation().0,
+            session.state.borrow().prefix_capacity_bytes()
+        );
         assert_eq!(ex.drive(64).pending, 0);
     }
 
@@ -5716,7 +5833,7 @@ mod function_measurements {
         {
             let state = session.state.try_borrow_mut().unwrap();
             assert_eq!(state.pipeline_status(), [1, 0]);
-            let view = state.declaration("PIPESTATUS").unwrap().unwrap();
+            let view = state.declaration("PIPESTATUS").unwrap();
             assert!(view.readonly && view.exported);
         }
         assert!(session.core.execution_storage.observation().0 >= 13);
@@ -5814,7 +5931,13 @@ mod function_measurements {
             );
             assert_eq!(session.state.borrow().bindings()["recovered"], "yes");
             assert_eq!(session.state.borrow().pipeline_status(), [0]);
-            assert_review_idle(&ex, &host, &session);
+            assert_eq!(
+                session.core.execution_storage.observation().0,
+                session.state.borrow().prefix_capacity_bytes()
+            );
+            assert_eq!(host.active_count(), 0);
+            assert_eq!(host.retained_count(), 0);
+            assert_eq!(ex.drive(64).pending, 0);
         }
     }
 
@@ -5883,7 +6006,10 @@ mod function_measurements {
                 0
             );
             assert!(!session.state.borrow().bindings().contains_key("saved"));
-            assert_eq!(session.core.execution_storage.observation().0, 0);
+            assert_eq!(
+                session.core.execution_storage.observation().0,
+                session.state.borrow().prefix_capacity_bytes()
+            );
             assert_eq!(host.retained_count(), 0);
             assert_eq!(ex.drive(64).pending, 0);
         }
@@ -5918,12 +6044,16 @@ mod function_measurements {
                 let (live, peak) = session.core.execution_storage.observation();
                 let reader_bytes = state.functions()["f"].source.retained().unwrap().bytes();
                 assert_eq!(
-                    live, reader_bytes,
-                    "only the stored definition's reader survives"
+                    live,
+                    reader_bytes + state.prefix_capacity_bytes(),
+                    "only the stored reader and State prefix capacity survive"
                 );
                 drop(state);
                 assert_eq!(finish_review(&ex, session.start("unset -f f").unwrap()), 0);
-                assert_eq!(session.core.execution_storage.observation().0, 0);
+                assert_eq!(
+                    session.core.execution_storage.observation().0,
+                    session.state.borrow().prefix_capacity_bytes()
+                );
                 assert_eq!(sample.calls, goal);
                 assert!(sample.poll_bytes > 0 && sample.drop_bytes > 0);
                 println!(

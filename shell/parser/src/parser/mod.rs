@@ -551,6 +551,17 @@ impl<'a> Parser<'a> {
         Ok(part)
     }
 
+    /// Classify a complete, already-admitted `${...}` token without building
+    /// an AST or evaluating its operands. Valid but unsupported forms are not
+    /// bad substitutions. The caller bounds and charges the token scan.
+    pub fn is_bad_parameter_token(input: &str) -> bool {
+        let Some(body) = input.strip_prefix("${") else {
+            return false;
+        };
+        let chars = WordChars::new(body, &[]);
+        bad_brace_parameter_length(&chars).is_some_and(|length| chars.count() == length + 1)
+    }
+
     /// Parse one already-admitted `${...}` token, retaining its enclosing
     /// operand context. Unlike a whole word this token has no quote markers.
     pub fn parse_parameter_token_with_limits(
@@ -2417,82 +2428,43 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    /// Parse the reserved-word pipeline form, plus the useful GNU report flags.
+    /// Parse Bash's `time [-p] [--] [pipeline]`. Only `-p` and one `--` are
+    /// options; any other word starts the timed pipeline. A list terminator
+    /// right after them times nothing.
     fn parse_time(&mut self) -> Result<CompoundCommand> {
         let start_span = self.current_span;
         self.advance(); // consume 'time'
-        self.skip_newlines()?;
-
-        let mut posix_format = false;
-        let mut format = None;
-        let mut output = None;
-        let mut append = false;
-        let mut verbose = false;
-        let mut option_error = None;
-
-        while let Some(option) = self.current_word_str() {
-            if option == "--" {
-                self.advance();
-                self.skip_newlines()?;
-                break;
-            }
-            if !option.starts_with('-') || option == "-" {
-                break;
-            }
-
-            self.advance();
-            match option.as_str() {
-                "-p" => posix_format = true,
-                "-a" | "--append" => append = true,
-                "-v" | "--verbose" => verbose = true,
-                "-f" | "--format" => {
-                    format = self.current_word_to_word();
-                    if format.is_some() {
-                        self.advance();
-                    } else {
-                        option_error = Some(format!("option '{option}' requires an argument"));
-                    }
-                }
-                "-o" | "--output" => {
-                    output = self.current_word_to_word();
-                    if output.is_some() {
-                        self.advance();
-                    } else {
-                        option_error = Some(format!("option '{option}' requires an argument"));
-                    }
-                }
-                _ if option.starts_with("--format=") => {
-                    format = Some(Word::literal(option[9..].to_string()));
-                }
-                _ if option.starts_with("--output=") => {
-                    output = Some(Word::literal(option[9..].to_string()));
-                }
-                _ if option.starts_with("-f") && option.len() > 2 => {
-                    format = Some(Word::literal(option[2..].to_string()));
-                }
-                _ if option.starts_with("-o") && option.len() > 2 => {
-                    output = Some(Word::literal(option[2..].to_string()));
-                }
-                _ => option_error = Some(format!("unrecognized option '{option}'")),
-            }
-            self.skip_newlines()?;
-            if option_error.is_some() {
-                break;
-            }
-        }
-
-        let command = self.parse_pipeline()?;
+        let mut posix_format = self.time_option("-p");
+        posix_format |= self.time_option("--");
+        let command = if matches!(
+            self.current_token,
+            None | Some(
+                tokens::Token::Newline | tokens::Token::Semicolon | tokens::Token::Background
+            )
+        ) {
+            None
+        } else {
+            Some(
+                self.parse_pipeline()?
+                    .ok_or_else(|| self.error("expected command after time"))?,
+            )
+        };
 
         Ok(CompoundCommand::Time(Box::new(TimeCommand {
             posix_format,
-            format,
-            output,
-            append,
-            verbose,
-            option_error,
             command,
             span: start_span.merge(self.current_span),
         })))
+    }
+
+    /// Consume one unquoted `time` option word when it is next.
+    fn time_option(&mut self, option: &str) -> bool {
+        let matched = self.current_escapes.is_empty()
+            && matches!(&self.current_token, Some(tokens::Token::Word(word)) if word == option);
+        if matched {
+            self.advance();
+        }
+        matched
     }
 
     /// Parse a coproc command: `coproc [NAME] command`
@@ -6423,6 +6395,10 @@ fn bang_parameter_operator(chars: &mut WordChars<'_>) -> bool {
 /// forms and anything involving quote/escape markers are left to the
 /// regular parser, so this only ever rejects words bash rejects too.
 fn bad_brace_parameter(chars: &WordChars<'_>) -> Option<String> {
+    bad_brace_parameter_length(chars).map(|length| chars.clone().take(length).collect())
+}
+
+fn bad_brace_parameter_length(chars: &WordChars<'_>) -> Option<usize> {
     const MARKERS: [char; 3] = ['\x00', '\u{1e}', '\u{1f}'];
     let mut it = chars.clone();
     let length_prefix = match it.peek() {
@@ -6499,20 +6475,18 @@ fn bad_brace_parameter(chars: &WordChars<'_>) -> Option<String> {
         return None;
     }
     // Find the closing brace to report and skip the whole expansion.
-    let mut inner = String::new();
     let mut depth = 0usize;
-    for c in chars.clone() {
+    for (length, c) in chars.clone().enumerate() {
         // `${#1#'x'}` is bad whatever the quoting after the name.
         if !length_prefix && (MARKERS.contains(&c) || c == '\'' || c == '"' || c == '\\') {
             return None;
         }
         match c {
             '{' => depth += 1,
-            '}' if depth == 0 => return Some(inner),
+            '}' if depth == 0 => return Some(length),
             '}' => depth -= 1,
             _ => {}
         }
-        inner.push(c);
     }
     None
 }

@@ -11,7 +11,7 @@ impl Expansion<'_> {
         quoted: bool,
         scalar: bool,
     ) -> crate::exec::ResultFuture<'a, ()> {
-        self.part_frame(move |expansion| {
+        self.local_frame(self.admit_frames, move |expansion| {
             expansion.prefix_name_fields(prefix, star, state, quoted, scalar)
         })
     }
@@ -71,7 +71,10 @@ fn next_name(
 ) -> Result<Option<String>, Error> {
     let state = state.borrow();
     let lower = previous.map_or(Included(prefix), Excluded);
-    let binding = state.bindings().range::<str, _>((lower, Unbounded)).next();
+    let binding = state
+        .raw_bindings()
+        .range::<str, _>((lower, Unbounded))
+        .next();
     let nameref = state.namerefs().range::<str, _>((lower, Unbounded)).next();
     let name = binding.map(|(name, _)| name).into_iter();
     let Some(name) = name.chain(nameref.map(|(name, _)| name)).min() else {

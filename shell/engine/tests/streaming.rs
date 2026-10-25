@@ -11,6 +11,24 @@ fn register_utilities(
     support::register_utilities(host, fs, true);
 }
 include!("support/streaming.rs");
+impl Rig {
+    fn with_retained_prefix_capacity(limits: Limits) -> Self {
+        let setup = Self::with_limits(Limits {
+            expansion_bytes: Limits::default().expansion_bytes,
+            ..limits.clone()
+        });
+        assert_eq!(setup.run("A= :"), 0);
+        assert!(!setup.shell.state().borrow().bindings().contains_key("A"));
+        let rig = Self::with_limits(limits);
+        // Move the admitted State, including its capacity ticket. Only setup
+        // has a roomy expansion budget; the measured session keeps its limit.
+        std::mem::swap(
+            &mut *rig.shell.state().borrow_mut(),
+            &mut *setup.shell.state().borrow_mut(),
+        );
+        rig
+    }
+}
 #[test]
 fn ticker_streams_through_filter_before_exit() {
     let rig = Rig::new();
@@ -340,7 +358,7 @@ fn command_byte_limit_includes_prefix_and_assignment_only_values() {
         "A=$VALUE okay xyz",
         "A=12345678 echo abcde",
     ] {
-        let r = Rig::with_limits(Limits {
+        let r = Rig::with_retained_prefix_capacity(Limits {
             expansion_bytes: 16,
             ..Limits::default()
         });
@@ -354,7 +372,7 @@ fn command_byte_limit_includes_prefix_and_assignment_only_values() {
         assert!(r.output.is_empty());
         assert_eq!(r.host.retained_count(), 0);
     }
-    let r = Rig::with_limits(Limits {
+    let r = Rig::with_retained_prefix_capacity(Limits {
         expansion_bytes: 16,
         ..Limits::default()
     });
@@ -364,6 +382,18 @@ fn command_byte_limit_includes_prefix_and_assignment_only_values() {
         r.shell.state().borrow().bindings().get("A").unwrap(),
         "1234"
     );
+}
+
+#[test]
+fn command_byte_limit_cold_prefix_refusal_is_atomic() {
+    let rig = Rig::with_limits(Limits {
+        expansion_bytes: 10,
+        ..Limits::default()
+    });
+    assert_eq!(rig.run("A=1234 okay"), 2);
+    assert!(!rig.shell.state().borrow().bindings().contains_key("A"));
+    assert!(rig.output.is_empty());
+    assert_eq!(rig.host.retained_count(), 0);
 }
 
 #[test]
@@ -531,7 +561,7 @@ fn assignment_values_expand_against_prior_assignments_in_the_same_command() {
 fn command_byte_limit_counts_assignment_names_and_accepts_exact_boundary() {
     for script in ["A=1234 okay", "A=1234 B=12", "LONGNAME=x"] {
         for (limit, status) in [(9, 2), (10, 0)] {
-            let r = Rig::with_limits(Limits {
+            let r = Rig::with_retained_prefix_capacity(Limits {
                 expansion_bytes: limit,
                 ..Limits::default()
             });

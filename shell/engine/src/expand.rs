@@ -5,7 +5,7 @@
 //! also expand pathname patterns through the shell filesystem.
 use crate::{
     executor::Cancel,
-    state::{SharedState, State},
+    state::{Reference, SharedState, State},
 };
 use futures::FutureExt;
 use shell_parser::parser::{ParameterOp, Word, WordPart};
@@ -25,6 +25,8 @@ pub(crate) mod pattern;
 mod positional;
 mod prefix;
 mod printable;
+mod prompt;
+pub(crate) mod references;
 mod replacement;
 mod tilde;
 mod transformation;
@@ -59,7 +61,7 @@ pub(crate) struct Work {
     execution: crate::exec::Work,
     frame_scope: Option<crate::exec::Scope>,
     arithmetic_depth: usize,
-    arithmetic_names: Vec<(String, u64)>,
+    arithmetic_names: Vec<(String, i64, u64)>,
     pub(crate) arithmetic_writes: u64,
     /// Runs command substitutions; absent where a word cannot run commands.
     pub(crate) substitutions: Option<crate::interpreter::Substitutions>,
@@ -121,12 +123,14 @@ impl Work {
     pub(crate) async fn enter_scalar_arithmetic(
         &mut self,
         name: &str,
+        element: i64,
         cancel: &Cancel,
     ) -> Result<(), Error> {
         for index in 0..self.arithmetic_names.len() {
             self.checkpoint(cancel).await?;
             if self.arithmetic_names[index].0 == name
-                && self.arithmetic_names[index].1 == self.arithmetic_writes
+                && self.arithmetic_names[index].1 == element
+                && self.arithmetic_names[index].2 == self.arithmetic_writes
             {
                 return crate::exec::fault("expression recursion level exceeded", self);
             }
@@ -134,7 +138,7 @@ impl Work {
         if self.arithmetic_names.len() == self.arithmetic_names.capacity() {
             let capacity = self.arithmetic_names.capacity().saturating_mul(2).max(1);
             let bytes = (capacity - self.arithmetic_names.capacity())
-                * std::mem::size_of::<(String, u64)>();
+                * std::mem::size_of::<(String, i64, u64)>();
             self.admit_storage(bytes)?;
             self.arithmetic_names
                 .try_reserve_exact(capacity - self.arithmetic_names.len())
@@ -142,7 +146,7 @@ impl Work {
         }
         self.admit_storage(name.len())?;
         self.arithmetic_names
-            .push((name.to_owned(), self.arithmetic_writes));
+            .push((name.to_owned(), element, self.arithmetic_writes));
         Ok(())
     }
     pub(crate) fn leave_scalar_arithmetic(&mut self) {
@@ -736,6 +740,32 @@ struct Expansion<'a> {
     /// Empty array/positional elements consume work even when they emit no text.
     elements_remaining: usize,
 }
+impl<'a> Expansion<'a> {
+    fn scalar(work: &'a mut Work, cancel: &'a Cancel, max: usize) -> Self {
+        Self {
+            segments: Segments {
+                account_storage: true,
+                ..Segments::default()
+            },
+            captured: Some(Captured {
+                value: String::new(),
+                max_bytes: max,
+            }),
+            pattern: None,
+            replacement: None,
+            pattern_context: false,
+            pattern_snapshots: true,
+            admit_frames: true,
+            ifs: None,
+            ifs_changed: false,
+            work,
+            cancel,
+            max_raw: max,
+            raw_remaining: max,
+            elements_remaining: max,
+        }
+    }
+}
 impl Expansion<'_> {
     /// Only actual value reads require a binding. The target of a lazy
     /// default/replacement/error operator is tested for absence, not read;
@@ -974,7 +1004,7 @@ impl Expansion<'_> {
                 },
             );
         }
-        self.part_frame(move |expansion| async move {
+        self.local_frame(self.admit_frames, move |expansion| async move {
             expansion.begin_part(state, quoted, scalar).await?;
             if matches!(part, WordPart::BadSubstitution(_)) {
                 expansion.work.admit_storage(256)?;
@@ -1027,10 +1057,10 @@ impl Expansion<'_> {
                 }
                 let runner = expansion.work.substitutions.clone().ok_or(2)?;
                 crate::ast_copy::admit(commands, expansion.cancel, expansion.work).await?;
-                let mut child =
-                    crate::state::State::snapshot(state, expansion.cancel, expansion.work).await?;
-                child.traps = state.borrow().traps.process_substitution();
-                let child = child.shared();
+                let child = Self::process_child(
+                    crate::state::State::snapshot(state, expansion.cancel, expansion.work).await?,
+                    state,
+                );
                 expansion.work.admit_storage(16)?;
                 let fd = runner
                     .process(commands.clone(), *is_input, child, state, expansion.work)
@@ -1164,7 +1194,7 @@ impl Expansion<'_> {
         colon_variant: bool,
         context: OperandContext<'a>,
     ) -> crate::exec::ResultFuture<'a, ()> {
-        self.part_frame(move |expansion| async move {
+        self.local_frame(self.admit_frames, move |expansion| async move {
             expansion
                 .begin_part(context.state, context.quoted, context.scalar)
                 .await?;
@@ -1187,18 +1217,17 @@ impl Expansion<'_> {
         Ok(())
     }
 
-    fn part_frame<'a, F>(
+    fn local_frame<'a, T, F>(
         &'a mut self,
+        admitted: bool,
         build: impl FnOnce(&'a mut Self) -> F,
-    ) -> crate::exec::ResultFuture<'a, ()>
+    ) -> crate::exec::ResultFuture<'a, T>
     where
-        F: std::future::Future<Output = Result<(), Error>> + 'a,
+        F: std::future::Future<Output = Result<T, Error>> + 'a,
     {
         // Admitted scalar/pattern contexts must charge the actual recursive
         // future before boxing it. Legacy argv retains its separate accounting.
-        if self.admit_frames
-            && let Err(error) = self.work.admit_storage(std::mem::size_of::<F>())
-        {
+        if admitted && let Err(error) = self.work.admit_storage(std::mem::size_of::<F>()) {
             return futures::future::Either::Left(futures::future::ready(Err(error)));
         }
         futures::future::Either::Right(build(self).boxed_local())
@@ -1211,6 +1240,39 @@ impl Expansion<'_> {
         quoted: bool,
         scalar: bool,
     ) -> Result<(), Error> {
+        if Reference::parse(name).is_some_and(|reference| {
+            state
+                .borrow()
+                .reference(reference)
+                .is_ok_and(|target| target.subscript.is_some())
+        }) {
+            let place = references::select(
+                references::syntax(name)?,
+                state,
+                self.cancel,
+                self.raw_remaining,
+                self.work,
+            )
+            .await?;
+            let value =
+                references::read(&place, state, self.cancel, self.raw_remaining, self.work).await?;
+            if value.is_none() && state.borrow().nounset {
+                self.work.admit_storage(name.len().saturating_add(128))?;
+                return Err(Error::Unbound {
+                    name: name.to_owned(),
+                    line: None,
+                });
+            }
+            self.ifs = None;
+            self.ifs_changed = true;
+            return self
+                .segment(
+                    value.as_deref().unwrap_or(""),
+                    Protection::expansion(scalar || quoted, state),
+                    scalar || quoted,
+                )
+                .await;
+        }
         self.require_bound(name, state).await?;
         let max = self.snapshot_max();
         let value = {
@@ -1408,7 +1470,7 @@ impl Expansion<'_> {
             let value = substring_snapshot(&s, name, self.raw_remaining, self.work)?;
             let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
                 .iter()
-                .filter_map(|name| s.bindings().get(*name))
+                .filter_map(|name| s.bindings().get(name))
                 .find(|v| !v.is_empty());
             (value, locale.is_some_and(|v| utf8_locale(v)))
         };
@@ -1516,7 +1578,7 @@ impl Expansion<'_> {
             )?;
             let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
                 .iter()
-                .filter_map(|name| s.bindings().get(*name))
+                .filter_map(|name| s.bindings().get(name))
                 .find(|value| !value.is_empty());
             (value, locale.is_some_and(|value| utf8_locale(value)))
         };
@@ -1531,7 +1593,37 @@ impl Expansion<'_> {
         )
         .await
     }
-    async fn parameter(
+    fn parameter<'a>(
+        &'a mut self,
+        name: &'a str,
+        operator: &'a ParameterOp,
+        operand: &'a str,
+        colon: bool,
+        context: OperandContext<'a>,
+        error_pointer: Option<&'a str>,
+    ) -> crate::exec::ResultFuture<'a, ()> {
+        self.parameter_frame(move |expansion| {
+            expansion.parameter_value(name, operator, operand, colon, context, error_pointer)
+        })
+    }
+
+    // Typed selector/write futures must not inflate every recursive operand poll.
+    // Own this operation in the existing execution scope, or admit its actual
+    // future bytes in standalone expansion work before constructing it.
+    fn parameter_frame<'a, F>(
+        &'a mut self,
+        build: impl FnOnce(&'a mut Self) -> F,
+    ) -> crate::exec::ResultFuture<'a, ()>
+    where
+        F: std::future::Future<Output = Result<(), Error>> + 'a,
+    {
+        if let Some(scope) = self.work.frame_scope.clone() {
+            return scope.frame(build(self), |code| Err(code.into()));
+        }
+        self.local_frame(true, build)
+    }
+
+    async fn parameter_value(
         &mut self,
         name: &str,
         operator: &ParameterOp,
@@ -1547,7 +1639,19 @@ impl Expansion<'_> {
             depth,
         } = context;
         self.slice_boundaries(operand).await?;
-        if error_pointer.is_none() && !operand::parameter_name(name) || depth >= operand::MAX_DEPTH
+        let indexed = matches!(
+            operator,
+            ParameterOp::UseDefault
+                | ParameterOp::UseReplacement
+                | ParameterOp::AssignDefault
+                | ParameterOp::Error
+        ) && Reference::parse(name).is_some_and(|reference| {
+            reference
+                .subscript
+                .is_some_and(|index| !matches!(index, "@" | "*"))
+        });
+        if error_pointer.is_none() && !operand::parameter_name(name) && !indexed
+            || depth >= operand::MAX_DEPTH
         {
             return Err(2.into());
         }
@@ -1628,7 +1732,22 @@ impl Expansion<'_> {
             _ => return Err(2.into()),
         };
         State::admit_scalar_access(state, name, self.cancel, self.work).await?;
-        let absent = {
+        let place =
+            references::parameter_place(name, state, self.cancel, self.snapshot_max(), self.work)
+                .await?;
+        let selected = if let Some(place) = &place {
+            // The selector can mutate IFS. Do not reuse a pre-selector split view.
+            self.ifs = None;
+            self.ifs_changed = true;
+            references::read(place, state, self.cancel, self.snapshot_max(), self.work).await?
+        } else {
+            None
+        };
+        let absent = if place.is_some() {
+            selected
+                .as_ref()
+                .is_none_or(|value| colon && value.is_empty())
+        } else {
             let s = state.borrow();
             !s.dynamic_parameter(name)
                 && s.scalar_parameter(name)
@@ -1636,7 +1755,14 @@ impl Expansion<'_> {
         };
         if absent && matches!(operator, ParameterOp::AssignDefault | ParameterOp::Error) {
             return self
-                .effect_operand(name, operator, operand, colon, context, error_pointer)
+                .effect_operand(
+                    (name, place.as_ref()),
+                    operator,
+                    operand,
+                    colon,
+                    context,
+                    error_pointer,
+                )
                 .await;
         }
         if replacement != absent {
@@ -1647,6 +1773,8 @@ impl Expansion<'_> {
         let max = self.snapshot_max();
         let value = if replacement {
             String::new()
+        } else if place.is_some() {
+            selected.unwrap_or_default()
         } else {
             let s = state.borrow();
             parameter_snapshot(&s, name, max, self.pattern_snapshots, self.work)?
@@ -1781,7 +1909,7 @@ impl Expansion<'_> {
     }
     async fn effect_operand(
         &mut self,
-        name: &str,
+        (name, place): (&str, Option<&crate::state::Place>),
         operator: &ParameterOp,
         source: &str,
         colon: bool,
@@ -1798,6 +1926,7 @@ impl Expansion<'_> {
         // an indirect target is only checked after the operand expands.
         let direct_special = matches!(operator, ParameterOp::AssignDefault)
             && error_pointer.is_none()
+            && place.is_none()
             && !operand::scalar_name(name);
         if direct_special {
             return self.special_assignment(name);
@@ -1870,29 +1999,22 @@ impl Expansion<'_> {
         if replacement_output {
             self.admit_replacement_output().await?;
         }
-        if !operand::scalar_name(name) {
+        if place.is_none() && !operand::scalar_name(name) {
             return self.special_assignment(name);
         }
-        admit_assignment(state, name, captured.value.len(), self.cancel, self.work).await?;
-        State::admit_scalar_access(state, "IFS", self.cancel, self.work).await?;
-        let ifs_changed = ifs_changed || state.borrow().shares_scalar_binding(name, "IFS")?;
-        self.work.admit_storage(captured.value.len())?;
-        // A prefix frame may also retain the durable value it will restore.
-        if state.borrow().prefix_saved(name) {
-            self.work
-                .admit_storage(name.len().saturating_add(captured.value.len()))?;
+        if place.is_none() {
+            admit_assignment(state, name, captured.value.len(), self.cancel, self.work).await?;
         }
-        let assigned = state
-            .borrow_mut()
-            .assign_parameter(name.to_owned(), captured.value.clone());
-        if assigned.is_err() {
-            self.work
-                .admit_storage(name.len().saturating_mul(2).saturating_add(160))?;
-            return Err(Error::Readonly {
-                name: name.to_owned(),
-                line: None,
-                expansion: true,
-            });
+        State::admit_scalar_access(state, "IFS", self.cancel, self.work).await?;
+        let target = place.map_or(name, |place| place.name.as_str());
+        let ifs_changed = ifs_changed || state.borrow().shares_scalar_binding(target, "IFS")?;
+        self.work.admit_storage(captured.value.len())?;
+        if let Some(place) = place {
+            references::write(place, captured.value.clone(), state, self.cancel, self.work)
+                .await
+                .map_err(Error::in_expansion)?;
+        } else {
+            self.assign_scalar_operand(name, &captured.value, state)?;
         }
         self.ifs_changed |= ifs_changed;
         if ifs_changed {
@@ -1904,6 +2026,32 @@ impl Expansion<'_> {
             scalar || quoted,
         )
         .await
+    }
+    fn assign_scalar_operand(
+        &mut self,
+        name: &str,
+        value: &str,
+        state: &SharedState,
+    ) -> Result<(), Error> {
+        // A prefix frame may also retain the durable value it will restore.
+        if state.borrow().prefix_saved(name) {
+            self.work
+                .admit_storage(name.len().saturating_add(value.len()))?;
+        }
+        if state
+            .borrow_mut()
+            .assign_parameter(name.to_owned(), value.to_owned())
+            .is_ok()
+        {
+            return Ok(());
+        }
+        self.work
+            .admit_storage(name.len().saturating_mul(2).saturating_add(160))?;
+        Err(Error::Readonly {
+            name: name.to_owned(),
+            line: None,
+            expansion: true,
+        })
     }
     fn special_assignment(&mut self, name: &str) -> Result<(), Error> {
         self.work
@@ -1982,6 +2130,19 @@ impl Expansion<'_> {
                     Protection::expansion(scalar || quoted || protected, state),
                     scalar || quoted || protected,
                 )
+                .await
+            }
+            operand::Piece::Expansion { part, protected } if is_list(&part) => {
+                self.local_frame(self.admit_frames, move |expansion| async move {
+                    expansion
+                        .elements(
+                            &part,
+                            state,
+                            quoted || protected,
+                            scalar || expansion.captured.is_some(),
+                        )
+                        .await
+                })
                 .await
             }
             operand::Piece::Expansion { part, protected } => {
@@ -2562,43 +2723,30 @@ async fn plain_literal(variant: &str, work: &mut Work, cancel: &Cancel) -> Resul
     Ok(true)
 }
 
-/// Textual expansion precedes arithmetic parsing, even in skipped branches.
-/// Capture is bounded and storage-admitted, without charging its bytes as the
-/// enclosing expansion's output. Nested arithmetic shares this command's Work.
-pub(crate) async fn arithmetic_text(
+pub(crate) enum ScalarSyntax {
+    Arithmetic,
+    Prompt,
+}
+
+/// Capture textual expansion without field splitting or pathname expansion.
+/// Arithmetic keeps its pattern context and flushes the final segment.
+pub(crate) async fn scalar_text(
+    syntax: ScalarSyntax,
     source: &str,
     state: &SharedState,
     cancel: &Cancel,
     max: usize,
     work: &mut Work,
 ) -> Result<String, Error> {
-    let mut expansion = Expansion {
-        segments: Segments {
-            account_storage: true,
-            ..Segments::default()
-        },
-        captured: Some(Captured {
-            value: String::new(),
-            max_bytes: max,
-        }),
-        pattern: None,
-        replacement: None,
-        pattern_context: true,
-        pattern_snapshots: true,
-        admit_frames: true,
-        ifs: None,
-        ifs_changed: false,
-        work,
-        cancel,
-        max_raw: max,
-        raw_remaining: max,
-        elements_remaining: max,
-    };
-    let mut scanner = operand::Scanner::arithmetic(source);
-    while let Some(piece) = scanner.next(expansion.work, expansion.cancel).await? {
+    let mut expansion = Expansion::scalar(work, cancel, max);
+    expansion.pattern_context = matches!(syntax, ScalarSyntax::Arithmetic);
+    let mut scanner = operand::Scanner::scalar(source, &syntax);
+    while let Some(piece) = scanner.next(expansion.work, cancel).await? {
         expansion.operand_piece(piece, state, true, true, 0).await?;
     }
-    expansion.segment("", Protection::None, true).await?;
+    if expansion.pattern_context {
+        expansion.segment("", Protection::None, true).await?;
+    }
     Ok(expansion.captured.take().ok_or(2)?.value)
 }
 
@@ -2706,28 +2854,7 @@ pub(crate) async fn conditional_word(
     work: &mut Work,
 ) -> Result<String, Error> {
     work.checkpoint(cancel).await?;
-    let mut expansion = Expansion {
-        segments: Segments {
-            account_storage: true,
-            ..Segments::default()
-        },
-        captured: Some(Captured {
-            value: String::new(),
-            max_bytes: max,
-        }),
-        pattern: None,
-        replacement: None,
-        pattern_context: false,
-        pattern_snapshots: true,
-        admit_frames: true,
-        ifs: None,
-        ifs_changed: false,
-        work,
-        cancel,
-        max_raw: max,
-        raw_remaining: max,
-        elements_remaining: max,
-    };
+    let mut expansion = Expansion::scalar(work, cancel, max);
     let mut has_part_quotes = false;
     for &quoted in &word.part_quoted {
         expansion.work.checkpoint(cancel).await?;
@@ -2830,6 +2957,25 @@ fn poll_argv(
 mod tests {
     use super::*;
 
+    fn parameter_expansion<'a>(work: &'a mut Work, cancel: &'a Cancel) -> Expansion<'a> {
+        Expansion {
+            segments: Segments::default(),
+            captured: None,
+            pattern: None,
+            replacement: None,
+            pattern_context: false,
+            pattern_snapshots: false,
+            admit_frames: false,
+            ifs: None,
+            ifs_changed: false,
+            work,
+            cancel,
+            max_raw: 1024,
+            raw_remaining: 1024,
+            elements_remaining: 16,
+        }
+    }
+
     fn assert_list_budgets(source: &str, state: &SharedState, expected: &[&str]) {
         let token = shell_parser::Parser::parse_word_string(source);
         for (steps, bytes, fields, raw, canceled, status) in [
@@ -2876,6 +3022,90 @@ mod tests {
     }
 
     #[test]
+    fn parameter_frames_admit_actual_bytes_before_construction() {
+        let bytes = std::mem::size_of::<std::future::Ready<Result<(), Error>>>();
+        let cancel = Cancel::new();
+        let mut work = Work::new(8, bytes - 1, 1);
+        let mut expansion = parameter_expansion(&mut work, &cancel);
+        let called = std::cell::Cell::new(false);
+        let rejected = expansion.parameter_frame(|_| {
+            called.set(true);
+            std::future::ready(Ok(()))
+        });
+        assert!(matches!(
+            rejected.now_or_never(),
+            Some(Err(Error::Status(2)))
+        ));
+        assert!(!called.get());
+        assert_eq!(expansion.work.storage_left(), bytes - 1);
+        let mut work = Work::new(8, bytes, 1);
+        let mut expansion = parameter_expansion(&mut work, &cancel);
+        assert!(matches!(
+            expansion
+                .parameter_frame(|_| std::future::ready(Ok(())))
+                .now_or_never(),
+            Some(Ok(()))
+        ));
+        assert_eq!(expansion.work.storage_left(), 0);
+    }
+
+    #[test]
+    fn parameter_frames_preserve_scoped_refusal_completion_cancel_and_drop() {
+        let execution = crate::exec::StorageBudget::new(4096);
+        let scope =
+            crate::exec::Scope::new(128, crate::exec::StorageBudget::new(128), execution.clone());
+        let cancel = Cancel::new();
+        let mut work = Work::new(8, 0, 1).with_frame_scope(scope.clone());
+        let mut expansion = parameter_expansion(&mut work, &cancel);
+        let mut frame = expansion.parameter_frame(|_| std::future::pending::<Result<(), Error>>());
+        assert!(scope.execution_available() < 4096);
+        assert!(
+            frame
+                .poll_unpin(&mut std::task::Context::from_waker(std::task::Waker::noop()))
+                .is_pending()
+        );
+        drop(frame);
+        assert_eq!(scope.execution_available(), 4096);
+        assert!(matches!(
+            expansion
+                .parameter_frame(|_| std::future::ready(Ok(())))
+                .now_or_never(),
+            Some(Ok(()))
+        ));
+        assert_eq!(scope.execution_available(), 4096);
+        cancel.cancel();
+        assert!(matches!(
+            expansion
+                .parameter_frame(|expansion| async move {
+                    expansion.work.checkpoint(expansion.cancel).await
+                })
+                .now_or_never(),
+            Some(Err(Error::Status(130)))
+        ));
+        assert_eq!(scope.execution_available(), 4096);
+        assert_eq!(expansion.work.storage_left(), 0);
+
+        let scope = crate::exec::Scope::new(
+            128,
+            crate::exec::StorageBudget::new(128),
+            crate::exec::StorageBudget::new(0),
+        );
+        let mut work = Work::new(8, 0, 1).with_frame_scope(scope.clone());
+        let mut expansion = parameter_expansion(&mut work, &cancel);
+        let polled = std::cell::Cell::new(false);
+        let rejected = expansion.parameter_frame(|_| async {
+            polled.set(true);
+            Ok(())
+        });
+        assert!(matches!(
+            rejected.now_or_never(),
+            Some(Err(Error::Status(crate::exec::RESOURCE_STATUS)))
+        ));
+        assert!(!polled.get());
+        assert_eq!(scope.execution_available(), 0);
+    }
+
+    #[test]
     fn list_names_and_lazy_positionals_share_admission_and_cancellation() {
         let mut state = State::default();
         state
@@ -2887,6 +3117,40 @@ mod tests {
         let state = state.shared();
         assert_list_budgets("${!param_@}", &state, &["param_a"]);
         assert_list_budgets("${@:-unused}", &state, &["a", "b"]);
+    }
+
+    #[test]
+    fn prompt_capture_does_not_charge_output_bytes_twice() {
+        let state = State::default().shared();
+        state
+            .borrow_mut()
+            .assign_parameter("p".into(), "abcd".into())
+            .unwrap();
+        let word =
+            crate::parse::generated_word(r#""${p@P}""#).expect("prompt test word must parse");
+        assert!(word.quoted);
+        assert_eq!(word.parts.len(), 1);
+        let cancel = Cancel::new();
+        for (bytes, accepted) in [(3, false), (4, true)] {
+            let mut work = Work::new(65536, 1024 * 1024, 1);
+            let result = fields(
+                &word,
+                &state,
+                &cancel,
+                FieldContext::ForList,
+                (bytes, 1, bytes),
+                &mut work,
+            )
+            .now_or_never()
+            .expect("short prompt must not suspend");
+            match (accepted, result) {
+                (true, Ok(value)) => assert_eq!(value, ["abcd"]),
+                (false, Err(Error::Status(2))) => (),
+                (_, Ok(value)) => panic!("{bytes}-byte limit returned {value:?}"),
+                (_, Err(Error::Status(status))) => panic!("{bytes}-byte limit returned {status}"),
+                (_, Err(_)) => panic!("{bytes}-byte limit returned a non-status error"),
+            }
+        }
     }
 
     #[test]
