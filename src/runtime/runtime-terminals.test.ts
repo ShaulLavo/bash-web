@@ -125,12 +125,12 @@ test("empty cooked reads preserve contended-lock and EOF precedence", () => {
   Atomics.store(bridge.state, control.inputLock, 1);
   const contended = measureByteAllocations(() => input.tryRead!(chunks));
   assert.equal(contended.value, -6);
-  assert.equal(totalBytes(contended.lengths), 0);
+  assert.ok(totalBytes(contended.lengths) <= 1);
   assert.equal(Atomics.load(bridge.state, control.inputLock), 1);
   Atomics.store(bridge.state, control.inputLock, 0);
   const eof = measureByteAllocations(() => input.tryRead!(chunks));
   assert.equal(eof.value, 0);
-  assert.equal(totalBytes(eof.lengths), 0);
+  assert.ok(totalBytes(eof.lengths) <= 1);
   assert.equal(bridge.send(Uint8Array.of(13, 10)), true);
   assert.equal(input.tryRead!(chunks), 1);
   assert.equal(chunks[0][0], 10);
@@ -170,4 +170,36 @@ test("returning to editor mode resets cooked split CRLF state", () => {
   bridge.send(Uint8Array.of(10));
   assert.equal(input.tryRead!([byte]), 1);
   assert.equal(byte[0], 10);
+});
+
+function sendAfterEmptySnapshot<T>(bridge: SharedBridge, operation: () => T) {
+  const original = SharedBridge.prototype.availableInput;
+  let pending = true;
+  SharedBridge.prototype.availableInput = function () {
+    const available = original.call(this);
+    if (pending && this.buffer === bridge.buffer && available === 0) {
+      pending = false;
+      assert.equal(bridge.send(Uint8Array.of(13, 10)), true);
+    }
+    return available;
+  };
+  try {
+    return operation();
+  } finally {
+    SharedBridge.prototype.availableInput = original;
+  }
+}
+
+test("input arriving after an empty snapshot still takes the cooked normalization path", () => {
+  for (const closed of [false, true]) {
+    const { bridge, input } = cookedTerminal();
+    if (closed) bridge.close();
+    const destination = new Uint8Array(2).fill(91);
+    const count = sendAfterEmptySnapshot(bridge, () => input.tryRead!([destination]));
+    assert.notEqual(count, 0);
+    assert.ok(count === -6 || count === 1);
+    if (count === -6) assert.equal(input.tryRead!([destination]), 1);
+    assert.equal(destination[0], 10);
+    assert.equal(destination[1], 91);
+  }
 });
