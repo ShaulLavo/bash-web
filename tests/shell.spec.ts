@@ -107,7 +107,7 @@ test("bounded heavy streaming keeps the main thread responsive", async ({ page }
     inputBytes: window.bashWeb?.metrics()?.inputBytes,
     lines: window.bashWeb?.readLines().slice(-8),
     snapshot: window.bashWeb?.snapshot(),
-    terminal: window.bashWeb?.runtimeSnapshot()?.terminal,
+    runtime: window.bashWeb?.runtimeSnapshot(),
   }));
   console.log(JSON.stringify({ streamingSample: responsive }));
   expect(responsive.bytes).toBeGreaterThan(1000);
@@ -229,7 +229,7 @@ test("long wrapped prompt survives resizing while editing and streaming", async 
       JSON.stringify({
         wrappedStreamingState: await page.evaluate(() => ({
           snapshot: window.bashWeb?.snapshot(),
-          terminal: window.bashWeb?.runtimeSnapshot()?.terminal,
+          runtime: window.bashWeb?.runtimeSnapshot(),
           metrics: window.bashWeb?.metrics(),
         })),
       }),
