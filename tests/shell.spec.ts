@@ -104,6 +104,8 @@ test("bounded heavy streaming keeps the main thread responsive", async ({ page }
   const responsive = await page.evaluate(() => ({
     time: performance.now(),
     bytes: window.bashWeb?.metrics()?.outputBytes,
+    inputBytes: window.bashWeb?.metrics()?.inputBytes,
+    lines: window.bashWeb?.readLines().slice(-8),
     snapshot: window.bashWeb?.snapshot(),
     terminal: window.bashWeb?.runtimeSnapshot()?.terminal,
   }));
