@@ -193,17 +193,30 @@ fn aliases_keep_shared_offsets_after_caller_scope_replacement() {
 fn cancellation_keeps_completed_exec_and_restores_surrounding_bindings() {
     for body in ["exec 3>out", "exec 3>&-", "exec 3>new"] {
         for scope in caller_scopes(&format!("{body}; printf ready >&2; while :; do :; done")) {
-            let rig = Rig::new(None);
-            assert_eq!(rig.run("exec 3>old; exec 2>&1"), 0);
-            let job = rig.shell.start(&scope).unwrap();
-            rig.until_ready();
-            rig.shell.interrupt();
-            assert_eq!(rig.finish(job), 130, "{scope}");
-            let status = rig.run("printf X >&3; result=$?; printf restored; test \"$result\" = 0");
-            assert_eq!(status, i32::from(body == "exec 3>&-"), "{scope}");
-            assert!(rig.output.bytes().ends_with(b"restored"), "{scope}");
+            cancelled_scope(body, &scope);
         }
     }
+}
+
+fn cancelled_scope(body: &str, scope: &str) {
+    let rig = Rig::new(None);
+    assert_eq!(rig.run("exec 3>old; exec 2>&1"), 0);
+    let job = rig.shell.start(scope).unwrap();
+    rig.until_ready();
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130, "{scope}");
+    let status = rig.run("printf X >&3; result=$?; printf restored; test \"$result\" = 0");
+    assert_eq!(status, i32::from(body == "exec 3>&-"), "{scope}");
+    assert!(rig.output.bytes().ends_with(b"restored"), "{scope}");
+    let changed = match body {
+        "exec 3>out" => Some("/home/guest/out"),
+        "exec 3>new" => Some("/home/guest/new"),
+        _ => None,
+    };
+    if let Some(path) = changed {
+        assert_eq!(rig.fs.read_file(path).unwrap(), b"X", "{scope}");
+    }
+    assert_eq!(rig.fs.read_file("/home/guest/old").unwrap(), b"", "{scope}");
 }
 
 #[test]
@@ -230,4 +243,122 @@ fn caller_close_releases_live_pipe_writer_and_reader() {
         assert!(probe.is_finished(), "reader leaked: {scope}");
         assert_eq!(probe.now_or_never().unwrap(), Err(IoError::BrokenPipe));
     }
+}
+
+#[test]
+fn issue_108_exact_reproducer() {
+    let rig = Rig::new(None);
+    assert_eq!(rig.run("f() { exec 3>out; }; f; printf X >&3; result=$?; printf '<%s:%s>' \"$result\" \"$(<out)\""), 0);
+    assert_eq!(rig.output.bytes(), b"<0:X>");
+}
+
+#[test]
+fn process_substitution_numbers_close_but_explicit_aliases_survive() {
+    for body in [
+        "g() { exec 63>out; exec 4>&63; }; g < <(printf data)",
+        "for path in <(printf data); do exec 63>out; exec 4>&63; done",
+        "{ exec 63>out; exec 4>&63; } < <(printf data)",
+    ] {
+        let rig = Rig::new(None);
+        assert_eq!(rig.run(&format!("f() {{ {body}; }}; f; printf leaked >&63; result=$?; printf kept >&4; test \"$result\" = 1")), 0, "{body}");
+        assert_eq!(rig.fs.read_file("/home/guest/out").unwrap(), b"kept");
+    }
+}
+
+#[test]
+fn caller_pipe_aliases_keep_endpoint_alive_until_the_last_binding_closes() {
+    let (reader, writer) = pipe();
+    let rig = Rig::new(Some((3, writer)));
+    assert_eq!(rig.run("f() { exec 4>&3; exec 3>&-; }; f; printf X >&4"), 0);
+    let probe = rig.executor.spawn(async move {
+        let mut byte = [0];
+        assert_eq!(reader.read(&mut byte).await, Ok(1));
+        assert_eq!(byte, *b"X");
+        reader.read(&mut byte).await
+    });
+    rig.executor.drive(256);
+    assert!(!probe.is_finished());
+    assert_eq!(rig.run("eval 'exec 4>&-'"), 0);
+    rig.executor.drive(256);
+    assert_eq!(probe.now_or_never().unwrap(), Ok(0));
+}
+
+#[test]
+fn failed_exec_preparation_does_not_publish_partial_bindings() {
+    for scope in caller_scopes("exec 3>new 4>&99") {
+        let rig = Rig::new(None);
+        assert_eq!(
+            rig.run(&format!("exec 3>old; {scope}; printf X >&3; printf Y >&4")),
+            1
+        );
+        assert_eq!(rig.fs.read_file("/home/guest/old").unwrap(), b"X");
+        assert_eq!(rig.fs.read_file("/home/guest/new").unwrap(), b"");
+    }
+}
+
+#[test]
+fn wrappers_and_high_descriptor_numbers_keep_caller_ownership() {
+    let rig = Rig::new(None);
+    assert_eq!(rig.run("command eval 'exec 123>out'; builtin eval 'exec 124>&123'; printf A >&123; printf B >&124"), 0);
+    assert_eq!(rig.fs.read_file("/home/guest/out").unwrap(), b"AB");
+}
+
+#[test]
+fn cancelled_nested_stdout_change_restores_temporary_outer_stdout() {
+    let rig = Rig::new(None);
+    let job = rig
+        .shell
+        .start("f() { exec 1>inner; exec 3>out; printf ready >&2; while :; do :; done; }; f >outer")
+        .unwrap();
+    for _ in 0..10000 {
+        rig.executor.drive(64);
+        if rig.errors.bytes() == b"ready" {
+            break;
+        }
+    }
+    assert_eq!(rig.errors.bytes(), b"ready");
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    assert_eq!(rig.run("printf restored; printf X >&3"), 0);
+    assert_eq!(rig.output.bytes(), b"restored");
+    assert_eq!(rig.fs.read_file("/home/guest/out").unwrap(), b"X");
+    assert_eq!(rig.fs.read_file("/home/guest/inner").unwrap(), b"");
+}
+
+#[test]
+fn caller_close_releases_pipe_endpoints_before_the_scope_is_cancelled() {
+    for close_writer in [true, false] {
+        for scope in caller_scopes("exec 3>&-; printf ready >&2; while :; do :; done") {
+            active_pipe_close(close_writer, &scope);
+        }
+    }
+}
+
+fn active_pipe_close(close_writer: bool, scope: &str) {
+    let (reader, writer) = pipe();
+    let (binding, observer) = if close_writer {
+        (writer, reader)
+    } else {
+        (reader, writer)
+    };
+    let rig = Rig::new(Some((3, binding)));
+    assert_eq!(rig.run("exec 2>&1"), 0);
+    let job = rig.shell.start(scope).unwrap();
+    rig.until_ready();
+    let probe = rig.executor.spawn(async move {
+        if close_writer {
+            return observer.read(&mut [0]).await == Ok(0);
+        }
+        observer.write_all(b"x", &Cancel::new()).await == Err(IoError::BrokenPipe)
+    });
+    rig.executor.drive(256);
+    assert!(
+        probe.is_finished(),
+        "endpoint retained by active scope: {scope}"
+    );
+    assert!(probe.now_or_never().unwrap());
+    assert!(!job.is_finished());
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    assert_eq!(rig.run("printf X >&3"), 1);
 }
