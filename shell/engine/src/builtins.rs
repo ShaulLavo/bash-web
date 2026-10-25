@@ -142,7 +142,7 @@ pub(crate) async fn run(
         Builtin::Caller => return caller::run(args, state, fds, context, work).await,
         Builtin::Shopt => return shopt(args, state, fds, context, work).await,
         Builtin::LoopControl => {
-            return loop_control(name, args, fds, context, work).await;
+            return loop_control(name, args, state, fds, context, work).await;
         }
         Builtin::ExitReturn => {
             let args = if args.first().is_some_and(|arg| arg == "--") {
@@ -173,10 +173,7 @@ pub(crate) async fn run(
                 None => state.borrow().status(),
             };
             if args.len() > 1 {
-                return Ok(Outcome {
-                    code: 1,
-                    flow: Flow::Exit,
-                });
+                return too_many_arguments(name, state, fds, context).await;
             }
             return Ok(Outcome {
                 code,
@@ -221,10 +218,7 @@ pub(crate) async fn run(
                     .map_err(|_| 2)?,
             };
             if args.len() > 1 {
-                return Ok(Outcome {
-                    code: 1,
-                    flow: Flow::Exit,
-                });
+                return too_many_arguments(name, state, fds, context).await;
             }
             let count = usize::try_from(count).map_err(|_| 1)?;
             state.borrow_mut().shift_positional(count)?;
@@ -563,12 +557,60 @@ async fn shopt_diagnostic(
     Ok(())
 }
 
+fn argument_error_flow(state: &SharedState) -> Flow {
+    if state.borrow().interactive {
+        Flow::Abort
+    } else {
+        Flow::Exit
+    }
+}
+
+async fn too_many_arguments(
+    name: &str,
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+) -> Result<Outcome, i32> {
+    control_diagnostic(
+        fds,
+        &["/usr/bin/bash: ", name, ": too many arguments\n"],
+        context,
+        Outcome {
+            code: 1,
+            flow: argument_error_flow(state),
+        },
+    )
+    .await
+}
+
+// Diagnostic delivery cannot replace the control outcome it describes.
+async fn control_diagnostic(
+    fds: &FdTable,
+    pieces: &[&str],
+    context: &Context,
+    outcome: Outcome,
+) -> Result<Outcome, i32> {
+    let Some(stderr) = fds.get(2) else {
+        return Ok(outcome);
+    };
+    for piece in pieces {
+        match stderr.write_all(piece.as_bytes(), &context.cancel).await {
+            Ok(()) => {}
+            Err(IoError::Cancelled) => return Err(130),
+            Err(IoError::LimitExceeded) => return Err(crate::exec::RESOURCE_STATUS),
+            Err(_) => return Ok(outcome),
+        }
+    }
+    Ok(outcome)
+}
+
 /// Original bounded loop-control adapter. Counts use Bash's signed decimal
 /// intmax_t syntax, not wasm32 usize, and outside-loop calls return success
 /// before inspecting their operands. Diagnostics borrow rather than clone argv.
 async fn loop_control(
     name: &str,
     args: &[String],
+    state: &SharedState,
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
@@ -595,7 +637,7 @@ async fn loop_control(
         write(fds, help, context).await?;
         return Ok(Outcome::status(2));
     } else if args.len() > 1 {
-        (1, Flow::Exit, None, "too many arguments")
+        (1, argument_error_flow(state), None, "too many arguments")
     } else {
         let count = match args.first() {
             None => Some(1),
@@ -623,35 +665,29 @@ async fn loop_control(
                 args.first(),
                 "loop count out of range",
             ),
-            None => (2, Flow::Exit, args.first(), "numeric argument required"),
+            None => (
+                2,
+                argument_error_flow(state),
+                args.first(),
+                "numeric argument required",
+            ),
         }
     };
-    let output = endpoint(fds, 2)?;
-    for piece in ["/usr/bin/bash: ", name, ": "] {
-        output
-            .write_all(piece.as_bytes(), &context.cancel)
-            .await
-            .map_err(|error| error.status())?;
-    }
-    if let Some(value) = value {
-        output
-            .write_all(value.as_bytes(), &context.cancel)
-            .await
-            .map_err(|error| error.status())?;
-        output
-            .write_all(b": ", &context.cancel)
-            .await
-            .map_err(|error| error.status())?;
-    }
-    output
-        .write_all(message.as_bytes(), &context.cancel)
-        .await
-        .map_err(|error| error.status())?;
-    output
-        .write_all(b"\n", &context.cancel)
-        .await
-        .map_err(|error| error.status())?;
-    Ok(Outcome { code, flow })
+    control_diagnostic(
+        fds,
+        &[
+            "/usr/bin/bash: ",
+            name,
+            ": ",
+            value.map_or("", String::as_str),
+            if value.is_some() { ": " } else { "" },
+            message,
+            "\n",
+        ],
+        context,
+        Outcome { code, flow },
+    )
+    .await
 }
 
 /// Original streaming adapter for Bashkit builtins/vars.rs Set. Expanded argv

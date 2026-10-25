@@ -316,7 +316,14 @@ async fn read_record(
         .saturating_mul(if utf8 { 4 } else { 1 })
         .min(context.limits().line_bytes);
     let protection_bytes = if options.raw { 0 } else { ceiling.div_ceil(8) };
-    let storage_bytes = ceiling.saturating_add(protection_bytes);
+    let chunk_bytes = if options.raw && options.count.exact() && !utf8 {
+        count.min(4096).min(ceiling.saturating_add(1))
+    } else {
+        1
+    };
+    let storage_bytes = ceiling
+        .saturating_add(protection_bytes)
+        .saturating_add(chunk_bytes);
     work.admit_storage(storage_bytes).map_err(error_status)?;
     let _storage = context.admit_builtin_buffer(storage_bytes)?;
     let mut reader = Reader {
@@ -340,31 +347,66 @@ async fn read_record(
         .try_reserve_exact(protection_bytes)
         .map_err(|_| 2)?;
     reader.protected.resize(protection_bytes, 0);
-    let mut byte = [0];
-    let code = loop {
-        if reader.remaining == 0 {
-            break 0;
-        }
-        work.checkpoint(&context.cancel)
-            .await
-            .map_err(error_status)?;
-        if input
-            .read_cancelled(&mut byte, &context.cancel)
-            .await
-            .map_err(|e| e.status())?
-            == 0
-        {
-            break 1;
-        }
-        if reader.byte(byte[0])? {
-            break 0;
-        }
-    };
+    let mut chunk = Vec::new();
+    chunk.try_reserve_exact(chunk_bytes).map_err(|_| 2)?;
+    chunk.resize(chunk_bytes, 0);
+    let code = reader.read(input, &mut chunk, context, work).await?;
     reader.finish()?;
     assign(reader, code, options, state, fds, context, work).await
 }
 
 impl Reader {
+    async fn read(
+        &mut self,
+        input: &Endpoint,
+        chunk: &mut [u8],
+        context: &Context,
+        work: &mut Work,
+    ) -> Result<i32, i32> {
+        while self.remaining != 0 {
+            work.checkpoint(&context.cancel)
+                .await
+                .map_err(error_status)?;
+            // Raw C exact reads emit at most one character per input byte.
+            // Stop at the first excess byte on a record-limit error, too.
+            let length = chunk.len().min(self.remaining).min(
+                self.ceiling
+                    .saturating_sub(self.bytes.len())
+                    .saturating_add(1),
+            );
+            let read = input
+                .read_cancelled(&mut chunk[..length], &context.cancel)
+                .await
+                .map_err(|error| error.status())?;
+            if read == 0 {
+                return Ok(1);
+            }
+            if self.consume(&chunk[..read], context, work).await? {
+                return Ok(0);
+            }
+        }
+        Ok(0)
+    }
+
+    async fn consume(
+        &mut self,
+        bytes: &[u8],
+        context: &Context,
+        work: &mut Work,
+    ) -> Result<bool, i32> {
+        for (index, byte) in bytes.iter().enumerate() {
+            if index != 0 {
+                work.checkpoint(&context.cancel)
+                    .await
+                    .map_err(error_status)?;
+            }
+            if self.byte(*byte)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     fn byte(&mut self, byte: u8) -> Result<bool, i32> {
         if byte == 0 {
             let delimiter = self.delimiter == Some(0) && !self.escaped;
