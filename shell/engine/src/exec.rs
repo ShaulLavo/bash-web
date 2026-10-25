@@ -432,6 +432,8 @@ impl Scope {
 /// The interpreter supplies the shell environment's status and diagnostic line.
 pub(crate) enum Error {
     Status(i32),
+    /// The diagnostic was already emitted; abort this reader, not only a command.
+    Abort(i32),
     /// A scalar write could not resolve its reference within the supported
     /// depth. Unlike an ordinary nonzero command, it ends this reader unit.
     AssignmentDepth,
