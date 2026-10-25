@@ -3061,9 +3061,12 @@ async fn prepare_simple_command_body(
     let mut budget = Budget::default();
     // Process substitutions open descriptors for this command only.
     let fds = Rc::new(RefCell::new(fds.borrow().clone()));
+    // Fixed descriptor metadata uses the active execution pool, not expansion bytes.
+    let _generated_allocation = context
+        .evaluation
+        .admit_execution(std::mem::size_of::<Cell<u64>>() + 2 * std::mem::size_of::<usize>())?;
     let generated_fds = Rc::new(Cell::new(0));
     let mut work = substitution_work(context, &fds, Some(generated_fds.clone()));
-    work.admit_storage(std::mem::size_of::<Rc<Cell<u64>>>() + std::mem::size_of::<Cell<u64>>())?;
     let mut argv = expand::fields(
         &simple.name,
         state,
