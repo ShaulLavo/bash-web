@@ -321,13 +321,7 @@ fn nameref_depth_overflow_stays_distinct_from_cycles_under_nounset() {
 
 #[test]
 fn unsupported_reference_shapes_do_not_create_a_binding_or_target() {
-    for operand in [
-        "ref=array[0]",
-        "ref=",
-        "ref=PIPESTATUS",
-        "-a ref=target",
-        "-nx ref=target",
-    ] {
+    for operand in ["ref=", "ref=PIPESTATUS", "-a ref=target", "-nx ref=target"] {
         let rig = Rig::new(Limits::default());
         assert_eq!(rig.run(&format!("declare -n {operand}")), 2, "{operand}");
         assert_eq!(rig.run(r#"args "${ref+set}" "${target+set}""#), 0);

@@ -322,7 +322,7 @@ async fn names(
         if action == "function" {
             state.functions().keys().map(String::len).sum()
         } else {
-            state.bindings().keys().map(String::len).sum()
+            state.raw_bindings().keys().map(String::len).sum()
         }
     };
     scan_bytes(bytes, context, work).await?;
@@ -333,7 +333,7 @@ async fn names(
         }
         return Ok(());
     }
-    for (name, binding) in state.bindings() {
+    for (name, binding) in state.raw_bindings() {
         let selected = match action {
             "export" => state.exported_bindings().contains(name),
             "arrayvar" => matches!(binding, Binding::Indexed(_)),

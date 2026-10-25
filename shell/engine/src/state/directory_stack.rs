@@ -177,6 +177,7 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+    use super::super::bindings_tests::finish;
     use super::*;
 
     fn state(limit: usize) -> (State, StorageBudget) {
@@ -187,6 +188,15 @@ mod tests {
         let version = state.prepare_push_directory(entry)?;
         state.install_directories(version);
         Ok(())
+    }
+    fn snapshot(state: &super::super::SharedState) -> State {
+        let mut work = crate::exec::Work::new(65_536, 65_536, 0);
+        finish(State::snapshot(
+            state,
+            &crate::executor::Cancel::new(),
+            &mut work,
+        ))
+        .unwrap_or_else(|_| panic!("snapshot fits"))
     }
     fn used(budget: &StorageBudget) -> usize {
         budget.observation().0
@@ -237,19 +247,20 @@ mod tests {
     }
 
     #[test]
-    fn clones_share_one_charge_and_change_through_admitted_copies() {
+    fn snapshots_share_directory_charge_and_change_through_admitted_copies() {
         let (mut state, budget) = state(4096);
         push(&mut state, "/a".into()).unwrap();
         let source = used(&budget);
-        let mut copy = state.clone();
+        let state = state.shared();
+        let mut copy = snapshot(&state);
         assert_eq!(used(&budget), source);
         copy.clear_directories();
-        assert_eq!(state.directories(), ["/a"]);
+        assert_eq!(state.borrow().directories(), ["/a"]);
         assert_eq!(used(&budget), source);
-        let mut copy = state.clone();
+        let mut copy = snapshot(&state);
         push(&mut copy, "/b".into()).unwrap();
         assert_eq!(used(&budget), source + retained(&copy));
-        assert_eq!(state.directories(), ["/a"]);
+        assert_eq!(state.borrow().directories(), ["/a"]);
         drop(copy);
         assert_eq!(used(&budget), source);
         drop(state);

@@ -131,7 +131,11 @@ pub(super) async fn print<'a>(
             print_pipeline_status(state, fds, context, work).await?;
             continue;
         }
-        if state.borrow().stack_array(name) && !state.borrow().is_nameref(name) {
+        let indexed = matches!(
+            state.borrow().raw_bindings().get(name),
+            Some(crate::state::Binding::Indexed(_))
+        );
+        if (state.borrow().stack_array(name) || indexed) && !state.borrow().is_nameref(name) {
             print_stack_array(name, state, fds, context, work).await?;
             continue;
         }
@@ -172,12 +176,11 @@ async fn snapshot(
     let bytes = state
         .borrow()
         .declaration(name)
-        .map_err(|()| 2)?
         .and_then(|view| view.value)
         .map_or(0, str::len);
     scan_bytes(bytes, context, work).await?;
     let state = state.borrow();
-    let Some(view) = state.declaration(name).map_err(|()| 2)? else {
+    let Some(view) = state.declaration(name) else {
         return Ok(None);
     };
     work.admit_storage(view.value.map_or(0, str::len))
@@ -343,7 +346,6 @@ async fn print_pipeline_status(
         let state = state.borrow();
         let attributes = state
             .declaration("PIPESTATUS")
-            .map_err(|()| 2)?
             .map(declaration_attributes)
             .unwrap_or([false; 5]);
         (state.pipeline_status().to_vec(), attributes)
@@ -380,7 +382,18 @@ async fn print_stack_array(
     crate::state::State::admit_scalar_access(state, name, &context.cancel, work)
         .await
         .map_err(error_status)?;
-    write(fds, b"declare -a ", context).await?;
+    let attributes = state
+        .borrow()
+        .declaration(name)
+        .map(declaration_attributes)
+        .unwrap_or([false; 5]);
+    write(fds, b"declare -a", context).await?;
+    for (index, flag) in [(3, b'l'), (0, b'n'), (1, b'r'), (4, b'u'), (2, b'x')] {
+        if attributes[index] {
+            write(fds, &[flag], context).await?;
+        }
+    }
+    write(fds, b" ", context).await?;
     write(fds, name.as_bytes(), context).await?;
     let count = state.borrow().array_count(name);
     if count == 0 {
@@ -394,8 +407,26 @@ async fn print_stack_array(
     write(fds, b"=(", context).await?;
     let utf8 = super::printf::character_locale(state, context, work).await?;
     let printability = Printability::new(utf8)?;
-    for index in 0..count {
-        print_stack_element(name, index, &printability, utf8, state, fds, context, work).await?;
+    let mut previous = None;
+    loop {
+        let next = state
+            .borrow()
+            .array_next(name, previous)
+            .map(|(index, _)| index);
+        let Some(index) = next else { break };
+        print_stack_element(
+            name,
+            index,
+            previous.is_none(),
+            &printability,
+            utf8,
+            state,
+            fds,
+            context,
+            work,
+        )
+        .await?;
+        previous = Some(index);
     }
     write(fds, b")\n", context).await
 }
@@ -403,7 +434,8 @@ async fn print_stack_array(
 #[allow(clippy::too_many_arguments)]
 async fn print_stack_element(
     name: &str,
-    index: usize,
+    index: i64,
+    first: bool,
     printability: &Printability,
     utf8: bool,
     state: &SharedState,
@@ -411,19 +443,15 @@ async fn print_stack_element(
     context: &Context,
     work: &mut Work,
 ) -> Result<(), i32> {
-    let bytes = state
-        .borrow()
-        .array_element(name, index as i64)
-        .ok_or(2)?
-        .len();
+    let bytes = state.borrow().array_element(name, index).ok_or(2)?.len();
     work.admit_storage(bytes + 24).map_err(error_status)?;
     scan_bytes(bytes + 24, context, work).await?;
     let value = state
         .borrow()
-        .array_element(name, index as i64)
+        .array_element(name, index)
         .ok_or(2)?
         .to_owned();
-    let mut line = if index == 0 {
+    let mut line = if first {
         format!("[{index}]")
     } else {
         format!(" [{index}]")

@@ -14,7 +14,7 @@ mod trap;
 use crate::{
     commands::{self, Builtin, Declaration},
     executor::Budget,
-    expand::{Error, Work},
+    expand::{self, Error, Work},
     interpreter::{Context, Flow, JobSelector, Outcome},
     io::{Endpoint, FdTable, IoError},
     state::{SharedState, State},
@@ -1078,7 +1078,7 @@ async fn nameref_declaration(
                 .get(key)
                 .or_else(|| {
                     state
-                        .bindings()
+                        .raw_bindings()
                         .get(key)
                         .and_then(crate::state::Binding::scalar)
                 })
@@ -1092,17 +1092,23 @@ async fn nameref_declaration(
             .await
             .map_err(error_status)?;
     }
-    // Array targets, unbound reference declarations and broad attributes are
-    // explicit prerequisites for later units, never target-string parsing.
-    if target.is_empty()
-        || target.contains(['[', ']'])
-        || target == "PIPESTATUS"
-        || key == "PIPESTATUS"
-    {
+    if target.is_empty() || target == "PIPESTATUS" || key == "PIPESTATUS" {
         return Err(2);
     }
-    if !valid_name(&target) {
-        return Err(1);
+    let Some(reference) = crate::state::Reference::parse(&target) else {
+        return Err(if target.contains(['[', ']']) { 2 } else { 1 });
+    };
+    // Special arrays have projected reads, not the ordinary element write
+    // contract. Refuse their subscripted declarations before publishing a local.
+    let unsupported = {
+        let state = state.borrow();
+        state.reference(reference).ok().is_some_and(|target| {
+            target.subscript.is_some()
+                && (target.name == "PIPESTATUS" || state.stack_array(target.name))
+        })
+    };
+    if unsupported {
+        return Err(2);
     }
     state
         .borrow_mut()
@@ -1179,7 +1185,7 @@ async fn unset(
     let mut budget = Budget::default();
     for name in names {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-        if !valid_name(name) {
+        if crate::state::Reference::parse(name).is_none() {
             continue;
         }
         if functions {
@@ -1189,8 +1195,39 @@ async fn unset(
         let removed = if namerefs {
             state.borrow_mut().unset_nameref(name)
         } else {
-            admit_unset_target(name, state, context, work).await?;
-            state.borrow_mut().unset_variable(name)
+            let Some(place) = expand::references::removal_place(
+                expand::references::syntax(name).map_err(error_status)?,
+                state,
+                &context.cancel,
+                context.limits().expansion_bytes,
+                work,
+            )
+            .await
+            .map_err(error_status)?
+            else {
+                continue;
+            };
+            if let Some(index) = place.index {
+                let existed = state.borrow().place_value(&place).is_some();
+                let result = State::write_element(
+                    state,
+                    &place,
+                    crate::state::BindingUpdate::Remove { index },
+                    &context.cancel,
+                    work,
+                )
+                .await;
+                match result {
+                    Ok(()) => Ok(existed),
+                    Err(crate::exec::Error::Readonly { .. }) => Err(1),
+                    Err(error) => return Err(error_status(error)),
+                }
+            } else {
+                admit_unset_target(&place.name, state, context, work).await?;
+                state
+                    .borrow_mut()
+                    .unset_selected(&place.name, name == "IFS")
+            }
         };
         match removed {
             Err(_) => {

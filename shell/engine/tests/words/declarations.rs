@@ -101,28 +101,38 @@ fn declaration_inspection_yields_and_cancels_without_mutation() {
 }
 
 #[test]
-fn indexed_declarations_reject_without_scalar_projection_or_mutation() {
-    for setup in ["a=(zero one)", "a=()", "a=(); a[7]=seven"] {
+fn indexed_declarations_print_sparse_values_without_mutation() {
+    for (setup, expected) in [
+        ("a=(zero one)", "declare -a a=([0]=\"zero\" [1]=\"one\")\n"),
+        ("a=()", "declare -a a=()\n"),
+        ("a=(); a[7]=seven", "declare -a a=([7]=\"seven\")\n"),
+    ] {
         let rig = Rig::new(Limits::default());
         assert_eq!(rig.run(setup), 0, "{setup}");
-        let before = rig.shell.state().borrow().bindings()["a"].clone();
-        assert_eq!(rig.run("declare -p a"), 2, "{setup}");
-        assert!(rig.output.bytes().is_empty(), "{setup}");
+        let before = rig.shell.state().borrow().bindings()["a"].to_string();
+        assert_eq!(rig.run("declare -p a"), 0, "{setup}");
+        assert_eq!(rig.output.bytes(), expected.as_bytes(), "{setup}");
         assert_eq!(rig.shell.state().borrow().bindings()["a"], before);
     }
 }
 
 #[test]
-fn indexed_declaration_rejection_preserves_local_and_raw_reference() {
+fn indexed_declaration_preserves_local_scope_and_raw_reference() {
     let rig = Rig::new(Limits::default());
     assert_eq!(
         rig.run("a=(global); f() { local a; a=(local); declare -p a; }; f"),
-        2
+        0
     );
     assert_eq!(rig.run("printf '%s\\n' \"${a[@]}\""), 0);
-    assert_eq!(rig.output.bytes(), b"global\n");
+    assert_eq!(
+        rig.output.bytes(),
+        b"declare -a a=([0]=\"local\")\nglobal\n"
+    );
     assert_eq!(rig.run("declare -n r=a; declare -p r"), 0);
-    assert_eq!(rig.output.bytes(), b"global\ndeclare -n r=\"a\"\n");
+    assert_eq!(
+        rig.output.bytes(),
+        b"declare -a a=([0]=\"local\")\nglobal\ndeclare -n r=\"a\"\n"
+    );
 }
 
 #[test]

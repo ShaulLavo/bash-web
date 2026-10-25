@@ -11,7 +11,9 @@ impl Expansion<'_> {
         state: &'a SharedState,
         depth: usize,
     ) -> crate::exec::ResultFuture<'a, String> {
-        self.part_frame(move |expansion| expansion.expand_prompt(value, state, depth))
+        self.local_frame(self.admit_frames, move |expansion| {
+            expansion.expand_prompt(value, state, depth)
+        })
     }
 
     async fn expand_prompt(

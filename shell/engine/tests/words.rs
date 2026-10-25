@@ -2169,6 +2169,14 @@ fn scalar_operators_work_in_assignments_declarations_command_names_and_redirects
 }
 
 #[test]
+fn selected_element_default_distinguishes_missing_and_set_empty() {
+    check(
+        r#"args ${a[0]-x}; a[0]=; args "${a[0]-x}" "${a[0]:-x}"; a[0]=kept; args "${a[0]-x}""#,
+        &[&["x"], &["", "x"], &["kept"]],
+    );
+}
+
+#[test]
 fn selected_unsupported_operands_and_operator_targets_fail_without_dispatch() {
     check(
         r#"args ${u:-$@}; set -- a "b c"; args ${u:-$@}; args "${u:-$@}""#,
@@ -2176,7 +2184,6 @@ fn selected_unsupported_operands_and_operator_targets_fail_without_dispatch() {
     );
     for source in [
         "args ${u:-${PIPESTATUS[@]}}",
-        "args ${a[0]-x}",
         "args ${1-x}",
         "args ${u:-~}",
         "args ${u:-*}",
@@ -2795,8 +2802,9 @@ fn deferred_list_separators_keep_raw_output_and_field_bounds() {
         expansion_bytes: 8,
         ..Limits::default()
     });
+    rig.variable("IFS", "");
     assert_eq!(
-        rig.run(r#"f() { IFS=; args "$@"${IFS:= }; }; f '' '' '' '' '' '' '' '' '' ''"#),
+        rig.run(r#"f() { args "$@"${IFS:= }; }; f '' '' '' '' '' '' '' '' '' ''"#),
         2
     );
     assert!(rig.calls.borrow().is_empty());
@@ -2806,10 +2814,8 @@ fn deferred_list_separators_keep_raw_output_and_field_bounds() {
             expansion_bytes: bytes,
             ..Limits::default()
         });
-        assert_eq!(
-            rig.run(r#"f() { IFS=; args "$@"${IFS:=:}; }; f aa bb"#),
-            status
-        );
+        rig.variable("IFS", "");
+        assert_eq!(rig.run(r#"f() { args "$@"${IFS:=:}; }; f aa bb"#), status);
         if status == 0 {
             assert_eq!(*rig.calls.borrow(), &[vec!["aa bb"]]);
         } else {
@@ -2820,7 +2826,8 @@ fn deferred_list_separators_keep_raw_output_and_field_bounds() {
         arguments: 3,
         ..Limits::default()
     });
-    assert_eq!(rig.run(r#"f() { IFS=; args $@${IFS:=:}; }; f a:b c:d"#), 2);
+    rig.variable("IFS", "");
+    assert_eq!(rig.run(r#"f() { args $@${IFS:=:}; }; f a:b c:d"#), 2);
     assert!(rig.calls.borrow().is_empty());
 }
 
@@ -4433,6 +4440,54 @@ mod aliases;
 
 #[path = "words/array_slicing.rs"]
 mod array_slicing;
+
+#[test]
+fn typed_reference_operator_errors_preserve_diagnostic_and_flow() {
+    for source in [
+        "a=(); args \"${a[-1]:-fallback}\"; args AFTER",
+        "a=(); declare -n r='a[-1]'; args \"${r:-fallback}\"; args AFTER",
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 1, "{source}");
+        assert_eq!(
+            rig.errors.bytes(),
+            b"/usr/bin/bash: line 1: a[-1]: bad array subscript\n"
+        );
+        assert!(rig.calls.borrow().is_empty(), "{source}");
+    }
+}
+
+#[test]
+fn typed_reference_operator_readonly_keeps_rhs_effect_but_not_destination_write() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(kept); readonly a; declare -n r='a[1]'"), 0);
+    assert_eq!(rig.run("args \"${r:=${side:=done}}\"; args AFTER"), 1);
+    assert_eq!(rig.value("side").as_deref(), Some("done"));
+    assert_eq!(
+        rig.errors.bytes(),
+        b"/usr/bin/bash: line 1: a: readonly variable\n"
+    );
+    assert!(rig.calls.borrow().is_empty());
+    assert_eq!(rig.run("args \"${a[@]}\""), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["kept"]]);
+}
+
+#[test]
+fn typed_reference_operator_cycles_are_selected_element_cycles() {
+    for source in [
+        "a[0]='a[0]'; args \"$((a[0]))\"; args AFTER",
+        "a[0]='a'; args \"$((a[0]))\"; args AFTER",
+        "a[0]='a[1]'; a[1]='a[0]'; args \"$((a[0]))\"; args AFTER",
+    ] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run(source), 1, "{source}");
+        assert_eq!(
+            rig.errors.bytes(),
+            b"/usr/bin/bash: line 1: arithmetic expression: expression recursion level exceeded\n"
+        );
+        assert!(rig.calls.borrow().is_empty(), "{source}");
+    }
+}
 
 #[path = "words/enable.rs"]
 mod enable;

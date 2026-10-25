@@ -155,8 +155,8 @@ mod guest {
                 .borrow()
                 .bindings()
                 .get("PS1")
-                .cloned()
-                .unwrap_or_else(|| "$ ".into());
+                .map(ToString::to_string)
+                .unwrap_or_else(|| "$ ".to_owned());
             editor.begin(&prompt, unsafe { columns() }.max(2) as usize);
             if write(&output, prompt.as_bytes()).await.is_err() {
                 return 1;

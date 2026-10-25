@@ -11,7 +11,7 @@ impl Expansion<'_> {
         colon: bool,
         context: OperandContext<'a>,
     ) -> crate::exec::ResultFuture<'a, ()> {
-        self.part_frame(move |expansion| async move {
+        self.local_frame(self.admit_frames, move |expansion| async move {
             let OperandContext {
                 state,
                 quoted,
@@ -27,7 +27,7 @@ impl Expansion<'_> {
                 return Err(2.into());
             }
             expansion
-                .part_frame(|expansion| {
+                .local_frame(expansion.admit_frames, |expansion| {
                     expansion.positional_parameter(name, operator, source, colon, context)
                 })
                 .await
@@ -52,7 +52,7 @@ impl Expansion<'_> {
         let scalar = scalar || self.captured.is_some();
         if absent && matches!(operator, ParameterOp::AssignDefault | ParameterOp::Error) {
             return self
-                .effect_operand(name, operator, source, colon, context, None)
+                .effect_operand((name, None), operator, source, colon, context, None)
                 .await;
         }
         let replacement = matches!(operator, ParameterOp::UseReplacement);

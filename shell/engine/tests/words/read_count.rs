@@ -213,7 +213,7 @@ fn read_count_short_local_values_do_not_retain_the_reserved_ceiling() {
             let state = rig.shell.state();
             let state = state.borrow();
             let value = state.bindings().get(name).unwrap();
-            (value.len(), value.scalar().unwrap().capacity())
+            (value.len(), state.bindings().scalar_capacity(name).unwrap())
         })
         .into();
     rig.shell.interrupt();

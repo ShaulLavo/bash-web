@@ -3906,13 +3906,21 @@ async fn assignments_body(
     if assignments.is_empty() {
         return Ok(Vec::new());
     }
-    let mut frame = PrefixFrame::enter(state.clone());
+    let mut frame = PrefixFrame::enter(state.clone(), work)?;
     let mut names = Vec::new();
     let initial_bytes = *bytes;
     let mut budget = Budget::default();
     for assignment in assignments {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
-        let indexed = assignment.index.is_some()
+        let element_reference = state
+            .borrow()
+            .reference(crate::state::Reference {
+                name: &assignment.name,
+                subscript: None,
+            })
+            .is_ok_and(|r| r.subscript.is_some());
+        let indexed = element_reference
+            || assignment.index.is_some()
             || assignment.append
             || matches!(assignment.value, AssignmentValue::Array(_))
             || (commit
@@ -3925,7 +3933,7 @@ async fn assignments_body(
         }
         if indexed {
             indexed::assign(&assignment, state, context, work, frame, bytes, completed).await?;
-            frame = PrefixFrame::enter(state.clone());
+            frame = PrefixFrame::enter_prepared(state.clone());
             continue;
         }
         let AssignmentValue::Scalar(word) = assignment.value else {
@@ -4005,7 +4013,7 @@ async fn assignments_body(
         names.push(assignment_name);
         if commit {
             frame.commit(Some(completed)).map_err(expand::Error::from)?;
-            frame = PrefixFrame::enter(state.clone());
+            frame = PrefixFrame::enter_prepared(state.clone());
         }
     }
     if commit {
@@ -5393,7 +5401,10 @@ mod function_measurements {
         assert_eq!(ex.drive(64).pending, 0);
         assert_eq!(host.active_count(), 0);
         assert_eq!(host.retained_count(), 0);
-        assert_eq!(session.core.execution_storage.observation().0, 0);
+        assert_eq!(
+            session.core.execution_storage.observation().0,
+            session.state.borrow().prefix_capacity_bytes()
+        );
     }
 
     fn finish_review(ex: &Executor, job: JoinHandle<i32>) -> i32 {
@@ -5502,18 +5513,27 @@ mod function_measurements {
             .retained()
             .unwrap()
             .bytes();
-        assert_eq!(session.core.execution_storage.observation().0, source_bytes);
+        assert_eq!(
+            session.core.execution_storage.observation().0,
+            source_bytes + session.state.borrow().prefix_capacity_bytes()
+        );
         assert_eq!(
             finish_review(&ex, session.start("f \"$payload\"").unwrap()),
             0
         );
         assert_eq!(session.state.borrow().bindings()["seen"], "2");
-        assert_eq!(session.core.execution_storage.observation().0, source_bytes);
+        assert_eq!(
+            session.core.execution_storage.observation().0,
+            source_bytes + session.state.borrow().prefix_capacity_bytes()
+        );
         assert_eq!(
             finish_review(&ex, session.start("unset -f f g").unwrap()),
             0
         );
-        assert_eq!(session.core.execution_storage.observation().0, 0);
+        assert_eq!(
+            session.core.execution_storage.observation().0,
+            session.state.borrow().prefix_capacity_bytes()
+        );
         assert_eq!(ex.drive(64).pending, 0);
     }
 
@@ -5541,7 +5561,7 @@ mod function_measurements {
         {
             let state = session.state.try_borrow_mut().unwrap();
             assert_eq!(state.pipeline_status(), [1, 0]);
-            let view = state.declaration("PIPESTATUS").unwrap().unwrap();
+            let view = state.declaration("PIPESTATUS").unwrap();
             assert!(view.readonly && view.exported);
         }
         assert!(session.core.execution_storage.observation().0 >= 13);
@@ -5639,7 +5659,13 @@ mod function_measurements {
             );
             assert_eq!(session.state.borrow().bindings()["recovered"], "yes");
             assert_eq!(session.state.borrow().pipeline_status(), [0]);
-            assert_review_idle(&ex, &host, &session);
+            assert_eq!(
+                session.core.execution_storage.observation().0,
+                session.state.borrow().prefix_capacity_bytes()
+            );
+            assert_eq!(host.active_count(), 0);
+            assert_eq!(host.retained_count(), 0);
+            assert_eq!(ex.drive(64).pending, 0);
         }
     }
 
@@ -5708,7 +5734,10 @@ mod function_measurements {
                 0
             );
             assert!(!session.state.borrow().bindings().contains_key("saved"));
-            assert_eq!(session.core.execution_storage.observation().0, 0);
+            assert_eq!(
+                session.core.execution_storage.observation().0,
+                session.state.borrow().prefix_capacity_bytes()
+            );
             assert_eq!(host.retained_count(), 0);
             assert_eq!(ex.drive(64).pending, 0);
         }
@@ -5743,12 +5772,16 @@ mod function_measurements {
                 let (live, peak) = session.core.execution_storage.observation();
                 let reader_bytes = state.functions()["f"].source.retained().unwrap().bytes();
                 assert_eq!(
-                    live, reader_bytes,
-                    "only the stored definition's reader survives"
+                    live,
+                    reader_bytes + state.prefix_capacity_bytes(),
+                    "only the stored reader and State prefix capacity survive"
                 );
                 drop(state);
                 assert_eq!(finish_review(&ex, session.start("unset -f f").unwrap()), 0);
-                assert_eq!(session.core.execution_storage.observation().0, 0);
+                assert_eq!(
+                    session.core.execution_storage.observation().0,
+                    session.state.borrow().prefix_capacity_bytes()
+                );
                 assert_eq!(sample.calls, goal);
                 assert!(sample.poll_bytes > 0 && sample.drop_bytes > 0);
                 println!(

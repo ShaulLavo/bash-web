@@ -71,7 +71,6 @@ fn nameref_empty_unset_subscript_and_pipestatus_targets_stay_unsupported() {
     for operand in [
         "ref=",
         "ref",
-        "ref=array[0]",
         "ref=array[",
         "ref=array]",
         "ref=PIPESTATUS",

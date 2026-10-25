@@ -579,11 +579,16 @@ fn block_output(rig: &Rig, fd: u32) -> Endpoint {
 }
 
 fn cancel_prefix_and_refund(rig: &Rig, job: JoinHandle<i32>, before: usize) {
+    let capacity_before = rig.session.state.borrow().prefix_capacity_bytes();
     rig.executor.drive(1024);
     assert!(!job.is_finished());
     rig.session.interrupt();
     assert_eq!(finish(&rig.executor, job), 130);
-    assert_eq!(rig.session.core.execution_storage.observation().0, before);
+    let retained = rig.session.state.borrow().prefix_capacity_bytes() - capacity_before;
+    assert_eq!(
+        rig.session.core.execution_storage.observation().0,
+        before + retained
+    );
     assert!(!rig.session.state.borrow().bindings().contains_key("a"));
 }
 
