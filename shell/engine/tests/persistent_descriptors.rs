@@ -362,3 +362,75 @@ fn active_pipe_close(close_writer: bool, scope: &str) {
     assert_eq!(rig.finish(job), 130);
     assert_eq!(rig.run("printf X >&3"), 1);
 }
+
+#[test]
+fn exec_generated_replacement_stays_command_local() {
+    let rig = Rig::new(None);
+    assert_eq!(rig.run(r#"f() { exec < <(printf data) 63>out; }; f; printf leaked >&63; result=$?; printf "<%s:%s>" "$result" "$(<out)""#), 0);
+    assert_eq!(String::from_utf8(rig.output.bytes()).unwrap(), "<1:>");
+    assert_eq!(rig.fs.read_file("/home/guest/out").unwrap(), b"");
+}
+
+#[test]
+fn exec_generated_alias_retains_data_after_the_number_is_replaced() {
+    for redirects in ["4>&63", "4>&63 63>out"] {
+        let rig = Rig::new(None);
+        assert_eq!(rig.run(&format!("f() {{ exec < <(printf data) {redirects}; }}; f; read -rN4 -u4 data; printf '<%s:%s>' \"$?\" \"$data\"; exec 0<&- 4<&-; wait")), 0);
+        assert_eq!(rig.output.bytes(), b"<0:data>", "{redirects}");
+    }
+}
+
+#[test]
+fn ordinary_explicit_high_descriptors_are_not_generated_numbers() {
+    for source in [
+        "f() { exec 63>out; }; f",
+        "f() { exec 63>out < <(printf data); }; f",
+        "exec 63>old; f() { exec < <(printf data) 63>out; }; f",
+    ] {
+        let rig = Rig::new(None);
+        assert_eq!(
+            rig.run(&format!(
+                "{source}; printf kept >&63; exec 0<&- 63>&-; wait"
+            )),
+            0,
+            "{source}"
+        );
+        assert_eq!(
+            rig.fs.read_file("/home/guest/out").unwrap(),
+            b"kept",
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn cancelled_exec_scope_keeps_aliases_but_not_generated_replacements() {
+    let rig = Rig::new(None);
+    assert_eq!(rig.run("exec 2>&1"), 0);
+    let job = rig.shell.start("f() { exec < <(printf data) 4>&63 63>out; wait; printf ready >&2; while :; do :; done; }; f").unwrap();
+    rig.until_ready();
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    assert_eq!(rig.run("printf leaked >&63; result=$?; read -rN4 -u4 data; printf '<%s:%s>' \"$result\" \"$data\"; exec 0<&- 4<&-; wait"), 0);
+    assert!(rig.output.bytes().ends_with(b"<1:data>"));
+    assert_eq!(rig.fs.read_file("/home/guest/out").unwrap(), b"");
+    assert_eq!(rig.executor.drive(256).pending, 0);
+}
+
+#[test]
+fn cancelled_exec_preparation_releases_generated_jobs_without_publication() {
+    let rig = Rig::new(None);
+    assert_eq!(rig.run("exec 2>&1; exec 4>kept"), 0);
+    let job = rig.shell.start("f() { exec < <(while :; do :; done) 4>&63 63>$(printf ready >&2; while :; do :; done); }; f").unwrap();
+    rig.until_ready();
+    rig.shell.interrupt();
+    assert_eq!(rig.finish(job), 130);
+    assert_eq!(
+        rig.run(
+            "printf kept >&4; printf leaked >&63; result=$?; exec 4>&-; wait; test \"$result\" = 1"
+        ),
+        0
+    );
+    assert_eq!(rig.fs.read_file("/home/guest/kept").unwrap(), b"kept");
+    assert_eq!(rig.executor.drive(256).pending, 0);
+}
