@@ -34,3 +34,11 @@ Negative counts need to retain a suffix and can use memory proportional to the r
 The direct Rustix dependency enables its `std` feature so uucore's WASI file-descriptor conversions compile. This dependency is intentionally feature-only. A new workspace utility can reuse `buildWasiShell(["-p", "shell-utilities", "--bin", "head"])` from `scripts/wasi-build.ts`, changing the binary name. The helper supplies the patched wasi-sdk 34.0 sysroot, the memory cap, and the final guest verifier. No guest-specific linker recipe is needed.
 
 `cargo test --locked --manifest-path shell/Cargo.toml -p shell-utilities --test head` tests the native upstream binary. After `npm run build:shell`, `npm run build:utilities`, and `npm run build:node-harness`, `node --test scripts/test-own-shell-head.ts` tests the real guest through Waffle, including GNU usage controls, cancellation, and the stdin differences above.
+
+## Recorded GNU controls
+
+The 24 comparison scripts retain their original text. Qualification replays `scripts/owned-fixtures/head-gnu.json`, not the host's Bash or coreutils. Each recording contains raw stdout and stderr bytes in base64 and the exit status. Tests compare stdout bytes, status, and diagnostic presence. Only the documented standard-input header difference is normalized.
+
+The recording used GNU Bash `5.3.15(1)-release`, binary SHA-256 `575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5`, and `head (GNU coreutils) 9.12`, binary SHA-256 `313bf1f0c296d63fa9534394e22a502cfe29d9fe9e110c5b45f3c070b9ddf3e1`. Each unchanged script ran twice with empty stdin, a fresh working directory, `PATH=/usr/bin:/bin`, `HOME=/home/user`, and `LC_ALL=C`. Both runs produced identical bytes and status. Recording processes had a two-second bound and owned process-group cleanup.
+
+`node --test scripts/test-own-shell-head-oracle.ts` checks the recorded identities, original case-set digest, complete observation digest, and absence of host subprocesses in qualification. The normal scoreboard test discovery includes this check automatically. This additive recording does not change the frozen score oracle, membership, exclusions, or baselines.

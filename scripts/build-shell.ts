@@ -1,3 +1,5 @@
+import { buildWc } from "./build-wc.ts";
 import { buildWasiShell } from "./wasi-build.ts";
 
-buildWasiShell();
+buildWc();
+buildWasiShell(["--workspace", "--exclude", "shell-wc"]);

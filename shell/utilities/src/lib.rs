@@ -1,6 +1,7 @@
 //! Separately linked external utilities. No utility is linked into the shell.
 mod acceptance;
 mod grep;
+mod tail;
 use shell_engine::{
     executor::Cancel,
     io::{Endpoint, FdTable, FileSystem},
@@ -13,6 +14,7 @@ pub enum Utility {
     Grep,
     Mkdir,
     Seq,
+    Tail,
 }
 
 pub struct Context {
@@ -30,6 +32,20 @@ async fn write(fds: &FdTable, bytes: &[u8], context: &Context) -> Result<(), i32
     let written = output.write_all(bytes, &context.cancel).await;
     written.map_err(|error| error.status())
 }
+async fn diagnostic(
+    fds: &FdTable,
+    context: &Context,
+    name: &str,
+    message: &str,
+) -> Result<(), i32> {
+    let Some(stderr) = fds.get(2) else {
+        return Ok(());
+    };
+    stderr
+        .write_all(format!("{name}: {message}\n").as_bytes(), &context.cancel)
+        .await
+        .map_err(|error| error.status())
+}
 pub async fn run(
     utility: Utility,
     args: Vec<String>,
@@ -42,11 +58,12 @@ pub async fn run(
         .unwrap_or_else(|status| status)
 }
 
-pub const UTILITIES: [(&str, Utility); 4] = [
+pub const UTILITIES: [(&str, Utility); 5] = [
     ("cat", Utility::Cat),
     ("grep", Utility::Grep),
     ("mkdir", Utility::Mkdir),
     ("seq", Utility::Seq),
+    ("tail", Utility::Tail),
 ];
 
 /// Register each utility as an external program of a native in-process host, at
@@ -138,6 +155,19 @@ pub async fn seq(invocation: Invocation) -> i32 {
     acceptance::seq(&args, &fds, &context)
         .await
         .map(|()| 0)
+        .unwrap_or_else(|status| status)
+}
+
+pub async fn tail(invocation: Invocation) -> i32 {
+    let Invocation {
+        args,
+        cwd,
+        fds,
+        context,
+        ..
+    } = invocation;
+    tail::run(args, &cwd, &fds, &context)
+        .await
         .unwrap_or_else(|status| status)
 }
 

@@ -1,5 +1,5 @@
 [workspace]
-members = ["parser", "engine", "utilities", "compat-fixtures"]
+members = ["parser", "engine", "utilities", "compat-fixtures", "sed", "wc"]
 resolver = "3"
 
 [workspace.package]
@@ -12,6 +12,9 @@ publish = false
 serde = { version = "1", features = ["derive", "rc"] }
 thiserror = "2"
 futures = { version = "0.3.31", default-features = false, features = ["std", "async-await"] }
+
+[patch.crates-io]
+bytecount = { path = "wc/vendor/bytecount" }
 
 [profile.release]
 opt-level = "s"

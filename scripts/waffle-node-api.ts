@@ -21,3 +21,6 @@ export { installMkdir } from "../src/utilities/mkdir";
 export { installSeq } from "../src/utilities/seq";
 export { installSort } from "../src/utilities/sort";
 export { installUniq } from "../src/utilities/uniq";
+export { installWc } from "../src/utilities/wc";
+export { installTail } from "../src/utilities/tail";
+export { installLs } from "../src/utilities/ls";

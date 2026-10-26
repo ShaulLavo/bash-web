@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { test, type TestContext } from "node:test";
 import { installNodeWorkers, liveNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
 import { runRoot } from "./waffle-compat.ts";
 import type * as Api from "./waffle-node-api.ts";
+import oracle from "./owned-fixtures/head-gnu.json" with { type: "json" };
 
 const nodeDirectory = new URL("../.build/node/", import.meta.url);
 const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
@@ -91,20 +91,32 @@ const cases = [
   ],
 ] as const;
 
-for (const [name, script] of cases) {
+assert.equal(oracle.schema, 1);
+assert.equal(
+  oracle.oracle.bash.version,
+  "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+);
+assert.deepEqual(oracle.environment, env);
+assert.deepEqual(
+  oracle.cases.map((entry) => [entry.name, entry.script]),
+  cases,
+);
+
+for (const expected of oracle.cases) {
+  const { name, script } = expected;
   test(`head matches GNU output and status for ${name}`, { timeout: 10000 }, async (context) => {
-    const build = resolve(import.meta.dirname, "../.build");
-    await mkdir(build, { recursive: true });
-    const scratch = await mkdtemp(resolve(build, "head-oracle-"));
-    context.after(() => rm(scratch, { recursive: true, force: true }));
-    const expected = spawnSync("bash", ["-c", script], { env, cwd: scratch, timeout: 2000 });
-    if (expected.error) throw expected.error;
     const actual = await run(context, script);
     assert.equal(actual.status, expected.status);
-    const normalizeHeader = (bytes: Buffer) =>
-      bytes.toString("latin1").replaceAll("==> 'standard input' <==", "==> standard input <==");
-    assert.equal(normalizeHeader(actual.stdout), normalizeHeader(expected.stdout));
-    assert.equal(actual.stderr.length > 0, expected.stderr.length > 0);
+    const stdout = Buffer.from(expected.stdoutBase64, "base64");
+    const expectedStdout =
+      name === "verbose stdin header"
+        ? Buffer.from(
+            stdout.toString("latin1").replace("==> 'standard input' <==", "==> standard input <=="),
+            "latin1",
+          )
+        : stdout;
+    assert.deepEqual(actual.stdout, expectedStdout);
+    assert.equal(actual.stderr.length > 0, Buffer.from(expected.stderrBase64, "base64").length > 0);
   });
 }
 

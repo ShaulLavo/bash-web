@@ -10,14 +10,23 @@ import { installCat } from "../src/utilities/cat";
 import { installGrep } from "../src/utilities/grep";
 import { installHead } from "../src/utilities/head";
 import { installMkdir } from "../src/utilities/mkdir";
+import { installRg } from "../src/utilities/rg";
+import { rgFiles } from "./helpers/rg-fixtures";
+import { installLs } from "../src/utilities/ls";
 import { installSeq } from "../src/utilities/seq";
 import { installSort } from "../src/utilities/sort";
 import { installUniq } from "../src/utilities/uniq";
+import { installWc } from "../src/utilities/wc";
+import { installTail } from "../src/utilities/tail";
 import filesystemWorkerUrl from "../.build/browser/fs-worker.js?url";
 
 declare global {
   interface Window {
     readSortUniqOutput?: () => Promise<{ stdout: number[]; stderrPresent: boolean }>;
+    rgTest?: {
+      readFile(path: string): Promise<string | undefined>;
+      writeFile(path: string, text: string): Promise<void>;
+    };
   }
 }
 
@@ -26,6 +35,28 @@ async function readSortUniqOutput(runtime: Runtime) {
   const stderr = await runtime.filesystem.readFile("/tmp/sort-uniq-error");
   if (!stdout || !stderr) throw new Error("Missing sort/uniq observation output files");
   return { stdout: Array.from(stdout), stderrPresent: stderr.length > 0 };
+}
+
+async function prepareRg(runtime: ReturnType<typeof createRuntime>): Promise<void> {
+  await installRg(runtime);
+  const directory = "/home/guest/rg-fixture";
+  const encoder = new TextEncoder();
+  for (const [name, text] of Object.entries(rgFiles)) {
+    const path = `${directory}/${name}`;
+    await runtime.filesystem.mkdirp(path.slice(0, path.lastIndexOf("/")));
+    await runtime.filesystem.writeFile(path, encoder.encode(text));
+  }
+  await runtime.filesystem.drain();
+  window.rgTest = {
+    async readFile(path) {
+      const bytes = await runtime.filesystem.readFile(path);
+      return bytes && new TextDecoder().decode(bytes);
+    },
+    async writeFile(path, text) {
+      await runtime.filesystem.writeFile(path, encoder.encode(text));
+      await runtime.filesystem.drain();
+    },
+  };
 }
 
 function filesystemOptions(): SharedFilesystemOptions {
@@ -65,15 +96,19 @@ mountBrowser({
     // program is fetched only when the shell first starts it.
     const ready = Promise.all([
       registerTestPrograms(runtime, registration.signal, onStartupStage),
+      query.get("test") === "1" && query.get("rg") === "1" ? prepareRg(runtime) : undefined,
       Promise.all(
         [
           installCat,
           installGrep,
           installHead,
+          installLs,
           installMkdir,
           installSeq,
           installSort,
+          installTail,
           installUniq,
+          installWc,
         ].map((install) => install(runtime)),
       ),
     ]).then(() => {});

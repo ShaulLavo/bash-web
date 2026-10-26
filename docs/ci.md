@@ -26,7 +26,7 @@ are unchanged.
 Consumers restore this run's JavaScript archive, preserving npm symlinks and
 executable modes. The native producer supplies `shell-engine`, `shell-cli`,
 `shell-engine.wasm`, `shell-runtime.wasm`, `argv-py.wasm`, `printenv-py.wasm`,
-`cat/grep/mkdir/seq.wasm`, the browser test/spin guests and every WASI test.
+`cat/grep/mkdir/seq/tail.wasm`, the browser test/spin guests and every WASI test.
 Parser has four test executables, engine has five including capabilities, and
 utilities has one streaming executable. Stable package-qualified filenames
 prevent the two streaming tests from overwriting each other.

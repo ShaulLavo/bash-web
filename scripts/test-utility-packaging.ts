@@ -7,7 +7,20 @@ import observations from "./owned-fixtures/sort-uniq.json" with { type: "json" }
 import { loadSortUniqObservations } from "./sort-uniq-observations.ts";
 
 const root = resolve(import.meta.dirname, "..");
-const utilities = ["cat", "grep", "head", "mkdir", "seq", "sort", "uniq"] as const;
+const utilities = [
+  "cat",
+  "grep",
+  "head",
+  "ls",
+  "mkdir",
+  "rg",
+  "sed",
+  "seq",
+  "sort",
+  "tail",
+  "uniq",
+  "wc",
+] as const;
 
 async function bundle(entry: string): Promise<string> {
   const result = await build({
@@ -64,6 +77,23 @@ test("head packages the pinned upstream entry and its license notices", () => {
   const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
   assert.match(notices, /## uu_head 0\.12\.0 \/ LICENSE/);
   assert.match(notices, /## uucore 0\.12\.0 \/ LICENSE/);
+});
+
+test("wc packages the surveyed upstream source, scalar build and license", () => {
+  const revision = "07763857f6b9a547742a994b58aef0ccd036198b";
+  const manifest = readFileSync(resolve(root, "shell/wc/Cargo.toml"), "utf8");
+  for (const name of ["uu_wc", "uucore"]) {
+    assert.match(manifest, new RegExp(`${name} = \\{ git = "https://github.com/uutils/coreutils"`));
+    assert.match(manifest, new RegExp(`rev = "${revision}"`));
+  }
+  const entry = readFileSync(resolve(root, "shell/wc/src/bin/wc.rs"), "utf8");
+  assert.match(entry, /uucore::bin!\(uu_wc\)/);
+  const build = readFileSync(resolve(root, "scripts/build-wc.ts"), "utf8");
+  assert.match(build, /target-feature=-simd128/);
+  const bytecount = readFileSync(resolve(root, "shell/wc/vendor/bytecount/src/lib.rs"), "utf8");
+  assert.match(bytecount, /all\(target_arch = "wasm32", target_feature = "simd128"\)/);
+  const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
+  assert.match(notices, /## shell-wc 0\.0\.1 \/ LICENSE\.uutils-coreutils/);
 });
 
 for (const name of ["sort", "uniq"]) {

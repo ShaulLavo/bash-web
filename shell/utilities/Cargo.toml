@@ -10,6 +10,8 @@ publish.workspace = true
 shell-engine = { path = "../engine" }
 futures.workspace = true
 regex = { version = "1.12.2", default-features = false, features = ["std", "perf", "unicode"] }
+uu_ls = { git = "https://github.com/uutils/coreutils", rev = "07763857f6b9a547742a994b58aef0ccd036198b" }
+uucore_ls = { package = "uucore", git = "https://github.com/uutils/coreutils", rev = "07763857f6b9a547742a994b58aef0ccd036198b" }
 uu_head = "=0.12.0"
 uu_sort = "=0.12.0"
 uu_uniq = "=0.12.0"
@@ -22,4 +24,4 @@ serde_json = "1"
 
 [package.metadata.cargo-machete]
 # Upstream entries use uucore::bin!, which cargo-machete does not expand.
-ignored = ["rustix", "uu_head", "uu_sort", "uu_uniq"]
+ignored = ["rustix", "uu_head", "uu_ls", "uu_sort", "uu_uniq"]
