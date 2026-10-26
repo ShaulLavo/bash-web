@@ -352,6 +352,24 @@ test("complete input equivalence excludes only reviewed regular docs, never adap
     assert.notDeepEqual(scoringInputs(root, base), scoringInputs(root, changed));
   });
 });
+function pullRequestProvenance(headSha, baseSha) {
+  return {
+    event: {
+      repository: { id: authority.repositoryId },
+      pull_request: {
+        head: { sha: headSha },
+        base: { sha: baseSha, ref: "main", repo: { id: authority.repositoryId } },
+      },
+    },
+    run: {
+      repository: { id: authority.repositoryId },
+      workflow_id: authority.workflowId,
+      path: authority.workflowPath,
+      event: "pull_request",
+      head_sha: headSha,
+    },
+  };
+}
 test("H/C/B/M are distinct and actual merge parents/current main inclusion are checked", async () => {
   await withRepo(({ root, put, commit }) => {
     put("src/runtime/worker.ts", "a");
@@ -375,20 +393,7 @@ test("H/C/B/M are distinct and actual merge parents/current main inclusion are c
       headSha,
     ]);
     const sourceSha = git(root, ["rev-parse", "HEAD"]);
-    const event = {
-      repository: { id: authority.repositoryId },
-      pull_request: {
-        head: { sha: headSha },
-        base: { sha: baseSha, ref: "main", repo: { id: authority.repositoryId } },
-      },
-    };
-    const run = {
-      repository: { id: authority.repositoryId },
-      workflow_id: authority.workflowId,
-      path: authority.workflowPath,
-      event: "pull_request",
-      head_sha: headSha,
-    };
+    const { event, run } = pullRequestProvenance(headSha, baseSha);
     const input = { root, event, eventName: "pull_request", sourceSha, mainSha, run };
     assert.deepEqual(verifyBinding(input), {
       kind: "pull-request",
@@ -428,21 +433,8 @@ function rebuiltMerge({ root, put, commit }) {
   const mainSha = commit();
   git(root, ["-c", "commit.gpgsign=false", "merge", "--no-ff", "-m", "rebuilt", headSha]);
   const sourceSha = git(root, ["rev-parse", "HEAD"]);
-  const event = {
-    repository: { id: authority.repositoryId },
-    pull_request: {
-      head: { sha: headSha },
-      base: { sha: eventBase, ref: "main", repo: { id: authority.repositoryId } },
-    },
-  };
-  const run = {
-    repository: { id: authority.repositoryId },
-    workflow_id: authority.workflowId,
-    path: authority.workflowPath,
-    event: "pull_request",
-    head_sha: headSha,
-    pull_requests: [{ head: { sha: headSha }, base: { sha: eventBase } }],
-  };
+  const { event, run } = pullRequestProvenance(headSha, eventBase);
+  run.pull_requests = [{ head: { sha: headSha }, base: { sha: eventBase } }];
   return { root, event, eventName: "pull_request", sourceSha, mainSha, run };
 }
 test("a rebuilt tested merge binds its main parent rather than the stale PR event base", async () => {
