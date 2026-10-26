@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import type { ProgramDefinition, Runtime } from "waffle";
 import { installCat, UtilityConflictError } from "../src/utilities/cat";
+import { installEnv } from "../src/utilities/env";
 import { installGrep } from "../src/utilities/grep";
 import { installHead } from "../src/utilities/head";
 import { installSort } from "../src/utilities/sort";
@@ -320,6 +321,7 @@ test("rg registers raw source lazily without claiming another utility", async (c
 });
 
 for (const [name, install] of [
+  ["env", installEnv],
   ["sort", installSort],
   ["uniq", installUniq],
 ] as const) {

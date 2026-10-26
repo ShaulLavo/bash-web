@@ -66,3 +66,7 @@ The cooperative utilities support small subsets. `head`, `sort`, `uniq`, and `wc
 ## Install upstream ls
 
 Import `installLs` from `bash-web/utilities/ls`. It uses the same caller-owned runtime and loads `dist/ls.wasm` on first spawn. This is an ordinary WASI guest. Use `WasiUtilityOptions` with `wasmUrl` or raw `source` bytes, not a compiled module. [ls](../ls.md) lists the qualified flags and the upstream WASI metadata limitations.
+
+## Install print-only env
+
+Import `installEnv` from `bash-web/utilities/env`. It lazily loads `dist/env.wasm` as an ordinary WASI guest using `WasiUtilityOptions`. It prints and edits only its own guest environment. Program execution and signal options are outside the initial contract. See [Print-only env](../env.md) for qualified forms and the process dependency.
