@@ -20,6 +20,7 @@
     "./shell": "./src/shell.ts",
     "./utilities/cat": "./src/utilities/cat.ts",
     "./utilities/grep": "./src/utilities/grep.ts",
+    "./utilities/ls": "./src/utilities/ls.ts",
     "./utilities/mkdir": "./src/utilities/mkdir.ts",
     "./utilities/seq": "./src/utilities/seq.ts"
   },
@@ -87,6 +88,8 @@
     "test:quality-gates": "node --test scripts/test-quality-gates.mjs",
     "quality": "npm run sources:browser && npm run build:worker && npm run quality:js && npm run check:rust && cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast",
     "build:utilities": "node scripts/build-utilities.ts",
+    "build:ls": "node scripts/build-ls.ts",
+    "test:ls": "node --test scripts/test-own-shell-ls.ts",
     "build:node-harness": "node scripts/build-node-harness.ts",
     "build:compat-control": "node scripts/build-compat-control.ts",
     "test:guest-build": "node --test scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts",

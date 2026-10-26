@@ -18,3 +18,4 @@ export { installCat } from "../src/utilities/cat";
 export { installGrep } from "../src/utilities/grep";
 export { installMkdir } from "../src/utilities/mkdir";
 export { installSeq } from "../src/utilities/seq";
+export { installLs } from "../src/utilities/ls";

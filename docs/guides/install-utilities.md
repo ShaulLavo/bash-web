@@ -57,3 +57,7 @@ These are small subsets of the real tools. They exist so pipelines and the accep
 
 - [Embed a shell in a page](embed-in-a-page.md)
 - [API reference: utility entries](../reference/api.md#utility-entries)
+
+## Install upstream ls
+
+Import `installLs` from `bash-web/utilities/ls`. It uses the same caller-owned runtime and loads `dist/ls.wasm` on first spawn. This is an ordinary WASI guest. Use `WasiUtilityOptions` with `wasmUrl` or raw `source` bytes, not a compiled module. [ls](../ls.md) lists the qualified flags and the upstream WASI metadata limitations.

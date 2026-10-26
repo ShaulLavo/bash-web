@@ -10,3 +10,5 @@ publish.workspace = true
 shell-engine = { path = "../engine" }
 futures.workspace = true
 regex = { version = "1.12.2", default-features = false, features = ["std", "perf", "unicode"] }
+uu_ls = { git = "https://github.com/uutils/coreutils", rev = "07763857f6b9a547742a994b58aef0ccd036198b" }
+uucore = { git = "https://github.com/uutils/coreutils", rev = "07763857f6b9a547742a994b58aef0ccd036198b" }
