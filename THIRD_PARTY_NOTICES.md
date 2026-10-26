@@ -16,6 +16,8 @@ The new shell's parser starts from Bashkit's `crates/bashkit/src/parser/` at `49
 
 The terminal's historical notice names an older Ghostty revision. The actual included `ghostty-vt.wasm` provenance names `7b11f3dca034d8d24369ad3856afe57946d7902a`, and the build records that correction while preserving the original notice text.
 
+The `wc` guest uses `uu_wc` and `uucore` from `uutils/coreutils` at `07763857f6b9a547742a994b58aef0ccd036198b` (MIT, Copyright uutils developers). The upstream license is retained in `shell/utilities/LICENSE.uutils-coreutils`. The notices script includes that license in generated distributions, and the utility artifact receipt covers the separately linked guest.
+
 The fixed compatibility oracle at `docs/evidence/own-shell-oracle.json` contains
 upstream test scripts, not production interpreter code. The corpus source paths,
 revisions and license checksums are pinned under `shellScoreboard.corpora` in

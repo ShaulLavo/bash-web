@@ -823,7 +823,7 @@ import { resolve } from 'node:path';
 const release = resolve(process.env.CARGO_TARGET_DIR, 'wasm32-wasip1/release');
 mkdirSync(release, { recursive: true });
 const names = process.argv.includes('shell-utilities')
-  ? ['shell-runtime', 'cat', 'grep', 'mkdir', 'seq']
+  ? ['shell-runtime', 'cat', 'grep', 'mkdir', 'seq', 'wc']
   : ['argv-py', 'printenv-py'];
 if (process.cwd() !== ${JSON.stringify(repo)}) {
   assert.match(readFileSync('shell/utilities/Cargo.toml', 'utf8'), /name = "shell-utilities"/);
@@ -841,7 +841,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 const release = dirname(process.env.BASH_COMPAT_SHELL_WASM);
 assert.equal(process.env.BASH_COMPAT_UTILITY_DIR, release);
-for (const name of ['cat', 'grep', 'mkdir', 'seq'])
+for (const name of ['cat', 'grep', 'mkdir', 'seq', 'wc'])
   assert.ok(readFileSync(resolve(release, name + '.wasm')).length > 0);
 writeFileSync(process.env.BASH_COMPAT_OUT, readFileSync('fixture-target-score.json'));
 `,

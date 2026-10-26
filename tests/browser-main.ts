@@ -10,6 +10,7 @@ import { installCat } from "../src/utilities/cat";
 import { installGrep } from "../src/utilities/grep";
 import { installMkdir } from "../src/utilities/mkdir";
 import { installSeq } from "../src/utilities/seq";
+import { installWc } from "../src/utilities/wc";
 import filesystemWorkerUrl from "../.build/browser/fs-worker.js?url";
 
 function filesystemOptions(): SharedFilesystemOptions {
@@ -49,7 +50,9 @@ mountBrowser({
     const ready = Promise.all([
       registerTestPrograms(runtime, registration.signal, onStartupStage),
       Promise.all(
-        [installCat, installGrep, installMkdir, installSeq].map((install) => install(runtime)),
+        [installCat, installGrep, installMkdir, installSeq, installWc].map((install) =>
+          install(runtime),
+        ),
       ),
     ]).then(() => {});
     let disposing: Promise<void> | undefined;
