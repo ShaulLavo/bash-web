@@ -15,6 +15,8 @@ The TypeScript surface of bash-web, from `src/index.ts`, `src/shell.ts`, `src/br
 | `bash-web/utilities/head` | `src/utilities/head.ts` |
 | `bash-web/utilities/mkdir` | `src/utilities/mkdir.ts` |
 | `bash-web/utilities/seq` | `src/utilities/seq.ts` |
+| `bash-web/utilities/sort` | `src/utilities/sort.ts` |
+| `bash-web/utilities/uniq` | `src/utilities/uniq.ts` |
 | `bash-web/utilities/tail` | `src/utilities/tail.ts` |
 | `bash-web/utilities/wc` | `src/utilities/wc.ts` |
 
@@ -177,7 +179,7 @@ Each `bash-web/utilities/<name>` entry exports one install function, shown here 
 function installCat(runtime: Runtime, options?: UtilityOptions): Promise<UtilityInstallation>;
 ```
 
-`installGrep`, `installMkdir`, `installSeq`, and `installTail` use the same options. `installHead` and `installWc` use `WasiUtilityOptions` below. Each registers `/bin/<name>`.
+`installGrep`, `installMkdir`, `installSeq`, and `installTail` use the same options. `installHead`, `installSort`, `installUniq`, and `installWc` use `WasiUtilityOptions` below. Each registers `/bin/<name>`.
 
 ```ts
 type UtilityOptions = { workerUrl?: string | URL } & (
@@ -201,6 +203,6 @@ class UtilityConflictError extends Error {
 }
 ```
 
-Default `wasmUrl`: `dist/<name>.wasm` next to the package. Default `workerUrl`: `dist/shell-worker.js`. Cooperative entries export `UtilityInstallation`, `UtilityModule`, and `UtilityOptions`. The `head` and `wc` entries export `UtilityInstallation`, `UtilitySource`, and `WasiUtilityOptions`. Ordinary WASI guests take raw source bytes so Waffle can add interrupt checks. `UtilityConflictError` carries the conflicting `path`, and its message reads `Cannot install utility at <path>: <reason>`.
+Default `wasmUrl`: `dist/<name>.wasm` next to the package. Default `workerUrl`: `dist/shell-worker.js`. Cooperative entries export `UtilityInstallation`, `UtilityModule`, and `UtilityOptions`. The `head`, `sort`, `uniq`, and `wc` entries export `UtilityInstallation`, `UtilitySource`, and `WasiUtilityOptions`. Ordinary WASI guests take raw source bytes so Waffle can add interrupt checks. `UtilityConflictError` carries the conflicting `path`, and its message reads `Cannot install utility at <path>: <reason>`.
 
 `install*` throws `Runtime is disposed` for a disposed runtime. It loads nothing until the first spawn.

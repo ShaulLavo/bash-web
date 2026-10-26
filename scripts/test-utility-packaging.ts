@@ -3,9 +3,70 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { build } from "esbuild";
+import observations from "./owned-fixtures/sort-uniq.json" with { type: "json" };
+import { loadSortUniqObservations } from "./sort-uniq-observations.ts";
 
 const root = resolve(import.meta.dirname, "..");
-const utilities = ["cat", "grep", "head", "ls", "mkdir", "rg", "sed", "seq", "tail", "wc"] as const;
+const utilities = [
+  "cat",
+  "grep",
+  "head",
+  "ls",
+  "mkdir",
+  "rg",
+  "sed",
+  "seq",
+  "sort",
+  "tail",
+  "uniq",
+  "wc",
+] as const;
+
+const sortUniqTransitiveNotices = [
+  "calendrical_calculations 0.2.4 / LICENSE",
+  "chacha20 0.10.2 / LICENSE-APACHE",
+  "chacha20 0.10.2 / LICENSE-MIT",
+  "core_maths 0.1.1 / LICENSE",
+  "cpufeatures 0.3.1 / LICENSE-APACHE",
+  "cpufeatures 0.3.1 / LICENSE-MIT",
+  "crossbeam-deque 0.8.8 / LICENSE-APACHE",
+  "crossbeam-deque 0.8.8 / LICENSE-MIT",
+  "crossbeam-epoch 0.9.21 / LICENSE-APACHE",
+  "crossbeam-epoch 0.9.21 / LICENSE-MIT",
+  "crossbeam-utils 0.8.23 / LICENSE-APACHE",
+  "crossbeam-utils 0.8.23 / LICENSE-MIT",
+  "ctrlc 3.5.2 / LICENSE-APACHE",
+  "ctrlc 3.5.2 / LICENSE-MIT",
+  "fastrand 2.5.0 / LICENSE-APACHE",
+  "fastrand 2.5.0 / LICENSE-MIT",
+  "fixed_decimal 0.7.3 / LICENSE",
+  "foldhash 0.2.0 / LICENSE",
+  "getrandom 0.4.3 / LICENSE-APACHE",
+  "getrandom 0.4.3 / LICENSE-MIT",
+  "icu_calendar 2.4.0 / LICENSE",
+  "icu_calendar_data 2.4.0 / LICENSE",
+  "icu_datetime 2.4.0 / LICENSE",
+  "icu_datetime_data 2.4.0 / LICENSE",
+  "icu_decimal 2.4.0 / LICENSE",
+  "icu_decimal_data 2.4.0 / LICENSE",
+  "icu_pattern 0.5.1 / LICENSE",
+  "icu_plurals 2.4.0 / LICENSE",
+  "icu_plurals_data 2.4.0 / LICENSE",
+  "icu_time 2.4.0 / LICENSE",
+  "icu_time_data 2.4.0 / LICENSE",
+  "jiff-icu 0.2.2 / COPYING",
+  "jiff-icu 0.2.2 / LICENSE-MIT",
+  "rand 0.10.3 / LICENSE-APACHE",
+  "rand 0.10.3 / LICENSE-MIT",
+  "rand_core 0.10.1 / LICENSE-APACHE",
+  "rand_core 0.10.1 / LICENSE-MIT",
+  "rayon 1.12.0 / LICENSE-APACHE",
+  "rayon 1.12.0 / LICENSE-MIT",
+  "rayon-core 1.13.0 / LICENSE-APACHE",
+  "rayon-core 1.13.0 / LICENSE-MIT",
+  "tempfile 3.27.0 / LICENSE-APACHE",
+  "tempfile 3.27.0 / LICENSE-MIT",
+] as const;
 
 async function bundle(entry: string): Promise<string> {
   const result = await build({
@@ -79,4 +140,84 @@ test("wc packages the surveyed upstream source, scalar build and license", () =>
   assert.match(bytecount, /all\(target_arch = "wasm32", target_feature = "simd128"\)/);
   const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
   assert.match(notices, /## shell-wc 0\.0\.1 \/ LICENSE\.uutils-coreutils/);
+});
+
+for (const name of ["sort", "uniq"]) {
+  test(`${name} packages the exact upstream crate and license`, () => {
+    const manifest = readFileSync(resolve(root, "shell/utilities/Cargo.toml"), "utf8");
+    assert.ok(manifest.includes(`uu_${name} = "=0.12.0"`));
+    const entry = readFileSync(resolve(root, `shell/utilities/src/bin/${name}.rs`), "utf8");
+    assert.ok(entry.includes(`uucore::bin!(uu_${name})`));
+    assert.ok(entry.includes(`cwd::initialize("${name}")`));
+    const cwd = readFileSync(resolve(root, "shell/utilities/src/sort_uniq_cwd.rs"), "utf8");
+    assert.match(cwd, /std::env::set_current_dir/);
+    const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
+    assert.ok(notices.includes(`## uu_${name} 0.12.0 / LICENSE`));
+  });
+}
+
+test("sort and uniq retain every approved transitive license notice", () => {
+  const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
+  for (const heading of sortUniqTransitiveNotices)
+    assert.ok(notices.includes(`## ${heading}\n`), heading);
+});
+
+test("sort and uniq source receipts match the locked registry packages", () => {
+  const receipt = JSON.parse(readFileSync(resolve(root, "docs/sort-uniq-source.json"), "utf8"));
+  assert.equal(receipt.revision, "dc1efd89948a9ca4c78c3a4b9a6ac891019a8c69");
+  const lock = readFileSync(resolve(root, "shell/Cargo.lock"), "utf8");
+  assert.deepEqual(
+    receipt.packages.map((pkg: { name: string }) => pkg.name),
+    ["uu_sort", "uu_uniq"],
+  );
+  for (const pkg of receipt.packages) {
+    assert.ok(
+      lock.includes(
+        `name = "${pkg.name}"\nversion = "${pkg.version}"\nsource = "${pkg.registry}"\nchecksum = "${pkg.sha256}"`,
+      ),
+    );
+  }
+});
+
+test("sort and uniq qualification cannot import a live host oracle", async () => {
+  const result = await build({
+    entryPoints: ["scripts/test-own-shell-sort-uniq.ts", "tests/sort-uniq.spec.ts"],
+    outdir: "unused",
+    bundle: true,
+    write: false,
+    platform: "node",
+    format: "esm",
+    packages: "external",
+    metafile: true,
+    logLevel: "silent",
+  });
+  for (const [path, input] of Object.entries(result.metafile.inputs)) {
+    assert.equal(
+      input.imports.some((entry) => /^(?:node:)?child_process$/.test(entry.path)),
+      false,
+      `${path} admits a host subprocess into sort/uniq qualification`,
+    );
+  }
+});
+
+test("sort and uniq reject missing, changed, and invalid frozen observations", () => {
+  assert.equal(loadSortUniqObservations().length, 25);
+  const missing = structuredClone(observations);
+  missing.cases.pop();
+  assert.throws(() => loadSortUniqObservations(missing), /must match every case/);
+  const changed = structuredClone(observations);
+  changed.cases[0].script += "; true";
+  assert.throws(() => loadSortUniqObservations(changed), /must match every case/);
+  const malformed = structuredClone(observations);
+  malformed.cases[0].stdout = [256];
+  assert.throws(() => loadSortUniqObservations(malformed));
+  const wrongOracle = structuredClone(observations);
+  wrongOracle.oracle.bash.version = "host bash";
+  assert.throws(() => loadSortUniqObservations(wrongOracle));
+});
+
+test("native sort and uniq qualification runs candidates, not host GNU programs", () => {
+  const source = readFileSync(resolve(root, "shell/utilities/tests/sort_uniq.rs"), "utf8");
+  assert.match(source, /owned-fixtures\/sort-uniq\.json/);
+  assert.doesNotMatch(source, /run\(name,|Command::new\("(?:bash|sort|uniq)"\)/);
 });

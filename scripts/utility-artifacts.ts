@@ -14,7 +14,9 @@ export const utilityNames = [
   "mkdir",
   "sed",
   "seq",
+  "sort",
   "tail",
+  "uniq",
   "wc",
 ] as const;
 const receiptName = "source-sha256.txt";

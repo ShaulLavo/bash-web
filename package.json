@@ -26,6 +26,8 @@
     "./utilities/ls": "./src/utilities/ls.ts",
     "./utilities/mkdir": "./src/utilities/mkdir.ts",
     "./utilities/seq": "./src/utilities/seq.ts",
+    "./utilities/sort": "./src/utilities/sort.ts",
+    "./utilities/uniq": "./src/utilities/uniq.ts",
     "./utilities/rg": "./src/utilities/rg.ts",
     "./utilities/tail": "./src/utilities/tail.ts",
     "./utilities/sed": "./src/utilities/sed.ts",
