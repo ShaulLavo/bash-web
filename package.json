@@ -20,6 +20,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./shell": "./src/shell.ts",
+    "./utilities/env": "./src/utilities/env.ts",
     "./utilities/cat": "./src/utilities/cat.ts",
     "./utilities/grep": "./src/utilities/grep.ts",
     "./utilities/head": "./src/utilities/head.ts",

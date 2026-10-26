@@ -1515,6 +1515,7 @@ dependencies = [
  "serde_json",
  "shell-engine",
  "uu_cp",
+ "uu_env",
  "uu_head",
  "uu_ls",
  "uu_mv",
@@ -1758,6 +1759,18 @@ dependencies = [
  "uucore 0.13.0",
  "walkdir",
  "windows-sys",
+]
+
+[[package]]
+name = "uu_env"
+version = "0.13.0"
+source = "git+https://github.com/uutils/coreutils?rev=07763857f6b9a547742a994b58aef0ccd036198b#07763857f6b9a547742a994b58aef0ccd036198b"
+dependencies = [
+ "clap",
+ "fluent",
+ "nix",
+ "thiserror",
+ "uucore 0.13.0",
 ]
 
 [[package]]
