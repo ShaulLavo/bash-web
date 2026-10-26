@@ -11,6 +11,7 @@ export const utilityNames = [
   "cat",
   "grep",
   "head",
+  "which",
   "ls",
   "mkdir",
   "sed",

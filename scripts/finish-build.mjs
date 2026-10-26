@@ -16,6 +16,7 @@ for (const command of [
   "cat",
   "grep",
   "head",
+  "which",
   "ls",
   "mkdir",
   "rg",

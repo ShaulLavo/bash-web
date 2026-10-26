@@ -44,17 +44,17 @@ Call `dispose()` after the utility's processes have stopped. It releases the reg
 
 The cooperative utilities support small subsets. `head`, `sort`, `uniq`, and `wc` run upstream uutils through ordinary WASI admission.
 
-| Utility | Supported | Rejected |
-| ------- | --------- | -------- |
-| `cat` | File operands, or standard input when there are none | Options. Every argument is a file path, so `cat -n` fails |
-| `grep` | `-v -c -q -n -i -F -E`, basic regular expressions by default | Any other option, for example `-P` (status 2) |
-| `head` | Upstream lines, bytes, negative counts, NUL records, headers, help, and version. See [Head](../head.md) | Invalid options and counts (status 1). Buffered stdin can discard unread suffixes |
-| `mkdir` | `mkdir [-p] [--] dir...` | Any other option (status 2) |
-| `seq` | `seq end` and `seq start end`, integers | Step, separator, and other forms (status 2) |
-| `sort` | Upstream ordering options and file operands. The WASI path buffers input in memory and does not spill to temporary files. See [Sort](../sort.md) | Unsupported upstream options have no new compatibility claims |
-| `uniq` | Adjacent equal-record filtering, counts, and repeated-group selection. See [Uniq](../uniq.md) | Unsupported upstream options have no new compatibility claims |
-| `tail` | `tail [-n N] [--] [file]`; the last 10 lines by default; `-nN` is also accepted | Multiple files, filename headers, `-c`, `-f`, and other options (status 2). Retained input is capped at 16 MiB. See [tail](../tail.md) |
-| `wc` | Upstream line, word, and byte counts, file operands, standard input, and pipelines. See [wc](../wc.md) | Other upstream options have no new compatibility claims |
+| Utility | Supported                                                                                                                                        | Rejected                                                                                                                               |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `cat`   | File operands, or standard input when there are none                                                                                             | Options. Every argument is a file path, so `cat -n` fails                                                                              |
+| `grep`  | `-v -c -q -n -i -F -E`, basic regular expressions by default                                                                                     | Any other option, for example `-P` (status 2)                                                                                          |
+| `head`  | Upstream lines, bytes, negative counts, NUL records, headers, help, and version. See [Head](../head.md)                                          | Invalid options and counts (status 1). Buffered stdin can discard unread suffixes                                                      |
+| `mkdir` | `mkdir [-p] [--] dir...`                                                                                                                         | Any other option (status 2)                                                                                                            |
+| `seq`   | `seq end` and `seq start end`, integers                                                                                                          | Step, separator, and other forms (status 2)                                                                                            |
+| `sort`  | Upstream ordering options and file operands. The WASI path buffers input in memory and does not spill to temporary files. See [Sort](../sort.md) | Unsupported upstream options have no new compatibility claims                                                                          |
+| `uniq`  | Adjacent equal-record filtering, counts, and repeated-group selection. See [Uniq](../uniq.md)                                                    | Unsupported upstream options have no new compatibility claims                                                                          |
+| `tail`  | `tail [-n N] [--] [file]`; the last 10 lines by default; `-nN` is also accepted                                                                  | Multiple files, filename headers, `-c`, `-f`, and other options (status 2). Retained input is capped at 16 MiB. See [tail](../tail.md) |
+| `wc`    | Upstream line, word, and byte counts, file operands, standard input, and pipelines. See [wc](../wc.md)                                           | Other upstream options have no new compatibility claims                                                                                |
 
 `grep` is the only program that links the `regex` crate. The core build never does. See [ADR 003](../adr/003-one-core-shell-and-installable-utilities.md) for why the utilities are separate programs.
 
@@ -66,6 +66,10 @@ The cooperative utilities support small subsets. `head`, `sort`, `uniq`, and `wc
 ## Install upstream ls
 
 Import `installLs` from `bash-web/utilities/ls`. It uses the same caller-owned runtime and loads `dist/ls.wasm` on first spawn. This is an ordinary WASI guest. Use `WasiUtilityOptions` with `wasmUrl` or raw `source` bytes, not a compiled module. [ls](../ls.md) lists the qualified flags and the upstream WASI metadata limitations.
+
+## Look up registered programs
+
+Import `installWhich` from `bash-web/utilities/which`. It installs an ordinary WASI guest with the same lazy source and disposal contract. `which [-a|--all] [--] name...` queries live executable registrations, not Unix execute bits or installer markers. See [which](../which.md) for output, status, limitations, and Waffle process requirements.
 
 ## Install print-only env
 

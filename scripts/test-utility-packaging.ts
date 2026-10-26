@@ -12,6 +12,7 @@ const utilities = [
   "cat",
   "grep",
   "head",
+  "which",
   "ls",
   "mkdir",
   "rg",

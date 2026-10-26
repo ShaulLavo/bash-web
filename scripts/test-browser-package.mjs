@@ -87,6 +87,7 @@ test("worker preparation bundles the public Waffle FS worker and finish-build re
     "cat",
     "grep",
     "head",
+    "which",
     "ls",
     "mkdir",
     "rg",
