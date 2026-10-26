@@ -33,9 +33,9 @@ jobs:
           key: packages-${{ runner.os }}-${{ runner.arch }}-node26.12.1-${{ steps.inputs.outputs.dependencies }}
       - if: steps.packages.outputs.cache-hit != 'true' || steps.downloads.outputs.cache-hit != 'true'
         run: npm ci --ignore-scripts
-      - run: npm run sources:browser && npm run build:worker
+      - run: npm run sources:browser && npm run build:worker && npm run build:node-harness
       - name: Pack shared JavaScript inputs
-        run: tar -czf "$RUNNER_TEMP/javascript.tar.gz" node_modules .sources .build/browser dist/shell-worker.js dist/fs-worker.js
+        run: tar -czf "$RUNNER_TEMP/javascript.tar.gz" node_modules .sources .build/browser .build/node dist/shell-worker.js dist/fs-worker.js
       - uses: actions/upload-artifact@v4
         with:
           name: javascript-${{ github.sha }}
@@ -46,8 +46,6 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    env:
-      LAYERS_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,13 +55,7 @@ jobs:
           node-version: 26.12.1
       - uses: ./.github/actions/javascript
       - name: Select immutable layer baseline
-        run: |
-          baseline="$LAYERS_BASE_REF"
-          if [[ ! "$baseline" =~ ^[a-f0-9]{40}$ ]] || ! git cat-file -e "$baseline^{commit}"; then
-            echo "Could not resolve immutable layer baseline: $baseline" >&2
-            exit 1
-          fi
-          echo "LAYERS_BASE_REF=$baseline" >> "$GITHUB_ENV"
+        run: node scripts/scoreboard-ci.mjs baseline LAYERS_BASE_REF
       - run: npm run test:check-layers && npm run check:layers && npm run typecheck:layers
         env:
           LAYERS_OUTPUT: ${{ runner.temp }}/engine-layers.json
@@ -247,12 +239,7 @@ jobs:
       - run: ulimit -c 0; npm run fuzz:shell-echo:ci -- --shell "$GITHUB_WORKSPACE/.build/shell/release/shell-cli"
         env:
           TMPDIR: ${{ runner.temp }}
-  own-shell-compatibility:
-    outputs:
-      raw-artifact-id: ${{ steps.raw-upload.outputs.artifact-id }}
-    permissions:
-      contents: read
-      actions: read
+  own-shell-scoreboard:
     needs:
       - prepare
       - native
@@ -266,28 +253,16 @@ jobs:
       BASH_COMPAT_JOBS: 4
       BASH_COMPAT_SKIP_BUILD: "1"
       BASH_COMPAT_RECORD: "0"
-      BASH_COMPAT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Select compatibility baseline
-        shell: bash
-        run: |
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_REF" == "refs/heads/main" ]]; then
-            baseline="$BASH_COMPAT_BASE_REF"
-          else
-            baseline="$(git merge-base origin/main "$GITHUB_SHA")"
-          fi
-          if [[ -z "$baseline" || "$baseline" == "0000000000000000000000000000000000000000" ]] || ! git cat-file -e "$baseline^{commit}"; then
-            echo "Could not resolve compatibility baseline: $baseline" >&2
-            exit 1
-          fi
-          echo "BASH_COMPAT_BASE_REF=$baseline" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with:
           node-version: 26.12.1
       - uses: ./.github/actions/javascript
+      - name: Select compatibility baseline
+        run: node scripts/scoreboard-ci.mjs baseline BASH_COMPAT_BASE_REF
       - uses: ./.github/actions/native
       - uses: actions/cache@v4
         with:
@@ -297,7 +272,6 @@ jobs:
         with:
           targets: wasm32-wasip1
           components: rustfmt, clippy
-      - uses: ./.github/actions/wasi-sdk
       - name: Install isolated Bash runner tools
         run: |
           sudo apt-get update
@@ -305,21 +279,86 @@ jobs:
           # The disposable Ubuntu runner must permit bubblewrap's user namespace.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --unshare-all --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 --proc /proc --dev /dev -- /usr/bin/true
+      - run: npm run test:shell:scoreboard:prebuilt
+  own-shell-observation:
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      current-artifact-id: ${{ steps.current-upload.outputs.artifact-id }}
+    needs:
+      - prepare
+      - native
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_TARGET_DIR: .build/shell
+      BASH_WEB_UTILITY_ARTIFACTS: .build/utility-artifacts
+      BASH_COMPAT_MODE: frozen
+      BASH_COMPAT_ENGINES: own-shell
+      BASH_COMPAT_JOBS: 4
+      BASH_COMPAT_SKIP_BUILD: "1"
+      BASH_COMPAT_RECORD: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.12.1
+      - uses: ./.github/actions/javascript
+      - name: Select compatibility baseline
+        run: node scripts/scoreboard-ci.mjs baseline BASH_COMPAT_BASE_REF
+      - uses: ./.github/actions/native
       - name: Bind qualification and resolve PR main floor
         run: node scripts/scoreboard-ci.mjs prepare "${{ runner.temp }}/scoreboard-input.json"
         env:
           GH_TOKEN: ${{ github.token }}
       - run: node --test scripts/test-diagnose-compat.ts
-      - run: npm run test:shell:scoreboard
       - run: npm run fuzz:shell-echo:ci -- --waffle --shell "$GITHUB_WORKSPACE/.build/shell/wasm32-wasip1/release/shell-runtime.wasm"
         env:
           TMPDIR: ${{ runner.temp }}
-      - name: Observe compatibility with the same-job node build
+      - name: Observe compatibility with the shared node build
         run: node scripts/diagnose-compat.ts "${{ runner.temp }}/own-shell-diagnostics" -- npm run compat:shell:prebuilt
         env:
           BASH_COMPAT_RAW: "1"
           BASH_COMPAT_OUT: ${{ runner.temp }}/own-shell-current.json
           BASH_COMPAT_SCRATCH: ${{ runner.temp }}
+      - id: current-upload
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: own-shell-current-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/scoreboard-input.json
+            ${{ runner.temp }}/own-shell-current.json
+            ${{ runner.temp }}/own-shell-diagnostics/
+          if-no-files-found: ignore
+  own-shell-compatibility:
+    outputs:
+      raw-artifact-id: ${{ steps.raw-upload.outputs.artifact-id }}
+    permissions:
+      contents: read
+      actions: read
+    needs:
+      - prepare
+      - own-shell-scoreboard
+      - own-shell-observation
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.12.1
+      - uses: ./.github/actions/javascript
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.own-shell-observation.outputs.current-artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}
       - name: Seal complete raw score
         run: node scripts/scoreboard-ci.mjs raw "${{ runner.temp }}/scoreboard-input.json" "${{ runner.temp }}/own-shell-current.json" "${{ runner.temp }}/scoreboard-raw"
       - name: Upload complete raw score
@@ -330,14 +369,6 @@ jobs:
           path: ${{ runner.temp }}/scoreboard-raw/raw.json
           retention-days: 90
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: own-shell-current-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/own-shell-current.json
-            ${{ runner.temp }}/own-shell-diagnostics/
-          if-no-files-found: ignore
   score-floor:
     needs:
       - prepare
@@ -431,6 +462,8 @@ jobs:
       - native
       - wasi
       - fuzz
+      - own-shell-scoreboard
+      - own-shell-observation
       - own-shell-compatibility
       - score-floor
       - browser

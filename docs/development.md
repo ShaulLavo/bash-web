@@ -79,7 +79,7 @@ Do not regenerate or edit these in ordinary work. Scripts check them by digest.
 
 - `shell/parser/`: the parser crate (`shell-parser`), started from Bashkit's parser.
 - `shell/engine/`: the async shell engine. It builds `shell-engine` (CLI and size harness) and `shell-runtime` (the browser guest).
-- `shell/utilities/`: `cat`, `grep`, `mkdir`, and `seq` as separate WASM programs.
+- `shell/utilities/`: `cat`, `grep`, `mkdir`, `seq`, and `tail` as separate WASM programs.
 - `shell/compat-fixtures/`: test-only guests (`argv-py`, `printenv-py`) and `shell-cli`, the engine composed with the utilities. Never packaged.
 - `src/shell.ts`, `src/index.ts`: the public API. See [API reference](reference/api.md).
 - `src/runtime/`: adapters that connect the shell guest to Waffle.

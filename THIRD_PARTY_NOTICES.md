@@ -656,3 +656,13 @@ variant are original local modifications to the Bashkit-derived parser at
 5.3.15 controls are original. GNU Bash 5.3 source was inspected to explain the
 observed optimization boundaries; no upstream implementation was copied.
 See `sources.lock.json:shellFileSubstitution` and `docs/file-substitution.md`.
+
+## Head utility
+
+`shell/utilities/src/bin/head.rs` links the unmodified `uu_head` and `uucore`
+registry crates at version `0.12.0`, MIT licensed, copyright uutils developers.
+The head crate records upstream uutils/coreutils revision
+`dc1efd89948a9ca4c78c3a4b9a6ac891019a8c69`, path `src/uu/head`.
+The local wrapper only initializes the WASI working directory before the upstream
+entry point. The distribution notices generator includes the crates' license files
+and their transitive dependencies. No Bashkit head implementation is included.

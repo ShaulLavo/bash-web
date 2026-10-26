@@ -276,3 +276,92 @@ fn grep_closed_descriptor_errors_keep_operand_and_quiet_priority() {
     assert_eq!(rig.run("printf secret | grep secret /dev/fd/6"), 2);
     assert!(rig.text().starts_with("grep: "));
 }
+
+#[test]
+fn tail_selects_last_lines_and_preserves_record_bytes() {
+    let rig = Rig::new();
+    assert_eq!(rig.run("seq 1 12 | tail"), 0);
+    assert_eq!(rig.text(), "3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n");
+
+    let rig = Rig::new();
+    rig.fs
+        .write_file("/home/guest/input", b"discard\nkeep\0\r\nlast")
+        .unwrap();
+    assert_eq!(rig.run("tail -n2 input"), 0);
+    assert_eq!(rig.output.bytes(), b"keep\0\r\nlast");
+
+    let rig = Rig::new();
+    rig.fs
+        .write_file("/home/guest/-n", b"drop\nkeep\n")
+        .unwrap();
+    assert_eq!(rig.run("tail -n1 -- -n"), 0);
+    assert_eq!(rig.text(), "keep\n");
+
+    let rig = Rig::new();
+    rig.fs
+        .write_file("/home/guest/input", b"one\ntwo\n")
+        .unwrap();
+    assert_eq!(rig.run("tail -n 0 input"), 0);
+    assert!(rig.output.is_empty());
+}
+
+#[test]
+fn tail_consumes_pipeline_eof_without_streaming_early_output() {
+    let rig = Rig::new();
+    assert_eq!(rig.run("seq 1 400000 | tail -n 2"), 0);
+    assert_eq!(rig.text(), "399999\n400000\n");
+
+    let rig = Rig::new();
+    assert_eq!(rig.run("seq 1 400000 | tail -n 0"), 0);
+    assert!(rig.output.is_empty());
+
+    let rig = Rig::new();
+    interrupt_parked_pipeline(&rig, "ticker | tail");
+}
+
+#[test]
+fn tail_reports_usage_and_input_errors() {
+    for script in [
+        "tail -n",
+        "tail -n nope",
+        "tail -n -1",
+        "tail -n +1",
+        "tail -x",
+        "tail one two",
+    ] {
+        let rig = Rig::new();
+        assert_eq!(rig.run(script), 2, "{script}: {}", rig.text());
+        assert!(rig.text().starts_with("tail: "), "{script}");
+    }
+    let rig = Rig::new();
+    assert_eq!(rig.run("tail missing-file"), 1);
+    assert!(rig.text().starts_with("tail: missing-file: "));
+}
+
+#[test]
+fn tail_rejects_unbounded_retention() {
+    let source = "for ((i=0;i<2075;i++)); do printf '%8192s' ''; done";
+    let rig = Rig::new();
+    assert_eq!(rig.run(&format!("{source} | count")), 0);
+    assert_eq!(rig.text(), "COUNT:16998400:0\n");
+
+    let rig = Rig::new();
+    assert_eq!(rig.run(&format!("{source} | tail -n 1")), 1);
+    assert!(rig.text().contains("retained input exceeds 16777216 bytes"));
+
+    let rig = Rig::new();
+    assert_eq!(
+        rig.run("seq 1 2500000 | tail -n 2500000"),
+        1,
+        "{}",
+        rig.text()
+    );
+    assert!(rig.text().contains("retained input exceeds 16777216 bytes"));
+}
+
+#[test]
+fn tail_reports_output_descriptor_errors() {
+    let rig = Rig::new();
+    assert_eq!(rig.run("exec 1>&-; printf x | tail"), 1, "{}", rig.text());
+    assert!(rig.text().contains("tail: standard output is unavailable"));
+}
