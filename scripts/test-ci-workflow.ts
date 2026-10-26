@@ -411,3 +411,10 @@ test("read tokens stay out of the replay environment and layer graphs are artifa
   assert.equal(upload.if, "always()");
   assert.equal(object(upload.with)["retention-days"], 90);
 });
+
+test("browser stages ripgrep at its public-entry URL before bundling", () => {
+  const browser = commands(jobs().browser);
+  const staging = "cp public/programs/rg.wasm dist/rg.wasm";
+  assert.ok(browser.includes(staging), "downloaded ripgrep must also reach the Vite input URL");
+  assert.ok(browser.indexOf(staging) < browser.indexOf("npm run build:browser:assets:ci"));
+});

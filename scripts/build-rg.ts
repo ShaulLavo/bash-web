@@ -5,6 +5,7 @@ import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { wasiBuildEnvironment, wasiTarget } from "./wasi-build.ts";
 import { ripgrepNotices } from "./rg-notices.ts";
+import { patchRipgrepSource } from "./rg-source.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
 const root = resolve(import.meta.dirname, "..");
@@ -30,7 +31,7 @@ if ((await readFile(receipt, "utf8").catch(() => "")) !== identity) {
     await rm(source, { recursive: true, force: true });
     await mkdir(source, { recursive: true });
     execFileSync("tar", ["-xzf", archive, "--strip-components=1", "-C", source]);
-    execFileSync("git", ["apply", patch], { cwd: source });
+    patchRipgrepSource(source, patch);
     await writeFile(receipt, identity);
   } finally {
     await rm(archive, { force: true });
