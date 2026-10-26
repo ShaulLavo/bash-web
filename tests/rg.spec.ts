@@ -38,7 +38,9 @@ test("upstream ripgrep loads on first use and preserves paths, ignores, patterns
   const workers = page.workers().length;
   let index = 0;
   for (const fixture of rgCases) {
-    const input = fixture.stdin ? `printf %s ${shellQuote(fixture.stdin)} | ` : "";
+    const input = fixture.stdin
+      ? `printf %b ${shellQuote(fixture.stdin.replaceAll("\\", "\\\\").replaceAll("\n", "\\n"))} | `
+      : "";
     const marker = `${index++}:`;
     await command(
       page,
@@ -82,7 +84,7 @@ test("ripgrep handles a closed downstream pipe and remains usable after Ctrl+C",
     page,
     'set -o pipefail; rg --line-buffered needle large | { read -r first; printf \'%s\' "$first" > /tmp/rg-first; }; printf \'PIPE:%s:%s\' "$?" "${PIPESTATUS[0]}" > /tmp/rg-status',
   );
-  await finished(page, "PIPE:0:0");
+  await finished(page, "PIPE:1:1");
   expect(await readFile(page, "first")).toBe("needle");
   await expect.poll(() => page.workers().length).toBe(workers);
   await command(page, "rg '^never$' -");

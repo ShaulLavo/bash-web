@@ -30,6 +30,15 @@ try {
     if (fixture.error) assert.ok(result.stderr.includes(fixture.error), result.stderr);
     else assert.equal(result.stderr, "", fixture.name);
   }
+  if (!native) {
+    const startup = spawnSync(
+      "wasmtime",
+      ["run", "--env", "PWD=/missing-working-directory", guest, "needle"],
+      { encoding: "utf8" },
+    );
+    assert.equal(startup.status, 2, "invalid startup working directory");
+    assert.match(startup.stderr, /No such file or directory/);
+  }
   for (const fixture of native ? [] : rgUnsupported) {
     const result = spawnSync(
       "wasmtime",

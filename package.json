@@ -7,6 +7,7 @@
     "dist",
     "shell",
     "scripts",
+    "patches",
     "docs",
     "plans",
     "sources.lock.json",
