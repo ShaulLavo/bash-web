@@ -656,3 +656,16 @@ variant are original local modifications to the Bashkit-derived parser at
 5.3.15 controls are original. GNU Bash 5.3 source was inspected to explain the
 observed optimization boundaries; no upstream implementation was copied.
 See `sources.lock.json:shellFileSubstitution` and `docs/file-substitution.md`.
+
+### Individual upstream cut and tr programs
+
+`cut.wasm` and `tr.wasm` link the individual `uu_cut`, `uu_tr`, and `uucore`
+packages from uutils/coreutils `07763857f6b9a547742a994b58aef0ccd036198b`,
+version `0.13.0`, under the retained [MIT license](docs/licenses/uutils-coreutils-MIT.txt).
+Their upstream implementations are unmodified. The local Rust entries and
+TypeScript installers are original integration code. The `cut` entry sets the
+WASI working directory from `PWD` before calling upstream. No multicall
+executable, shell builtin, or replacement implementation is included.
+Cargo's workspace lock records exact source and dependency identities;
+`scripts/notices.mjs` includes the upstream root license and dependency notices.
+See [cut](docs/cut.md) and [tr](docs/tr.md) for tested behavior and runtime limits.

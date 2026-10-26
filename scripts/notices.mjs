@@ -29,6 +29,11 @@ for (const pkg of metadata.packages.sort((a, b) => a.name.localeCompare(b.name))
   included.add(pkg.manifest_path);
   await include(`${pkg.name} ${pkg.version}`, dirname(pkg.manifest_path));
 }
+const coreutilsLicense = await readFile(
+  resolve(root, "docs/licenses/uutils-coreutils-MIT.txt"),
+  "utf8",
+);
+output += `## uutils cut and tr 07763857f6b9a547742a994b58aef0ccd036198b / LICENSE\n\n${coreutilsLicense}\n\n`;
 const parserLicense = await readFile(resolve(root, pins.shellParser.directory, "LICENSE"), "utf8");
 output += `## Bashkit parser ${pins.shellParser.revision} / LICENSE\n\n${parserLicense}\n\n`;
 await include(`Oils corpus ${pins.oils.revision}`, resolve(root, "docs/evidence/licenses"));

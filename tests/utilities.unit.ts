@@ -3,6 +3,8 @@ import { test, type TestContext } from "node:test";
 import type { ProgramDefinition, Runtime } from "waffle";
 import { installCat, UtilityConflictError } from "../src/utilities/cat";
 import { installGrep } from "../src/utilities/grep";
+import { installCut } from "../src/utilities/cut";
+import { installTr } from "../src/utilities/tr";
 import { installHead } from "../src/utilities/head";
 
 const wasm = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
@@ -288,3 +290,30 @@ test("ordinary WASI source bytes bypass fetch and compilation at install", async
   assert.equal(state.fetched.length, 0);
   assert.equal(program.cooperative, undefined);
 });
+
+for (const [name, install] of [
+  ["cut", installCut],
+  ["tr", installTr],
+] as const) {
+  test(`${name} registers ordinary lazy source and disposes only itself`, async (context) => {
+    const state = fixture(context);
+    const other = await installCat(state.runtime, { module: await WebAssembly.compile(wasm) });
+    const installation = await install(state.runtime);
+    const program = state.programs.get(`/bin/${name}`);
+    assert.ok(program && typeof program.source === "function");
+    assert.equal(program.module, undefined);
+    assert.equal(program.cooperative, undefined);
+    assert.deepEqual(state.fetched, []);
+    await assert.rejects(install(state.runtime), UtilityConflictError);
+    assert.deepEqual(await program.source(), wasm);
+    assert.ok(state.fetched[0].endsWith(`/dist/${name}.wasm`));
+    await installation.dispose();
+    await installation.dispose();
+    assert.equal(state.programs.has(`/bin/${name}`), false);
+    assert.equal(state.files.has(`/bin/${name}`), false);
+    assert.equal(state.programs.has(other.executable), true);
+    const again = await install(state.runtime, { source: wasm });
+    await again.dispose();
+    await other.dispose();
+  });
+}

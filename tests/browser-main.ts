@@ -9,6 +9,8 @@ import { registerTestPrograms } from "./helpers/test-programs";
 import { installCat } from "../src/utilities/cat";
 import { installGrep } from "../src/utilities/grep";
 import { installMkdir } from "../src/utilities/mkdir";
+import { installCut } from "../src/utilities/cut";
+import { installTr } from "../src/utilities/tr";
 import { installSeq } from "../src/utilities/seq";
 import filesystemWorkerUrl from "../.build/browser/fs-worker.js?url";
 
@@ -44,12 +46,14 @@ mountBrowser({
     )
       throw new Error("OPFS conformance selector did not reach the runtime");
     const registration = new AbortController();
-    // External commands are add-ons: this composition selects all four. Each one's
+    // External commands are add-ons: this composition selects these programs. Each one's
     // program is fetched only when the shell first starts it.
     const ready = Promise.all([
       registerTestPrograms(runtime, registration.signal, onStartupStage),
       Promise.all(
-        [installCat, installGrep, installMkdir, installSeq].map((install) => install(runtime)),
+        [installCat, installGrep, installMkdir, installSeq, installCut, installTr].map((install) =>
+          install(runtime),
+        ),
       ),
     ]).then(() => {});
     let disposing: Promise<void> | undefined;
