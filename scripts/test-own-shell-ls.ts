@@ -45,7 +45,12 @@ async function run(script: string) {
       runtime,
       waffle,
       shell,
-      { tmp: "/listing", env, fixtureDirectory: "" },
+      {
+        tmp: "/listing",
+        env,
+        fixtureDirectory: "",
+        modulePath: resolve(directory, "shell-runtime.wasm"),
+      },
       script,
       (fd, bytes) => {
         if (fd === 2) stderr.push(Buffer.from(bytes));
