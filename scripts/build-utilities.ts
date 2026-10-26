@@ -7,6 +7,7 @@ const root = resolve(import.meta.dirname, "..");
 buildWc();
 buildWasiShell(["-p", "shell-utilities"]);
 buildWasiShell(["-p", "shell-sed", "--bin", "sed"]);
+buildWasiShell(["-p", "shell-xargs", "--bin", "xargs"]);
 for (const command of utilityNames) {
   for (const directory of ["dist", "public/programs"]) {
     mkdirSync(resolve(root, directory), { recursive: true });

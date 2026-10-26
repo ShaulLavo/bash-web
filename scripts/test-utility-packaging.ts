@@ -24,6 +24,7 @@ const utilities = [
   "rm",
   "cp",
   "mv",
+  "xargs",
 ] as const;
 
 const sortUniqTransitiveNotices = [
@@ -224,4 +225,21 @@ test("native sort and uniq qualification runs candidates, not host GNU programs"
   const source = readFileSync(resolve(root, "shell/utilities/tests/sort_uniq.rs"), "utf8");
   assert.match(source, /owned-fixtures\/sort-uniq\.json/);
   assert.doesNotMatch(source, /run\(name,|Command::new\("(?:bash|sort|uniq)"\)/);
+});
+
+test("xargs retains the upstream license and bounded source receipt", () => {
+  const receipt = JSON.parse(
+    readFileSync(resolve(root, "third-party/uutils-xargs/provenance.json"), "utf8"),
+  );
+  assert.equal(receipt.revision, "505421d4e03586efeb7b9c55adf057599e192e0a");
+  const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
+  assert.match(notices, /## upstream-xargs 0\.11\.0 \/ LICENSE/);
+  assert.ok(
+    notices.includes(
+      readFileSync(resolve(root, "third-party/uutils-xargs/LICENSE"), "utf8")
+        .replaceAll("\r\n", "\n")
+        .replace(/[ \t]+$/gm, "")
+        .trim(),
+    ),
+  );
 });

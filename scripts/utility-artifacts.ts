@@ -22,6 +22,7 @@ export const utilityNames = [
   "rm",
   "cp",
   "mv",
+  "xargs",
 ] as const;
 const receiptName = "source-sha256.txt";
 

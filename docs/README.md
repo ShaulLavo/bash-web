@@ -6,7 +6,7 @@ Start at the [README](../README.md) for what bash-web is. This page maps the res
 
 - [Getting started](getting-started.md): Build the engine and run your first scripts
 - [Embed a shell in a page](guides/embed-in-a-page.md): Run a script or an interactive shell in the browser
-- [Install utilities](guides/install-utilities.md): Add `cat`, `grep`, [head](head.md), `mkdir`, `seq`, [sort](sort.md), `tail`, [uniq](uniq.md), [file operations](file-operations.md)
+- [Install utilities](guides/install-utilities.md): Add `cat`, `grep`, [head](head.md), `mkdir`, `seq`, [sort](sort.md), `tail`, [uniq](uniq.md), [file operations](file-operations.md), [xargs](xargs.md)
 - [Troubleshooting](troubleshooting.md): Fix `command not found`, isolation errors, missing assets
 
 ## Understand
@@ -34,7 +34,7 @@ One page per feature, each stating exactly what is supported and what is left ou
 - Output and input: [echo](echo.md), [printf options](printf-options.md), [printf quoting](printf-quoting.md), [printf string fields](printf-string-fields.md), [printf integer fields](printf-integer-fields.md), [printf integer operands](printf-integer-operands.md), [printf unsigned and radix operands](printf-unsigned-radix.md), [printf character](printf-character.md), [printf floating conversions](printf-float.md), [printf escaped fields](printf-escaped-fields.md), [printf scalar assignment](printf-scalar-assignment.md), [read](read.md), [getopts](getopts.md)
 - Expansion: [tilde expansion](tilde-expansion.md), [parameter transformations](parameter-transformation.md), [input-only command substitution](file-substitution.md), [indexed arrays](indexed-arrays.md), [typed variable references](typed-references-contract.md), [grouped conditional ERE](regex-groups.md), [negative extglob patterns](negative-extglob.md)
 - Commands and state: [aliases](aliases.md), [builtin wrapper](builtin-wrapper.md), [type](type.md), [declaration printing](declaration-printing.md), [cd and the directory stack](directories.md), [trap registration](trap-registration.md), [completion](completion.md)
-- Files and descriptors: [file permission predicates](file-permissions.md), [descriptor reopening](descriptor-reopening.md), [broken pipes](pipeline-broken-pipe.md), [sort](sort.md), [tail](tail.md), [uniq](uniq.md), [file operations](file-operations.md)
+- Files and descriptors: [file permission predicates](file-permissions.md), [descriptor reopening](descriptor-reopening.md), [broken pipes](pipeline-broken-pipe.md), [sort](sort.md), [tail](tail.md), [uniq](uniq.md), [file operations](file-operations.md), [xargs](xargs.md)
 
 ## Contribute
 

@@ -24,3 +24,4 @@ export { installUniq } from "../src/utilities/uniq";
 export { installWc } from "../src/utilities/wc";
 export { installTail } from "../src/utilities/tail";
 export { installLs } from "../src/utilities/ls";
+export { installXargs } from "../src/utilities/xargs";

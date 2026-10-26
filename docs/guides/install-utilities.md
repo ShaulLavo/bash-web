@@ -58,6 +58,10 @@ The cooperative utilities support small subsets. `head`, `sort`, `uniq`, and `wc
 
 `grep` is the only program that links the `regex` crate. The core build never does. See [ADR 003](../adr/003-one-core-shell-and-installable-utilities.md) for why the utilities are separate programs.
 
+## Install bounded xargs
+
+Import `installXargs` from `bash-web/utilities/xargs`. It loads an ordinary WASI guest on first spawn. The initial contract parses input and echoes batches only; explicit commands are rejected pending Waffle `runtime_proc.spawn`/`wait` integration. See [xargs](../xargs.md) for flags and limits.
+
 ## Related
 
 - [Embed a shell in a page](embed-in-a-page.md)

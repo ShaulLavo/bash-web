@@ -1,0 +1,28 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1017,7 +1017,7 @@
+ fn do_xargs(args: &[&str]) -> Result<CommandResult, XargsError> {
+     let matches = clap::Command::new("xargs")
+         .version(crate_version!())
+-        .about("Run commands using arguments derived from standard input")
++        .about("Parse input and echo batches; explicit commands require Waffle runtime_proc.spawn/wait integration")
+         .arg(
+             Arg::new(options::COMMAND)
+                 .help("The command to run")
+@@ -1179,6 +1179,16 @@
+         },
+     };
+ 
++    if matches.contains_id(options::COMMAND) {
++        return Err("explicit commands require Waffle runtime_proc.spawn/wait integration".into());
++    }
++    if matches.contains_id(options::MAX_PROCS) {
++        return Err("parallel execution is not supported".into());
++    }
++    if matches.contains_id(options::REPLACE) || matches.contains_id(options::REPLACE_I) {
++        return Err("replacement mode requires explicit command execution".into());
++    }
++
+     let options = Options {
+         arg_file: matches
+             .get_one::<String>(options::ARG_FILE)
