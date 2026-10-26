@@ -175,12 +175,18 @@ Each `bash-web/utilities/<name>` entry exports one install function, shown here 
 function installCat(runtime: Runtime, options?: UtilityOptions): Promise<UtilityInstallation>;
 ```
 
-The others are `installGrep`, `installMkdir`, `installSeq`, and `installWc`. Each registers `/bin/<name>`.
+`installGrep`, `installMkdir`, and `installSeq` use the same options. `installHead` and `installWc` use `WasiUtilityOptions` below. Each registers `/bin/<name>`.
 
 ```ts
 type UtilityOptions = { workerUrl?: string | URL } & (
   | { wasmUrl?: string | URL; module?: never }
   | { module: WebAssembly.Module | (() => WebAssembly.Module | Promise<WebAssembly.Module>); wasmUrl?: never }
+);
+
+type UtilitySource = Uint8Array | (() => Uint8Array | Promise<Uint8Array>);
+type WasiUtilityOptions = { workerUrl?: string | URL } & (
+  | { wasmUrl?: string | URL; source?: never }
+  | { source: UtilitySource; wasmUrl?: never }
 );
 
 interface UtilityInstallation {
@@ -193,6 +199,6 @@ class UtilityConflictError extends Error {
 }
 ```
 
-Default `wasmUrl`: `dist/<name>.wasm` next to the package. Default `workerUrl`: `dist/shell-worker.js`. The entry also exports the types `UtilityInstallation`, `UtilityModule`, and `UtilityOptions`. `UtilityConflictError` carries the conflicting `path`, and its message reads `Cannot install utility at <path>: <reason>`.
+Default `wasmUrl`: `dist/<name>.wasm` next to the package. Default `workerUrl`: `dist/shell-worker.js`. Cooperative entries export `UtilityInstallation`, `UtilityModule`, and `UtilityOptions`. The `head` and `wc` entries export `UtilityInstallation`, `UtilitySource`, and `WasiUtilityOptions`. Ordinary WASI guests take raw source bytes so Waffle can add interrupt checks. `UtilityConflictError` carries the conflicting `path`, and its message reads `Cannot install utility at <path>: <reason>`.
 
 `install*` throws `Runtime is disposed` for a disposed runtime. It loads nothing until the first spawn.

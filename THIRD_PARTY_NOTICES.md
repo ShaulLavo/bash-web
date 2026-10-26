@@ -16,7 +16,7 @@ The new shell's parser starts from Bashkit's `crates/bashkit/src/parser/` at `49
 
 The terminal's historical notice names an older Ghostty revision. The actual included `ghostty-vt.wasm` provenance names `7b11f3dca034d8d24369ad3856afe57946d7902a`, and the build records that correction while preserving the original notice text.
 
-The `wc` guest uses `uu_wc` and `uucore` from `uutils/coreutils` at `07763857f6b9a547742a994b58aef0ccd036198b` (MIT, Copyright uutils developers). The upstream license is retained in `shell/utilities/LICENSE.uutils-coreutils`. The notices script includes that license in generated distributions, and the utility artifact receipt covers the separately linked guest.
+The `wc` guest uses `uu_wc` and `uucore` from `uutils/coreutils` at `07763857f6b9a547742a994b58aef0ccd036198b` (MIT, Copyright uutils developers). The upstream license is retained in `shell/wc/LICENSE.uutils-coreutils`. The notices script includes that license in generated distributions, and the utility artifact receipt covers the separately linked guest. Its `bytecount` 0.6.9 dependency is retained under `shell/wc/vendor/bytecount` with one local build guard: the existing WASM SIMD module and call sites now require the `simd128` target feature. The crate's MIT and Apache 2.0 licenses remain in that directory and in the generated notices.
 
 The fixed compatibility oracle at `docs/evidence/own-shell-oracle.json` contains
 upstream test scripts, not production interpreter code. The corpus source paths,
@@ -658,3 +658,13 @@ variant are original local modifications to the Bashkit-derived parser at
 5.3.15 controls are original. GNU Bash 5.3 source was inspected to explain the
 observed optimization boundaries; no upstream implementation was copied.
 See `sources.lock.json:shellFileSubstitution` and `docs/file-substitution.md`.
+
+## Head utility
+
+`shell/utilities/src/bin/head.rs` links the unmodified `uu_head` and `uucore`
+registry crates at version `0.12.0`, MIT licensed, copyright uutils developers.
+The head crate records upstream uutils/coreutils revision
+`dc1efd89948a9ca4c78c3a4b9a6ac891019a8c69`, path `src/uu/head`.
+The local wrapper only initializes the WASI working directory before the upstream
+entry point. The distribution notices generator includes the crates' license files
+and their transitive dependencies. No Bashkit head implementation is included.

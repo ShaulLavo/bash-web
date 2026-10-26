@@ -276,7 +276,6 @@ jobs:
         with:
           targets: wasm32-wasip1
           components: rustfmt, clippy
-      - uses: ./.github/actions/wasi-sdk
       - name: Install isolated Bash runner tools
         run: |
           sudo apt-get update

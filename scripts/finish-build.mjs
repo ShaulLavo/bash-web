@@ -11,7 +11,7 @@ for (const worker of ["shell-worker", "fs-worker"]) {
     new URL(`../dist/${worker}.js`, import.meta.url),
   );
 }
-for (const command of ["cat", "grep", "mkdir", "seq", "wc"]) {
+for (const command of ["cat", "grep", "head", "mkdir", "seq", "wc"]) {
   await copyFile(
     new URL(`../public/programs/${command}.wasm`, import.meta.url),
     new URL(`../dist/${command}.wasm`, import.meta.url),
