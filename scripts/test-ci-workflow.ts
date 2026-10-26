@@ -57,6 +57,29 @@ test("native and WASI producers always execute instead of restoring successful r
   assert.match(action, /node scripts\/ci-artifacts\.ts stage \.build\/ci-native/);
 });
 
+test("native artifact consumers install the pinned SDK before verifying guests", () => {
+  const action = object(
+    parse(readFileSync(new URL("../.github/actions/native/action.yml", import.meta.url), "utf8")),
+  );
+  const steps = object(action.runs).steps;
+  assert.ok(Array.isArray(steps));
+  const entries = steps.map(object);
+  const setup = entries.findIndex((step) => step.uses === "./.github/actions/wasi-sdk");
+  const stage = entries.findIndex(
+    (step) =>
+      typeof step.run === "string" && step.run.includes("node scripts/ci-artifacts.ts stage"),
+  );
+  assert.ok(setup >= 0 && setup < stage, "WASI SDK must be installed before artifact staging");
+  assert.equal(entries[setup].if, undefined, "SDK setup must not be conditional");
+  for (const job of Object.values(jobs())) {
+    const jobSteps = object(job).steps;
+    assert.ok(Array.isArray(jobSteps));
+    const uses = jobSteps.map(object).map((step) => step.uses);
+    if (!uses.includes("./.github/actions/native")) continue;
+    assert.ok(!uses.includes("./.github/actions/wasi-sdk"), "restore owns its SDK prerequisite");
+  }
+});
+
 function object(value: unknown): Record<string, unknown> {
   assert.ok(value && typeof value === "object" && !Array.isArray(value));
   return value as Record<string, unknown>;
@@ -133,7 +156,7 @@ test("the actual aggregate shell command rejects each non-success result in ever
 test("each moved current-main gate has one owner", () => {
   const workflowJobs = jobs();
   const expected: Record<string, readonly string[]> = {
-    prepare: ["sources:browser", "build:worker"],
+    prepare: ["sources:browser", "build:worker", "build:node-harness"],
     layers: ["test:check-layers", "check:layers", "typecheck:layers"],
     quality: ["quality:js", "test:ci", "test:guest-build", "typecheck:guest-build", "typecheck:ci"],
     native: [
@@ -145,7 +168,8 @@ test("each moved current-main gate has one owner", () => {
     ],
     wasi: ["test:shell:wasi"],
     browser: ["build:browser:assets:ci", "test:runtime:terminal", "test:browser"],
-    "own-shell-compatibility": ["test:shell:scoreboard", "compat:shell:prebuilt"],
+    "own-shell-scoreboard": ["test:shell:scoreboard:prebuilt"],
+    "own-shell-observation": ["compat:shell:prebuilt"],
   };
   const ownership = Object.entries(workflowJobs).flatMap(([owner, job]) =>
     Array.from(commands(job).matchAll(/npm run ([\w:-]+)/g), (match) => ({
@@ -199,12 +223,15 @@ test("quality package recipes preserve complete current selections", () => {
     "node --test scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts",
   );
   assert.match(String(scripts["test:shell:scoreboard"]), /build:node-harness/);
-  assert.match(String(scripts["test:shell:scoreboard"]), /node scripts\/scoreboard-tests\.mjs/);
-  assert.doesNotMatch(String(scripts["test:shell:scoreboard"]), /scripts\/test-/);
+  assert.match(
+    expanded(String(scripts["test:shell:scoreboard"])),
+    /node scripts\/scoreboard-tests\.mjs/,
+  );
+  assert.doesNotMatch(expanded(String(scripts["test:shell:scoreboard"])), /scripts\/test-/);
 });
 
 test("compatibility keeps frozen identity, diagnostics, echo and target baseline wiring", () => {
-  const compat = object(jobs()["own-shell-compatibility"]);
+  const compat = object(jobs()["own-shell-observation"]);
   const env = object(compat.env);
   for (const [key, value] of Object.entries({
     BASH_COMPAT_MODE: "frozen",
@@ -212,10 +239,19 @@ test("compatibility keeps frozen identity, diagnostics, echo and target baseline
     BASH_COMPAT_JOBS: 4,
     BASH_COMPAT_SKIP_BUILD: "1",
     BASH_COMPAT_RECORD: "0",
-    BASH_COMPAT_BASE_REF: "${{ github.event.pull_request.base.sha || github.event.before }}",
   }))
     assert.equal(env[key], value);
   const run = commands(compat);
+  assert.equal(env.BASH_COMPAT_BASE_REF, undefined);
+  assert.match(run, /node scripts\/scoreboard-ci\.mjs baseline BASH_COMPAT_BASE_REF/);
+  assert.match(
+    commands(jobs().layers),
+    /node scripts\/scoreboard-ci\.mjs baseline LAYERS_BASE_REF/,
+  );
+  assert.doesNotMatch(
+    readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
+    /github\.event\.pull_request\.base\.sha/,
+  );
   assert.match(run, /node --test scripts\/test-diagnose-compat.ts/);
   assert.match(
     run,
@@ -267,14 +303,11 @@ test("shell notices have exactly one native producer and a Cargo-free browser co
   assert.equal(browser.match(/vite build/g)?.length, 1);
 });
 
-test("compatibility reuses its same-job node build while standalone commands still build fresh", () => {
-  const compat = expanded(commands(jobs()["own-shell-compatibility"]));
-  assert.equal(compat.match(/node scripts\/build-node-harness\.ts/g)?.length, 1);
-  assert.equal(compat.match(/node scripts\/bash-compat\.mjs/g)?.length, 1);
-  const run = commands(jobs()["own-shell-compatibility"]);
-  assert.ok(
-    run.indexOf("npm run test:shell:scoreboard") < run.indexOf("npm run fuzz:shell-echo:ci"),
-  );
+test("compatibility reuses the shared node build while standalone commands still build fresh", () => {
+  const observation = expanded(commands(jobs()["own-shell-observation"]));
+  assert.doesNotMatch(observation, /node scripts\/build-node-harness\.ts/);
+  assert.equal(observation.match(/node scripts\/bash-compat\.mjs/g)?.length, 1);
+  const run = commands(jobs()["own-shell-observation"]);
   assert.ok(
     run.indexOf("npm run fuzz:shell-echo:ci") < run.indexOf("npm run compat:shell:prebuilt"),
   );
@@ -287,6 +320,10 @@ test("compatibility reuses its same-job node build while standalone commands sti
       expanded(`npm run ${name}`).match(/node scripts\/build-node-harness\.ts/g)?.length,
       1,
     );
+  assert.equal(
+    expanded("npm run test:shell:scoreboard:prebuilt"),
+    "node scripts/scoreboard-tests.mjs",
+  );
 });
 
 test("browser apt uses the runner's existing HTTPS fallbacks instead of the slow Azure archive", () => {
@@ -335,9 +372,9 @@ test("raw publication and the blocking cheap fold have no dependency cycle or wh
   const workflowJobs = jobs();
   const raw = object(workflowJobs["own-shell-compatibility"]);
   const floor = object(workflowJobs["score-floor"]);
-  assert.deepEqual(raw.needs, ["prepare", "native"]);
+  assert.deepEqual(raw.needs, ["prepare", "own-shell-scoreboard", "own-shell-observation"]);
   assert.deepEqual(floor.needs, ["prepare", "own-shell-compatibility"]);
-  assert.ok(!("BASH_COMPAT_RAW" in object(raw.env)));
+  assert.ok(!raw.env || !("BASH_COMPAT_RAW" in object(raw.env)));
   assert.equal(
     object(raw.outputs)["raw-artifact-id"],
     "${{ steps.raw-upload.outputs.artifact-id }}",
@@ -374,27 +411,32 @@ test("raw mode belongs only to observation, never scorer or lifecycle test envir
     const job = object(value);
     assert.ok(!job.env || !("BASH_COMPAT_RAW" in object(job.env)), `${id} leaks raw mode`);
   }
-  const raw = object(workflowJobs["own-shell-compatibility"]);
+  const raw = object(workflowJobs["own-shell-observation"]);
   assert.ok(Array.isArray(raw.steps));
   const owners = raw.steps
     .map(object)
     .filter((step) => step.env && "BASH_COMPAT_RAW" in object(step.env));
   assert.equal(owners.length, 1);
-  assert.equal(owners[0].name, "Observe compatibility with the same-job node build");
+  assert.equal(owners[0].name, "Observe compatibility with the shared node build");
   assert.equal(object(owners[0].env).BASH_COMPAT_RAW, "1");
 });
 
 test("read tokens stay out of the replay environment and layer graphs are artifact-only", () => {
-  for (const key of ["own-shell-compatibility", "score-floor"]) {
+  for (const key of ["own-shell-compatibility", "own-shell-observation", "score-floor"]) {
     const job = object(jobs()[key]);
     assert.equal(object(job.permissions).actions, "read");
     assert.ok(!job.env || !("GH_TOKEN" in object(job.env)));
   }
-  const raw = object(jobs()["own-shell-compatibility"]);
-  assert.ok(Array.isArray(raw.steps));
-  for (const step of raw.steps.map(object)) {
-    if (!step.env || !("GH_TOKEN" in object(step.env))) continue;
-    assert.equal(step.name, "Bind qualification and resolve PR main floor");
+  for (const key of ["own-shell-compatibility", "own-shell-observation"]) {
+    const job = object(jobs()[key]);
+    assert.ok(Array.isArray(job.steps));
+    const tokens = job.steps
+      .map(object)
+      .filter((step) => step.env && "GH_TOKEN" in object(step.env));
+    for (const step of tokens) {
+      assert.equal(key, "own-shell-observation");
+      assert.equal(step.name, "Bind qualification and resolve PR main floor");
+    }
   }
   const layer = object(jobs().layers);
   assert.doesNotMatch(commands(layer), /--record/);
@@ -409,4 +451,102 @@ test("read tokens stay out of the replay environment and layer graphs are artifa
   assert.equal(object(upload.with).path, object(check.env).LAYERS_OUTPUT);
   assert.equal(upload.if, "always()");
   assert.equal(object(upload.with)["retention-days"], 90);
+});
+
+test("scoreboard and observation run independently using one shared node build", () => {
+  const workflowJobs = jobs();
+  const scoreboard = object(workflowJobs["own-shell-scoreboard"]);
+  const observation = object(workflowJobs["own-shell-observation"]);
+  const publisher = object(workflowJobs["own-shell-compatibility"]);
+  assert.deepEqual(scoreboard.needs, ["prepare", "native"]);
+  assert.deepEqual(observation.needs, ["prepare", "native"]);
+  assert.deepEqual(publisher.needs, ["prepare", "own-shell-scoreboard", "own-shell-observation"]);
+  for (const job of [scoreboard, observation, publisher]) {
+    assert.ok(!("if" in job), "failed or skipped prerequisites must block publication");
+    assert.ok(!("continue-on-error" in job));
+    assert.ok(Array.isArray(job.steps));
+    const checked = job.steps.map(object).filter((step) => typeof step.run === "string");
+    assert.ok(checked.every((step) => !("if" in step) && !("continue-on-error" in step)));
+  }
+  const buildOwners = Object.entries(workflowJobs).flatMap(([owner, job]) =>
+    Array.from(
+      expanded(commands(job)).matchAll(/node scripts\/build-node-harness\.ts/g),
+      () => owner,
+    ),
+  );
+  assert.deepEqual(buildOwners, ["prepare"]);
+  const prepare = commands(workflowJobs.prepare);
+  assert.ok(prepare.indexOf("npm run build:node-harness") < prepare.indexOf("tar -czf"));
+  assert.match(prepare, /tar -czf .* \.build\/node /);
+  assert.equal(
+    expanded(commands(scoreboard)).match(/node scripts\/scoreboard-tests\.mjs/g)?.length,
+    1,
+  );
+  assert.doesNotMatch(expanded(commands(observation)), /scoreboard-tests\.mjs/);
+  assert.ok(Array.isArray(scoreboard.steps));
+  for (const action of ["javascript", "native"])
+    assert.equal(
+      scoreboard.steps.map(object).filter((step) => step.uses === `./.github/actions/${action}`)
+        .length,
+      1,
+    );
+  assert.deepEqual(object(scoreboard.env), object(observation.env));
+  assert.ok(Array.isArray(publisher.steps));
+  const download = publisher.steps
+    .map(object)
+    .find((step) => step.uses === "actions/download-artifact@v4");
+  assert.ok(download);
+  assert.equal(
+    object(download.with)["artifact-ids"],
+    "${{ needs.own-shell-observation.outputs.current-artifact-id }}",
+  );
+  assert.equal(object(download.with).path, "${{ runner.temp }}");
+  const current = object(observation.outputs);
+  assert.equal(current["current-artifact-id"], "${{ steps.current-upload.outputs.artifact-id }}");
+  assert.ok(Array.isArray(observation.steps));
+  const upload = observation.steps.map(object).find((step) => step.id === "current-upload");
+  assert.ok(upload);
+  assert.equal(
+    object(upload.with).name,
+    "own-shell-current-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}",
+  );
+  assert.match(
+    String(object(upload.with).path),
+    /\$\{\{ runner.temp \}\}\/own-shell-current\.json/,
+  );
+  assert.match(String(object(upload.with).path), /\$\{\{ runner.temp \}\}\/scoreboard-input\.json/);
+  const observe = commands(observation);
+  assert.ok(observe.indexOf("scoreboard-ci.mjs prepare") < observe.indexOf("diagnose-compat.ts"));
+  assert.doesNotMatch(commands(publisher), /scoreboard-ci\.mjs prepare/);
+});
+
+test("layer and split compatibility producers select immutable baselines after JavaScript restore", () => {
+  for (const { id, variable, consumer } of [
+    { id: "layers", variable: "LAYERS_BASE_REF", consumer: "npm run test:check-layers" },
+    {
+      id: "own-shell-scoreboard",
+      variable: "BASH_COMPAT_BASE_REF",
+      consumer: "npm run test:shell:scoreboard:prebuilt",
+    },
+    {
+      id: "own-shell-observation",
+      variable: "BASH_COMPAT_BASE_REF",
+      consumer: "scoreboard-ci.mjs prepare",
+    },
+  ]) {
+    const job = object(jobs()[id]);
+    assert.ok(!job.env || !(variable in object(job.env)));
+    assert.ok(Array.isArray(job.steps));
+    const steps = job.steps.map(object);
+    const restore = steps.findIndex((step) => step.uses === "./.github/actions/javascript");
+    const command = `node scripts/scoreboard-ci.mjs baseline ${variable}`;
+    const baseline = steps.findIndex((step) => step.run === command);
+    assert.equal(steps.filter((step) => step.run === command).length, 1);
+    assert.ok(restore >= 0 && restore < baseline, `${id} restores dependencies before selection`);
+    assert.ok(!("if" in steps[baseline]) && !("continue-on-error" in steps[baseline]));
+    const stage = steps.findIndex((step) => step.uses === "./.github/actions/native");
+    if (stage >= 0) assert.ok(baseline < stage, `${id} selects before native staging`);
+    const run = commands(job);
+    assert.ok(run.indexOf(command) < run.indexOf(consumer), `${id} selects before consuming`);
+  }
 });

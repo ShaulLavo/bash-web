@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { build } from "esbuild";
 
 const root = resolve(import.meta.dirname, "..");
-const utilities = ["cat", "grep", "head", "ls", "mkdir", "seq"] as const;
+const utilities = ["cat", "grep", "head", "ls", "mkdir", "seq", "tail"] as const;
 
 async function bundle(entry: string): Promise<string> {
   const result = await build({

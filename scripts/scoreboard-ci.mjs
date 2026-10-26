@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -30,12 +30,8 @@ function json(path) {
 function write(path, value) {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 }
-export function verifyBinding({ root, event, eventName, sourceSha, mainSha, run }) {
+function sourceBinding({ root, event, eventName, sourceSha, mainSha }) {
   assert.equal(event.repository?.id, authority.repositoryId, "wrong event repository");
-  assert.equal(run.repository?.id, authority.repositoryId, "wrong run repository");
-  assert.equal(run.workflow_id, authority.workflowId, "wrong workflow");
-  assert.equal(run.path, authority.workflowPath, "wrong workflow path");
-  assert.equal(run.event, eventName, "wrong run event");
   assert.equal(
     git(root, ["rev-parse", "HEAD"]),
     fullSha(sourceSha),
@@ -44,7 +40,6 @@ export function verifyBinding({ root, event, eventName, sourceSha, mainSha, run 
   if (eventName === "push") {
     assert.equal(event.ref, "refs/heads/main", "only main pushes qualify");
     assert.equal(event.after, sourceSha, "wrong pushed source");
-    assert.equal(run.head_sha, sourceSha, "wrong host push source");
     fullSha(event.before);
     assert.equal(
       git(root, ["merge-base", event.before, sourceSha]),
@@ -55,19 +50,41 @@ export function verifyBinding({ root, event, eventName, sourceSha, mainSha, run 
   }
   assert.equal(eventName, "pull_request", "unsupported qualification event");
   const headSha = fullSha(event.pull_request.head.sha);
-  const baseSha = fullSha(event.pull_request.base.sha);
+  const eventBaseSha = fullSha(event.pull_request.base.sha);
   assert.equal(event.pull_request.base.ref, "main", "PR does not target main");
   assert.equal(event.pull_request.base.repo.id, authority.repositoryId, "PR base repository");
-  assert.equal(run.head_sha, headSha, "host PR head changed");
-  const parents = git(root, ["rev-list", "--parents", "-n", "1", sourceSha]).split(" ").slice(1);
-  assert.deepEqual(parents, [baseSha, headSha], "tested merge parents differ from PR H/B");
-  fullSha(mainSha);
+  const parents = git(root, ["show", "-s", "--format=%P", sourceSha]).split(" ");
+  assert.equal(parents.length, 2, "tested source must be a two-parent merge");
+  assert.equal(parents[1], headSha, "tested merge second parent differs from PR head");
+  const baseSha = fullSha(parents[0]);
+  const mainHistory = git(root, ["rev-list", "--first-parent", fullSha(mainSha)]).split("\n");
+  assert.ok(mainHistory.includes(baseSha), "tested base is not in captured main history");
+  const baseHistory = git(root, ["rev-list", "--first-parent", baseSha]).split("\n");
+  assert.ok(baseHistory.includes(eventBaseSha), "event base is not in tested base history");
   const included = git(root, ["merge-base", mainSha, sourceSha]) === mainSha;
   assert.ok(
     included || sourceEquivalent(root, baseSha, mainSha),
     `current main ${mainSha} is not included or scoring-equivalent to tested base ${baseSha}`,
   );
   return { kind: "pull-request", headSha, testedMergeSha: sourceSha, baseSha, mainSha };
+}
+export function verifyBinding(input) {
+  const { eventName, sourceSha, run } = input;
+  assert.equal(run.repository?.id, authority.repositoryId, "wrong run repository");
+  assert.equal(run.workflow_id, authority.workflowId, "wrong workflow");
+  assert.equal(run.path, authority.workflowPath, "wrong workflow path");
+  assert.equal(run.event, eventName, "wrong run event");
+  const selected = sourceBinding(input);
+  assert.equal(
+    run.head_sha,
+    selected.kind === "pull-request" ? selected.headSha : sourceSha,
+    "wrong host source",
+  );
+  return selected;
+}
+export function selectBaseline(input) {
+  const selected = sourceBinding(input);
+  return selected.kind === "pull-request" ? selected.baseSha : selected.beforeSha;
 }
 async function binding(root, client, pinnedMain) {
   const event = json(process.env.GITHUB_EVENT_PATH);
@@ -136,6 +153,17 @@ export function sealRaw({ root, input, scorePath, output }) {
   assert.equal(prepared.run.runId, Number(process.env.GITHUB_RUN_ID));
   assert.equal(prepared.run.attempt, Number(process.env.GITHUB_RUN_ATTEMPT));
   assert.equal(prepared.inputsSha256, digest(scoringInputs(root, prepared.sourceSha)));
+  assert.deepEqual(
+    prepared.selected,
+    sourceBinding({
+      root,
+      event: json(process.env.GITHUB_EVENT_PATH),
+      eventName: process.env.GITHUB_EVENT_NAME,
+      sourceSha: prepared.sourceSha,
+      mainSha: prepared.selected.mainSha,
+    }),
+    "prepared source binding mismatch",
+  );
   const score = json(scorePath);
   validateOwnScore(oracleAt(root, bootstrap.sourceSha), score);
   mkdirSync(output, { recursive: true });
@@ -279,6 +307,22 @@ async function foldAcceptedCandidate({ root, client, raw, bound, oracle, output 
 async function main() {
   const [command, ...args] = process.argv.slice(2);
   const root = resolve(import.meta.dirname, "..");
+  if (command === "baseline") {
+    assert.equal(args.length, 1);
+    assert.ok(["LAYERS_BASE_REF", "BASH_COMPAT_BASE_REF"].includes(args[0]));
+    const baseline = selectBaseline({
+      root,
+      event: json(process.env.GITHUB_EVENT_PATH),
+      eventName: process.env.GITHUB_EVENT_NAME,
+      sourceSha: process.env.GITHUB_SHA,
+      mainSha:
+        process.env.GITHUB_EVENT_NAME === "pull_request"
+          ? git(root, ["rev-parse", "refs/remotes/origin/main"])
+          : undefined,
+    });
+    appendFileSync(process.env.GITHUB_ENV, `${args[0]}=${baseline}\n`);
+    return;
+  }
   if (command === "enforce") {
     assert.equal(
       json(args[0]).ok,
