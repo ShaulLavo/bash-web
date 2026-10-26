@@ -7,5 +7,6 @@ runs:
       with:
         name: native-${{ github.sha }}
         path: .build/ci-native
+    - uses: ./.github/actions/wasi-sdk
     - shell: bash
       run: node scripts/ci-artifacts.ts stage .build/ci-native

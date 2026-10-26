@@ -64,6 +64,7 @@ function browserInputs(consumer: string) {
     put(consumer, `${directory}/LICENSE`, `${label} license ©\n`);
     put(consumer, `${directory}/licenses/extra.txt`, `${label} extra notice\n`);
   }
+  put(consumer, "public/programs/rg.NOTICES.txt", "Ripgrep license notice\n");
   put(consumer, "scripts/placeholder", "");
   copyFileSync(
     resolve(root, "scripts/browser-notices.mjs"),

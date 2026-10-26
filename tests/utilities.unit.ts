@@ -4,6 +4,9 @@ import type { ProgramDefinition, Runtime } from "waffle";
 import { installCat, UtilityConflictError } from "../src/utilities/cat";
 import { installGrep } from "../src/utilities/grep";
 import { installHead } from "../src/utilities/head";
+import { installSort } from "../src/utilities/sort";
+import { installUniq } from "../src/utilities/uniq";
+import { installRg } from "../src/utilities/rg";
 
 const wasm = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
 type Program = ProgramDefinition;
@@ -288,3 +291,39 @@ test("ordinary WASI source bytes bypass fetch and compilation at install", async
   assert.equal(state.fetched.length, 0);
   assert.equal(program.cooperative, undefined);
 });
+
+type WasiInstaller = (runtime: Runtime) => ReturnType<typeof installSort>;
+
+async function assertWasiInstallation(
+  context: TestContext,
+  name: string,
+  install: WasiInstaller,
+): Promise<void> {
+  const state = fixture(context);
+  const installation = await install(state.runtime);
+  assert.equal(installation.executable, `/bin/${name}`);
+  assert.deepEqual(Array.from(state.programs.keys()), [`/bin/${name}`]);
+  assert.equal(state.fetched.length, 0);
+  const program = state.programs.get(installation.executable);
+  assert.ok(program && typeof program.source === "function");
+  assert.equal(program.module, undefined);
+  assert.equal(program.cooperative, undefined);
+  assert.deepEqual(await program.source(), wasm);
+  assert.equal(state.fetched.length, 1);
+  assert.ok(state.fetched[0].endsWith(`/dist/${name}.wasm`));
+  await installation.dispose();
+  assert.equal(state.programs.size + state.adapters.size + state.files.size, 0);
+}
+
+test("rg registers raw source lazily without claiming another utility", async (context) => {
+  await assertWasiInstallation(context, "rg", installRg);
+});
+
+for (const [name, install] of [
+  ["sort", installSort],
+  ["uniq", installUniq],
+] as const) {
+  test(`${name} loads only its own ordinary WASI source and disposes independently`, async (context) => {
+    await assertWasiInstallation(context, name, install);
+  });
+}

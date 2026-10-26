@@ -605,6 +605,7 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
         // trusted baseline launcher, migration supervisor and group draining are shipped code.
         for (const name of [
           "bash-compat.mjs",
+          "build-wc.ts",
           "bash-compat-helpers.mjs",
           "bash-compat-runner.mjs",
           "shell-scoreboard.mjs",
@@ -612,6 +613,7 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
           "shell-scoreboard-migration.mjs",
           "shell-process-group.mjs",
           "wasi-build.ts",
+          "sed-source.ts",
           "utility-artifacts.ts",
           "verify-wasi-guests.ts",
         ])
@@ -636,6 +638,12 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
         try {
           let directory;
           await until(() => {
+            assert.equal(
+              child.exitCode ?? child.signalCode,
+              null,
+              `compatibility entrypoint exited before migration started:
+${Buffer.concat(errors)}`,
+            );
             directory = readdirSync(runner).find((name) =>
               name.startsWith("audit-oracle-migration-"),
             );
@@ -827,7 +835,8 @@ const names = process.argv.includes('shell-utilities')
   : ['argv-py', 'printenv-py'];
 if (process.cwd() !== ${JSON.stringify(repo)}) {
   assert.match(readFileSync('shell/utilities/Cargo.toml', 'utf8'), /name = "shell-utilities"/);
-  for (const name of names) assert.ok(process.argv.includes(name), 'missing target binary ' + name);
+  const binaries = process.argv.filter((_, index, args) => args[index - 1] === '--bin');
+  assert.deepEqual(binaries, names, 'request only immutable target binaries');
 }
 const wasm = Buffer.from([0, 97, 115, 109, 1, 0, 0, 0, 5, 5, 1, 1, 1, 128, 32]);
 for (const name of names) writeFileSync(resolve(release, name + '.wasm'), wasm);

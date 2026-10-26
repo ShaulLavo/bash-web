@@ -102,18 +102,26 @@ function utilityDefinition(
 ): ProgramDefinition {
   if (program.execution === "wasi") {
     if ("module" in options) throw new TypeError("Ordinary WASI utilities require source bytes");
-    const source = "source" in options ? options.source : undefined;
-    return {
-      adapter,
-      source: cachedLoad(async () => {
-        if (source instanceof Uint8Array) return source;
-        if (source) return source();
-        return fetchSource(options.wasmUrl ?? program.defaultUrl);
-      }),
-    };
+    return wasiDefinition(adapter, program.defaultUrl, options);
   }
   if ("source" in options) throw new TypeError("Cooperative utilities require compiled modules");
   return cooperativeDefinition(adapter, program.defaultUrl, options);
+}
+
+function wasiDefinition(
+  adapter: string,
+  defaultUrl: URL,
+  options: WasiUtilityOptions,
+): ProgramDefinition {
+  const source = options.source;
+  return {
+    adapter,
+    source: cachedLoad(async () => {
+      if (source instanceof Uint8Array) return source;
+      if (source) return source();
+      return fetchSource(options.wasmUrl ?? defaultUrl);
+    }),
+  };
 }
 
 function cooperativeDefinition(

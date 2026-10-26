@@ -82,16 +82,33 @@ test("worker preparation bundles the public Waffle FS worker and finish-build re
   // finish-build must also restore the stable URLs for package consumers.
   await rm(resolve(scratch, "dist"), { recursive: true });
   await mkdir(resolve(scratch, "dist"));
-  const programs = ["cat", "grep", "mkdir", "seq", "tail", "touch", "rm", "cp", "mv"].map(
-    (name) => [name, Buffer.from(`${name}-program`)],
-  );
+  const programs = [
+    "cat",
+    "grep",
+    "head",
+    "ls",
+    "mkdir",
+    "rg",
+    "sed",
+    "seq",
+    "sort",
+    "tail",
+    "uniq",
+    "wc",
+    "touch",
+    "rm",
+    "cp",
+    "mv",
+  ].map((name) => [name, Buffer.from(`${name}-program`)]);
   await mkdir(resolve(scratch, "public/programs"), { recursive: true });
   for (const [name, bytes] of programs)
     await writeFile(resolve(scratch, `public/programs/${name}.wasm`), bytes);
+  await writeFile(resolve(scratch, "public/programs/rg.NOTICES.txt"), "ripgrep notices");
   await run(process.execPath, [resolve(scratch, "scripts/finish-build.mjs")], { timeout: 30000 });
   for (const [worker, bytes] of prepared) {
     assert.deepEqual(await readFile(resolve(scratch, `dist/${worker}.js`)), bytes);
   }
+  assert.equal(await readFile(resolve(scratch, "dist/rg.NOTICES.txt"), "utf8"), "ripgrep notices");
   for (const [name, bytes] of programs)
     assert.deepEqual(await readFile(resolve(scratch, `dist/${name}.wasm`)), bytes);
 });

@@ -14,7 +14,10 @@ async function include(label, directory) {
     .sort();
   for (const name of names) {
     const text = await readFile(resolve(directory, name), "utf8").catch(() => undefined);
-    if (text) output += `## ${label} / ${name}\n\n${text}\n\n`;
+    if (text) {
+      const normalized = text.replaceAll("\r\n", "\n").replace(/[ \t]+$/gm, "");
+      output += `## ${label} / ${name}\n\n${normalized}\n\n`;
+    }
   }
 }
 
@@ -25,6 +28,10 @@ const metadata = JSON.parse(
     { cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
   ),
 );
+const sed = JSON.parse(
+  await readFile(resolve(root, "third-party/uutils-sed/provenance.json"), "utf8"),
+);
+output += `## uutils sed source\n\n${sed.repository} at ${sed.revision}. Local WASI changes are recorded in third-party/uutils-sed/wasi.patch.\n\n`;
 const included = new Set();
 const fileOperations = JSON.parse(
   await readFile(resolve(root, "shell/utilities/file-operations.source.json"), "utf8"),

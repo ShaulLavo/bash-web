@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
@@ -13,14 +21,21 @@ import {
   firstParent,
   git,
   mainEvidence,
+  oracleAt,
   resolveFloor,
   scoringInputs,
   sourceEquivalent,
 } from "./shell-scoreboard-main.mjs";
 import { bootstrap } from "./shell-scoreboard-floor.mjs";
-import { bytesDigest, digest } from "./shell-scoreboard.mjs";
+import { bytesDigest, digest, summarize } from "./shell-scoreboard.mjs";
 import { scoreboardFixture } from "./shell-scoreboard-test-fixture.mjs";
-import { verifyBinding } from "./scoreboard-ci.mjs";
+import {
+  foldQualification,
+  prepareQualification,
+  sealRaw,
+  selectBaseline,
+  verifyBinding,
+} from "./scoreboard-ci.mjs";
 
 const sha = (n) => n.toString(16).padStart(40, "0");
 const fixture = scoreboardFixture("oils");
@@ -187,7 +202,11 @@ function archive(entries) {
       "-c",
       "import io,json,sys,zipfile; b=io.BytesIO(); z=zipfile.ZipFile(b,'w'); [z.writestr(n,v) for n,v in json.load(sys.stdin)]; z.close(); sys.stdout.buffer.write(b.getvalue())",
     ],
-    { input: JSON.stringify(entries), stdio: ["pipe", "pipe", "ignore"] },
+    {
+      input: JSON.stringify(entries),
+      stdio: ["pipe", "pipe", "ignore"],
+      maxBuffer: 16 * 1024 * 1024,
+    },
   );
 }
 test("archive digests, fixed members and duplicates/path traversal fail closed", () => {
@@ -333,6 +352,24 @@ test("complete input equivalence excludes only reviewed regular docs, never adap
     assert.notDeepEqual(scoringInputs(root, base), scoringInputs(root, changed));
   });
 });
+function pullRequestProvenance(headSha, baseSha) {
+  return {
+    event: {
+      repository: { id: authority.repositoryId },
+      pull_request: {
+        head: { sha: headSha },
+        base: { sha: baseSha, ref: "main", repo: { id: authority.repositoryId } },
+      },
+    },
+    run: {
+      repository: { id: authority.repositoryId },
+      workflow_id: authority.workflowId,
+      path: authority.workflowPath,
+      event: "pull_request",
+      head_sha: headSha,
+    },
+  };
+}
 test("H/C/B/M are distinct and actual merge parents/current main inclusion are checked", async () => {
   await withRepo(({ root, put, commit }) => {
     put("src/runtime/worker.ts", "a");
@@ -356,20 +393,7 @@ test("H/C/B/M are distinct and actual merge parents/current main inclusion are c
       headSha,
     ]);
     const sourceSha = git(root, ["rev-parse", "HEAD"]);
-    const event = {
-      repository: { id: authority.repositoryId },
-      pull_request: {
-        head: { sha: headSha },
-        base: { sha: baseSha, ref: "main", repo: { id: authority.repositoryId } },
-      },
-    };
-    const run = {
-      repository: { id: authority.repositoryId },
-      workflow_id: authority.workflowId,
-      path: authority.workflowPath,
-      event: "pull_request",
-      head_sha: headSha,
-    };
+    const { event, run } = pullRequestProvenance(headSha, baseSha);
     const input = { root, event, eventName: "pull_request", sourceSha, mainSha, run };
     assert.deepEqual(verifyBinding(input), {
       kind: "pull-request",
@@ -398,7 +422,86 @@ test("H/C/B/M are distinct and actual merge parents/current main inclusion are c
   });
 });
 
-function hostedArtifact({ root, sourceSha, attempt, kind, passes, status = "completed" }) {
+function rebuiltMerge({ root, put, commit }) {
+  put("source.txt", "base");
+  const eventBase = commit();
+  git(root, ["checkout", "-qb", "feature"]);
+  put("feature.txt", "head");
+  const headSha = commit();
+  git(root, ["checkout", "--detach", eventBase]);
+  put("main.txt", "new main");
+  const mainSha = commit();
+  git(root, ["-c", "commit.gpgsign=false", "merge", "--no-ff", "-m", "rebuilt", headSha]);
+  const sourceSha = git(root, ["rev-parse", "HEAD"]);
+  const { event, run } = pullRequestProvenance(headSha, eventBase);
+  run.pull_requests = [{ head: { sha: headSha }, base: { sha: eventBase } }];
+  return { root, event, eventName: "pull_request", sourceSha, mainSha, run };
+}
+test("a rebuilt tested merge binds its main parent rather than the stale PR event base", async () => {
+  await withRepo((repo) => {
+    const input = rebuiltMerge(repo);
+    const headSha = input.run.head_sha;
+    assert.deepEqual(verifyBinding(input), {
+      kind: "pull-request",
+      headSha,
+      testedMergeSha: input.sourceSha,
+      baseSha: input.mainSha,
+      mainSha: input.mainSha,
+    });
+    assert.equal(selectBaseline(input), input.mainSha);
+  });
+});
+
+test("rebuilt merge validation rejects wrong heads, unrelated or invalid bases, and forged topology", async () => {
+  await withRepo((repo) => {
+    const input = rebuiltMerge(repo);
+    const { root, event, sourceSha, mainSha, run } = input;
+    const wrongHead = { ...event, pull_request: { ...event.pull_request, head: { sha: mainSha } } };
+    assert.throws(
+      () => verifyBinding({ ...input, event: wrongHead, run: { ...run, head_sha: mainSha } }),
+      /second parent differs/,
+    );
+    const unrelated = git(root, ["commit-tree", `${mainSha}^{tree}`, "-m", "unrelated"]);
+    for (const base of [unrelated, run.head_sha, "f".repeat(40), "not-a-sha"]) {
+      const invalid = {
+        ...event,
+        pull_request: { ...event.pull_request, base: { ...event.pull_request.base, sha: base } },
+      };
+      assert.throws(() => verifyBinding({ ...input, event: invalid }));
+      assert.throws(() => selectBaseline({ ...input, event: invalid }));
+    }
+    assert.throws(
+      () => verifyBinding({ ...input, mainSha: run.head_sha }),
+      /captured main history/,
+    );
+    const forged = [
+      [unrelated, run.head_sha],
+      [run.head_sha, mainSha],
+      [mainSha, run.head_sha, unrelated],
+    ];
+    for (const parents of forged) {
+      const args = ["commit-tree", `${sourceSha}^{tree}`, "-m", "forged"].concat(
+        parents.flatMap((sha) => ["-p", sha]),
+      );
+      const commit = git(root, args);
+      git(root, ["checkout", "--detach", commit]);
+      assert.throws(() => verifyBinding({ ...input, sourceSha: commit }));
+    }
+    git(root, ["checkout", "--detach", run.head_sha]);
+    assert.throws(() => verifyBinding({ ...input, sourceSha: run.head_sha }), /two-parent merge/);
+  });
+});
+
+function hostedArtifact({
+  root,
+  sourceSha,
+  attempt,
+  kind,
+  passes,
+  status = "completed",
+  observation = score(passes),
+  requiredFloor = floor(sourceSha, passes),
+}) {
   const input = provenance(kind);
   Object.assign(input.run, { head_sha: sourceSha, run_attempt: attempt });
   Object.assign(input.job, { head_sha: sourceSha, run_attempt: attempt, id: 20 + attempt, status });
@@ -409,14 +512,14 @@ function hostedArtifact({ root, sourceSha, attempt, kind, passes, status = "comp
     selected: { kind: "main-push", sourceSha, beforeSha: bootstrap.sourceSha },
     run: { runId: input.run.id, attempt },
     inputsSha256: digest(scoringInputs(root, sourceSha)),
-    resultSha256: digest(score(passes)),
-    score: score(passes),
+    resultSha256: digest(observation),
+    score: observation,
   };
   const payload =
     kind === "raw"
       ? raw
       : {
-          ...floor(sourceSha, passes),
+          ...requiredFloor,
           run: raw.run,
           beforeSha: bootstrap.sourceSha,
           lostIds: [],
@@ -432,6 +535,7 @@ function hostedArtifact({ root, sourceSha, attempt, kind, passes, status = "comp
   return { ...input, payload, bytes };
 }
 function hostedClient(sourceSha, inputs) {
+  const runId = inputs[0].run.id;
   const requests = [];
   async function request(path) {
     requests.push(path);
@@ -439,12 +543,14 @@ function hostedClient(sourceSha, inputs) {
       return {
         total_count: 1,
         workflow_runs: [
-          { id: 10, run_attempt: Math.max(...inputs.map((item) => item.run.run_attempt)) },
+          { id: runId, run_attempt: Math.max(...inputs.map((item) => item.run.run_attempt)) },
         ],
       };
-    if (path === "/actions/runs/10/artifacts?per_page=100")
+    if (path === `/actions/runs/${runId}/artifacts?per_page=100`)
       return { total_count: inputs.length, artifacts: inputs.map((item) => item.artifact) };
-    const attempt = path.match(/^\/actions\/runs\/10\/attempts\/(\d+)(\/jobs\?per_page=100)?$/);
+    const attempt = path.match(
+      new RegExp(`^/actions/runs/${runId}/attempts/(\\d+)(/jobs\\?per_page=100)?$`),
+    );
     if (attempt) {
       const selected = inputs.filter((item) => item.run.run_attempt === Number(attempt[1]));
       if (attempt[2])
@@ -529,3 +635,230 @@ test("API admission rejects expired evidence and never treats a cancelled produc
     );
   });
 });
+
+function qualificationFixture(repo) {
+  const { root, put } = repo;
+  const project = resolve(import.meta.dirname, "..");
+  const common = git(project, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+  put(".git/objects/info/alternates", `${resolve(common, "objects")}\n`);
+  git(root, ["update-ref", "HEAD", bootstrap.sourceSha]);
+  git(root, ["read-tree", "--empty"]);
+  for (const path of ["docs/evidence/own-shell-oracle.json", "sources.lock.json"])
+    put(
+      path,
+      execFileSync("git", ["show", `${bootstrap.sourceSha}:${path}`], {
+        cwd: root,
+        env: { ...process.env, GIT_NO_REPLACE_OBJECTS: "1" },
+        maxBuffer: 64 * 1024 * 1024,
+      }),
+    );
+  put(authority.workflowPath, provenance().workflow);
+  git(root, ["remote", "add", "origin", root]);
+  const input = rebuiltMerge(repo);
+  const oracle = oracleAt(root, bootstrap.sourceSha);
+  const ids = oracle.cases
+    .filter((item) => !item.excluded && item.kind === "builtins-only")
+    .slice(0, 2)
+    .map((item) => item.id)
+    .sort();
+  const score = (passes) => {
+    const cases = oracle.cases.map(({ bash: _bash, ...item }) => ({
+      ...item,
+      outcome:
+        item.excluded || item.kind !== "builtins-only"
+          ? "skip"
+          : passes.includes(item.id)
+            ? "pass"
+            : "fail",
+    }));
+    return { engine: "own-shell", identity: oracle.identity, cases, counts: summarize({ cases }) };
+  };
+  const requiredFloor = { ...floor(input.mainSha, ids), identity: oracle.identity };
+  const main = hostedArtifact({
+    root,
+    sourceSha: input.mainSha,
+    attempt: 1,
+    kind: "floor",
+    observation: score(ids),
+    requiredFloor,
+  });
+  const mainClient = hostedClient(input.mainSha, [main]);
+  const run = {
+    ...input.run,
+    id: 11,
+    run_attempt: 1,
+    head_repository: { id: authority.repositoryId },
+  };
+  let rawClient;
+  const client = {
+    requests: [],
+    observedMain: input.mainSha,
+    async request(path) {
+      this.requests.push(path);
+      if (path === "/git/ref/heads/main") return { object: { sha: this.observedMain } };
+      if (path === "/actions/runs/11/attempts/1") return run;
+      if (
+        path.startsWith("/actions/runs/11/") ||
+        path === "/actions/jobs/99/logs" ||
+        path === "/actions/artifacts/999/zip"
+      )
+        return rawClient.request(path);
+      assert.ok(
+        !path.includes(input.event.pull_request.base.sha),
+        "stale event base must not replace current main floor",
+      );
+      return mainClient.request(path);
+    },
+  };
+  function publish(raw) {
+    const value = hostedArtifact({
+      root,
+      sourceSha: input.sourceSha,
+      attempt: 1,
+      kind: "raw",
+      observation: raw.score,
+      requiredFloor,
+    });
+    value.run = run;
+    Object.assign(value.job, { id: 99, run_id: 11, head_sha: run.head_sha });
+    value.bytes = archive([["raw.json", JSON.stringify(raw)]]);
+    Object.assign(value.artifact, {
+      id: 999,
+      name: `own-shell-raw-${input.sourceSha}-11-1`,
+      digest: `sha256:${bytesDigest(value.bytes)}`,
+      workflow_run: { id: 11, head_sha: run.head_sha, head_repository_id: authority.repositoryId },
+    });
+    value.logs = `2026-10-24T17:00:01.100Z SHA256 digest of uploaded artifact zip is ${bytesDigest(value.bytes)}\n2026-10-24T17:00:01.200Z Artifact ${value.artifact.name} has been successfully uploaded! Final size is ${value.bytes.length} bytes. Artifact ID is 999\n`;
+    rawClient = hostedClient(input.sourceSha, [value]);
+  }
+  return { ...input, client, ids, score, publish };
+}
+async function withQualificationEnvironment(input, body) {
+  const eventPath = resolve(input.root, "event.json");
+  writeFileSync(eventPath, JSON.stringify(input.event));
+  const values = {
+    GITHUB_EVENT_PATH: eventPath,
+    GITHUB_EVENT_NAME: "pull_request",
+    GITHUB_SHA: input.sourceSha,
+    GITHUB_RUN_ID: "11",
+    GITHUB_RUN_ATTEMPT: "1",
+  };
+  const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, values);
+  try {
+    await body();
+  } finally {
+    restoreEnvironment(previous);
+  }
+}
+function restoreEnvironment(previous) {
+  for (const [key, value] of Object.entries(previous)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+}
+async function assertQualificationLifecycle(input) {
+  const { root, client, ids } = input;
+  const preparedPath = resolve(root, "prepared.json");
+  await prepareQualification({ root, client, output: preparedPath });
+  const prepared = JSON.parse(readFileSync(preparedPath, "utf8"));
+  assert.equal(prepared.selected.baseSha, input.mainSha);
+  assert.equal(prepared.selected.mainSha, input.mainSha);
+  assert.equal(prepared.floor.sourceSha, input.mainSha);
+  assert.deepEqual(prepared.floor.floorIds, ids);
+  client.observedMain = git(root, [
+    "commit-tree",
+    `${input.mainSha}^{tree}`,
+    "-p",
+    input.mainSha,
+    "-m",
+    "advanced main",
+  ]);
+  const scorePath = resolve(root, "score.json");
+  const rawDirectory = resolve(root, "raw");
+  const output = resolve(root, "folded");
+  writeFileSync(scorePath, JSON.stringify(input.score(ids)));
+  const seal = () => sealRaw({ root, input: preparedPath, scorePath, output: rawDirectory });
+  const invalid = structuredClone(prepared);
+  invalid.selected.baseSha = input.event.pull_request.base.sha;
+  writeFileSync(preparedPath, JSON.stringify(invalid));
+  assert.throws(seal, /prepared source binding mismatch/);
+  writeFileSync(preparedPath, JSON.stringify(prepared));
+  const rawPath = resolve(rawDirectory, "raw.json");
+  for (const passes of [ids, ids.slice(0, 1)]) {
+    writeFileSync(scorePath, JSON.stringify(input.score(passes)));
+    seal();
+    const raw = JSON.parse(readFileSync(rawPath, "utf8"));
+    assert.deepEqual(raw.selected, prepared.selected);
+    input.publish(raw);
+    const folded = await foldQualification({ root, client, rawPath, output });
+    assert.deepEqual(folded.binding, prepared.selected);
+    assert.equal(folded.observedMainAfter, client.observedMain);
+    assert.equal(folded.floorSha256, prepared.floor.floorSha256);
+    assert.equal(folded.ok, passes.length === ids.length);
+    assert.deepEqual(
+      Object.values(folded.corpora).flatMap((row) => row.lost),
+      ids.filter((id) => !passes.includes(id)),
+    );
+  }
+  assert.ok(client.requests.includes("/actions/artifacts/999/zip"));
+  const raw = JSON.parse(readFileSync(rawPath, "utf8"));
+  raw.selected.baseSha = input.event.pull_request.base.sha;
+  writeFileSync(rawPath, JSON.stringify(raw));
+  await assert.rejects(
+    foldQualification({ root, client, rawPath, output }),
+    /qualification binding mismatch/,
+  );
+}
+test("stale-event preparation, sealing and host-admitted folding preserve the captured current-main floor", async () => {
+  await withRepo(async (repo) => {
+    const input = qualificationFixture(repo);
+    await withQualificationEnvironment(input, () => assertQualificationLifecycle(input));
+  });
+});
+
+test("workflow baseline commands select the tested main parent for both gates and the predecessor for pushes", async () => {
+  await withRepo(async (repo) => {
+    const input = rebuiltMerge(repo);
+    await withQualificationEnvironment(input, () => assertBaselineCommands(repo, input));
+  });
+});
+function assertBaselineCommands({ root, put }, input) {
+  for (const file of [
+    "scoreboard-ci.mjs",
+    "shell-scoreboard-main.mjs",
+    "shell-scoreboard-floor.mjs",
+    "shell-scoreboard.mjs",
+    "shell-scoreboard-accepted-gains.mjs",
+  ])
+    put(`scripts/${file}`, readFileSync(new URL(file, import.meta.url)));
+  symlinkSync(resolve(import.meta.dirname, "../node_modules"), resolve(root, "node_modules"));
+  git(root, ["update-ref", "refs/remotes/origin/main", input.mainSha]);
+  const output = resolve(root, "github-env");
+  const env = { ...process.env, GITHUB_ENV: output };
+  const execute = (name) =>
+    execFileSync(process.execPath, [resolve(root, "scripts/scoreboard-ci.mjs"), "baseline", name], {
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  for (const name of ["LAYERS_BASE_REF", "BASH_COMPAT_BASE_REF"]) {
+    writeFileSync(output, "");
+    execute(name);
+    assert.equal(readFileSync(output, "utf8"), `${name}=${input.mainSha}\n`);
+  }
+  assert.throws(() => execute("NODE_OPTIONS"));
+  const push = {
+    repository: input.event.repository,
+    ref: "refs/heads/main",
+    after: input.sourceSha,
+    before: input.mainSha,
+  };
+  writeFileSync(env.GITHUB_EVENT_PATH, JSON.stringify(push));
+  env.GITHUB_EVENT_NAME = "push";
+  writeFileSync(output, "");
+  execute("LAYERS_BASE_REF");
+  assert.equal(readFileSync(output, "utf8"), `LAYERS_BASE_REF=${input.mainSha}\n`);
+  push.before = "0".repeat(40);
+  writeFileSync(env.GITHUB_EVENT_PATH, JSON.stringify(push));
+  assert.throws(() => execute("LAYERS_BASE_REF"));
+}
