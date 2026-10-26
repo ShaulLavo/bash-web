@@ -8,6 +8,7 @@ import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
 export const utilityNames = [
   "cat",
+  "cut",
   "grep",
   "head",
   "ls",

@@ -1,3 +1,4 @@
+import { installCut } from "../src/utilities/cut";
 // Acceptance/demo composition. Bun's public async installer and worker exports exist.
 // Bun cases stay disabled pending a verified Bun package, shared Waffle commit, and
 // matching receipted guest. Then compose createBunRuntimeLease with that installer
@@ -100,6 +101,7 @@ mountBrowser({
       Promise.all(
         [
           installCat,
+          installCut,
           installGrep,
           installHead,
           installLs,

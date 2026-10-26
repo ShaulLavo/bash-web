@@ -1,10 +1,10 @@
 # Install utilities
 
-Give a shell `cat`, `grep`, `head`, `mkdir`, `seq`, `sort`, `tail`, `uniq`, and `wc`. The shell core has no external commands. Without an installed program, a command lookup on `PATH` fails with status 127.
+Give a shell `cat`, `cut`, `grep`, `head`, `mkdir`, `seq`, `sort`, `tail`, `uniq`, and `wc`. The shell core has no external commands. Without an installed program, a command lookup on `PATH` fails with status 127.
 
 Each utility is its own WASM program with its own entry, so you install only what the page needs and pay only for those.
 
-1. Build the browser assets (`npm run build:browser`). The build writes `dist/cat.wasm`, `dist/grep.wasm`, `dist/head.wasm`, `dist/mkdir.wasm`, `dist/seq.wasm`, `dist/sort.wasm`, `dist/tail.wasm`, `dist/uniq.wasm`, and `dist/wc.wasm`.
+1. Build the browser assets (`npm run build:browser`). The build writes `dist/cat.wasm`, `dist/cut.wasm`, `dist/grep.wasm`, `dist/head.wasm`, `dist/mkdir.wasm`, `dist/seq.wasm`, `dist/sort.wasm`, `dist/tail.wasm`, `dist/uniq.wasm`, and `dist/wc.wasm`.
 2. Install each utility on the same `Runtime` that you pass to `createShell`:
 
    ```ts
@@ -24,9 +24,9 @@ Each utility is its own WASM program with its own entry, so you install only wha
    }
    ```
 
-   The other entries are `bash-web/utilities/grep` (`installGrep`), `bash-web/utilities/head` (`installHead`), `bash-web/utilities/mkdir` (`installMkdir`), `bash-web/utilities/seq` (`installSeq`), `bash-web/utilities/sort` (`installSort`), `bash-web/utilities/tail` (`installTail`), `bash-web/utilities/uniq` (`installUniq`), and `bash-web/utilities/wc` (`installWc`).
+   The other entries are `bash-web/utilities/cut` (`installCut`), `bash-web/utilities/grep` (`installGrep`), `bash-web/utilities/head` (`installHead`), `bash-web/utilities/mkdir` (`installMkdir`), `bash-web/utilities/seq` (`installSeq`), `bash-web/utilities/sort` (`installSort`), `bash-web/utilities/tail` (`installTail`), `bash-web/utilities/uniq` (`installUniq`), and `bash-web/utilities/wc` (`installWc`).
 
-3. If your bundler moves assets, pass the new URLs. `wasmUrl` points at the utility's `.wasm` file. `workerUrl` points at `dist/shell-worker.js`. For cooperative utilities, instead of `wasmUrl`, you can pass `module`, a compiled `WebAssembly.Module` or a function that returns one. Upstream `head`, `sort`, `uniq`, and `wc` take `source`, raw `Uint8Array` bytes or a function returning bytes, instead. Waffle needs those bytes to add interrupt checks.
+3. If your bundler moves assets, pass the new URLs. `wasmUrl` points at the utility's `.wasm` file. `workerUrl` points at `dist/shell-worker.js`. For cooperative utilities, instead of `wasmUrl`, you can pass `module`, a compiled `WebAssembly.Module` or a function that returns one. Upstream `cut`, `head`, `sort`, `uniq`, and `wc` take `source`, raw `Uint8Array` bytes or a function returning bytes, instead. Waffle needs those bytes to add interrupt checks.
 
 An install call writes a small marker file at `/bin/<name>` and registers the program with the runtime. It does not fetch, compile, or start a worker. The first command that runs the utility loads the guest.
 
@@ -42,12 +42,13 @@ Call `dispose()` after the utility's processes have stopped. It releases the reg
 
 ## What each utility supports
 
-The cooperative utilities support small subsets. `head`, `sort`, `uniq`, and `wc` run upstream uutils through ordinary WASI admission.
+The cooperative utilities support small subsets. `cut`, `head`, `sort`, `uniq`, and `wc` run upstream uutils through ordinary WASI admission.
 
 | Utility | Supported | Rejected |
 | ------- | --------- | -------- |
 | `cat` | File operands, or standard input when there are none | Options. Every argument is a file path, so `cat -n` fails |
 | `grep` | `-v -c -q -n -i -F -E`, basic regular expressions by default | Any other option, for example `-P` (status 2) |
+| `cut` | Upstream byte, character and field selection, complements, custom delimiters, binary and NUL records. See [cut](../cut.md) | Invalid options, ranges and delimiters. Locale-dependent multibyte behavior is not qualified |
 | `head` | Upstream lines, bytes, negative counts, NUL records, headers, help, and version. See [Head](../head.md) | Invalid options and counts (status 1). Buffered stdin can discard unread suffixes |
 | `mkdir` | `mkdir [-p] [--] dir...` | Any other option (status 2) |
 | `seq` | `seq end` and `seq start end`, integers | Step, separator, and other forms (status 2) |

@@ -9,6 +9,7 @@ import { loadSortUniqObservations } from "./sort-uniq-observations.ts";
 const root = resolve(import.meta.dirname, "..");
 const utilities = [
   "cat",
+  "cut",
   "grep",
   "head",
   "ls",
@@ -224,4 +225,25 @@ test("native sort and uniq qualification runs candidates, not host GNU programs"
   const source = readFileSync(resolve(root, "shell/utilities/tests/sort_uniq.rs"), "utf8");
   assert.match(source, /owned-fixtures\/sort-uniq\.json/);
   assert.doesNotMatch(source, /run\(name,|Command::new\("(?:bash|sort|uniq)"\)/);
+});
+
+test("cut packages the accepted upstream wrapper, ordinary admission and notices", () => {
+  const revision = "07763857f6b9a547742a994b58aef0ccd036198b";
+  const manifest = readFileSync(resolve(root, "shell/cut/Cargo.toml"), "utf8");
+  for (const name of ["uu_cut", "uucore"])
+    assert.ok(
+      manifest.includes(
+        `${name} = { git = "https://github.com/uutils/coreutils", rev = "${revision}" }`,
+      ),
+    );
+  const entry = readFileSync(resolve(root, "shell/cut/src/main.rs"), "utf8");
+  assert.match(entry, /uucore::bin!\(uu_cut\)/);
+  assert.match(entry, /std::env::var\("PWD"\)/);
+  assert.match(entry, /std::env::set_current_dir\(&cwd\)/);
+  const installer = readFileSync(resolve(root, "src/utilities/cut.ts"), "utf8");
+  assert.match(installer, /execution: "wasi"/);
+  assert.match(installer, /WasiUtilityOptions/);
+  const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
+  assert.match(notices, /## uu_cut 0\.13\.0 \/ LICENSE/);
+  assert.ok(notices.includes(`## uutils coreutils ${revision} / LICENSE`));
 });
