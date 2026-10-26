@@ -48,6 +48,21 @@ assert.equal(
   fileOperations.license.sha256,
   "Pinned uutils root license digest",
 );
+const envSource = JSON.parse(
+  await readFile(resolve(root, "shell/utilities/env.source.json"), "utf8"),
+);
+assert.equal(envSource.repository, fileOperations.repository);
+assert.equal(envSource.revision, fileOperations.revision);
+assert.deepEqual(envSource.license, fileOperations.license);
+assert.deepEqual(envSource.sharedPackage, fileOperations.sharedPackage);
+for (const [name, pkg] of Object.entries(envSource.packages)) {
+  const resolved = metadata.packages.find(
+    (entry) => entry.name === name && entry.source === upstream.source,
+  );
+  assert.ok(resolved, `Pinned env source is missing from Cargo metadata: ${name}`);
+  assert.equal(resolved.version, pkg.version);
+  assert.equal(dirname(resolved.manifest_path), resolve(upstreamRoot, pkg.path));
+}
 await include(`uutils coreutils ${fileOperations.revision}`, upstreamRoot);
 for (const pkg of metadata.packages.sort((a, b) => a.name.localeCompare(b.name))) {
   if (included.has(pkg.manifest_path) || pkg.name === "shell-parser") continue;

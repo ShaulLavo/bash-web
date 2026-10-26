@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import { installNodeWorkers, liveNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
-import { loadUtilityReplay, runRoot } from "./waffle-compat.ts";
+import { runRoot } from "./waffle-compat.ts";
+import * as replay from "./test-own-shell-wasi-fixture.ts";
 
-const { api, shell, source: which, directory, nodeDirectory } = await loadUtilityReplay("which");
+const { api, directory, nodeDirectory } = replay;
+const shell = await replay.readShell();
+const which = await replay.readWasiSource("which");
 
 async function fixture(context: TestContext) {
   let stop = () => {};

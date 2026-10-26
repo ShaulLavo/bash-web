@@ -25,3 +25,4 @@ export { installUniq } from "../src/utilities/uniq";
 export { installWc } from "../src/utilities/wc";
 export { installTail } from "../src/utilities/tail";
 export { installLs } from "../src/utilities/ls";
+export { installEnv } from "../src/utilities/env";
