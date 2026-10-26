@@ -4,6 +4,8 @@ import type { ProgramDefinition, Runtime } from "waffle";
 import { installCat, UtilityConflictError } from "../src/utilities/cat";
 import { installGrep } from "../src/utilities/grep";
 import { installHead } from "../src/utilities/head";
+import { installSort } from "../src/utilities/sort";
+import { installUniq } from "../src/utilities/uniq";
 
 const wasm = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
 type Program = ProgramDefinition;
@@ -288,3 +290,26 @@ test("ordinary WASI source bytes bypass fetch and compilation at install", async
   assert.equal(state.fetched.length, 0);
   assert.equal(program.cooperative, undefined);
 });
+
+for (const [name, install] of [
+  ["sort", installSort],
+  ["uniq", installUniq],
+] as const) {
+  test(`${name} loads only its own ordinary WASI source and disposes independently`, async (context) => {
+    const state = fixture(context);
+    const installation = await install(state.runtime);
+    assert.equal(installation.executable, `/bin/${name}`);
+    assert.deepEqual(Array.from(state.programs.keys()), [`/bin/${name}`]);
+    assert.equal(state.fetched.length, 0);
+    const program = state.programs.get(`/bin/${name}`);
+    assert.ok(program && typeof program.source === "function");
+    assert.equal(program.module, undefined);
+    assert.equal(program.cooperative, undefined);
+    assert.deepEqual(await program.source(), wasm);
+    assert.equal(state.fetched.length, 1);
+    assert.ok(state.fetched[0].endsWith(`/dist/${name}.wasm`));
+    await installation.dispose();
+    assert.equal(state.programs.size + state.adapters.size, 0);
+    assert.equal(state.files.has(`/bin/${name}`), false);
+  });
+}

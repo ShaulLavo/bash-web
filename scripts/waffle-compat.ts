@@ -23,7 +23,7 @@ export interface WaffleCaseResult {
 
 const OUTPUT_LIMIT_BYTES = 4 * 1024 * 1024;
 const nodeDirectory = new URL("../.build/node/", import.meta.url);
-const utilities = ["cat", "grep", "head", "mkdir", "seq"] as const;
+const utilities = ["cat", "grep", "head", "mkdir", "seq", "sort", "uniq"] as const;
 const fixtures = [
   ["argv.py", "argv-py.wasm"],
   ["printenv.py", "printenv-py.wasm"],
@@ -80,12 +80,14 @@ async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: t
     head: waffle.installHead,
     mkdir: waffle.installMkdir,
     seq: waffle.installSeq,
+    sort: waffle.installSort,
+    uniq: waffle.installUniq,
   };
   for (const name of utilities) {
-    if (name === "head") {
-      await installers.head(runtime, {
+    if (name === "head" || name === "sort" || name === "uniq") {
+      await installers[name](runtime, {
         workerUrl: utilityWorkerUrl,
-        source: async () => new Uint8Array(await readFile(`${directory}/head.wasm`)),
+        source: async () => new Uint8Array(await readFile(`${directory}/${name}.wasm`)),
       });
       continue;
     }

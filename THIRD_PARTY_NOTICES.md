@@ -666,3 +666,9 @@ The head crate records upstream uutils/coreutils revision
 The local wrapper only initializes the WASI working directory before the upstream
 entry point. The distribution notices generator includes the crates' license files
 and their transitive dependencies. No Bashkit head implementation is included.
+
+## Upstream sort and uniq programs
+
+`shell/utilities/src/bin/sort.rs` and `shell/utilities/src/bin/uniq.rs` link the unmodified registry packages `uu_sort` and `uu_uniq` at version `0.12.0`. They are MIT licensed, copyright uutils developers. Both crates record uutils/coreutils revision `dc1efd89948a9ca4c78c3a4b9a6ac891019a8c69`, at `src/uu/sort` and `src/uu/uniq`. The individual wrappers initialize WASI cwd from `PWD` and call upstream entry points. No multicall binary or local replacement algorithm is included.
+
+`docs/sort-uniq-source.json` records the source checksums. `npm run notices:shell` includes their license files and the licenses of every transitive dependency in `dist/THIRD_PARTY_NOTICES.txt`.

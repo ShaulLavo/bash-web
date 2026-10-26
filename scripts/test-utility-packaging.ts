@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { build } from "esbuild";
 
 const root = resolve(import.meta.dirname, "..");
-const utilities = ["cat", "grep", "head", "mkdir", "seq"] as const;
+const utilities = ["cat", "grep", "head", "mkdir", "seq", "sort", "uniq"] as const;
 
 async function bundle(entry: string): Promise<string> {
   const result = await build({
@@ -62,4 +62,35 @@ test("head packages the pinned upstream entry and its license notices", () => {
   const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
   assert.match(notices, /## uu_head 0\.12\.0 \/ LICENSE/);
   assert.match(notices, /## uucore 0\.12\.0 \/ LICENSE/);
+});
+
+for (const name of ["sort", "uniq"]) {
+  test(`${name} packages the exact upstream crate and license`, () => {
+    const manifest = readFileSync(resolve(root, "shell/utilities/Cargo.toml"), "utf8");
+    assert.ok(manifest.includes(`uu_${name} = "=0.12.0"`));
+    const entry = readFileSync(resolve(root, `shell/utilities/src/bin/${name}.rs`), "utf8");
+    assert.ok(entry.includes(`uucore::bin!(uu_${name})`));
+    assert.ok(entry.includes(`cwd::initialize("${name}")`));
+    const cwd = readFileSync(resolve(root, "shell/utilities/src/sort_uniq_cwd.rs"), "utf8");
+    assert.match(cwd, /std::env::set_current_dir/);
+    const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
+    assert.ok(notices.includes(`## uu_${name} 0.12.0 / LICENSE`));
+  });
+}
+
+test("sort and uniq source receipts match the locked registry packages", () => {
+  const receipt = JSON.parse(readFileSync(resolve(root, "docs/sort-uniq-source.json"), "utf8"));
+  assert.equal(receipt.revision, "dc1efd89948a9ca4c78c3a4b9a6ac891019a8c69");
+  const lock = readFileSync(resolve(root, "shell/Cargo.lock"), "utf8");
+  assert.deepEqual(
+    receipt.packages.map((pkg: { name: string }) => pkg.name),
+    ["uu_sort", "uu_uniq"],
+  );
+  for (const pkg of receipt.packages) {
+    assert.ok(
+      lock.includes(
+        `name = "${pkg.name}"\nversion = "${pkg.version}"\nsource = "${pkg.registry}"\nchecksum = "${pkg.sha256}"`,
+      ),
+    );
+  }
 });
