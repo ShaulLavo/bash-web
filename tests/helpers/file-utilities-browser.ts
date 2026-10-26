@@ -130,8 +130,8 @@ async function lifecycle() {
         await state.runtime.filesystem.readFile("/tmp/owner-alive"),
       ),
       removed: await Promise.all(
-        fileUtilityNames.map((name) =>
-          state.runtime.filesystem.lookup(`/bin/${name}`).then((entry) => !entry),
+        fileUtilityNames.map(
+          async (name) => !(await state.runtime.filesystem.lookup(`/bin/${name}`)),
         ),
       ),
     };

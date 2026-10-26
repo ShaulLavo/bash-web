@@ -9,10 +9,7 @@ export async function recordFileUtilityCase(bash: string, script: string) {
   await mkdir(resolve(".build"), { recursive: true });
   const scratch = await mkdtemp(resolve(".build/file-utility-oracle-"));
   try {
-    for (const [path, bytes] of Object.entries(initialTree)) {
-      if (bytes === null) await mkdir(resolve(scratch, path));
-      else await writeFile(resolve(scratch, path), Uint8Array.from(bytes));
-    }
+    await seedNativeTree(scratch);
     const expected = spawnSync(bash, ["-c", script], { env, cwd: scratch, timeout: 5000 });
     if (expected.error) throw expected.error;
     return {
@@ -26,6 +23,13 @@ export async function recordFileUtilityCase(bash: string, script: string) {
     };
   } finally {
     await rm(scratch, { recursive: true, force: true });
+  }
+}
+
+async function seedNativeTree(scratch: string) {
+  for (const [path, bytes] of Object.entries(initialTree)) {
+    if (bytes === null) await mkdir(resolve(scratch, path));
+    else await writeFile(resolve(scratch, path), Uint8Array.from(bytes));
   }
 }
 
