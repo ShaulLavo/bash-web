@@ -57,7 +57,7 @@ test("a failing newly discovered test fails the actual runner", () => {
   });
 });
 
-test("scoreboard files overlap in pairs without multiplying the compatibility pool", () => {
+test("scoreboard runs every file with exactly two active files", () => {
   fixture((directory) => {
     const files = discoverScoreboardTests(directory);
     const events = resolve(directory, "events.jsonl");
