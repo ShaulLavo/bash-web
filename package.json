@@ -22,7 +22,11 @@
     "./utilities/grep": "./src/utilities/grep.ts",
     "./utilities/mkdir": "./src/utilities/mkdir.ts",
     "./utilities/seq": "./src/utilities/seq.ts",
-    "./utilities/tail": "./src/utilities/tail.ts"
+    "./utilities/tail": "./src/utilities/tail.ts",
+    "./utilities/touch": "./src/utilities/touch.ts",
+    "./utilities/rm": "./src/utilities/rm.ts",
+    "./utilities/cp": "./src/utilities/cp.ts",
+    "./utilities/mv": "./src/utilities/mv.ts"
   },
   "scripts": {
     "format:check": "oxfmt --check scripts shell src tests package.json vite.config.ts playwright.config.ts tsconfig.json .oxlintrc.json .knip.jsonc quality docs/code-quality.md '!scripts/fixtures/**/*.json'",
@@ -96,18 +100,21 @@
     "test:fuzz-shell-echo": "node --test scripts/test-fuzz-shell-echo.ts",
     "fuzz:shell-echo:ci": "node scripts/fuzz-shell-echo.ts --replay scripts/fixtures/shell-echo.json",
     "quality:js": "npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates",
-    "build:browser:assets": "npm run notices:browser && npm run bundle:browser:assets",
+    "build:browser:assets": "npm run notices:browser && npm run bundle:browser:assets && npm run build:file-utilities:tests",
     "test:ci": "node --test --test-concurrency=1 scripts/test-ci-inputs.ts scripts/test-ci-workflow.ts scripts/test-prepare-wasi-tests.ts scripts/test-ci-artifacts.ts scripts/test-ci-notices.ts scripts/test-scoreboard-discovery.mjs",
     "prepare:wasi-tests": "node scripts/prepare-wasi-tests.ts .build/ci-native/wasi-tests",
     "typecheck:ci": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/ci-inputs.ts scripts/ci-artifacts.ts scripts/prepare-wasi-tests.ts scripts/test-ci*.ts scripts/test-prepare-wasi-tests.ts",
     "compat:shell:prebuilt": "BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell BASH_COMPAT_UTILITY_DIR=${CARGO_TARGET_DIR:-.build/shell}/wasm32-wasip1/release node scripts/bash-compat.mjs",
     "notices:browser:ci": "node scripts/ci-artifacts.ts notices .build/ci-native && node scripts/browser-notices.mjs",
     "bundle:browser:assets": "vite build && node scripts/finish-build.mjs",
-    "build:browser:assets:ci": "npm run notices:browser:ci && npm run bundle:browser:assets",
+    "build:browser:assets:ci": "npm run notices:browser:ci && npm run bundle:browser:assets && npm run build:file-utilities:tests",
     "test:file-substitution": "npm run build:node-harness && node --test scripts/test-own-shell-file-substitution.ts",
     "test:select": "npm run build:node-harness && node --test scripts/test-own-shell-select.ts",
     "test:shell:completion:pending": "npm run build:node-harness && BASH_COMPLETION_PENDING=1 node --test scripts/test-own-shell-completion.ts",
-    "test:shell:function-names:pending": "npm run build:node-harness && BASH_FUNCTION_NAMES_PENDING=1 node --test scripts/test-own-shell-function-names.ts"
+    "test:shell:function-names:pending": "npm run build:node-harness && BASH_FUNCTION_NAMES_PENDING=1 node --test scripts/test-own-shell-function-names.ts",
+    "build:file-utilities:tests": "node scripts/build-file-utilities-tests.ts",
+    "test:file-utilities:browser": "playwright test --config=playwright.file-utilities.config.ts",
+    "record:file-utilities": "node scripts/record-file-utilities.ts"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",

@@ -6,6 +6,7 @@ await build({
   absWorkingDir: root,
   entryPoints: {
     api: "scripts/waffle-node-api.ts",
+    "file-utilities-api": "tests/helpers/file-utilities-api.ts",
     root: "scripts/waffle-root-worker.ts",
     child: "scripts/waffle-child-worker.ts",
     shell: "src/runtime/worker.ts",

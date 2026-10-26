@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
@@ -24,6 +26,22 @@ const metadata = JSON.parse(
   ),
 );
 const included = new Set();
+const fileOperations = JSON.parse(
+  await readFile(resolve(root, "shell/utilities/file-operations.source.json"), "utf8"),
+);
+const upstream = metadata.packages.find(
+  (pkg) => pkg.name === "uucore" && pkg.source?.endsWith(`#${fileOperations.revision}`),
+);
+if (!upstream) throw new Error("Pinned file utility source is missing from Cargo metadata");
+const upstreamRoot = resolve(dirname(upstream.manifest_path), "../..");
+assert.equal(
+  createHash("sha256")
+    .update(await readFile(resolve(upstreamRoot, fileOperations.license.path)))
+    .digest("hex"),
+  fileOperations.license.sha256,
+  "Pinned uutils root license digest",
+);
+await include(`uutils coreutils ${fileOperations.revision}`, upstreamRoot);
 for (const pkg of metadata.packages.sort((a, b) => a.name.localeCompare(b.name))) {
   if (included.has(pkg.manifest_path) || pkg.name === "shell-parser") continue;
   included.add(pkg.manifest_path);

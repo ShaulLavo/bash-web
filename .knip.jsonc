@@ -4,6 +4,7 @@
   "entry": [
     "src/{runtime,browser}/*.test.ts",
     "tests/*.unit.ts",
+    "tests/helpers/file-utilities-browser.ts",
     "src/utilities/head.ts",
     "scripts/bash-compat-worker.mjs",
     // Filename-discovered scoreboard tests are independent executable roots.
