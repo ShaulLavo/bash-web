@@ -163,10 +163,11 @@ test("each moved current-main gate has one owner", () => {
       "check:rust",
       "build:shell",
       "build:test-guest",
+      "build:rg",
       "prepare:wasi-tests",
       "check:capabilities",
     ],
-    wasi: ["test:shell:wasi"],
+    wasi: ["test:shell:wasi", "test:rg:wasi"],
     browser: ["build:browser:assets:ci", "test:runtime:terminal", "test:browser"],
     "own-shell-scoreboard": ["test:shell:scoreboard:prebuilt"],
     "own-shell-observation": ["compat:shell:prebuilt"],
@@ -220,7 +221,7 @@ test("quality package recipes preserve complete current selections", () => {
   );
   assert.equal(
     scripts["test:guest-build"],
-    "node --test scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts",
+    "node --test scripts/test-rg-source.ts scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts",
   );
   assert.match(String(scripts["test:shell:scoreboard"]), /build:node-harness/);
   assert.match(
@@ -451,6 +452,13 @@ test("read tokens stay out of the replay environment and layer graphs are artifa
   assert.equal(object(upload.with).path, object(check.env).LAYERS_OUTPUT);
   assert.equal(upload.if, "always()");
   assert.equal(object(upload.with)["retention-days"], 90);
+});
+
+test("browser stages ripgrep at its public-entry URL before bundling", () => {
+  const browser = commands(jobs().browser);
+  const staging = "cp public/programs/rg.wasm dist/rg.wasm";
+  assert.ok(browser.includes(staging), "downloaded ripgrep must also reach the Vite input URL");
+  assert.ok(browser.indexOf(staging) < browser.indexOf("npm run build:browser:assets:ci"));
 });
 
 test("scoreboard and observation run independently using one shared node build", () => {

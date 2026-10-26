@@ -133,6 +133,22 @@ jobs:
           npm run prepare:wasi-tests
         env:
           CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime run -W max-memory-size=268435456
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .sources/ripgrep
+            .build/ripgrep
+          key: ripgrep-${{ runner.os }}-${{ runner.arch }}-rust1.98.1-sdk34-${{ hashFiles('scripts/build-rg.ts', 'scripts/rg-source.ts', 'scripts/wasi-build.ts', 'patches/ripgrep-wasi.patch') }}
+      - name: Build upstream ripgrep once for WASI and browser checks
+        run: npm run build:rg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ripgrep-${{ github.sha }}
+          path: |
+            dist/rg.wasm
+            dist/rg.NOTICES.txt
+          if-no-files-found: error
+          retention-days: 1
       - name: Build shared native CLI
         run: |
           cargo build --locked --release --manifest-path shell/Cargo.toml -p shell-engine -p shell-compat-fixtures -j2
@@ -179,6 +195,11 @@ jobs:
       - uses: bytecodealliance/actions/wasmtime/setup@v1.1.3
         with:
           version: v49.0.3
+      - uses: actions/download-artifact@v4
+        with:
+          name: ripgrep-${{ github.sha }}
+          path: dist
+      - run: npm run test:rg:wasi
       - name: WASI tests and size
         run: |
           ulimit -c 0
@@ -417,6 +438,11 @@ jobs:
           test -s /etc/apt/apt-mirrors.txt
           cat /etc/apt/apt-mirrors.txt
       - run: npx playwright install --with-deps chromium firefox
+      - uses: actions/download-artifact@v4
+        with:
+          name: ripgrep-${{ github.sha }}
+          path: public/programs
+      - run: cp public/programs/rg.wasm dist/rg.wasm
       - run: npm run build:browser:assets:ci
       - run: npm run test:runtime:terminal
       - run: npm run test:browser

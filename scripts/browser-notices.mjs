@@ -31,5 +31,6 @@ for (const [label, directory] of [
     text += `\n## ${label} / ${name}\n\n${await readFile(resolve(root, directory, name), "utf8")}\n`;
   }
 }
+text += `\n${await readFile(resolve(root, "public/programs/rg.NOTICES.txt"), "utf8")}`;
 await mkdir(resolve(root, "public"), { recursive: true });
 await writeFile(resolve(root, "public/THIRD_PARTY_NOTICES.txt"), text);
