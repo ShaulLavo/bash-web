@@ -28,7 +28,7 @@ seq exited 127
 /usr/bin/bash: seq: command not found
 ```
 
-Run the same engine in a page. This needs a built checkout, the pinned [Waffle](https://github.com/ShaulLavo/waffle) commit `250967060c0268950266fc5afb85be2170fb8ed3` (Waffle's API is early and can change), and `dist/fs-worker.js` served at `/fs-worker.js`. [Embed a shell in a page](docs/guides/embed-in-a-page.md#install-the-waffle-peer) has the install steps.
+Run the same engine in a page. This needs a built checkout, the pinned [Waffle](https://github.com/ShaulLavo/waffle) commit `c1cb67c300439af24335d0b2ec481bfb52f79a01` (Waffle's API is early and can change), and `dist/fs-worker.js` served at `/fs-worker.js`. [Embed a shell in a page](docs/guides/embed-in-a-page.md#install-the-waffle-peer) has the install steps.
 
 ```ts
 import { createRuntime } from "waffle";
