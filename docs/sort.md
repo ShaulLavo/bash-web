@@ -28,4 +28,4 @@ The browser test uses Waffle's filesystem and ordinary process admission. No nat
 
 The wrapper calls `uucore::bin!(uu_sort)` after setting WASI libc's cwd from `PWD`. It contains no local sorting algorithm. The existing `buildWasiShell` helper supplies patched wasi-sdk 34.0 libc, the memory cap, and guest verification.
 
-Run `cargo test --locked --manifest-path shell/Cargo.toml -p shell-utilities --test sort_uniq` for native GNU comparisons. After building the shell, utilities, and Node test bundle, run `node --test scripts/test-own-shell-sort-uniq.ts` for real Waffle comparisons and independent lazy-loading and disposal checks. `npm run test:browser -- tests/sort-uniq.spec.ts` exercises the same usage cases in Chromium and Firefox.
+Run `cargo test --locked --manifest-path shell/Cargo.toml -p shell-utilities --test sort_uniq` for native frozen-GNU comparisons. After building the shell, utilities, and Node test bundle, run `node --test scripts/test-own-shell-sort-uniq.ts` for real Waffle comparisons and independent lazy-loading and disposal checks. `npm run test:browser -- tests/sort-uniq.spec.ts` exercises the same usage cases in Chromium and Firefox.
