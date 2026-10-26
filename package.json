@@ -22,7 +22,8 @@
     "./utilities/grep": "./src/utilities/grep.ts",
     "./utilities/head": "./src/utilities/head.ts",
     "./utilities/mkdir": "./src/utilities/mkdir.ts",
-    "./utilities/seq": "./src/utilities/seq.ts"
+    "./utilities/seq": "./src/utilities/seq.ts",
+    "./utilities/tail": "./src/utilities/tail.ts"
   },
   "scripts": {
     "format:check": "oxfmt --check scripts shell src tests package.json vite.config.ts playwright.config.ts tsconfig.json .oxlintrc.json .knip.jsonc quality docs/code-quality.md '!scripts/fixtures/**/*.json'",
@@ -122,11 +123,11 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.3",
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#250967060c0268950266fc5afb85be2170fb8ed3",
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#c1cb67c300439af24335d0b2ec481bfb52f79a01",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#250967060c0268950266fc5afb85be2170fb8ed3"
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#c1cb67c300439af24335d0b2ec481bfb52f79a01"
   },
   "overrides": {
     "esbuild": "0.28.2"
