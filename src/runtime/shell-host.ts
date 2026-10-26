@@ -22,7 +22,7 @@ import {
   quiesceTerminal,
   revokeTerminal,
 } from "./terminal-admission";
-import { cooperativeGuestLauncher, waitForShellWorkers } from "./worker-launcher";
+import { guestLauncher, waitForShellWorkers } from "./worker-launcher";
 import type { ShellWorkerRequest } from "./worker";
 
 const executable = "/programs/shell-engine.wasm";
@@ -84,10 +84,7 @@ function createRegistration(runtime: Runtime, wasmUrl: string, workerUrl: string
   let removeAdapter: (() => void) | undefined;
   let removeProgram: (() => void) | undefined;
   try {
-    removeAdapter = runtime.registerAdapter(
-      "bash-web:preview1",
-      cooperativeGuestLauncher(runtime, workerUrl),
-    );
+    removeAdapter = runtime.registerAdapter("bash-web:preview1", guestLauncher(runtime, workerUrl));
     // This package's own cooperative Rust guest checks the runtime signal ABI. Foreign
     // programs are registered by their packages, using the runtime's admission rules.
     removeProgram = runtime.registerProgram(executable, {

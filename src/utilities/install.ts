@@ -1,12 +1,21 @@
 // Original installer for bash-web's separately linked utility programs. Each program is
 // its own WASM guest on the caller's single Waffle Runtime; nothing here creates a
 // Runtime, a process service, a worker or a fetch until the shell actually spawns it.
-import type { Runtime } from "waffle";
-import { cooperativeGuestLauncher } from "../runtime/worker-launcher";
+import type { ProgramDefinition, Runtime } from "waffle";
+import { guestLauncher } from "../runtime/worker-launcher";
 
 export type UtilityModule =
   | WebAssembly.Module
   | (() => WebAssembly.Module | Promise<WebAssembly.Module>);
+
+export type UtilitySource = Uint8Array | (() => Uint8Array | Promise<Uint8Array>);
+
+export type WasiUtilityOptions = {
+  readonly workerUrl?: string | URL;
+} & (
+  | { readonly wasmUrl?: string | URL; readonly source?: never }
+  | { readonly source: UtilitySource; readonly wasmUrl?: never }
+);
 
 export type UtilityOptions = {
   /** Bundler-emitted URL of this package's shell worker (`dist/shell-worker.js`). */
@@ -50,6 +59,7 @@ export interface UtilityProgram {
   readonly name: string;
   readonly path: string;
   readonly defaultUrl: URL;
+  readonly execution?: "cooperative" | "wasi";
 }
 
 const installed = new WeakMap<Runtime, Set<string>>();
@@ -64,18 +74,8 @@ function resolveUrl(url: string | URL): string {
 }
 
 // Share an in-flight or successful load; a later spawn may retry after a failure.
-function lazyModule(options: UtilityOptions, defaultUrl: URL): () => Promise<WebAssembly.Module> {
-  let pending: Promise<WebAssembly.Module> | undefined;
-  const load = async (): Promise<WebAssembly.Module> => {
-    const module = options.module;
-    if (module instanceof WebAssembly.Module) return module;
-    if (module) return module();
-    const url = resolveUrl(options.wasmUrl ?? defaultUrl);
-    const response = await fetch(url);
-    if (!response.ok)
-      throw new Error(`Utility executable fetch failed: ${url} (${response.status})`);
-    return WebAssembly.compile(await response.arrayBuffer());
-  };
+function cachedLoad<T>(load: () => Promise<T>): () => Promise<T> {
+  let pending: Promise<T> | undefined;
   return () => {
     if (pending) return pending;
     const attempt = load();
@@ -84,6 +84,52 @@ function lazyModule(options: UtilityOptions, defaultUrl: URL): () => Promise<Web
       if (pending === attempt) pending = undefined;
     });
     return attempt;
+  };
+}
+
+async function fetchSource(url: string | URL): Promise<Uint8Array<ArrayBuffer>> {
+  const resolved = resolveUrl(url);
+  const response = await fetch(resolved);
+  if (!response.ok)
+    throw new Error(`Utility executable fetch failed: ${resolved} (${response.status})`);
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+function utilityDefinition(
+  adapter: string,
+  program: UtilityProgram,
+  options: UtilityOptions | WasiUtilityOptions,
+): ProgramDefinition {
+  if (program.execution === "wasi") {
+    if ("module" in options) throw new TypeError("Ordinary WASI utilities require source bytes");
+    const source = "source" in options ? options.source : undefined;
+    return {
+      adapter,
+      source: cachedLoad(async () => {
+        if (source instanceof Uint8Array) return source;
+        if (source) return source();
+        return fetchSource(options.wasmUrl ?? program.defaultUrl);
+      }),
+    };
+  }
+  if ("source" in options) throw new TypeError("Cooperative utilities require compiled modules");
+  return cooperativeDefinition(adapter, program.defaultUrl, options);
+}
+
+function cooperativeDefinition(
+  adapter: string,
+  defaultUrl: URL,
+  options: UtilityOptions,
+): ProgramDefinition {
+  const module = options.module;
+  return {
+    adapter,
+    cooperative: true,
+    module: cachedLoad(async () => {
+      if (module instanceof WebAssembly.Module) return module;
+      if (module) return module();
+      return WebAssembly.compile(await fetchSource(options.wasmUrl ?? defaultUrl));
+    }),
   };
 }
 
@@ -138,10 +184,20 @@ function parentDirectory(path: string): string {
   return path.slice(0, path.lastIndexOf("/")) || "/";
 }
 
+export function installUtility(
+  runtime: Runtime,
+  program: UtilityProgram & { readonly execution: "wasi" },
+  options?: WasiUtilityOptions,
+): Promise<UtilityInstallation>;
+export function installUtility(
+  runtime: Runtime,
+  program: UtilityProgram & { readonly execution?: "cooperative" },
+  options?: UtilityOptions,
+): Promise<UtilityInstallation>;
 export async function installUtility(
   runtime: Runtime,
   program: UtilityProgram,
-  options: UtilityOptions = {},
+  options: UtilityOptions | WasiUtilityOptions = {},
 ): Promise<UtilityInstallation> {
   if (runtime.disposed) throw new Error("Runtime is disposed");
   const { name, path } = program;
@@ -174,14 +230,8 @@ export async function installUtility(
     const workerUrl = resolveUrl(
       options.workerUrl ?? new URL("../../dist/shell-worker.js", import.meta.url),
     );
-    releases.push(runtime.registerAdapter(adapter, cooperativeGuestLauncher(runtime, workerUrl)));
-    releases.push(
-      runtime.registerProgram(path, {
-        adapter,
-        module: lazyModule(options, program.defaultUrl),
-        cooperative: true,
-      }),
-    );
+    releases.push(runtime.registerAdapter(adapter, guestLauncher(runtime, workerUrl)));
+    releases.push(runtime.registerProgram(path, utilityDefinition(adapter, program, options)));
   } catch (error) {
     try {
       return await rollbackUtility(runtime, path, marker, created, release, error);
