@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { test, type TestContext } from "node:test";
 import {
   fileUtilityCases,
+  fileUtilityEnvironment,
   fileUtilityNames,
   initialTree,
 } from "../tests/helpers/file-utility-cases.ts";
@@ -25,7 +26,6 @@ const installers = {
   cp: api.installCp,
   mv: api.installMv,
 };
-const env = { PATH: "/usr/bin:/bin", HOME: "/home/user", LC_ALL: "C" };
 
 async function fixture(context: TestContext) {
   installNodeWorkers();
@@ -52,7 +52,12 @@ async function fixture(context: TestContext) {
       runtime,
       api,
       shell,
-      { modulePath: "", tmp: "/tmp/spec", env, fixtureDirectory: directory },
+      {
+        modulePath: "",
+        tmp: "/tmp/spec",
+        env: fileUtilityEnvironment,
+        fixtureDirectory: directory,
+      },
       script,
       (fd, bytes) => (fd === 2 ? stderr : stdout).push(Buffer.from(bytes)),
       (terminate) => {

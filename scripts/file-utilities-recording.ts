@@ -1,16 +1,22 @@
 import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { initialTree, type FileTree } from "../tests/helpers/file-utility-cases.ts";
-
-const env = { PATH: "/usr/bin:/bin", HOME: "/home/user", LC_ALL: "C" };
+import {
+  fileUtilityEnvironment,
+  initialTree,
+  type FileTree,
+} from "../tests/helpers/file-utility-cases.ts";
 
 export async function recordFileUtilityCase(bash: string, script: string) {
   await mkdir(resolve(".build"), { recursive: true });
   const scratch = await mkdtemp(resolve(".build/file-utility-oracle-"));
   try {
     await seedNativeTree(scratch);
-    const expected = spawnSync(bash, ["-c", script], { env, cwd: scratch, timeout: 5000 });
+    const expected = spawnSync(bash, ["-c", script], {
+      env: fileUtilityEnvironment,
+      cwd: scratch,
+      timeout: 5000,
+    });
     if (expected.error) throw expected.error;
     return {
       diagnosticBytes: Array.from(expected.stderr),

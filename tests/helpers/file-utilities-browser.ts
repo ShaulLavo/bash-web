@@ -4,7 +4,7 @@ import { installTouch } from "../../src/utilities/touch.ts";
 import { installRm } from "../../src/utilities/rm.ts";
 import { installCp } from "../../src/utilities/cp.ts";
 import { installMv } from "../../src/utilities/mv.ts";
-import { fileUtilityNames } from "./file-utility-cases.ts";
+import { fileUtilityEnvironment, fileUtilityNames } from "./file-utility-cases.ts";
 import { fileUtilityTree, seedFileUtilityTree } from "./file-utility-filesystem.ts";
 
 const installers = { touch: installTouch, rm: installRm, cp: installCp, mv: installMv };
@@ -73,7 +73,7 @@ async function run(
     workerUrl: "/shell-worker.js",
     wasmUrl: "/shell-runtime.wasm",
     cwd: "/tmp/spec",
-    env: { PATH: "/bin", HOME: "/home/user", LC_ALL: "C" },
+    env: fileUtilityEnvironment,
     script: `{ ${script}; } 2>/tmp/diagnostic`,
   });
   state.active = shell;

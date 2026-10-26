@@ -39,4 +39,6 @@ Each Rust bin uses a shared thin wrapper that initializes WASI libc's cwd from `
 
 `scripts/owned-fixtures/file-utilities.json` contains additive observations recorded once with Bash 5.3.15 and identified GNU coreutils binaries. Both qualification runners replay those exact records. They never invoke host Bash or coreutils. Existing protected fixtures and score baselines are unchanged.
 
+The shared reader parses the complete record from `unknown`, checks exact binary identities and case identities, and validates statuses, byte arrays, diagnostics, directory parents, and the runtime-gap record. It seals the original 17,583 bytes with SHA256 `7b64ee02c7430f2c1534dabd6d424abec48d1efec1329216b6a04904cde32ead`. A separate context digest binds the recording environment and initial tree shared by the recorder and both runners.
+
 After building the shell, utilities, workers, and Node harness, run `npm run build:file-utilities:tests`. `node --test scripts/test-own-shell-file-utilities.ts` checks the real guests on caller-owned Waffle. `npm run test:file-utilities:browser` checks them in Chromium and Firefox, including independent lazy loads, installation disposal, cancellation, caller runtime reuse, and worker cleanup.

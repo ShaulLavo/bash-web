@@ -1,3 +1,5 @@
+export const fileUtilityEnvironment = { PATH: "/usr/bin:/bin", HOME: "/home/user", LC_ALL: "C" };
+
 export const fileUtilityNames = ["touch", "rm", "cp", "mv"] as const;
 export type FileTree = Record<string, number[] | null>;
 
