@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
 import test from "node:test";
 import {
   assertFreshObservation,
@@ -17,8 +21,22 @@ import { digest } from "./shell-scoreboard.mjs";
 import { scoreboardFixture } from "./shell-scoreboard-test-fixture.mjs";
 
 const merge = "f6e3a9e67d56332b0476f3608e198bf74e8e12f3";
+const historicalTestedMergeSha = "aaa853b275c27b9609918260f0e8cade3276d552";
 const fixture = scoreboardFixture("oils");
-const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+const historicalWorkflowBytes = readFileSync(
+  new URL("./test-data/ci-aaa853-workflow.yml", import.meta.url),
+);
+const historicalWorkflow = historicalWorkflowBytes.toString("utf8");
+const historicalWorkflowBlob = createHash("sha1")
+  .update(`blob ${historicalWorkflowBytes.byteLength}\0`)
+  .update(historicalWorkflowBytes)
+  .digest("hex");
+const historicalWorkflowSha256 = createHash("sha256").update(historicalWorkflowBytes).digest("hex");
+assert.equal(historicalWorkflowBlob, "8c96d5736d9806c8977f02236e4a2a490c794916");
+assert.equal(
+  historicalWorkflowSha256,
+  "52a979a412258d066a67783afc80ab24137a3ad788af6c7c61a3a9198c5d8f1f",
+);
 const testName =
   "interpreter::command_builtin::tests::timed_function_declaration_output_releases_storage_on_cancel_and_drop";
 function blocked() {
@@ -145,7 +163,7 @@ function history() {
   return { run, jobs, mergedAt: "2026-10-25T00:02:00Z" };
 }
 test("A07 each of the original ten jobs must be green on the original run before merge", () => {
-  const check = (v) => assertHistoricalJobs(v.run, v.jobs, workflow, v.mergedAt);
+  const check = (v) => assertHistoricalJobs(v.run, v.jobs, historicalWorkflow, v.mergedAt);
   assert.doesNotThrow(() => check(history()));
   for (let i = 0; i < 10; i++) {
     for (const patch of [
@@ -164,6 +182,46 @@ test("A07 each of the original ten jobs must be green on the original run before
     value.jobs.splice(i, 1);
     assert.throws(() => check(value), assert.AssertionError);
   }
+});
+test("A07 historical input does not depend on a local Git object cache", () => {
+  const root = mkdtempSync(resolve(tmpdir(), "shell-scoreboard-history-"));
+  try {
+    mkdirSync(resolve(root, ".github/workflows"), { recursive: true });
+    writeFileSync(resolve(root, authority.workflowPath), historicalWorkflowBytes);
+    execFileSync("git", ["init", "--quiet"], { cwd: root });
+    const result = spawnSync(
+      "git",
+      ["show", `${historicalTestedMergeSha}:${authority.workflowPath}`],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert.notEqual(result.status, 0);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /fatal:/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+test("A07 current scheduling and extra or duplicate jobs cannot expand historical authority", () => {
+  const { run, jobs, mergedAt } = history();
+  const currentWorkflow = readFileSync(
+    new URL(`../${authority.workflowPath}`, import.meta.url),
+    "utf8",
+  );
+  assert.throws(
+    () => assertHistoricalJobs(run, jobs, currentWorkflow, mergedAt),
+    /reviewed historical Shell job set/,
+  );
+  for (const name of ["own-shell-scoreboard", "own-shell-observation", "prepare"])
+    assert.throws(
+      () =>
+        assertHistoricalJobs(
+          run,
+          jobs.concat([{ ...jobs[0], name }]),
+          historicalWorkflow,
+          mergedAt,
+        ),
+      /missing\/extra historical job/,
+    );
 });
 function inputs() {
   const binding = {

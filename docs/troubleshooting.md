@@ -4,7 +4,7 @@ Find your symptom. Each entry gives the cause and the fix.
 
 ## A command prints `command not found` and exits 127
 
-The shell core has no external commands. `cat`, `grep`, `mkdir`, and `seq` are separate programs, and any other program must be registered with the runtime.
+The shell core has no external commands. `cat`, `grep`, `mkdir`, `seq`, and `tail` are separate programs, and any other program must be registered with the runtime.
 
 ```text
 $ shell-engine -c 'seq 3'

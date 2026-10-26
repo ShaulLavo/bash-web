@@ -28,7 +28,7 @@ export function runScoreboardTests(directory) {
   const { NODE_TEST_CONTEXT: _context, ...environment } = process.env;
   return spawnSync(
     process.execPath,
-    ["--test", "--test-concurrency=1"].concat(discoverScoreboardTests(directory)),
+    ["--test", "--test-concurrency=2"].concat(discoverScoreboardTests(directory)),
     { stdio: "inherit", env: environment },
   );
 }

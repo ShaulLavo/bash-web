@@ -7,6 +7,7 @@
     "dist",
     "shell",
     "scripts",
+    "patches",
     "docs",
     "plans",
     "sources.lock.json",
@@ -21,8 +22,12 @@
     "./shell": "./src/shell.ts",
     "./utilities/cat": "./src/utilities/cat.ts",
     "./utilities/grep": "./src/utilities/grep.ts",
+    "./utilities/head": "./src/utilities/head.ts",
+    "./utilities/ls": "./src/utilities/ls.ts",
     "./utilities/mkdir": "./src/utilities/mkdir.ts",
     "./utilities/seq": "./src/utilities/seq.ts",
+    "./utilities/rg": "./src/utilities/rg.ts",
+    "./utilities/tail": "./src/utilities/tail.ts",
     "./utilities/sed": "./src/utilities/sed.ts"
   },
   "scripts": {
@@ -31,7 +36,8 @@
     "build:shell": "node scripts/build-shell.ts",
     "check:capabilities": "node scripts/check-shell-capabilities.ts",
     "test:shell:wasi": "node scripts/test-shell-wasi.ts",
-    "test:shell:scoreboard": "npm run build:node-harness && node scripts/scoreboard-tests.mjs",
+    "test:shell:scoreboard": "npm run build:node-harness && npm run test:shell:scoreboard:prebuilt",
+    "test:shell:scoreboard:prebuilt": "node scripts/scoreboard-tests.mjs",
     "compat:shell": "npm run build:node-harness && npm run compat:shell:prebuilt",
     "prepare:shell-corpus": "node scripts/prepare-shell-corpus.mjs",
     "fuzz:shell-braces": "node scripts/fuzz-shell-braces.mjs",
@@ -62,7 +68,7 @@
     "fuzz:shell-path:ci": "node scripts/fuzz-shell-path.ts --replay scripts/fixtures/shell-path-seed-1.json --replay scripts/fixtures/shell-path-seed-42.json",
     "sources:browser": "node scripts/sources.mjs",
     "build:shell:browser": "node scripts/build-shell-browser.mjs",
-    "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:utilities && npm run build:test-guest && npm run build:browser:assets",
+    "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:utilities && npm run build:rg && npm run build:test-guest && npm run build:browser:assets",
     "typecheck:browser": "tsc --noEmit",
     "test:browser": "playwright test",
     "test:runtime:terminal": "node --expose-gc scripts/test-runtime-terminal.mjs",
@@ -89,10 +95,12 @@
     "test:quality-gates": "node --test scripts/test-quality-gates.mjs",
     "quality": "npm run sources:browser && npm run build:worker && npm run quality:js && npm run check:rust && cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast",
     "build:utilities": "node scripts/build-utilities.ts",
+    "build:ls": "node scripts/build-ls.ts",
+    "test:ls": "node --test scripts/test-own-shell-ls.ts",
     "build:node-harness": "node scripts/build-node-harness.ts",
     "build:compat-control": "node scripts/build-compat-control.ts",
-    "test:guest-build": "node --test scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-sed-source.ts",
-    "typecheck:guest-build": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/build-sed.ts scripts/sed-source.ts scripts/test-sed-source.ts scripts/check-shell-capabilities.ts scripts/wasi-build.ts scripts/utility-artifacts.ts scripts/test-utility-artifacts.ts scripts/build-utilities.ts scripts/build-compat-control.ts scripts/test-build-compat-control.ts scripts/test-utility-packaging.ts scripts/test-shell-wasi.ts scripts/test-wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts",
+    "test:guest-build": "node --test scripts/test-rg-source.ts scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-sed-source.ts",
+    "typecheck:guest-build": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/rg-source.ts scripts/test-rg-source.ts scripts/build-sed.ts scripts/sed-source.ts scripts/test-sed-source.ts scripts/check-shell-capabilities.ts scripts/wasi-build.ts scripts/utility-artifacts.ts scripts/test-utility-artifacts.ts scripts/build-utilities.ts scripts/build-compat-control.ts scripts/test-build-compat-control.ts scripts/test-utility-packaging.ts scripts/test-shell-wasi.ts scripts/test-wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts",
     "fuzz:shell-echo": "node scripts/fuzz-shell-echo.ts",
     "test:fuzz-shell-echo": "node --test scripts/test-fuzz-shell-echo.ts",
     "fuzz:shell-echo:ci": "node scripts/fuzz-shell-echo.ts --replay scripts/fixtures/shell-echo.json",
@@ -109,6 +117,8 @@
     "test:select": "npm run build:node-harness && node --test scripts/test-own-shell-select.ts",
     "test:shell:completion:pending": "npm run build:node-harness && BASH_COMPLETION_PENDING=1 node --test scripts/test-own-shell-completion.ts",
     "test:shell:function-names:pending": "npm run build:node-harness && BASH_FUNCTION_NAMES_PENDING=1 node --test scripts/test-own-shell-function-names.ts",
+    "build:rg": "node scripts/build-rg.ts",
+    "test:rg:wasi": "node scripts/test-rg-wasi.ts",
     "build:sed": "node scripts/build-sed.ts",
     "test:installed-sed": "node scripts/test-installed-sed.ts"
   },
@@ -125,11 +135,11 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.3",
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#250967060c0268950266fc5afb85be2170fb8ed3",
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#c1cb67c300439af24335d0b2ec481bfb52f79a01",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#250967060c0268950266fc5afb85be2170fb8ed3"
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#c1cb67c300439af24335d0b2ec481bfb52f79a01"
   },
   "overrides": {
     "esbuild": "0.28.2"
