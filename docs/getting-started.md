@@ -72,11 +72,11 @@ seq exited 127
 /usr/bin/bash: seq: command not found
 ```
 
-Status 127 is what any shell reports for a command it cannot find. In a page, you install `cat`, `grep`, `mkdir`, and `seq` as separate programs when you need them. This binary has no way to install them, so the next step builds a second binary that links them in.
+Status 127 is what any shell reports for a command it cannot find. In a page, you install `cat`, `grep`, `mkdir`, `seq`, and `tail` as separate programs when you need them. This binary has no way to install them, so the next step builds a second binary that links them in.
 
 ## Run a pipeline
 
-Build `shell-cli`. It is the engine composed with the four utilities, the harness the repository's fuzzers use.
+Build `shell-cli`. It is the engine composed with the five utilities, the harness the repository's fuzzers use.
 
 ```sh
 cargo build --release --locked --manifest-path shell/Cargo.toml -p shell-compat-fixtures --bin shell-cli
