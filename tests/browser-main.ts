@@ -10,6 +10,7 @@ import { installCat } from "../src/utilities/cat";
 import { installGrep } from "../src/utilities/grep";
 import { installHead } from "../src/utilities/head";
 import { installMkdir } from "../src/utilities/mkdir";
+import { installLs } from "../src/utilities/ls";
 import { installSeq } from "../src/utilities/seq";
 import { installTail } from "../src/utilities/tail";
 import filesystemWorkerUrl from "../.build/browser/fs-worker.js?url";
@@ -51,9 +52,15 @@ mountBrowser({
     const ready = Promise.all([
       registerTestPrograms(runtime, registration.signal, onStartupStage),
       Promise.all(
-        [installCat, installGrep, installHead, installMkdir, installSeq, installTail].map(
-          (install) => install(runtime),
-        ),
+        [
+          installCat,
+          installGrep,
+          installHead,
+          installLs,
+          installMkdir,
+          installSeq,
+          installTail,
+        ].map((install) => install(runtime)),
       ),
     ]).then(() => {});
     let disposing: Promise<void> | undefined;
