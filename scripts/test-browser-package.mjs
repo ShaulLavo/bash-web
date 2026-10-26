@@ -82,10 +82,9 @@ test("worker preparation bundles the public Waffle FS worker and finish-build re
   // finish-build must also restore the stable URLs for package consumers.
   await rm(resolve(scratch, "dist"), { recursive: true });
   await mkdir(resolve(scratch, "dist"));
-  const programs = ["cat", "grep", "head", "ls", "mkdir", "rg", "seq", "tail"].map((name) => [
-    name,
-    Buffer.from(`${name}-program`),
-  ]);
+  const programs = ["cat", "grep", "head", "ls", "mkdir", "rg", "sed", "seq", "tail"].map(
+    (name) => [name, Buffer.from(`${name}-program`)],
+  );
   await mkdir(resolve(scratch, "public/programs"), { recursive: true });
   for (const [name, bytes] of programs)
     await writeFile(resolve(scratch, `public/programs/${name}.wasm`), bytes);

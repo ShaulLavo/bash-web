@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 import { stageUtilityArtifacts, utilityNames } from "./utility-artifacts.ts";
 
+import { verifySedSource } from "./sed-source.ts";
+
 type Environment = NodeJS.ProcessEnv;
 const helper = fileURLToPath(import.meta.url);
 const repositoryRoot = resolve(import.meta.dirname, "..");
@@ -129,17 +131,19 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
   const target = shellTargetDirectory(repositoryRoot);
   const artifacts = process.env.BASH_WEB_UTILITY_ARTIFACTS;
   const utilityPackage = args.includes("shell-utilities");
+  const sedPackage = args.includes("shell-sed");
+  if (sedPackage || args.includes("--workspace")) verifySedSource(repositoryRoot);
   if (artifacts) {
     stageUtilityArtifacts(
       repositoryRoot,
       resolve(repositoryRoot, artifacts),
       resolve(target, wasiTarget, "release"),
     );
-    if (utilityPackage) return;
+    if (utilityPackage || sedPackage) return;
   }
   const cargoArgs =
     artifacts && args.includes("--workspace")
-      ? args.concat(["--exclude", "shell-utilities"])
+      ? args.concat(["--exclude", "shell-utilities", "--exclude", "shell-sed"])
       : args;
   execFileSync(
     "cargo",
@@ -163,7 +167,11 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
   // The core shell, each separately linked utility, and the compatibility fixtures
   // all pass the same patched-libc verifier.
   const binaries =
-    binIndex >= 0 ? [args[binIndex + 1]] : utilityPackage ? utilityNames : workspaceGuests;
+    binIndex >= 0
+      ? [args[binIndex + 1]]
+      : utilityPackage
+        ? utilityNames.filter((name) => name !== "sed")
+        : workspaceGuests;
   for (const binary of binaries) {
     verifyWasiGuest(resolve(target, wasiTarget, "release", `${binary}.wasm`));
   }

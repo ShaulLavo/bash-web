@@ -612,6 +612,7 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
           "shell-scoreboard-migration.mjs",
           "shell-process-group.mjs",
           "wasi-build.ts",
+          "sed-source.ts",
           "utility-artifacts.ts",
           "verify-wasi-guests.ts",
         ])
@@ -636,6 +637,12 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
         try {
           let directory;
           await until(() => {
+            assert.equal(
+              child.exitCode ?? child.signalCode,
+              null,
+              `compatibility entrypoint exited before migration started:
+${Buffer.concat(errors)}`,
+            );
             directory = readdirSync(runner).find((name) =>
               name.startsWith("audit-oracle-migration-"),
             );

@@ -445,6 +445,7 @@ jobs:
       - run: cp public/programs/rg.wasm dist/rg.wasm
       - run: npm run build:browser:assets:ci
       - run: npm run test:runtime:terminal
+      - run: npm run test:installed-sed
       - run: npm run test:browser
       - uses: actions/upload-artifact@v4
         if: failure()
