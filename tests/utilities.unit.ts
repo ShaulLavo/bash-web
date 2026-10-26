@@ -4,6 +4,7 @@ import type { ProgramDefinition, Runtime } from "waffle";
 import { installCat, UtilityConflictError } from "../src/utilities/cat";
 import { installGrep } from "../src/utilities/grep";
 import { installHead } from "../src/utilities/head";
+import { installWhich } from "../src/utilities/which";
 import { installSort } from "../src/utilities/sort";
 import { installUniq } from "../src/utilities/uniq";
 import { installRg } from "../src/utilities/rg";
@@ -320,6 +321,7 @@ test("rg registers raw source lazily without claiming another utility", async (c
 });
 
 for (const [name, install] of [
+  ["which", installWhich],
   ["sort", installSort],
   ["uniq", installUniq],
 ] as const) {

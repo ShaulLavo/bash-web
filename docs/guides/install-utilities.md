@@ -66,3 +66,7 @@ The cooperative utilities support small subsets. `head`, `sort`, `uniq`, and `wc
 ## Install upstream ls
 
 Import `installLs` from `bash-web/utilities/ls`. It uses the same caller-owned runtime and loads `dist/ls.wasm` on first spawn. This is an ordinary WASI guest. Use `WasiUtilityOptions` with `wasmUrl` or raw `source` bytes, not a compiled module. [ls](../ls.md) lists the qualified flags and the upstream WASI metadata limitations.
+
+## Look up registered programs
+
+Import `installWhich` from `bash-web/utilities/which`. It installs an ordinary WASI guest with the same lazy source and disposal contract. `which [-a|--all] [--] name...` queries live executable registrations, not Unix execute bits or installer markers. See [which](../which.md) for output, status, limitations, and Waffle process requirements.

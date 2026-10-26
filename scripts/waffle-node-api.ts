@@ -17,6 +17,7 @@ export { installUtility } from "../src/utilities/install";
 export { installCat } from "../src/utilities/cat";
 export { installGrep } from "../src/utilities/grep";
 export { installHead } from "../src/utilities/head";
+export { installWhich } from "../src/utilities/which";
 export { installMkdir } from "../src/utilities/mkdir";
 export { installSeq } from "../src/utilities/seq";
 export { installSort } from "../src/utilities/sort";
