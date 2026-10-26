@@ -20,3 +20,5 @@ export { installHead } from "../src/utilities/head";
 export { installMkdir } from "../src/utilities/mkdir";
 export { installSeq } from "../src/utilities/seq";
 export { installWc } from "../src/utilities/wc";
+export { installTail } from "../src/utilities/tail";
+export { installLs } from "../src/utilities/ls";

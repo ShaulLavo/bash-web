@@ -10,6 +10,8 @@ publish.workspace = true
 shell-engine = { path = "../engine" }
 futures.workspace = true
 regex = { version = "1.12.2", default-features = false, features = ["std", "perf", "unicode"] }
+uu_ls = { git = "https://github.com/uutils/coreutils", rev = "07763857f6b9a547742a994b58aef0ccd036198b" }
+uucore_ls = { package = "uucore", git = "https://github.com/uutils/coreutils", rev = "07763857f6b9a547742a994b58aef0ccd036198b" }
 uu_head = "=0.12.0"
 uucore = "=0.12.0"
 # uucore's WASI file-descriptor conversions require Rustix's std implementations.
@@ -17,4 +19,4 @@ rustix = { version = "1.1.5", features = ["std"] }
 
 [package.metadata.cargo-machete]
 # uu_head is referenced through uucore::bin!, which cargo-machete does not expand.
-ignored = ["rustix", "uu_head"]
+ignored = ["rustix", "uu_head", "uu_ls"]

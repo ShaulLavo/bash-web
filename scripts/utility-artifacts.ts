@@ -6,7 +6,17 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
-export const utilityNames = ["cat", "grep", "head", "mkdir", "seq", "wc"] as const;
+export const utilityNames = [
+  "cat",
+  "grep",
+  "head",
+  "ls",
+  "mkdir",
+  "sed",
+  "seq",
+  "tail",
+  "wc",
+] as const;
 const receiptName = "source-sha256.txt";
 
 function receipt(root: string, directory: string): string {

@@ -12,8 +12,10 @@ The TypeScript surface of bash-web, from `src/index.ts`, `src/shell.ts`, `src/br
 | `bash-web/shell` | `src/shell.ts` |
 | `bash-web/utilities/cat` | `src/utilities/cat.ts` |
 | `bash-web/utilities/grep` | `src/utilities/grep.ts` |
+| `bash-web/utilities/head` | `src/utilities/head.ts` |
 | `bash-web/utilities/mkdir` | `src/utilities/mkdir.ts` |
 | `bash-web/utilities/seq` | `src/utilities/seq.ts` |
+| `bash-web/utilities/tail` | `src/utilities/tail.ts` |
 | `bash-web/utilities/wc` | `src/utilities/wc.ts` |
 
 `bash-web` re-exports: `createShell`; the types `RuntimeExit`, `RuntimeProcess`, `Shell`, `ShellOptions`; `SharedBridge`, `control`, `INPUT_CAPACITY`, `OUTPUT_CAPACITY`; `TerminalNewlines`; `runtimeSnapshot`; and the types `StartupObserver`, `StartupStage`, `StartupSnapshot`. `bash-web/shell` exports `createShell` and its types. The core entries import no utility.
@@ -175,7 +177,7 @@ Each `bash-web/utilities/<name>` entry exports one install function, shown here 
 function installCat(runtime: Runtime, options?: UtilityOptions): Promise<UtilityInstallation>;
 ```
 
-`installGrep`, `installMkdir`, and `installSeq` use the same options. `installHead` and `installWc` use `WasiUtilityOptions` below. Each registers `/bin/<name>`.
+`installGrep`, `installMkdir`, `installSeq`, and `installTail` use the same options. `installHead` and `installWc` use `WasiUtilityOptions` below. Each registers `/bin/<name>`.
 
 ```ts
 type UtilityOptions = { workerUrl?: string | URL } & (

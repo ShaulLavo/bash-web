@@ -1,5 +1,5 @@
 //! Original cat, mkdir and seq implementations extracted from bash-web 81205d0.
-use super::{Context, Utility, endpoint, grep, write};
+use super::{Context, Utility, diagnostic, endpoint, grep, tail, write};
 use shell_engine::{
     executor::Budget,
     io::{Endpoint, FdTable, OpenOptions, open_path},
@@ -19,6 +19,7 @@ pub(crate) async fn run(
         Utility::Grep => return grep::run(args, cwd, fds, context).await,
         Utility::Mkdir => return mkdir(args, cwd, fds, context).await,
         Utility::Seq => seq(&args, fds, context).await?,
+        Utility::Tail => return tail::run(args, cwd, fds, context).await,
     }
     Ok(0)
 }
@@ -114,16 +115,7 @@ async fn mkdir_error(
     fds: &FdTable,
     context: &Context,
 ) -> Result<(), i32> {
-    let Some(stderr) = fds.get(2) else {
-        return Ok(());
-    };
-    stderr
-        .write_all(
-            format!("mkdir: {operand}: {error}\n").as_bytes(),
-            &context.cancel,
-        )
-        .await
-        .map_err(|error| error.status())
+    diagnostic(fds, context, "mkdir", &format!("{operand}: {error}")).await
 }
 pub(crate) async fn seq(args: &[String], fds: &FdTable, context: &Context) -> Result<(), i32> {
     let (start, end) = match args {

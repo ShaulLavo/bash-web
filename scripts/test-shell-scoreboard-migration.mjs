@@ -612,6 +612,7 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
           "shell-scoreboard-migration.mjs",
           "shell-process-group.mjs",
           "wasi-build.ts",
+          "sed-source.ts",
           "utility-artifacts.ts",
           "verify-wasi-guests.ts",
         ])
@@ -636,6 +637,12 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
         try {
           let directory;
           await until(() => {
+            assert.equal(
+              child.exitCode ?? child.signalCode,
+              null,
+              `compatibility entrypoint exited before migration started:
+${Buffer.concat(errors)}`,
+            );
             directory = readdirSync(runner).find((name) =>
               name.startsWith("audit-oracle-migration-"),
             );
@@ -823,11 +830,12 @@ import { resolve } from 'node:path';
 const release = resolve(process.env.CARGO_TARGET_DIR, 'wasm32-wasip1/release');
 mkdirSync(release, { recursive: true });
 const names = process.argv.includes('shell-utilities')
-  ? ['shell-runtime', 'cat', 'grep', 'mkdir', 'seq', 'wc']
+  ? ['shell-runtime', 'cat', 'grep', 'mkdir', 'seq']
   : ['argv-py', 'printenv-py'];
 if (process.cwd() !== ${JSON.stringify(repo)}) {
   assert.match(readFileSync('shell/utilities/Cargo.toml', 'utf8'), /name = "shell-utilities"/);
-  for (const name of names) assert.ok(process.argv.includes(name), 'missing target binary ' + name);
+  const binaries = process.argv.filter((_, index, args) => args[index - 1] === '--bin');
+  assert.deepEqual(binaries, names, 'request only immutable target binaries');
 }
 const wasm = Buffer.from([0, 97, 115, 109, 1, 0, 0, 0, 5, 5, 1, 1, 1, 128, 32]);
 for (const name of names) writeFileSync(resolve(release, name + '.wasm'), wasm);
@@ -841,7 +849,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 const release = dirname(process.env.BASH_COMPAT_SHELL_WASM);
 assert.equal(process.env.BASH_COMPAT_UTILITY_DIR, release);
-for (const name of ['cat', 'grep', 'mkdir', 'seq', 'wc'])
+for (const name of ['cat', 'grep', 'mkdir', 'seq'])
   assert.ok(readFileSync(resolve(release, name + '.wasm')).length > 0);
 writeFileSync(process.env.BASH_COMPAT_OUT, readFileSync('fixture-target-score.json'));
 `,

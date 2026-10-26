@@ -90,6 +90,21 @@ test("external pipes preserve binary bytes, EOF, and backpressure in both direct
   await ready(page);
 });
 
+test("tail WASI utility retains the last lines after pipeline EOF", async ({ page }) => {
+  await open(page);
+  await command(page, "seq 1 20000 | tail -n 2; printf 'left\\nright\\n' | tail -n 1");
+  await output(page, "19999");
+  await output(page, "20000");
+  await output(page, "right");
+  await ready(page);
+  const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
+  expect(lines?.filter((line) => /^(19999|20000|left|right)$/.test(line))).toEqual([
+    "19999",
+    "20000",
+    "right",
+  ]);
+});
+
 test("command builtin launches a registered external WASI guest", async ({ page }) => {
   await open(page);
   await command(page, `command /bin/test-guest emit $'COMMAND_OK\\n'`);

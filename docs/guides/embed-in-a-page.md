@@ -129,6 +129,6 @@ Forward raw input without local echo. The shell echoes. `TerminalNewlines` turns
 
 ## Related
 
-- Add `cat`, `grep`, `mkdir`, and `seq`: [Install utilities](install-utilities.md).
+- Add `cat`, `grep`, `mkdir`, `seq`, and `tail`: [Install utilities](install-utilities.md).
 - Every option and return value: [API reference](../reference/api.md).
 - Something does not work: [Troubleshooting](../troubleshooting.md).
