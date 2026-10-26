@@ -18,6 +18,10 @@ export const utilityNames = [
   "tail",
   "uniq",
   "wc",
+  "touch",
+  "rm",
+  "cp",
+  "mv",
 ] as const;
 const receiptName = "source-sha256.txt";
 

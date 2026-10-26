@@ -24,6 +24,10 @@ for (const command of [
   "tail",
   "uniq",
   "wc",
+  "touch",
+  "rm",
+  "cp",
+  "mv",
 ]) {
   await copyFile(
     new URL(`../public/programs/${command}.wasm`, import.meta.url),

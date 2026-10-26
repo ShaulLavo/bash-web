@@ -1,4 +1,4 @@
-extern crate uucore_ls as uucore;
+extern crate uucore_files as uucore;
 
 mod upstream {
     uucore::bin!(uu_ls);

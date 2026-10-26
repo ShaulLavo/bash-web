@@ -5,6 +5,7 @@
     "src/{runtime,browser}/*.test.ts",
     "tests/*.unit.ts",
     "tests/sed-installed-app.ts",
+    "tests/helpers/file-utilities-browser.ts",
     "scripts/bash-compat-worker.mjs",
     // Filename-discovered scoreboard tests are independent executable roots.
     "scripts/test-{shell-scoreboard*,own-shell-*,bash-compat*,compat-selection}.{mjs,ts}",

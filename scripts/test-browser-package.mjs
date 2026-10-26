@@ -95,6 +95,10 @@ test("worker preparation bundles the public Waffle FS worker and finish-build re
     "tail",
     "uniq",
     "wc",
+    "touch",
+    "rm",
+    "cp",
+    "mv",
   ].map((name) => [name, Buffer.from(`${name}-program`)]);
   await mkdir(resolve(scratch, "public/programs"), { recursive: true });
   for (const [name, bytes] of programs)

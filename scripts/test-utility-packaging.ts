@@ -20,6 +20,10 @@ const utilities = [
   "tail",
   "uniq",
   "wc",
+  "touch",
+  "rm",
+  "cp",
+  "mv",
 ] as const;
 
 const sortUniqTransitiveNotices = [

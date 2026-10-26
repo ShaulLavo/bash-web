@@ -19,11 +19,11 @@ const binaries = {
 const env = { PATH: "/usr/bin:/bin", HOME: "/home/user", LC_ALL: "C", TMPDIR: "/tmp" };
 
 async function fixture(context: TestContext) {
+  let stop = () => {};
   installNodeWorkers();
   const runtime = api.createRuntime({
     filesystem: { workerURL: new URL("fs.mjs", nodeDirectory), mode: "memory" },
   });
-  let stop = () => {};
   context.after(async () => {
     stop();
     try {
