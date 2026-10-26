@@ -16,5 +16,6 @@ export { launchTerminalWorker } from "../src/runtime/worker-launcher";
 export { installUtility } from "../src/utilities/install";
 export { installCat } from "../src/utilities/cat";
 export { installGrep } from "../src/utilities/grep";
+export { installHead } from "../src/utilities/head";
 export { installMkdir } from "../src/utilities/mkdir";
 export { installSeq } from "../src/utilities/seq";
