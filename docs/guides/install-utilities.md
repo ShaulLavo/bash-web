@@ -1,10 +1,10 @@
 # Install utilities
 
-Give a shell `cat`, `grep`, `head`, `mkdir`, `seq`, and `tail`. The shell core has no external commands. Without an installed program, a command lookup on `PATH` fails with status 127.
+Give a shell `cat`, `grep`, `head`, `mkdir`, `seq`, `tail`, and `wc`. The shell core has no external commands. Without an installed program, a command lookup on `PATH` fails with status 127.
 
 Each utility is its own WASM program with its own entry, so you install only what the page needs and pay only for those.
 
-1. Build the browser assets (`npm run build:browser`). The build writes `dist/cat.wasm`, `dist/grep.wasm`, `dist/head.wasm`, `dist/mkdir.wasm`, `dist/seq.wasm`, and `dist/tail.wasm`.
+1. Build the browser assets (`npm run build:browser`). The build writes `dist/cat.wasm`, `dist/grep.wasm`, `dist/head.wasm`, `dist/mkdir.wasm`, `dist/seq.wasm`, `dist/tail.wasm`, and `dist/wc.wasm`.
 2. Install each utility on the same `Runtime` that you pass to `createShell`:
 
    ```ts
@@ -24,9 +24,9 @@ Each utility is its own WASM program with its own entry, so you install only wha
    }
    ```
 
-   The other entries are `bash-web/utilities/grep` (`installGrep`), `bash-web/utilities/head` (`installHead`), `bash-web/utilities/mkdir` (`installMkdir`), `bash-web/utilities/seq` (`installSeq`), and `bash-web/utilities/tail` (`installTail`).
+   The other entries are `bash-web/utilities/grep` (`installGrep`), `bash-web/utilities/head` (`installHead`), `bash-web/utilities/mkdir` (`installMkdir`), `bash-web/utilities/seq` (`installSeq`), `bash-web/utilities/tail` (`installTail`), and `bash-web/utilities/wc` (`installWc`).
 
-3. If your bundler moves assets, pass the new URLs. `wasmUrl` points at the utility's `.wasm` file. `workerUrl` points at `dist/shell-worker.js`. For cooperative utilities, instead of `wasmUrl`, you can pass `module`, a compiled `WebAssembly.Module` or a function that returns one. Upstream `head` takes `source`, raw `Uint8Array` bytes or a function returning bytes, instead. Waffle needs those bytes to add interrupt checks.
+3. If your bundler moves assets, pass the new URLs. `wasmUrl` points at the utility's `.wasm` file. `workerUrl` points at `dist/shell-worker.js`. For cooperative utilities, instead of `wasmUrl`, you can pass `module`, a compiled `WebAssembly.Module` or a function that returns one. Upstream `head` and `wc` take `source`, raw `Uint8Array` bytes or a function returning bytes, instead. Waffle needs those bytes to add interrupt checks.
 
 An install call writes a small marker file at `/bin/<name>` and registers the program with the runtime. It does not fetch, compile, or start a worker. The first command that runs the utility loads the guest.
 
@@ -42,7 +42,7 @@ Call `dispose()` after the utility's processes have stopped. It releases the reg
 
 ## What each utility supports
 
-The cooperative utilities support small subsets. `head` runs upstream uutils through ordinary WASI admission.
+The cooperative utilities support small subsets. `head` and `wc` run upstream uutils through ordinary WASI admission.
 
 | Utility | Supported | Rejected |
 | ------- | --------- | -------- |
@@ -52,6 +52,7 @@ The cooperative utilities support small subsets. `head` runs upstream uutils thr
 | `mkdir` | `mkdir [-p] [--] dir...` | Any other option (status 2) |
 | `seq` | `seq end` and `seq start end`, integers | Step, separator, and other forms (status 2) |
 | `tail` | `tail [-n N] [--] [file]`; the last 10 lines by default; `-nN` is also accepted | Multiple files, filename headers, `-c`, `-f`, and other options (status 2). Retained input is capped at 16 MiB. See [tail](../tail.md) |
+| `wc` | Upstream line, word, and byte counts, file operands, standard input, and pipelines. See [wc](../wc.md) | Other upstream options have no new compatibility claims |
 
 `grep` is the only program that links the `regex` crate. The core build never does. See [ADR 003](../adr/003-one-core-shell-and-installable-utilities.md) for why the utilities are separate programs.
 

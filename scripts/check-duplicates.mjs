@@ -15,7 +15,7 @@ export function duplicateArgs(mode, baseline, paths, update = false) {
     "--min-tokens",
     "50",
     "--ignore",
-    "**/target/**,**/fixtures/**",
+    "**/target/**,**/fixtures/**,**/vendor/**",
     "--pattern",
     "**/*.{rs,ts,tsx,js,mjs,cjs}",
     "--workers",

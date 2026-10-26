@@ -14,6 +14,7 @@ import { installRg } from "../src/utilities/rg";
 import { rgFiles } from "./helpers/rg-fixtures";
 import { installLs } from "../src/utilities/ls";
 import { installSeq } from "../src/utilities/seq";
+import { installWc } from "../src/utilities/wc";
 import { installTail } from "../src/utilities/tail";
 import filesystemWorkerUrl from "../.build/browser/fs-worker.js?url";
 
@@ -94,6 +95,7 @@ mountBrowser({
           installMkdir,
           installSeq,
           installTail,
+          installWc,
         ].map((install) => install(runtime)),
       ),
     ]).then(() => {});

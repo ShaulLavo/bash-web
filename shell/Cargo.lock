@@ -158,6 +158,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
+name = "bytecount"
+version = "0.6.9"
+
+[[package]]
 name = "cc"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1147,6 +1151,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "shell-wc"
+version = "0.0.1"
+dependencies = [
+ "uu_wc",
+ "uucore 0.13.0",
+]
+
+[[package]]
 name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1383,6 +1395,21 @@ dependencies = [
  "thiserror",
  "uucore 0.13.0",
  "uutils_term_grid",
+]
+
+[[package]]
+name = "uu_wc"
+version = "0.13.0"
+source = "git+https://github.com/uutils/coreutils?rev=07763857f6b9a547742a994b58aef0ccd036198b#07763857f6b9a547742a994b58aef0ccd036198b"
+dependencies = [
+ "bytecount",
+ "clap",
+ "fluent",
+ "libc",
+ "rustix",
+ "thiserror",
+ "unicode-width",
+ "uucore 0.13.0",
 ]
 
 [[package]]

@@ -605,6 +605,7 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
         // trusted baseline launcher, migration supervisor and group draining are shipped code.
         for (const name of [
           "bash-compat.mjs",
+          "build-wc.ts",
           "bash-compat-helpers.mjs",
           "bash-compat-runner.mjs",
           "shell-scoreboard.mjs",
