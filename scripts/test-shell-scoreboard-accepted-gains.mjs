@@ -11,14 +11,17 @@ import {
   prepareCandidate,
   recomputeAcceptedGains,
 } from "./shell-scoreboard-accepted-gains.mjs";
-import { authority } from "./shell-scoreboard-main.mjs";
+import { authority, git } from "./shell-scoreboard-main.mjs";
 import { qualification } from "./shell-scoreboard-floor.mjs";
 import { digest } from "./shell-scoreboard.mjs";
 import { scoreboardFixture } from "./shell-scoreboard-test-fixture.mjs";
 
 const merge = "f6e3a9e67d56332b0476f3608e198bf74e8e12f3";
 const fixture = scoreboardFixture("oils");
-const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+const historicalWorkflow = git(import.meta.dirname, [
+  "show",
+  `aaa853b275c27b9609918260f0e8cade3276d552:${authority.workflowPath}`,
+]);
 const testName =
   "interpreter::command_builtin::tests::timed_function_declaration_output_releases_storage_on_cancel_and_drop";
 function blocked() {
@@ -145,7 +148,7 @@ function history() {
   return { run, jobs, mergedAt: "2026-10-25T00:02:00Z" };
 }
 test("A07 each of the original ten jobs must be green on the original run before merge", () => {
-  const check = (v) => assertHistoricalJobs(v.run, v.jobs, workflow, v.mergedAt);
+  const check = (v) => assertHistoricalJobs(v.run, v.jobs, historicalWorkflow, v.mergedAt);
   assert.doesNotThrow(() => check(history()));
   for (let i = 0; i < 10; i++) {
     for (const patch of [
@@ -164,6 +167,28 @@ test("A07 each of the original ten jobs must be green on the original run before
     value.jobs.splice(i, 1);
     assert.throws(() => check(value), assert.AssertionError);
   }
+});
+test("A07 current scheduling and extra or duplicate jobs cannot expand historical authority", () => {
+  const { run, jobs, mergedAt } = history();
+  const currentWorkflow = readFileSync(
+    new URL(`../${authority.workflowPath}`, import.meta.url),
+    "utf8",
+  );
+  assert.throws(
+    () => assertHistoricalJobs(run, jobs, currentWorkflow, mergedAt),
+    /reviewed historical Shell job set/,
+  );
+  for (const name of ["own-shell-scoreboard", "own-shell-observation", "prepare"])
+    assert.throws(
+      () =>
+        assertHistoricalJobs(
+          run,
+          jobs.concat([{ ...jobs[0], name }]),
+          historicalWorkflow,
+          mergedAt,
+        ),
+      /missing\/extra historical job/,
+    );
 });
 function inputs() {
   const binding = {
