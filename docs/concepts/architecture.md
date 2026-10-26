@@ -33,7 +33,7 @@ The terminal UI is a host concern. The bridge carries bytes. The shell guest own
 
 ## External commands are other programs
 
-When a script runs `grep`, the shell asks Waffle to start a program, and Waffle starts it in its own worker with the right inherited descriptors, including numbers other than 0, 1, and 2. The shell core ships no external commands. `cat`, `grep`, `mkdir`, and `seq` exist as separate WASM programs that the page installs on demand ([Install utilities](../guides/install-utilities.md)). With nothing installed, the lookup fails with status 127, as in any shell. This keeps the core small and keeps the `regex` crate out of it ([ADR 003](../adr/003-one-core-shell-and-installable-utilities.md)).
+When a script runs `grep`, the shell asks Waffle to start a program, and Waffle starts it in its own worker with the right inherited descriptors, including numbers other than 0, 1, and 2. The shell core ships no external commands. `cat`, `grep`, `mkdir`, `seq`, and `tail` exist as separate WASM programs that the page installs on demand ([Install utilities](../guides/install-utilities.md)). With nothing installed, the lookup fails with status 127, as in any shell. This keeps the core small and keeps the `regex` crate out of it ([ADR 003](../adr/003-one-core-shell-and-installable-utilities.md)).
 
 ## Inside the engine
 

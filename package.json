@@ -21,7 +21,8 @@
     "./utilities/cat": "./src/utilities/cat.ts",
     "./utilities/grep": "./src/utilities/grep.ts",
     "./utilities/mkdir": "./src/utilities/mkdir.ts",
-    "./utilities/seq": "./src/utilities/seq.ts"
+    "./utilities/seq": "./src/utilities/seq.ts",
+    "./utilities/tail": "./src/utilities/tail.ts"
   },
   "scripts": {
     "format:check": "oxfmt --check scripts shell src tests package.json vite.config.ts playwright.config.ts tsconfig.json .oxlintrc.json .knip.jsonc quality docs/code-quality.md '!scripts/fixtures/**/*.json'",

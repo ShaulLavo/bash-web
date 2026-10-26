@@ -23,7 +23,7 @@ export interface WaffleCaseResult {
 
 const OUTPUT_LIMIT_BYTES = 4 * 1024 * 1024;
 const nodeDirectory = new URL("../.build/node/", import.meta.url);
-const utilities = ["cat", "grep", "mkdir", "seq"] as const;
+const utilities = ["cat", "grep", "mkdir", "seq", "tail"] as const;
 const fixtures = [
   ["argv.py", "argv-py.wasm"],
   ["printenv.py", "printenv-py.wasm"],
@@ -79,6 +79,7 @@ async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: t
     grep: waffle.installGrep,
     mkdir: waffle.installMkdir,
     seq: waffle.installSeq,
+    tail: waffle.installTail,
   };
   for (const name of utilities)
     await installers[name](runtime, {

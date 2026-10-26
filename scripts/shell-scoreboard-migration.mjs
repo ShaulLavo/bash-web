@@ -1,7 +1,7 @@
 // Internal launcher: no baseline or binary inputs. The target commit supplies the scorer and source.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,7 +22,6 @@ import {
 } from "./shell-scoreboard.mjs";
 import { wasiCargoEnvironment, wasiSysrootCommand } from "./wasi-build.ts";
 import { drainGroup, killGroup } from "./shell-process-group.mjs";
-import { utilityNames } from "./utility-artifacts.ts";
 
 const root = resolve(process.argv[2] ?? ".");
 const ref = process.argv[3];
@@ -81,6 +80,16 @@ const verify = (path) =>
     [fileURLToPath(new URL("./verify-wasi-guests.ts", import.meta.url)), path],
     root,
   );
+
+async function targetUtilityNames(checkout) {
+  const directory = resolve(checkout, "shell/utilities/src/bin");
+  if (!existsSync(directory)) return [];
+  const entries = await readdir(directory, { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".rs"))
+    .map((entry) => entry.name.slice(0, -3))
+    .sort();
+}
 
 async function buildTarget(checkout, targetDir, runner) {
   const [prepareCommand, prepareArgs] = wasiSysrootCommand(root);
@@ -150,7 +159,7 @@ async function rescoreUnderCandidateInstrument(candidate) {
     const [prepareCommand, prepareArgs] = wasiSysrootCommand(root);
     await run(prepareCommand, prepareArgs, root);
     const utilities = existsSync(resolve(checkout, "shell/utilities/Cargo.toml"))
-      ? utilityNames
+      ? await targetUtilityNames(checkout)
       : [];
     const binaries = ["shell-runtime"].concat(utilities);
     await cargoBuild(

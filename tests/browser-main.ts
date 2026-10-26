@@ -10,6 +10,7 @@ import { installCat } from "../src/utilities/cat";
 import { installGrep } from "../src/utilities/grep";
 import { installMkdir } from "../src/utilities/mkdir";
 import { installSeq } from "../src/utilities/seq";
+import { installTail } from "../src/utilities/tail";
 import filesystemWorkerUrl from "../.build/browser/fs-worker.js?url";
 
 function filesystemOptions(): SharedFilesystemOptions {
@@ -44,12 +45,14 @@ mountBrowser({
     )
       throw new Error("OPFS conformance selector did not reach the runtime");
     const registration = new AbortController();
-    // External commands are add-ons: this composition selects all four. Each one's
+    // External commands are add-ons: this composition selects all five. Each one's
     // program is fetched only when the shell first starts it.
     const ready = Promise.all([
       registerTestPrograms(runtime, registration.signal, onStartupStage),
       Promise.all(
-        [installCat, installGrep, installMkdir, installSeq].map((install) => install(runtime)),
+        [installCat, installGrep, installMkdir, installSeq, installTail].map((install) =>
+          install(runtime),
+        ),
       ),
     ]).then(() => {});
     let disposing: Promise<void> | undefined;
