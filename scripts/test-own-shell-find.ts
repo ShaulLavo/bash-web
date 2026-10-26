@@ -12,19 +12,16 @@ const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm3
 const shell = await WebAssembly.compile(await readFile(resolve(directory, "shell-runtime.wasm")));
 const find = new Uint8Array(await readFile(resolve(directory, "find.wasm")));
 const env = { PATH: "/bin", HOME: "/home/user", LC_ALL: "C", LANG: "C", TZ: "UTC" };
+type Runtime = ReturnType<typeof api.createRuntime>;
 
-async function fixture(context: TestContext) {
-  installNodeWorkers();
-  const runtime = api.createRuntime({
-    filesystem: { workerURL: new URL("fs.mjs", nodeDirectory), mode: "memory" },
-  });
-  let stop = () => {};
-  context.after(async () => {
-    stop();
-    await runtime.dispose();
-    await stopNodeWorkers();
-    assert.equal(liveNodeWorkers(), 0);
-  });
+async function disposeFixture(runtime: Runtime, stop: () => void) {
+  stop();
+  await runtime.dispose();
+  await stopNodeWorkers();
+  assert.equal(liveNodeWorkers(), 0);
+}
+
+async function seedFindTree(runtime: Runtime) {
   for (const path of ["/tree/sub/deep", "/bin", "/home/user"])
     await runtime.filesystem.mkdirp(path);
   for (const [path, contents] of [
@@ -33,6 +30,16 @@ async function fixture(context: TestContext) {
     ["/tree/sub/deep/c.txt", "c"],
   ])
     await runtime.filesystem.writeFile(path, contents);
+}
+
+async function fixture(context: TestContext) {
+  installNodeWorkers();
+  const runtime = api.createRuntime({
+    filesystem: { mode: "memory", workerURL: new URL("fs.mjs", nodeDirectory) },
+  });
+  let stop = () => {};
+  context.after(() => disposeFixture(runtime, stop));
+  await seedFindTree(runtime);
   let loads = 0;
   const installation = await api.installFind(runtime, {
     workerUrl: new URL("shell.mjs", nodeDirectory),
