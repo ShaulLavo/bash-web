@@ -303,7 +303,7 @@ for (const [name, install] of [
     assert.ok(program && typeof program.source === "function");
     assert.equal(program.module, undefined);
     assert.equal(program.cooperative, undefined);
-    assert.deepEqual(state.fetched, []);
+    assert.equal(state.fetched.length, 0);
     await assert.rejects(install(state.runtime), UtilityConflictError);
     assert.deepEqual(await program.source(), wasm);
     assert.ok(state.fetched[0].endsWith(`/dist/${name}.wasm`));

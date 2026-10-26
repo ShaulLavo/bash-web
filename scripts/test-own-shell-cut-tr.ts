@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { test, type TestContext } from "node:test";
 import { installNodeWorkers, liveNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
 import { runRoot } from "./waffle-compat.ts";
-import { cutTrCases } from "../tests/helpers/cut-tr-cases.ts";
+import { cutTrRecording } from "../tests/helpers/cut-tr-recording.ts";
 import type * as Api from "./waffle-node-api.ts";
 
 const nodeDirectory = new URL("../.build/node/", import.meta.url);
@@ -25,7 +24,7 @@ const programs = {
     bytes: new Uint8Array(await readFile(resolve(directory, "tr.wasm"))),
   },
 };
-const env = { PATH: "/usr/bin:/bin", HOME: "/tmp/spec", LC_ALL: "C" };
+const { environment: env, cases } = cutTrRecording();
 
 async function fixture(context: TestContext) {
   installNodeWorkers();
@@ -86,7 +85,7 @@ for (const [name, program] of Object.entries(programs)) {
         },
       });
       assert.equal(loads, 0);
-      assert.deepEqual(state.admissions, []);
+      assert.equal(state.admissions.length, 0);
       const actual = await execute(state, `${name} --version; ${name} --help`);
       assert.equal(actual.status, 0, actual.stderr.toString());
       assert.ok(actual.stdout.toString().includes(program.version));
@@ -106,19 +105,14 @@ for (const [name, program] of Object.entries(programs)) {
   );
 }
 
-for (const [name, script] of cutTrCases) {
+for (const { name, script, ...expected } of cases) {
   test(`cut/tr match GNU bytes and status for ${name}`, { timeout: 15000 }, async (context) => {
-    await mkdir(resolve(".build"), { recursive: true });
-    const scratch = await mkdtemp(resolve(".build/cut-tr-oracle-"));
-    context.after(() => rm(scratch, { recursive: true, force: true }));
-    const expected = spawnSync("bash", ["-c", script], { env, cwd: scratch, timeout: 3000 });
-    if (expected.error) throw expected.error;
     const state = await fixture(context);
     await install(state);
     const actual = await execute(state, script);
     assert.equal(actual.status, expected.status, actual.stderr.toString());
-    assert.deepEqual(actual.stdout, expected.stdout);
-    assert.equal(actual.stderr.length > 0, expected.stderr.length > 0);
+    assert.deepEqual(actual.stdout, Buffer.from(expected.stdoutBase64, "base64"));
+    assert.equal(actual.stderr.length > 0, expected.stderrPresent);
   });
 }
 

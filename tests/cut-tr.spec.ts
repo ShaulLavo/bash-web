@@ -1,21 +1,18 @@
-import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
-import { resolve } from "node:path";
 import { test, expect, type Page } from "./helpers/browser-test";
 import { ready, startupReady } from "./helpers/readiness.ts";
-import { cutTrCases } from "./helpers/cut-tr-cases.ts";
+import { cutTrRecording } from "./helpers/cut-tr-recording.ts";
+
+const { cases } = cutTrRecording();
 
 async function command(page: Page, script: string) {
   await page.keyboard.insertText(script);
   await page.keyboard.press("Enter");
 }
 
-async function lines(page: Page) {
-  return page.evaluate(() => window.bashWeb!.readLines().map((line) => line.trim()));
-}
-
 async function output(page: Page, text: string) {
-  await expect.poll(() => lines(page)).toContain(text);
+  await expect
+    .poll(() => page.evaluate(() => window.bashWeb!.readLines().map((line) => line.trim())))
+    .toContain(text);
 }
 
 async function open(page: Page) {
@@ -27,43 +24,24 @@ async function open(page: Page) {
   return page.workers().length;
 }
 
-type BrowserCase = (typeof cutTrCases)[number];
+type BrowserCase = (typeof cases)[number];
 
-async function compareCase(
-  page: Page,
-  entry: BrowserCase,
-  index: number,
-  scratch: string,
-  workers: number,
-) {
-  const [name, script] = entry;
+async function compareCase(page: Page, entry: BrowserCase, index: number, workers: number) {
+  const { name, script } = entry;
   await test.step(name, async () => {
-    const expected = spawnSync("bash", ["-c", script], {
-      env: { PATH: "/usr/bin:/bin", LC_ALL: "C" },
-      cwd: scratch,
-      timeout: 3000,
-    });
-    if (expected.error) throw expected.error;
-    const bytes = Array.from(expected.stdout).join(",");
+    const bytes = Array.from(Buffer.from(entry.stdoutBase64, "base64")).join(",");
     const capture = `{ ${script}; } > /tmp/text-output 2> /tmp/text-error; text_status=$?; test-guest bytes < /tmp/text-output; printf 'TEXT_STATUS_${index}:%s\\n' "$text_status"; test -s /tmp/text-error; echo TEXT_ERROR_${index}:$?`;
     await command(page, capture);
     await output(page, `BYTES:${bytes}`);
-    await output(page, `TEXT_STATUS_${index}:${expected.status}`);
-    await output(page, `TEXT_ERROR_${index}:${expected.stderr.length > 0 ? 0 : 1}`);
+    await output(page, `TEXT_STATUS_${index}:${entry.status}`);
+    await output(page, `TEXT_ERROR_${index}:${entry.stderrPresent ? 0 : 1}`);
     await ready(page);
     await expect.poll(() => page.workers().length).toBe(workers);
   });
 }
 
 async function compareCases(page: Page, cases: readonly BrowserCase[], workers: number) {
-  await mkdir(resolve(".build"), { recursive: true });
-  const scratch = await mkdtemp(resolve(".build/cut-tr-browser-oracle-"));
-  try {
-    for (const [index, entry] of cases.entries())
-      await compareCase(page, entry, index, scratch, workers);
-  } finally {
-    await rm(scratch, { recursive: true, force: true });
-  }
+  for (const [index, entry] of cases.entries()) await compareCase(page, entry, index, workers);
 }
 
 for (const name of ["cut", "tr"]) {
@@ -78,7 +56,7 @@ for (const name of ["cut", "tr"]) {
     expect(fetched("tr")).toHaveLength(0);
     await compareCases(
       page,
-      cutTrCases.filter(([label]) => label.startsWith(`${name} `)),
+      cases.filter(({ name: label }) => label.startsWith(`${name} `)),
       workers,
     );
     expect(fetched(name)).toHaveLength(1);
@@ -90,7 +68,7 @@ test("cut and tr compose in browser pipelines", async ({ page }) => {
   const workers = await open(page);
   await compareCases(
     page,
-    cutTrCases.filter(([label]) => !label.startsWith("cut ") && !label.startsWith("tr ")),
+    cases.filter(({ name }) => !name.startsWith("cut ") && !name.startsWith("tr ")),
     workers,
   );
 });

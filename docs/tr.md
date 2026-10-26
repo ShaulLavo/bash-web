@@ -27,6 +27,6 @@ Registry `uu_tr =0.0.30` was the one bounded unmodified alternative. It avoids `
 
 ## Acceptance cases awaiting admission
 
-The shared GNU matrix covers translation, classes, deletion, squeezing, combined operations, complements, short and repeated destination sets, truncation, empty and unterminated input, NUL and binary bytes, errors, pipelines, status, and interruption. These `tr` cases are not claimed passing until ordinary admission works. The tests remain executable and fail at the actual runtime boundary.
+The shared frozen GNU matrix described in [cut](cut.md#verification-checkpoint) covers translation, classes, deletion, squeezing, combined operations, complements, short and repeated destination sets, truncation, empty and unterminated input, NUL and binary bytes, errors, pipelines, status, and interruption. These `tr` cases are not claimed passing until ordinary admission works. The tests remain executable and fail at the actual runtime boundary.
 
 GNU comparisons use `LC_ALL=C`; they do not establish full locale or multibyte parity. Error wording may differ. The upstream [MIT license](licenses/uutils-coreutils-MIT.txt) is retained and included in generated distribution notices. [cut](cut.md) has independent passing admission and byte-comparison evidence.

@@ -26,4 +26,6 @@ The ordinary-source admission and 24 GNU comparisons pass on bash-web base `9383
 
 `scripts/test-own-shell-cut-tr.ts` exercises actual Waffle source admission, lazy bytes, disposal, exit status, and interruption. `tests/cut-tr.spec.ts` runs the usage cases in browser shell pipelines. Packaging checks keep this program out of the core and every other utility entry.
 
+Both runners replay `scripts/owned-fixtures/cut-tr.json`, captured once with GNU Bash 5.3.15 and GNU coreutils 9.12 in `LC_ALL=C`. The recording preserves stdout bytes, exit status, and stderr presence. Its digest, executable identities, and capture environment are recorded in `sources.lock.json`. Missing or changed cases and observations fail validation. Qualification never invokes the host's Bash or utilities. `npm run record:cut-tr -- /absolute/path/to/bash-5.3.15` is the local maintenance recorder and refuses to overwrite an existing recording.
+
 The upstream [MIT license](licenses/uutils-coreutils-MIT.txt) is retained and included in generated distribution notices. See [tr](tr.md) for the paired program's current runtime blocker.
