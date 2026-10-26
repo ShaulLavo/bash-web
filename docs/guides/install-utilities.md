@@ -1,10 +1,10 @@
 # Install utilities
 
-Give a shell `cat`, `grep`, `mkdir`, and `seq`. The shell core has no external commands. Without an installed program, a command lookup on `PATH` fails with status 127.
+Give a shell `cat`, `grep`, `head`, `mkdir`, and `seq`. The shell core has no external commands. Without an installed program, a command lookup on `PATH` fails with status 127.
 
 Each utility is its own WASM program with its own entry, so you install only what the page needs and pay only for those.
 
-1. Build the browser assets (`npm run build:browser`). The build writes `dist/cat.wasm`, `dist/grep.wasm`, `dist/mkdir.wasm`, and `dist/seq.wasm`.
+1. Build the browser assets (`npm run build:browser`). The build writes `dist/cat.wasm`, `dist/grep.wasm`, `dist/head.wasm`, `dist/mkdir.wasm`, and `dist/seq.wasm`.
 2. Install each utility on the same `Runtime` that you pass to `createShell`:
 
    ```ts
@@ -24,9 +24,9 @@ Each utility is its own WASM program with its own entry, so you install only wha
    }
    ```
 
-   The other entries are `bash-web/utilities/grep` (`installGrep`), `bash-web/utilities/mkdir` (`installMkdir`), and `bash-web/utilities/seq` (`installSeq`).
+   The other entries are `bash-web/utilities/grep` (`installGrep`), `bash-web/utilities/head` (`installHead`), `bash-web/utilities/mkdir` (`installMkdir`), and `bash-web/utilities/seq` (`installSeq`).
 
-3. If your bundler moves assets, pass the new URLs. `wasmUrl` points at the utility's `.wasm` file. `workerUrl` points at `dist/shell-worker.js`. Instead of `wasmUrl`, you can pass `module`, a compiled `WebAssembly.Module` or a function that returns one.
+3. If your bundler moves assets, pass the new URLs. `wasmUrl` points at the utility's `.wasm` file. `workerUrl` points at `dist/shell-worker.js`. For cooperative utilities, instead of `wasmUrl`, you can pass `module`, a compiled `WebAssembly.Module` or a function that returns one. Upstream `head` takes `source`, raw `Uint8Array` bytes or a function returning bytes, instead. Waffle needs those bytes to add interrupt checks.
 
 An install call writes a small marker file at `/bin/<name>` and registers the program with the runtime. It does not fetch, compile, or start a worker. The first command that runs the utility loads the guest.
 
@@ -42,12 +42,13 @@ Call `dispose()` after the utility's processes have stopped. It releases the reg
 
 ## What each utility supports
 
-These are small subsets of the real tools. They exist so pipelines and the acceptance tests have real programs to run, not to replace coreutils.
+The cooperative utilities support small subsets. `head` runs upstream uutils through ordinary WASI admission.
 
 | Utility | Supported | Rejected |
 | ------- | --------- | -------- |
 | `cat` | File operands, or standard input when there are none | Options. Every argument is a file path, so `cat -n` fails |
 | `grep` | `-v -c -q -n -i -F -E`, basic regular expressions by default | Any other option, for example `-P` (status 2) |
+| `head` | Upstream lines, bytes, negative counts, NUL records, headers, help, and version. See [Head](../head.md) | Invalid options and counts (status 1). Buffered stdin can discard unread suffixes |
 | `mkdir` | `mkdir [-p] [--] dir...` | Any other option (status 2) |
 | `seq` | `seq end` and `seq start end`, integers | Step, separator, and other forms (status 2) |
 
