@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
 import { shellTargetDirectory, wasiBuildEnvironment } from "./wasi-build.ts";
 import { verifyCiArtifacts } from "./ci-artifacts.ts";
+import { buildWc } from "./build-wc.ts";
 import { wasiTestArguments, wasiTestFiles, wasiTestTargets } from "./prepare-wasi-tests.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
@@ -30,6 +31,7 @@ if (prebuilt) {
       { stdio: "inherit" },
     );
 } else {
+  buildWc();
   const cargoEnv = wasiBuildEnvironment(root, shellTargetDirectory(root));
   const env = {
     ...cargoEnv,

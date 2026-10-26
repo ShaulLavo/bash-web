@@ -1,22 +1,22 @@
 // uutils coreutils wc, MIT licensed. See docs/wc.md and the distribution notices.
-mod upstream {
+mod program {
     uucore::bin!(uu_wc);
 }
 
 fn main() {
-    #[cfg(target_os = "wasi")]
-    initialize_cwd();
-    upstream::main();
+    configure_directory();
+    program::main();
 }
 
+#[cfg(not(target_os = "wasi"))]
+fn configure_directory() {}
+
 #[cfg(target_os = "wasi")]
-fn initialize_cwd() {
+fn configure_directory() {
     // Waffle passes the process directory as PWD; WASI libc starts at the preopen root.
-    let Ok(cwd) = std::env::var("PWD") else {
-        return;
-    };
-    if let Err(error) = std::env::set_current_dir(&cwd) {
+    let cwd = std::env::var("PWD").unwrap_or_else(|_| "/".into());
+    std::env::set_current_dir(&cwd).unwrap_or_else(|error| {
         eprintln!("wc: set cwd {cwd}: {error}");
         std::process::exit(1);
-    }
+    });
 }

@@ -12,4 +12,4 @@ Waffle's interrupt instrumentation does not accept SIMD value types. The build d
 
 ## Verification
 
-Run `npm run build:node-harness && node --test scripts/test-own-shell-wc.ts` for Waffle process tests. Run `npx playwright test tests/wc.spec.ts --project=chromium` after `npm run build:browser` for the browser cases. `npm run test:shell:wasi` checks the guest contract and prints its compressed sizes.
+Run `npm run build:node-harness && node --test scripts/test-own-shell-wc.ts` for Waffle process tests. Run `npx playwright test tests/external-commands.spec.ts --project=chromium --grep wc` after `npm run build:browser` for the browser cases. `npm run test:shell:wasi` checks the guest contract and prints its compressed sizes.
