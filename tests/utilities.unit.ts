@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
-import type { Runtime } from "waffle";
+import type { ProgramDefinition, Runtime } from "waffle";
 import { installCat, UtilityConflictError } from "../src/utilities/cat";
 import { installGrep } from "../src/utilities/grep";
+import { installHead } from "../src/utilities/head";
 
 const wasm = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
-type Program = { adapter: string; module: () => Promise<WebAssembly.Module> };
+type Program = ProgramDefinition;
 
 function fixture(context: TestContext) {
   const files = new Map<string, Uint8Array>();
@@ -85,6 +86,9 @@ test("installing one utility registers only it and loads nothing until first spa
   assert.deepEqual(Array.from(state.adapters), ["bash-web:utility:cat"]);
   assert.deepEqual(state.fetched, []);
   const program = state.programs.get("/bin/cat")!;
+  assert.equal(program.cooperative, true);
+  assert.equal(typeof program.module, "function");
+  assert.ok(typeof program.module === "function");
   const [first, second] = await Promise.all([program.module(), program.module()]);
   assert.equal(first, second, "one in-flight load is shared");
   assert.deepEqual(state.fetched, ["https://cdn.test/cat.wasm"]);
@@ -94,6 +98,7 @@ test("a failed program load is retried by a later spawn", async (context) => {
   const state = fixture(context);
   await installGrep(state.runtime, { wasmUrl: "https://cdn.test/grep.wasm" });
   const program = state.programs.get("/bin/grep")!;
+  assert.ok(typeof program.module === "function");
   state.failNextFetch(true);
   await assert.rejects(program.module(), /fetch failed.*503/);
   state.failNextFetch(false);
@@ -105,7 +110,9 @@ test("a caller-supplied module never fetches", async (context) => {
   const state = fixture(context);
   const module = await WebAssembly.compile(wasm);
   await installCat(state.runtime, { module: () => module });
-  assert.equal(await state.programs.get("/bin/cat")!.module(), module);
+  const program = state.programs.get("/bin/cat");
+  assert.ok(program && typeof program.module === "function");
+  assert.equal(await program.module(), module);
   assert.deepEqual(state.fetched, []);
 });
 
@@ -228,4 +235,56 @@ test("failed rollback preserves both errors and releases its reservation after s
   const fresh = await installCat(state.runtime);
   assert.ok(state.files.has(fresh.executable));
   await fresh.dispose();
+});
+
+test("head installs lazily at its own path and rejects duplicate registrations", async (context) => {
+  const state = fixture(context);
+  const installation = await installHead(state.runtime);
+  assert.equal(installation.executable, "/bin/head");
+  assert.deepEqual(Array.from(state.programs.keys()), ["/bin/head"]);
+  assert.deepEqual(Array.from(state.adapters), ["bash-web:utility:head"]);
+  assert.equal(state.fetched.length, 0);
+  await assert.rejects(installHead(state.runtime), UtilityConflictError);
+  const program = state.programs.get("/bin/head");
+  assert.ok(program);
+  assert.equal(program.cooperative, undefined);
+  assert.equal(program.module, undefined);
+  assert.ok(typeof program.source === "function");
+  const [first, second] = await Promise.all([program.source(), program.source()]);
+  assert.equal(first, second);
+  assert.deepEqual(first, wasm);
+  assert.equal(state.fetched.length, 1);
+  assert.ok(state.fetched[0].endsWith("/dist/head.wasm"));
+  await installation.dispose();
+  assert.equal(state.files.has("/bin/head"), false);
+  assert.equal(state.programs.size + state.adapters.size, 0);
+});
+
+test("ordinary WASI source loaders stay lazy and retry failed loads", async (context) => {
+  const state = fixture(context);
+  let loads = 0;
+  await installHead(state.runtime, {
+    source: () => {
+      if (++loads === 1) throw new Error("source unavailable");
+      return wasm;
+    },
+  });
+  assert.equal(loads, 0);
+  const program = state.programs.get("/bin/head");
+  assert.ok(program && typeof program.source === "function");
+  const load = program.source;
+  await assert.rejects(async () => load(), /source unavailable/);
+  assert.deepEqual(await program.source(), wasm);
+  assert.equal(loads, 2);
+  assert.equal(state.fetched.length, 0);
+});
+
+test("ordinary WASI source bytes bypass fetch and compilation at install", async (context) => {
+  const state = fixture(context);
+  await installHead(state.runtime, { source: wasm });
+  const program = state.programs.get("/bin/head");
+  assert.ok(program && typeof program.source === "function");
+  assert.deepEqual(await program.source(), wasm);
+  assert.equal(state.fetched.length, 0);
+  assert.equal(program.cooperative, undefined);
 });

@@ -12,7 +12,7 @@ Main sources have independent concurrency groups. Each run scores once and uploa
 
 The resolver checks exact repository, workflow, main event, source, run, attempt, producer job, upload steps and artifact digest. It proves documentation-only source equivalence per intervening main edge, with a 32-edge limit. Missing or expired non-equivalent evidence is an explicit prerequisite. It never starts historical replays or falls back to a static score.
 
-PR qualification records the head, tested merge, event base and resolved main separately. Later unrelated main changes follow the normal no-retest policy. The post-merge main check uses its actual predecessor.
+PR qualification records the head, tested merge, tested base and resolved main separately. The tested merge must have exactly two parents. Its second parent must match the PR head, and its first parent must belong to captured main history. The event base may be older, but must belong to the tested base's first-parent history. Both workflow baselines use this validated tested base. Sealing checks the prepared binding again, and folding verifies the same immutable source against host evidence without replacing the captured current-main floor. Later unrelated main changes follow the normal no-retest policy. The post-merge main check uses its actual predecessor.
 
 Compact floor artifacts expire after 90 days. Retained complete scores need only a cheap fold. A genuinely missing non-equivalent score needs an explicit exact-source qualification, and older workflows may make that unavailable. Parent landing reports own retained run and digest references; CI owns uploaded evidence. No evidence writer branch or extra credential is required.
 

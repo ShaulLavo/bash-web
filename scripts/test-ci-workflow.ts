@@ -57,6 +57,29 @@ test("native and WASI producers always execute instead of restoring successful r
   assert.match(action, /node scripts\/ci-artifacts\.ts stage \.build\/ci-native/);
 });
 
+test("native artifact consumers install the pinned SDK before verifying guests", () => {
+  const action = object(
+    parse(readFileSync(new URL("../.github/actions/native/action.yml", import.meta.url), "utf8")),
+  );
+  const steps = object(action.runs).steps;
+  assert.ok(Array.isArray(steps));
+  const entries = steps.map(object);
+  const setup = entries.findIndex((step) => step.uses === "./.github/actions/wasi-sdk");
+  const stage = entries.findIndex(
+    (step) =>
+      typeof step.run === "string" && step.run.includes("node scripts/ci-artifacts.ts stage"),
+  );
+  assert.ok(setup >= 0 && setup < stage, "WASI SDK must be installed before artifact staging");
+  assert.equal(entries[setup].if, undefined, "SDK setup must not be conditional");
+  for (const job of Object.values(jobs())) {
+    const jobSteps = object(job).steps;
+    assert.ok(Array.isArray(jobSteps));
+    const uses = jobSteps.map(object).map((step) => step.uses);
+    if (!uses.includes("./.github/actions/native")) continue;
+    assert.ok(!uses.includes("./.github/actions/wasi-sdk"), "restore owns its SDK prerequisite");
+  }
+});
+
 function object(value: unknown): Record<string, unknown> {
   assert.ok(value && typeof value === "object" && !Array.isArray(value));
   return value as Record<string, unknown>;
@@ -212,10 +235,19 @@ test("compatibility keeps frozen identity, diagnostics, echo and target baseline
     BASH_COMPAT_JOBS: 4,
     BASH_COMPAT_SKIP_BUILD: "1",
     BASH_COMPAT_RECORD: "0",
-    BASH_COMPAT_BASE_REF: "${{ github.event.pull_request.base.sha || github.event.before }}",
   }))
     assert.equal(env[key], value);
   const run = commands(compat);
+  assert.equal(env.BASH_COMPAT_BASE_REF, undefined);
+  assert.match(run, /node scripts\/scoreboard-ci\.mjs baseline BASH_COMPAT_BASE_REF/);
+  assert.match(
+    commands(jobs().layers),
+    /node scripts\/scoreboard-ci\.mjs baseline LAYERS_BASE_REF/,
+  );
+  assert.doesNotMatch(
+    readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
+    /github\.event\.pull_request\.base\.sha/,
+  );
   assert.match(run, /node --test scripts\/test-diagnose-compat.ts/);
   assert.match(
     run,
