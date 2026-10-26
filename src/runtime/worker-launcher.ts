@@ -132,10 +132,9 @@ export function launchTerminalWorker<T extends RuntimeWorkerRequest>(
   }
 }
 
-/** This package's cooperative Rust guests (the shell's children and installed utility
- * programs) all start through the shell worker, which owns inherited pipe and terminal
- * descriptors. Waffle's real bootstrap, runtime_proc and supervision stay in charge. */
-export function cooperativeGuestLauncher(runtime: Runtime, workerUrl: string): GuestLauncher {
+/** Shell guests and installed WASI utilities share inherited terminal descriptors.
+ * Waffle owns admission, interrupt instrumentation and supervision for both. */
+export function guestLauncher(runtime: Runtime, workerUrl: string): GuestLauncher {
   return (context, service) =>
     launchTerminalWorker<ShellWorkerRequest>(runtime, service, context, {
       workerUrl,
