@@ -23,6 +23,10 @@ const metadata = JSON.parse(
     { cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
   ),
 );
+const sed = JSON.parse(
+  await readFile(resolve(root, "third-party/uutils-sed/provenance.json"), "utf8"),
+);
+output += `## uutils sed source\n\n${sed.repository} at ${sed.revision}. Local WASI changes are recorded in third-party/uutils-sed/wasi.patch.\n\n`;
 const included = new Set();
 for (const pkg of metadata.packages.sort((a, b) => a.name.localeCompare(b.name))) {
   if (included.has(pkg.manifest_path) || pkg.name === "shell-parser") continue;
