@@ -22,6 +22,52 @@ const utilities = [
   "wc",
 ] as const;
 
+const sortUniqTransitiveNotices = [
+  "calendrical_calculations 0.2.4 / LICENSE",
+  "chacha20 0.10.2 / LICENSE-APACHE",
+  "chacha20 0.10.2 / LICENSE-MIT",
+  "core_maths 0.1.1 / LICENSE",
+  "cpufeatures 0.3.1 / LICENSE-APACHE",
+  "cpufeatures 0.3.1 / LICENSE-MIT",
+  "crossbeam-deque 0.8.8 / LICENSE-APACHE",
+  "crossbeam-deque 0.8.8 / LICENSE-MIT",
+  "crossbeam-epoch 0.9.21 / LICENSE-APACHE",
+  "crossbeam-epoch 0.9.21 / LICENSE-MIT",
+  "crossbeam-utils 0.8.23 / LICENSE-APACHE",
+  "crossbeam-utils 0.8.23 / LICENSE-MIT",
+  "ctrlc 3.5.2 / LICENSE-APACHE",
+  "ctrlc 3.5.2 / LICENSE-MIT",
+  "fastrand 2.5.0 / LICENSE-APACHE",
+  "fastrand 2.5.0 / LICENSE-MIT",
+  "fixed_decimal 0.7.3 / LICENSE",
+  "foldhash 0.2.0 / LICENSE",
+  "getrandom 0.4.3 / LICENSE-APACHE",
+  "getrandom 0.4.3 / LICENSE-MIT",
+  "icu_calendar 2.4.0 / LICENSE",
+  "icu_calendar_data 2.4.0 / LICENSE",
+  "icu_datetime 2.4.0 / LICENSE",
+  "icu_datetime_data 2.4.0 / LICENSE",
+  "icu_decimal 2.4.0 / LICENSE",
+  "icu_decimal_data 2.4.0 / LICENSE",
+  "icu_pattern 0.5.1 / LICENSE",
+  "icu_plurals 2.4.0 / LICENSE",
+  "icu_plurals_data 2.4.0 / LICENSE",
+  "icu_time 2.4.0 / LICENSE",
+  "icu_time_data 2.4.0 / LICENSE",
+  "jiff-icu 0.2.2 / COPYING",
+  "jiff-icu 0.2.2 / LICENSE-MIT",
+  "rand 0.10.3 / LICENSE-APACHE",
+  "rand 0.10.3 / LICENSE-MIT",
+  "rand_core 0.10.1 / LICENSE-APACHE",
+  "rand_core 0.10.1 / LICENSE-MIT",
+  "rayon 1.12.0 / LICENSE-APACHE",
+  "rayon 1.12.0 / LICENSE-MIT",
+  "rayon-core 1.13.0 / LICENSE-APACHE",
+  "rayon-core 1.13.0 / LICENSE-MIT",
+  "tempfile 3.27.0 / LICENSE-APACHE",
+  "tempfile 3.27.0 / LICENSE-MIT",
+] as const;
+
 async function bundle(entry: string): Promise<string> {
   const result = await build({
     absWorkingDir: root,
@@ -109,6 +155,12 @@ for (const name of ["sort", "uniq"]) {
     assert.ok(notices.includes(`## uu_${name} 0.12.0 / LICENSE`));
   });
 }
+
+test("sort and uniq retain every approved transitive license notice", () => {
+  const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
+  for (const heading of sortUniqTransitiveNotices)
+    assert.ok(notices.includes(`## ${heading}\n`), heading);
+});
 
 test("sort and uniq source receipts match the locked registry packages", () => {
   const receipt = JSON.parse(readFileSync(resolve(root, "docs/sort-uniq-source.json"), "utf8"));
