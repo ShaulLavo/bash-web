@@ -235,10 +235,19 @@ test("compatibility keeps frozen identity, diagnostics, echo and target baseline
     BASH_COMPAT_JOBS: 4,
     BASH_COMPAT_SKIP_BUILD: "1",
     BASH_COMPAT_RECORD: "0",
-    BASH_COMPAT_BASE_REF: "${{ github.event.pull_request.base.sha || github.event.before }}",
   }))
     assert.equal(env[key], value);
   const run = commands(compat);
+  assert.equal(env.BASH_COMPAT_BASE_REF, undefined);
+  assert.match(run, /node scripts\/scoreboard-ci\.mjs baseline BASH_COMPAT_BASE_REF/);
+  assert.match(
+    commands(jobs().layers),
+    /node scripts\/scoreboard-ci\.mjs baseline LAYERS_BASE_REF/,
+  );
+  assert.doesNotMatch(
+    readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
+    /github\.event\.pull_request\.base\.sha/,
+  );
   assert.match(run, /node --test scripts\/test-diagnose-compat.ts/);
   assert.match(
     run,
