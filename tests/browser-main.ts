@@ -8,6 +8,7 @@ import { mountBrowser, type BrowserRuntimeLease } from "../src/browser/main";
 import { registerTestPrograms } from "./helpers/test-programs";
 import { installCat } from "../src/utilities/cat";
 import { installGrep } from "../src/utilities/grep";
+import { installHead } from "../src/utilities/head";
 import { installMkdir } from "../src/utilities/mkdir";
 import { installLs } from "../src/utilities/ls";
 import { installSeq } from "../src/utilities/seq";
@@ -45,12 +46,12 @@ mountBrowser({
     )
       throw new Error("OPFS conformance selector did not reach the runtime");
     const registration = new AbortController();
-    // External commands are add-ons: this composition selects the test utilities. Each one's
+    // External commands are add-ons: this composition selects these utilities. Each one's
     // program is fetched only when the shell first starts it.
     const ready = Promise.all([
       registerTestPrograms(runtime, registration.signal, onStartupStage),
       Promise.all(
-        [installCat, installGrep, installLs, installMkdir, installSeq].map((install) =>
+        [installCat, installGrep, installHead, installLs, installMkdir, installSeq].map((install) =>
           install(runtime),
         ),
       ),

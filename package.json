@@ -20,6 +20,7 @@
     "./shell": "./src/shell.ts",
     "./utilities/cat": "./src/utilities/cat.ts",
     "./utilities/grep": "./src/utilities/grep.ts",
+    "./utilities/head": "./src/utilities/head.ts",
     "./utilities/ls": "./src/utilities/ls.ts",
     "./utilities/mkdir": "./src/utilities/mkdir.ts",
     "./utilities/seq": "./src/utilities/seq.ts"

@@ -12,7 +12,10 @@ async function include(label, directory) {
     .sort();
   for (const name of names) {
     const text = await readFile(resolve(directory, name), "utf8").catch(() => undefined);
-    if (text) output += `## ${label} / ${name}\n\n${text}\n\n`;
+    if (text) {
+      const normalized = text.replaceAll("\r\n", "\n").replace(/[ \t]+$/gm, "");
+      output += `## ${label} / ${name}\n\n${normalized}\n\n`;
+    }
   }
 }
 
