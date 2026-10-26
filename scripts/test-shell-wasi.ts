@@ -115,5 +115,5 @@ const size = (label: string, path: string) => {
 const core = size("Shell core release WASI (standalone embedding)", wasm);
 assert.ok(core <= 1_000_000, "shell core exceeds Brush's 1.0 MB brotli guardrail");
 size("Shell core release WASI (browser runtime)", resolve(release, "shell-runtime.wasm"));
-for (const name of ["cat", "grep", "mkdir", "seq", "tail"])
+for (const name of ["cat", "grep", "head", "mkdir", "seq", "tail"])
   size(`Utility add-on ${name}`, resolve(release, `${name}.wasm`));

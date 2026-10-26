@@ -46,8 +46,6 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    env:
-      LAYERS_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,13 +55,7 @@ jobs:
           node-version: 26.12.1
       - uses: ./.github/actions/javascript
       - name: Select immutable layer baseline
-        run: |
-          baseline="$LAYERS_BASE_REF"
-          if [[ ! "$baseline" =~ ^[a-f0-9]{40}$ ]] || ! git cat-file -e "$baseline^{commit}"; then
-            echo "Could not resolve immutable layer baseline: $baseline" >&2
-            exit 1
-          fi
-          echo "LAYERS_BASE_REF=$baseline" >> "$GITHUB_ENV"
+        run: node scripts/scoreboard-ci.mjs baseline LAYERS_BASE_REF
       - run: npm run test:check-layers && npm run check:layers && npm run typecheck:layers
         env:
           LAYERS_OUTPUT: ${{ runner.temp }}/engine-layers.json
@@ -240,28 +232,16 @@ jobs:
       BASH_COMPAT_JOBS: 4
       BASH_COMPAT_SKIP_BUILD: "1"
       BASH_COMPAT_RECORD: "0"
-      BASH_COMPAT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Select compatibility baseline
-        shell: bash
-        run: |
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_REF" == "refs/heads/main" ]]; then
-            baseline="$BASH_COMPAT_BASE_REF"
-          else
-            baseline="$(git merge-base origin/main "$GITHUB_SHA")"
-          fi
-          if [[ -z "$baseline" || "$baseline" == "0000000000000000000000000000000000000000" ]] || ! git cat-file -e "$baseline^{commit}"; then
-            echo "Could not resolve compatibility baseline: $baseline" >&2
-            exit 1
-          fi
-          echo "BASH_COMPAT_BASE_REF=$baseline" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with:
           node-version: 26.12.1
       - uses: ./.github/actions/javascript
+      - name: Select compatibility baseline
+        run: node scripts/scoreboard-ci.mjs baseline BASH_COMPAT_BASE_REF
       - uses: ./.github/actions/native
       - uses: actions/cache@v4
         with:
@@ -271,7 +251,6 @@ jobs:
         with:
           targets: wasm32-wasip1
           components: rustfmt, clippy
-      - uses: ./.github/actions/wasi-sdk
       - name: Install isolated Bash runner tools
         run: |
           sudo apt-get update
