@@ -98,7 +98,7 @@ async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: t
     wc: waffle.installWc,
   };
   for (const name of utilities) {
-    if (name === "head" || name === "sort" || name === "uniq" || name === "wc") {
+    if (name === "find" || name === "head" || name === "sort" || name === "uniq" || name === "wc") {
       await installers[name](runtime, {
         workerUrl: utilityWorkerUrl,
         source: async () => new Uint8Array(await readFile(`${directory}/${name}.wasm`)),
