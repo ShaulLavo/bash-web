@@ -484,7 +484,7 @@ test("scoreboard and observation run independently using one shared node build",
   );
   assert.doesNotMatch(expanded(commands(observation)), /scoreboard-tests\.mjs/);
   assert.ok(Array.isArray(scoreboard.steps));
-  for (const action of ["javascript", "native", "wasi-sdk"])
+  for (const action of ["javascript", "native"])
     assert.equal(
       scoreboard.steps.map(object).filter((step) => step.uses === `./.github/actions/${action}`)
         .length,
@@ -518,4 +518,35 @@ test("scoreboard and observation run independently using one shared node build",
   const observe = commands(observation);
   assert.ok(observe.indexOf("scoreboard-ci.mjs prepare") < observe.indexOf("diagnose-compat.ts"));
   assert.doesNotMatch(commands(publisher), /scoreboard-ci\.mjs prepare/);
+});
+
+test("layer and split compatibility producers select immutable baselines after JavaScript restore", () => {
+  for (const { id, variable, consumer } of [
+    { id: "layers", variable: "LAYERS_BASE_REF", consumer: "npm run test:check-layers" },
+    {
+      id: "own-shell-scoreboard",
+      variable: "BASH_COMPAT_BASE_REF",
+      consumer: "npm run test:shell:scoreboard:prebuilt",
+    },
+    {
+      id: "own-shell-observation",
+      variable: "BASH_COMPAT_BASE_REF",
+      consumer: "scoreboard-ci.mjs prepare",
+    },
+  ]) {
+    const job = object(jobs()[id]);
+    assert.ok(!job.env || !(variable in object(job.env)));
+    assert.ok(Array.isArray(job.steps));
+    const steps = job.steps.map(object);
+    const restore = steps.findIndex((step) => step.uses === "./.github/actions/javascript");
+    const command = `node scripts/scoreboard-ci.mjs baseline ${variable}`;
+    const baseline = steps.findIndex((step) => step.run === command);
+    assert.equal(steps.filter((step) => step.run === command).length, 1);
+    assert.ok(restore >= 0 && restore < baseline, `${id} restores dependencies before selection`);
+    assert.ok(!("if" in steps[baseline]) && !("continue-on-error" in steps[baseline]));
+    const stage = steps.findIndex((step) => step.uses === "./.github/actions/native");
+    if (stage >= 0) assert.ok(baseline < stage, `${id} selects before native staging`);
+    const run = commands(job);
+    assert.ok(run.indexOf(command) < run.indexOf(consumer), `${id} selects before consuming`);
+  }
 });
