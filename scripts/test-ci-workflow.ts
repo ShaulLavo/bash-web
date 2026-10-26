@@ -140,10 +140,11 @@ test("each moved current-main gate has one owner", () => {
       "check:rust",
       "build:shell",
       "build:test-guest",
+      "build:rg",
       "prepare:wasi-tests",
       "check:capabilities",
     ],
-    wasi: ["test:shell:wasi"],
+    wasi: ["test:shell:wasi", "test:rg:wasi"],
     browser: ["build:browser:assets:ci", "test:runtime:terminal", "test:browser"],
     "own-shell-compatibility": ["test:shell:scoreboard", "compat:shell:prebuilt"],
   };

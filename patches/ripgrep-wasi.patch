@@ -79,3 +79,21 @@ index 3498b10..d4e09d6 100644
 +    low.mmap = MmapMode::Never;
 +    Ok(())
 +}
+diff --git i/crates/core/main.rs w/crates/core/main.rs
+index c74e645..daf965c 100644
+--- i/crates/core/main.rs
++++ w/crates/core/main.rs
+@@ -41,6 +41,13 @@ static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+ 
+ /// Then, as it was, then again it will be.
+ fn main() -> ExitCode {
++    #[cfg(target_os = "wasi")]
++    if let Some(cwd) = std::env::var_os("PWD") {
++        if let Err(err) = std::env::set_current_dir(cwd) {
++            eprintln_locked!("{:#}", err);
++            return ExitCode::from(2);
++        }
++    }
+     match run(flags::parse()) {
+         Ok(code) => code,
+         Err(err) => {

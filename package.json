@@ -61,7 +61,7 @@
     "fuzz:shell-path:ci": "node scripts/fuzz-shell-path.ts --replay scripts/fixtures/shell-path-seed-1.json --replay scripts/fixtures/shell-path-seed-42.json",
     "sources:browser": "node scripts/sources.mjs",
     "build:shell:browser": "node scripts/build-shell-browser.mjs",
-    "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:utilities && npm run build:test-guest && npm run build:browser:assets",
+    "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:utilities && npm run build:rg && npm run build:test-guest && npm run build:browser:assets",
     "typecheck:browser": "tsc --noEmit",
     "test:browser": "playwright test",
     "test:runtime:terminal": "node --expose-gc scripts/test-runtime-terminal.mjs",
@@ -108,7 +108,8 @@
     "test:select": "npm run build:node-harness && node --test scripts/test-own-shell-select.ts",
     "test:shell:completion:pending": "npm run build:node-harness && BASH_COMPLETION_PENDING=1 node --test scripts/test-own-shell-completion.ts",
     "test:shell:function-names:pending": "npm run build:node-harness && BASH_FUNCTION_NAMES_PENDING=1 node --test scripts/test-own-shell-function-names.ts",
-    "build:rg": "node scripts/build-rg.ts"
+    "build:rg": "node scripts/build-rg.ts",
+    "test:rg:wasi": "node scripts/test-rg-wasi.ts"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",

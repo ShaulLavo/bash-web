@@ -9,8 +9,41 @@ import { registerTestPrograms } from "./helpers/test-programs";
 import { installCat } from "../src/utilities/cat";
 import { installGrep } from "../src/utilities/grep";
 import { installMkdir } from "../src/utilities/mkdir";
+import { installRg } from "../src/utilities/rg";
+import { rgFiles } from "./helpers/rg-fixtures";
 import { installSeq } from "../src/utilities/seq";
 import filesystemWorkerUrl from "../.build/browser/fs-worker.js?url";
+
+declare global {
+  interface Window {
+    rgTest?: {
+      readFile(path: string): Promise<string | undefined>;
+      writeFile(path: string, text: string): Promise<void>;
+    };
+  }
+}
+
+async function prepareRg(runtime: ReturnType<typeof createRuntime>): Promise<void> {
+  await installRg(runtime);
+  const directory = "/home/guest/rg-fixture";
+  const encoder = new TextEncoder();
+  for (const [name, text] of Object.entries(rgFiles)) {
+    const path = `${directory}/${name}`;
+    await runtime.filesystem.mkdirp(path.slice(0, path.lastIndexOf("/")));
+    await runtime.filesystem.writeFile(path, encoder.encode(text));
+  }
+  await runtime.filesystem.drain();
+  window.rgTest = {
+    async readFile(path) {
+      const bytes = await runtime.filesystem.readFile(path);
+      return bytes && new TextDecoder().decode(bytes);
+    },
+    async writeFile(path, text) {
+      await runtime.filesystem.writeFile(path, encoder.encode(text));
+      await runtime.filesystem.drain();
+    },
+  };
+}
 
 function filesystemOptions(): SharedFilesystemOptions {
   const query = new URLSearchParams(location.search);
@@ -48,6 +81,7 @@ mountBrowser({
     // program is fetched only when the shell first starts it.
     const ready = Promise.all([
       registerTestPrograms(runtime, registration.signal, onStartupStage),
+      query.get("test") === "1" && query.get("rg") === "1" ? prepareRg(runtime) : undefined,
       Promise.all(
         [installCat, installGrep, installMkdir, installSeq].map((install) => install(runtime)),
       ),
