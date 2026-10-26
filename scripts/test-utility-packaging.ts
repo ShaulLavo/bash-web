@@ -10,6 +10,7 @@ const root = resolve(import.meta.dirname, "..");
 const utilities = [
   "env",
   "cat",
+  "find",
   "grep",
   "head",
   "which",
@@ -118,6 +119,26 @@ test("each utility entry references only its own program", async () => {
       assert.doesNotMatch(text, new RegExp(`${other}\\.wasm`), `${name} entry`);
     assert.match(text, new RegExp(`function install${name[0].toUpperCase()}${name.slice(1)}`));
   }
+});
+
+test("find packages the pinned upstream entry and source receipt", () => {
+  const revision = "505421d4e03586efeb7b9c55adf057599e192e0a";
+  const manifest = readFileSync(resolve(root, "shell/utilities/Cargo.toml"), "utf8");
+  assert.match(
+    manifest,
+    new RegExp(
+      `findutils = \\{ git = "https://github.com/uutils/findutils", rev = "${revision}" \\}`,
+    ),
+  );
+  const entry = readFileSync(resolve(root, "shell/utilities/src/bin/find.rs"), "utf8");
+  assert.match(entry, /findutils::find::find_main/);
+  const receipt = JSON.parse(
+    readFileSync(resolve(root, "shell/utilities/find.source.json"), "utf8"),
+  );
+  assert.equal(receipt.revision, revision);
+  assert.equal(receipt.entry, "findutils::find::find_main");
+  const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
+  assert.match(notices, /## findutils 0\.11\.0 \/ LICENSE/);
 });
 
 test("head packages the pinned upstream entry and its license notices", () => {

@@ -14,6 +14,7 @@ for (const worker of ["shell-worker", "fs-worker"]) {
 for (const command of [
   "env",
   "cat",
+  "find",
   "grep",
   "head",
   "which",

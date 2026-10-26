@@ -15,6 +15,7 @@ export { waitStatus } from "waffle/proc/wait-status";
 export { launchTerminalWorker } from "../src/runtime/worker-launcher";
 export { installUtility } from "../src/utilities/install";
 export { installCat } from "../src/utilities/cat";
+export { installFind } from "../src/utilities/find";
 export { installGrep } from "../src/utilities/grep";
 export { installHead } from "../src/utilities/head";
 export { installWhich } from "../src/utilities/which";
