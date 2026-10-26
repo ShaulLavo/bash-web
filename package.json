@@ -21,7 +21,8 @@
     "./utilities/cat": "./src/utilities/cat.ts",
     "./utilities/grep": "./src/utilities/grep.ts",
     "./utilities/mkdir": "./src/utilities/mkdir.ts",
-    "./utilities/seq": "./src/utilities/seq.ts"
+    "./utilities/seq": "./src/utilities/seq.ts",
+    "./utilities/rg": "./src/utilities/rg.ts"
   },
   "scripts": {
     "format:check": "oxfmt --check scripts shell src tests package.json vite.config.ts playwright.config.ts tsconfig.json .oxlintrc.json .knip.jsonc quality docs/code-quality.md '!scripts/fixtures/**/*.json'",
@@ -106,7 +107,8 @@
     "test:file-substitution": "npm run build:node-harness && node --test scripts/test-own-shell-file-substitution.ts",
     "test:select": "npm run build:node-harness && node --test scripts/test-own-shell-select.ts",
     "test:shell:completion:pending": "npm run build:node-harness && BASH_COMPLETION_PENDING=1 node --test scripts/test-own-shell-completion.ts",
-    "test:shell:function-names:pending": "npm run build:node-harness && BASH_FUNCTION_NAMES_PENDING=1 node --test scripts/test-own-shell-function-names.ts"
+    "test:shell:function-names:pending": "npm run build:node-harness && BASH_FUNCTION_NAMES_PENDING=1 node --test scripts/test-own-shell-function-names.ts",
+    "build:rg": "node scripts/build-rg.ts"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",
