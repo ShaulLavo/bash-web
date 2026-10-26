@@ -7,7 +7,7 @@ use std::{
 
 fn run(binary: &str, args: &[&str], input: &[u8]) -> Output {
     let mut command = Command::new(binary);
-    command.env("LC_ALL", "C").args(args);
+    command.env("LC_ALL", "C").env("PATH", "").args(args);
     command.stdin(Stdio::piped());
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut process = command.spawn().expect("start upstream utility");
@@ -17,35 +17,50 @@ fn run(binary: &str, args: &[&str], input: &[u8]) -> Output {
     process.wait_with_output().expect("collect utility output")
 }
 
+fn bytes(value: &serde_json::Value) -> Vec<u8> {
+    value
+        .as_array()
+        .expect("frozen bytes")
+        .iter()
+        .map(|byte| u8::try_from(byte.as_u64().expect("unsigned byte")).expect("byte range"))
+        .collect()
+}
+
 #[test]
-fn upstream_programs_match_gnu_output_and_status() {
-    for (name, binary, args, input) in [
-        ("sort", env!("CARGO_BIN_EXE_sort"), vec![], "b\na\nb\n"),
-        (
-            "sort",
-            env!("CARGO_BIN_EXE_sort"),
-            vec!["-n"],
-            "10\n2\n-3\n",
-        ),
-        ("sort", env!("CARGO_BIN_EXE_sort"), vec!["-r"], "b\na\nc"),
-        ("sort", env!("CARGO_BIN_EXE_sort"), vec!["-u"], "b\na\nb"),
-        ("sort", env!("CARGO_BIN_EXE_sort"), vec![], ""),
-        ("uniq", env!("CARGO_BIN_EXE_uniq"), vec![], "a\na\nb\na"),
-        ("uniq", env!("CARGO_BIN_EXE_uniq"), vec!["-c"], "a\na\nb\n"),
-        ("uniq", env!("CARGO_BIN_EXE_uniq"), vec!["-d"], "a\na\nb\n"),
-        ("uniq", env!("CARGO_BIN_EXE_uniq"), vec!["-u"], "a\na\nb"),
-        ("uniq", env!("CARGO_BIN_EXE_uniq"), vec![], ""),
-    ] {
-        let expected = run(name, &args, input.as_bytes());
-        let actual = run(binary, &args, input.as_bytes());
+fn upstream_programs_match_frozen_gnu_output_and_status() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../scripts/owned-fixtures/sort-uniq.json"
+    ))
+    .expect("frozen GNU observations");
+    let mut checked = 0;
+    for entry in fixture["cases"].as_array().expect("frozen cases") {
+        let Some(native) = entry.get("native") else {
+            continue;
+        };
+        let binary = match native["program"].as_str().expect("program") {
+            "sort" => env!("CARGO_BIN_EXE_sort"),
+            "uniq" => env!("CARGO_BIN_EXE_uniq"),
+            name => panic!("unrecorded native program {name}"),
+        };
+        let args: Vec<_> = native["args"]
+            .as_array()
+            .expect("frozen arguments")
+            .iter()
+            .map(|arg| arg.as_str().expect("argument"))
+            .collect();
+        let actual = run(binary, &args, &bytes(&native["stdin"]));
         assert_eq!(
             actual.status.code(),
-            expected.status.code(),
-            "{name} {args:?}"
+            Some(i32::try_from(entry["status"].as_i64().expect("status")).expect("status range"))
         );
-        assert_eq!(actual.stdout, expected.stdout, "{name} {args:?}");
-        assert!(actual.stderr.is_empty(), "{actual:?}");
+        assert_eq!(actual.stdout, bytes(&entry["stdout"]), "{entry}");
+        assert_eq!(
+            !actual.stderr.is_empty(),
+            entry["stderrPresent"].as_bool().expect("stderr presence")
+        );
+        checked += 1;
     }
+    assert_eq!(checked, 14, "native frozen-case coverage changed");
 }
 
 #[test]

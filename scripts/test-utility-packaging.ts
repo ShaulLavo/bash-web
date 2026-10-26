@@ -3,6 +3,8 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { build } from "esbuild";
+import observations from "./owned-fixtures/sort-uniq.json" with { type: "json" };
+import { loadSortUniqObservations } from "./sort-uniq-observations.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const utilities = ["cat", "grep", "head", "mkdir", "seq", "sort", "uniq"] as const;
@@ -93,4 +95,47 @@ test("sort and uniq source receipts match the locked registry packages", () => {
       ),
     );
   }
+});
+
+test("sort and uniq qualification cannot import a live host oracle", async () => {
+  const result = await build({
+    entryPoints: ["scripts/test-own-shell-sort-uniq.ts", "tests/sort-uniq.spec.ts"],
+    outdir: "unused",
+    bundle: true,
+    write: false,
+    platform: "node",
+    format: "esm",
+    packages: "external",
+    metafile: true,
+    logLevel: "silent",
+  });
+  for (const [path, input] of Object.entries(result.metafile.inputs)) {
+    assert.equal(
+      input.imports.some((entry) => /^(?:node:)?child_process$/.test(entry.path)),
+      false,
+      `${path} admits a host subprocess into sort/uniq qualification`,
+    );
+  }
+});
+
+test("sort and uniq reject missing, changed, and invalid frozen observations", () => {
+  assert.equal(loadSortUniqObservations().length, 25);
+  const missing = structuredClone(observations);
+  missing.cases.pop();
+  assert.throws(() => loadSortUniqObservations(missing), /must match every case/);
+  const changed = structuredClone(observations);
+  changed.cases[0].script += "; true";
+  assert.throws(() => loadSortUniqObservations(changed), /must match every case/);
+  const malformed = structuredClone(observations);
+  malformed.cases[0].stdout = [256];
+  assert.throws(() => loadSortUniqObservations(malformed));
+  const wrongOracle = structuredClone(observations);
+  wrongOracle.oracle.bash.version = "host bash";
+  assert.throws(() => loadSortUniqObservations(wrongOracle));
+});
+
+test("native sort and uniq qualification runs candidates, not host GNU programs", () => {
+  const source = readFileSync(resolve(root, "shell/utilities/tests/sort_uniq.rs"), "utf8");
+  assert.match(source, /owned-fixtures\/sort-uniq\.json/);
+  assert.doesNotMatch(source, /run\(name,|Command::new\("(?:bash|sort|uniq)"\)/);
 });

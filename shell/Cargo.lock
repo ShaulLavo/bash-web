@@ -1346,6 +1346,7 @@ dependencies = [
  "futures",
  "regex",
  "rustix",
+ "serde_json",
  "shell-engine",
  "uu_head",
  "uu_sort",

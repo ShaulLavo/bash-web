@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { sortUniqCases } from "./sort-uniq-cases.ts";
-import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
-import { tmpdir } from "node:os";
+import { loadSortUniqObservations } from "./sort-uniq-observations.ts";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { test, type TestContext } from "node:test";
 import { installNodeWorkers, liveNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
 import { runRoot } from "./waffle-compat.ts";
@@ -68,17 +66,13 @@ async function fixture(context: TestContext) {
   return { execute, loads, installations, runtime };
 }
 
-for (const [name, script] of sortUniqCases) {
-  test(`ordinary WASI ${name} matches GNU`, { timeout: 15000 }, async (context) => {
-    const scratch = await mkdtemp(join(tmpdir(), "sort-uniq-oracle-"));
-    context.after(() => rm(scratch, { recursive: true, force: true }));
-    const expected = spawnSync("bash", ["-c", script], { env, cwd: scratch, timeout: 3000 });
-    if (expected.error) throw expected.error;
+for (const expected of loadSortUniqObservations()) {
+  test(`ordinary WASI ${expected.name} matches frozen GNU`, { timeout: 15000 }, async (context) => {
     const state = await fixture(context);
-    const actual = await state.execute(script);
+    const actual = await state.execute(expected.script);
     assert.equal(actual.status, expected.status);
-    assert.deepEqual(actual.stdout, expected.stdout);
-    assert.equal(actual.stderr.length > 0, expected.stderr.length > 0);
+    assert.deepEqual(actual.stdout, Buffer.from(expected.stdout));
+    assert.equal(actual.stderr.length > 0, expected.stderrPresent);
   });
 }
 
