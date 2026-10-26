@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import type { Runtime } from "waffle";
 import type { RuntimeWorkerMessage, RuntimeWorkerRequest } from "waffle/browser/worker";
 import { installNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
@@ -42,6 +43,19 @@ function compiled(path: string): Promise<WebAssembly.Module> {
   if (!module)
     modules.set(path, (module = readFile(path).then((bytes) => WebAssembly.compile(bytes))));
   return module;
+}
+
+export async function loadUtilityReplay(name: string) {
+  const directory = resolve(
+    process.env.CARGO_TARGET_DIR ?? ".build/shell",
+    "wasm32-wasip1/release",
+  );
+  const [api, shell, bytes] = await Promise.all([
+    loadApi(),
+    compiled(resolve(directory, "shell-runtime.wasm")),
+    readFile(resolve(directory, `${name}.wasm`)),
+  ]);
+  return { api, shell, source: new Uint8Array(bytes), directory, nodeDirectory };
 }
 
 async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: typeof Api) {

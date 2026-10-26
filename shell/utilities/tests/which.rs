@@ -8,8 +8,8 @@ fn run(args: &[&str], path: Option<&str>, error: Option<i32>) -> (i32, String, S
         path,
         registered: |path: &str, cwd: &str| {
             queries.borrow_mut().push(path.to_owned());
-            if path == "/bin/tool" && error.is_some() {
-                return Err(error.unwrap());
+            if let Some(error) = error.filter(|_| path == "/bin/tool") {
+                return Err(error);
             }
             let absolute = shell_engine::state::absolute(cwd, path);
             Ok(matches!(

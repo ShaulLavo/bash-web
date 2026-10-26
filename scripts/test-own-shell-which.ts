@@ -1,16 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { test, type TestContext } from "node:test";
 import { installNodeWorkers, liveNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
-import { runRoot } from "./waffle-compat.ts";
-import type * as Api from "./waffle-node-api.ts";
+import { loadUtilityReplay, runRoot } from "./waffle-compat.ts";
 
-const nodeDirectory = new URL("../.build/node/", import.meta.url);
-const api: typeof Api = await import(new URL("api.mjs", nodeDirectory).href);
-const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
-const shell = await WebAssembly.compile(await readFile(resolve(directory, "shell-runtime.wasm")));
-const which = new Uint8Array(await readFile(resolve(directory, "which.wasm")));
+const { api, shell, source: which, directory, nodeDirectory } = await loadUtilityReplay("which");
 
 async function fixture(context: TestContext) {
   let stop = () => {};
@@ -73,15 +66,14 @@ async function fixture(context: TestContext) {
     script: string,
     env: Record<string, string> = { PATH: "/bin:/first:/second" },
   ) {
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
+    const output: Record<"stdout" | "stderr", Buffer[]> = { stdout: [], stderr: [] };
     const status = await runRoot(
       owner,
       api,
       shell,
       { modulePath: "", tmp: "/tmp/spec", env, fixtureDirectory: directory },
       script,
-      (fd, bytes) => (fd === 2 ? stderr : stdout).push(Buffer.from(bytes)),
+      (fd, bytes) => output[fd === 2 ? "stderr" : "stdout"].push(Buffer.from(bytes)),
       (terminate) => {
         stop = terminate;
       },
@@ -89,8 +81,8 @@ async function fixture(context: TestContext) {
     assert.equal(candidateLoads, 0, "metadata lookup must not load, compile or launch candidates");
     return {
       status,
-      stdout: Buffer.concat(stdout).toString(),
-      stderr: Buffer.concat(stderr).toString(),
+      stdout: Buffer.concat(output.stdout).toString(),
+      stderr: Buffer.concat(output.stderr).toString(),
     };
   }
   return { execute, install, owner, registers, loads: () => whichLoads };
