@@ -16,6 +16,7 @@ const patch = resolve(root, "patches/ripgrep-wasi.patch");
 const identity = createHash("sha256")
   .update(revision)
   .update(await readFile(patch))
+  .update(await readFile(new URL("./rg-source.ts", import.meta.url)))
   .digest("hex");
 const receipt = resolve(source, ".bash-web-recipe");
 

@@ -197,7 +197,7 @@ test("quality package recipes preserve complete current selections", () => {
   );
   assert.equal(
     scripts["test:guest-build"],
-    "node --test scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts",
+    "node --test scripts/test-rg-source.ts scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts",
   );
   assert.match(String(scripts["test:shell:scoreboard"]), /build:node-harness/);
   assert.match(String(scripts["test:shell:scoreboard"]), /node scripts\/scoreboard-tests\.mjs/);
