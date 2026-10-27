@@ -6,10 +6,10 @@
   "localPath": "src/lib.rs",
   "upstreamSha256": "8fa9777ff191bef065ffac7a5f862b7ffd0e0716105808ae6e0d8a9ae159dc7b",
   "files": {
-    "src/lib.rs": "644dde507785fa0e0a7b4abb7fee2a4681b6a3a115993132266a24030d85ae84",
+    "src/lib.rs": "0ae81e4ebbac812787af785ef6437464227b311b31482d6cc68bbabfe75d4997",
     "LICENSE": "b2888851106d2281b01ff2b807b4950463725c39895dd064770c43d28d419a71",
     "Cargo.toml": "01777dfc847857aeba6c30c4f7075b3de6fd72a813c98e64183f7a88db4e958c",
-    "wasi.patch": "fb74d15b865bec9fc254b6b2a0a0aa9851a2ebaf6e283569d04b7f4c8d50e1b0"
+    "wasi.patch": "c6c510cc371d24b2faa2e1a10d57696c5c4ea8a3c26d0303964fdf563ee92436"
   },
   "changes": [
     "Copy only the upstream xargs module; omit unrelated find/locate dependencies.",

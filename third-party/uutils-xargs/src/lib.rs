@@ -10,8 +10,8 @@ use std::{
     ffi::{OsStr, OsString},
     fmt::Display,
     fs,
-    io::{self, BufRead, BufReader, Read},
-    process::{Command, Stdio},
+    io::{self, BufRead, BufReader, Read, Write},
+    process::{Command, ExitStatus, Stdio},
 };
 
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction};
@@ -377,6 +377,7 @@ enum CommandExecutionError {
     UrgentlyFailed,
     Killed { signal: i32 },
     CannotRun(io::Error),
+    Output(io::Error),
     NotFound,
     Unknown,
 }
@@ -389,6 +390,7 @@ impl Display for CommandExecutionError {
                 write!(f, "Command was killed with signal {signal}")
             }
             Self::CannotRun(err) => write!(f, "Command could not be run: {err}"),
+            Self::Output(err) => write!(f, "Command output failed: {err}"),
             Self::NotFound => write!(f, "Command not found"),
             Self::Unknown => write!(f, "Unknown error running command"),
         }
@@ -503,48 +505,55 @@ impl CommandBuilder<'_> {
         }
 
         match &self.options.action {
-            ExecAction::Command(_) => match command.status() {
-                Ok(status) => {
-                    if status.success() {
-                        Ok(CommandResult::Success)
-                    } else if let Some(err) = status.code() {
-                        if err == 255 {
-                            Err(CommandExecutionError::UrgentlyFailed)
-                        } else {
-                            Ok(CommandResult::Failure)
-                        }
-                    } else {
-                        #[cfg(unix)]
-                        {
-                            use std::os::unix::process::ExitStatusExt;
-                            if let Some(signal) = status.signal() {
-                                Err(CommandExecutionError::Killed { signal })
-                            } else {
-                                Err(CommandExecutionError::Unknown)
-                            }
-                        }
-
-                        #[cfg(not(unix))]
-                        Err(CommandExecutionError::Unknown)
-                    }
-                }
-                Err(e) if e.kind() == io::ErrorKind::NotFound => {
-                    Err(CommandExecutionError::NotFound)
-                }
-                Err(e) => Err(CommandExecutionError::CannotRun(e)),
-            },
-            ExecAction::Echo => {
-                println!(
-                    "{}",
-                    self.extra_args
-                        .iter()
-                        .map(|arg| arg.to_string_lossy())
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                );
-                Ok(CommandResult::Success)
-            }
+            ExecAction::Command(_) => Self::execute_command(command),
+            ExecAction::Echo => self.execute_echo(),
         }
+    }
+
+    fn execute_command(mut command: Command) -> Result<CommandResult, CommandExecutionError> {
+        match command.status() {
+            Ok(status) => Self::command_result(status),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Err(CommandExecutionError::NotFound),
+            Err(e) => Err(CommandExecutionError::CannotRun(e)),
+        }
+    }
+
+    fn command_result(status: ExitStatus) -> Result<CommandResult, CommandExecutionError> {
+        if status.success() {
+            return Ok(CommandResult::Success);
+        }
+        if let Some(code) = status.code() {
+            if code == 255 {
+                return Err(CommandExecutionError::UrgentlyFailed);
+            }
+            return Ok(CommandResult::Failure);
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            return status
+                .signal()
+                .map(|signal| Err(CommandExecutionError::Killed { signal }))
+                .unwrap_or(Err(CommandExecutionError::Unknown));
+        }
+        #[cfg(not(unix))]
+        Err(CommandExecutionError::Unknown)
+    }
+
+    fn execute_echo(&self) -> Result<CommandResult, CommandExecutionError> {
+        let stdout = io::stdout();
+        let mut stdout = stdout.lock();
+        writeln!(
+            stdout,
+            "{}",
+            self.extra_args
+                .iter()
+                .map(|arg| arg.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
+        .map_err(CommandExecutionError::Output)?;
+        Ok(CommandResult::Success)
     }
 }
 
@@ -1307,6 +1316,7 @@ pub fn xargs_main(args: &[&str]) -> i32 {
                     CommandExecutionError::CannotRun(_) => 126,
                     CommandExecutionError::NotFound => 127,
                     CommandExecutionError::Unknown => 1,
+                    CommandExecutionError::Output(_) => 1,
                 }
             } else {
                 1

@@ -119,3 +119,18 @@ test(
     }
   },
 );
+
+test(
+  "xargs reports a closed downstream output without panicking",
+  { timeout: 10000 },
+  async (context) => {
+    const state = await fixture(context);
+    const result = await state.execute(
+      "set -o pipefail; printf 'a a a a a a a a a a a a a a a a a a a a' | xargs -n1 | { read -r; exit 0; }; printf 'STATUS:%s:%s\\n' \"$?\" \"${PIPESTATUS[*]}\"",
+    );
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /STATUS:1:0 1 0\n$/);
+    assert.match(result.stderr, /Command output failed/);
+    assert.doesNotMatch(result.stderr, /panicked at|panic/);
+  },
+);
