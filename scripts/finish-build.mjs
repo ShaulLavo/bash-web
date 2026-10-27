@@ -13,6 +13,7 @@ for (const worker of ["shell-worker", "fs-worker"]) {
 }
 for (const command of [
   "env",
+  "clear",
   "cat",
   "cut",
   "tr",

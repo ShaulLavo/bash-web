@@ -43,7 +43,8 @@
     "./utilities/rm": "./src/utilities/rm.ts",
     "./utilities/cp": "./src/utilities/cp.ts",
     "./utilities/mv": "./src/utilities/mv.ts",
-    "./utilities/xargs": "./src/utilities/xargs.ts"
+    "./utilities/xargs": "./src/utilities/xargs.ts",
+    "./utilities/clear": "./src/utilities/clear.ts"
   },
   "scripts": {
     "record:cut-tr": "node scripts/record-cut-tr.ts",
@@ -156,7 +157,10 @@
     "test:file-utilities:browser": "playwright test --config=playwright.file-utilities.config.ts",
     "record:file-utilities": "node scripts/record-file-utilities.ts",
     "prepare:python:browser": "node scripts/test-own-shell-python.ts --prepare-browser",
-    "test:python:browser": "node scripts/test-own-shell-python.ts --browser"
+    "test:python:browser": "node scripts/test-own-shell-python.ts --browser",
+    "build:clear": "node scripts/build-clear.ts",
+    "test:clear": "node --test scripts/test-clear.ts",
+    "test:clear:browser": "node scripts/test-clear-browser.ts"
   },
   "dependencies": {
     "buffer": "6.0.3",

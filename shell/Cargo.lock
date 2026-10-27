@@ -1559,6 +1559,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "shell-clear"
+version = "0.0.1"
+
+[[package]]
 name = "shell-compat-fixtures"
 version = "0.0.1"
 dependencies = [
