@@ -37,14 +37,44 @@ mod guest {
         eprintln!("shell-runtime: {error}");
         std::process::exit(2);
     }
+    enum Startup {
+        Interactive,
+        Command {
+            source: String,
+            name: String,
+            args: Vec<String>,
+        },
+        File {
+            name: String,
+            args: Vec<String>,
+        },
+    }
+    fn startup(mut args: impl Iterator<Item = String>) -> Startup {
+        let program = args.next().unwrap_or_else(|| usage());
+        match args.next() {
+            None => Startup::Interactive,
+            Some(flag) if flag == "-i" && args.next().is_none() => Startup::Interactive,
+            Some(flag) if flag == "-c" => {
+                let source = args.next().unwrap_or_else(|| usage());
+                let name = args.next().unwrap_or(program);
+                Startup::Command {
+                    source,
+                    name,
+                    args: args.collect(),
+                }
+            }
+            Some(name) if !name.starts_with('-') => Startup::File {
+                name,
+                args: args.collect(),
+            },
+            _ => usage(),
+        }
+    }
+    fn usage() -> ! {
+        report("usage: shell-runtime [-i | -c SCRIPT [NAME [ARG...]] | FILE [ARG...]]")
+    }
     pub fn main() {
-        let args: Vec<_> = std::env::args().collect();
-        let command = match args.as_slice() {
-            [_] => None,
-            [_, flag] if flag == "-i" => None,
-            [_, flag, source, ..] if flag == "-c" => Some(source.clone()),
-            _ => report("usage: shell-runtime [-i | -c SCRIPT [NAME [ARG...]]]"),
-        };
+        let startup = startup(std::env::args());
         let abi = Rc::new(
             WasiAbi::new()
                 .unwrap_or_else(|errno| report(format!("missing root preopen (errno {errno})"))),
@@ -62,9 +92,9 @@ mod guest {
         {
             let state = session.state();
             let mut state = state.borrow_mut();
-            state.interactive = command.is_none();
+            state.interactive = matches!(startup, Startup::Interactive);
             state.inherit_environment(std::env::vars());
-            state.command_string = command.is_some();
+            state.command_string = matches!(startup, Startup::Command { .. });
             if let Ok(cwd) = std::env::var("PWD") {
                 state.cwd = cwd;
             }
@@ -73,20 +103,11 @@ mod guest {
         session
             .set_descriptors(fds)
             .unwrap_or_else(|error| report_runtime(&session, error));
-        if command.is_some() {
-            session
-                .set_arguments(
-                    args.get(3).unwrap_or(&args[0]).clone(),
-                    args.get(4..).unwrap_or_default().to_vec(),
-                )
-                .unwrap_or_else(|error| report_runtime(&session, error));
-        }
-        drop(args);
         let editor_cancel = Rc::new(RefCell::new(Cancel::new()));
         let shell = session.clone();
         let input_cancel = editor_cancel.clone();
         let root = executor.spawn(async move {
-            let result = run(shell.clone(), command, input_cancel).await;
+            let result = run(shell.clone(), startup, input_cancel).await;
             set_phase(0);
             shell.shutdown().await;
             result
@@ -138,21 +159,29 @@ mod guest {
             let _ = write(&endpoint, bytes).await;
         }
     }
-    async fn run(
-        session: Rc<Session>,
-        command: Option<String>,
-        input_cancel: Rc<RefCell<Cancel>>,
-    ) -> i32 {
-        if let Some(source) = command {
-            set_phase(2);
-            return match session.start(&source) {
-                Ok(job) => job.await,
-                Err(error) => {
-                    diagnostic(&session, format!("shell: {error}\n").as_bytes()).await;
-                    error.status()
-                }
-            };
+    async fn run(session: Rc<Session>, startup: Startup, input_cancel: Rc<RefCell<Cancel>>) -> i32 {
+        let job = match startup {
+            Startup::Interactive => return interactive(session, input_cancel).await,
+            Startup::Command { source, name, args } => {
+                set_phase(2);
+                session
+                    .set_arguments(name, args)
+                    .and_then(|()| session.start(&source))
+            }
+            Startup::File { name, args } => {
+                set_phase(2);
+                session.start_file(name, args)
+            }
+        };
+        match job {
+            Ok(job) => job.await,
+            Err(error) => {
+                diagnostic(&session, format!("shell: {error}\n").as_bytes()).await;
+                error.status()
+            }
         }
+    }
+    async fn interactive(session: Rc<Session>, input_cancel: Rc<RefCell<Cancel>>) -> i32 {
         let mut editor = Editor::default();
         let mut skip_lf = false;
         loop {

@@ -919,6 +919,64 @@ impl Session {
             cancel,
             group,
         );
+        let read = reader::run(
+            reader::Reader::new(script, failure, aliases, parser),
+            "-c",
+            false,
+            self.state.clone(),
+            self.core.descriptors.clone(),
+            context.clone(),
+        );
+        Ok(self.foreground(context, read))
+    }
+    /// Start a named script in the current cwd, with its literal invocation arguments.
+    /// Loading belongs to the foreground job and shares its interrupt/shutdown lifecycle.
+    pub fn start_file(
+        &self,
+        name: String,
+        args: Vec<String>,
+    ) -> Result<JoinHandle<i32>, StartError> {
+        if self.core.foreground.borrow().is_some() {
+            return Err(StartError::Invalid(
+                "foreground job is already running".into(),
+            ));
+        }
+        let evaluation = crate::exec::Scope::new(
+            self.core.limits.source_bytes,
+            self.core.eval_storage.clone(),
+            self.core.execution_storage.clone(),
+        );
+        let reader = crate::exec::ReaderLocation::file(name.clone(), &evaluation)
+            .map_err(|_| StartError::Invalid("shell source storage limit exceeded".into()))?;
+        self.set_arguments(name, args)?;
+        {
+            let mut state = self.state.borrow_mut();
+            state.interactive = false;
+            state.command_string = false;
+        }
+        let host = self.core.host.clone();
+        let cancel = Cancel::with_probe(Rc::new(move || host.interrupted()));
+        let mut context = Context::root(
+            self.core.clone(),
+            crate::exec::Source::root(""),
+            evaluation,
+            cancel,
+            self.core.host.allocate_group(),
+        );
+        context.reader = reader;
+        let read = source::script(
+            self.state.clone(),
+            self.core.descriptors.clone(),
+            context.clone(),
+        );
+        Ok(self.foreground(context, read))
+    }
+    fn foreground(
+        &self,
+        context: Context,
+        run: impl std::future::Future<Output = Outcome> + 'static,
+    ) -> JoinHandle<i32> {
+        let group = context.group;
         let foreground_cancel = context.cancel.clone();
         let foreground_signal = context.signal.clone();
         let state = self.state.clone();
@@ -926,15 +984,7 @@ impl Session {
             let _foreground = ForegroundGuard(context.core.clone());
             let mut processes = ProcessGroup::new(context.core.host.clone(), group)
                 .with_signal(context.signal.clone());
-            let result = reader::run(
-                reader::Reader::new(script, failure, aliases, parser),
-                "-c",
-                false,
-                state.clone(),
-                context.core.descriptors.clone(),
-                context.clone(),
-            )
-            .await;
+            let result = run.await;
             if result.flow == Flow::Exit {
                 context.core.exit_requested.set(true);
             }
@@ -953,7 +1003,7 @@ impl Session {
             join: join.clone(),
             _allocation: None,
         });
-        Ok(join)
+        join
     }
     pub async fn shutdown(&self) {
         self.interrupt();
@@ -3728,7 +3778,7 @@ async fn dispatch_arguments(
                 path.into_parts()
             }
             command_builtin::Resolution::NonExecutable(path, reason) => {
-                command_builtin::execution_failure(&fds, context, &path.text, reason).await?;
+                command_builtin::execution_failure(&fds, context, &path.text, reason, line).await?;
                 return Ok(Outcome::status(126));
             }
             command_builtin::Resolution::Missing => {
@@ -3737,7 +3787,7 @@ async fn dispatch_arguments(
                 } else {
                     b"command not found".as_slice()
                 };
-                command_builtin::execution_failure(&fds, context, name, reason).await?;
+                command_builtin::execution_failure(&fds, context, name, reason, line).await?;
                 return Ok(Outcome::status(127));
             }
         }
