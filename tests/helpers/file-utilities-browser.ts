@@ -14,7 +14,6 @@ type Fixture = {
   active: Shell | undefined;
   loaded: string[];
   installations: Awaited<ReturnType<typeof installTouch>>[];
-  childLaunched: () => void;
 };
 
 async function dispose(state: Fixture) {
@@ -41,14 +40,10 @@ async function fixture() {
   const state: Fixture = {
     runtime: createRuntime({
       filesystem: { mode: "memory", workerURL: "/fs-worker.js" },
-      onProcessAdmission(event) {
-        if (event.stage === "launched") state.childLaunched();
-      },
     }),
     active: undefined,
     loaded: [],
     installations: [],
-    childLaunched() {},
   };
   try {
     await seedFileUtilityTree(state.runtime);
@@ -60,14 +55,25 @@ async function fixture() {
   }
 }
 
+async function waitForPrompt(state: Fixture, shell: Shell) {
+  for (;;) {
+    const bytes = await state.runtime.filesystem.readFile("/tmp/diagnostic");
+    if (bytes && new TextDecoder().decode(bytes).endsWith("? ")) return;
+    const exit = await Promise.race([
+      shell.done,
+      new Promise<void>((resolve) => setTimeout(resolve, 2)),
+    ]);
+    if (exit) throw new Error(`Interactive utility exited before its prompt: ${exit.code}`);
+  }
+}
+
 async function run(
   state: Fixture,
   script: string,
   interaction: "none" | "interrupt" | "decline" = "none",
 ) {
-  const admission = Promise.withResolvers<void>();
-  state.childLaunched = admission.resolve;
   const output: number[] = [];
+  await state.runtime.filesystem.writeFile("/tmp/diagnostic", "");
   const shell = await createShell({
     runtime: state.runtime,
     workerUrl: "/shell-worker.js",
@@ -82,7 +88,7 @@ async function run(
   };
   const timer = setInterval(drain, 2);
   try {
-    if (interaction !== "none") await admission.promise;
+    if (interaction !== "none") await waitForPrompt(state, shell);
     if (interaction === "interrupt") shell.interrupt();
     if (interaction === "decline") shell.terminal.send(new TextEncoder().encode("n\n"));
     const result = await shell.done;

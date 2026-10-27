@@ -13,7 +13,64 @@ type Installation = Awaited<ReturnType<typeof installPython>>;
 type Sample = { start: number; end: number };
 const now = () => performance.now();
 
+type WorkerRecord = { id: number; url: string; process: boolean; stopped: boolean };
+
+function workerRecord(records: Map<Worker, WorkerRecord>, worker: Worker) {
+  const record = records.get(worker);
+  if (!record) throw new Error("Unobserved Python fixture worker");
+  return record;
+}
+
+function processRequest(record: WorkerRecord, message: unknown) {
+  if (!message || typeof message !== "object" || !("runtimeProcess" in message)) return;
+  record.process = true;
+}
+
+function observeProcessWorkers() {
+  const original = globalThis.Worker;
+  const records = new Map<Worker, WorkerRecord>();
+  const processURL = new URL("/shell-worker.js", location.href).href;
+  let nextId = 0;
+  class ObservedWorker extends original {
+    constructor(url: string | URL, options?: WorkerOptions) {
+      super(url, options);
+      records.set(this, {
+        id: ++nextId,
+        url: new URL(url, location.href).href,
+        process: false,
+        stopped: false,
+      });
+    }
+    postMessage(message: unknown, options?: Transferable[] | StructuredSerializeOptions) {
+      processRequest(workerRecord(records, this), message);
+      Reflect.apply(original.prototype.postMessage, this, [message, options]);
+    }
+    terminate() {
+      workerRecord(records, this).stopped = true;
+      super.terminate();
+    }
+  }
+  globalThis.Worker = ObservedWorker;
+  return {
+    snapshot() {
+      const live = Array.from(records.values()).filter(
+        (record) => !record.stopped && record.url === processURL,
+      );
+      return {
+        pool: live.filter((record) => !record.process),
+        processes: live.filter((record) => record.process),
+        retired: Array.from(records.values()).filter((record) => record.process && record.stopped),
+      };
+    },
+    restore() {
+      globalThis.Worker = original;
+      records.clear();
+    },
+  };
+}
+
 function instrumentation() {
+  const workers = observeProcessWorkers();
   const compiles: (Sample & { bytes: number })[] = [];
   const originalCompile = WebAssembly.compile;
   WebAssembly.compile = async (...args) => {
@@ -26,8 +83,10 @@ function instrumentation() {
   };
   return {
     snapshot: () => ({ compiles: compiles.slice() }),
+    workers: workers.snapshot,
     restore() {
       WebAssembly.compile = originalCompile;
+      workers.restore();
     },
   };
 }
@@ -177,6 +236,7 @@ function measurement() {
   const fixture = current();
   return {
     ...fixture.metrics.snapshot(),
+    workers: fixture.metrics.workers(),
     admissions: fixture.admissions.slice(),
     resources: performance
       .getEntriesByType("resource")
@@ -240,6 +300,7 @@ const pythonAcceptance = {
   run,
   runScript,
   measurement,
+  workers: () => current().metrics.workers(),
   disposeUtility,
   disposeUnused,
   close,
