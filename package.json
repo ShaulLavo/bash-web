@@ -113,6 +113,8 @@
     "build:ls": "node scripts/build-ls.ts",
     "test:ls": "node --test scripts/test-own-shell-ls.ts",
     "test:find": "node --test scripts/test-own-shell-find.ts",
+    "build:env:tests": "node scripts/build-env-tests.ts",
+    "test:env:browser": "playwright test --config=playwright.env.config.ts",
     "build:node-harness": "node scripts/build-node-harness.ts",
     "build:compat-control": "node scripts/build-compat-control.ts",
     "test:guest-build": "node --test scripts/test-rg-source.ts scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-sed-source.ts scripts/test-xargs-source.ts scripts/test-wasi-guest-path.ts scripts/test-waffle-fixture-lifecycle.ts scripts/test-python-build.ts scripts/test-python-ci.ts",
