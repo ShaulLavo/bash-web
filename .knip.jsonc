@@ -6,6 +6,7 @@
     "tests/*.unit.ts",
     "tests/sed-installed-app.ts",
     "tests/helpers/file-utilities-browser.ts",
+    "tests/helpers/git-browser.ts",
     "tests/helpers/grep-usage-browser.ts",
     "tests/helpers/env-browser.ts",
     "scripts/bash-compat-worker.mjs",

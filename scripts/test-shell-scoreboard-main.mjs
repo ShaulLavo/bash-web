@@ -622,6 +622,7 @@ function hostedObservation({ root, sourceSha, attempt = 1, passes = ["a", "x"] }
       const entries = [["scoreboard-input.json", JSON.stringify(this.input)]].concat(
         this.omitScore ? [] : [["own-shell-current.json", JSON.stringify(this.score)]],
         [["own-shell-diagnostics/host.jsonl", "diagnostics"]],
+        this.extraMembers ?? [],
       );
       const bytes = archive(entries);
       this.bytes = bytes;
@@ -689,16 +690,16 @@ function hostedClient(sourceSha, inputs) {
   }
   return { request, requests };
 }
-async function withObservationRepo(body) {
+async function withObservationRepo(body, workflow = provenance().workflow) {
   await withRepo(async ({ root, put, commit }) => {
     put("base.txt", "base");
     commit();
-    put(authority.workflowPath, provenance().workflow);
+    put(authority.workflowPath, workflow);
     const sourceSha = commit();
     await body({ root, sourceSha });
   });
 }
-function resolveNonEquivalentFixture(sourceSha, found) {
+function resolveNonEquivalentFixture(sourceSha, found, predecessorEvidence = []) {
   return resolveFloor({
     oracle,
     sourceSha,
@@ -709,7 +710,7 @@ function resolveNonEquivalentFixture(sourceSha, found) {
       beforeInputsSha256: digest("before"),
       sourceInputsSha256: digest("source"),
     }),
-    anchor: async () => floor(bootstrap.sourceSha, ["a"]),
+    anchor: async () => ({ ...floor(bootstrap.sourceSha, ["a"]), evidence: predecessorEvidence }),
   });
 }
 test("API admission preserves all completed attempts while the workflow is running, including the known timeout", async () => {
@@ -782,13 +783,106 @@ test("completed failed main attempts can admit a complete observation without se
     assert.equal(found.evidence[0].gate.conclusion, "failure");
     assert.equal(found.evidence[0].inputSha256, digest(input.input));
     assert.equal(found.evidence[0].payloadSha256, digest(input.score));
-    const result = await resolveNonEquivalentFixture(sourceSha, found);
+    const predecessor = { kind: "predecessor-sentinel", sourceSha: bootstrap.sourceSha };
+    const result = await resolveNonEquivalentFixture(sourceSha, found, [predecessor]);
     assert.deepEqual(result.floorIds, ["a", "x"]);
+    assert.deepEqual(
+      result.evidence.filter((item) => item.kind === predecessor.kind),
+      [predecessor],
+    );
+    assert.deepEqual(
+      result.evidence.filter((item) => item.kind === "observation"),
+      found.evidence,
+    );
+    assert.deepEqual(
+      result.evidence.find((item) => item.kind === "scored-edge"),
+      {
+        kind: "scored-edge",
+        beforeInputsSha256: digest("before"),
+        sourceInputsSha256: digest("source"),
+        sourceSha,
+        beforeSha: bootstrap.sourceSha,
+      },
+    );
     assert.equal(
       client.requests.some((path) => path.includes("own-shell-raw")),
       false,
     );
   });
+});
+
+test("a valid raw score takes precedence over a coexisting current archive", async () => {
+  await withObservationRepo(async ({ root, sourceSha }) => {
+    const input = hostedObservation({ root, sourceSha });
+    const raw = hostedArtifact({ root, sourceSha, attempt: 1, kind: "raw", passes: ["a", "y"] });
+    input.jobs[1].conclusion = "success";
+    input.jobs[3] = raw.job;
+    input.artifacts.push(raw.artifact);
+    input.logsByJobId[raw.job.id] = raw.logs;
+    input.bytesByArtifact = { [raw.artifact.id]: raw.bytes };
+    const client = hostedClient(sourceSha, [input]);
+    const found = await mainEvidence({ root, oracle, client }).collect(sourceSha);
+    assert.deepEqual(found.scores, [raw.payload.score]);
+    assert.deepEqual(
+      found.evidence.map((item) => item.kind),
+      ["raw"],
+    );
+    assert.ok(client.requests.includes(`/actions/artifacts/${raw.artifact.id}/zip`));
+    assert.ok(client.requests.includes(`/actions/jobs/${raw.job.id}/logs`));
+    assert.ok(!client.requests.includes(`/actions/artifacts/${input.artifact.id}/zip`));
+    assert.ok(!client.requests.includes(`/actions/jobs/${input.jobs[2].id}/logs`));
+  });
+});
+
+test("collector observation boundaries reject corrupt ZIPs, missing cases and unsafe source evidence", async () => {
+  const cases = [
+    {
+      name: "served ZIP corruption after valid upload provenance",
+      patch(input) {
+        const bytes = Buffer.from(input.bytes);
+        bytes[0] ^= 1;
+        input.bytesByArtifact = { [input.artifact.id]: bytes };
+      },
+      refresh: false,
+      error: /archive digest mismatch/,
+    },
+    {
+      name: "missing case with consistent stored counts",
+      patch(input) {
+        input.score.cases.pop();
+        input.score.counts = summarize(input.score);
+      },
+      refresh: true,
+      error: /result case count changed/,
+    },
+    {
+      name: "unsafe diagnostics member in a non-exact archive",
+      patch(input) {
+        input.extraMembers = [["own-shell-diagnostics/../escape.json", "{}"]];
+      },
+      refresh: true,
+      error: (error) => /ValueError: unsafe archive member/.test(error.stderr?.toString() ?? ""),
+    },
+    {
+      name: "immutable workflow omits the reviewed uploader ID",
+      patch() {},
+      workflow: provenance().workflow.replace("      - id: current-upload\n", ""),
+      refresh: true,
+      error: /wrong reviewed upload step ID/,
+    },
+  ];
+  for (const { name, patch, refresh, error, workflow } of cases) {
+    await withObservationRepo(async ({ root, sourceSha }) => {
+      const input = hostedObservation({ root, sourceSha });
+      patch(input);
+      if (refresh) input.refresh();
+      const client = hostedClient(sourceSha, [input]);
+      const evidence = mainEvidence({ root, oracle, client });
+      await assert.rejects(evidence.collect(sourceSha), error, name);
+      if (name !== "immutable workflow omits the reviewed uploader ID")
+        assert.ok(client.requests.includes(`/actions/artifacts/${input.artifact.id}/zip`), name);
+    }, workflow);
+  }
 });
 
 test("observation admission stays closed for incomplete or wrongly gated attempts", async () => {
