@@ -1638,6 +1638,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "shell-wasi-process"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "shell-wc"
 version = "0.0.1"
 dependencies = [
