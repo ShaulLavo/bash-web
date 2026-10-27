@@ -50,7 +50,8 @@ test(`${name} stays separately lazy and matches GNU in the browser`, async ({ pa
   const requests: string[] = [];
   page.on("request", (request) => requests.push(new URL(request.url()).pathname));
   const workers = await open(page);
-  const fetched = (program: string) => requests.filter((path) => path.endsWith(`/${program}.wasm`));
+  const fetched = (program: string) =>
+    requests.filter((path) => /\/(cut|tr)(?:-[^/]+)?\.wasm$/.exec(path)?.[1] === program);
   expect(fetched("cut")).toHaveLength(0);
   expect(fetched("tr")).toHaveLength(0);
   await compareCases(
