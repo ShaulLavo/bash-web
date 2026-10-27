@@ -63,7 +63,13 @@ impl Request {
             fds: &self.fds,
         };
         let mut output = BoundedJson(Vec::new());
-        serde_json::to_writer(&mut output, &wire).map_err(|_| Error::RequestTooLarge)?;
+        serde_json::to_writer(&mut output, &wire).map_err(|error| match error.io_error_kind() {
+            Some(io::ErrorKind::OutOfMemory) => Error::Host {
+                operation: "encode",
+                errno: 48,
+            },
+            _ => Error::RequestTooLarge,
+        })?;
         Ok(output.0)
     }
 }
@@ -77,7 +83,9 @@ impl Write for BoundedJson {
                 "spawn JSON too large",
             ));
         }
-        self.0.try_reserve(bytes.len()).map_err(io::Error::other)?;
+        self.0
+            .try_reserve(bytes.len())
+            .map_err(|error| io::Error::new(io::ErrorKind::OutOfMemory, error))?;
         self.0.extend_from_slice(bytes);
         Ok(bytes.len())
     }

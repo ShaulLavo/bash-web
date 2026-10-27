@@ -113,6 +113,9 @@ impl Child {
     /// Pending handled signals cancel the owned job with SIGKILL, collect it, then
     /// return Interrupted. This crate never changes the caller's signal dispositions.
     pub fn wait(&mut self) -> Result<Outcome, Error> {
+        if self.complete {
+            return self.outcome.ok_or(Error::InvalidRecord);
+        }
         loop {
             if let Some(signal) = take_signal()? {
                 self.cancel()?;
@@ -204,6 +207,7 @@ fn park(kind: u32, id: u32) -> Result<(), Error> {
 struct Access(u32);
 impl Access {
     fn check(path: &str, cwd: &str) -> Result<(), Error> {
+        validate_path(path, false)?;
         let id = decode_host_result("access_start", unsafe {
             proc_access_start(path.as_ptr(), path.len(), cwd.as_ptr(), cwd.len(), 1)
         })?;
