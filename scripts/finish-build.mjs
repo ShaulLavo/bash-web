@@ -15,6 +15,7 @@ for (const command of [
   "env",
   "cat",
   "cut",
+  "tr",
   "find",
   "grep",
   "head",

@@ -10,6 +10,7 @@ export const utilityNames = [
   "env",
   "cat",
   "cut",
+  "tr",
   "find",
   "grep",
   "head",

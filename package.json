@@ -21,6 +21,7 @@
     ".": "./src/index.ts",
     "./shell": "./src/shell.ts",
     "./utilities/cut": "./src/utilities/cut.ts",
+    "./utilities/tr": "./src/utilities/tr.ts",
     "./utilities/env": "./src/utilities/env.ts",
     "./utilities/cat": "./src/utilities/cat.ts",
     "./utilities/find": "./src/utilities/find.ts",

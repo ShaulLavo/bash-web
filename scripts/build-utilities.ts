@@ -4,7 +4,10 @@ import { buildWc } from "./build-wc.ts";
 import { buildWasiShell, shellTargetDirectory } from "./wasi-build.ts";
 import { utilityNames } from "./utility-artifacts.ts";
 const root = resolve(import.meta.dirname, "..");
-if (!process.env.BASH_WEB_UTILITY_ARTIFACTS) buildWasiShell(["-p", "shell-cut", "--bin", "cut"]);
+if (!process.env.BASH_WEB_UTILITY_ARTIFACTS) {
+  buildWasiShell(["-p", "shell-cut", "--bin", "cut"]);
+  buildWasiShell(["-p", "shell-tr", "--bin", "tr"]);
+}
 buildWc();
 buildWasiShell(["-p", "shell-utilities"]);
 buildWasiShell(["-p", "shell-sed", "--bin", "sed"]);

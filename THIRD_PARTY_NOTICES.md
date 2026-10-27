@@ -687,3 +687,7 @@ executable, shell builtin, or replacement implementation is included.
 Cargo's workspace lock records exact source and dependency identities;
 `scripts/notices.mjs` includes the upstream root license and dependency notices.
 See [cut](docs/cut.md) for tested behavior and runtime limits.
+
+### Individual upstream tr program
+
+`tr.wasm` links unmodified `uu_tr` and `uucore` version `0.13.0` from the same exact uutils/coreutils revision as cut. Its Rust entry calls `uucore::bin!(uu_tr)`. Cargo locks the source and dependencies; generated distribution notices include upstream and transitive licenses. See [tr](docs/tr.md) for tested behavior.
