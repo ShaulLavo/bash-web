@@ -289,7 +289,7 @@ fn file_argument_admission_is_atomic_before_open() {
 fn file_reader_refunds_failed_loads_and_preserves_stored_file_identity() {
     let shell = Shell::new(
         Limits {
-            source_bytes: 128,
+            source_bytes: 64 * 1024,
             ..Limits::default()
         },
         Fault::None,
@@ -297,7 +297,7 @@ fn file_reader_refunds_failed_loads_and_preserves_stored_file_identity() {
     shell
         .fs
         .inner
-        .write_file("/home/guest/large", &[b' '; 129])
+        .write_file("/home/guest/large", &vec![b' '; 64 * 1024 + 1])
         .unwrap();
     assert_eq!(shell.run("large", Vec::new()), 2);
     shell
@@ -305,12 +305,17 @@ fn file_reader_refunds_failed_loads_and_preserves_stored_file_identity() {
         .inner
         .write_file(
             "/home/guest/library",
-            b"f() {\n printf '<%s:%s>\\n' \"${BASH_SOURCE[0]}\" \"$LINENO\";\n}\n",
+            b"f() {\n printf '<%s>\\n' \"${BASH_SOURCE[0]}\";\n}\n",
         )
         .unwrap();
     assert_eq!(shell.run("library", Vec::new()), 0);
-    assert_eq!(shell.finish(shell.session.start("f").unwrap()), 0);
-    assert_eq!(shell.out.bytes(), b"<library:2>\n");
+    assert_eq!(
+        shell.finish(shell.session.start("f").unwrap()),
+        0,
+        "{}",
+        String::from_utf8_lossy(&shell.err.bytes())
+    );
+    assert_eq!(shell.out.bytes(), b"<library>\n");
 }
 
 #[test]

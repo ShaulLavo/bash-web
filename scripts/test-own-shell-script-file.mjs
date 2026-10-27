@@ -103,9 +103,17 @@ test(
   },
 );
 
-test("WASI named command failure retains source line and status", { timeout: 15000 }, async context => {
-  const result = await invoke(context, ["sh", "failure.sh"], [["/workdir/failure.sh", "\nmissing-script-command\n"]]);
-  assert.equal(result.status, 127);
-  assert.equal(result.stdout, "");
-  assert.match(result.stderr, /failure\.sh: line 2:/);
-});
+test(
+  "WASI named command failure retains source line and status",
+  { timeout: 15000 },
+  async (context) => {
+    const result = await invoke(
+      context,
+      ["sh", "failure.sh"],
+      [["/workdir/failure.sh", "\nmissing-script-command\n"]],
+    );
+    assert.equal(result.status, 127);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /failure\.sh: line 2:/);
+  },
+);
