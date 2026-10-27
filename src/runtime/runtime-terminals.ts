@@ -105,7 +105,11 @@ export function createBridgeTerminal(
     write: (chunks) => blocking(tryWrite, chunks),
     readiness() {
       checkActive();
-      if (terminalSection(admission, () => Atomics.load(bridge.state, control.phase) === 4 ? -29 : 0))
+      if (
+        terminalSection(admission, () =>
+          Atomics.load(bridge.state, control.phase) === 4 ? -29 : 0,
+        )
+      )
         return { readable: false, writable: false, hangup: true, nbytes: 0 };
       const pending =
         (Atomics.load(bridge.state, control.outputWrite) -
