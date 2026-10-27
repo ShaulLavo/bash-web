@@ -272,6 +272,7 @@ struct Core {
     limits: Limits,
     eval_storage: crate::exec::StorageBudget,
     execution_storage: crate::exec::StorageBudget,
+    invocation_name_storage: RefCell<crate::exec::StorageAllocation>,
     descriptors: Descriptors,
     jobs: RefCell<BTreeMap<JobId, Job>>,
     residuals: RefCell<BTreeMap<GroupId, Residual>>,
@@ -755,6 +756,15 @@ impl std::fmt::Display for StartError {
 }
 impl std::error::Error for StartError {}
 
+// The root startup boundary accounts for the retained Vec slots and String capacities,
+// matching State's positional reservation while also including the invocation name.
+fn invocation_storage(name_bytes: usize, args: &Vec<String>) -> Option<usize> {
+    args.iter().try_fold(
+        name_bytes.checked_add(args.capacity().checked_mul(std::mem::size_of::<String>())?)?,
+        |bytes, value| bytes.checked_add(value.capacity()),
+    )
+}
+
 /// A persistent shell session. The embedding drives `Executor`, delivers
 /// interrupts without a message-loop round trip, and drains terminal endpoints.
 pub struct Session {
@@ -770,6 +780,8 @@ impl Session {
     ) -> Self {
         let memory = crate::exec::StorageBudget::new(limits.execution_bytes);
         let state = State::with_memory(memory.clone()).shared();
+        let invocation_name_storage =
+            RefCell::new(memory.admit(0).expect("empty reservation fits"));
         Self {
             core: Rc::new(Core {
                 executor,
@@ -777,6 +789,7 @@ impl Session {
                 fs,
                 eval_storage: crate::exec::StorageBudget::new(limits.expansion_bytes),
                 execution_storage: memory,
+                invocation_name_storage,
                 limits,
                 descriptors: Rc::new(RefCell::new(FdTable::default())),
                 jobs: RefCell::new(BTreeMap::new()),
@@ -790,6 +803,41 @@ impl Session {
     }
     pub fn state(&self) -> SharedState {
         self.state.clone()
+    }
+    /// Set the invocation name and literal positional parameters before execution.
+    /// Name and positional storage are admitted together before either value changes.
+    pub fn set_arguments(&self, name: String, args: Vec<String>) -> Result<(), StartError> {
+        if self.core.foreground.borrow().is_some() {
+            return Err(StartError::Invalid(
+                "foreground job is already running".into(),
+            ));
+        }
+        let error = || StartError::Invalid("shell argument storage limit exceeded".into());
+        let mut state = self.state.borrow_mut();
+        let mut name_storage = self.core.invocation_name_storage.borrow_mut();
+        let previous =
+            invocation_storage(name_storage.bytes(), state.positional()).ok_or_else(error)?;
+        let next = invocation_storage(name.capacity(), &args).ok_or_else(error)?;
+        let growth = self
+            .core
+            .execution_storage
+            .admit(next.saturating_sub(previous))
+            .map_err(|_| error())?;
+        // No yield or other caller can spend the admitted growth during this commit.
+        // Release a shrinking name first so its bytes can fund growing positionals.
+        drop(growth);
+        let retained_name = name.capacity().min(name_storage.bytes());
+        name_storage
+            .resize(retained_name)
+            .expect("shrinking the name reservation fits");
+        state
+            .replace_positional(args)
+            .expect("aggregate argument admission covers positionals");
+        name_storage
+            .resize(name.capacity())
+            .expect("aggregate argument admission covers name");
+        state.shell_name = name;
+        Ok(())
     }
     pub fn exit_requested(&self) -> bool {
         self.core.exit_requested.get()
@@ -4848,6 +4896,9 @@ mod residual_review_tests {
     }
     impl Harness {
         fn new() -> Self {
+            Self::with_limits(Limits::default())
+        }
+        fn with_limits(limits: Limits) -> Self {
             let executor = Executor::new();
             let host = Rc::new(Host {
                 inner: InProcessHost::new(executor.clone()),
@@ -4889,7 +4940,7 @@ mod residual_review_tests {
                 executor.clone(),
                 host.clone(),
                 Rc::new(MemoryFs::new(65536)),
-                Limits::default(),
+                limits,
             );
             let (out, output) = io::capture(65536);
             let mut fds = FdTable::default();
@@ -4940,6 +4991,136 @@ mod residual_review_tests {
             assert_eq!(self.host.inner.retained_count(), 0);
             assert_eq!(self.executor.drive(256).pending, 0);
         }
+    }
+
+    #[test]
+    fn invocation_arguments_reject_oversized_name_with_empty_positionals() {
+        let harness = Harness::with_limits(Limits {
+            execution_bytes: 1024,
+            ..Limits::default()
+        });
+        let session = harness.session();
+        let error = session
+            .set_arguments("x".repeat(8192), Vec::new())
+            .unwrap_err();
+        assert_eq!(error.status(), 2);
+        assert_eq!(session.state.borrow().shell_name, "bash");
+        assert!(session.state.borrow().positional().is_empty());
+        assert_eq!(session.core.execution_storage.observation().0, 0);
+        let mut spare = String::with_capacity(8192);
+        spare.push('x');
+        assert!(session.set_arguments(spare, Vec::new()).is_err());
+        assert_eq!(session.core.execution_storage.observation().0, 0);
+        harness.shutdown();
+    }
+
+    #[test]
+    fn invocation_arguments_share_budget_and_refund_replacements_and_drop() {
+        let harness = Harness::with_limits(Limits {
+            execution_bytes: 1024,
+            ..Limits::default()
+        });
+        let session = harness.session();
+        let memory = session.core.execution_storage.clone();
+        session.set_arguments("x".repeat(512), Vec::new()).unwrap();
+        assert_eq!(memory.observation().0, 512);
+        let error = session
+            .set_arguments("x".repeat(512), vec!["y".repeat(600)])
+            .unwrap_err();
+        assert_eq!(error.status(), 2);
+        assert_eq!(session.state.borrow().shell_name, "x".repeat(512));
+        assert!(session.state.borrow().positional().is_empty());
+        assert_eq!(memory.observation().0, 512);
+        session
+            .set_arguments(String::new(), vec!["y".repeat(600)])
+            .unwrap();
+        let positional_charge = memory.observation().0;
+        assert!(positional_charge >= 600);
+        session
+            .set_arguments("z".repeat(512), vec!["saved".into()])
+            .unwrap();
+        let combined_charge = memory.observation().0;
+        assert!(combined_charge < positional_charge);
+        let error = session
+            .set_arguments("x".repeat(2048), Vec::new())
+            .unwrap_err();
+        assert_eq!(error.status(), 2);
+        assert_eq!(session.state.borrow().shell_name, "z".repeat(512));
+        assert_eq!(session.state.borrow().positional(), &["saved"]);
+        assert_eq!(memory.observation().0, combined_charge);
+        session
+            .set_arguments("small".into(), vec!["one".into()])
+            .unwrap();
+        let small_charge = memory.observation().0;
+        assert!(small_charge < positional_charge);
+        session
+            .set_arguments("small".into(), vec!["two".into()])
+            .unwrap();
+        assert_eq!(memory.observation().0, small_charge);
+        session.set_arguments(String::new(), Vec::new()).unwrap();
+        assert_eq!(memory.observation().0, 0);
+        session
+            .set_arguments("last".into(), vec!["tail".into()])
+            .unwrap();
+        assert!(memory.observation().0 > 0);
+        harness.shutdown();
+        assert_eq!(memory.observation().0, 0);
+    }
+
+    #[test]
+    fn invocation_arguments_foreground_rejection_preserves_values_and_admission() {
+        let harness = Harness::new();
+        let session = harness.session();
+        session
+            .set_arguments("saved".into(), vec!["tail".into()])
+            .unwrap();
+        let job = session.start(":").unwrap();
+        let before = session.core.execution_storage.observation().0;
+        let error = session
+            .set_arguments("x".repeat(8192), Vec::new())
+            .unwrap_err();
+        assert_eq!(error.to_string(), "foreground job is already running");
+        assert_eq!(session.state.borrow().shell_name, "saved");
+        assert_eq!(session.state.borrow().positional(), &["tail"]);
+        assert_eq!(session.core.execution_storage.observation().0, before);
+        assert_eq!(harness.finish(job), 0);
+        harness.shutdown();
+    }
+
+    #[test]
+    fn invocation_arguments_are_literal_and_failed_admission_preserves_them() {
+        let harness = Harness::new();
+        let session = harness.session();
+        session
+            .set_arguments(
+                "zero name".into(),
+                vec!["".into(), "a b".into(), "$x*".into()],
+            )
+            .unwrap();
+        assert_eq!(
+            harness.run("printf '<%s>\\n' \"$0\" \"$#\" \"$1\" \"$@\""),
+            0
+        );
+        assert_eq!(
+            harness.output.bytes(),
+            b"<zero name>\n<3>\n<>\n<>\n<a b>\n<$x*>\n"
+        );
+        let before = session.core.execution_storage.observation().0;
+        let pressure = session
+            .core
+            .execution_storage
+            .admit(session.core.limits.execution_bytes - before - 1)
+            .unwrap();
+        let error = session
+            .set_arguments("changed".into(), vec!["x".repeat(64)])
+            .unwrap_err();
+        assert_eq!(error.status(), 2);
+        assert_eq!(error.to_string(), "shell argument storage limit exceeded");
+        assert_eq!(session.state.borrow().shell_name, "zero name");
+        assert_eq!(session.state.borrow().positional(), &["", "a b", "$x*"]);
+        drop(pressure);
+        assert_eq!(session.core.execution_storage.observation().0, before);
+        harness.shutdown();
     }
 
     #[test]

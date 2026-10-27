@@ -42,8 +42,8 @@ mod guest {
         let command = match args.as_slice() {
             [_] => None,
             [_, flag] if flag == "-i" => None,
-            [_, flag, source] if flag == "-c" => Some(source.clone()),
-            _ => report("usage: shell-runtime [-i | -c SCRIPT]"),
+            [_, flag, source, ..] if flag == "-c" => Some(source.clone()),
+            _ => report("usage: shell-runtime [-i | -c SCRIPT [NAME [ARG...]]]"),
         };
         let abi = Rc::new(
             WasiAbi::new()
@@ -73,6 +73,15 @@ mod guest {
         session
             .set_descriptors(fds)
             .unwrap_or_else(|error| report_runtime(&session, error));
+        if command.is_some() {
+            session
+                .set_arguments(
+                    args.get(3).unwrap_or(&args[0]).clone(),
+                    args.get(4..).unwrap_or_default().to_vec(),
+                )
+                .unwrap_or_else(|error| report_runtime(&session, error));
+        }
+        drop(args);
         let editor_cancel = Rc::new(RefCell::new(Cancel::new()));
         let shell = session.clone();
         let input_cancel = editor_cancel.clone();
