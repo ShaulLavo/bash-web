@@ -26,7 +26,10 @@ registerSourceContractTest(
     },
     verifyDrift(scratch, directory) {
       assert.throws(() => verifyXargsSource(scratch), /src\/lib.rs/);
-      cpSync(resolve(root, "third-party/uutils-xargs/src/lib.rs"), resolve(directory, "src/lib.rs"));
+      cpSync(
+        resolve(root, "third-party/uutils-xargs/src/lib.rs"),
+        resolve(directory, "src/lib.rs"),
+      );
       writeFileSync(resolve(directory, "src/invented.rs"), "");
       assert.throws(() => verifyXargsSource(scratch), /file set/);
     },
