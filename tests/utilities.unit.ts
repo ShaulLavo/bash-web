@@ -10,6 +10,8 @@ import { installWhich } from "../src/utilities/which";
 import { installSort } from "../src/utilities/sort";
 import { installUniq } from "../src/utilities/uniq";
 import { installRg } from "../src/utilities/rg";
+import { installPython, type PythonPayloadManifest } from "../src/utilities/python";
+import { createHash } from "node:crypto";
 
 const wasm = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
 type Program = ProgramDefinition;
@@ -356,3 +358,82 @@ for (const [name, install] of [["cut", installCut]] as const) {
     await other.dispose();
   });
 }
+
+const pythonPayload: PythonPayloadManifest = {
+  format: 1,
+  cpython: "5e58eaad7c58df58dfa8ea549c87996e01dd1077",
+  argv0: "/cross-build/wasm32-wasip1/python.wasm",
+  files: ["/Lib/os.py", "/cross-build/wasm32-wasip1/pybuilddir.txt"].map((path) => ({
+    path,
+    url: `https://cdn.test/python-files${path}`,
+    bytes: wasm.length,
+    sha256: createHash("sha256").update(wasm).digest("hex"),
+  })),
+};
+
+test("Python installs quietly, shares complete first use and caches successful preparation", async (context) => {
+  const state = fixture(context);
+  let manifests = 0;
+  const installation = await installPython(state.runtime, {
+    wasmUrl: "https://cdn.test/python.wasm",
+    payload: () => {
+      manifests++;
+      return pythonPayload;
+    },
+  });
+  assert.equal(installation.executable, "/bin/python");
+  assert.deepEqual(Array.from(state.files.keys()), ["/bin/python"]);
+  assert.equal(state.fetched.length + manifests, 0);
+  const program = state.programs.get(installation.executable);
+  assert.ok(program && typeof program.source === "function");
+  assert.equal(program.module, undefined);
+  const first = program.source();
+  assert.equal(program.source(), first);
+  assert.equal(await first, await program.source());
+  assert.equal(state.files.size, 3);
+  assert.equal(manifests, 1);
+  assert.deepEqual(
+    state.fetched.toSorted(),
+    ["https://cdn.test/python.wasm"].concat(pythonPayload.files.map((file) => file.url)).sort(),
+  );
+  const disposal = installation.dispose();
+  assert.equal(installation.dispose(), disposal);
+  assert.equal(
+    state.programs.size + state.adapters.size,
+    0,
+    "registrations released synchronously",
+  );
+  await disposal;
+  assert.equal(state.files.size, 0);
+});
+
+test("Python disposal before first use loads nothing and releases only Python", async (context) => {
+  const state = fixture(context);
+  const other = await installRg(state.runtime, { source: wasm });
+  const installation = await installPython(state.runtime);
+  await installation.dispose();
+  assert.equal(state.fetched.length, 0);
+  assert.deepEqual(Array.from(state.files.keys()), [other.executable]);
+  assert.deepEqual(Array.from(state.programs.keys()), [other.executable]);
+  await other.dispose();
+});
+
+test("Python interpreter failure rolls back payload and a later source call retries", async (context) => {
+  const state = fixture(context);
+  let attempts = 0;
+  const installation = await installPython(state.runtime, {
+    source: async () => {
+      if (++attempts === 1) throw new Error("interpreter failed");
+      return wasm;
+    },
+    payload: pythonPayload,
+  });
+  const program = state.programs.get(installation.executable);
+  assert.ok(program && typeof program.source === "function");
+  const load = program.source;
+  await assert.rejects(async () => load(), /interpreter failed/);
+  assert.deepEqual(Array.from(state.files.keys()), ["/bin/python"]);
+  assert.equal(await program.source(), wasm);
+  assert.equal(attempts, 2);
+  await installation.dispose();
+});

@@ -18,6 +18,8 @@ The terminal's historical notice names an older Ghostty revision. The actual inc
 
 The `wc` guest uses `uu_wc` and `uucore` from `uutils/coreutils` at `07763857f6b9a547742a994b58aef0ccd036198b` (MIT, Copyright uutils developers). The upstream license is retained in `shell/wc/LICENSE.uutils-coreutils`. The notices script includes that license in generated distributions, and the utility artifact receipt covers the separately linked guest. Its `bytecount` 0.6.9 dependency is retained under `shell/wc/vendor/bytecount` with one local build guard: the existing WASM SIMD module and call sites now require the `simd128` target feature. The crate's MIT and Apache 2.0 licenses remain in that directory and in the generated notices.
 
+The `xargs` guest reuses the MIT-licensed module `src/xargs/mod.rs` from `uutils/findutils` revision `505421d4e03586efeb7b9c55adf057599e192e0a`, Copyright 2021 Collabora, Ltd. Its source receipt, retained license, and small echo-only contract patch are in `third-party/uutils-xargs/`. The notices generator includes the license from that crate. No find/locate implementation is included.
+
 The fixed compatibility oracle at `docs/evidence/own-shell-oracle.json` contains
 upstream test scripts, not production interpreter code. The corpus source paths,
 revisions and license checksums are pinned under `shellScoreboard.corpora` in
@@ -687,3 +689,10 @@ executable, shell builtin, or replacement implementation is included.
 Cargo's workspace lock records exact source and dependency identities;
 `scripts/notices.mjs` includes the upstream root license and dependency notices.
 See [cut](docs/cut.md) for tested behavior and runtime limits.
+
+
+## Optional Python payload
+
+`bash-web/utilities/python` loads the official CPython 3.15.2 WASI interpreter from source commit `5e58eaad7c58df58dfa8ea549c87996e01dd1077` and its full unmodified `Lib` tree plus generated sysconfig data. CPython's license includes the PSF License Agreement and historical Python licenses. The library also contains separately licensed components and bundled wheels.
+
+The Python build emits `python.NOTICES.txt` with source license texts, embedded library notices, and notices extracted from every bundled wheel. `python-licenses.json` records their source paths and hashes. Keep both with the interpreter and payload when distributing Python. When `dist/python.wasm` is present, `npm run notices:shell` requires `dist/python.NOTICES.txt` and includes its complete text in the normal generated distribution notices. An installation without Python assets does not distribute CPython.
