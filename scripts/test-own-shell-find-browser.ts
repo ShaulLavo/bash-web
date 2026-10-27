@@ -96,8 +96,8 @@ test(
       const actual = await runFind(example.script);
       assert.equal(actual.status, expected.status, `${example.name}: ${actual.diagnostic}`);
       assert.deepEqual(
-        findOutput(Uint8Array.from(actual.stdout), example.records),
-        findOutput(expected.stdout, example.records),
+        findOutput(Uint8Array.from(actual.stdout), example.records, example.prefix),
+        findOutput(expected.stdout, example.records, example.prefix),
         example.name,
       );
       assert.equal(actual.diagnostic.length > 0, expected.stderr.length > 0, example.name);
