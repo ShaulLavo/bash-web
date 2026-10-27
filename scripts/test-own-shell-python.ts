@@ -41,6 +41,7 @@ async function browser() {
     "dist/python-tests.html",
     '<!doctype html><meta charset="utf-8"><script type="module" src="/python-tests.js"></script>',
   );
+  if (!existsSync("dist/index.html")) copyFileSync("dist/python-tests.html", "dist/index.html");
   const result = spawnSync(
     process.execPath,
     ["node_modules/@playwright/test/cli.js", "test", "tests/python.spec.ts"].concat(
