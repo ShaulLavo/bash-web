@@ -66,6 +66,14 @@ async function seed(runtime: Runtime) {
   await runtime.filesystem.drain();
 }
 
+async function disposeRuntime(runtime: Runtime, restore: () => void) {
+  try {
+    await runtime.dispose();
+  } finally {
+    restore();
+  }
+}
+
 async function create() {
   const admissions: { stage: string; pid: number; time: number }[] = [];
   const runtime = createRuntime({
@@ -82,8 +90,7 @@ async function create() {
       await active?.dispose();
       await installation?.dispose();
     } finally {
-      await runtime.dispose();
-      metrics.restore();
+      await disposeRuntime(runtime, metrics.restore);
     }
   }
   try {
@@ -137,6 +144,14 @@ async function open() {
   return state.installed;
 }
 
+function drainOutput(shell: Shell, chunks: Uint8Array[]) {
+  for (;;) {
+    const bytes = shell.terminal.drain();
+    if (!bytes.length) return;
+    chunks.push(bytes);
+  }
+}
+
 async function runScript(script: string) {
   const fixture = current();
   const start = now();
@@ -150,10 +165,7 @@ async function runScript(script: string) {
   });
   fixture.setActive(shell);
   const chunks: Uint8Array[] = [];
-  const drain = () => {
-    const bytes = shell.terminal.drain();
-    if (bytes.length) chunks.push(bytes);
-  };
+  const drain = () => drainOutput(shell, chunks);
   const timer = setInterval(drain, 2);
   try {
     const exit = await shell.done;
