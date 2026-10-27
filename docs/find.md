@@ -24,7 +24,7 @@ find -files0-from roots -type f -print0
 
 The guest is lazy. Installation creates `/bin/find` and registers the source loader without fetching, compiling, or starting a process. The first spawn supplies raw bytes to Waffle so it can instrument the ordinary WASI guest for interruption; later spawns reuse the admitted source.
 
-This is not full GNU find parity. `-exec`, `-execdir`, `-ok`, and `-okdir` are excluded because they need child-process launch. `-xdev`, `-readable`, `-writable`, `-executable`, and Unix ownership, group, mount, and permission predicates are excluded because the aligned WASI/runtime metadata does not provide their authoritative behavior. `-delete`, links, time predicates, and other upstream options have no new compatibility claim in this change.
+This is not full GNU find parity. `-exec`, `-execdir`, `-ok`, and `-okdir` are rejected by the WASI expression parser with status 1 before traversal or starting-path input is read. They need child-process launch. Predicate operands remain data, so `find . -name -exec` is valid. `-xdev`, `-readable`, `-writable`, `-executable`, and Unix ownership, group, mount, and permission predicates are excluded because the aligned WASI/runtime metadata does not provide their authoritative behavior. `-delete`, links, time predicates, and other upstream options have no new compatibility claim in this change.
 
 ## Needs from other tracks
 
@@ -40,8 +40,10 @@ The required descriptor operation must enumerate inheritable bindings, exclude p
 
 ## Source and checks
 
-The guest uses `findutils` 0.11.0 from `uutils/findutils` revision `505421d4e03586efeb7b9c55adf057599e192e0a`. `third-party/uutils-find` contains the find-only source from that revision. Its `wasi.patch` records the manifest/library extraction and the invalid starting-record fix. `shell/utilities/find.source.json` records the original archive and license digests, the patch digest, every vendored source digest, and the accepted scope. The upstream MIT license is collected by `npm run notices:shell` from Cargo metadata.
+The guest uses `findutils` 0.11.0 from `uutils/findutils` revision `505421d4e03586efeb7b9c55adf057599e192e0a`. `third-party/uutils-find` contains the find-only source from that revision. Its `wasi.patch` records the manifest/library extraction, invalid starting-record fix, and WASI execution-predicate rejection. `shell/utilities/find.source.json` records the original archive and license digests, the patch digest, every vendored source digest, and the accepted scope. The upstream MIT license is collected by `npm run notices:shell` from Cargo metadata.
 
 Run `npm run build:shell`, `npm run build:utilities`, `npm run build:node-harness`, and `npm run test:find` for the focused Node-hosted Waffle cases and source receipt check. Run `npm run build:worker` and `npm run test:find:browser` for the real Chromium/Waffle cases. These commands need the WASI build prerequisites from [Development](development.md).
 
 The expanded cases compare stdout bytes and status with native GNU find on the same fixture. They compare unordered records only where traversal ordering is unspecified; the depth-first case compares exact bytes. Diagnostics are checked for presence, because upstream error wording differs. Fixtures include spaces, newlines and shell-looking names. Browser checks also verify lazy loading, marker disposal, caller ownership, and closure of every worker. Native GNU find is only a test oracle.
+
+Execution rejection checks cover semicolon and batch forms, skipped predicates, empty roots, unread starting-path input, and both prompt modes leaving stdin unread. Literal name, path, and format operands are compared with GNU find.

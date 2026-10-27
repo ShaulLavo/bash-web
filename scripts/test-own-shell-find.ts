@@ -5,7 +5,12 @@ import { test, type TestContext } from "node:test";
 import { installNodeWorkers, liveNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
 import { runRoot } from "./waffle-compat.ts";
 import type * as Api from "./waffle-node-api.ts";
-import { findCases, findOutput, seedFindTree } from "../tests/helpers/find-cases.ts";
+import {
+  findCases,
+  findOutput,
+  findRejections,
+  seedFindTree,
+} from "../tests/helpers/find-cases.ts";
 import { findOracle } from "./find-oracle.ts";
 
 const nodeDirectory = new URL("../.build/node/", import.meta.url);
@@ -137,3 +142,19 @@ test("find traversal guest has no child-process imports", async () => {
     WebAssembly.Module.imports(module).every((entry) => entry.module === "wasi_snapshot_preview1"),
   );
 });
+
+for (const example of findRejections) {
+  test(
+    `find rejects unsupported execution: ${example.name}`,
+    { timeout: 10000 },
+    async (context) => {
+      const state = await fixture(context, true);
+      const actual = await state.run(`cd /tree; { ${example.script}; } > /result`);
+      assert.equal(actual.status, 1, actual.stderr.toString());
+      assert.equal(actual.stdout.toString(), example.stdout);
+      assert.ok(actual.stderr.toString().includes(example.diagnostic), actual.stderr.toString());
+      assert.doesNotMatch(actual.stderr.toString(), /< .* > \? /);
+      assert.doesNotMatch(actual.stderr.toString(), /No such file|Is a directory|zero-length/);
+    },
+  );
+}

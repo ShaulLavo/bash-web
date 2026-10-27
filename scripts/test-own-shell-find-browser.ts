@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { build } from "esbuild";
 import { chromium, type Browser } from "@playwright/test";
 import type * as FindApi from "../tests/helpers/find-browser-api.ts";
-import { findCases, findOutput } from "../tests/helpers/find-cases.ts";
+import { findCases, findOutput, findRejections } from "../tests/helpers/find-cases.ts";
 import { findOracle } from "./find-oracle.ts";
 
 const output = resolve(".build/find-browser");
@@ -78,13 +78,22 @@ test(
     const closedWorkers: Promise<unknown>[] = [];
     page.on("worker", (worker) => closedWorkers.push(worker.waitForEvent("close")));
     await page.goto(`http://127.0.0.1:${address.port}`);
-    const oracle = await findOracle(context);
-    for (const example of findCases) {
-      const expected = await oracle(example.script);
+    async function runFind(script: string) {
       const actual = await page.evaluate(async (script) => {
         const api: typeof FindApi = await import(new URL("/api.js", location.href).href);
         return api.checkFind(script);
-      }, example.script);
+      }, script);
+      assert.equal(actual.loads, 1);
+      assert.equal(actual.removed, true);
+      assert.equal(actual.ownerAlive, true);
+      await Promise.all(closedWorkers);
+      assert.equal(page.workers().length, 0, `${script}: leaked worker`);
+      return actual;
+    }
+    const oracle = await findOracle(context);
+    for (const example of findCases) {
+      const expected = await oracle(example.script);
+      const actual = await runFind(example.script);
       assert.equal(actual.status, expected.status, `${example.name}: ${actual.diagnostic}`);
       assert.deepEqual(
         findOutput(Uint8Array.from(actual.stdout), example.records),
@@ -92,11 +101,14 @@ test(
         example.name,
       );
       assert.equal(actual.diagnostic.length > 0, expected.stderr.length > 0, example.name);
-      assert.equal(actual.loads, 1);
-      assert.equal(actual.removed, true);
-      assert.equal(actual.ownerAlive, true);
-      await Promise.all(closedWorkers);
-      assert.equal(page.workers().length, 0, `${example.name}: leaked worker`);
+    }
+    for (const example of findRejections) {
+      const actual = await runFind(example.script);
+      assert.equal(actual.status, 1, `${example.name}: ${actual.diagnostic}`);
+      assert.equal(new TextDecoder().decode(Uint8Array.from(actual.stdout)), example.stdout);
+      assert.ok(actual.diagnostic.includes(example.diagnostic), actual.diagnostic);
+      assert.doesNotMatch(actual.diagnostic, /< .* > \? /);
+      assert.doesNotMatch(actual.diagnostic, /No such file|Is a directory|zero-length/);
     }
   },
 );

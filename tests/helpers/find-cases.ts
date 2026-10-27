@@ -11,6 +11,11 @@ export const findFiles = [
   ["line\nbreak.txt", "newline"],
   ["-option", "dash"],
   ["$(touch injected)", "literal"],
+  ["-exec", "literal"],
+  ["-execdir", "literal"],
+  ["-ok", "literal"],
+  ["-okdir", "literal"],
+  ["reply", "y\nuntouched\n"],
   ["roots", "./sub/deep\0./a.txt\0"],
   ["invalid-roots", "./a.txt\0\0./sub/deep\0"],
 ];
@@ -88,6 +93,60 @@ export const findCases: { name: string; script: string; records: "lines" | "nul"
     records: "nul",
   },
 ];
+
+for (const predicate of ["-exec", "-execdir", "-ok", "-okdir"]) {
+  findCases.push({
+    name: `execution spelling is a literal name: ${predicate}`,
+    script: `find . -name ${predicate} -print0`,
+    records: "nul",
+  });
+  findCases.push({
+    name: `execution spelling is a literal path: ${predicate}`,
+    script: `find . -path ${predicate} -print0`,
+    records: "nul",
+  });
+}
+findCases.push({
+  name: "execution spelling is a literal output format",
+  script: "find a.txt -printf -exec",
+  records: "bytes",
+});
+
+const executionForms = [
+  ["-exec", "\\;"],
+  ["-exec", "+"],
+  ["-execdir", "\\;"],
+  ["-execdir", "+"],
+  ["-ok", "\\;"],
+  ["-okdir", "\\;"],
+];
+
+export const findRejections = executionForms.flatMap(([predicate, terminator]) => {
+  const action = `${predicate} /bin/true '{}' ${terminator}`;
+  return [
+    { name: "before print", expression: `a.txt -print , ${action}` },
+    { name: "short circuit", expression: `a.txt -false ${action}` },
+    { name: "nonmatching traversal", expression: `sub -name absent ${action}` },
+    { name: "empty roots", expression: `-files0-from empty ${action}` },
+    { name: "before roots input", expression: `-files0-from sub ${action}` },
+    { name: "before stdin roots", expression: `-files0-from - ${action}` },
+    { name: "before missing root", expression: `missing ${action}` },
+  ].map(({ name, expression }) => ({
+    name: `${predicate} ${terminator}: ${name}`,
+    script: `find ${expression} < reply`,
+    diagnostic: `${predicate} is unsupported on WASI`,
+    stdout: "",
+  }));
+});
+
+for (const predicate of ["-ok", "-okdir"]) {
+  findRejections.push({
+    name: `${predicate}: leaves stdin unread`,
+    script: `{ find a.txt ${predicate} /bin/true '{}' \\;; status=$?; IFS= read -r answer; printf 'remaining:%s\\n' "$answer"; exit "$status"; } < reply`,
+    diagnostic: `${predicate} is unsupported on WASI`,
+    stdout: "remaining:y\n",
+  });
+}
 
 export async function seedFindTree(runtime: Runtime) {
   for (const path of findDirectories) await runtime.filesystem.mkdirp(`/tree/${path}`);

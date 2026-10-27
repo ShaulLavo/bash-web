@@ -244,3 +244,36 @@
          let dir_ret = process_dir(
              &path,
              &paths_and_matcher.config,
+--- a/src/find/matchers/mod.rs
++++ b/src/find/matchers/mod.rs
+@@ -619,6 +619,18 @@
+         .map_or(Predicate::Other, |&(_, predicate)| predicate)
+ }
+ 
++#[cfg(target_os = "wasi")]
++fn validate_wasi_predicate(
++    predicate: Predicate,
++    arg: &str,
++    index: usize,
++) -> Result<(), ParseError> {
++    if matches!(predicate, Predicate::Exec | Predicate::Prompt) {
++        return Err(ParseError::new(format!("{arg} is unsupported on WASI")).at(index));
++    }
++    Ok(())
++}
++
+ /// Turns one of the `logical_matchers` "binary operator with nothing before it"
+ /// errors into a diagnostic pointing at the operator.
+ fn binary_operator_error(err: &dyn Error, arg_index: usize) -> ParseError {
+@@ -676,7 +688,10 @@
+     let mut i = arg_index;
+     let mut invert_next_matcher = false;
+     while i < args.len() {
+-        let possible_submatcher = match lookup_predicate(args[i]) {
++        let predicate = lookup_predicate(args[i]);
++        #[cfg(target_os = "wasi")]
++        validate_wasi_predicate(predicate, args[i], i)?;
++        let possible_submatcher = match predicate {
+             Predicate::Print => Some(
+                 Printer::new(PrintDelimiter::Newline, None)
+                     .with_stdout_errors(config.stdout_errors.clone())
