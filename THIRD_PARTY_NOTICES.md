@@ -687,3 +687,10 @@ executable, shell builtin, or replacement implementation is included.
 Cargo's workspace lock records exact source and dependency identities;
 `scripts/notices.mjs` includes the upstream root license and dependency notices.
 See [cut](docs/cut.md) for tested behavior and runtime limits.
+
+
+## Optional Python payload
+
+`bash-web/utilities/python` loads the official CPython 3.15.2 WASI interpreter from source commit `5e58eaad7c58df58dfa8ea549c87996e01dd1077` and its full unmodified `Lib` tree plus generated sysconfig data. CPython's license includes the PSF License Agreement and historical Python licenses. The library also contains separately licensed components and bundled wheels.
+
+The Python build emits `python.NOTICES.txt` with source license texts, embedded library notices, and notices extracted from every bundled wheel. `python-licenses.json` records their source paths and hashes. Keep both with the interpreter and payload when distributing Python. When `dist/python.wasm` is present, `npm run notices:shell` requires `dist/python.NOTICES.txt` and includes its complete text in the normal generated distribution notices. An installation without Python assets does not distribute CPython.

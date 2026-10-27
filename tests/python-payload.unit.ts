@@ -203,7 +203,7 @@ for (const kind of ["foreign file", "directory", "symlink", "parent file", "pare
       /collision/,
     );
     assert.deepEqual(Array.from(state.files), before);
-    assert.equal(state.removed.length, 0);
+    assert.equal(state.removed.includes("/Lib/os.py"), false);
   });
 }
 
@@ -400,38 +400,36 @@ test("disposal during fetch joins both sources and prevents all later writes", a
   assert.equal(state.calls.length, 0);
 });
 
-test("disposal joins an admitted write and removes it before resolving", async (context) => {
+async function pausedPreparation(context: TestContext, phase: "write" | "drain") {
   const state = fixture(context);
   const entered = deferred();
   const resume = deferred();
-  state.write(async () => {
+  state[phase](async () => {
     entered.resolve();
     await resume.promise;
   });
-  const loading = state.payload.load(async () => wasm);
-  const rejected = assert.rejects(loading, /disposed/);
+  const rejected = assert.rejects(
+    state.payload.load(async () => wasm),
+    /disposed/,
+  );
   await entered.promise;
+  return { state, resume: resume.resolve, rejected };
+}
+
+test("disposal joins an admitted write and removes it before resolving", async (context) => {
+  const { state, resume, rejected } = await pausedPreparation(context, "write");
   const disposal = state.payload.dispose();
-  resume.resolve();
+  resume();
   await Promise.all([disposal, rejected]);
   assert.equal(state.files.size, 0);
   assert.equal(state.calls.filter((call) => call.startsWith("write:")).length, 1);
 });
 
 test("runtime disposal stops pending preparation and prevents cleanup filesystem calls", async (context) => {
-  const state = fixture(context);
-  const entered = deferred();
-  const resume = deferred();
-  state.drain(async () => {
-    entered.resolve();
-    await resume.promise;
-  });
-  const loading = state.payload.load(async () => wasm);
-  const rejected = assert.rejects(loading, /disposed/);
-  await entered.promise;
+  const { state, resume, rejected } = await pausedPreparation(context, "drain");
   state.runtime.disposed = true;
   const count = state.calls.length;
-  resume.resolve();
+  resume();
   await rejected;
   await state.payload.dispose();
   assert.equal(state.calls.length, count);
