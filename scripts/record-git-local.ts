@@ -1,14 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -93,7 +86,12 @@ function write(path: string, text: string): GitLocalAction {
 
 const init = git("init", "--quiet", "--initial-branch=main", "--object-format=sha1", "--template=");
 const status = query("status", "--porcelain=v1", "--untracked-files=all");
-const base = [init, write("story.txt", "base\n"), git("add", "story.txt"), git("commit", "-m", "base")];
+const base = [
+  init,
+  write("story.txt", "base\n"),
+  git("add", "story.txt"),
+  git("commit", "-m", "base"),
+];
 
 export const gitLocalInputs: { id: string; semantics: string; actions: GitLocalAction[] }[] = [
   {
@@ -212,6 +210,121 @@ export function gitLocalDigest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+function object(value: unknown): Record<string, unknown> {
+  assert.ok(value !== null && typeof value === "object" && !Array.isArray(value));
+  return Object.fromEntries(Object.entries(value));
+}
+
+function stringMap(value: unknown): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(object(value))) {
+    assert.equal(typeof entry, "string");
+    assert.ok(typeof entry === "string");
+    result[key] = entry;
+  }
+  return result;
+}
+
+function strings(value: unknown): string[] {
+  assert.ok(Array.isArray(value));
+  return value.map((entry: unknown) => {
+    assert.ok(typeof entry === "string");
+    return entry;
+  });
+}
+
+function validateState(value: unknown) {
+  const state = object(value);
+  assert.deepEqual(Object.keys(state).sort(), [
+    "files",
+    "head",
+    "history",
+    "refs",
+    "stash",
+    "status",
+  ]);
+  for (const path of Object.keys(stringMap(state.files))) gitLocalPath("/worktree", path);
+  assert.ok(typeof state.head === "string" && state.head.length > 0);
+  assert.ok(typeof state.status === "string");
+  strings(state.stash);
+  const history = object(state.history);
+  for (const [label, value] of Object.entries(history)) {
+    assert.match(label, /^c[1-9][0-9]*$/);
+    const commit = object(value);
+    assert.deepEqual(Object.keys(commit).sort(), ["parents", "subject"]);
+    assert.ok(typeof commit.subject === "string" && commit.subject.length > 0);
+    for (const parent of strings(commit.parents)) assert.ok(Object.hasOwn(history, parent));
+  }
+  for (const [ref, label] of Object.entries(stringMap(state.refs))) {
+    assert.ok(ref.startsWith("refs/heads/"));
+    assert.ok(Object.hasOwn(history, label));
+  }
+}
+
+function validateResult(value: unknown) {
+  const result = object(value);
+  assert.deepEqual(Object.keys(result).sort(), ["status", "stderr", "stdout"]);
+  assert.ok(Number.isInteger(result.status) && Number(result.status) >= 0);
+  assert.ok(result.stdout === null || typeof result.stdout === "string");
+  assert.ok(result.stderr === null || typeof result.stderr === "string");
+  return result;
+}
+
+function validateStep(value: unknown, action: GitLocalAction) {
+  const step = object(value);
+  assert.deepEqual(Object.keys(step).sort(), ["action", "expected", "oracle", "state"]);
+  assert.deepEqual(step.action, action);
+  validateState(step.state);
+  if (action.kind !== "git") {
+    assert.equal(step.expected, null);
+    assert.equal(step.oracle, null);
+    return;
+  }
+  const expected = validateResult(step.expected);
+  const oracle = validateResult(step.oracle);
+  assert.equal(typeof oracle.stdout, "string");
+  assert.equal(typeof oracle.stderr, "string");
+  assert.equal(expected.status, oracle.status);
+  for (const stream of ["stdout", "stderr"]) {
+    const text = oracle[stream];
+    assert.ok(typeof text === "string");
+    assert.equal(
+      expected[stream],
+      action.output === "exact" ? normalizeGitLocalOutput(text) : null,
+    );
+  }
+}
+
+export function validateGitLocalRecording(value: unknown): void {
+  const fixture = object(value);
+  assert.deepEqual(Object.keys(fixture).sort(), ["cases", "provenance", "schema"]);
+  assert.equal(fixture.schema, 1);
+  const provenance = object(fixture.provenance);
+  const identity = object(provenance.git);
+  assert.equal(identity.path, "/usr/bin/git");
+  assert.ok(typeof identity.version === "string" && /^git version \d+\.\d+/.test(identity.version));
+  assert.ok(typeof identity.sha256 === "string" && /^[0-9a-f]{64}$/.test(identity.sha256));
+  assert.deepEqual(provenance.environment, gitLocalEnvironment);
+  assert.deepEqual(provenance.config, gitLocalConfig);
+  assert.deepEqual(provenance.probes, gitLocalProbes);
+  assert.ok(typeof provenance.normalization === "string");
+  assert.equal(provenance.inputsSha256, gitLocalDigest(gitLocalInputs));
+  assert.equal(provenance.casesSha256, gitLocalDigest(fixture.cases));
+  assert.ok(Array.isArray(fixture.cases));
+  assert.equal(fixture.cases.length, gitLocalInputs.length);
+  const cases = fixture.cases;
+  gitLocalInputs.forEach((input, index) => {
+    const example = object(cases[index]);
+    assert.deepEqual(Object.keys(example).sort(), ["id", "semantics", "steps"]);
+    assert.equal(example.id, input.id);
+    assert.equal(example.semantics, input.semantics);
+    assert.ok(Array.isArray(example.steps));
+    assert.equal(example.steps.length, input.actions.length);
+    const steps = example.steps;
+    input.actions.forEach((action, index) => validateStep(steps[index], action));
+  });
+}
+
 export function nativeGit(cwd: string, argv: readonly string[]) {
   const args = gitLocalConfig.flatMap((entry) => ["-c", entry]).concat(argv);
   const result = spawnSync("/usr/bin/git", args, {
@@ -222,8 +335,12 @@ export function nativeGit(cwd: string, argv: readonly string[]) {
   });
   if (result.error) throw result.error;
   assert.equal(result.signal, null, `git ${argv.join(" ")} terminated by signal`);
-  assert.notEqual(result.status, null);
-  return { status: result.status ?? -1, stdout: result.stdout, stderr: result.stderr };
+  assert.ok(result.status !== null);
+  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
+export function normalizeGitLocalOutput(text: string): string {
+  return text.replace(/^index [0-9a-f]+\.\.[0-9a-f]+/gm, "index <old>..<new>");
 }
 
 function probe(cwd: string, argv: readonly string[]): string {
@@ -290,18 +407,26 @@ export function gitLocalPath(root: string, path: string): string {
   return join(root, path);
 }
 
-function recordStep(cwd: string, action: GitLocalAction, labels: Map<string, string>): GitLocalStep {
+function recordStep(
+  cwd: string,
+  action: GitLocalAction,
+  labels: Map<string, string>,
+): GitLocalStep {
   if (action.kind === "git") {
     const result = nativeGit(cwd, action.argv);
     return {
       action,
       expected: {
         status: result.status,
-        stdout: action.output === "exact" ? result.stdout : null,
-        stderr: action.output === "exact" ? result.stderr : null,
+        stdout: action.output === "exact" ? normalizeGitLocalOutput(result.stdout) : null,
+        stderr: action.output === "exact" ? normalizeGitLocalOutput(result.stderr) : null,
       },
       state: inspectState(cwd, labels),
-      oracle: { ...result, stdout: result.stdout.replaceAll(cwd, "<repo>"), stderr: result.stderr.replaceAll(cwd, "<repo>") },
+      oracle: {
+        ...result,
+        stdout: result.stdout.replaceAll(cwd, "<repo>"),
+        stderr: result.stderr.replaceAll(cwd, "<repo>"),
+      },
     };
   }
   const path = gitLocalPath(cwd, action.path);
@@ -317,7 +442,10 @@ export function recordGitLocal(scratchRoot = "/work/tmp") {
   assert.ok(isAbsolute(scratchRoot), "Scratch root must be absolute");
   const scratch = mkdtempSync(join(scratchRoot, "bash-web-git-oracle-"));
   const cleanup = () => rmSync(scratch, { recursive: true, force: true });
-  const interrupt = () => { cleanup(); process.exit(130); };
+  const interrupt = () => {
+    cleanup();
+    process.exit(130);
+  };
   process.once("SIGINT", interrupt);
   process.once("SIGTERM", interrupt);
   try {
@@ -325,18 +453,27 @@ export function recordGitLocal(scratchRoot = "/work/tmp") {
       const cwd = join(scratch, input.id);
       mkdirSync(cwd);
       const labels = new Map<string, string>();
-      return { id: input.id, semantics: input.semantics, steps: input.actions.map((action) => recordStep(cwd, action, labels)) };
+      return {
+        id: input.id,
+        semantics: input.semantics,
+        steps: input.actions.map((action) => recordStep(cwd, action, labels)),
+      };
     });
     return {
       schema: 1,
       provenance: {
-        git: { path: "/usr/bin/git", version: probe(scratch, ["--version"]).trimEnd(), sha256: createHash("sha256").update(readFileSync("/usr/bin/git")).digest("hex") },
+        git: {
+          path: "/usr/bin/git",
+          version: probe(scratch, ["--version"]).trimEnd(),
+          sha256: createHash("sha256").update(readFileSync("/usr/bin/git")).digest("hex"),
+        },
         environment: gitLocalEnvironment,
         config: gitLocalConfig,
         probes: gitLocalProbes,
         inputsSha256: gitLocalDigest(gitLocalInputs),
         casesSha256: gitLocalDigest(cases),
-        normalization: "Compare all states and exit statuses. Compare stdout/stderr only for exact queries. Commit labels c1,c2,... follow first observation in reverse topological history. No dates or object IDs in expected state. Raw mutation diagnostics are provenance only; scratch paths become <repo>.",
+        normalization:
+          "Compare all states and exit statuses. Compare stdout/stderr only for exact queries, replacing diff index blob IDs with <old>..<new>. Commit labels c1,c2,... follow first observation in reverse topological history. No dates or object IDs in expected state. Raw mutation diagnostics are provenance only; scratch paths become <repo>.",
       },
       cases,
     };
@@ -349,9 +486,17 @@ export function recordGitLocal(scratchRoot = "/work/tmp") {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const mode = process.argv[2];
-  assert.ok(mode === "--write" || mode === "--check", "Usage: node scripts/record-git-local.ts --write|--check");
+  assert.ok(
+    mode === "--write" || mode === "--check",
+    "Usage: node scripts/record-git-local.ts --write|--check",
+  );
   const fixture = new URL("./owned-fixtures/git-local.json", import.meta.url);
   const text = JSON.stringify(recordGitLocal(), null, 2) + "\n";
   if (mode === "--write") writeFileSync(fixture, text, { flag: "wx" });
-  else assert.equal(readFileSync(fixture, "utf8"), text, "Git recording differs; inspect provenance and semantics");
+  else
+    assert.equal(
+      readFileSync(fixture, "utf8"),
+      text,
+      "Git recording differs; inspect provenance and semantics",
+    );
 }
