@@ -52,17 +52,31 @@ separate from a child's `Outcome::StartFailed`. There is no native execution API
 
 ## Cancellation and cleanup
 
-`wait` consumes handled pending signals through Waffle. It cancels the owned job
-with SIGKILL, waits for teardown, then returns `Error::Interrupted(signal)`.
+`wait` consumes a handled pending signal through Waffle. It cancels the owned job
+with SIGKILL and returns `Error::Interrupted(signal)` after successful collection.
 The bridge does not install signal handlers or change signal dispositions.
 Default-action signals remain Waffle's responsibility. `cancel` kills the job and
-collects it; repeated cancellation or waits return the cached outcome.
-Direct cancellation and Drop leave handled signals pending in the caller. P's
-poll returns immediately while such a signal is pending, so cancellation can
-rescan until the child cleanup fence is ready. Only `wait` consumes a handled
-signal to report `Error::Interrupted`.
-Dropping an unfinished `Child` also cancels and collects it. Explicit cancellation
-lets callers observe cleanup errors. Drop attempts to report a cleanup failure
+collects it when the host can wait; completed calls return the cached outcome.
+
+P cannot block for cleanup while preserving handled pending signals. Its
+`poll(..., timeout=-1, ...)` returns zero before readiness scanning in that state.
+Cancellation returns `Error::CleanupWaitUnsupported { interrupted: None }` after
+that first wake, retaining the unfinished `Child`. It does not retry, consume or
+re-emit the parent's signal. If another signal interrupts collection initiated
+by `wait`, the same error carries `interrupted: Some(signal)` for the first
+delivery that `wait` already consumed. Other parent deliveries remain pending.
+This error means cleanup is unfinished. It is not a child outcome or a completed
+`Error::Interrupted`. Callers must retain ownership and must not loop on this gate.
+
+Automatic complete cleanup by Drop is unsupported when this gate occurs. Drop
+makes its best-effort cancellation attempt, reports unsupported collection and
+returns while Waffle still retains the child/job. An explicit lifecycle owner
+must collect it. `run` cannot return its temporary `Child` on an error, so callers
+that require recoverable cancellation ownership must use `spawn` and retain the
+handle. Utility integration that promises unconditional signal-preserving cleanup
+must remain gated until the host provides the missing wait capability.
+
+Explicit cancellation lets callers observe cleanup errors. Drop reports failure
 on stderr and ignores diagnostic write errors, including closed stderr.
 Rust Drop cannot run after fatal guest unwinds or process exit. At this pinned
 provider, killing the caller's job does not kill the independent job this API
@@ -132,6 +146,12 @@ through the committed Rust helper on the delivered worker.
   A host lifecycle owner must link and collect owned jobs before utility consumers
   can claim automatic cancellation. Joining the caller's job would include the
   waiting caller itself and cannot replace this ownership contract.
+- A noninterrupting, readiness-notified cleanup wait that leaves handled pending
+  signals intact and still honors fatal outcomes. At adopted P2,
+  `proc/abi.ts:752` returns zero from poll before readiness scanning when a signal
+  is pending. Blocking `wait_job` accepts only flags 0 and 1, and returns EINTR
+  for pending signals. `signal` changes dispositions rather than providing a
+  signal-preserving mask. The existing imports cannot provide this operation.
 
 These gates leave the committed codec, explicit descriptor bindings, status
 mapping, and live-owner wait/cancel API usable for qualified callers. Env, find
@@ -152,3 +172,11 @@ operation. They require the test worker and do not alter product imports.
 `node --test shell/wasi-process/tests/diagnostics.test.mjs` checks the strict
 diagnostic classifier. The browser runner rejects every unexpected broker,
 console or page diagnostic and requires the exact expected negative-test set.
+
+The `review-delayed-cancel`, `review-delayed-wait` and `review-delayed-drop`
+controls hold a real adapter quiescence fence on an explicit test-owned promise.
+They count cleanup polls and trip on a second poll before release. The fixture
+asserts pending-signal preservation and the unsupported-wait result before
+requesting release through its test-only `fixture_control` namespace. It then
+collects the actual fence and outcome after the test owner handles its signal.
+The namespace is a test rendezvous, not a process ABI or a product workaround.

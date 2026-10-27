@@ -72,6 +72,7 @@ pub fn inherited_stdio() -> Result<Vec<DescriptorBinding>, Error> {
 }
 
 /// Run a child and wait for its whole owned job's descriptor/filesystem safety fence.
+/// Use spawn instead when the caller must retain cleanup ownership after a gated wait.
 pub fn run(request: &Request) -> Result<Outcome, Error> {
     spawn(request)?.wait()
 }
@@ -99,7 +100,8 @@ pub fn spawn(request: &Request) -> Result<Child, Error> {
     Ok(child)
 }
 
-/// One child and an independent job. Dropping it kills and collects unfinished work.
+/// One child and an independent job. Drop attempts cleanup on a best-effort basis.
+/// Signal-preserving blocking cleanup is gated when the host cannot park.
 /// Use `cancel` explicitly when the caller needs to observe cleanup errors.
 /// Fatal caller termination does not run Drop or cancel this independent job on P.
 #[derive(Debug)]
@@ -135,16 +137,16 @@ impl Child {
         self.complete = true;
         Ok(Some(outcome))
     }
-    /// Pending handled signals cancel the owned job with SIGKILL, collect it, then
-    /// return Interrupted. This crate never changes the caller's signal dispositions.
+    /// A handled signal cancels the owned job with SIGKILL. Returns Interrupted
+    /// after collection, or CleanupWaitUnsupported if another delivery prevents
+    /// parking. This crate never changes the caller's signal dispositions.
     pub fn wait(&mut self) -> Result<Outcome, Error> {
         if self.complete {
             return self.outcome.ok_or(Error::InvalidRecord);
         }
         loop {
             if let Some(signal) = take_signal()? {
-                self.cancel()?;
-                return Err(Error::Interrupted(signal));
+                return self.cancel_after_signal(signal);
             }
             if let Some(outcome) = self.try_wait()? {
                 return Ok(outcome);
@@ -154,6 +156,8 @@ impl Child {
     }
     /// SIGKILL the owned job, including descendants, then collect all resources.
     /// Repeated calls return the cached outcome and cannot signal a recycled identity.
+    /// If the host cannot park without consuming caller signals, returns
+    /// CleanupWaitUnsupported with this Child still owning unfinished cleanup.
     pub fn cancel(&mut self) -> Result<Outcome, Error> {
         if self.complete {
             return self.outcome.ok_or(Error::InvalidRecord);
@@ -164,14 +168,24 @@ impl Child {
         };
         decode_host_result(operation, result)?;
         loop {
-            // Keep caller signals pending even when they make poll return immediately.
             if let Some(outcome) = self.try_wait()? {
                 return Ok(outcome);
             }
-            self.park()?;
+            if !self.park()? {
+                return Err(Error::CleanupWaitUnsupported { interrupted: None });
+            }
         }
     }
-    fn park(&self) -> Result<(), Error> {
+    fn cancel_after_signal(&mut self, signal: u8) -> Result<Outcome, Error> {
+        self.cancel().map_err(|error| match error {
+            Error::CleanupWaitUnsupported { .. } => Error::CleanupWaitUnsupported {
+                interrupted: Some(signal),
+            },
+            other => other,
+        })?;
+        Err(Error::Interrupted(signal))
+    }
+    fn park(&self) -> Result<bool, Error> {
         match (self.outcome, self.job) {
             (Some(_), Some(job)) => park(4, job),
             _ => park(2, self.pid),
@@ -217,7 +231,7 @@ fn take_signal() -> Result<Option<u8>, Error> {
     }
 }
 
-fn park(kind: u32, id: u32) -> Result<(), Error> {
+fn park(kind: u32, id: u32) -> Result<bool, Error> {
     let mut subscription = [0; 16];
     subscription[..4].copy_from_slice(&kind.to_le_bytes());
     subscription[4..8].copy_from_slice(&id.to_le_bytes());
@@ -228,7 +242,9 @@ fn park(kind: u32, id: u32) -> Result<(), Error> {
     if count > 1 {
         return Err(Error::InvalidRecord);
     }
-    Ok(())
+    // With timeout -1 and one subscription, P returns zero only for a pending
+    // signal. It has not waited or consumed that delivery. Cleanup cannot retry.
+    Ok(count == 1)
 }
 
 struct Access(u32);

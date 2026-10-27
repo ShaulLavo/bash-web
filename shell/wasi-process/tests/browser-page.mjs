@@ -119,6 +119,7 @@ export async function execute({ mode = "driver", injectBroker } = {}) {
         onError,
       }),
   });
+  const fence = createDelayedFence(mode.startsWith("review-delayed-"));
   try {
     const filesystem = runtime.filesystem;
     await filesystem.mkdirp("/bin");
@@ -130,6 +131,7 @@ export async function execute({ mode = "driver", injectBroker } = {}) {
     await filesystem.writeFile("/bin/no-start", new Uint8Array([0]));
     runtime.registerAdapter("fixture", (context, service) => {
       launches++;
+      fence.attach(context, service);
       return service.launchWorker(context, {
         workerUrl: "/worker.js",
         request: {
@@ -139,6 +141,7 @@ export async function execute({ mode = "driver", injectBroker } = {}) {
           // overlay is a separately documented host gap, not reproduced here.
           env: context.request.env,
           interruptible: context.interruptible,
+          testFence: fence.buffer,
         },
       });
     });
@@ -216,7 +219,9 @@ export async function execute({ mode = "driver", injectBroker } = {}) {
       cwd: "/",
       job: 0,
       fds: [0, 1, 2, 3, 9, 1_000_000]
-        .filter((fd) => fd !== 2 || !mode.startsWith("review-drop-"))
+        .filter(
+          (fd) => fd !== 2 || !(mode.startsWith("review-drop-") || mode === "review-delayed-drop"),
+        )
         .map((fd) => ({ child: fd, parent: fd })),
     });
     descriptors.dispose();
@@ -264,10 +269,18 @@ export async function execute({ mode = "driver", injectBroker } = {}) {
       retained.length === 1 && retained[0].pid === root,
       `uncollected processes: ${JSON.stringify(retained)}`,
     );
-    return { admission, abiFixture: { stdout, stderr, loads, retained }, diagnostics: errors };
+    return {
+      admission,
+      abiFixture: { stdout, stderr, loads, retained },
+      delayedFence: fence.proof(),
+      diagnostics: errors,
+    };
   } finally {
+    await fence.close();
     await runtime.dispose();
     assert(runtime.disposed, "runtime not disposed");
+    const proof = fence.proof();
+    assert(!proof || proof.pollsBeforeRelease <= 1, `DELAYED_FENCE_SPIN: ${JSON.stringify(proof)}`);
     if (injectBroker === "dispose") onError(null);
     diagnostics.verify(
       mode === "driver"
@@ -275,6 +288,59 @@ export async function execute({ mode = "driver", injectBroker } = {}) {
         : ["raw-admission"],
     );
   }
+}
+
+function createDelayedFence(enabled) {
+  const control = new Int32Array(new SharedArrayBuffer(8));
+  let release;
+  let started;
+  let quiescing = false;
+  let released = false;
+  const held = new Promise((resolve) => {
+    release = resolve;
+  });
+  const begun = new Promise((resolve) => {
+    started = resolve;
+  });
+  const driver = enabled
+    ? releaseRequestedFence(control, begun, () => {
+        assert(Atomics.load(control, 1) === 1, "cleanup polled more than once before release");
+        released = true;
+        release();
+      })
+    : Promise.resolve();
+  return {
+    buffer: enabled ? control.buffer : undefined,
+    attach(context, service) {
+      if (!enabled || context.request.argv[1] !== "delayed-spin") return;
+      service.registerController(context.pid, {
+        quiesce() {
+          quiescing = true;
+          started();
+          return held;
+        },
+      });
+    },
+    proof() {
+      return enabled
+        ? { pollsBeforeRelease: Atomics.load(control, 1), quiescing, released }
+        : undefined;
+    },
+    async close() {
+      release();
+      started();
+      Atomics.store(control, 0, 2);
+      Atomics.notify(control, 0);
+      await driver;
+    },
+  };
+}
+
+async function releaseRequestedFence(control, begun, release) {
+  await Atomics.waitAsync(control, 0, 0).value;
+  if (Atomics.load(control, 0) !== 1) return;
+  await begun;
+  release();
 }
 
 function injectedError(kind) {

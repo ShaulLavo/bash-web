@@ -40,12 +40,17 @@ mod fixture {
         fn raw_wait_job(job: u32, flags: u32, output: *mut u8) -> i32;
     }
 
+    #[link(wasm_import_module = "fixture_control")]
+    unsafe extern "C" {
+        fn release_fence();
+    }
+
     pub fn main() {
         let arguments: Vec<_> = std::env::args().collect();
         match arguments.get(1).map(String::as_str) {
             Some("driver") => driver(),
             Some("inspect") => inspect(),
-            Some("spin") => spin(),
+            Some("spin" | "delayed-spin") => spin(),
             Some("closed") => closed(),
             Some("leader") => leader(),
             Some("exit") => std::process::exit(arguments[2].parse().unwrap()),
@@ -54,8 +59,58 @@ mod fixture {
             Some("review-drop-child") => review_drop_child(),
             Some("review-drop-access") => review_drop_access(),
             Some("review-noop") => println!("REVIEW_OK"),
+            Some("review-delayed-cancel") => review_delayed_cancel(false),
+            Some("review-delayed-wait") => review_delayed_cancel(true),
+            Some("review-delayed-drop") => review_delayed_drop(),
             _ => panic!("unknown fixture mode"),
         }
+    }
+
+    fn review_delayed_cancel(wait_signal: bool) {
+        let mut child = spawn(&request("delayed-spin")).unwrap();
+        await_entry(child.pid());
+        assert_eq!(unsafe { signal(2, 2) }, 0);
+        assert_eq!(unsafe { signal(2, 3) }, 0);
+        if wait_signal {
+            assert_eq!(unsafe { signal(3, 2) }, 0);
+            assert_eq!(unsafe { signal(3, 3) }, 0);
+        }
+        let result = if wait_signal {
+            child.wait()
+        } else {
+            child.cancel()
+        };
+        assert_eq!(
+            result,
+            Err(Error::CleanupWaitUnsupported {
+                interrupted: if wait_signal { Some(2) } else { None },
+            })
+        );
+        assert_eq!(child.try_wait(), Ok(None), "held fence was collected early");
+        assert_eq!(unsafe { interrupted() }, if wait_signal { 3 } else { 2 });
+        assert_eq!(unsafe { signal(2, 0) }, 0);
+        assert_eq!(unsafe { signal(3, 0) }, 0);
+        unsafe { release_fence() };
+        assert_eq!(child.wait(), Ok(Outcome::Signaled(9)));
+        println!("REVIEW_OK");
+    }
+
+    fn review_delayed_drop() {
+        let child = spawn(&request("delayed-spin")).unwrap();
+        await_entry(child.pid());
+        let pid = child.pid();
+        let job = u32::try_from(unsafe { job_of(pid) }).unwrap();
+        assert_eq!(unsafe { signal(2, 2) }, 0);
+        assert_eq!(unsafe { signal(2, 3) }, 0);
+        drop(child);
+        assert_eq!(unsafe { interrupted() }, 2);
+        assert_eq!(unsafe { signal(2, 0) }, 0);
+        unsafe { release_fence() };
+        // This test owner retained the identities before Drop. Product callers
+        // cannot rely on Drop to collect a job when the host cannot park.
+        collect(|out| unsafe { raw_wait(pid, out) }, 2, pid);
+        collect(|out| unsafe { raw_wait_job(job, 1, out) }, 4, job);
+        println!("REVIEW_OK");
     }
 
     fn review_cancel(drop_child: bool) {
@@ -63,13 +118,25 @@ mod fixture {
         await_entry(child.pid());
         assert_eq!(unsafe { signal(2, 2) }, 0);
         assert_eq!(unsafe { signal(2, 3) }, 0);
+        let pid = child.pid();
+        let job = u32::try_from(unsafe { job_of(pid) }).unwrap();
         if drop_child {
             drop(child);
         } else {
-            assert_eq!(child.cancel().unwrap(), Outcome::Signaled(9));
+            assert!(matches!(
+                child.cancel(),
+                Ok(Outcome::Signaled(9)) | Err(Error::CleanupWaitUnsupported { interrupted: None })
+            ));
+            assert_eq!(unsafe { interrupted() }, 2, "parent SIGINT was consumed");
+            assert_eq!(unsafe { signal(2, 0) }, 0);
+            assert_eq!(child.wait(), Ok(Outcome::Signaled(9)));
+            println!("REVIEW_OK");
+            return;
         }
         assert_eq!(unsafe { interrupted() }, 2, "parent SIGINT was consumed");
         assert_eq!(unsafe { signal(2, 0) }, 0);
+        collect(|out| unsafe { raw_wait(pid, out) }, 2, pid);
+        collect(|out| unsafe { raw_wait_job(job, 1, out) }, 4, job);
         println!("REVIEW_OK");
     }
 
@@ -106,7 +173,7 @@ mod fixture {
         let mut output = [0u8; 16];
         loop {
             let result = call(record.as_mut_ptr());
-            if result == 0 {
+            if result == 0 || result == -12 {
                 return;
             }
             assert_eq!(result, -6);
