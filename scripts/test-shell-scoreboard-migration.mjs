@@ -614,6 +614,7 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
           "shell-process-group.mjs",
           "wasi-build.ts",
           "sed-source.ts",
+          "xargs-source.ts",
           "utility-artifacts.ts",
           "verify-wasi-guests.ts",
         ])

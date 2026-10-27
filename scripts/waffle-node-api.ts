@@ -28,4 +28,5 @@ export { installWc } from "../src/utilities/wc";
 export { installTail } from "../src/utilities/tail";
 export { installLs } from "../src/utilities/ls";
 export { installEnv } from "../src/utilities/env";
+export { installXargs } from "../src/utilities/xargs";
 export { installTr } from "../src/utilities/tr";
