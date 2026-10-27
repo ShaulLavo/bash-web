@@ -23,7 +23,18 @@ export interface WaffleCaseResult {
 
 const OUTPUT_LIMIT_BYTES = 4 * 1024 * 1024;
 const nodeDirectory = new URL("../.build/node/", import.meta.url);
-const utilities = ["cat", "grep", "head", "mkdir", "seq", "sort", "tail", "uniq", "wc"] as const;
+const utilities = [
+  "cat",
+  "find",
+  "grep",
+  "head",
+  "mkdir",
+  "seq",
+  "sort",
+  "tail",
+  "uniq",
+  "wc",
+] as const;
 const fixtures = [
   ["argv.py", "argv-py.wasm"],
   ["printenv.py", "printenv-py.wasm"],
@@ -76,6 +87,7 @@ async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: t
   const utilityWorkerUrl = new URL("shell.mjs", nodeDirectory);
   const installers = {
     cat: waffle.installCat,
+    find: waffle.installFind,
     grep: waffle.installGrep,
     head: waffle.installHead,
     mkdir: waffle.installMkdir,
@@ -86,7 +98,7 @@ async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: t
     wc: waffle.installWc,
   };
   for (const name of utilities) {
-    if (name === "head" || name === "sort" || name === "uniq" || name === "wc") {
+    if (name === "find" || name === "head" || name === "sort" || name === "uniq" || name === "wc") {
       await installers[name](runtime, {
         workerUrl: utilityWorkerUrl,
         source: async () => new Uint8Array(await readFile(`${directory}/${name}.wasm`)),

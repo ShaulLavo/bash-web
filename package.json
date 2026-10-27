@@ -20,9 +20,13 @@
   "exports": {
     ".": "./src/index.ts",
     "./shell": "./src/shell.ts",
+    "./utilities/cut": "./src/utilities/cut.ts",
+    "./utilities/env": "./src/utilities/env.ts",
     "./utilities/cat": "./src/utilities/cat.ts",
+    "./utilities/find": "./src/utilities/find.ts",
     "./utilities/grep": "./src/utilities/grep.ts",
     "./utilities/head": "./src/utilities/head.ts",
+    "./utilities/which": "./src/utilities/which.ts",
     "./utilities/ls": "./src/utilities/ls.ts",
     "./utilities/mkdir": "./src/utilities/mkdir.ts",
     "./utilities/seq": "./src/utilities/seq.ts",
@@ -39,6 +43,7 @@
     "./utilities/xargs": "./src/utilities/xargs.ts"
   },
   "scripts": {
+    "record:cut-tr": "node scripts/record-cut-tr.ts",
     "format:check": "oxfmt --check scripts shell src tests package.json vite.config.ts playwright.config.ts tsconfig.json .oxlintrc.json .knip.jsonc quality docs/code-quality.md '!scripts/fixtures/**/*.json'",
     "test:rust": "node scripts/check-shell-parser.mjs && cargo fmt --manifest-path shell/Cargo.toml --all --check && cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2",
     "build:shell": "node scripts/build-shell.ts",
@@ -105,6 +110,7 @@
     "build:utilities": "node scripts/build-utilities.ts",
     "build:ls": "node scripts/build-ls.ts",
     "test:ls": "node --test scripts/test-own-shell-ls.ts",
+    "test:find": "node --test scripts/test-own-shell-find.ts",
     "build:node-harness": "node scripts/build-node-harness.ts",
     "build:compat-control": "node scripts/build-compat-control.ts",
     "test:guest-build": "node --test scripts/test-rg-source.ts scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-sed-source.ts scripts/test-xargs-source.ts",

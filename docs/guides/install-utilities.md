@@ -1,10 +1,10 @@
 # Install utilities
 
-Give a shell `cat`, `grep`, `head`, `mkdir`, `seq`, `sort`, `tail`, `uniq`, and `wc`. The shell core has no external commands. Without an installed program, a command lookup on `PATH` fails with status 127.
+Give a shell `cat`, `cut`, `find`, `grep`, `head`, `mkdir`, `seq`, `sort`, `tail`, `uniq`, and `wc`. The shell core has no external commands. Without an installed program, a command lookup on `PATH` fails with status 127.
 
 Each utility is its own WASM program with its own entry, so you install only what the page needs and pay only for those.
 
-1. Build the browser assets (`npm run build:browser`). The build writes `dist/cat.wasm`, `dist/grep.wasm`, `dist/head.wasm`, `dist/mkdir.wasm`, `dist/seq.wasm`, `dist/sort.wasm`, `dist/tail.wasm`, `dist/uniq.wasm`, and `dist/wc.wasm`.
+1. Build the browser assets (`npm run build:browser`). The build writes `dist/cat.wasm`, `dist/cut.wasm`, `dist/grep.wasm`, `dist/head.wasm`, `dist/mkdir.wasm`, `dist/seq.wasm`, `dist/sort.wasm`, `dist/tail.wasm`, `dist/uniq.wasm`, and `dist/wc.wasm`.
 2. Install each utility on the same `Runtime` that you pass to `createShell`:
 
    ```ts
@@ -24,9 +24,9 @@ Each utility is its own WASM program with its own entry, so you install only wha
    }
    ```
 
-   The other entries are `bash-web/utilities/grep` (`installGrep`), `bash-web/utilities/head` (`installHead`), `bash-web/utilities/mkdir` (`installMkdir`), `bash-web/utilities/seq` (`installSeq`), `bash-web/utilities/sort` (`installSort`), `bash-web/utilities/tail` (`installTail`), `bash-web/utilities/uniq` (`installUniq`), and `bash-web/utilities/wc` (`installWc`).
+   The other entries are `bash-web/utilities/cut` (`installCut`), `bash-web/utilities/find` (`installFind`), `bash-web/utilities/grep` (`installGrep`), `bash-web/utilities/head` (`installHead`), `bash-web/utilities/mkdir` (`installMkdir`), `bash-web/utilities/seq` (`installSeq`), `bash-web/utilities/sort` (`installSort`), `bash-web/utilities/tail` (`installTail`), `bash-web/utilities/uniq` (`installUniq`), and `bash-web/utilities/wc` (`installWc`).
 
-3. If your bundler moves assets, pass the new URLs. `wasmUrl` points at the utility's `.wasm` file. `workerUrl` points at `dist/shell-worker.js`. For cooperative utilities, instead of `wasmUrl`, you can pass `module`, a compiled `WebAssembly.Module` or a function that returns one. Upstream `head`, `sort`, `uniq`, and `wc` take `source`, raw `Uint8Array` bytes or a function returning bytes, instead. Waffle needs those bytes to add interrupt checks.
+3. If your bundler moves assets, pass the new URLs. `wasmUrl` points at the utility's `.wasm` file. `workerUrl` points at `dist/shell-worker.js`. For cooperative utilities, instead of `wasmUrl`, you can pass `module`, a compiled `WebAssembly.Module` or a function that returns one. Upstream `cut`, `find`, `head`, `sort`, `uniq`, and `wc` take `source`, raw `Uint8Array` bytes or a function returning bytes, instead. Waffle needs those bytes to add interrupt checks.
 
 An install call writes a small marker file at `/bin/<name>` and registers the program with the runtime. It does not fetch, compile, or start a worker. The first command that runs the utility loads the guest.
 
@@ -42,19 +42,20 @@ Call `dispose()` after the utility's processes have stopped. It releases the reg
 
 ## What each utility supports
 
-The cooperative utilities support small subsets. `head`, `sort`, `uniq`, and `wc` run upstream uutils through ordinary WASI admission.
+The cooperative utilities support small subsets. `cut`, `head`, `sort`, `uniq`, and `wc` run upstream uutils through ordinary WASI admission.
 
-| Utility | Supported | Rejected |
-| ------- | --------- | -------- |
-| `cat` | File operands, or standard input when there are none | Options. Every argument is a file path, so `cat -n` fails |
-| `grep` | `-v -c -q -n -i -F -E`, basic regular expressions by default | Any other option, for example `-P` (status 2) |
-| `head` | Upstream lines, bytes, negative counts, NUL records, headers, help, and version. See [Head](../head.md) | Invalid options and counts (status 1). Buffered stdin can discard unread suffixes |
-| `mkdir` | `mkdir [-p] [--] dir...` | Any other option (status 2) |
-| `seq` | `seq end` and `seq start end`, integers | Step, separator, and other forms (status 2) |
-| `sort` | Upstream ordering options and file operands. The WASI path buffers input in memory and does not spill to temporary files. See [Sort](../sort.md) | Unsupported upstream options have no new compatibility claims |
-| `uniq` | Adjacent equal-record filtering, counts, and repeated-group selection. See [Uniq](../uniq.md) | Unsupported upstream options have no new compatibility claims |
-| `tail` | `tail [-n N] [--] [file]`; the last 10 lines by default; `-nN` is also accepted | Multiple files, filename headers, `-c`, `-f`, and other options (status 2). Retained input is capped at 16 MiB. See [tail](../tail.md) |
-| `wc` | Upstream line, word, and byte counts, file operands, standard input, and pipelines. See [wc](../wc.md) | Other upstream options have no new compatibility claims |
+| Utility | Supported                                                                                                                                        | Rejected                                                                                                                               |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `cat`   | File operands, or standard input when there are none                                                                                             | Options. Every argument is a file path, so `cat -n` fails                                                                              |
+| `grep`  | `-v -c -q -n -i -F -E`, basic regular expressions by default                                                                                     | Any other option, for example `-P` (status 2)                                                                                          |
+| `cut` | Upstream byte, character and field selection, complements, custom delimiters, binary and NUL records. See [cut](../cut.md) | Invalid options, ranges and delimiters. Locale-dependent multibyte behavior is not qualified |
+| `head`  | Upstream lines, bytes, negative counts, NUL records, headers, help, and version. See [Head](../head.md)                                          | Invalid options and counts (status 1). Buffered stdin can discard unread suffixes                                                      |
+| `mkdir` | `mkdir [-p] [--] dir...`                                                                                                                         | Any other option (status 2)                                                                                                            |
+| `seq`   | `seq end` and `seq start end`, integers                                                                                                          | Step, separator, and other forms (status 2)                                                                                            |
+| `sort`  | Upstream ordering options and file operands. The WASI path buffers input in memory and does not spill to temporary files. See [Sort](../sort.md) | Unsupported upstream options have no new compatibility claims                                                                          |
+| `uniq`  | Adjacent equal-record filtering, counts, and repeated-group selection. See [Uniq](../uniq.md)                                                    | Unsupported upstream options have no new compatibility claims                                                                          |
+| `tail`  | `tail [-n N] [--] [file]`; the last 10 lines by default; `-nN` is also accepted                                                                  | Multiple files, filename headers, `-c`, `-f`, and other options (status 2). Retained input is capped at 16 MiB. See [tail](../tail.md) |
+| `wc`    | Upstream line, word, and byte counts, file operands, standard input, and pipelines. See [wc](../wc.md)                                           | Other upstream options have no new compatibility claims                                                                                |
 
 `grep` is the only program that links the `regex` crate. The core build never does. See [ADR 003](../adr/003-one-core-shell-and-installable-utilities.md) for why the utilities are separate programs.
 
@@ -70,3 +71,11 @@ Import `installXargs` from `bash-web/utilities/xargs`. It loads an ordinary WASI
 ## Install upstream ls
 
 Import `installLs` from `bash-web/utilities/ls`. It uses the same caller-owned runtime and loads `dist/ls.wasm` on first spawn. This is an ordinary WASI guest. Use `WasiUtilityOptions` with `wasmUrl` or raw `source` bytes, not a compiled module. [ls](../ls.md) lists the qualified flags and the upstream WASI metadata limitations.
+
+## Look up registered programs
+
+Import `installWhich` from `bash-web/utilities/which`. It installs an ordinary WASI guest with the same lazy source and disposal contract. `which [-a|--all] [--] name...` queries live executable registrations, not Unix execute bits or installer markers. See [which](../which.md) for output, status, limitations, and Waffle process requirements.
+
+## Install print-only env
+
+Import `installEnv` from `bash-web/utilities/env`. It lazily loads `dist/env.wasm` as an ordinary WASI guest using `WasiUtilityOptions`. It prints and edits only its own guest environment. Program execution and signal options are outside the initial contract. See [Print-only env](../env.md) for qualified forms and the process dependency.

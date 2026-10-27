@@ -2,6 +2,7 @@
 mod acceptance;
 mod grep;
 mod tail;
+pub mod which;
 use shell_engine::{
     executor::Cancel,
     io::{Endpoint, FdTable, FileSystem},

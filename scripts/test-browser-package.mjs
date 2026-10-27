@@ -83,9 +83,13 @@ test("worker preparation bundles the public Waffle FS worker and finish-build re
   await rm(resolve(scratch, "dist"), { recursive: true });
   await mkdir(resolve(scratch, "dist"));
   const programs = [
+    "env",
     "cat",
+    "cut",
+    "find",
     "grep",
     "head",
+    "which",
     "ls",
     "mkdir",
     "rg",

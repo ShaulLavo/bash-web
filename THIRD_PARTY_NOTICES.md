@@ -676,3 +676,16 @@ and their transitive dependencies. No Bashkit head implementation is included.
 `shell/utilities/src/bin/sort.rs` and `shell/utilities/src/bin/uniq.rs` link the unmodified registry packages `uu_sort` and `uu_uniq` at version `0.12.0`. They are MIT licensed, copyright uutils developers. Both crates record uutils/coreutils revision `dc1efd89948a9ca4c78c3a4b9a6ac891019a8c69`, at `src/uu/sort` and `src/uu/uniq`. The individual wrappers initialize WASI cwd from `PWD` and call upstream entry points. No multicall binary or local replacement algorithm is included.
 
 `docs/sort-uniq-source.json` records the source checksums. `npm run notices:shell` includes their license files and the licenses of every transitive dependency in `dist/THIRD_PARTY_NOTICES.txt`.
+
+### Individual upstream cut program
+
+`cut.wasm` links the individual `uu_cut` and `uucore`
+packages from uutils/coreutils `07763857f6b9a547742a994b58aef0ccd036198b`,
+version `0.13.0`, under the retained [MIT license](docs/licenses/uutils-coreutils-MIT.txt).
+The upstream implementation is unmodified. The local Rust entries and
+TypeScript installers are original integration code. The `cut` entry sets the
+WASI working directory from `PWD` before calling upstream. No multicall
+executable, shell builtin, or replacement implementation is included.
+Cargo's workspace lock records exact source and dependency identities;
+`scripts/notices.mjs` includes the upstream root license and dependency notices.
+See [cut](docs/cut.md) for tested behavior and runtime limits.
