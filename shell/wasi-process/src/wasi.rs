@@ -23,38 +23,28 @@ pub fn inherited_shell_descriptors() -> Result<Vec<DescriptorBinding>, Error> {
     Err(Error::InvalidRecord)
 }
 
-#[link(wasm_import_module = "runtime_proc")]
-unsafe extern "C" {
-    #[link_name = "spawn"]
-    fn proc_spawn(ptr: *const u8, length: usize) -> i32;
-    #[link_name = "job_of"]
-    fn proc_job_of(pid: u32) -> i32;
-    #[link_name = "wait"]
-    fn proc_wait(pid: u32, output: *mut u8) -> i32;
-    #[link_name = "wait_job"]
-    fn proc_wait_job(job: u32, flags: u32, output: *mut u8) -> i32;
-    #[link_name = "kill"]
-    fn proc_kill(pid: u32, signal: i32) -> i32;
-    #[link_name = "kill_job"]
-    fn proc_kill_job(job: u32, signal: i32) -> i32;
-    #[link_name = "poll"]
-    fn proc_poll(ptr: *const u8, count: usize, timeout: i32, output: *mut u8) -> i32;
-    #[link_name = "interrupted"]
-    fn proc_interrupted() -> i32;
-    #[link_name = "fd_kind"]
-    fn proc_fd_kind(fd: u32) -> i32;
-    #[link_name = "access_start"]
-    fn proc_access_start(
-        path: *const u8,
-        length: usize,
-        cwd: *const u8,
-        cwd_len: usize,
-        mode: i32,
-    ) -> i32;
-    #[link_name = "access_take"]
-    fn proc_access_take(request: u32) -> i32;
-    #[link_name = "access_cancel"]
-    fn proc_access_cancel(request: u32) -> i32;
+mod imports {
+    #[link(wasm_import_module = "runtime_proc")]
+    unsafe extern "C" {
+        pub(super) fn spawn(ptr: *const u8, length: usize) -> i32;
+        pub(super) fn job_of(pid: u32) -> i32;
+        pub(super) fn wait(pid: u32, output: *mut u8) -> i32;
+        pub(super) fn wait_job(job: u32, flags: u32, output: *mut u8) -> i32;
+        pub(super) fn kill(pid: u32, signal: i32) -> i32;
+        pub(super) fn kill_job(job: u32, signal: i32) -> i32;
+        pub(super) fn poll(ptr: *const u8, count: usize, timeout: i32, output: *mut u8) -> i32;
+        pub(super) fn interrupted() -> i32;
+        pub(super) fn fd_kind(fd: u32) -> i32;
+        pub(super) fn access_start(
+            path: *const u8,
+            length: usize,
+            cwd: *const u8,
+            cwd_len: usize,
+            mode: i32,
+        ) -> i32;
+        pub(super) fn access_take(request: u32) -> i32;
+        pub(super) fn access_cancel(request: u32) -> i32;
+    }
 }
 
 /// Preserve open stdio only. Extra descriptors require explicit bindings from the caller.
@@ -62,7 +52,7 @@ unsafe extern "C" {
 pub fn inherited_stdio() -> Result<Vec<DescriptorBinding>, Error> {
     let mut bindings = Vec::new();
     for fd in 0..=2 {
-        match decode_host_result("fd_kind", unsafe { proc_fd_kind(fd) }) {
+        match decode_host_result("fd_kind", unsafe { imports::fd_kind(fd) }) {
             Ok(_) => bindings.push(DescriptorBinding::inherit(fd)),
             Err(Error::Host { errno: 8, .. }) => (),
             Err(error) => return Err(error),
@@ -81,7 +71,9 @@ pub fn run(request: &Request) -> Result<Outcome, Error> {
 /// No module is loaded until the caller actually calls this function.
 pub fn spawn(request: &Request) -> Result<Child, Error> {
     let bytes = request.encode()?;
-    let pid = decode_host_result("spawn", unsafe { proc_spawn(bytes.as_ptr(), bytes.len()) })?;
+    let pid = decode_host_result("spawn", unsafe {
+        imports::spawn(bytes.as_ptr(), bytes.len())
+    })?;
     if pid == 0 {
         return Err(Error::InvalidRecord);
     }
@@ -92,7 +84,7 @@ pub fn spawn(request: &Request) -> Result<Child, Error> {
         outcome: None,
         complete: false,
     };
-    let job = decode_host_result("job_of", unsafe { proc_job_of(pid) })?;
+    let job = decode_host_result("job_of", unsafe { imports::job_of(pid) })?;
     if job == 0 {
         return Err(Error::InvalidRecord);
     }
@@ -122,7 +114,7 @@ impl Child {
             return Ok(self.outcome);
         }
         if self.outcome.is_none() {
-            self.outcome = wait_record("wait", |out| unsafe { proc_wait(self.pid, out) })?;
+            self.outcome = wait_record("wait", |out| unsafe { imports::wait(self.pid, out) })?;
         }
         let Some(outcome) = self.outcome else {
             return Ok(None);
@@ -131,7 +123,7 @@ impl Child {
             self.complete = true;
             return Ok(Some(outcome));
         };
-        if wait_record("wait_job", |out| unsafe { proc_wait_job(job, 1, out) })?.is_none() {
+        if wait_record("wait_job", |out| unsafe { imports::wait_job(job, 1, out) })?.is_none() {
             return Ok(None);
         }
         self.complete = true;
@@ -163,8 +155,8 @@ impl Child {
             return self.outcome.ok_or(Error::InvalidRecord);
         }
         let (operation, result) = match self.job {
-            Some(job) => ("kill_job", unsafe { proc_kill_job(job, 9) }),
-            None => ("kill", unsafe { proc_kill(self.pid, 9) }),
+            Some(job) => ("kill_job", unsafe { imports::kill_job(job, 9) }),
+            None => ("kill", unsafe { imports::kill(self.pid, 9) }),
         };
         decode_host_result(operation, result)?;
         loop {
@@ -221,7 +213,7 @@ fn wait_record(
 }
 
 fn take_signal() -> Result<Option<u8>, Error> {
-    let signal = decode_host_result("interrupted", unsafe { proc_interrupted() })?;
+    let signal = decode_host_result("interrupted", unsafe { imports::interrupted() })?;
     match signal {
         0 => Ok(None),
         1..=64 if signal != 32 && signal != 33 => Ok(Some(
@@ -237,7 +229,7 @@ fn park(kind: u32, id: u32) -> Result<bool, Error> {
     subscription[4..8].copy_from_slice(&id.to_le_bytes());
     let mut output = [0; 16];
     let count = decode_host_result("poll", unsafe {
-        proc_poll(subscription.as_ptr(), 1, -1, output.as_mut_ptr())
+        imports::poll(subscription.as_ptr(), 1, -1, output.as_mut_ptr())
     })?;
     if count > 1 {
         return Err(Error::InvalidRecord);
@@ -252,7 +244,7 @@ impl Access {
     fn check(path: &str, cwd: &str) -> Result<(), Error> {
         validate_path(path, false)?;
         let id = decode_host_result("access_start", unsafe {
-            proc_access_start(path.as_ptr(), path.len(), cwd.as_ptr(), cwd.len(), 1)
+            imports::access_start(path.as_ptr(), path.len(), cwd.as_ptr(), cwd.len(), 1)
         })?;
         if id == 0 {
             return Err(Error::InvalidRecord);
@@ -265,7 +257,7 @@ impl Access {
             if let Some(signal) = take_signal()? {
                 return Err(Error::Interrupted(signal));
             }
-            let result = unsafe { proc_access_take(self.0) };
+            let result = unsafe { imports::access_take(self.0) };
             if result == -6 {
                 park(5, self.0)?;
                 continue;
@@ -281,7 +273,7 @@ impl Access {
 }
 impl Drop for Access {
     fn drop(&mut self) {
-        let result = unsafe { proc_access_cancel(self.0) };
+        let result = unsafe { imports::access_cancel(self.0) };
         if let Err(error) = decode_host_result("access_cancel", result) {
             let _ = writeln!(
                 std::io::stderr().lock(),

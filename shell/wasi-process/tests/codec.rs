@@ -90,10 +90,8 @@ fn bound_encoded_size_including_json_escape_expansion() {
 }
 
 fn record(kind: u32, value: i32) -> [u8; 8] {
-    let mut bytes = [0; 8];
-    bytes[..4].copy_from_slice(&kind.to_le_bytes());
-    bytes[4..].copy_from_slice(&value.to_le_bytes());
-    bytes
+    let bits = u64::from(kind) | (u64::from(value.cast_unsigned()) << u32::BITS);
+    bits.to_le_bytes()
 }
 
 #[test]

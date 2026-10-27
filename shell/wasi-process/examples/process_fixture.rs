@@ -69,11 +69,9 @@ mod fixture {
     fn review_delayed_cancel(wait_signal: bool) {
         let mut child = spawn(&request("delayed-spin")).unwrap();
         await_entry(child.pid());
-        assert_eq!(unsafe { signal(2, 2) }, 0);
-        assert_eq!(unsafe { signal(2, 3) }, 0);
+        raise_handled_signal(2);
         if wait_signal {
-            assert_eq!(unsafe { signal(3, 2) }, 0);
-            assert_eq!(unsafe { signal(3, 3) }, 0);
+            raise_handled_signal(3);
         }
         let result = if wait_signal {
             child.wait()
@@ -100,24 +98,21 @@ mod fixture {
         await_entry(child.pid());
         let pid = child.pid();
         let job = u32::try_from(unsafe { job_of(pid) }).unwrap();
-        assert_eq!(unsafe { signal(2, 2) }, 0);
-        assert_eq!(unsafe { signal(2, 3) }, 0);
+        raise_handled_signal(2);
         drop(child);
         assert_eq!(unsafe { interrupted() }, 2);
         assert_eq!(unsafe { signal(2, 0) }, 0);
         unsafe { release_fence() };
         // This test owner retained the identities before Drop. Product callers
         // cannot rely on Drop to collect a job when the host cannot park.
-        collect(|out| unsafe { raw_wait(pid, out) }, 2, pid);
-        collect(|out| unsafe { raw_wait_job(job, 1, out) }, 4, job);
+        collect_child(pid, job);
         println!("REVIEW_OK");
     }
 
     fn review_cancel(drop_child: bool) {
         let mut child = spawn(&request("spin")).unwrap();
         await_entry(child.pid());
-        assert_eq!(unsafe { signal(2, 2) }, 0);
-        assert_eq!(unsafe { signal(2, 3) }, 0);
+        raise_handled_signal(2);
         let pid = child.pid();
         let job = u32::try_from(unsafe { job_of(pid) }).unwrap();
         if drop_child {
@@ -135,8 +130,7 @@ mod fixture {
         }
         assert_eq!(unsafe { interrupted() }, 2, "parent SIGINT was consumed");
         assert_eq!(unsafe { signal(2, 0) }, 0);
-        collect(|out| unsafe { raw_wait(pid, out) }, 2, pid);
-        collect(|out| unsafe { raw_wait_job(job, 1, out) }, 4, job);
+        collect_child(pid, job);
         println!("REVIEW_OK");
     }
 
@@ -148,21 +142,33 @@ mod fixture {
         let job = u32::try_from(unsafe { job_of(pid) }).unwrap();
         // The test worker kills the real child, then injects an error return.
         drop(child);
-        collect(|out| unsafe { raw_wait(pid, out) }, 2, pid);
-        collect(|out| unsafe { raw_wait_job(job, 1, out) }, 4, job);
+        collect_child(pid, job);
         println!("REVIEW_OK");
     }
 
     fn review_drop_access() {
         assert_eq!(unsafe { fd_kind(2) }, -8);
-        assert_eq!(unsafe { signal(2, 2) }, 0);
-        assert_eq!(unsafe { signal(2, 3) }, 0);
+        assert_interrupted_access();
+        println!("REVIEW_OK");
+    }
+
+    fn assert_interrupted_access() {
+        raise_handled_signal(2);
         assert_eq!(
             resolve_executable("fixture", Some("/bin"), "/"),
             Err(Error::Interrupted(2))
         );
         assert_eq!(unsafe { signal(2, 0) }, 0);
-        println!("REVIEW_OK");
+    }
+
+    fn raise_handled_signal(number: i32) {
+        assert_eq!(unsafe { signal(number, 2) }, 0);
+        assert_eq!(unsafe { signal(number, 3) }, 0);
+    }
+
+    fn collect_child(pid: u32, job: u32) {
+        collect(|out| unsafe { raw_wait(pid, out) }, 2, pid);
+        collect(|out| unsafe { raw_wait_job(job, 1, out) }, 4, job);
     }
 
     fn collect(call: impl Fn(*mut u8) -> i32, kind: u32, id: u32) {
@@ -284,17 +290,10 @@ mod fixture {
         drop(child);
         let mut child = spawn(&request("spin")).unwrap();
         await_entry(child.pid());
-        assert_eq!(unsafe { signal(2, 2) }, 0);
-        assert_eq!(unsafe { signal(2, 3) }, 0);
+        raise_handled_signal(2);
         assert_eq!(child.wait(), Err(Error::Interrupted(2)));
         assert_eq!(unsafe { signal(2, 0) }, 0);
-        assert_eq!(unsafe { signal(2, 2) }, 0);
-        assert_eq!(unsafe { signal(2, 3) }, 0);
-        assert_eq!(
-            resolve_executable("fixture", Some("/bin"), "/"),
-            Err(Error::Interrupted(2))
-        );
-        assert_eq!(unsafe { signal(2, 0) }, 0);
+        assert_interrupted_access();
         println!("CLEANUP_OK");
     }
 
