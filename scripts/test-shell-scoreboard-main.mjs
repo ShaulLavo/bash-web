@@ -689,6 +689,15 @@ function hostedClient(sourceSha, inputs) {
   }
   return { request, requests };
 }
+async function withObservationRepo(body) {
+  await withRepo(async ({ root, put, commit }) => {
+    put("base.txt", "base");
+    commit();
+    put(authority.workflowPath, provenance().workflow);
+    const sourceSha = commit();
+    await body({ root, sourceSha });
+  });
+}
 test("API admission preserves all completed attempts while the workflow is running, including the known timeout", async () => {
   await withRepo(async ({ root, put, commit }) => {
     put(authority.workflowPath, provenance().workflow);
@@ -760,11 +769,7 @@ test("API admission rejects expired evidence and never treats a cancelled produc
   });
 });
 test("completed failed main attempts can admit a complete observation without sealing raw", async () => {
-  await withRepo(async ({ root, put, commit }) => {
-    put("base.txt", "base");
-    commit();
-    put(authority.workflowPath, provenance().workflow);
-    const sourceSha = commit();
+  await withObservationRepo(async ({ root, sourceSha }) => {
     const input = hostedObservation({ root, sourceSha });
     const client = hostedClient(sourceSha, [input]);
     const found = await mainEvidence({ root, oracle, client }).collect(sourceSha);
@@ -806,11 +811,7 @@ test("observation admission stays closed for incomplete or wrongly gated attempt
     ["failed sealer", (input) => (input.jobs[3].conclusion = "failure")],
   ];
   for (const [name, patch] of patches) {
-    await withRepo(async ({ root, put, commit }) => {
-      put("base.txt", "base");
-      commit();
-      put(authority.workflowPath, provenance().workflow);
-      const sourceSha = commit();
+    await withObservationRepo(async ({ root, sourceSha }) => {
       const input = hostedObservation({ root, sourceSha });
       patch(input);
       const found = await mainEvidence({
@@ -841,11 +842,7 @@ test("observation payload tampering fails closed", async () => {
     ["wrong prepare source", (input) => (input.jobs[0].head_sha = sha(2))],
   ];
   for (const [name, patch] of cases) {
-    await withRepo(async ({ root, put, commit }) => {
-      put("base.txt", "base");
-      commit();
-      put(authority.workflowPath, provenance().workflow);
-      const sourceSha = commit();
+    await withObservationRepo(async ({ root, sourceSha }) => {
       const input = hostedObservation({ root, sourceSha });
       patch(input);
       if (name !== "score digest mismatch" && name !== "expired") input.refresh();
@@ -858,11 +855,7 @@ test("observation payload tampering fails closed", async () => {
 });
 
 test("observation uploader shape is unique and explicitly optional-file", async () => {
-  await withRepo(async ({ root, put, commit }) => {
-    put("base.txt", "base");
-    commit();
-    put(authority.workflowPath, provenance().workflow);
-    const sourceSha = commit();
+  await withObservationRepo(async ({ root, sourceSha }) => {
     const input = hostedObservation({ root, sourceSha });
     const uploader = {
       run: input.run,
