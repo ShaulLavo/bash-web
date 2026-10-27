@@ -10,6 +10,15 @@
   "sbom_sha256": "d2c26cfc418b268180009e8f3bc4261cbe1aeb4662ee7bb92b6d9624583e6c1c",
   "sbom_url": "https://www.python.org/ftp/python/3.15.2/Python-3.15.2.tar.xz.spdx.json",
   "tag": "v3.15.2",
+  "appliedPatches": [
+    {
+      "path": "patches/cpython-wasi-cwd.patch",
+      "target": "Modules/main.c",
+      "sha256": "b85dda59d0aef994c3e2b9b1cf09bd2f121d31c79363094ed638051965773c1b",
+      "upstreamSha256": "724ebf378f2d33974ed8342d3ffba755ddbf6d9b14e0253563ca28e6190c5adc",
+      "patchedSha256": "ce326dfb6fa4843c26b120cbaee8d8ed5e108be5eafd620be113b3776faf0ec5"
+    }
+  ],
   "sourceCorrespondence": {
     "Doc/license.rst": "0d4c04850f7320219853c3c9d20cf9d2c6916524030e147f220f2b96b5ae8aeb",
     "LICENSE": "b0e25a78cffb43f4d92de8b61ccfa1f1f98ecbc22330b54b5251e7b6ba010231",

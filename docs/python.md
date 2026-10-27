@@ -18,7 +18,7 @@ Serve `python.wasm`, `python-stdlib.json`, `python-files/**`, and `python.NOTICE
 
 Installation registers the executable without fetching Python assets, creating payload directories, or starting a process worker. The first spawn shares one interpreter/payload load across concurrent callers. Every payload file's byte count and SHA-256 must match before any file is installed, and filesystem drain completes before the interpreter can launch. Successful later spawns reuse the cached program. A failed attempt rolls back unchanged files it created and lets a later spawn retry.
 
-The supported slice is `--version`, `-c`, script files and arguments, standard-library imports including `json`, `os`, `sys`, and `sysconfig`, ordinary guest file I/O, stdin/stdout/stderr, and exit status. Subprocesses, threads, sockets, pip, dynamic native extensions, and interactive REPL behavior are outside this slice. This is a WASI build, not a promise that every CPython module works in a browser.
+The supported slice is `--version`, `-c`, script files and arguments, standard-library imports including `json`, `os`, `sys`, and `sysconfig`, ordinary guest file I/O, stdin/stdout/stderr, exit status, and the caller's requested cwd for `os.getcwd()` and relative paths. Subprocesses, threads, sockets, pip, dynamic native extensions, and interactive REPL behavior are outside this slice. This is a WASI build, not a promise that every CPython module works in a browser.
 
 ## Options and payload ownership
 

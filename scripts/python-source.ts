@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, resolve } from "node:path";
 
 export const pythonSource = Object.freeze({
   version: "3.15.2",
@@ -13,6 +21,13 @@ export const pythonSource = Object.freeze({
   archiveSha256: "8b5536d280142ecf6cdfe15d12a21ba1c65e300bbf7b28a8d0cdb849575797de",
   archiveBytes: 27960396,
   argv0: "/cross-build/wasm32-wasip1/python.wasm",
+  patch: Object.freeze({
+    path: "patches/cpython-wasi-cwd.patch",
+    target: "Modules/main.c",
+    sha256: "b85dda59d0aef994c3e2b9b1cf09bd2f121d31c79363094ed638051965773c1b",
+    upstreamSha256: "724ebf378f2d33974ed8342d3ffba755ddbf6d9b14e0253563ca28e6190c5adc",
+    patchedSha256: "ce326dfb6fa4843c26b120cbaee8d8ed5e108be5eafd620be113b3776faf0ec5",
+  }),
 });
 
 export interface PythonPayloadFile {
@@ -49,6 +64,12 @@ export function verifyPythonSource(root: string, source: string) {
     readFileSync(resolve(root, "third-party/cpython/provenance.json"), "utf8"),
   );
   assert.ok(receipt && typeof receipt === "object" && "sourceCorrespondence" in receipt);
+  assert.deepEqual(
+    receipt && typeof receipt === "object" && "appliedPatches" in receipt
+      ? receipt.appliedPatches
+      : undefined,
+    [pythonSource.patch],
+  );
   assert.ok(receipt.sourceCorrespondence && typeof receipt.sourceCorrespondence === "object");
   for (const [path, hash] of Object.entries(receipt.sourceCorrespondence)) {
     assert.equal(sha256(readFileSync(resolve(source, path))), hash, path);
@@ -57,6 +78,19 @@ export function verifyPythonSource(root: string, source: string) {
     readFileSync(resolve(source, "Include/patchlevel.h"), "utf8"),
     /#define PY_VERSION\s+"3\.15\.2"/,
   );
+}
+
+function applyPythonSourcePatch(root: string, source: string) {
+  const patch = pythonSource.patch;
+  const patchPath = resolve(root, patch.path);
+  assert.equal(sha256(readFileSync(patchPath)), patch.sha256, patch.path);
+  const target = resolve(source, patch.target);
+  assert.equal(sha256(readFileSync(target)), patch.upstreamSha256, patch.target);
+  execFileSync("git", ["apply", patchPath], {
+    cwd: source,
+    env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(realpathSync(source)) },
+  });
+  assert.equal(sha256(readFileSync(target)), patch.patchedSha256, patch.target);
 }
 
 export async function preparePythonSource(root: string, work: string) {
@@ -76,6 +110,7 @@ export async function preparePythonSource(root: string, work: string) {
   mkdirSync(source);
   execFileSync("tar", ["-xJf", archive, "--strip-components=1", "-C", source]);
   verifyPythonSource(root, source);
+  applyPythonSourcePatch(root, source);
   const initialLib = resolve(work, "initial-Lib");
   cpSync(resolve(source, "Lib"), initialLib, { recursive: true, errorOnExist: true, force: false });
   return { source, initialLib };

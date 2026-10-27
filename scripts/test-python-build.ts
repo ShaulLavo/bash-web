@@ -192,6 +192,7 @@ test("source correspondence checks reject a changed pinned input", (context) => 
   put(
     "third-party/cpython/provenance.json",
     JSON.stringify({
+      appliedPatches: [pythonSource.patch],
       sourceCorrespondence: {
         "Platforms/WASI/config.toml": sha256('host-triple = "wasm32-wasip1"\n'),
       },

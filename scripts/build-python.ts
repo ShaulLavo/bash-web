@@ -268,7 +268,7 @@ for(const [path,text] of Object.entries(${JSON.stringify(pythonGuestFiles)})) {
 function run(fixture) {
   const out=[],err=[];
   let input=Buffer.from(fixture.input??"");
-  const wasi=new Wasi({args:[${JSON.stringify(pythonSource.argv0)}].concat(fixture.args),env:{PYTHONDONTWRITEBYTECODE:"1"},fs,preopens:{"/":"/"},stdout:bytes=>out.push(Buffer.from(bytes)),stderr:bytes=>err.push(Buffer.from(bytes)),stdin:cap=>{const chunk=input.subarray(0,cap);input=input.subarray(chunk.length);return chunk;},sleep(){throw Error("Unexpected blocking Python call");}});
+  const wasi=new Wasi({args:[${JSON.stringify(pythonSource.argv0)}].concat(fixture.args),env:{PYTHONDONTWRITEBYTECODE:"1",PWD:"/"},fs,preopens:{"/":"/"},stdout:bytes=>out.push(Buffer.from(bytes)),stderr:bytes=>err.push(Buffer.from(bytes)),stdin:cap=>{const chunk=input.subarray(0,cap);input=input.subarray(chunk.length);return chunk;},sleep(){throw Error("Unexpected blocking Python call");}});
   try {
     const imports=wasi.imports(module);
     for(const entry of WebAssembly.Module.imports(module)) {
@@ -355,6 +355,8 @@ function qualifyPythonWasmtime(output: string) {
       `${scratch}::/`,
       "--env",
       "PYTHONDONTWRITEBYTECODE=1",
+      "--env",
+      "PWD=/",
       resolve(output, "python.wasm"),
     ];
     const results = pythonUsageCases().map((fixture) => {
@@ -499,6 +501,7 @@ export async function qualifyPythonArtifact(
   const receipt = {
     cpython: pythonSource.revision,
     source: pythonSource,
+    sourcePatch: pythonSource.patch,
     waffle: waffleRevision,
     sdk: readFileSync(resolve(config.sdk, "VERSION"), "utf8"),
     sysrootRecipe: config.identity,
