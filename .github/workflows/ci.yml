@@ -489,6 +489,7 @@ jobs:
       - run: npm run prepare:python:browser
         env:
           BASH_WEB_PYTHON_SHELL_WASM: public/programs/shell-engine.wasm
+      - run: npm run test:find:browser
       - run: npm run test:runtime:terminal
       - run: npm run test:installed-sed
       - run: npm run test:browser
