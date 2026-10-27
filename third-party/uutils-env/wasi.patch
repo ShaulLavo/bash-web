@@ -1,0 +1,60 @@
+--- a/src/env.rs
++++ b/src/env.rs
+@@ -11,6 +11,9 @@
+ pub mod string_expander;
+ pub mod string_parser;
+ pub mod variable_parser;
++
++#[cfg(target_os = "wasi")]
++mod wasi_support;
+ 
+ use clap::builder::ValueParser;
+ use clap::{Arg, ArgAction, Command};
+@@ -792,6 +795,9 @@
+             &signal_apply_all,
+         )?;
+ 
++        #[cfg(target_os = "wasi")]
++        wasi_support::validate_execution(&opts)?;
++
+         // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
+         //       easily handle the case where no command is given
+ 
+@@ -955,6 +961,9 @@
+     matches: &'a clap::ArgMatches,
+     #[cfg(all(unix, not(target_os = "fuchsia")))] signal_apply_all: &BTreeSet<&'static str>,
+ ) -> UResult<Options<'a>> {
++    #[cfg(target_os = "wasi")]
++    wasi_support::validate_options(matches)?;
++
+     let ignore_env = matches.get_flag("ignore-environment");
+     let line_ending = LineEnding::from_zero_flag(matches.get_flag("null"));
+     let running_directory = matches
+--- /dev/null
++++ b/src/wasi_support.rs
+@@ -0,0 +1,25 @@
++// Local WASI restrictions for upstream env. See ../wasi.patch and provenance.json.
++use uucore::error::{UResult, USimpleError};
++
++pub fn validate_options(matches: &clap::ArgMatches) -> UResult<()> {
++    let signal_option = ["ignore-signal", "default-signal", "block-signal"]
++        .into_iter()
++        .any(|option| matches.contains_id(option));
++    if signal_option || matches.get_flag("list-signal-handling") {
++        return Err(USimpleError::new(
++            125,
++            "signal options are unsupported on WASI",
++        ));
++    }
++    Ok(())
++}
++
++pub fn validate_execution(opts: &super::Options<'_>) -> UResult<()> {
++    if opts.program.is_empty() {
++        return Ok(());
++    }
++    Err(USimpleError::new(
++        125,
++        "program execution is unsupported on this runtime",
++    ))
++}
