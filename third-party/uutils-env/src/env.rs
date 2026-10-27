@@ -47,8 +47,8 @@ use std::os::unix::ffi::OsStrExt;
 
 use uucore::display::{Quotable, print_all_env_vars};
 #[cfg(not(target_os = "wasi"))]
-use uucore::error::strip_errno;
-use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
+use uucore::error::{ExitCode, strip_errno};
+use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals::{

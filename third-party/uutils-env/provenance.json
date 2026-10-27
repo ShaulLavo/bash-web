@@ -21,13 +21,13 @@
     "locales/en-US.ftl": "1e951c21651bf601fc1101f0d22674208999857bac8a865842ffd635e1cc07eb",
     "locales/fr-FR.ftl": "ae23fe4b521996d9e662aa7e7e9c3384aeb6700ba272a3adadf67dea817c0cff",
     "src/diagnostics.rs": "db358221261dd95e8f77b83327f6763b8df28523bfd03987ad9dfaabe3c55013",
-    "src/env.rs": "b6eee76264a9b9ceee5437cbbb755d78f034b1c8eadc93e97d536186c2baf76f",
+    "src/env.rs": "d920f985d20edc75e8cdb06b14cb32c5be3d6be83499be8c7703f495713ced39",
     "src/native_int_str.rs": "6698064ba4abf2e8603828c1508a592c1f8c013fec2f905bb78973e4f3c3efab",
     "src/split_iterator.rs": "92e8f9d8cb9a66e2a576e0b79c6b9570a665c85cdab201cd36999c64e8db7ebb",
     "src/string_expander.rs": "0b232ca38c0b51f90be8400a697325b649e0e151436416c9f24efb076e5bd3ab",
     "src/string_parser.rs": "b0e58c1dccdf3e68627a7813463e3c599c863c4eb403158c317ed09fd62af19a",
     "src/variable_parser.rs": "eccf830341f02bafc1f6abfd88d6cfe36028256b4f4f5ef32a4f6203b0940704",
-    "src/wasi_support.rs": "d48b8e9ed1579e7c42df67d23acee289fa6b97e177bc97953204a99b8e83e7be",
-    "wasi.patch": "fbad0472f2b0e07ff23954995c6f3698be78c044087f2276b603e37076e9a638"
+    "src/wasi_support.rs": "5aedd94473f0d9f3c34e27bca9452fd69b5afff8481e8ca468a00993e04aa1c5",
+    "wasi.patch": "b9aedade33a8aaa4cb6d03174daca89deed6009d97b787da0c86488c7ea12b03"
   }
 }

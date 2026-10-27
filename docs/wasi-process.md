@@ -1,182 +1,27 @@
 # WASI utility processes
 
-`shell-wasi-process` provides the Rust process API for a WASI guest on its caller's
-Waffle runtime. Ordinary source-byte utility integration is gated by admission.
-It creates no runtime, host process, thread, socket or output relay.
-Its process imports match Waffle `c312af63`, adopted through Shell main
-`7deb0fdcf8c8cdac20bf8e55393c475ea4cc5f54`. The process modules are unchanged
-from the qualified `d0c5f8a1a9a6723c2f9fccf5df8544b8aad84a00` contract.
+`shell-wasi-process` is the Rust process consumer for WASI utilities on the caller's Waffle runtime. It creates no runtime, host process or OS adapter. Env uses it for ordinary command execution; find and xargs retain their own integration scope.
 
 ## Launch data
 
-`Request` supplies `executable`, `argv`, `env`, `cwd` and `fds`. `argv` includes
-argv0, which can differ from the executable path. Empty arguments and an empty
-environment stay empty. `cwd` must be absolute. The bridge never changes `PWD`.
-Strings must be UTF-8 without NUL. Environment names cannot contain `=`.
-Encoded spawn JSON is limited to 1 MiB, including escaping.
+`Request` supplies an executable path, argv including argv0, the exact environment, absolute cwd, and descriptor bindings. Empty arguments and empty environments stay empty. Strings must be UTF-8 without NUL; environment names cannot contain `=`. Encoded spawn JSON is limited to 1 MiB. Each request starts a new foreground job with `jobLifetime: "caller-fatal"`, so Waffle cancels and collects it when its caller dies from a signal.
 
-`DescriptorBinding { child, parent }` borrows an existing descriptor. Spawn retains
-its own binding before returning. The bridge never closes the parent's binding.
-Duplicate child targets are invalid. Sparse descriptors and remapping are supported.
-`inherited_stdio()` returns bindings for open descriptors 0, 1 and 2 only.
+`DescriptorBinding { child, parent }` borrows a descriptor. Spawn retains its own binding before returning, without closing the parent's descriptor. Sparse and remapped bindings are supported. `inherited_stdio()` includes open descriptors 0, 1 and 2. `inherited_shell_descriptors()` uses the Shell worker's `shell_terminal.inherited_fd` import to enumerate all actual launch bindings, excluding private preopens. Generic Waffle workers must supply their own explicit binding list.
 
-Waffle's `runtime_proc` has no import to enumerate inherited descriptors. The Shell
-worker separately supplies `shell_terminal.inherited_fd(index: i32) -> i32` to its
-own guests. `inherited_shell_descriptors()` uses that existing import and its `-1`
-end marker to return the complete launch bindings. It excludes private preopens
-and supports sparse large descriptors without scanning their numeric range.
-Callers must use it only with the Shell worker. A generic Waffle worker does not
-provide that namespace. Other callers must supply an explicit complete list.
-The stdio helper does not establish that contract. The bridge never scans a guessed
-fd range or assumes that fd 3 is the root preopen.
+`resolve_executable(program, path, cwd)` uses Waffle executable-access queries without loading candidates. Missing PATH uses `/bin:/usr/bin`; empty components mean cwd. Slash paths bypass PATH. EACCES takes precedence over missing and non-directory candidates. Other host errors stop lookup. Spawn checks admission again.
 
-## Lookup and execution
+## Completion and cancellation
 
-`resolve_executable(program, path, cwd)` uses Waffle's executable-access queries.
-The caller passes its final PATH after environment edits. Missing PATH uses
-`/bin:/usr/bin`. Empty PATH components mean cwd. A slash bypasses PATH search.
-EACCES takes precedence over missing and non-directory search candidates. Other
-errors stop the search. Lookup does not load or compile a program. Spawn checks
-admission again. Shell-script fallback for ENOEXEC is outside this API.
+`run` spawns and blocks for completion. `spawn` returns a `Child` with `pid`, `try_wait`, `wait`, and `cancel`. Blocking `wait` and `cancel` use Waffle's `wait_job(job, 2, out)` to collect the job after descriptor, filesystem and physical worker retirement. This wait leaves pending handled signals untouched and still honors fatal outcomes.
 
-On `wasm32-wasip1`, `run(&request)` spawns and waits. `spawn(&request)` returns
-`Child`, with `pid`, `try_wait`, `wait` and `cancel` methods. Each child owns a new
-foreground job. A successful wait collects both the direct child and its job,
-including same-job descendants' descriptor and filesystem cleanup fences. `try_wait` is
-nonblocking and returns no outcome until that whole job is safe.
+`wait` consumes the first handled pending signal, cancels the job with SIGKILL, then returns `Error::Interrupted(signal)` after collection. `cancel` kills and collects without consuming handled signals. Completed calls return their cached outcome. Drop attempts cancellation; callers that need cleanup errors use `cancel` explicitly. Fatal caller termination cannot run Drop, so Waffle owns cancellation and retirement of the caller's independent child jobs.
 
-`Outcome` distinguishes real exits, signals and startup failures. `shell_status()`
-returns actual exit codes unchanged, 128 plus the signal, 127 for startup ENOENT,
-and 126 for other startup failures. An error of a host call remains `Error::Host`,
-separate from a child's `Outcome::StartFailed`. There is no native execution API.
+`try_wait` is nonblocking and collects the descriptor/filesystem completion fence. It does not provide the stronger blocking physical-retirement guarantee. Callers that require that guarantee use `wait` directly.
 
-## Cancellation and cleanup
+`Outcome` distinguishes real exits, signals and startup failures. `shell_status()` preserves actual exits, maps signals to 128 plus the signal, maps ENOENT startup failure to 127, and maps other startup failures to 126. Host-call failures remain errors rather than fabricated child outcomes. Native builds expose codecs and status types only.
 
-`wait` consumes a handled pending signal through Waffle. It cancels the owned job
-with SIGKILL and returns `Error::Interrupted(signal)` after successful collection.
-The bridge does not install signal handlers or change signal dispositions.
-Default-action signals remain Waffle's responsibility. `cancel` kills the job and
-collects it when the host can wait; completed calls return the cached outcome.
+## Checks
 
-P cannot block for cleanup while preserving handled pending signals. Its
-`poll(..., timeout=-1, ...)` returns zero before readiness scanning in that state.
-Cancellation returns `Error::CleanupWaitUnsupported { interrupted: None }` after
-that first wake, retaining the unfinished `Child`. It does not retry, consume or
-re-emit the parent's signal. If another signal interrupts collection initiated
-by `wait`, the same error carries `interrupted: Some(signal)` for the first
-delivery that `wait` already consumed. Other parent deliveries remain pending.
-This error means cleanup is unfinished. It is not a child outcome or a completed
-`Error::Interrupted`. Callers must retain ownership and must not loop on this gate.
+Run `cargo test --locked --manifest-path shell/Cargo.toml -p shell-wasi-process` for codec tests. `npm run test:env:command` exercises an ordinary admitted env guest, real WASI child argv/environment/status, lookup and fatal-owner cleanup on the installed Waffle pin. No test substitutes native host command execution for the guest.
 
-Automatic complete cleanup by Drop is unsupported when this gate occurs. Drop
-makes its best-effort cancellation attempt, reports unsupported collection and
-returns while Waffle still retains the child/job. An explicit lifecycle owner
-must collect it. `run` cannot return its temporary `Child` on an error, so callers
-that require recoverable cancellation ownership must use `spawn` and retain the
-handle. Utility integration that promises unconditional signal-preserving cleanup
-must remain gated until the host provides the missing wait capability.
-
-Explicit cancellation lets callers observe cleanup errors. Drop reports failure
-on stderr and ignores diagnostic write errors, including closed stderr.
-Rust Drop cannot run after fatal guest unwinds or process exit. At this pinned
-provider, killing the caller's job does not kill the independent job this API
-creates. Killing an owned job also does not include descendants that deliberately
-create separate jobs. Utility integration with automatic ancestor cancellation
-is gated until the host links owned jobs to caller termination. Killing an owned
-job does not signal the utility's siblings or parent job.
-
-Executable queries are consumed on completion and canceled on interruption or an
-error before completion. There are no retries, timeouts or buffered stdout copies.
-
-## Current integration limits
-
-The delivered Shell `guestLauncher` adds or overwrites `PWD` with the requested cwd.
-Waffle's generic preview1 bootstrap has no independent cwd initialization, so libc
-starts at `/`. The wire preserves both supplied fields, but that adapter cannot
-execute arbitrary programs with independent cwd and environment. Utility callers
-must reject those modes until the host supplies a real cwd bootstrap contract.
-An empty environment and custom PWD cannot be claimed on the delivered adapter.
-
-The usage fixture uses Waffle's generic worker with an environment-preserving test
-adapter and root cwd. It checks exact argv0 and environment, explicit sparse and
-remapped descriptors, relocated root-preopen access, PATH queries, typed failures,
-live cancellation and Drop cleanup. It does not certify the gated modes above.
-
-## Admission and verification
-
-The public ordinary-program path is `Runtime.registerProgram(path, { adapter,
-source })`. Shell's `installUtility(..., { execution: "wasi" }, { source })` uses
-that path and the delivered `guestLauncher` and worker. Waffle P rewrites these
-bytes for interruption before compiling them. Pre-existing `runtime_proc` imports
-fail with `Cannot instrument WebAssembly: reserved import namespace runtime_proc`.
-The browser test submits the actual Rust fixture bytes through the production
-installer and observes `{ kind: "start-failed", code: 8, error: "ENOEXEC" }`.
-Host outcomes use Linux errno numbers. P's `proc/start-errno.ts` and
-`proc/abi.ts:481` encode this as WASI errno 45 for the Rust `StartFailed(45)` outcome.
-
-P also publicly supports trusted cooperative modules with `Runtime.registerProgram`
-and `{ adapter, module, cooperative: true }`. The preserved ABI fixture uses that
-path with explicit interruption checkpoints. This proves the imports and wire
-contract against real browser workers. It does not prove ordinary raw-WASI utility
-execution. Switching env, find or xargs to compiled modules would bypass the
-ordinary admission requirement and is not implemented or recommended here.
-
-The same browser run installs a launch probe through the production installer and
-worker. The probe uses `shell_terminal.inherited_fd` without pre-existing
-`runtime_proc` imports and runs through source admission. It reports libc cwd `/` for requested
-cwd `/workspace`, and observes injected `PWD=/workspace` for both an empty
-environment and a supplied `PWD=/different`. This separates the launcher limits
-from admission and from the cooperative ABI fixture.
-The probe also checks complete inherited bindings at 0, 1, 2, 3, 9 and 1,000,000
-through the committed Rust helper on the delivered worker.
-
-## Needs from other tracks
-
-- Ordinary source admission for a guest importing the existing `runtime_proc`
-  signatures. The rejection is at Waffle P `interrupt/rewriter-internal.ts:518`,
-  reached from `runtime.ts:405-407`. No additional process operation or guessed
-  namespace is needed. Admission policy and instrumentation belong to the host.
-- Independent cwd bootstrap that preserves the supplied environment. P's
-  `browser/worker.ts::RuntimeWorkerRequest` has no cwd field. Shell's
-  `src/runtime/worker-launcher.ts::guestLauncher` overlays `PWD` instead.
-- Fatal-owner child-job cleanup. `spawn(json_ptr, json_len) -> i32` with `job: 0`
-  creates an independent job. `kill_job(job: i32, signal: i32) -> i32` targets
-  members of that job only, at P `proc/supervisor.ts:701` and
-  `proc/worker-client.ts:600`. Fatal guest termination cannot run Rust Drop.
-  A host lifecycle owner must link and collect owned jobs before utility consumers
-  can claim automatic cancellation. Joining the caller's job would include the
-  waiting caller itself and cannot replace this ownership contract.
-- A noninterrupting, readiness-notified cleanup wait that leaves handled pending
-  signals intact and still honors fatal outcomes. At adopted P2,
-  `proc/abi.ts:752` returns zero from poll before readiness scanning when a signal
-  is pending. Blocking `wait_job` accepts only flags 0 and 1, and returns EINTR
-  for pending signals. `signal` changes dispositions rather than providing a
-  signal-preserving mask. The existing imports cannot provide this operation.
-
-These gates leave the committed codec, explicit descriptor bindings, status
-mapping, and live-owner wait/cancel API usable for qualified callers. Env, find
-and xargs execution remain unmodified until their complete requirements are met.
-
-Run `cargo test --locked --manifest-path shell/Cargo.toml -p shell-wasi-process`
-for codec tests. Build the WASI fixture with
-`node shell/wasi-process/tests/build-fixture.mjs`, then run
-`WASI_PROCESS_FIXTURE=.build/wasi-process-target/wasm32-wasip1/release/examples/process_fixture.wasm bun shell/wasi-process/tests/browser.mjs`.
-These commands require the repository's installed dependencies, SDK34 and a
-Playwright Chromium installation. Substantial runs use the machine's job queue.
-The browser runner closes its runtime, browser and localhost server and removes
-its temporary bundle and profile directory on success, failure or interruption.
-`WASI_PROCESS_MODE=review-cancel`, `review-drop-pending`, `review-drop-child` or
-`review-drop-access` selects focused review controls. The Drop fault controls
-close stderr and inject a diagnostic write failure after a real host cleanup
-operation. They require the test worker and do not alter product imports.
-`node --test shell/wasi-process/tests/diagnostics.test.mjs` checks the strict
-diagnostic classifier. The browser runner rejects every unexpected broker,
-console or page diagnostic and requires the exact expected negative-test set.
-
-The `review-delayed-cancel`, `review-delayed-wait` and `review-delayed-drop`
-controls hold a real adapter quiescence fence on an explicit test-owned promise.
-They count cleanup polls and trip on a second poll before release. The fixture
-asserts pending-signal preservation and the unsupported-wait result before
-requesting release through its test-only `fixture_control` namespace. It then
-collects the actual fence and outcome after the test owner handles its signal.
-The namespace is a test rendezvous, not a process ABI or a product workaround.
+The older standalone process fixture is built with `node shell/wasi-process/tests/build-fixture.mjs` and driven by `shell/wasi-process/tests/browser.mjs`. Its focused cancellation controls use a test-owned delayed quiescence promise and count cleanup-wait entry before release. The rendezvous belongs to the test, not the process ABI.

@@ -14,21 +14,9 @@ function delayedPollControl(imports, buffer) {
   };
 }
 
-function fixtureNamespaces(buffer) {
-  return { fixture_control: { release_fence: () => requestFenceRelease(buffer) } };
-}
-
-function requestFenceRelease(buffer) {
-  if (!buffer) throw new Error("fixture has no delayed fence controller");
-  const control = new Int32Array(buffer);
-  Atomics.store(control, 0, 1);
-  Atomics.notify(control, 0);
-}
-
 globalThis.onmessage = ({ data }) =>
   bootstrap(data, {
     ...preview1Executor,
-    namespaces: () => fixtureNamespaces(data.testFence),
     // Match Shell's child policy: only explicit inherited bindings remain open.
     beforeBindings({ wasi }) {
       for (const fd of [0, 1, 2]) wasi.descriptors.close(fd);

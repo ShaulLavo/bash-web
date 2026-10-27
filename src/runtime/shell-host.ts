@@ -145,11 +145,13 @@ export async function startShell(
   const registration = registerShell(runtime, options);
   const filesystem = runtime.filesystem.fork();
   const { port: _port, ...identity } = filesystem;
+  const cwd = options.cwd ?? "/home/guest";
   const transport = createWorkerProcessTransport({
     pid: runtime.identities.pid(),
     job: runtime.identities.job(),
     identity: runtime.identities.buffer,
     capacity: processDirectoryCapacity,
+    cwd,
   });
   const state = workerProcessState(transport);
   const admission = createTerminalAdmission();
@@ -354,7 +356,6 @@ export async function startShell(
     };
     worker.onmessageerror = () =>
       finish({ code: 1, error: "Shell worker message could not be decoded" });
-    const cwd = options.cwd ?? "/home/guest";
     const request: ShellWorkerRequest = {
       module: loaded.module,
       args:

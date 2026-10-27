@@ -266,7 +266,10 @@ export async function installUtility(
       options.workerUrl ?? new URL("../../dist/shell-worker.js", import.meta.url),
     );
     releases.push(
-      runtime.registerAdapter(adapter, guestLauncher(runtime, workerUrl, program.argv0, program.exactEnvironment)),
+      runtime.registerAdapter(
+        adapter,
+        guestLauncher(runtime, workerUrl, program.argv0, program.exactEnvironment),
+      ),
     );
     const definition = utilityDefinition(adapter, program, options);
     for (const candidate of paths) releases.push(runtime.registerProgram(candidate, definition));

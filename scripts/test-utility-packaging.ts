@@ -256,7 +256,7 @@ test("native sort and uniq qualification runs candidates, not host GNU programs"
   assert.doesNotMatch(source, /run\(name,|Command::new\("(?:bash|sort|uniq)"\)/);
 });
 
-test("env packages the exact print-only upstream source and root license", () => {
+test("env packages the exact patched upstream source and root license", () => {
   const receipt = JSON.parse(
     readFileSync(resolve(root, "shell/utilities/env.source.json"), "utf8"),
   );

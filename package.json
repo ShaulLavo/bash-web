@@ -125,6 +125,7 @@
     "test:ls": "node --test scripts/test-own-shell-ls.ts",
     "test:find": "node --test scripts/test-find-source.ts scripts/test-own-shell-find.ts",
     "test:find:browser": "node --test scripts/test-own-shell-find-browser.ts",
+    "test:env:command": "node scripts/build-env-command-tests.ts && npm run build:node-harness && node --test scripts/test-env-command.ts",
     "build:env:tests": "node scripts/build-env-tests.ts",
     "test:env:browser": "playwright test --config=playwright.env.config.ts",
     "build:node-harness": "node scripts/build-node-harness.ts",

@@ -52,6 +52,8 @@ struct WireRequest<'a> {
     env: &'a BTreeMap<String, String>,
     cwd: &'a str,
     job: i32,
+    #[serde(rename = "jobLifetime")]
+    job_lifetime: &'static str,
     fds: &'a [DescriptorBinding],
 }
 
@@ -65,6 +67,7 @@ impl Request {
             env: &self.env,
             cwd: &self.cwd,
             job: 0,
+            job_lifetime: "caller-fatal",
             fds: &self.fds,
         };
         let mut output = BoundedJson(Vec::new());
