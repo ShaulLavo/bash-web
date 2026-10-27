@@ -15,6 +15,7 @@ import {
   recordGitLocal,
   validateGitLocalRecording,
   type GitLocalCase,
+  type GitLocalState,
 } from "./record-git-local.ts";
 
 function redigest<T extends { cases: unknown; provenance: object }>(value: T) {
@@ -94,6 +95,10 @@ function gitSteps(value: GitLocalCase, command: string) {
   );
 }
 
+function hasMerge(state: GitLocalState): boolean {
+  return Object.values(state.history).some((commit) => commit.parents.length === 2);
+}
+
 function assertUsageSemantics(cases: GitLocalCase[]) {
   const index = example(cases, "index-worktree");
   assert.ok(index.steps.some((step) => step.state.status.includes("MM notes.txt")));
@@ -104,9 +109,7 @@ function assertUsageSemantics(cases: GitLocalCase[]) {
   const branches = example(cases, "branches-and-merges");
   const merge = gitSteps(branches, "merge").at(-1);
   assert.equal(merge?.expected?.status, 0);
-  assert.ok(
-    merge && Object.values(merge.state.history).some((commit) => commit.parents.length === 2),
-  );
+  assert.ok(merge && hasMerge(merge.state));
   assert.equal(gitSteps(branches, "checkout").at(-1)?.expected?.status, 1);
   assertConflictSemantics(example(cases, "conflict-and-recovery"));
   assertStashSemantics(example(cases, "stash-index-and-untracked"));
@@ -129,9 +132,7 @@ function assertConflictSemantics(value: GitLocalCase) {
   const final = value.steps.at(-1);
   assert.equal(final?.state.files["story.txt"], "main and side\n");
   assert.equal(final?.state.status, "");
-  assert.ok(
-    final && Object.values(final.state.history).some((commit) => commit.parents.length === 2),
-  );
+  assert.ok(final && hasMerge(final.state));
 }
 
 function assertStashSemantics(value: GitLocalCase) {
