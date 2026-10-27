@@ -79,3 +79,7 @@ Import `installWhich` from `bash-web/utilities/which`. It installs an ordinary W
 ## Install print-only env
 
 Import `installEnv` from `bash-web/utilities/env`. It lazily loads `dist/env.wasm` as an ordinary WASI guest using `WasiUtilityOptions`. It prints and edits only its own guest environment. Program execution and signal options are outside the initial contract. See [Print-only env](../env.md) for qualified forms and the process dependency.
+
+## Clear the terminal
+
+Import `installClear` from `bash-web/utilities/clear`. It installs a lazy ordinary WASI guest on the caller's runtime. `clear` clears the visible screen, homes the cursor, and requests scrollback erasure. `clear -x` preserves scrollback. Only the explicit xterm profiles are supported; see [clear](../clear.md) for terminal selection, rejected options, and provenance.

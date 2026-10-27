@@ -21,6 +21,7 @@ import { installSort } from "../src/utilities/sort";
 import { installUniq } from "../src/utilities/uniq";
 import { installWc } from "../src/utilities/wc";
 import { installTail } from "../src/utilities/tail";
+import { installShellCommands } from "../src/shell-commands";
 import filesystemWorkerUrl from "../.build/browser/fs-worker.js?url";
 
 declare global {
@@ -100,6 +101,7 @@ mountBrowser({
     const ready = Promise.all([
       registerTestPrograms(runtime, registration.signal, onStartupStage),
       query.get("test") === "1" && query.get("rg") === "1" ? prepareRg(runtime) : undefined,
+      installShellCommands(runtime),
       Promise.all(
         [
           installCat,

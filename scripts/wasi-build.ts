@@ -134,6 +134,7 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
   const utilityPackage = args.includes("shell-utilities");
   const sedPackage = args.includes("shell-sed");
   const xargsPackage = args.includes("shell-xargs");
+  const clearPackage = args.includes("shell-clear");
   if (xargsPackage || args.includes("--workspace")) verifyXargsSource(repositoryRoot);
   if (sedPackage || args.includes("--workspace")) verifySedSource(repositoryRoot);
   if (artifacts) {
@@ -142,7 +143,7 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
       resolve(repositoryRoot, artifacts),
       resolve(target, wasiTarget, "release"),
     );
-    if (utilityPackage || sedPackage || xargsPackage) return;
+    if (utilityPackage || sedPackage || xargsPackage || clearPackage) return;
   }
   const cargoArgs =
     artifacts && args.includes("--workspace")
@@ -153,6 +154,8 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
           "shell-sed",
           "--exclude",
           "shell-xargs",
+          "--exclude",
+          "shell-clear",
         ])
       : args;
   execFileSync(
@@ -180,7 +183,7 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
     binIndex >= 0
       ? [args[binIndex + 1]]
       : utilityPackage
-        ? utilityNames.filter((name) => name !== "sed" && name !== "xargs")
+        ? utilityNames.filter((name) => name !== "sed" && name !== "xargs" && name !== "clear")
         : workspaceGuests;
   for (const binary of binaries) {
     verifyWasiGuest(resolve(target, wasiTarget, "release", `${binary}.wasm`));

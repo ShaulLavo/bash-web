@@ -9,6 +9,7 @@ members = [
   "cut",
   "tr",
   "xargs",
+  "clear",
   "wasi-process",
 ]
 resolver = "3"

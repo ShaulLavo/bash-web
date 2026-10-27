@@ -75,8 +75,15 @@ pub(super) async fn execution_failure(
     context: &Context,
     name: &str,
     reason: &[u8],
+    line: Option<usize>,
 ) -> Result<(), i32> {
-    diagnostic(fds, context, b"/usr/bin/bash: ").await?;
+    if context.reader.filename().is_some() {
+        eval::Diagnostic::new(name, line, fds, context)
+            .prefix()
+            .await?;
+    } else {
+        diagnostic(fds, context, b"/usr/bin/bash: ").await?;
+    }
     diagnostic(fds, context, name.as_bytes()).await?;
     diagnostic(fds, context, b": ").await?;
     diagnostic(fds, context, reason).await?;

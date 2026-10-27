@@ -5,6 +5,7 @@
     "src/{runtime,browser}/*.test.ts",
     "tests/*.unit.ts",
     "tests/sed-installed-app.ts",
+    "tests/clear-browser.ts",
     "tests/helpers/file-utilities-browser.ts",
     "tests/helpers/git-browser.ts",
     "tests/helpers/grep-usage-browser.ts",
