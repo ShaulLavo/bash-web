@@ -81,6 +81,7 @@ mod guest {
                 )
                 .unwrap_or_else(|error| report_runtime(&session, error));
         }
+        drop(args);
         let editor_cancel = Rc::new(RefCell::new(Cancel::new()));
         let shell = session.clone();
         let input_cancel = editor_cancel.clone();
