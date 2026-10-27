@@ -19,6 +19,18 @@ function rejectProcessImport(entry: WebAssembly.ModuleImportDescriptor) {
   };
 }
 
+function printOnlyNamespaces(module: WebAssembly.Module): WebAssembly.Imports {
+  const namespaces: WebAssembly.Imports = {};
+  for (const entry of WebAssembly.Module.imports(module)) {
+    if (entry.module === "wasi_snapshot_preview1") continue;
+    if (entry.kind !== "function")
+      throw new Error(`unexpected print-only import ${entry.module}.${entry.name}`);
+    const namespace = (namespaces[entry.module] ??= {});
+    namespace[entry.name] = rejectProcessImport(entry);
+  }
+  return namespaces;
+}
+
 // These are literal source-contract expectations, not observations from a host oracle.
 function printEnv(args: string[], env: Record<string, string> = {}) {
   const stdout: Buffer[] = [];
@@ -27,6 +39,7 @@ function printEnv(args: string[], env: Record<string, string> = {}) {
     args: ["env"].concat(args),
     env,
     fs: new api.MemFS(),
+    namespaces: printOnlyNamespaces(guest),
     preopens: { "/": "/" },
     sleep() {
       throw new Error("print-only env must not block");
@@ -36,11 +49,6 @@ function printEnv(args: string[], env: Record<string, string> = {}) {
   });
   try {
     const imports = wasi.imports(guest);
-    for (const entry of WebAssembly.Module.imports(guest)) {
-      if (entry.module === "wasi_snapshot_preview1") continue;
-      imports[entry.module] ??= {};
-      imports[entry.module][entry.name] = rejectProcessImport(entry);
-    }
     const instance = new WebAssembly.Instance(guest, imports);
     const status = wasi.start(instance);
     return { status, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr) };
@@ -48,6 +56,18 @@ function printEnv(args: string[], env: Record<string, string> = {}) {
     wasi.descriptors.dispose();
   }
 }
+
+test("env print-only namespaces trap every process import", () => {
+  const namespaces = printOnlyNamespaces(guest);
+  for (const entry of WebAssembly.Module.imports(guest)) {
+    if (entry.module === "wasi_snapshot_preview1") continue;
+    const imported = namespaces[entry.module]?.[entry.name];
+    assert.ok(typeof imported === "function");
+    assert.throws(() => imported(), {
+      message: `print-only env called ${entry.module}.${entry.name}`,
+    });
+  }
+});
 
 const cases: { name: string; args: string[]; env: Record<string, string>; stdout: string }[] = [
   { name: "empty environment", args: [], env: {}, stdout: "" },
