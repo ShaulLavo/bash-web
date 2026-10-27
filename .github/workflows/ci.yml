@@ -482,6 +482,7 @@ jobs:
           name: ripgrep-${{ github.sha }}
           path: public/programs
       - run: cp public/programs/rg.wasm dist/rg.wasm
+      - run: npm run test:git:browser
       - run: npm run build:browser:assets:ci
       - uses: actions/download-artifact@v4
         with:
@@ -494,7 +495,6 @@ jobs:
       - run: npm run test:find:browser
       - run: npm run test:grep:usage
       - run: npm run build:env:tests && npm run test:env:browser
-      - run: npm run test:git:browser
       - run: npm run test:runtime:terminal
       - run: npm run test:installed-sed
       - run: npm run test:browser

@@ -511,11 +511,13 @@ test("browser gates the find driver once after prepared assets", () => {
 test("program regression entrypoints have one blocking owner and prepared inputs", () => {
   const workflowJobs = jobs();
   const browser = commands(workflowJobs.browser);
-  for (const command of ["test:grep:usage", "build:env:tests", "test:env:browser", "test:git:browser"]) {
+  for (const command of ["test:grep:usage", "build:env:tests", "test:env:browser"]) {
     assert.ok(browser.indexOf("npx playwright install") < browser.indexOf(`npm run ${command}`));
     assert.ok(browser.indexOf("npm run build:browser:assets:ci") < browser.indexOf(`npm run ${command}`));
     assert.ok(browser.indexOf(`npm run ${command}`) < browser.indexOf("npm run test:browser"));
   }
+  assert.ok(browser.indexOf("npx playwright install") < browser.indexOf("npm run test:git:browser"));
+  assert.ok(browser.indexOf("npm run test:git:browser") < browser.indexOf("npm run build:browser:assets:ci"));
   assert.ok(browser.indexOf("npm run build:env:tests") < browser.indexOf("npm run test:env:browser"));
   const all = Object.values(workflowJobs).map(commands).join("\n");
   const quality = commands(workflowJobs.quality);
