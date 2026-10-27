@@ -36,7 +36,7 @@ use std::env;
 #[cfg(unix)]
 use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
-#[cfg(not(unix))]
+#[cfg(all(not(unix), not(target_os = "wasi")))]
 use std::io;
 use std::io::Write as _;
 use std::io::stderr;
@@ -789,14 +789,14 @@ impl EnvAppData {
             self.do_input_debug_printing = Some(false);
         }
 
+        #[cfg(target_os = "wasi")]
+        wasi_support::initialize_cwd()?;
+
         let opts = make_options(
             &matches,
             #[cfg(all(unix, not(target_os = "fuchsia")))]
             &signal_apply_all,
         )?;
-
-        #[cfg(target_os = "wasi")]
-        wasi_support::validate_execution(&opts)?;
 
         // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
         //       easily handle the case where no command is given
@@ -849,7 +849,7 @@ impl EnvAppData {
 
         let arg0 = match opts.argv0 {
             None => prog.clone(),
-            Some(argv0) if cfg!(unix) => {
+            Some(argv0) if cfg!(any(unix, target_os = "wasi")) => {
                 let arg0 = Cow::Borrowed(argv0);
                 if do_debug_printing {
                     let _ = writeln!(stderr(), "argv0:     {}", arg0.quote());
@@ -875,6 +875,9 @@ impl EnvAppData {
                 let _ = writeln!(error, "{arg_prefix}[{}]= {}", i + 1, arg.quote());
             }
         }
+
+        #[cfg(target_os = "wasi")]
+        return wasi_support::run_program(&prog, &arg0, args);
 
         #[cfg(unix)]
         {
@@ -919,7 +922,7 @@ impl EnvAppData {
             }
         }
 
-        #[cfg(not(unix))]
+        #[cfg(all(not(unix), not(target_os = "wasi")))]
         {
             // Fallback to Command::status for non-Unix systems
             let mut cmd = std::process::Command::new(&*prog);

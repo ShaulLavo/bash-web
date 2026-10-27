@@ -22,3 +22,6 @@ nix = { version = "0.31.3", default-features = false, features = ["process", "si
 
 [features]
 diagnostics = ["uucore/diagnostics"]
+
+[target.'cfg(target_os = "wasi")'.dependencies]
+shell-wasi-process = { path = "../../shell/wasi-process" }
