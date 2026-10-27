@@ -23,6 +23,15 @@ const contracts = {
     upload: "Upload complete raw score",
     prefix: "own-shell-raw",
   },
+  observation: {
+    job: "own-shell-observation",
+    bind: "Bind qualification and resolve PR main floor",
+    observe: "Observe compatibility with the shared node build",
+    upload: "Run actions/upload-artifact@v4",
+    uploadId: "current-upload",
+    prefix: "own-shell-current",
+    optionalFile: true,
+  },
   qualification: {
     job: "score-floor",
     observe: "Fold main floor and qualification",
@@ -176,8 +185,17 @@ export function assertUploader({
   assert.equal(uploaders.length, 1, "reviewed workflow must have one unique uploader expression");
   const uploader = uploaders[0];
   assert.equal(uploader.owner, contract.job, "wrong reviewed uploader owner");
-  assert.equal(uploader.step.name, contract.upload, "wrong reviewed upload step");
-  assert.equal(uploader.step.with["if-no-files-found"], "error", "uploader must require a file");
+  if (contract.uploadId) {
+    assert.equal(uploader.step.id, contract.uploadId, "wrong reviewed upload step ID");
+    assert.equal(uploader.step.name, undefined, "observation upload step must be unnamed");
+  } else assert.equal(uploader.step.name, contract.upload, "wrong reviewed upload step");
+  assert.equal(
+    uploader.step.with["if-no-files-found"],
+    contract.optionalFile ? "ignore" : "error",
+    contract.optionalFile
+      ? "observation uploader must tolerate missing files"
+      : "uploader must require a file",
+  );
   assert.ok(!uploader.step.with.overwrite, "immutable uploads cannot overwrite");
   const name = `${contract.prefix}-${fullSha(testedSource)}-${run.id}-${run.run_attempt}`;
   assert.equal(artifact.name, name, "artifact source/run/attempt name mismatch");
@@ -314,8 +332,11 @@ export function mainEvidence({ root, oracle, client }) {
       `/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`,
     );
     assert.ok(jobs.total_count <= 100, "too many producer jobs");
+    const scores = result.scores.length;
     for (const kind of ["raw", "floor"])
       await collectArtifact(run, jobs.jobs, artifacts, kind, result);
+    if (result.scores.length === scores)
+      await collectObservation(run, jobs.jobs, artifacts, result);
   }
   async function collectArtifact(run, jobs, artifacts, kind, result) {
     const contract = contracts[kind];
@@ -350,6 +371,104 @@ export function mainEvidence({ root, oracle, client }) {
       sourceSha: run.head_sha,
       ...evidence,
       payloadSha256: digest(value),
+    });
+  }
+  async function collectObservation(run, jobs, artifacts, result) {
+    if (run.status !== "completed" || run.conclusion !== "failure") return;
+    const sealers = jobs.filter((job) => job.name === contracts.raw.job);
+    if (sealers.length !== 1) return;
+    const sealer = sealers[0];
+    if (sealer.status !== "completed" || sealer.conclusion !== "skipped") return;
+    const rawName = `${contracts.raw.prefix}-${run.head_sha}-${run.id}-${run.run_attempt}`;
+    const rawArtifacts = artifacts.filter((artifact) => artifact.name === rawName);
+    assert.equal(rawArtifacts.length, 0, "skipped sealer cannot have a raw artifact");
+    const scoreboards = jobs.filter((job) => job.name === "own-shell-scoreboard");
+    if (
+      scoreboards.length !== 1 ||
+      scoreboards[0].status !== "completed" ||
+      scoreboards[0].conclusion !== "failure"
+    )
+      return;
+    const prepares = jobs.filter((job) => job.name === "prepare");
+    if (
+      prepares.length !== 1 ||
+      prepares[0].status !== "completed" ||
+      prepares[0].conclusion !== "success"
+    )
+      return;
+    const observations = jobs.filter((job) => job.name === contracts.observation.job);
+    if (
+      observations.length !== 1 ||
+      observations[0].status !== "completed" ||
+      observations[0].conclusion !== "success"
+    )
+      return;
+    const name = `${contracts.observation.prefix}-${run.head_sha}-${run.id}-${run.run_attempt}`;
+    const matches = artifacts.filter((artifact) => artifact.name === name);
+    assert.ok(matches.length <= 1, "ambiguous observation artifact");
+    if (!matches.length) return;
+    const artifact = matches[0];
+    if (artifact.expired) throw new FloorPrerequisite("expired-source-artifact", run.head_sha);
+    const workflow = git(root, ["show", `${run.head_sha}:${authority.workflowPath}`]);
+    const job = observations[0];
+    const evidence = assertUploader({
+      run,
+      job,
+      artifact,
+      kind: "observation",
+      workflow,
+      logs: await client.request(`/actions/jobs/${job.id}/logs`, "text"),
+    });
+    const bind = successfulStep(job, contracts.observation.bind);
+    const observed = successfulStep(job, contracts.observation.observe);
+    const uploaded = successfulStep(job, contracts.observation.upload);
+    assert.ok(bind.number < observed.number, "bind must precede observation");
+    assert.ok(observed.number < uploaded.number, "observation must precede upload");
+    assert.ok(
+      Date.parse(bind.completed_at) <= Date.parse(observed.started_at),
+      "observation must start after bind",
+    );
+    const bytes = await client.request(`/actions/artifacts/${artifact.id}/zip`, "bytes");
+    const input = artifactJson(bytes, artifact, "scoreboard-input.json", false);
+    const score = artifactJson(bytes, artifact, "own-shell-current.json", false);
+    assert.equal(input.sourceSha, run.head_sha, "observation source mismatch");
+    assert.deepEqual(
+      input.run,
+      { runId: run.id, attempt: run.run_attempt },
+      "observation attempt mismatch",
+    );
+    assert.equal(
+      input.inputsSha256,
+      digest(scoringInputs(root, run.head_sha)),
+      "observation inputs mismatch",
+    );
+    const beforeSha = fullSha(input.selected?.beforeSha);
+    assert.deepEqual(
+      input.selected,
+      { kind: "main-push", sourceSha: run.head_sha, beforeSha },
+      "observation source binding mismatch",
+    );
+    assert.equal(
+      git(root, ["merge-base", beforeSha, run.head_sha]),
+      beforeSha,
+      "invalid main predecessor",
+    );
+    const capturedAt = Date.parse(input.capturedAt);
+    assert.ok(
+      capturedAt >= Date.parse(bind.started_at) &&
+        capturedAt < Date.parse(bind.completed_at) + 1000,
+      "observation capture outside bind step",
+    );
+    validateOwnScore(oracle, score);
+    result.scores.push(score);
+    result.evidence.push({
+      kind: "observation",
+      sourceSha: run.head_sha,
+      ...evidence,
+      inputSha256: digest(input),
+      payloadSha256: digest(score),
+      sealer: { jobId: sealer.id, conclusion: "skipped" },
+      gate: { jobId: scoreboards[0].id, conclusion: "failure" },
     });
   }
   function admitRaw(value, sourceSha, result) {
