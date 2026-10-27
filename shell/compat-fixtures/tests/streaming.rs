@@ -374,7 +374,7 @@ fn tail_reports_output_descriptor_errors() {
 #[test]
 fn grep_agent_usage_controls() {
     let cases: serde_json::Value =
-        serde_json::from_str(include_str!("../../../tests/helpers/grep-usage-cases.json")).unwrap();
+        serde_json::from_str(include_str!("grep-usage-cases.json")).unwrap();
     for case in cases.as_array().unwrap() {
         let rig = Rig::new();
         let (stderr, diagnostic) = capture(16 * 1024);
