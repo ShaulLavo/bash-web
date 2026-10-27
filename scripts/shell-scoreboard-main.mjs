@@ -378,6 +378,7 @@ export function mainEvidence({ root, oracle, client }) {
     const sealers = jobs.filter((job) => job.name === contracts.raw.job);
     if (sealers.length !== 1) return;
     const sealer = sealers[0];
+    positive(sealer.id);
     if (sealer.status !== "completed" || sealer.conclusion !== "skipped") return;
     const rawName = `${contracts.raw.prefix}-${run.head_sha}-${run.id}-${run.run_attempt}`;
     const rawArtifacts = artifacts.filter((artifact) => artifact.name === rawName);
@@ -389,6 +390,7 @@ export function mainEvidence({ root, oracle, client }) {
       scoreboards[0].conclusion !== "failure"
     )
       return;
+    positive(scoreboards[0].id);
     const prepares = jobs.filter((job) => job.name === "prepare");
     if (
       prepares.length !== 1 ||
@@ -396,6 +398,7 @@ export function mainEvidence({ root, oracle, client }) {
       prepares[0].conclusion !== "success"
     )
       return;
+    positive(prepares[0].id);
     const observations = jobs.filter((job) => job.name === contracts.observation.job);
     if (
       observations.length !== 1 ||
