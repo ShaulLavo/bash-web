@@ -25,6 +25,13 @@ function redigest<T extends { cases: unknown; provenance: object }>(value: T) {
   };
 }
 
+function withSteps(change: (step: (typeof fixture.cases)[number]["steps"][number]) => unknown) {
+  return redigest({
+    ...fixture,
+    cases: fixture.cases.map((entry) => ({ ...entry, steps: entry.steps.map(change) })),
+  });
+}
+
 function contracts(cases: typeof fixture.cases | GitLocalCase[]) {
   return cases.map((example) => ({
     id: example.id,
@@ -193,17 +200,7 @@ test("malformed state, command, status and dangling refs fail even with a recomp
     },
     { ...fixture.cases[0]?.steps[0]?.state, extra: true },
   ])
-    assert.throws(() =>
-      validateGitLocalRecording(
-        redigest({
-          ...fixture,
-          cases: fixture.cases.map((entry) => ({
-            ...entry,
-            steps: entry.steps.map((step) => ({ ...step, state })),
-          })),
-        }),
-      ),
-    );
+    assert.throws(() => validateGitLocalRecording(withSteps((step) => ({ ...step, state }))));
   for (const replacement of [
     { action: { kind: "git", argv: ["push"], output: "exit-only" } },
     { expected: { status: null, stdout: null, stderr: null } },
@@ -212,15 +209,7 @@ test("malformed state, command, status and dangling refs fail even with a recomp
     { oracle: { status: 0, stdout: null, stderr: "" } },
   ])
     assert.throws(() =>
-      validateGitLocalRecording(
-        redigest({
-          ...fixture,
-          cases: fixture.cases.map((entry) => ({
-            ...entry,
-            steps: entry.steps.map((step) => ({ ...step, ...replacement })),
-          })),
-        }),
-      ),
+      validateGitLocalRecording(withSteps((step) => ({ ...step, ...replacement }))),
     );
 });
 
