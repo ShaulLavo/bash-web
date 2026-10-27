@@ -9,6 +9,7 @@ import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 export const utilityNames = [
   "env",
   "cat",
+  "find",
   "grep",
   "head",
   "which",

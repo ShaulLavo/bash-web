@@ -1,6 +1,6 @@
 # Install utilities
 
-Give a shell `cat`, `grep`, `head`, `mkdir`, `seq`, `sort`, `tail`, `uniq`, and `wc`. The shell core has no external commands. Without an installed program, a command lookup on `PATH` fails with status 127.
+Give a shell `cat`, `find`, `grep`, `head`, `mkdir`, `seq`, `sort`, `tail`, `uniq`, and `wc`. The shell core has no external commands. Without an installed program, a command lookup on `PATH` fails with status 127.
 
 Each utility is its own WASM program with its own entry, so you install only what the page needs and pay only for those.
 
@@ -24,9 +24,9 @@ Each utility is its own WASM program with its own entry, so you install only wha
    }
    ```
 
-   The other entries are `bash-web/utilities/grep` (`installGrep`), `bash-web/utilities/head` (`installHead`), `bash-web/utilities/mkdir` (`installMkdir`), `bash-web/utilities/seq` (`installSeq`), `bash-web/utilities/sort` (`installSort`), `bash-web/utilities/tail` (`installTail`), `bash-web/utilities/uniq` (`installUniq`), and `bash-web/utilities/wc` (`installWc`).
+   The other entries are `bash-web/utilities/find` (`installFind`), `bash-web/utilities/grep` (`installGrep`), `bash-web/utilities/head` (`installHead`), `bash-web/utilities/mkdir` (`installMkdir`), `bash-web/utilities/seq` (`installSeq`), `bash-web/utilities/sort` (`installSort`), `bash-web/utilities/tail` (`installTail`), `bash-web/utilities/uniq` (`installUniq`), and `bash-web/utilities/wc` (`installWc`).
 
-3. If your bundler moves assets, pass the new URLs. `wasmUrl` points at the utility's `.wasm` file. `workerUrl` points at `dist/shell-worker.js`. For cooperative utilities, instead of `wasmUrl`, you can pass `module`, a compiled `WebAssembly.Module` or a function that returns one. Upstream `head`, `sort`, `uniq`, and `wc` take `source`, raw `Uint8Array` bytes or a function returning bytes, instead. Waffle needs those bytes to add interrupt checks.
+3. If your bundler moves assets, pass the new URLs. `wasmUrl` points at the utility's `.wasm` file. `workerUrl` points at `dist/shell-worker.js`. For cooperative utilities, instead of `wasmUrl`, you can pass `module`, a compiled `WebAssembly.Module` or a function that returns one. Upstream `find`, `head`, `sort`, `uniq`, and `wc` take `source`, raw `Uint8Array` bytes or a function returning bytes, instead. Waffle needs those bytes to add interrupt checks.
 
 An install call writes a small marker file at `/bin/<name>` and registers the program with the runtime. It does not fetch, compile, or start a worker. The first command that runs the utility loads the guest.
 
