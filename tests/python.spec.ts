@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { test, expect } from "@playwright/test";
 import { pythonArgv0, pythonCases, pythonVersion } from "./helpers/python-cases.ts";
@@ -68,13 +68,27 @@ test("real CPython on Waffle loads once, runs scripts, disposes and leaves its b
         stdin: "",
       }),
     );
-    const warm: { name: string; milliseconds: number }[] = [];
+    const warm: {
+      name: string;
+      milliseconds: number;
+      status: number;
+      statusMatches: boolean;
+      stdoutMatches: boolean;
+      stderrMatches: boolean;
+    }[] = [];
     for (const example of pythonCases) {
       const result = await page.evaluate((value) => window.pythonAcceptance.run(value), example);
       expect.soft(result.status, `${example.name}: ${result.stderr}`).toBe(example.status);
       expect.soft(result.stdout, example.name).toBe(example.stdout);
       expect.soft(result.stderr, example.name).toBe(example.stderr);
-      warm.push({ name: example.name, milliseconds: result.milliseconds });
+      warm.push({
+        name: example.name,
+        milliseconds: result.milliseconds,
+        status: result.status,
+        statusMatches: result.status === example.status,
+        stdoutMatches: result.stdout === example.stdout,
+        stderrMatches: result.stderr === example.stderr,
+      });
     }
     const discovery = await page.evaluate(() =>
       window.pythonAcceptance.run({
@@ -117,33 +131,37 @@ test("real CPython on Waffle loads once, runs scripts, disposes and leaves its b
     expect(payload.reduce((sum, resource) => sum + resource.decodedBytes, 0)).toBe(
       files.reduce((sum, file) => sum + file.bytes, 0),
     );
+    const body = JSON.stringify(
+      {
+        interpreter: {
+          bytes: wasm.length,
+          sha256: createHash("sha256").update(wasm).digest("hex"),
+        },
+        manifest: {
+          bytes: manifestBytes.length,
+          sha256: createHash("sha256").update(manifestBytes).digest("hex"),
+        },
+        payload: {
+          files: payload.length,
+          bytes: payload.reduce((sum, resource) => sum + resource.decodedBytes, 0),
+        },
+        coldFirstUseMilliseconds: cold.milliseconds,
+        cwdDiagnostic,
+        warmCaseMilliseconds: warm,
+        warmVersionMilliseconds: repeated,
+        scope:
+          "Shell startup through Python completion and terminal drain; cold includes asset fetch, verification, VFS population/drain and Waffle compilation. Compile events include shell and guest and preserve input byte lengths. Population and drain are included in the cold total, without separate spans because the runtime filesystem facade is immutable.",
+        ...measurement,
+      },
+      null,
+      2,
+    );
+    await mkdir(testInfo.outputDir, { recursive: true });
+    const measurementPath = testInfo.outputPath("python-measurement-report.json");
+    await writeFile(measurementPath, body);
     await testInfo.attach("python-measurement", {
       contentType: "application/json",
-      body: JSON.stringify(
-        {
-          interpreter: {
-            bytes: wasm.length,
-            sha256: createHash("sha256").update(wasm).digest("hex"),
-          },
-          manifest: {
-            bytes: manifestBytes.length,
-            sha256: createHash("sha256").update(manifestBytes).digest("hex"),
-          },
-          payload: {
-            files: payload.length,
-            bytes: payload.reduce((sum, resource) => sum + resource.decodedBytes, 0),
-          },
-          coldFirstUseMilliseconds: cold.milliseconds,
-          cwdDiagnostic,
-          warmCaseMilliseconds: warm,
-          warmVersionMilliseconds: repeated,
-          scope:
-            "Shell startup through Python completion and terminal drain; cold includes asset fetch, verification, VFS population/drain and Waffle compilation. Compile events include shell and guest and preserve input byte lengths. Population and drain are included in the cold total, without separate spans because the runtime filesystem facade is immutable.",
-          ...measurement,
-        },
-        null,
-        2,
-      ),
+      path: measurementPath,
     });
     const disposed = await page.evaluate(() => window.pythonAcceptance.disposeUtility());
     expect(disposed.markerRemoved).toBe(true);
