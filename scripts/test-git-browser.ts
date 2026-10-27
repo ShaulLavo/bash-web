@@ -8,6 +8,10 @@ import { build } from "esbuild";
 import { chromium } from "@playwright/test";
 import fixture from "./owned-fixtures/git-local.json" with { type: "json" };
 import { patchGitSource } from "./patch-git-source.ts";
+import {
+  mixedConflictExpected,
+  indexOnlyStashExpected,
+} from "../tests/helpers/git-review-cases.ts";
 import { buildGit } from "./build-git.ts";
 
 const directory = resolve(`.build/git-browser-${randomUUID()}`);
@@ -87,6 +91,15 @@ try {
   );
   for (const example of fixture.cases) await replay(page, example);
   await trackedStash(page);
+  const reviewRegressions = await page.evaluate(
+    (env) => window.gitLocalTest.reviewRegressions(env),
+    fixture.provenance.environment,
+  );
+  console.log(JSON.stringify({ reviewRegressions }));
+  assert.deepEqual(reviewRegressions, {
+    merge: mixedConflictExpected,
+    stash: indexOnlyStashExpected,
+  });
   assert.deepEqual(errors, []);
   assert.equal(
     requests.filter((url) => url.includes("git-command-")).length,
@@ -115,6 +128,7 @@ try {
       runtimeBorrowed: true,
       lifecycle: released,
       shellPATH: "blocked by P WASM-only program registration",
+      reviewRegressions,
       trackedStash: "staged and unstaged bytes restored by pop --index",
       assets,
     }),

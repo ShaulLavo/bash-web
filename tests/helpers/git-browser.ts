@@ -3,6 +3,7 @@ import { installGit } from "../../src/utilities/git";
 import { gitFilesystem } from "../../src/utilities/git-filesystem";
 import type { GitInstallation } from "../../src/utilities/git-types";
 import type { GitLocalState } from "../../scripts/record-git-local";
+import { mixedConflict, indexOnlyStash, type GitReviewRepository } from "./git-review-cases";
 import { captureGit } from "./git-output";
 
 let runtime: Runtime | undefined;
@@ -12,6 +13,27 @@ let admissions = 0;
 function owner() {
   if (!runtime) throw new Error("Git test runtime is not initialized");
   return runtime;
+}
+
+function reviewRepository(dir: string, env: Record<string, string>): GitReviewRepository {
+  return {
+    async run(argv) {
+      if (!installation) throw new Error("Git is not installed");
+      return captureGit(installation.run, { argv, cwd: dir, env });
+    },
+    write: (path, text) => owner().filesystem.writeFile(`${dir}/${path}`, text),
+    async remove(path) {
+      await owner().filesystem.remove(`${dir}/${path}`);
+    },
+    async read(path) {
+      const bytes = await owner().filesystem.readFile(`${dir}/${path}`);
+      return bytes ? new TextDecoder().decode(bytes) : null;
+    },
+    async blob(ref, path) {
+      const { gitBlob } = await import("./git-blob");
+      return gitBlob(gitFilesystem(owner().filesystem), dir, ref, path);
+    },
+  };
 }
 
 const api = {
@@ -44,6 +66,14 @@ const api = {
   ) {
     const { gitSnapshot } = await import("./git-snapshot");
     return gitSnapshot(gitFilesystem(owner().filesystem), dir, expected);
+  },
+  async reviewRegressions(env: Record<string, string>) {
+    await owner().filesystem.mkdirp("/review-merge");
+    await owner().filesystem.mkdirp("/review-stash");
+    return {
+      merge: await mixedConflict(reviewRepository("/review-merge", env)),
+      stash: await indexOnlyStash(reviewRepository("/review-stash", env)),
+    };
   },
   async release() {
     if (!installation) throw new Error("Git is not installed");

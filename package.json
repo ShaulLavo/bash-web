@@ -94,7 +94,7 @@
     "prepare": "npm run build:git && npm run build:worker && npm run notices:git",
     "build:git": "node scripts/build-git.ts",
     "notices:git": "node scripts/git-notices.ts",
-    "test:git:local": "node scripts/test-git-local.ts && node --test scripts/test-git-source.ts scripts/test-git-local-recording.ts scripts/test-git-package.ts",
+    "test:git:local": "npm run build:git && node scripts/test-git-local.ts && node --test scripts/test-git-source.ts scripts/test-git-local-recording.ts scripts/test-git-package.ts scripts/test-git-review.ts",
     "test:git:browser": "node scripts/test-git-browser.ts",
     "audit:git:fixture": "node scripts/test-git-local.ts",
     "record:git:local": "node scripts/record-git-local.ts",

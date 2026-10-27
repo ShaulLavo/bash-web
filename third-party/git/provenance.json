@@ -18,7 +18,9 @@
       "Compare nanosecond timestamps and rehash the racy-index window in core and exported index manager",
       "Import browser Buffer inside the ESM core, managers and filesystem model without a global assignment",
       "Use HEAD as the local merge conflict marker label",
-      "Keep original bytes when abortMerge restores binary files, instead of decoding them as UTF-8"
+      "Keep original bytes when abortMerge restores binary files, instead of decoding them as UTF-8",
+      "Complete nonconflicting index entries and remove clean deletions when mergeTree materializes a conflicted merge",
+      "Carry merged additions through abortMerge traversal so abort removes their worktree and index entries"
     ],
     "licenseSha256": "b916888fb16893c3a1df138543f994b96bb6892d74b6777c3a080d9cd2520c48"
   },

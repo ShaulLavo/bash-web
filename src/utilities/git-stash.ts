@@ -196,9 +196,11 @@ async function apply(context: GitContext, oid: string, restoreIndex: boolean) {
   }
   await git.checkout({ ...context, ref: oid, noUpdateHead: true, dryRun: true });
   await git.checkout({ ...context, ref: oid, noUpdateHead: true });
-  const rows = await git.statusMatrix(context);
-  for (const [filepath] of rows)
-    await git.resetIndex({ ...context, filepath, ref: restoreIndex ? index : base });
+  const ref = restoreIndex ? index : base;
+  const paths = new Set(
+    (await git.listFiles(context)).concat(await git.listFiles({ ...context, ref })),
+  );
+  for (const filepath of paths) await git.resetIndex({ ...context, filepath, ref });
   for (const filepath of loose) {
     const { blob } = await git.readBlob({ ...context, oid: untracked, filepath });
     await new FileSystem(context.fs).write(`${context.dir}/${filepath}`, blob);
