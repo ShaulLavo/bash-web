@@ -481,11 +481,9 @@ checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 [[package]]
 name = "findutils"
 version = "0.11.0"
-source = "git+https://github.com/uutils/findutils?rev=505421d4e03586efeb7b9c55adf057599e192e0a#505421d4e03586efeb7b9c55adf057599e192e0a"
 dependencies = [
  "argmax",
  "chrono",
- "clap",
  "faccess",
  "itertools",
  "nix 0.31.3",
@@ -1211,6 +1209,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nom"
+version = "8.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1595,6 +1602,14 @@ name = "shell-sed"
 version = "0.3.0"
 dependencies = [
  "upstream-sed",
+]
+
+[[package]]
+name = "shell-tr"
+version = "0.1.0"
+dependencies = [
+ "uu_tr",
+ "uucore 0.13.0",
 ]
 
 [[package]]
@@ -1998,6 +2013,19 @@ dependencies = [
  "thiserror",
  "uucore 0.13.0",
  "windows-sys",
+]
+
+[[package]]
+name = "uu_tr"
+version = "0.13.0"
+source = "git+https://github.com/uutils/coreutils?rev=07763857f6b9a547742a994b58aef0ccd036198b#07763857f6b9a547742a994b58aef0ccd036198b"
+dependencies = [
+ "bytecount",
+ "clap",
+ "fluent",
+ "memchr",
+ "nom",
+ "uucore 0.13.0",
 ]
 
 [[package]]

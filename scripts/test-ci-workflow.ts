@@ -168,7 +168,12 @@ test("each moved current-main gate has one owner", () => {
       "check:capabilities",
     ],
     wasi: ["test:shell:wasi", "test:rg:wasi"],
-    browser: ["build:browser:assets:ci", "test:runtime:terminal", "test:browser"],
+    browser: [
+      "build:browser:assets:ci",
+      "test:find:browser",
+      "test:runtime:terminal",
+      "test:browser",
+    ],
     "own-shell-scoreboard": ["test:shell:scoreboard:prebuilt"],
     "own-shell-observation": ["compat:shell:prebuilt"],
   };
@@ -487,6 +492,16 @@ test("browser stages ripgrep at its public-entry URL before bundling", () => {
   const staging = "cp public/programs/rg.wasm dist/rg.wasm";
   assert.ok(browser.includes(staging), "downloaded ripgrep must also reach the Vite input URL");
   assert.ok(browser.indexOf(staging) < browser.indexOf("npm run build:browser:assets:ci"));
+});
+
+test("browser gates the find driver once after prepared assets", () => {
+  const browser = commands(jobs().browser);
+  const find = "npm run test:find:browser";
+  assert.equal(browser.match(new RegExp(`${find}\\b`, "g"))?.length, 1);
+  assert.ok(browser.indexOf("npx playwright install") < browser.indexOf(find));
+  assert.ok(browser.indexOf("npm run build:browser:assets:ci") < browser.indexOf(find));
+  assert.ok(browser.indexOf(find) < browser.indexOf("npm run test:browser"));
+  assert.doesNotMatch(commands(jobs()["own-shell-scoreboard"]), /npm run test:find:browser/);
 });
 
 test("scoreboard and observation run independently using one shared node build", () => {

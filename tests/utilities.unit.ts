@@ -1,3 +1,4 @@
+import { installTr } from "../src/utilities/tr";
 import { installCut } from "../src/utilities/cut";
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
@@ -335,7 +336,10 @@ for (const [name, install] of [
   });
 }
 
-for (const [name, install] of [["cut", installCut]] as const) {
+for (const [name, install] of [
+  ["cut", installCut],
+  ["tr", installTr],
+] as const) {
   test(`${name} registers ordinary lazy source and disposes only itself`, async (context) => {
     const state = fixture(context);
     const other = await installCat(state.runtime, { module: await WebAssembly.compile(wasm) });

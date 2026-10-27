@@ -27,11 +27,13 @@ function fixture(body) {
 test("new mjs and ts entrypoints are discovered once in deterministic order", () => {
   fixture((directory) => {
     writeFileSync(resolve(directory, "test-own-shell-new.mjs"), "");
+    writeFileSync(resolve(directory, "test-own-shell-browser.ts"), "");
     writeFileSync(resolve(directory, "test-shell-scoreboard-new.ts"), "");
     writeFileSync(resolve(directory, "own-shell-helper.mjs"), "");
     const files = discoverScoreboardTests(directory).map((path) => basename(path));
     assert.equal(new Set(files).size, files.length);
     assert.ok(files.includes("test-own-shell-new.mjs"));
+    assert.ok(!files.includes("test-own-shell-browser.ts"));
     assert.ok(files.includes("test-shell-scoreboard-new.ts"));
     assert.ok(!files.includes("own-shell-helper.mjs"));
     assert.deepEqual(files, files.toSorted());

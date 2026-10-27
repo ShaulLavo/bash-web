@@ -3,7 +3,7 @@ import { installUtility, type UtilityInstallation, type WasiUtilityOptions } fro
 export type { UtilityInstallation, UtilitySource, WasiUtilityOptions } from "./install";
 export { UtilityConflictError } from "./install";
 
-/** Provision and register traversal-only upstream `find` on the caller's Runtime. */
+/** Provision and register upstream traversal and predicate `find` on the caller's Runtime. */
 export function installFind(
   runtime: Runtime,
   options?: WasiUtilityOptions,

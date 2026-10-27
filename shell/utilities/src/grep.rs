@@ -3,6 +3,7 @@
 //! 491c3281f668b76d64b15210b8f5d7bf97244be0. See sources.lock.json.
 //! Original descriptor adapter, bounded record reader and small BRE translator;
 //! no upstream whole-file reads, output accumulation or backtracking matcher.
+//! The -e/-H/-h extension and locked regex receipt are in ../grep.source.json.
 use super::{Context, endpoint, write};
 use regex::bytes::{Regex, RegexBuilder};
 use shell_engine::{
@@ -23,6 +24,7 @@ struct Options {
     numbers: bool,
     ignore_case: bool,
     syntax: Syntax,
+    filename: Option<bool>,
 }
 #[derive(Clone, Copy, Default, PartialEq)]
 enum Syntax {
@@ -32,53 +34,91 @@ enum Syntax {
     Fixed,
 }
 impl Options {
-    // Retain Bashkit's mixed option/operand and grouped short-option handling,
-    // but reject every flag outside this acceptance-only subset.
-    fn parse(args: Vec<String>) -> Result<(Self, String, Vec<String>), String> {
+    fn parse(args: Vec<String>) -> Result<(Self, Vec<String>, Vec<String>), String> {
         let mut options = Self::default();
         let mut operands = Vec::new();
+        let mut patterns = Vec::new();
         let mut flags = true;
-        for arg in args {
+        let mut args = args.into_iter();
+        while let Some(arg) = args.next() {
             if flags && arg == "--" {
                 flags = false;
-            } else if flags && arg.starts_with('-') && arg != "-" {
-                for flag in arg[1..].chars() {
-                    match flag {
-                        'v' => options.invert = true,
-                        'c' => options.count = true,
-                        'q' => options.quiet = true,
-                        'n' => options.numbers = true,
-                        'i' => options.ignore_case = true,
-                        'F' | 'E' => {
-                            let syntax = if flag == 'F' {
-                                Syntax::Fixed
-                            } else {
-                                Syntax::Extended
-                            };
-                            if options.syntax != Syntax::Basic && options.syntax != syntax {
-                                return Err("conflicting matchers specified".into());
-                            }
-                            options.syntax = syntax;
-                        }
-                        _ => return Err(format!("unsupported option: -{flag}")),
-                    }
-                }
-            } else {
-                operands.push(arg);
+                continue;
             }
+            if flags && arg.starts_with('-') && arg != "-" {
+                options.short_options(&arg[1..], &mut args, &mut patterns)?;
+                continue;
+            }
+            operands.push(arg);
         }
-        let mut operands = operands.into_iter();
-        let pattern = operands.next().ok_or("missing pattern")?;
-        Ok((options, pattern, operands.collect()))
+        if patterns.is_empty() {
+            if operands.is_empty() {
+                return Err("missing pattern".into());
+            }
+            patterns.push(operands.remove(0));
+        }
+        Ok((options, patterns, operands))
     }
-    fn compile(&self, pattern: &str) -> Result<Regex, String> {
-        if pattern.len() > PATTERN_BYTES {
+    fn short_options(
+        &mut self,
+        arg: &str,
+        args: &mut impl Iterator<Item = String>,
+        patterns: &mut Vec<String>,
+    ) -> Result<(), String> {
+        for (index, flag) in arg.char_indices() {
+            if flag == 'e' {
+                let tail = &arg[index + 1..];
+                let pattern = if tail.is_empty() {
+                    args.next().ok_or("option requires an argument: -e")?
+                } else {
+                    tail.to_owned()
+                };
+                patterns.push(pattern);
+                return Ok(());
+            }
+            self.flag(flag)?;
+        }
+        Ok(())
+    }
+    fn flag(&mut self, flag: char) -> Result<(), String> {
+        match flag {
+            'v' => self.invert = true,
+            'c' => self.count = true,
+            'q' => self.quiet = true,
+            'n' => self.numbers = true,
+            'i' => self.ignore_case = true,
+            'H' => self.filename = Some(true),
+            'h' => self.filename = Some(false),
+            'F' | 'E' => return self.matcher(flag),
+            _ => return Err(format!("unsupported option: -{flag}")),
+        }
+        Ok(())
+    }
+    fn matcher(&mut self, flag: char) -> Result<(), String> {
+        let syntax = if flag == 'F' {
+            Syntax::Fixed
+        } else {
+            Syntax::Extended
+        };
+        if self.syntax != Syntax::Basic && self.syntax != syntax {
+            return Err("conflicting matchers specified".into());
+        }
+        self.syntax = syntax;
+        Ok(())
+    }
+    fn compile(&self, patterns: &[String]) -> Result<Regex, String> {
+        let bytes = patterns.iter().try_fold(0usize, |total, pattern| {
+            total
+                .checked_add(pattern.len())
+                .and_then(|n| n.checked_add(1))
+        });
+        if bytes.is_none_or(|bytes| bytes > PATTERN_BYTES + 1) {
             return Err("pattern byte limit exceeded".into());
         }
         // GNU/Bashkit treat newline-separated patterns as alternatives. Group
         // them so anchors remain local, without adding any capturing groups.
         let mut translated = String::new();
-        for pattern in pattern.split('\n') {
+        for pattern in patterns.iter().flat_map(|pattern| pattern.split('\n')) {
             if !translated.is_empty() {
                 translated.push('|');
             }
@@ -206,7 +246,7 @@ fn io_status(error: IoError) -> i32 {
 struct Scan<'a> {
     options: &'a Options,
     matcher: &'a Regex,
-    // Prefix only for multiple input operands, as in Bashkit/GNU grep.
+    // Multiple operands prefix by default; -H/-h can override that choice.
     filename: Option<&'a str>,
     fds: &'a FdTable,
     context: &'a Context,
@@ -340,7 +380,7 @@ pub(crate) async fn run(
     if files.is_empty() {
         files.push("-".into());
     }
-    let multiple = files.len() > 1;
+    let filename = options.filename.unwrap_or(files.len() > 1);
     let mut found = false;
     let mut failed = false;
     let mut budget = Budget::default();
@@ -350,7 +390,7 @@ pub(crate) async fn run(
         let mut scan = Scan {
             options: &options,
             matcher: &matcher,
-            filename: multiple.then_some(if file == "-" {
+            filename: filename.then_some(if file == "-" {
                 "(standard input)"
             } else {
                 &file

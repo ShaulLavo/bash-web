@@ -12,6 +12,7 @@ const utilities = [
   "env",
   "cat",
   "cut",
+  "tr",
   "find",
   "grep",
   "head",
@@ -130,18 +131,17 @@ test("each utility entry references only its own program", async () => {
 test("find packages the pinned upstream entry and source receipt", () => {
   const revision = "505421d4e03586efeb7b9c55adf057599e192e0a";
   const manifest = readFileSync(resolve(root, "shell/utilities/Cargo.toml"), "utf8");
-  assert.match(
-    manifest,
-    new RegExp(
-      `findutils = \\{ git = "https://github.com/uutils/findutils", rev = "${revision}" \\}`,
-    ),
-  );
+  assert.ok(manifest.includes('findutils = { path = "../../third-party/uutils-find" }'));
+  const upstream = readFileSync(resolve(root, "third-party/uutils-find/Cargo.toml"), "utf8");
+  assert.match(upstream, /name = "findutils"\nversion = "0\.11\.0"/);
   const entry = readFileSync(resolve(root, "shell/utilities/src/bin/find.rs"), "utf8");
   assert.match(entry, /findutils::find::find_main/);
   const receipt = JSON.parse(
     readFileSync(resolve(root, "shell/utilities/find.source.json"), "utf8"),
   );
   assert.equal(receipt.revision, revision);
+  assert.equal(receipt.vendor, "third-party/uutils-find");
+  assert.equal(receipt.patch.path, "third-party/uutils-find/wasi.patch");
   assert.equal(receipt.entry, "findutils::find::find_main");
   const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
   assert.match(notices, /## findutils 0\.11\.0 \/ LICENSE/);
@@ -295,26 +295,30 @@ test("env packages the exact print-only upstream source and root license", () =>
   assert.ok(notices.includes(`## uutils coreutils ${revision} / LICENSE`));
 });
 
-test("cut packages the accepted upstream wrapper, ordinary admission and notices", () => {
-  const revision = "07763857f6b9a547742a994b58aef0ccd036198b";
-  const manifest = readFileSync(resolve(root, "shell/cut/Cargo.toml"), "utf8");
-  for (const name of ["uu_cut", "uucore"])
-    assert.ok(
-      manifest.includes(
-        `${name} = { git = "https://github.com/uutils/coreutils", rev = "${revision}" }`,
-      ),
-    );
-  const entry = readFileSync(resolve(root, "shell/cut/src/main.rs"), "utf8");
-  assert.match(entry, /uucore::bin!\(uu_cut\)/);
-  assert.match(entry, /std::env::var\("PWD"\)/);
-  assert.match(entry, /std::env::set_current_dir\(&cwd\)/);
-  const installer = readFileSync(resolve(root, "src/utilities/cut.ts"), "utf8");
-  assert.match(installer, /execution: "wasi"/);
-  assert.match(installer, /WasiUtilityOptions/);
-  const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
-  assert.match(notices, /## uu_cut 0\.13\.0 \/ LICENSE/);
-  assert.ok(notices.includes(`## uutils coreutils ${revision} / LICENSE`));
-});
+for (const name of ["cut", "tr"]) {
+  test(`${name} packages the accepted upstream wrapper, ordinary admission and notices`, () => {
+    const revision = "07763857f6b9a547742a994b58aef0ccd036198b";
+    const manifest = readFileSync(resolve(root, `shell/${name}/Cargo.toml`), "utf8");
+    for (const dependency of [`uu_${name}`, "uucore"])
+      assert.ok(
+        manifest.includes(
+          `${dependency} = { git = "https://github.com/uutils/coreutils", rev = "${revision}" }`,
+        ),
+      );
+    const entry = readFileSync(resolve(root, `shell/${name}/src/main.rs`), "utf8");
+    assert.ok(entry.includes(`uucore::bin!(uu_${name})`));
+    if (name === "cut") {
+      assert.match(entry, /std::env::var\("PWD"\)/);
+      assert.match(entry, /std::env::set_current_dir\(&cwd\)/);
+    }
+    const installer = readFileSync(resolve(root, `src/utilities/${name}.ts`), "utf8");
+    assert.match(installer, /execution: "wasi"/);
+    assert.match(installer, /WasiUtilityOptions/);
+    const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
+    assert.ok(notices.includes(`## uu_${name} 0.13.0 / LICENSE`));
+    assert.ok(notices.includes(`## uutils coreutils ${revision} / LICENSE`));
+  });
+}
 
 test("Python packages a lazy payload separately from its raw WASI interpreter", async () => {
   const text = await bundle("src/utilities/python.ts");
