@@ -39,7 +39,8 @@
     "./utilities/touch": "./src/utilities/touch.ts",
     "./utilities/rm": "./src/utilities/rm.ts",
     "./utilities/cp": "./src/utilities/cp.ts",
-    "./utilities/mv": "./src/utilities/mv.ts"
+    "./utilities/mv": "./src/utilities/mv.ts",
+    "./utilities/xargs": "./src/utilities/xargs.ts"
   },
   "scripts": {
     "record:cut-tr": "node scripts/record-cut-tr.ts",
@@ -113,8 +114,8 @@
     "test:find:browser": "node --test scripts/test-own-shell-find-browser.ts",
     "build:node-harness": "node scripts/build-node-harness.ts",
     "build:compat-control": "node scripts/build-compat-control.ts",
-    "test:guest-build": "node --test scripts/test-rg-source.ts scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-sed-source.ts",
-    "typecheck:guest-build": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/rg-source.ts scripts/test-rg-source.ts scripts/build-sed.ts scripts/sed-source.ts scripts/test-sed-source.ts scripts/check-shell-capabilities.ts scripts/wasi-build.ts scripts/utility-artifacts.ts scripts/test-utility-artifacts.ts scripts/build-utilities.ts scripts/build-wc.ts scripts/build-compat-control.ts scripts/test-build-compat-control.ts scripts/test-utility-packaging.ts scripts/test-shell-wasi.ts scripts/test-wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts",
+    "test:guest-build": "node --test scripts/test-rg-source.ts scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-sed-source.ts scripts/test-xargs-source.ts scripts/test-wasi-guest-path.ts scripts/test-waffle-fixture-lifecycle.ts",
+    "typecheck:guest-build": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/rg-source.ts scripts/test-rg-source.ts scripts/build-sed.ts scripts/sed-source.ts scripts/test-sed-source.ts scripts/check-shell-capabilities.ts scripts/wasi-build.ts scripts/utility-artifacts.ts scripts/test-utility-artifacts.ts scripts/build-utilities.ts scripts/build-wc.ts scripts/build-compat-control.ts scripts/test-build-compat-control.ts scripts/test-utility-packaging.ts scripts/test-shell-wasi.ts scripts/test-wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts scripts/wasi-guest-path.ts scripts/test-wasi-guest-path.ts scripts/waffle-fixture-lifecycle.ts scripts/test-waffle-fixture-lifecycle.ts",
     "fuzz:shell-echo": "node scripts/fuzz-shell-echo.ts",
     "test:fuzz-shell-echo": "node --test scripts/test-fuzz-shell-echo.ts",
     "fuzz:shell-echo:ci": "node scripts/fuzz-shell-echo.ts --replay scripts/fixtures/shell-echo.json",
@@ -152,11 +153,11 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.3",
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#d0c5f8a1a9a6723c2f9fccf5df8544b8aad84a00",
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#c312af63a554602906b462a2b49c7d5e14a97c5b",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#d0c5f8a1a9a6723c2f9fccf5df8544b8aad84a00"
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#c312af63a554602906b462a2b49c7d5e14a97c5b"
   },
   "overrides": {
     "esbuild": "0.28.2"

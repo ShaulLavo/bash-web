@@ -1619,11 +1619,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "shell-wasi-process"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "shell-wc"
 version = "0.0.1"
 dependencies = [
  "uu_wc",
  "uucore 0.13.0",
+]
+
+[[package]]
+name = "shell-xargs"
+version = "0.0.1"
+dependencies = [
+ "upstream-xargs",
 ]
 
 [[package]]
@@ -1813,6 +1828,14 @@ dependencies = [
  "tempfile",
  "terminal_size",
  "unicode-width",
+ "uucore 0.12.0",
+]
+
+[[package]]
+name = "upstream-xargs"
+version = "0.11.0"
+dependencies = [
+ "clap",
  "uucore 0.12.0",
 ]
 

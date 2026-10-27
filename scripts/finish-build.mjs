@@ -32,6 +32,7 @@ for (const command of [
   "rm",
   "cp",
   "mv",
+  "xargs",
 ]) {
   await copyFile(
     new URL(`../public/programs/${command}.wasm`, import.meta.url),
