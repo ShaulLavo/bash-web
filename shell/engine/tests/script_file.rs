@@ -104,9 +104,9 @@ impl Shell {
         let (stdout, out) = io::capture(65536);
         let (stderr, err) = io::capture(65536);
         let mut fds = io::FdTable::default();
-        fds.insert(0, Endpoint::null());
-        fds.insert(1, stdout);
-        fds.insert(2, stderr);
+        for (fd, endpoint) in [(0, Endpoint::null()), (1, stdout), (2, stderr)] {
+            fds.insert(fd, endpoint);
+        }
         session.set_descriptors(fds).unwrap();
         Self {
             executor,
@@ -278,8 +278,69 @@ fn file_argument_admission_is_atomic_before_open() {
     let error = shell
         .session
         .start_file("x".repeat(8192), Vec::new())
-        .unwrap_err();
+        .err()
+        .expect("oversized invocation must be refused");
     assert_eq!(error.status(), 2);
     assert_eq!(shell.session.state().borrow().shell_name, "saved");
     assert_eq!(shell.fs.opens.get(), 0);
+}
+
+#[test]
+fn file_reader_refunds_failed_loads_and_preserves_stored_file_identity() {
+    let shell = Shell::new(
+        Limits {
+            source_bytes: 128,
+            ..Limits::default()
+        },
+        Fault::None,
+    );
+    shell
+        .fs
+        .inner
+        .write_file("/home/guest/large", &[b' '; 129])
+        .unwrap();
+    assert_eq!(shell.run("large", Vec::new()), 2);
+    shell
+        .fs
+        .inner
+        .write_file(
+            "/home/guest/library",
+            b"f() {\n printf '<%s:%s>\\n' \"${BASH_SOURCE[0]}\" \"$LINENO\";\n}\n",
+        )
+        .unwrap();
+    assert_eq!(shell.run("library", Vec::new()), 0);
+    assert_eq!(shell.finish(shell.session.start("f").unwrap()), 0);
+    assert_eq!(shell.out.bytes(), b"<library:2>\n");
+}
+
+#[test]
+fn file_execution_diagnostic_keeps_filename_line_and_status() {
+    let shell = Shell::new(Limits::default(), Fault::None);
+    shell
+        .fs
+        .inner
+        .write_file("/home/guest/failure", b"\nmissing-script-command\n")
+        .unwrap();
+    assert_eq!(shell.run("failure", Vec::new()), 127);
+    let error = String::from_utf8(shell.err.bytes()).unwrap();
+    assert!(error.contains("failure: line 2:"), "{error}");
+}
+
+#[test]
+fn file_entry_is_noninteractive_root_execution_not_a_source_frame() {
+    let shell = Shell::new(Limits::default(), Fault::None);
+    {
+        let state = shell.session.state();
+        let mut state = state.borrow_mut();
+        state.interactive = true;
+        state.command_string = true;
+    }
+    shell
+        .fs
+        .inner
+        .write_file("/home/guest/root", b"printf '%s\\n' \"$-\"; return 9")
+        .unwrap();
+    assert_eq!(shell.run("root", Vec::new()), 2);
+    let flags = String::from_utf8(shell.out.bytes()).unwrap();
+    assert!(!flags.contains('c') && !flags.contains('i'), "{flags}");
 }

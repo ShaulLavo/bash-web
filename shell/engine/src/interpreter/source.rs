@@ -163,13 +163,14 @@ async fn load_script(
         let storage = context.admit_builtin_buffer(state.cwd.len())?;
         (state.cwd.clone(), storage)
     };
-    let file = candidate(&cwd, "", name, fds, context)
+    let endpoint = candidate(&cwd, "", name, fds, context)
         .await
-        .map_err(ReadError::Io)?;
-    if file.endpoint.descriptor_kind().map_err(ReadError::Io)? == io::DescriptorKind::Directory {
+        .map_err(ReadError::Io)?
+        .endpoint;
+    if endpoint.descriptor_kind().map_err(ReadError::Io)? == io::DescriptorKind::Directory {
         return Err(ReadError::Io(IoError::Runtime(31)));
     }
-    read(file.endpoint, &context.evaluation, context).await
+    read(endpoint, &context.evaluation, context).await
 }
 
 async fn script_error(fds: &Descriptors, context: &Context, message: &str, code: i32) -> Outcome {

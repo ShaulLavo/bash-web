@@ -198,7 +198,7 @@ impl<'a> Diagnostic<'a> {
         command_builtin::diagnostic(self.fds, self.context, bytes).await
     }
 
-    async fn prefix(&self) -> Result<(), i32> {
+    pub(super) async fn prefix(&self) -> Result<(), i32> {
         let filename = self.context.reader.filename().unwrap_or("/usr/bin/bash");
         self.write(filename.as_bytes()).await?;
         self.write(b": ").await?;

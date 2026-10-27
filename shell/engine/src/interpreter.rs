@@ -3778,7 +3778,7 @@ async fn dispatch_arguments(
                 path.into_parts()
             }
             command_builtin::Resolution::NonExecutable(path, reason) => {
-                command_builtin::execution_failure(&fds, context, &path.text, reason).await?;
+                command_builtin::execution_failure(&fds, context, &path.text, reason, line).await?;
                 return Ok(Outcome::status(126));
             }
             command_builtin::Resolution::Missing => {
@@ -3787,7 +3787,7 @@ async fn dispatch_arguments(
                 } else {
                     b"command not found".as_slice()
                 };
-                command_builtin::execution_failure(&fds, context, name, reason).await?;
+                command_builtin::execution_failure(&fds, context, name, reason, line).await?;
                 return Ok(Outcome::status(127));
             }
         }
