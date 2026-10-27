@@ -179,6 +179,40 @@ jobs:
             .build/shell/cli-sha256.txt
             .build/shell/cli-source.txt
           retention-days: 3
+  python:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.12.1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.14.8
+      - uses: ./.github/actions/javascript
+      - uses: ./.github/actions/wasi-sdk
+      - uses: bytecodealliance/actions/wasmtime/setup@v1.1.3
+        with:
+          version: v49.0.3
+      - uses: actions/cache@v4
+        id: python-assets
+        with:
+          path: .build/python-assets
+          key: python-${{ runner.os }}-${{ runner.arch }}-sdk34-python3.14.8-${{ hashFiles('scripts/build-python.ts', 'scripts/python-source.ts', 'scripts/wasi-build.ts', 'scripts/verify-wasi-guests.ts', 'patches/cpython-wasi-cwd.patch', 'third-party/cpython/**', 'package-lock.json') }}
+      - name: Build and qualify Python once
+        if: steps.python-assets.outputs.cache-hit != 'true'
+        run: npm run build:python -- --output .build/python-assets
+      - name: Validate Python assets before distribution
+        run: npm run build:python -- --stage .build/python-assets --output .build/python-distribution
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-${{ github.sha }}
+          path: .build/python-distribution
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
   wasi:
     needs:
       - prepare
@@ -416,6 +450,7 @@ jobs:
     needs:
       - prepare
       - native
+      - python
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -444,6 +479,14 @@ jobs:
           path: public/programs
       - run: cp public/programs/rg.wasm dist/rg.wasm
       - run: npm run build:browser:assets:ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-${{ github.sha }}
+          path: .build/python-assets
+      - run: npm run build:python -- --stage .build/python-assets --output dist
+      - run: npm run prepare:python:browser
+        env:
+          BASH_WEB_PYTHON_SHELL_WASM: public/programs/shell-engine.wasm
       - run: npm run test:runtime:terminal
       - run: npm run test:installed-sed
       - run: npm run test:browser
@@ -461,6 +504,7 @@ jobs:
       - layers
       - quality
       - native
+      - python
       - wasi
       - fuzz
       - own-shell-scoreboard

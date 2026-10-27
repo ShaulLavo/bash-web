@@ -201,6 +201,7 @@ export function stagePythonArtifact(source: string, output: string, sdk?: string
   const receipt = object(JSON.parse(readFileSync(resolve(source, "python-build.json"), "utf8")));
   assert.equal(receipt.cpython, pythonSource.revision);
   assert.equal(receipt.waffle, waffleRevision);
+  assert.deepEqual(receipt.sourcePatch, pythonSource.patch, "Python startup patch provenance");
   const assets = object(receipt.assets);
   assert.deepEqual(Object.keys(assets).sort(), [
     "python-licenses.json",

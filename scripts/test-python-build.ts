@@ -169,6 +169,7 @@ test("a validated artifact stages without building and rejects an altered interp
     JSON.stringify({
       cpython: pythonSource.revision,
       waffle: "d0c5f8a1a9a6723c2f9fccf5df8544b8aad84a00",
+      sourcePatch: pythonSource.patch,
       assets,
     }),
   );
@@ -181,6 +182,19 @@ test("a validated artifact stages without building and rejects an altered interp
       readFileSync(resolve(output, path)),
       path,
     );
+  put(
+    "artifact/python-build.json",
+    JSON.stringify({
+      cpython: pythonSource.revision,
+      waffle: "d0c5f8a1a9a6723c2f9fccf5df8544b8aad84a00",
+      sourcePatch: { ...pythonSource.patch, sha256: "0".repeat(64) },
+      assets,
+    }),
+  );
+  assert.throws(
+    () => stagePythonArtifact(output, resolve(directory, "stale-startup")),
+    /startup patch provenance/,
+  );
   put("artifact/python.wasm", Uint8Array.from(cappedWasiFixture).slice(0, -1));
   assert.throws(() => stagePythonArtifact(output, resolve(directory, "altered")));
 });

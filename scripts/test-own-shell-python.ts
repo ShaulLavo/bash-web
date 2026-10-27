@@ -11,7 +11,7 @@ import {
   type PythonCase,
 } from "../tests/helpers/python-cases.ts";
 
-async function browser() {
+async function prepareBrowser() {
   const { build } = await import("esbuild");
   mkdirSync("dist", { recursive: true });
   const shell = process.env.BASH_WEB_PYTHON_SHELL_WASM;
@@ -42,6 +42,10 @@ async function browser() {
     '<!doctype html><meta charset="utf-8"><script type="module" src="/python-tests.js"></script>',
   );
   if (!existsSync("dist/index.html")) copyFileSync("dist/python-tests.html", "dist/index.html");
+}
+
+async function browser() {
+  await prepareBrowser();
   const result = spawnSync(
     process.execPath,
     ["node_modules/@playwright/test/cli.js", "test", "tests/python.spec.ts"].concat(
@@ -91,5 +95,6 @@ function oracle() {
   }
 }
 
-if (process.argv.includes("--browser")) await browser();
+if (process.argv.includes("--prepare-browser")) await prepareBrowser();
+else if (process.argv.includes("--browser")) await browser();
 else oracle();
