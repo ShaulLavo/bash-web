@@ -176,10 +176,10 @@ function splitRecords(bytes: Uint8Array, delimiter: number) {
   let start = 0;
   for (let index = 0; index < bytes.length; index++) {
     if (bytes[index] !== delimiter) continue;
-    records.push(bytes.slice(start, index));
+    records.push(Uint8Array.from(bytes.subarray(start, index)));
     start = index + 1;
   }
-  records.push(bytes.slice(start));
+  records.push(Uint8Array.from(bytes.subarray(start)));
   return records;
 }
 
@@ -200,22 +200,23 @@ export function findOutput(
   if (records === "bytes") return Uint8Array.from(bytes);
   if (records === "lines") {
     const chunks = splitRecords(bytes, 10);
-    const unordered = chunks.toSorted(compareBytes);
-    return { prefix: new Uint8Array(), records: unordered };
+    chunks.sort(compareBytes);
+    return { prefix: new Uint8Array(), records: chunks };
   }
   let status = new Uint8Array();
-  let payload = bytes;
+  let payload = Uint8Array.from(bytes);
   if (prefix === "status-line") {
     const newline = bytes.indexOf(10);
     if (newline < 0) return { prefix: status, records: [], rawPayload: Uint8Array.from(bytes) };
-    status = bytes.slice(0, newline + 1);
-    payload = bytes.slice(newline + 1);
+    status = Uint8Array.from(bytes.subarray(0, newline + 1));
+    payload = Uint8Array.from(bytes.subarray(newline + 1));
   }
   if (payload.length === 0) return { prefix: status, records: [] };
   if (payload[payload.length - 1] !== 0)
     return { prefix: status, records: [], rawPayload: Uint8Array.from(payload) };
-  const completePayload = payload.slice(0, -1);
+  const completePayload = Uint8Array.from(payload.subarray(0, -1));
   const recordsPayload =
     completePayload.length === 0 ? [new Uint8Array()] : splitRecords(completePayload, 0);
-  return { prefix: status, records: recordsPayload.toSorted(compareBytes) };
+  recordsPayload.sort(compareBytes);
+  return { prefix: status, records: recordsPayload };
 }

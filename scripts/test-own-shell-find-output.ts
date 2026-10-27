@@ -17,6 +17,15 @@ function normalized(output: Uint8Array) {
   return findOutput(output, "nul", "status-line");
 }
 
+test("find output normalization canonicalizes Buffer and Uint8Array inputs", () => {
+  const nul = nulOutput([Buffer.from("sub/b.txt"), Buffer.from("sub/deep/c.txt")]);
+  const lines = Buffer.from("sub/b.txt\nsub/deep/c.txt\n");
+  const bytes = Buffer.from([0xff, 0x00, 0xfe]);
+  assert.deepEqual(normalized(nul), normalized(Uint8Array.from(nul)));
+  assert.deepEqual(findOutput(lines, "lines"), findOutput(Uint8Array.from(lines), "lines"));
+  assert.deepEqual(findOutput(bytes, "bytes"), findOutput(Uint8Array.from(bytes), "bytes"));
+});
+
 test("NUL find records ignore traversal order but preserve the exact status prefix", () => {
   const first = nulOutput([Buffer.from("sub/b.txt"), Buffer.from("sub/deep/c.txt")]);
   const second = nulOutput([Buffer.from("sub/deep/c.txt"), Buffer.from("sub/b.txt")]);
