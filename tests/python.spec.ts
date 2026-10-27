@@ -44,6 +44,9 @@ test("real CPython on Waffle loads once, runs scripts, disposes and leaves its b
     expect(installed.admissions).toEqual([]);
     expect(installed.after.compiles).toEqual([]);
     expect(requests).toEqual([]);
+    expect(page.workers().map((worker) => new URL(worker.url()).pathname)).toEqual([
+      "/fs-worker.js",
+    ]);
     const baselineWorkers = page.workers().length;
     const cold = await page.evaluate(() =>
       window.pythonAcceptance.run({ args: ["--version"], stdin: "" }),
@@ -119,7 +122,7 @@ test("real CPython on Waffle loads once, runs scripts, disposes and leaves its b
           warmCaseMilliseconds: warm,
           warmVersionMilliseconds: repeated,
           scope:
-            "Shell startup through Python completion and terminal drain; cold includes asset fetch, verification, VFS population/drain and Waffle compilation. Compile events include shell and guest and preserve input byte lengths; write/drain spans may overlap.",
+            "Shell startup through Python completion and terminal drain; cold includes asset fetch, verification, VFS population/drain and Waffle compilation. Compile events include shell and guest and preserve input byte lengths. Population and drain are included in the cold total, without separate spans because the runtime filesystem facade is immutable.",
           ...measurement,
         },
         null,

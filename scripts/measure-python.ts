@@ -13,29 +13,9 @@ type Installation = Awaited<ReturnType<typeof installPython>>;
 type Sample = { start: number; end: number };
 const now = () => performance.now();
 
-function instrumentation(runtime: Runtime) {
-  const writes: Sample[] = [];
-  const drains: Sample[] = [];
+function instrumentation() {
   const compiles: (Sample & { bytes: number })[] = [];
-  const originalWrite = runtime.filesystem.writeFile.bind(runtime.filesystem);
-  const originalDrain = runtime.filesystem.drain.bind(runtime.filesystem);
   const originalCompile = WebAssembly.compile;
-  runtime.filesystem.writeFile = async (...args) => {
-    const start = now();
-    try {
-      return await originalWrite(...args);
-    } finally {
-      writes.push({ start, end: now() });
-    }
-  };
-  runtime.filesystem.drain = async () => {
-    const start = now();
-    try {
-      return await originalDrain();
-    } finally {
-      drains.push({ start, end: now() });
-    }
-  };
   WebAssembly.compile = async (...args) => {
     const start = now();
     try {
@@ -45,14 +25,8 @@ function instrumentation(runtime: Runtime) {
     }
   };
   return {
-    snapshot: () => ({
-      writes: writes.slice(),
-      drains: drains.slice(),
-      compiles: compiles.slice(),
-    }),
+    snapshot: () => ({ compiles: compiles.slice() }),
     restore() {
-      runtime.filesystem.writeFile = originalWrite;
-      runtime.filesystem.drain = originalDrain;
       WebAssembly.compile = originalCompile;
     },
   };
@@ -84,7 +58,7 @@ async function create() {
   });
   let active: Shell | undefined;
   let installation: Installation | undefined;
-  const metrics = instrumentation(runtime);
+  const metrics = instrumentation();
   async function close() {
     try {
       await active?.dispose();
