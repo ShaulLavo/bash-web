@@ -21,7 +21,7 @@ The TypeScript surface of bash-web, from `src/index.ts`, `src/shell.ts`, `src/br
 | `bash-web/utilities/tail` | `src/utilities/tail.ts` |
 | `bash-web/utilities/wc` | `src/utilities/wc.ts` |
 
-`bash-web` re-exports: `createShell`; the types `RuntimeExit`, `RuntimeProcess`, `Shell`, `ShellOptions`; `SharedBridge`, `control`, `INPUT_CAPACITY`, `OUTPUT_CAPACITY`; `TerminalNewlines`; `runtimeSnapshot`; and the types `StartupObserver`, `StartupStage`, `StartupSnapshot`. `bash-web/shell` exports `createShell` and its types. The core entries import no utility.
+`bash-web` re-exports: `createShell`; the types `RuntimeExit`, `RuntimeProcess`, `Shell`, `ShellOptions`; `installShellCommands`, `UtilityConflictError` and the types `ShellCommandOptions`, `ShellCommandsInstallation`; `SharedBridge`, `control`, `INPUT_CAPACITY`, `OUTPUT_CAPACITY`; `TerminalNewlines`; `runtimeSnapshot`; and the types `StartupObserver`, `StartupStage`, `StartupSnapshot`. `bash-web/shell` exports `createShell` and its types. The core entries import no utility.
 
 The package has a required peer dependency on `waffle`, pinned to one Git commit (`peerDependencies.waffle`). `Runtime` and the other Waffle types named below come from there.
 
@@ -86,6 +86,25 @@ interface RuntimeExit {
 | `done` | `Promise<RuntimeExit>` | Same promise as `Shell.done`. |
 | `signal(signal)` | `(2 \| 9) => void` | 2 is SIGINT, 9 is SIGKILL. |
 | `dispose()` | `Promise<void>` | Same as `Shell.dispose()`. |
+
+## `installShellCommands(runtime, options?)`
+
+```ts
+function installShellCommands(
+  runtime: Runtime,
+  options?: ShellCommandOptions,
+): Promise<ShellCommandsInstallation>;
+```
+
+Registers the shell guest at `/bin/sh` and `/bin/bash`, so other programs on the same runtime can run `sh -c SCRIPT` or find `bash` on `PATH`. Bun's package scripts and `Bun.$` use this. Each path gets an executable marker under the same rules as [utility entries](#utility-entries): an existing foreign entry throws `UtilityConflictError` and is left alone, and a failed install rolls back the paths it already created. The guest loads on first spawn and shares its compiled module with `createShell`.
+
+| Option | Type | Default | Meaning |
+| ------ | ---- | ------- | ------- |
+| `wasmUrl` | `string \| URL` | `/programs/shell-engine.wasm` | Must match `createShell` on this runtime. |
+| `workerUrl` | `string \| URL` | `dist/shell-worker.js` next to the package | Must match `createShell` on this runtime. |
+| `executables` | `readonly string[]` | `["/bin/sh", "/bin/bash"]` | Canonical absolute paths to register. |
+
+The result has `executables` (the registered paths) and `dispose()`. `dispose()` releases these registrations and removes unchanged markers it created. It leaves `/programs/shell-engine.wasm` and running shells alone.
 
 ## `SharedBridge`
 

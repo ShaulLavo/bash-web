@@ -14,6 +14,7 @@ import { installUniq } from "../src/utilities/uniq";
 import { installRg } from "../src/utilities/rg";
 import { installPython, type PythonPayloadManifest } from "../src/utilities/python";
 import { createHash } from "node:crypto";
+import { installShellCommands } from "../src/index";
 
 const wasm = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
 type Program = ProgramDefinition;
@@ -589,4 +590,73 @@ test("Python interpreter failure rolls back payload and a later source call retr
   assert.equal(await program.source(), wasm);
   assert.equal(attempts, 2);
   await installation.dispose();
+});
+
+async function shellCommandsFixture(context: TestContext) {
+  const state = fixture(context);
+  // registerShell's own marker belongs to createShell's initialization, not this installer.
+  state.files.set("/programs/shell-engine.wasm", new Uint8Array());
+  return state;
+}
+
+async function load(program: Program | undefined): Promise<WebAssembly.Module> {
+  assert.ok(program && typeof program.module === "function");
+  return program.module();
+}
+
+test("sh and bash run the shell guest createShell uses, compiled once", async (context) => {
+  const state = await shellCommandsFixture(context);
+  const wasmUrl = "https://cdn.test/shell-engine.wasm";
+  const installation = await installShellCommands(state.runtime, { wasmUrl });
+  assert.deepEqual(installation.executables, ["/bin/sh", "/bin/bash"]);
+  assert.deepEqual(Array.from(state.programs.keys()).toSorted(), [
+    "/bin/bash",
+    "/bin/sh",
+    "/programs/shell-engine.wasm",
+  ]);
+  assert.deepEqual(state.fetched, [], "nothing loads until the first spawn");
+  for (const path of ["/bin/sh", "/bin/bash"])
+    assert.equal(state.programs.get(path)?.cooperative, true);
+  const modules = await Promise.all(
+    ["/bin/sh", "/bin/bash", "/programs/shell-engine.wasm"].map((path) =>
+      load(state.programs.get(path)),
+    ),
+  );
+  assert.ok(modules.every((module) => module === modules[0]));
+  assert.deepEqual(state.fetched, [wasmUrl]);
+});
+
+test("shell command dispose removes only its registrations and markers", async (context) => {
+  const state = await shellCommandsFixture(context);
+  const installation = await installShellCommands(state.runtime, { executables: ["/usr/bin/sh"] });
+  assert.ok(state.files.has("/usr/bin/sh"));
+  await installation.dispose();
+  await installation.dispose();
+  assert.equal(state.files.has("/usr/bin/sh"), false);
+  assert.deepEqual(Array.from(state.programs.keys()), ["/programs/shell-engine.wasm"]);
+});
+
+test("a foreign /bin/bash fails the shell install and rolls back /bin/sh", async (context) => {
+  const state = await shellCommandsFixture(context);
+  const foreign = new TextEncoder().encode("another bash\n");
+  state.files.set("/bin/bash", foreign);
+  await assert.rejects(installShellCommands(state.runtime), UtilityConflictError);
+  assert.equal(state.files.get("/bin/bash"), foreign);
+  assert.equal(state.files.has("/bin/sh"), false);
+  assert.equal(state.programs.has("/bin/sh"), false);
+});
+
+test("shell commands with a shared basename or a utility's name stay distinct", async (context) => {
+  const state = await shellCommandsFixture(context);
+  await installCat(state.runtime);
+  const installation = await installShellCommands(state.runtime, {
+    executables: ["/bin/sh", "/usr/bin/sh", "/opt/tools/cat"],
+  });
+  assert.deepEqual(installation.executables, ["/bin/sh", "/usr/bin/sh", "/opt/tools/cat"]);
+  await installation.dispose();
+  assert.ok(state.programs.has("/bin/cat"), "the cat utility keeps its registration");
+  assert.deepEqual(Array.from(state.programs.keys()).toSorted(), [
+    "/bin/cat",
+    "/programs/shell-engine.wasm",
+  ]);
 });

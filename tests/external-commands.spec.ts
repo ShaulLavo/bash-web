@@ -496,3 +496,22 @@ test("wc bounds memory on sustained input and stops on Ctrl+C", async ({ page },
     contentType: "application/json",
   });
 });
+
+test("sh and bash run the shell guest as ordinary programs on PATH", async ({ page }) => {
+  await open(page);
+  await command(
+    page,
+    `command -v sh bash; sh -c 'echo "SH_ARGS:$((6 * 7))"'; bash -c 'exit 7'; echo BASH_STATUS:$?; printf 'PIPED\\n' | sh -c 'read -r line; echo "SH_STDIN:$line"'; sh -c 'echo SH_STDERR >&2' 2>&1 | cat`,
+  );
+  for (const line of [
+    "/bin/sh",
+    "/bin/bash",
+    "SH_ARGS:42",
+    "BASH_STATUS:7",
+    "SH_STDIN:PIPED",
+    "SH_STDERR",
+  ])
+    await output(page, line);
+  await ready(page);
+  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+});
