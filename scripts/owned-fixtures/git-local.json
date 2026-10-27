@@ -43,8 +43,8 @@
       "status": ["status", "--porcelain=v1", "--untracked-files=all"],
       "stash": ["stash", "list", "--format=%gs"]
     },
-    "inputsSha256": "bf24fe089a6e52de1b47d31758133380305a930960cb3a054576bc01ba794303",
-    "casesSha256": "4325d49b5791dcfea359e5bd8a2d307e2b0f05018f746793c4e91986eac57842",
+    "inputsSha256": "7825ac2e3becbcd9e50d88b8f549bcac6c004edf2b7a5856e4516a82668d4b8b",
+    "casesSha256": "3e6fdde16a5cbd21a00b02ba5d67074651728fbe1405f6abbfcf5f64932b608c",
     "normalization": "Compare all states and exit statuses. Compare stdout/stderr only for exact queries, replacing diff index blob IDs with <old>..<new>. Commit labels c1,c2,... follow first observation in reverse topological history. No dates or object IDs in expected state. Raw mutation diagnostics are provenance only; scratch paths become <repo>."
   },
   "cases": [
@@ -422,11 +422,11 @@
         {
           "action": {
             "kind": "git",
-            "argv": ["diff", "--no-ext-diff", "--no-color", "--no-prefix"],
+            "argv": ["diff", "--exit-code", "--no-ext-diff", "--no-color", "--no-prefix"],
             "output": "exact"
           },
           "expected": {
-            "status": 0,
+            "status": 1,
             "stdout": "diff --git notes.txt notes.txt\nindex <old>..<new> 100644\n--- notes.txt\n+++ notes.txt\n@@ -1,2 +1,3 @@\n one\n TWO\n+three\n",
             "stderr": ""
           },
@@ -450,7 +450,7 @@
             "stash": []
           },
           "oracle": {
-            "status": 0,
+            "status": 1,
             "stdout": "diff --git notes.txt notes.txt\nindex 879de50..ddc897f 100644\n--- notes.txt\n+++ notes.txt\n@@ -1,2 +1,3 @@\n one\n TWO\n+three\n",
             "stderr": ""
           }
@@ -3017,6 +3017,76 @@
           "oracle": {
             "status": 0,
             "stdout": "MM story.txt\n?? loose.txt\n",
+            "stderr": ""
+          }
+        },
+        {
+          "action": {
+            "kind": "git",
+            "argv": ["diff", "--cached", "--no-ext-diff", "--no-color", "--no-prefix"],
+            "output": "exact"
+          },
+          "expected": {
+            "status": 0,
+            "stdout": "diff --git story.txt story.txt\nindex <old>..<new> 100644\n--- story.txt\n+++ story.txt\n@@ -1 +1 @@\n-base\n+staged\n",
+            "stderr": ""
+          },
+          "state": {
+            "files": {
+              "loose.txt": "keep me\n",
+              "story.txt": "staged\nunstaged\n"
+            },
+            "head": "main",
+            "refs": {
+              "refs/heads/main": "c1"
+            },
+            "history": {
+              "c1": {
+                "subject": "base",
+                "parents": []
+              }
+            },
+            "status": "MM story.txt\n?? loose.txt\n",
+            "stash": []
+          },
+          "oracle": {
+            "status": 0,
+            "stdout": "diff --git story.txt story.txt\nindex df967b9..19d9cc8 100644\n--- story.txt\n+++ story.txt\n@@ -1 +1 @@\n-base\n+staged\n",
+            "stderr": ""
+          }
+        },
+        {
+          "action": {
+            "kind": "git",
+            "argv": ["diff", "--no-ext-diff", "--no-color", "--no-prefix"],
+            "output": "exact"
+          },
+          "expected": {
+            "status": 0,
+            "stdout": "diff --git story.txt story.txt\nindex <old>..<new> 100644\n--- story.txt\n+++ story.txt\n@@ -1 +1,2 @@\n staged\n+unstaged\n",
+            "stderr": ""
+          },
+          "state": {
+            "files": {
+              "loose.txt": "keep me\n",
+              "story.txt": "staged\nunstaged\n"
+            },
+            "head": "main",
+            "refs": {
+              "refs/heads/main": "c1"
+            },
+            "history": {
+              "c1": {
+                "subject": "base",
+                "parents": []
+              }
+            },
+            "status": "MM story.txt\n?? loose.txt\n",
+            "stash": []
+          },
+          "oracle": {
+            "status": 0,
+            "stdout": "diff --git story.txt story.txt\nindex 19d9cc8..b97ac3c 100644\n--- story.txt\n+++ story.txt\n@@ -1 +1,2 @@\n staged\n+unstaged\n",
             "stderr": ""
           }
         },

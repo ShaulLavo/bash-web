@@ -112,7 +112,7 @@ export const gitLocalInputs: { id: string; semantics: string; actions: GitLocalA
       write("notes.txt", "one\nTWO\nthree\n"),
       write("loose.txt", "untracked\n"),
       status,
-      query("diff", "--no-ext-diff", "--no-color", "--no-prefix"),
+      query("diff", "--exit-code", "--no-ext-diff", "--no-color", "--no-prefix"),
       query("diff", "--cached", "--no-ext-diff", "--no-color", "--no-prefix"),
       git("commit", "-m", "stage second line"),
       status,
@@ -190,6 +190,8 @@ export const gitLocalInputs: { id: string; semantics: string; actions: GitLocalA
       status,
       git("stash", "pop", "--index"),
       status,
+      query("diff", "--cached", "--no-ext-diff", "--no-color", "--no-prefix"),
+      query("diff", "--no-ext-diff", "--no-color", "--no-prefix"),
       git("add", "story.txt", "loose.txt"),
       git("commit", "-m", "restored work"),
       write("story.txt", "another change\n"),
@@ -491,12 +493,16 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     "Usage: node scripts/record-git-local.ts --write|--check",
   );
   const fixture = new URL("./owned-fixtures/git-local.json", import.meta.url);
-  const text = JSON.stringify(recordGitLocal(), null, 2) + "\n";
-  if (mode === "--write") writeFileSync(fixture, text, { flag: "wx" });
-  else
-    assert.equal(
-      readFileSync(fixture, "utf8"),
-      text,
+  const recording = recordGitLocal();
+  if (mode === "--write")
+    writeFileSync(fixture, JSON.stringify(recording, null, 2) + "\n", { flag: "wx" });
+  else {
+    const existing: unknown = JSON.parse(readFileSync(fixture, "utf8"));
+    validateGitLocalRecording(existing);
+    assert.deepEqual(
+      existing,
+      recording,
       "Git recording differs; inspect provenance and semantics",
     );
+  }
 }
