@@ -47,27 +47,24 @@ export function createBridgeTerminal(
       if (count <= 0) return count;
       let written = 0;
       let destination = 0;
-      for (let index = 0; index < count; index++) {
-        const byte = raw[index];
+      for (const byte of raw.subarray(0, count)) {
         if (lineState.skipLineFeed && byte === 10) {
           lineState.skipLineFeed = false;
           continue;
         }
         lineState.skipLineFeed = byte === 13;
         const normalized = byte === 13 ? 10 : byte;
-        while (destination < chunks.length && written === chunks[destination].length) {
-          destination++;
+        let chunk = chunks[destination];
+        while (chunk && written === chunk.length) {
+          chunk = chunks[++destination];
           written = 0;
         }
-        if (destination === chunks.length) break;
-        chunks[destination][written++] = normalized;
+        if (!chunk) break;
+        chunk[written++] = normalized;
       }
       const output = chunks
         .slice(0, destination + 1)
-        .reduce(
-          (total, _chunk, index) => total + (index < destination ? chunks[index].length : written),
-          0,
-        );
+        .reduce((total, chunk, index) => total + (index < destination ? chunk.length : written), 0);
       // A split CRLF can consume the LF while producing no byte. Signal the
       // normal retry path instead of exposing a false EOF to the stream caller.
       return output || (count > 0 ? AGAIN : count);
