@@ -103,7 +103,6 @@ fn command_operands_match_gnu_environment_and_argument_rules() {
         vec!["-u", "A", "A=first", "A=last", "/usr/bin/env"],
         vec!["-i", "A=x=y", "EMPTY=", "/usr/bin/env"],
         vec!["-i", "-S", "A='two words' /usr/bin/env"],
-        vec!["-i", "-a", "custom", "/bin/sh", "-c", "printf '%s' \"$0\""],
         vec!["-i", "/bin/sh", "-c", "exit 23"],
         vec!["-0", "/usr/bin/env"],
         vec!["-u", "bad=name", "/usr/bin/env"],
@@ -124,4 +123,15 @@ fn command_operands_match_gnu_environment_and_argument_rules() {
             "{args:?}"
         );
     }
+}
+
+#[test]
+fn command_argv0_is_replaced() {
+    let output = env(
+        &["-i", "-a", "custom", "/bin/sh", "-c", "printf '%s' \"$0\""],
+        &[],
+    );
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    assert_eq!(output.stdout, b"custom");
+    assert!(output.stderr.is_empty(), "{output:?}");
 }
