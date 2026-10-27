@@ -321,7 +321,7 @@ export async function startShell(
       await clean();
       throw new Error("Shell stopped before worker startup");
     }
-    worker = new Worker(registration.workerUrl, { type: "module" });
+    worker = service.takeWorker(registration.workerUrl);
     worker.onmessage = ({ data: message }: MessageEvent<RuntimeWorkerMessage>) => {
       if (runtime.disposed) return;
       if (finished) {

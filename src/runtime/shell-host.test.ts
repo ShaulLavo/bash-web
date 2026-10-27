@@ -92,6 +92,10 @@ function fixture(
       live();
       roots.set(workerProcessState(transport).pid, { transport, options });
     },
+    takeWorker(url: string) {
+      live();
+      return new Worker(url, { type: "module" });
+    },
     async rootExit(pid: number, status: number) {
       live();
       rootStatuses.push(status);
