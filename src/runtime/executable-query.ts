@@ -14,10 +14,15 @@ function importsModule(): WebAssembly.Module {
     3, 0x60, 5, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 1, 0x7f, 0x60, 1, 0x7f, 1, 0x7f, 0x60, 4, 0x7f, 0x7f,
     0x7f, 0x7f, 1, 0x7f,
   ];
-  const signatures = [0, 1, 1, 2];
+  const signatures = {
+    access_start: 0,
+    access_take: 1,
+    access_cancel: 1,
+    poll: 2,
+  } satisfies Record<(typeof names)[number], number>;
   const imports = Array.of<number>(names.length).concat(
-    names.flatMap((name, index) =>
-      encodedName("runtime_proc").concat(encodedName(name), [0, signatures[index]]),
+    names.flatMap((name) =>
+      encodedName("runtime_proc").concat(encodedName(name), [0, signatures[name]]),
     ),
   );
   const bytes = [0, 97, 115, 109, 1, 0, 0, 0].concat(
