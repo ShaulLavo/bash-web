@@ -46,6 +46,15 @@ shared runtime without creating a process service. The application remains
 responsible for `await runtime.dispose()` once the shared runtime is no longer
 needed.
 
+Inherited bridge terminals on stdin, stdout, and stderr share one input cursor.
+A terminal's original stdio target identifies its destination after remapping;
+Waffle descriptor rights decide whether the guest may read it. Redirected pipes
+and files keep their own rights and byte streams. Immediate terminal reads return
+`EAGAIN` while input is unavailable or cancelled; blocking reads return `EINTR`
+on cancellation. Revoked or failed terminal endpoints report hangup and reject
+I/O. This byte adapter does not provide `/dev/tty`, terminal mode, or geometry
+operations to ordinary guests.
+
 ## Demo terminal activity
 
 The demo requires `Atomics.waitAsync` on the page. It subscribes to the bridge's

@@ -26,7 +26,8 @@ export function createBridgeTerminal(
     return terminalSection(admission, () => {
       const phase = Atomics.load(bridge.state, control.phase);
       if (phase === 4) return -29;
-      if (target !== 0) return -8;
+      // Targets identify inherited terminal destinations, not descriptor rights.
+      // Waffle checks FD_READ before invoking this shared input stream.
       if (bridge.cancelled()) return AGAIN;
       // This bounded browser-terminal adapter deliberately keeps the interactive
       // editor raw so it can handle CR/LF and redraw itself. Once a command is
@@ -88,6 +89,7 @@ export function createBridgeTerminal(
       const sequence = Atomics.load(notification, 0);
       const result = operation(chunks);
       if (result !== AGAIN) return result;
+      if (operation === tryRead && bridge.cancelled()) return -27;
       Atomics.wait(notification, 0, sequence, 10);
     }
   };
@@ -100,15 +102,21 @@ export function createBridgeTerminal(
     write: (chunks) => blocking(tryWrite, chunks),
     readiness() {
       checkActive();
+      if (
+        terminalSection(admission, () =>
+          Atomics.load(bridge.state, control.phase) === 4 ? -29 : 0,
+        )
+      )
+        return { readable: false, writable: false, hangup: true, nbytes: 0 };
       const pending =
         (Atomics.load(bridge.state, control.outputWrite) -
           Atomics.load(bridge.state, control.outputRead)) >>>
         0;
       return {
-        readable: target === 0 && (bridge.availableInput() !== 0 || bridge.closed()),
+        readable: !bridge.cancelled() && (bridge.availableInput() !== 0 || bridge.closed()),
         writable: target !== 0 && !bridge.closed() && pending < bridge.output.length,
         hangup: bridge.closed(),
-        nbytes: target === 0 ? bridge.availableInput() : bridge.output.length - pending,
+        nbytes: bridge.availableInput(),
       };
     },
   };
