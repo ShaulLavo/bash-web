@@ -83,6 +83,7 @@ mod guest {
             .unwrap_or_else(|errno| report(format!("signal setup errno {errno}")));
         let executor = Executor::new();
         let runtime = Runtime::new(abi, executor.clone());
+        runtime.set_job_control(matches!(startup, Startup::Interactive));
         let session = Rc::new(Session::new(
             executor.clone(),
             Rc::new(runtime.clone()),

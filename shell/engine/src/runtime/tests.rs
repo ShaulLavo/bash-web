@@ -7,6 +7,9 @@ use crate::{
 };
 use std::collections::BTreeSet;
 
+/// The calling shell's own job, as runtime_proc.job_of(0) reports it.
+const SHELL_JOB: u32 = 7;
+
 struct FakeChild {
     job: u32,
     startup: Rc<Cell<Option<Result<(), i32>>>>,
@@ -242,7 +245,8 @@ impl Abi for Fake {
         if request.job > 0 {
             let job = request.job as u32;
             if self.reaped_jobs.borrow().contains(&job)
-                || !(self.held_jobs.borrow().contains(&job)
+                || !(job == SHELL_JOB
+                    || self.held_jobs.borrow().contains(&job)
                     || self
                         .children
                         .borrow()
@@ -428,6 +432,9 @@ impl Abi for Fake {
         Ok(pid)
     }
     fn job_of(&self, pid: u32) -> Result<u32, i32> {
+        if pid == 0 {
+            return Ok(SHELL_JOB);
+        }
         self.children
             .borrow()
             .get(&pid)
@@ -1366,6 +1373,33 @@ fn consuming_child_wait_keeps_job_pending_until_live_grandchild_finishes() {
     assert_eq!(fake.wait_job(job), Err(12));
     assert_eq!(fake.wait(grandchild), Err(12));
     assert_eq!(executor.drive(64).pending, 0);
+}
+
+#[test]
+fn without_job_control_foreground_children_join_the_shell_job() {
+    let (executor, fake, runtime) = setup();
+    runtime.set_job_control(false);
+    let group = runtime.allocate_group();
+    let pid = runtime.spawn(request(&runtime, "sleep", group)).unwrap();
+    assert_eq!(fake.requests.borrow().last().unwrap().job, SHELL_JOB as i32);
+    // The shell signals its own member by PID: never the job it belongs to itself.
+    runtime.kill_group(group, 2).unwrap();
+    assert_eq!(*fake.signals.borrow(), [(false, pid as u32, 2)]);
+    finish(
+        &executor,
+        &runtime,
+        executor.spawn(runtime.wait_group(group)),
+    )
+    .unwrap();
+    assert!(fake.wait_job_calls.borrow().is_empty());
+    assert_eq!(runtime.retained_count(), 0);
+    assert!(runtime.0.groups.borrow().is_empty());
+    let background = runtime.allocate_background_group();
+    runtime
+        .spawn(request(&runtime, "sleep", background))
+        .unwrap();
+    assert_eq!(fake.requests.borrow().last().unwrap().job, -1);
+    runtime.kill_group(background, 9).unwrap();
 }
 
 #[test]

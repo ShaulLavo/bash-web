@@ -16,7 +16,11 @@ async function command(page: Page, text: string) {
 }
 async function output(page: Page, text: string) {
   await expect
-    .poll(() => page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())))
+    .poll(() =>
+      page.evaluate(() =>
+        window.bashWeb?.readLines().map((line) => line.trim()),
+      ),
+    )
     .toContain(text);
 }
 
@@ -24,15 +28,21 @@ test("external WASI guest streams before exit", async ({ page }) => {
   await open(page);
   await command(page, "test-guest ticker 2 2000 STREAM");
   await output(page, "STREAM 0");
-  expect(await page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("running");
+  expect(await page.evaluate(() => window.bashWeb?.snapshot().state)).toBe(
+    "running",
+  );
   expect(
-    await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())),
+    await page.evaluate(() =>
+      window.bashWeb?.readLines().map((line) => line.trim()),
+    ),
   ).not.toContain("STREAM 1");
   await output(page, "STREAM 1");
   await ready(page);
 });
 
-test("external bun executes through normal command lookup", async ({ page }) => {
+test("external bun executes through normal command lookup", async ({
+  page,
+}) => {
   test.skip(
     true,
     "Public bun-wasm installer and worker exports exist; pending verification of an aligned Bun package, shared Waffle commit, and matching receipted guest; this case exercises the real Bun executable, not the generic WASI guest.",
@@ -43,16 +53,23 @@ test("external bun executes through normal command lookup", async ({ page }) => 
   await ready(page);
 });
 
-test("printf octal escapes produce exact bytes for an external guest", async ({ page }) => {
+test("printf octal escapes produce exact bytes for an external guest", async ({
+  page,
+}) => {
   await open(page);
   await command(page, `printf 'hi\\000\\377\\r\\n' | test-guest bytes`);
   await output(page, "BYTES:104,105,0,255,13,10");
   await ready(page);
 });
 
-test("echo options and escapes preserve exact bytes for an external guest", async ({ page }) => {
+test("echo options and escapes preserve exact bytes for an external guest", async ({
+  page,
+}) => {
   await open(page);
-  await command(page, `echo -e 'hi\\000\\0377\\r\\n\\cdiscarded' later | test-guest bytes`);
+  await command(
+    page,
+    `echo -e 'hi\\000\\0377\\r\\n\\cdiscarded' later | test-guest bytes`,
+  );
   await output(page, "BYTES:104,105,0,255,13,10");
   await ready(page);
   await command(page, `echo -neE 'a\\nb' | test-guest bytes`);
@@ -60,7 +77,9 @@ test("echo options and escapes preserve exact bytes for an external guest", asyn
   await ready(page);
 });
 
-test("read character counts preserve Unicode and unread pipe bytes", async ({ page }) => {
+test("read character counts preserve Unicode and unread pipe bytes", async ({
+  page,
+}) => {
   await open(page);
   await command(
     page,
@@ -85,27 +104,37 @@ test("external pipes preserve binary bytes, EOF, and backpressure in both direct
   await output(page, "foo");
   await output(page, "foo two");
   await ready(page);
-  await command(page, "test-guest pattern 8192 23 251 | test-guest check-pattern 8192 251");
+  await command(
+    page,
+    "test-guest pattern 8192 23 251 | test-guest check-pattern 8192 251",
+  );
   await output(page, "COUNT:188416:true");
   await ready(page);
 });
 
-test("tail WASI utility retains the last lines after pipeline EOF", async ({ page }) => {
+test("tail WASI utility retains the last lines after pipeline EOF", async ({
+  page,
+}) => {
   await open(page);
-  await command(page, "seq 1 20000 | tail -n 2; printf 'left\\nright\\n' | tail -n 1");
+  await command(
+    page,
+    "seq 1 20000 | tail -n 2; printf 'left\\nright\\n' | tail -n 1",
+  );
   await output(page, "19999");
   await output(page, "20000");
   await output(page, "right");
   await ready(page);
-  const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
-  expect(lines?.filter((line) => /^(19999|20000|left|right)$/.test(line))).toEqual([
-    "19999",
-    "20000",
-    "right",
-  ]);
+  const lines = await page.evaluate(() =>
+    window.bashWeb?.readLines().map((line) => line.trim()),
+  );
+  expect(
+    lines?.filter((line) => /^(19999|20000|left|right)$/.test(line)),
+  ).toEqual(["19999", "20000", "right"]);
 });
 
-test("command builtin launches a registered external WASI guest", async ({ page }) => {
+test("command builtin launches a registered external WASI guest", async ({
+  page,
+}) => {
   await open(page);
   await command(page, `command /bin/test-guest emit $'COMMAND_OK\\n'`);
   await output(page, "COMMAND_OK");
@@ -121,10 +150,15 @@ test("external status controls lists and pipelines", async ({ page }) => {
   await output(page, "STATUS:7");
   await output(page, "OR_OK");
   expect(
-    await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())),
+    await page.evaluate(() =>
+      window.bashWeb?.readLines().map((line) => line.trim()),
+    ),
   ).not.toContain("BAD_AND");
   await ready(page);
-  await command(page, "set -o pipefail; echo hi | test-guest exit 7; echo PIPE_STATUS:$?");
+  await command(
+    page,
+    "set -o pipefail; echo hi | test-guest exit 7; echo PIPE_STATUS:$?",
+  );
   await output(page, "PIPE_STATUS:7");
 });
 
@@ -132,17 +166,29 @@ test("Ctrl+C interrupts instrumented external WASM with status 130 and preserves
   page,
 }) => {
   await open(page);
-  await command(page, "export KEEP=retained; test-spin CHILD_STARTED; echo BAD_AFTER_INTERRUPT");
+  await command(
+    page,
+    "export KEEP=retained; test-spin CHILD_STARTED; echo BAD_AFTER_INTERRUPT",
+  );
   await output(page, "CHILD_STARTED");
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page)! + 1);
-  await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("running");
+  await expect
+    .poll(() => page.workers().length)
+    .toBe(baselineWorkers.get(page)! + 1);
+  await expect
+    .poll(() => page.evaluate(() => window.bashWeb?.snapshot().state))
+    .toBe("running");
   await page.keyboard.press("Control+c");
   await ready(page);
-  await command(page, `echo INTERRUPT:$?:$KEEP; test-guest emit $'NEXT_CHILD_OK\\n'`);
+  await command(
+    page,
+    `echo INTERRUPT:$?:$KEEP; test-guest emit $'NEXT_CHILD_OK\\n'`,
+  );
   await output(page, "INTERRUPT:130:retained");
   await output(page, "NEXT_CHILD_OK");
   expect(
-    await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())),
+    await page.evaluate(() =>
+      window.bashWeb?.readLines().map((line) => line.trim()),
+    ),
   ).not.toContain("BAD_AFTER_INTERRUPT");
   await ready(page);
 });
@@ -181,13 +227,17 @@ test("external terminal stdin receives a raw input line", async ({ page }) => {
   await open(page);
   await command(page, "test-guest read-line INPUT: INPUT_READY");
   await output(page, "INPUT_READY");
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page)! + 1);
+  await expect
+    .poll(() => page.workers().length)
+    .toBe(baselineWorkers.get(page)! + 1);
   await command(page, "typed line");
   await output(page, "INPUT:typed line");
   await ready(page);
 });
 
-test("unregistered files fail with 126 and leave the command host usable", async ({ page }) => {
+test("unregistered files fail with 126 and leave the command host usable", async ({
+  page,
+}) => {
   await open(page);
   await command(
     page,
@@ -196,12 +246,19 @@ test("unregistered files fail with 126 and leave the command host usable", async
   await output(page, "UNREGISTERED:126");
   await output(page, "AFTER_ERROR_OK");
   await ready(page);
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  await expect
+    .poll(() => page.workers().length)
+    .toBe(baselineWorkers.get(page));
 });
 
-test("PATH skips non-runnable candidates and resolves cwd components", async ({ page }) => {
+test("PATH skips non-runnable candidates and resolves cwd components", async ({
+  page,
+}) => {
   await open(page);
-  await command(page, "printf unregistered > /home/guest/test-guest; mkdir /tmp/test-guest");
+  await command(
+    page,
+    "printf unregistered > /home/guest/test-guest; mkdir /tmp/test-guest",
+  );
   await ready(page);
   for (const [label, cwd, path] of [
     ["SKIPPED", "/home/guest", "/missing:/home/guest:/tmp:/bin"],
@@ -217,11 +274,15 @@ test("PATH skips non-runnable candidates and resolves cwd components", async ({ 
     await output(page, `PATH_${label}`);
     await output(page, `PATH_STATUS_${label}:0`);
     await ready(page);
-    await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+    await expect
+      .poll(() => page.workers().length)
+      .toBe(baselineWorkers.get(page));
   }
 });
 
-test("command queries share live PATH lookup without launching a guest", async ({ page }) => {
+test("command queries share live PATH lookup without launching a guest", async ({
+  page,
+}) => {
   await open(page);
   await command(
     page,
@@ -229,7 +290,9 @@ test("command queries share live PATH lookup without launching a guest", async (
   );
   await output(page, "QUERY_FIXTURE:0");
   await ready(page);
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  await expect
+    .poll(() => page.workers().length)
+    .toBe(baselineWorkers.get(page));
   let queryWorkers = 0;
   const countQueryWorker = () => queryWorkers++;
   page.on("worker", countQueryWorker);
@@ -242,7 +305,9 @@ test("command queries share live PATH lookup without launching a guest", async (
   await output(page, "QUERY:0");
   await output(page, "VERBOSE:0");
   await ready(page);
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  await expect
+    .poll(() => page.workers().length)
+    .toBe(baselineWorkers.get(page));
   await command(
     page,
     "cd /programs; export PATH=../bin; command -v test-guest; command -V test-guest; export PATH=/missing; command -v test-guest; echo MISSING_QUERY:$?; command -V test-guest; echo MISSING_VERBOSE:$?",
@@ -261,14 +326,19 @@ test("command queries share live PATH lookup without launching a guest", async (
   await output(page, "DELETED_QUERY:1");
   await output(page, "DELETED_VERBOSE:1");
   await ready(page);
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  await expect
+    .poll(() => page.workers().length)
+    .toBe(baselineWorkers.get(page));
 });
 
 test("PATH preserves denied versus missing status without executing rejected files", async ({
   page,
 }) => {
   await open(page);
-  await command(page, "printf unregistered > /home/guest/test-guest; mkdir /tmp/test-guest");
+  await command(
+    page,
+    "printf unregistered > /home/guest/test-guest; mkdir /tmp/test-guest",
+  );
   await ready(page);
   for (const [label, path, status] of [
     ["FILE", "/home/guest:/missing", 126],
@@ -282,18 +352,26 @@ test("PATH preserves denied versus missing status without executing rejected fil
     );
     await output(page, `PATH_${label}:${status}`);
     await ready(page);
-    await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+    await expect
+      .poll(() => page.workers().length)
+      .toBe(baselineWorkers.get(page));
   }
   expect(
-    await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())),
+    await page.evaluate(() =>
+      window.bashWeb?.readLines().map((line) => line.trim()),
+    ),
   ).not.toContain("REJECTED_RAN");
   await command(page, "export PATH=/bin; test-guest emit $'PATH_RECOVERED\\n'");
   await output(page, "PATH_RECOVERED");
   await ready(page);
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  await expect
+    .poll(() => page.workers().length)
+    .toBe(baselineWorkers.get(page));
 });
 
-test("an executable file cannot be traversed as a directory", async ({ page }) => {
+test("an executable file cannot be traversed as a directory", async ({
+  page,
+}) => {
   await open(page);
   await command(
     page,
@@ -301,31 +379,43 @@ test("an executable file cannot be traversed as a directory", async ({ page }) =
   );
   await output(page, "NOTDIR:126");
   await output(page, "TRAILING:126");
-  const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
+  const lines = await page.evaluate(() =>
+    window.bashWeb?.readLines().map((line) => line.trim()),
+  );
   expect(lines).not.toContain("NOTDIR_RAN");
   expect(lines).not.toContain("TRAILING_RAN");
   await ready(page);
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  await expect
+    .poll(() => page.workers().length)
+    .toBe(baselineWorkers.get(page));
 });
 
 test("session restart terminates a running child worker", async ({ page }) => {
   await open(page);
   await command(page, "test-spin RESTART_CHILD");
   await output(page, "RESTART_CHILD");
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page)! + 1);
+  await expect
+    .poll(() => page.workers().length)
+    .toBe(baselineWorkers.get(page)! + 1);
   await page.evaluate(() => {
     void window.bashWeb?.restart();
   });
   await startupReady(page);
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  await expect
+    .poll(() => page.workers().length)
+    .toBe(baselineWorkers.get(page));
   await page.locator("textarea").focus();
   await command(page, `test-guest emit $'RESTART_OK\\n'`);
   await output(page, "RESTART_OK");
   await ready(page);
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  await expect
+    .poll(() => page.workers().length)
+    .toBe(baselineWorkers.get(page));
 });
 
-test("redirected stdout and stderr retain the child's write order", async ({ page }) => {
+test("redirected stdout and stderr retain the child's write order", async ({
+  page,
+}) => {
   await open(page);
   await command(page, "test-guest write-order 3 > ordered 2>&1; cat ordered");
   await output(page, "ERR:2");
@@ -335,11 +425,20 @@ test("redirected stdout and stderr retain the child's write order", async ({ pag
       .map((line) => line.trim())
       .filter((line) => /^(OUT|ERR):[0-2]$/.test(line)),
   );
-  expect(writes).toEqual(["OUT:0", "ERR:0", "OUT:1", "ERR:1", "OUT:2", "ERR:2"]);
+  expect(writes).toEqual([
+    "OUT:0",
+    "ERR:0",
+    "OUT:1",
+    "ERR:1",
+    "OUT:2",
+    "ERR:2",
+  ]);
   await ready(page);
 });
 
-test("child stdio preserves pipe rather than terminal device types", async ({ page }) => {
+test("child stdio preserves pipe rather than terminal device types", async ({
+  page,
+}) => {
   await open(page);
   await command(page, "printf x | test-guest fd-types 2>err | cat");
   await output(page, "STDIOTTY:0:0:0");
@@ -353,7 +452,10 @@ for (const [label, setup, executable] of [
 ]) {
   test(`external executable lookup resolves ${label}`, async ({ page }) => {
     await open(page);
-    await command(page, `${setup}; ${executable} emit $'RESOLVED_OK\\n'; echo LOOKUP:$?`);
+    await command(
+      page,
+      `${setup}; ${executable} emit $'RESOLVED_OK\\n'; echo LOOKUP:$?`,
+    );
     await output(page, "RESOLVED_OK");
     await output(page, "LOOKUP:0");
     await ready(page);
@@ -362,22 +464,41 @@ for (const [label, setup, executable] of [
 
 for (const [label, setup, executable] of [
   ["missing relative", "cd /bin", "./missing"],
-  ["missing intermediate before parent", "cd /bin", "/missing/../bin/test-guest"],
-  ["deleted registered", "test-guest unlink /bin/test-guest", "/bin/test-guest"],
+  [
+    "missing intermediate before parent",
+    "cd /bin",
+    "/missing/../bin/test-guest",
+  ],
+  [
+    "deleted registered",
+    "test-guest unlink /bin/test-guest",
+    "/bin/test-guest",
+  ],
 ]) {
-  test(`external executable lookup rejects ${label} files`, async ({ page }) => {
+  test(`external executable lookup rejects ${label} files`, async ({
+    page,
+  }) => {
     await open(page);
-    await command(page, `${setup}; ${executable} emit $'DELETED_RAN\\n'; echo MISSING:$?`);
+    await command(
+      page,
+      `${setup}; ${executable} emit $'DELETED_RAN\\n'; echo MISSING:$?`,
+    );
     await output(page, "MISSING:127");
     expect(
-      await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())),
+      await page.evaluate(() =>
+        window.bashWeb?.readLines().map((line) => line.trim()),
+      ),
     ).not.toContain("DELETED_RAN");
     await ready(page);
-    await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+    await expect
+      .poll(() => page.workers().length)
+      .toBe(baselineWorkers.get(page));
   });
 }
 
-test("external zero-length stdin read finishes without input or EOF", async ({ page }) => {
+test("external zero-length stdin read finishes without input or EOF", async ({
+  page,
+}) => {
   await open(page);
   await command(page, "test-guest zero-read");
   await output(page, "ZERO_READ:0");
@@ -388,26 +509,40 @@ test("normal child exit hands raw terminal input back before the next child", as
   page,
 }, testInfo) => {
   await open(page);
-  await command(page, "export HANDOFF=retained; test-guest read-exact 5 PARTIAL: TYPE_NOW");
+  await command(
+    page,
+    "export HANDOFF=retained; test-guest read-exact 5 PARTIAL: TYPE_NOW",
+  );
   await output(page, "TYPE_NOW");
   // Raw input has no canonical line buffer: the guest consumes the unfinished line.
   await page.keyboard.insertText("stale");
   await output(page, "PARTIAL:stale");
   await ready(page);
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
-  await command(page, "echo HANDOFF:$HANDOFF; test-guest read-line INPUT: NEXT_READY");
+  await expect
+    .poll(() => page.workers().length)
+    .toBe(baselineWorkers.get(page));
+  await command(
+    page,
+    "echo HANDOFF:$HANDOFF; test-guest read-line INPUT: NEXT_READY",
+  );
   await output(page, "HANDOFF:retained");
   await output(page, "NEXT_READY");
   await command(page, "fresh");
   await output(page, "INPUT:fresh");
   await ready(page);
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  await expect
+    .poll(() => page.workers().length)
+    .toBe(baselineWorkers.get(page));
   await command(page, "echo NORMAL_EXIT_SHELL_OK");
   await output(page, "NORMAL_EXIT_SHELL_OK");
-  await page.screenshot({ path: testInfo.outputPath("normal-exit-handoff.png") });
+  await page.screenshot({
+    path: testInfo.outputPath("normal-exit-handoff.png"),
+  });
 });
 
-test("registered executable paths must still name regular files", async ({ page }) => {
+test("registered executable paths must still name regular files", async ({
+  page,
+}) => {
   await open(page);
   await command(
     page,
@@ -415,10 +550,14 @@ test("registered executable paths must still name regular files", async ({ page 
   );
   await output(page, "DIRECTORY:126");
   expect(
-    await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())),
+    await page.evaluate(() =>
+      window.bashWeb?.readLines().map((line) => line.trim()),
+    ),
   ).not.toContain("DIRECTORY_RAN");
   await ready(page);
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  await expect
+    .poll(() => page.workers().length)
+    .toBe(baselineWorkers.get(page));
 });
 
 for (const [name, script, expected, status] of [
@@ -435,20 +574,27 @@ for (const [name, script, expected, status] of [
     await output(page, expected);
     await output(page, `WC_STATUS:${status}`);
     await ready(page);
-    await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+    await expect
+      .poll(() => page.workers().length)
+      .toBe(baselineWorkers.get(page));
   });
 }
 
 test("wc reads files and reports totals in Chromium", async ({ page }) => {
   await open(page);
-  await command(page, "printf 'a b\\n' > one; printf 'x\\ny z\\n' > two; wc one two");
+  await command(
+    page,
+    "printf 'a b\\n' > one; printf 'x\\ny z\\n' > two; wc one two",
+  );
   await output(page, "1  2  4 one");
   await output(page, "2  3  6 two");
   await output(page, "3  5 10 total");
   await ready(page);
 });
 
-test("wc returns file and option errors without stopping the browser shell", async ({ page }) => {
+test("wc returns file and option errors without stopping the browser shell", async ({
+  page,
+}) => {
   await open(page);
   await command(page, "wc missing; printf 'MISSING:%s\\n' \"$?\"");
   await output(page, "MISSING:1");
@@ -461,23 +607,32 @@ test("wc returns file and option errors without stopping the browser shell", asy
   await ready(page);
 });
 
-test("wc bounds memory on sustained input and stops on Ctrl+C", async ({ page }, info) => {
+test("wc bounds memory on sustained input and stops on Ctrl+C", async ({
+  page,
+}, info) => {
   await open(page);
   const baseline = baselineWorkers.get(page)!;
   const before = await page.evaluate(() => window.bashWeb!.runtimeSnapshot()!);
-  await command(page, "export KEEP=retained; while printf x; do :; done | wc; echo BAD_AFTER");
+  await command(
+    page,
+    "export KEEP=retained; while printf x; do :; done | wc; echo BAD_AFTER",
+  );
   await expect.poll(() => page.workers().length).toBe(baseline + 1);
   await page.waitForTimeout(100);
   const memory: number[] = [];
   for (let sample = 0; sample < 8; sample++) {
-    const guests = await page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0].guests);
+    const guests = await page.evaluate(
+      () => window.bashWeb!.runtimeSnapshot()!.roots[0].guests,
+    );
     expect(guests).toHaveLength(1);
     expect(guests[0].memoryBytes).toBeGreaterThan(0);
     memory.push(guests[0].memoryBytes);
     await page.waitForTimeout(25);
   }
   expect(Math.max(...memory)).toBeLessThanOrEqual(32 * 1024 * 1024);
-  expect(Math.max(...memory) - Math.min(...memory)).toBeLessThanOrEqual(8 * 1024 * 1024);
+  expect(Math.max(...memory) - Math.min(...memory)).toBeLessThanOrEqual(
+    8 * 1024 * 1024,
+  );
   await page.keyboard.press("Control+c");
   await ready(page);
   await command(page, 'printf \'INTERRUPT:%s:%s\\n\' "$?" "$KEEP"');
@@ -485,19 +640,25 @@ test("wc bounds memory on sustained input and stops on Ctrl+C", async ({ page },
   await ready(page);
   await expect.poll(() => page.workers().length).toBe(baseline);
   expect(
-    await page.evaluate(() => window.bashWeb!.readLines().map((line) => line.trim())),
+    await page.evaluate(() =>
+      window.bashWeb!.readLines().map((line) => line.trim()),
+    ),
   ).not.toContain("BAD_AFTER");
   await info.attach("wc-sustained-input-memory", {
     body: JSON.stringify({
       memory,
       before: before.roots[0].memoryBytes,
-      after: await page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0].memoryBytes),
+      after: await page.evaluate(
+        () => window.bashWeb!.runtimeSnapshot()!.roots[0].memoryBytes,
+      ),
     }),
     contentType: "application/json",
   });
 });
 
-test("sh and bash run the shell guest as ordinary programs on PATH", async ({ page }) => {
+test("sh and bash run the shell guest as ordinary programs on PATH", async ({
+  page,
+}) => {
   await open(page);
   await command(
     page,
@@ -513,5 +674,38 @@ test("sh and bash run the shell guest as ordinary programs on PATH", async ({ pa
   ])
     await output(page, line);
   await ready(page);
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+  await expect
+    .poll(() => page.workers().length)
+    .toBe(baselineWorkers.get(page));
+});
+
+test("sh -c keeps its commands in the shell's own job, so Ctrl+C reaches them", async ({
+  page,
+}) => {
+  await open(page);
+  await command(
+    page,
+    `sh -c 'test-guest job; test-guest job; test-spin SH_CHILD_STARTED; echo BAD_AFTER_INTERRUPT'`,
+  );
+  await output(page, "SH_CHILD_STARTED");
+  const jobs = await page.evaluate(() =>
+    window.bashWeb
+      ?.readLines()
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("JOB:")),
+  );
+  expect(jobs).toHaveLength(2);
+  expect(jobs?.[0]).toBe(jobs?.[1]);
+  await page.keyboard.press("Control+c");
+  await ready(page);
+  await command(page, "echo SH_INTERRUPT:$?");
+  await output(page, "SH_INTERRUPT:130");
+  expect(
+    await page.evaluate(() =>
+      window.bashWeb?.readLines().map((line) => line.trim()),
+    ),
+  ).not.toContain("BAD_AFTER_INTERRUPT");
+  await expect
+    .poll(() => page.workers().length)
+    .toBe(baselineWorkers.get(page));
 });
