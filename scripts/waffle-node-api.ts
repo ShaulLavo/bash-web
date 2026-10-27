@@ -1,3 +1,4 @@
+export { installCut } from "../src/utilities/cut";
 export { createRuntime } from "waffle";
 export { Wasi } from "waffle/core/wasi";
 export { MemFS } from "waffle/fs/memory";
@@ -15,6 +16,7 @@ export { waitStatus } from "waffle/proc/wait-status";
 export { launchTerminalWorker } from "../src/runtime/worker-launcher";
 export { installUtility } from "../src/utilities/install";
 export { installCat } from "../src/utilities/cat";
+export { installFind } from "../src/utilities/find";
 export { installGrep } from "../src/utilities/grep";
 export { installHead } from "../src/utilities/head";
 export { installWhich } from "../src/utilities/which";

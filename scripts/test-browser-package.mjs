@@ -85,6 +85,8 @@ test("worker preparation bundles the public Waffle FS worker and finish-build re
   const programs = [
     "env",
     "cat",
+    "cut",
+    "find",
     "grep",
     "head",
     "which",

@@ -1,3 +1,4 @@
+import { installCut } from "../src/utilities/cut";
 // Acceptance/demo composition. Bun's public async installer and worker exports exist.
 // Bun cases stay disabled pending a verified Bun package, shared Waffle commit, and
 // matching receipted guest. Then compose createBunRuntimeLease with that installer
@@ -7,6 +8,7 @@ import { withVfsImplementation } from "../node_modules/waffle/fs/vfs-internal.ts
 import { mountBrowser, type BrowserRuntimeLease } from "../src/browser/main";
 import { registerTestPrograms } from "./helpers/test-programs";
 import { installCat } from "../src/utilities/cat";
+import { installFind } from "../src/utilities/find";
 import { installGrep } from "../src/utilities/grep";
 import { installHead } from "../src/utilities/head";
 import { installMkdir } from "../src/utilities/mkdir";
@@ -100,6 +102,8 @@ mountBrowser({
       Promise.all(
         [
           installCat,
+          installCut,
+          installFind,
           installGrep,
           installHead,
           installLs,
