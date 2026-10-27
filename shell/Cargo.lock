@@ -481,11 +481,9 @@ checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 [[package]]
 name = "findutils"
 version = "0.11.0"
-source = "git+https://github.com/uutils/findutils?rev=505421d4e03586efeb7b9c55adf057599e192e0a#505421d4e03586efeb7b9c55adf057599e192e0a"
 dependencies = [
  "argmax",
  "chrono",
- "clap",
  "faccess",
  "itertools",
  "nix 0.31.3",
