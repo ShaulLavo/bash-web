@@ -220,7 +220,10 @@ security policy must permit the worker/WASM loading strategy it uses.
 
 The application registers the programs it wants with its Waffle runtime.
 `createShell` does not know Bun, register aliases, or provide an external-program
-registry of its own. A host can use Bun's guest adapter and guest binary as a
+registry of its own. To let other programs start the shell itself, for example
+Bun running package scripts with `sh -c`, call `installShellCommands(runtime)`.
+It registers the same shell guest at `/bin/sh` and `/bin/bash`
+([API](reference/api.md#installshellcommandsruntime-options)). A host can use Bun's guest adapter and guest binary as a
 separate integration. Every registered executable must resolve to its actual
 program, not to the shell binary as a placeholder.
 
