@@ -29,7 +29,8 @@ function printEnv(args: string[], env: Record<string, string> = {}) {
     stderr: (bytes) => stderr.push(Buffer.from(bytes)),
   });
   try {
-    const instance = new WebAssembly.Instance(guest, wasi.imports(guest));
+    const imports = wasi.imports(guest);
+    const instance = new WebAssembly.Instance(guest, imports);
     const status = wasi.start(instance);
     return { status, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr) };
   } finally {
@@ -39,6 +40,36 @@ function printEnv(args: string[], env: Record<string, string> = {}) {
 
 const cases: { name: string; args: string[]; env: Record<string, string>; stdout: string }[] = [
   { name: "empty environment", args: [], env: {}, stdout: "" },
+  {
+    name: "ordered unset and repeated assignments",
+    args: ["-u", "A", "-u", "MISSING", "A=first", "A=last", "C=x=y"],
+    env: { A: "old", B: "keep" },
+    stdout: "B=keep\nA=last\nC=x=y\n",
+  },
+  {
+    name: "dash clears and preserves unusual assignment names",
+    args: ["-", "--odd=value", "EMPTY="],
+    env: { OLD: "gone" },
+    stdout: "--odd=value\nEMPTY=\n",
+  },
+  {
+    name: "option terminator permits dash assignment",
+    args: ["-i", "--", "-name=value"],
+    env: {},
+    stdout: "-name=value\n",
+  },
+  {
+    name: "NUL separates values containing newlines",
+    args: ["-i", "-0", "A=line\nbreak", "B=two words"],
+    env: {},
+    stdout: "A=line\nbreak\0B=two words\0",
+  },
+  {
+    name: "split escapes single quotes and comments",
+    args: ["-i", "-S", "A=\"one\\_two\" B='${BASE}' # comment"],
+    env: { BASE: "expanded" },
+    stdout: "A=one two\nB=${BASE}\n",
+  },
   {
     name: "inherited environment",
     args: [],
@@ -121,24 +152,33 @@ test("env input debug output does not alter printed bytes", () => {
   assert.ok(actual.stderr.length > 0);
 });
 
-test("env command forms stay outside support and have no process ABI imports", () => {
+test("env unsupported command modes reject before process imports or input", () => {
   assert.ok(
     WebAssembly.Module.imports(guest).every((entry) => entry.module === "wasi_snapshot_preview1"),
   );
   for (const args of [
-    ["-i", "A=one", "echo", "hello"],
-    ["-S", "A=one echo hello"],
-    ["-C", "/", "echo"],
+    ["-i", "env"],
+    ["env"],
+    ["-C", "/", "env"],
+    ["-a", "custom", "env"],
+    ["-S", "A=one env"],
+    ["-u", "PWD", "env"],
+    ["PWD=/different", "env"],
+    ["-C", "/tmp", "env"],
+    ["--ignore-signal=INT", "env"],
+    ["--default-signal", "env"],
+    ["--block-signal=PIPE", "env"],
+    ["--list-signal-handling", "env"],
+    ["-S", "--ignore-signal=INT env"],
   ]) {
-    const actual = printEnv(args);
-    assert.equal(actual.status, 126, actual.stderr.toString());
-    assert.equal(actual.stdout.length, 0, "a command must not become an environment dump");
+    const actual = printEnv(args, { PWD: "/" });
+    assert.equal(actual.status, 125, actual.stderr.toString());
+    assert.equal(actual.stdout.length, 0);
     assert.ok(actual.stderr.length > 0);
   }
-  assert.equal(printEnv(["-a", "other", "echo"]).status, 2);
 });
 
-async function installedFixture(context: TestContext) {
+async function installedFixture(context: TestContext, cwd = "/tmp/spec") {
   installNodeWorkers();
   const runtime = api.createRuntime({
     filesystem: { workerURL: new URL("fs.mjs", nodeDirectory), mode: "memory" },
@@ -164,7 +204,7 @@ async function installedFixture(context: TestContext) {
       shell,
       {
         modulePath: "",
-        tmp: "/tmp/spec",
+        tmp: cwd,
         env: { PATH: "/bin", A: "old" },
         fixtureDirectory: directory,
       },

@@ -1621,6 +1621,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "shell-wasi-process"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "shell-wc"
 version = "0.0.1"
 dependencies = [
@@ -1884,7 +1892,6 @@ dependencies = [
 [[package]]
 name = "uu_env"
 version = "0.13.0"
-source = "git+https://github.com/uutils/coreutils?rev=07763857f6b9a547742a994b58aef0ccd036198b#07763857f6b9a547742a994b58aef0ccd036198b"
 dependencies = [
  "clap",
  "fluent",
