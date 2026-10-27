@@ -82,7 +82,6 @@ Do not regenerate or edit these in ordinary work. Scripts check them by digest.
 - `shell/compat-fixtures/`: test-only guests (`argv-py`, `printenv-py`) and `shell-cli`, the engine composed with the Waffle family crates. Never packaged.
 - `src/shell.ts`, `src/index.ts`: the public API. See [API reference](reference/api.md).
 - `src/runtime/`: adapters that connect the shell guest to Waffle and the generic program launcher used by `waffle-base`.
-- `src/utilities/`: the optional Python entry pending its corrected family export.
 - `src/browser/`: the demo page and its terminal UI. Not part of the shell API.
 - `tests/`: Playwright acceptance tests. `tests/guest/` holds the source-built `test-guest` and `test-spin` programs ([Test guests](test-guests.md)).
 - `scripts/`: build helpers, the scoreboard, differential fuzzers, provenance checks.

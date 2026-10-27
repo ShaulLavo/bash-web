@@ -20,5 +20,5 @@
   // The duplicate-check driver spawns the pinned jscpd executable by path.
   "ignoreDependencies": ["ghostty-webgpu", "@fregat/hotkeys", "jscpd"],
   // WASI qualification and CPython's native build require these system tools.
-  "ignoreBinaries": ["wasmtime", "cc"],
+  "ignoreBinaries": ["wasmtime"],
 }

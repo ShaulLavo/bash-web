@@ -5,7 +5,7 @@ import { guestLauncher } from "./worker-launcher";
 
 type UtilityModule = WebAssembly.Module | (() => WebAssembly.Module | Promise<WebAssembly.Module>);
 
-export type UtilitySource = Uint8Array | (() => Uint8Array | Promise<Uint8Array>);
+type UtilitySource = Uint8Array | (() => Uint8Array | Promise<Uint8Array>);
 
 export type WasiUtilityOptions = {
   readonly workerUrl?: string | URL;

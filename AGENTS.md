@@ -27,7 +27,7 @@ bash-web is a Rust shell engine compiled to WASM, plus a TypeScript browser adap
 
 ## Where things are
 
-- Public API: `src/shell.ts`, `src/index.ts`, `src/bridge.ts`, optional `src/utilities/python.ts`.
+- Public API: `src/shell.ts`, `src/index.ts`, `src/bridge.ts`.
 - Shell guest and worker glue: `src/runtime/`. The demo page is `src/browser/` and is not API.
 - Engine: `shell/engine/src/`. Parser: `shell/parser/`. Native family composition for tests: `shell/compat-fixtures/`.
 - Native smoke test: `cargo build --release --locked --manifest-path shell/Cargo.toml -p shell-engine --bin shell-engine`, then `shell/target/release/shell-engine -c '<script>'`. It has no external commands. `[[ =~ ]]` needs `LC_ALL=C.UTF-8`.
