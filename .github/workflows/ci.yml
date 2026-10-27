@@ -33,9 +33,9 @@ jobs:
           key: packages-${{ runner.os }}-${{ runner.arch }}-node26.12.1-${{ steps.inputs.outputs.dependencies }}
       - if: steps.packages.outputs.cache-hit != 'true' || steps.downloads.outputs.cache-hit != 'true'
         run: npm ci --ignore-scripts
-      - run: npm run sources:browser && npm run build:worker && npm run build:node-harness
+      - run: npm run sources:browser && npm run build:git && npm run build:worker && npm run build:node-harness
       - name: Pack shared JavaScript inputs
-        run: tar -czf "$RUNNER_TEMP/javascript.tar.gz" node_modules .sources .build/browser .build/node dist/shell-worker.js dist/fs-worker.js
+        run: tar -czf "$RUNNER_TEMP/javascript.tar.gz" node_modules .sources .build/browser .build/node dist/git-command.js dist/git-command.d.ts dist/shell-worker.js dist/fs-worker.js
       - uses: actions/upload-artifact@v4
         with:
           name: javascript-${{ github.sha }}

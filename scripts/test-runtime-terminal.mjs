@@ -21,6 +21,7 @@ for (const entry of entries) {
     format: "esm",
     platform: "neutral",
     conditions: ["browser"],
+    mainFields: ["browser", "module", "main"],
     external: ["node:*"],
     write: false,
     // Tests replace browser workers; imported adapter URL construction still needs

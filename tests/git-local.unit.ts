@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import * as fs from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as git from "isomorphic-git";
 import fixture from "../scripts/owned-fixtures/git-local.json" with { type: "json" };
@@ -10,7 +11,7 @@ import { gitSnapshot } from "./helpers/git-snapshot";
 import { captureGit } from "./helpers/git-output";
 
 async function repository(context: TestContext) {
-  const root = await fs.mkdtemp("/work/tmp/bash-web-git-");
+  const root = await fs.mkdtemp(join(tmpdir(), "bash-web-git-"));
   context.after(() => fs.rm(root, { recursive: true, force: true }));
   const command = async (argv: readonly string[]) => {
     return captureGit((invocation) => runGit(filesystem, invocation), {

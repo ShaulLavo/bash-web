@@ -156,7 +156,7 @@ test("the actual aggregate shell command rejects each non-success result in ever
 test("each moved current-main gate has one owner", () => {
   const workflowJobs = jobs();
   const expected: Record<string, readonly string[]> = {
-    prepare: ["sources:browser", "build:worker", "build:node-harness"],
+    prepare: ["sources:browser", "build:git", "build:worker", "build:node-harness"],
     layers: ["test:check-layers", "check:layers", "typecheck:layers"],
     quality: ["quality:js", "test:ci", "test:guest-build", "typecheck:guest-build", "typecheck:ci"],
     native: [
@@ -484,6 +484,8 @@ test("scoreboard and observation run independently using one shared node build",
   );
   assert.deepEqual(buildOwners, ["prepare"]);
   const prepare = commands(workflowJobs.prepare);
+  assert.ok(prepare.indexOf("npm run build:git") < prepare.indexOf("tar -czf"));
+  assert.match(prepare, /tar -czf .* dist\/git-command\.js dist\/git-command\.d\.ts /);
   assert.ok(prepare.indexOf("npm run build:node-harness") < prepare.indexOf("tar -czf"));
   assert.match(prepare, /tar -czf .* \.build\/node /);
   assert.equal(
