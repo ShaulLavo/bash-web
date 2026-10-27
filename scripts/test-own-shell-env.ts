@@ -13,6 +13,12 @@ import {
 const source = await readWasiSource("env");
 const guest = await WebAssembly.compile(source);
 
+function rejectProcessImport(entry: WebAssembly.ModuleImportDescriptor) {
+  return () => {
+    throw new Error(`print-only env called ${entry.module}.${entry.name}`);
+  };
+}
+
 // These are literal source-contract expectations, not observations from a host oracle.
 function printEnv(args: string[], env: Record<string, string> = {}) {
   const stdout: Buffer[] = [];
@@ -33,9 +39,7 @@ function printEnv(args: string[], env: Record<string, string> = {}) {
     for (const entry of WebAssembly.Module.imports(guest)) {
       if (entry.module === "wasi_snapshot_preview1") continue;
       imports[entry.module] ??= {};
-      imports[entry.module][entry.name] = () => {
-        throw new Error(`print-only env called ${entry.module}.${entry.name}`);
-      };
+      imports[entry.module][entry.name] = rejectProcessImport(entry);
     }
     const instance = new WebAssembly.Instance(guest, imports);
     const status = wasi.start(instance);

@@ -49,6 +49,9 @@ pub fn run_program(
 ) -> UResult<()> {
     use shell_wasi_process::{Request, inherited_shell_descriptors, resolve_executable, run};
     let program = text(program)?;
+    if program.is_empty() {
+        return Err(USimpleError::new(127, "'': No such file or directory"));
+    }
     let cwd = std::env::current_dir()
         .map_err(|error| USimpleError::new(125, format!("cannot read cwd: {error}")))?;
     let cwd = text(cwd.as_os_str())?;

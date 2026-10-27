@@ -114,7 +114,7 @@ impl Child {
             return Ok(self.outcome);
         }
         if self.outcome.is_none() {
-            self.outcome = wait_record("wait", |out| unsafe { imports::wait(self.pid, out) })?;
+            self.outcome = wait_child(self.pid)?;
         }
         let Some(outcome) = self.outcome else {
             return Ok(None);
@@ -141,7 +141,7 @@ impl Child {
                 return Err(Error::Interrupted(signal));
             }
             if self.outcome.is_none() {
-                self.outcome = wait_record("wait", |out| unsafe { imports::wait(self.pid, out) })?;
+                self.outcome = wait_child(self.pid)?;
             }
             if self.outcome.is_some() {
                 return self.collect_job();
@@ -190,6 +190,10 @@ impl Drop for Child {
             );
         }
     }
+}
+
+fn wait_child(pid: u32) -> Result<Option<Outcome>, Error> {
+    wait_record("wait", |out| unsafe { imports::wait(pid, out) })
 }
 
 fn wait_record(

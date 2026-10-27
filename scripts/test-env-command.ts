@@ -78,6 +78,7 @@ test(
     assert.match(split.stdout, /arg0=<probe>\narg1=<two words>\narg2=<>\nenv=<A=new>/);
     for (const [args, code] of [
       [["missing-command"], 127],
+      [[""], 127],
       [["/denied/probe"], 126],
       [["-0", "probe"], 125],
       [["-C", "/"], 125],
