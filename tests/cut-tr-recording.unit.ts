@@ -1,3 +1,4 @@
+import { trCases } from "./helpers/tr-cases.ts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -80,5 +81,19 @@ test("cut runners select all 24 accepted cut observations and no parked tr cases
   for (const path of ["../scripts/test-own-shell-cut.ts", "cut.spec.ts"]) {
     const source = readFileSync(new URL(path, import.meta.url), "utf8");
     assert.doesNotMatch(source, /installTr|api\.installTr|tr a-z/);
+  }
+});
+
+test("tr qualification selects the remaining 21 frozen cases without a host oracle", () => {
+  const selected = trCases();
+  assert.equal(selected.length, 21);
+  assert.deepEqual(
+    selected,
+    cutTrRecording().cases.filter(({ name }) => !name.startsWith("cut ")),
+  );
+  for (const path of ["../scripts/test-own-shell-tr.ts", "tr.spec.ts"]) {
+    const source = readFileSync(new URL(path, import.meta.url), "utf8");
+    assert.match(source, /trCases\(\)/);
+    assert.doesNotMatch(source, /node:child_process|spawnSync/);
   }
 });

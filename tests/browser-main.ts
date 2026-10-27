@@ -1,3 +1,4 @@
+import { installTr } from "../src/utilities/tr";
 import { installCut } from "../src/utilities/cut";
 // Acceptance/demo composition. Bun's public async installer and worker exports exist.
 // Bun cases stay disabled pending a verified Bun package, shared Waffle commit, and
@@ -103,6 +104,7 @@ mountBrowser({
         [
           installCat,
           installCut,
+          installTr,
           installFind,
           installGrep,
           installHead,
