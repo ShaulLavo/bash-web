@@ -125,8 +125,14 @@ test(
   { timeout: 10000 },
   async (context) => {
     const state = await fixture(context);
+    const input = `${"a".repeat(256)}\n`.repeat(1024);
+    await state.runtime.filesystem.writeFile(
+      "/tmp/spec/closed-output-args",
+      new TextEncoder().encode(input),
+    );
+    await state.runtime.filesystem.drain();
     const result = await state.execute(
-      "set -o pipefail; printf 'a a a a a a a a a a a a a a a a a a a a' | xargs -n1 | { read -r; exit 0; }; printf 'STATUS:%s:%s\\n' \"$?\" \"${PIPESTATUS[*]}\"",
+      "set -o pipefail; printf '' | xargs -a closed-output-args -n1 | { read -r; exit 0; }; printf 'STATUS:%s:%s\\n' \"$?\" \"${PIPESTATUS[*]}\"",
     );
     assert.equal(result.status, 0);
     assert.match(result.stdout, /STATUS:1:0 1 0\n$/);

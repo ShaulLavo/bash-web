@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import type { TestContext } from "node:test";
+
+interface WaffleFixtureContext {
+  after(callback: () => Promise<void>): void;
+}
 
 export interface WaffleFixtureRuntime {
   dispose(): Promise<void>;
@@ -36,19 +39,19 @@ async function cleanupWaffleFixture<Runtime extends WaffleFixtureRuntime>(
   stop: () => void,
   dependencies: Pick<WaffleFixtureDependencies<Runtime>, "stopNodeWorkers" | "liveNodeWorkers">,
 ) {
-  let firstError: unknown;
+  const failures: unknown[] = [];
   const remember = (error: unknown) => {
-    firstError ??= error;
+    failures.push(error);
   };
   attempt(stop, remember);
   await attemptAsync(() => runtime?.dispose(), remember);
   await attemptAsync(dependencies.stopNodeWorkers, remember);
   attempt(() => assert.equal(dependencies.liveNodeWorkers(), 0), remember);
-  if (firstError) throw firstError;
+  if (failures.length > 0) throw failures[0];
 }
 
 export async function createWaffleFixture<Runtime extends WaffleFixtureRuntime>(
-  context: TestContext,
+  context: WaffleFixtureContext,
   dependencies: WaffleFixtureDependencies<Runtime>,
 ) {
   let runtime: Runtime | undefined;

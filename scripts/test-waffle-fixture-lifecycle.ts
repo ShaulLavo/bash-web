@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test, { type TestContext } from "node:test";
+import test from "node:test";
 import { createWaffleFixture } from "./waffle-fixture-lifecycle.ts";
 
 type FakeRuntime = { dispose(): Promise<void> };
@@ -10,7 +10,7 @@ function context() {
     after(callback: () => Promise<void>) {
       cleanup = callback;
     },
-  } as unknown as TestContext;
+  };
   return {
     value,
     async cleanup() {
@@ -73,5 +73,25 @@ test("stop failure does not skip runtime or worker cleanup", async () => {
     throw stopError;
   });
   await assert.rejects(state.cleanup(), stopError);
+  assert.deepEqual(calls, ["install", "stop", "dispose", "stop-workers", "live"]);
+});
+
+test("cleanup preserves the first failure even when it is falsy", async () => {
+  const calls: string[] = [];
+  const state = context();
+  const fixture = await createWaffleFixture(
+    state.value,
+    dependencies(calls, () => ({
+      async dispose() {
+        calls.push("dispose");
+        throw new Error("later failure");
+      },
+    })),
+  );
+  fixture.setStop(() => {
+    calls.push("stop");
+    throw 0;
+  });
+  await assert.rejects(state.cleanup(), (error) => error === 0);
   assert.deepEqual(calls, ["install", "stop", "dispose", "stop-workers", "live"]);
 });
