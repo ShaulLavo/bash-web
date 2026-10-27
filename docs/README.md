@@ -22,7 +22,7 @@ Start at the [README](../README.md) for what bash-web is. This page maps the res
 - [API reference](reference/api.md): `createShell`, `Shell`, `SharedBridge`, utility entries
 - [Browser integration](browser-runtime.md): Asset contract, storage, `PATH` lookup, test scope, source provenance
 - [Async shell core](shell-engine.md): Execution contract, bounds, supported syntax
-- [Shell workspace](shell-workspace.md): Parser crate, runtime ABI for the interactive guest, the CLI
+- [Shell workspace](shell-workspace.md): Parser crate, runtime ABI for the interactive guest, the CLI; [WASI utility processes](wasi-process.md) for child execution
 - [Engine ownership notes](reference/engine-ownership.md): Which module owns execution types, bindings, parsing entry points
 - [Guest libc and build provenance](wasi-libc.md): The patched wasi-libc every WASI guest links against
 - [Test guests](test-guests.md): `test-guest` and `test-spin` commands and the descriptor test matrix
