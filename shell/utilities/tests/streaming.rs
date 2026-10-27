@@ -365,3 +365,37 @@ fn tail_reports_output_descriptor_errors() {
     assert_eq!(rig.run("exec 1>&-; printf x | tail"), 1, "{}", rig.text());
     assert!(rig.text().contains("tail: standard output is unavailable"));
 }
+
+#[test]
+fn grep_agent_usage_controls() {
+    let cases: serde_json::Value =
+        serde_json::from_str(include_str!("../../../tests/helpers/grep-usage-cases.json")).unwrap();
+    for case in cases.as_array().unwrap() {
+        let rig = Rig::new();
+        let (stderr, diagnostic) = capture(16 * 1024);
+        let mut fds = rig.fds.clone();
+        fds.insert(2, stderr);
+        rig.shell.set_descriptors(fds).unwrap();
+        let name = case["name"].as_str().unwrap();
+        assert_eq!(
+            rig.run(case["script"].as_str().unwrap()),
+            i32::try_from(case["status"].as_i64().unwrap()).unwrap(),
+            "{name}"
+        );
+        assert_eq!(rig.text(), case["stdout"].as_str().unwrap(), "{name}");
+        assert_eq!(
+            !diagnostic.is_empty(),
+            case["stderrPresent"].as_bool().unwrap(),
+            "{name}"
+        );
+        assert_eq!(rig.host.active_count(), 0, "{name}");
+    }
+}
+
+#[test]
+fn grep_explicit_patterns_share_the_pattern_budget() {
+    let rig = Rig::new();
+    let script = format!("grep -e '{}' -e '{}'", "a".repeat(2048), "b".repeat(2048));
+    assert_eq!(rig.run(&script), 2);
+    assert!(rig.text().contains("pattern byte limit"));
+}

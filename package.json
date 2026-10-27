@@ -47,6 +47,7 @@
   "scripts": {
     "record:cut-tr": "node scripts/record-cut-tr.ts",
     "format:check": "oxfmt --check scripts shell src tests package.json vite.config.ts playwright.config.ts tsconfig.json .oxlintrc.json .knip.jsonc quality docs/code-quality.md '!scripts/fixtures/**/*.json'",
+    "test:grep:usage": "node scripts/test-grep-usage.ts",
     "test:rust": "node scripts/check-shell-parser.mjs && cargo fmt --manifest-path shell/Cargo.toml --all --check && cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2",
     "build:shell": "node scripts/build-shell.ts",
     "check:capabilities": "node scripts/check-shell-capabilities.ts",
