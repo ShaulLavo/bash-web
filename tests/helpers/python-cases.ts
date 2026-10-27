@@ -12,7 +12,7 @@ export const pythonEnvironment = {
 
 export const pythonFiles: Record<string, string> = {
   "script.py":
-    'import json, os, sys\nprint(json.dumps([os.path.basename(__file__), sys.argv[1:]], ensure_ascii=False))\n',
+    "import json, os, sys\nprint(json.dumps([os.path.basename(__file__), sys.argv[1:]], ensure_ascii=False))\n",
   "input.txt": "alpha\nβeta\n",
 };
 
@@ -38,7 +38,14 @@ export const pythonCases: readonly PythonCase[] = [
   ),
   {
     name: "-c keeps empty, spaced, Unicode and option-like arguments",
-    args: ["-c", "import json, sys; print(json.dumps(sys.argv, ensure_ascii=False))", "", "two words", "β", "--flag"],
+    args: [
+      "-c",
+      "import json, sys; print(json.dumps(sys.argv, ensure_ascii=False))",
+      "",
+      "two words",
+      "β",
+      "--flag",
+    ],
     stdin: "",
     stdout: '["-c", "", "two words", "β", "--flag"]\n',
     stderr: "",
@@ -62,7 +69,10 @@ export const pythonCases: readonly PythonCase[] = [
   },
   {
     name: "-c reads stdin through EOF",
-    args: ["-c", "import sys; data = sys.stdin.buffer.read(); sys.stdout.buffer.write(data.upper())"],
+    args: [
+      "-c",
+      "import sys; data = sys.stdin.buffer.read(); sys.stdout.buffer.write(data.upper())",
+    ],
     stdin: "alpha\nbeta\n",
     stdout: "ALPHA\nBETA\n",
     stderr: "",
@@ -91,7 +101,11 @@ export const pythonCases: readonly PythonCase[] = [
     stderr: "err\n",
     status: 7,
   },
-  command("stdout drains beyond the terminal ring", 'import sys; sys.stdout.write("0123456789" * 40000)', "0123456789".repeat(40000)),
+  command(
+    "stdout drains beyond the terminal ring",
+    'import sys; sys.stdout.write("0123456789" * 40000)',
+    "0123456789".repeat(40000),
+  ),
   {
     name: "stderr drains beyond a pipe buffer",
     args: ["-c", 'import sys; sys.stderr.write("diagnostic\\n" * 10000); sys.exit(7)'],

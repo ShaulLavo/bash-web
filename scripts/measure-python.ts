@@ -45,7 +45,11 @@ function instrumentation(runtime: Runtime) {
     }
   };
   return {
-    snapshot: () => ({ writes: writes.slice(), drains: drains.slice(), compiles: compiles.slice() }),
+    snapshot: () => ({
+      writes: writes.slice(),
+      drains: drains.slice(),
+      compiles: compiles.slice(),
+    }),
     restore() {
       runtime.filesystem.writeFile = originalWrite;
       runtime.filesystem.drain = originalDrain;
@@ -95,7 +99,9 @@ async function create() {
     const installed = {
       milliseconds: now() - start,
       admissions: admissions.slice(),
-      payloadAbsent: !(await runtime.filesystem.lookup("/Lib")) && !(await runtime.filesystem.lookup("/cross-build")),
+      payloadAbsent:
+        !(await runtime.filesystem.lookup("/Lib")) &&
+        !(await runtime.filesystem.lookup("/cross-build")),
       before: beforeInstall,
       after: metrics.snapshot(),
     };
@@ -104,7 +110,9 @@ async function create() {
       installed,
       metrics,
       admissions,
-      setActive: (shell: Shell | undefined) => { active = shell; },
+      setActive: (shell: Shell | undefined) => {
+        active = shell;
+      },
       release: () => installedUtility.dispose(),
       close,
     };
@@ -161,7 +169,9 @@ async function runScript(script: string) {
       status: exit.code,
       error: exit.error,
       stdout: new TextDecoder().decode(stdout),
-      stderr: new TextDecoder().decode(await fixture.runtime.filesystem.readFile(`${pythonDirectory}/stderr`)),
+      stderr: new TextDecoder().decode(
+        await fixture.runtime.filesystem.readFile(`${pythonDirectory}/stderr`),
+      ),
       milliseconds: elapsed,
     };
   } finally {
@@ -182,17 +192,21 @@ function measurement() {
   return {
     ...fixture.metrics.snapshot(),
     admissions: fixture.admissions.slice(),
-    resources: performance.getEntriesByType("resource").filter((entry) => entry instanceof PerformanceResourceTiming).map((entry) => ({
-      url: entry.name,
-      start: entry.startTime,
-      end: entry.responseEnd,
-      encodedBytes: entry.encodedBodySize,
-      decodedBytes: entry.decodedBodySize,
-      transferBytes: entry.transferSize,
-    })),
+    resources: performance
+      .getEntriesByType("resource")
+      .filter((entry) => entry instanceof PerformanceResourceTiming)
+      .map((entry) => ({
+        url: entry.name,
+        start: entry.startTime,
+        end: entry.responseEnd,
+        encodedBytes: entry.encodedBodySize,
+        decodedBytes: entry.decodedBodySize,
+        transferBytes: entry.transferSize,
+      })),
     memory: {
       highWaterBytes: null,
-      reason: "Pinned Waffle exposes no per-guest linear-memory high-water measurement. Browser heap and process RSS are not guest memory. The 256 MiB declared limit is a cap only.",
+      reason:
+        "Pinned Waffle exposes no per-guest linear-memory high-water measurement. Browser heap and process RSS are not guest memory. The 256 MiB declared limit is a cap only.",
     },
   };
 }
@@ -206,10 +220,26 @@ async function disposeUtility() {
   return {
     markerRemoved: !(await fixture.runtime.filesystem.lookup("/bin/python")),
     payloadRemoved: !(await fixture.runtime.filesystem.lookup("/Lib/os.py")),
-    callerFile: new TextDecoder().decode(await fixture.runtime.filesystem.readFile("/Lib/caller-owned.txt")),
+    callerFile: new TextDecoder().decode(
+      await fixture.runtime.filesystem.readFile("/Lib/caller-owned.txt"),
+    ),
     disposed: fixture.runtime.disposed,
     recovery: await runScript('printf "borrowed runtime alive\\n"'),
     missing: await runScript("python --version"),
+  };
+}
+
+async function disposeUnused() {
+  const fixture = current();
+  await fixture.release();
+  await fixture.release();
+  return {
+    markerRemoved: !(await fixture.runtime.filesystem.lookup("/bin/python")),
+    payloadAbsent:
+      !(await fixture.runtime.filesystem.lookup("/Lib")) &&
+      !(await fixture.runtime.filesystem.lookup("/cross-build")),
+    disposed: fixture.runtime.disposed,
+    recovery: await runScript('printf "after unused disposal\\n"'),
   };
 }
 
@@ -219,7 +249,15 @@ async function close() {
   await fixture?.close();
 }
 
-export const pythonAcceptance = { open, run, runScript, measurement, disposeUtility, close };
+export const pythonAcceptance = {
+  open,
+  run,
+  runScript,
+  measurement,
+  disposeUtility,
+  disposeUnused,
+  close,
+};
 
 declare global {
   interface Window {
