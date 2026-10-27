@@ -81,8 +81,10 @@ for (const [source, status] of [
 
 for (const args of [
   ["sh", "-c"],
-  ["sh", "script.sh"],
   ["sh", "-x", "echo wrong"],
+  ["sh", "-e", "script.sh"],
+  ["sh", "-"],
+  ["sh", "--", "script.sh"],
 ]) {
   test(
     `WASI rejects unsupported startup ${JSON.stringify(args)}`,
@@ -93,7 +95,7 @@ for (const args of [
       assert.equal(result.stdout, "");
       assert.match(
         result.stderr,
-        /usage: shell-runtime \[-i \| -c SCRIPT \[NAME \[ARG\.\.\.\]\]\]/,
+        /usage: shell-runtime \[-i \| -c SCRIPT \[NAME \[ARG\.\.\.\]\]/,
       );
     },
   );

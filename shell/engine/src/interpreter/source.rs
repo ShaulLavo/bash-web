@@ -1,7 +1,8 @@
-use super::{Context, Descriptors, Flow, Outcome, eval};
+use super::{Context, Descriptors, Flow, Outcome, eval, reader};
 use crate::{
     exec::{JoinedSource, Scope, StorageAllocation},
     io::{self, Endpoint, IoError, OpenOptions},
+    parse,
     state::{SharedState, SourceFrame, absolute},
 };
 
@@ -97,6 +98,96 @@ async fn run_body(
         result.flow = Flow::Normal;
     }
     result
+}
+
+pub(super) async fn script(state: SharedState, fds: Descriptors, context: Context) -> Outcome {
+    let source = match load_script(&state, &fds, &context).await {
+        Ok(source) => source.retain(),
+        Err(ReadError::Io(IoError::Cancelled)) => return Outcome::status(130),
+        Err(ReadError::Io(error)) => {
+            let code = match error {
+                IoError::NotFound | IoError::NotDirectory | IoError::Runtime(44 | 54) => 127,
+                IoError::LimitExceeded => 2,
+                _ => 126,
+            };
+            return script_error(&fds, &context, &io_message(error), code).await;
+        }
+        Err(ReadError::Refused(message)) => return script_error(&fds, &context, message, 2).await,
+    };
+    let context = Context {
+        evaluation: context.evaluation.with_retained(source.retained()),
+        source,
+        ..context
+    };
+    let parser = context.parser_budget();
+    let aliases = reader::AliasOptions::snapshot(&state);
+    let parsed = parse::script(
+        &context.source,
+        context.limits().source_bytes,
+        &parser,
+        aliases.options(),
+    );
+    let (script, failure) = match parsed {
+        Ok(parsed) => parsed,
+        Err(_) if context.cancel.probe_now() => return Outcome::status(130),
+        Err(message) => return script_error(&fds, &context, &message, 2).await,
+    };
+    reader::run(
+        reader::Reader::new(script, failure, aliases, parser),
+        context
+            .reader
+            .filename()
+            .expect("file startup has a reader name"),
+        false,
+        state,
+        fds,
+        context.clone(),
+    )
+    .await
+}
+
+async fn load_script(
+    state: &SharedState,
+    fds: &Descriptors,
+    context: &Context,
+) -> Result<JoinedSource, ReadError> {
+    let name = context
+        .reader
+        .filename()
+        .expect("file startup has a reader name");
+    if name.is_empty() {
+        return Err(ReadError::Io(IoError::NotFound));
+    }
+    let (cwd, _storage) = {
+        let state = state.borrow();
+        let storage = context.admit_builtin_buffer(state.cwd.len())?;
+        (state.cwd.clone(), storage)
+    };
+    let file = candidate(&cwd, "", name, fds, context)
+        .await
+        .map_err(ReadError::Io)?;
+    if file.endpoint.descriptor_kind().map_err(ReadError::Io)? == io::DescriptorKind::Directory {
+        return Err(ReadError::Io(IoError::Runtime(31)));
+    }
+    read(file.endpoint, &context.evaluation, context).await
+}
+
+async fn script_error(fds: &Descriptors, context: &Context, message: &str, code: i32) -> Outcome {
+    let stderr = fds.borrow().get(2);
+    if let Some(stderr) = stderr {
+        let name = context
+            .reader
+            .filename()
+            .expect("file startup has a reader name");
+        let _ = stderr.write_all(name.as_bytes(), &context.cancel).await;
+        let _ = stderr.write_all(b": ", &context.cancel).await;
+        let _ = stderr.write_all(message.as_bytes(), &context.cancel).await;
+        let _ = stderr.write_all(b"\n", &context.cancel).await;
+    }
+    if context.cancel.is_cancelled() {
+        return Outcome::status(130);
+    }
+    Outcome::status(code)
 }
 
 const STORAGE_LIMIT: &str = "shell source storage limit exceeded";
