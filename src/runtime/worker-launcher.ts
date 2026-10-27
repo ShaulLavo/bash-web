@@ -134,14 +134,21 @@ export function launchTerminalWorker<T extends RuntimeWorkerRequest>(
 
 /** Shell guests and installed WASI utilities share inherited terminal descriptors.
  * Waffle owns admission, interrupt instrumentation and supervision for both. */
-export function guestLauncher(runtime: Runtime, workerUrl: string, argv0?: string): GuestLauncher {
+export function guestLauncher(
+  runtime: Runtime,
+  workerUrl: string,
+  argv0?: string,
+  exactEnvironment = false,
+): GuestLauncher {
   return (context, service) =>
     launchTerminalWorker<ShellWorkerRequest>(runtime, service, context, {
       workerUrl,
       request: {
         module: context.module,
         args: guestArguments(context.request.argv, argv0),
-        env: { ...context.request.env, PWD: context.request.cwd },
+        env: exactEnvironment
+          ? context.request.env
+          : { ...context.request.env, PWD: context.request.cwd },
         interruptible: context.interruptible,
         memoryUsage: new SharedArrayBuffer(8),
       },

@@ -11,7 +11,7 @@ export function installEnv(
   const defaultUrl = new URL("../../dist/env.wasm", import.meta.url);
   return installUtility(
     runtime,
-    { name: "env", path: "/bin/env", aliases: ["/usr/bin/env"], defaultUrl, execution: "wasi" },
+    { name: "env", path: "/bin/env", aliases: ["/usr/bin/env"], defaultUrl, execution: "wasi", exactEnvironment: true },
     options,
   );
 }

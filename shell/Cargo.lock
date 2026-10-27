@@ -1915,6 +1915,7 @@ dependencies = [
  "clap",
  "fluent",
  "nix 0.31.3",
+ "shell-wasi-process",
  "thiserror",
  "uucore 0.13.0",
 ]

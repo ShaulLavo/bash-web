@@ -37,16 +37,11 @@ test("env preserves lazy loading and leaves the caller runtime usable after unin
 });
 
 for (const mode of [
-  "",
   "-0",
   "--ignore-signal=INT",
   "--default-signal",
   "--block-signal=PIPE",
   "--list-signal-handling",
-  "-i",
-  "-C /tmp",
-  "-a custom",
-  "-S",
 ]) {
   test(`env rejects unsupported mode ${mode} before consuming shared input`, async ({ page }) => {
     await page.goto("/env-tests.html");

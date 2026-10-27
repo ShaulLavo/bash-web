@@ -30,6 +30,13 @@ function printEnv(args: string[], env: Record<string, string> = {}) {
   });
   try {
     const imports = wasi.imports(guest);
+    for (const entry of WebAssembly.Module.imports(guest)) {
+      if (entry.module === "wasi_snapshot_preview1") continue;
+      imports[entry.module] ??= {};
+      imports[entry.module][entry.name] = () => {
+        throw new Error(`print-only env called ${entry.module}.${entry.name}`);
+      };
+    }
     const instance = new WebAssembly.Instance(guest, imports);
     const status = wasi.start(instance);
     return { status, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr) };
@@ -152,19 +159,8 @@ test("env input debug output does not alter printed bytes", () => {
   assert.ok(actual.stderr.length > 0);
 });
 
-test("env unsupported command modes reject before process imports or input", () => {
-  assert.ok(
-    WebAssembly.Module.imports(guest).every((entry) => entry.module === "wasi_snapshot_preview1"),
-  );
+test("env signal modes reject before process imports or input", () => {
   for (const args of [
-    ["-i", "env"],
-    ["env"],
-    ["-C", "/", "env"],
-    ["-a", "custom", "env"],
-    ["-S", "A=one env"],
-    ["-u", "PWD", "env"],
-    ["PWD=/different", "env"],
-    ["-C", "/tmp", "env"],
     ["--ignore-signal=INT", "env"],
     ["--default-signal", "env"],
     ["--block-signal=PIPE", "env"],

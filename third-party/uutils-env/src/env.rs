@@ -46,7 +46,9 @@ use std::mem::zeroed;
 use std::os::unix::ffi::OsStrExt;
 
 use uucore::display::{Quotable, print_all_env_vars};
-use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, strip_errno};
+#[cfg(not(target_os = "wasi"))]
+use uucore::error::strip_errno;
+use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals::{
@@ -570,6 +572,7 @@ struct ParsedArguments {
 impl EnvAppData {
     #[cold]
     #[inline(never)]
+    #[cfg(not(target_os = "wasi"))]
     fn make_error_no_such_file_or_dir(&self, prog: &OsStr) -> Box<dyn UError> {
         uucore::show_error!(
             "{}",
@@ -789,14 +792,16 @@ impl EnvAppData {
             self.do_input_debug_printing = Some(false);
         }
 
-        #[cfg(target_os = "wasi")]
-        wasi_support::initialize_cwd()?;
-
         let opts = make_options(
             &matches,
             #[cfg(all(unix, not(target_os = "fuchsia")))]
             &signal_apply_all,
         )?;
+
+        #[cfg(target_os = "wasi")]
+        if !opts.program.is_empty() {
+            wasi_support::initialize_cwd()?;
+        }
 
         // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
         //       easily handle the case where no command is given

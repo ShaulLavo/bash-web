@@ -1,10 +1,8 @@
 //! Process execution for WASI utilities on the caller's existing Waffle runtime.
 //! Native builds expose only request codecs and status types, never host execution.
 //!
-//! Waffle P rejects these imports on ordinary source-byte admission. The tested
-//! cooperative ABI fixture does not qualify env/find/xargs utility installation.
-//! Independent cwd/environment and fatal-owner cleanup also require host support.
-//! See `docs/wasi-process.md` for the exact integration gates.
+//! Ordinary source imports are admitted by Waffle. Blocking collection uses its
+//! signal-preserving physical-retirement wait; the host owns fatal-caller cleanup.
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -188,12 +186,6 @@ pub enum Error {
     },
     /// A handled signal canceled the child job. Teardown finished before this error.
     Interrupted(u8),
-    /// The host cannot park for cleanup without consuming a pending handled signal.
-    /// Cleanup is unfinished. Retain the Child; do not retry this error in a loop.
-    /// `interrupted` preserves a signal already consumed by `wait`, if any.
-    CleanupWaitUnsupported {
-        interrupted: Option<u8>,
-    },
 }
 impl fmt::Display for Error {
     fn fmt(&self, output: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -209,24 +201,10 @@ impl fmt::Display for Error {
             Self::Interrupted(signal) => {
                 write!(output, "process execution canceled by signal {signal}")
             }
-            Self::CleanupWaitUnsupported { interrupted } => {
-                write_cleanup_gate(output, *interrupted)
-            }
         }
     }
 }
 impl std::error::Error for Error {}
-
-fn write_cleanup_gate(output: &mut fmt::Formatter<'_>, interrupted: Option<u8>) -> fmt::Result {
-    write!(
-        output,
-        "host cannot wait for cleanup while preserving pending handled signals"
-    )?;
-    if let Some(signal) = interrupted {
-        write!(output, "; wait was interrupted by signal {signal}")?;
-    }
-    Ok(())
-}
 
 /// Convert the negative errno convention without overflowing on malformed i32::MIN.
 pub fn decode_host_result(operation: &'static str, value: i32) -> Result<u32, Error> {

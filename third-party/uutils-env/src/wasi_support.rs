@@ -23,8 +23,10 @@ pub fn initialize_cwd() -> UResult<()> {
     let mut bytes = vec![0; shell_wasi_process::MAX_REQUEST_BYTES];
     let length = shell_wasi_process::decode_host_result("cwd", unsafe {
         cwd(bytes.as_mut_ptr(), bytes.len())
-    }).map_err(process_error)?;
-    let path = bytes.get(..length as usize)
+    })
+    .map_err(process_error)?;
+    let path = bytes
+        .get(..length as usize)
         .ok_or_else(|| USimpleError::new(125, "invalid process cwd length"))?;
     let path = std::str::from_utf8(path)
         .map_err(|_| USimpleError::new(125, "non-UTF-8 process cwd is unsupported"))?;
@@ -34,7 +36,9 @@ pub fn initialize_cwd() -> UResult<()> {
 }
 
 fn text(value: &std::ffi::OsStr) -> UResult<String> {
-    value.to_str().map(str::to_owned)
+    value
+        .to_str()
+        .map(str::to_owned)
         .ok_or_else(|| USimpleError::new(125, "non-UTF-8 process strings are unsupported"))
 }
 
@@ -48,7 +52,8 @@ pub fn run_program(
     let cwd = std::env::current_dir()
         .map_err(|error| USimpleError::new(125, format!("cannot read cwd: {error}")))?;
     let cwd = text(cwd.as_os_str())?;
-    let env = std::env::vars_os().map(|(key, value)| Ok((text(&key)?, text(&value)?)))
+    let env = std::env::vars_os()
+        .map(|(key, value)| Ok((text(&key)?, text(&value)?)))
         .collect::<UResult<std::collections::BTreeMap<_, _>>>()?;
     let executable = resolve_executable(&program, env.get("PATH").map(String::as_str), &cwd)
         .map_err(process_error)?;
@@ -57,7 +62,10 @@ pub fn run_program(
         argv.push(text(arg)?);
     }
     let request = Request {
-        executable, argv, env, cwd,
+        executable,
+        argv,
+        env,
+        cwd,
         fds: inherited_shell_descriptors().map_err(process_error)?,
     };
     let outcome = run(&request).map_err(process_error)?;
@@ -71,8 +79,14 @@ pub fn run_program(
 fn process_error(error: shell_wasi_process::Error) -> Box<dyn uucore::error::UError> {
     use shell_wasi_process::Error;
     let status = match error {
-        Error::Host { operation: "access_take" | "spawn", errno: 44 } => 127,
-        Error::Host { operation: "access_take" | "spawn", .. } => 126,
+        Error::Host {
+            operation: "access_take" | "spawn",
+            errno: 44,
+        } => 127,
+        Error::Host {
+            operation: "access_take" | "spawn",
+            ..
+        } => 126,
         Error::Interrupted(signal) => 128 + i32::from(signal),
         _ => 125,
     };
