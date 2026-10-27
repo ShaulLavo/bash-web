@@ -9,6 +9,7 @@ if (!process.env.BASH_WEB_UTILITY_ARTIFACTS) {
   buildWasiShell(["-p", "shell-tr", "--bin", "tr"]);
 }
 buildWc();
+buildWasiShell(["-p", "shell-clear", "--bin", "clear"]);
 buildWasiShell(["-p", "shell-utilities"]);
 buildWasiShell(["-p", "shell-sed", "--bin", "sed"]);
 buildWasiShell(["-p", "shell-xargs", "--bin", "xargs"]);

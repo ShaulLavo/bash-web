@@ -238,6 +238,7 @@ jobs:
           name: ripgrep-${{ github.sha }}
           path: dist
       - run: npm run test:rg:wasi
+      - run: npm run test:clear
       - name: WASI tests and size
         run: |
           ulimit -c 0
@@ -497,6 +498,7 @@ jobs:
       - run: npm run build:env:tests && npm run test:env:browser
       - run: npm run test:runtime:terminal
       - run: npm run test:installed-sed
+      - run: npm run test:clear:browser
       - run: npm run test:browser
       - uses: actions/upload-artifact@v4
         if: failure()
