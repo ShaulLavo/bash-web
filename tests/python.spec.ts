@@ -86,7 +86,13 @@ test("real CPython on Waffle loads once, runs scripts, disposes and leaves its b
       }),
     );
     expect(discovery.status, discovery.stderr).toBe(0);
-    expect(JSON.parse(discovery.stdout)).toEqual([pythonArgv0, "wasi", "wasi-wasm32", true, true]);
+    expect(JSON.parse(discovery.stdout)).toEqual([
+      pythonArgv0,
+      "wasi",
+      "wasi-0.0.0-wasm32",
+      true,
+      true,
+    ]);
     expect(requests).toEqual(loaded);
     const repeated: number[] = [];
     for (let index = 0; index < 5; index++) {
