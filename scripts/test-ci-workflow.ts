@@ -513,20 +513,33 @@ test("program regression entrypoints have one blocking owner and prepared inputs
   const browser = commands(workflowJobs.browser);
   for (const command of ["test:grep:usage", "build:env:tests", "test:env:browser"]) {
     assert.ok(browser.indexOf("npx playwright install") < browser.indexOf(`npm run ${command}`));
-    assert.ok(browser.indexOf("npm run build:browser:assets:ci") < browser.indexOf(`npm run ${command}`));
+    assert.ok(
+      browser.indexOf("npm run build:browser:assets:ci") < browser.indexOf(`npm run ${command}`),
+    );
     assert.ok(browser.indexOf(`npm run ${command}`) < browser.indexOf("npm run test:browser"));
   }
-  assert.ok(browser.indexOf("npx playwright install") < browser.indexOf("npm run test:git:browser"));
-  assert.ok(browser.indexOf("npm run test:git:browser") < browser.indexOf("npm run build:browser:assets:ci"));
-  assert.ok(browser.indexOf("npm run build:env:tests") < browser.indexOf("npm run test:env:browser"));
+  assert.ok(
+    browser.indexOf("npx playwright install") < browser.indexOf("npm run test:git:browser"),
+  );
+  assert.ok(
+    browser.indexOf("npm run test:git:browser") <
+      browser.indexOf("npm run build:browser:assets:ci"),
+  );
+  assert.ok(
+    browser.indexOf("npm run build:env:tests") < browser.indexOf("npm run test:env:browser"),
+  );
   const all = Object.values(workflowJobs).map(commands).join("\n");
   const quality = commands(workflowJobs.quality);
-  const selected = "node --test scripts/test-git-source.ts scripts/test-git-local-recording.ts scripts/test-git-package.ts scripts/test-git-review.ts";
+  const selected =
+    "node --test scripts/test-git-source.ts scripts/test-git-local-recording.ts scripts/test-git-package.ts scripts/test-git-review.ts";
   assert.equal(all.split(selected).length, 2);
   assert.ok(quality.includes(selected));
   assert.equal(all.split("node --test scripts/test-find-source.ts").length, 2);
   assert.ok(quality.includes("node --test scripts/test-find-source.ts"));
-  assert.doesNotMatch(all, /npm run test:git:local\b|node scripts\/test-git-local\.ts|npm run test:find\s/);
+  assert.doesNotMatch(
+    all,
+    /npm run test:git:local\b|node scripts\/test-git-local\.ts|npm run test:find\s/,
+  );
   assert.match(browser, /npm run build:env:tests && npm run test:env:browser/);
 });
 
@@ -535,12 +548,24 @@ test("npm prepare is the only Git/worker build and consumers use its artifacts",
   const lifecycle = String(recipes().prepare);
   assert.equal(lifecycle, "npm run build:git && npm run build:worker && npm run notices:git");
   const owners = Object.entries(workflowJobs).flatMap(([owner, job]) => {
-    const actual = expanded(commands(job)).replace("node scripts/pack-git-tests.ts", expanded(lifecycle));
-    return Array.from(actual.matchAll(/node scripts\/(build-git\.ts|build-worker\.mjs)/g), (match) => ({ owner, file: match[1] }));
+    const actual = expanded(commands(job)).replace(
+      "node scripts/pack-git-tests.ts",
+      expanded(lifecycle),
+    );
+    return Array.from(
+      actual.matchAll(/node scripts\/(build-git\.ts|build-worker\.mjs)/g),
+      (match) => ({ owner, file: match[1] }),
+    );
   });
-  assert.deepEqual(owners, [{ owner: "prepare", file: "build-git.ts" }, { owner: "prepare", file: "build-worker.mjs" }]);
+  assert.deepEqual(owners, [
+    { owner: "prepare", file: "build-git.ts" },
+    { owner: "prepare", file: "build-worker.mjs" },
+  ]);
   const read = (name: string) => readFileSync(new URL(name, import.meta.url), "utf8");
-  assert.match(read("./pack-git-tests.ts"), /spawnSync\("npm", \["pack", "--pack-destination", "\.build\/git-package"\]/);
+  assert.match(
+    read("./pack-git-tests.ts"),
+    /spawnSync\("npm", \["pack", "--pack-destination", "\.build\/git-package"\]/,
+  );
   const packageTest = read("./test-git-package.ts");
   assert.match(packageTest, /resolve\("\.build\/git-package"\)/);
   assert.doesNotMatch(packageTest, /execute\("npm"/);
@@ -549,7 +574,10 @@ test("npm prepare is the only Git/worker build and consumers use its artifacts",
   assert.match(driver, /copyFile\("dist\/git-command\.js"/);
   assert.match(driver, /external: true/);
   assert.doesNotMatch(read("./git-notices.ts"), /from "esbuild"|patchGitSource/);
-  assert.match(commands(workflowJobs.prepare), /tar -czf .* \.build\/git-package .*dist\/git\.NOTICES\.txt/);
+  assert.match(
+    commands(workflowJobs.prepare),
+    /tar -czf .* \.build\/git-package .*dist\/git\.NOTICES\.txt/,
+  );
   assert.doesNotMatch(read("./pack-git-tests.ts"), /ignore-scripts|--prebuilt/);
 });
 

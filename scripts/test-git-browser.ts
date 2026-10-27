@@ -48,15 +48,17 @@ try {
     target: "esnext",
     chunkNames: "[name]-[hash]",
     metafile: true,
-    plugins: [{
-      name: "prepared-git",
-      setup(builder) {
-        builder.onResolve({ filter: /\/dist\/git-command\.js$/ }, () => ({
-          path: "./git-command.js",
-          external: true,
-        }));
+    plugins: [
+      {
+        name: "prepared-git",
+        setup(builder) {
+          builder.onResolve({ filter: /\/dist\/git-command\.js$/ }, () => ({
+            path: "./git-command.js",
+            external: true,
+          }));
+        },
       },
-    }],
+    ],
   });
   const assets = await Promise.all(
     Object.entries(bundle.metafile.outputs).map(async ([path, output]) => ({
