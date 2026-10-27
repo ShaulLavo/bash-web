@@ -1,20 +1,21 @@
 import assert from "node:assert/strict";
 import { loadSortUniqObservations } from "./sort-uniq-observations.ts";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { test, type TestContext } from "node:test";
 import { installNodeWorkers, liveNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
 import { runRoot } from "./waffle-compat.ts";
-import type * as Api from "./waffle-node-api.ts";
+import {
+  api,
+  directory,
+  nodeDirectory,
+  readShell,
+  readWasiSource,
+} from "./test-own-shell-wasi-fixture.ts";
 
 const names = ["sort", "uniq"] as const;
-const nodeDirectory = new URL("../.build/node/", import.meta.url);
-const api: typeof Api = await import(new URL("api.mjs", nodeDirectory).href);
-const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
-const shell = await WebAssembly.compile(await readFile(resolve(directory, "shell-runtime.wasm")));
+const shell = await readShell();
 const binaries = {
-  sort: new Uint8Array(await readFile(resolve(directory, "sort.wasm"))),
-  uniq: new Uint8Array(await readFile(resolve(directory, "uniq.wasm"))),
+  sort: await readWasiSource("sort"),
+  uniq: await readWasiSource("uniq"),
 };
 const env = { PATH: "/usr/bin:/bin", HOME: "/home/user", LC_ALL: "C", TMPDIR: "/tmp" };
 

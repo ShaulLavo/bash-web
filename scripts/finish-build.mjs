@@ -12,10 +12,13 @@ for (const worker of ["shell-worker", "fs-worker"]) {
   );
 }
 for (const command of [
+  "env",
   "cat",
   "cut",
+  "find",
   "grep",
   "head",
+  "which",
   "ls",
   "mkdir",
   "rg",

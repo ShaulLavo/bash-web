@@ -8,6 +8,7 @@ import { withVfsImplementation } from "../node_modules/waffle/fs/vfs-internal.ts
 import { mountBrowser, type BrowserRuntimeLease } from "../src/browser/main";
 import { registerTestPrograms } from "./helpers/test-programs";
 import { installCat } from "../src/utilities/cat";
+import { installFind } from "../src/utilities/find";
 import { installGrep } from "../src/utilities/grep";
 import { installHead } from "../src/utilities/head";
 import { installMkdir } from "../src/utilities/mkdir";
@@ -102,6 +103,7 @@ mountBrowser({
         [
           installCat,
           installCut,
+          installFind,
           installGrep,
           installHead,
           installLs,

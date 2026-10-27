@@ -9,6 +9,7 @@ import {
   type RuntimeWorkerRequest,
 } from "waffle/browser/worker";
 import { SharedBridge, control } from "../bridge";
+import { createExecutableQuery } from "./executable-query";
 import { shellTerminalImports } from "./guest-imports";
 import { createBridgeTerminal } from "./runtime-terminals";
 import { createTerminalAdmission, type TerminalAdmission } from "./terminal-admission";
@@ -25,6 +26,7 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
   const terminal = request.terminal ?? data?.shellTerminal;
   const admission =
     request.terminalAdmission ?? data?.terminalAdmission ?? createTerminalAdmission();
+  const executableQuery = createExecutableQuery();
   let checkActive = () => {};
   let memory: WebAssembly.Memory | undefined;
   const bridge = request.terminal ? new SharedBridge(request.terminal) : undefined;
@@ -52,6 +54,7 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
           : request.runtimeProcess?.bindings.map((binding) => binding.fd),
       );
       return {
+        bash_web_executable: executableQuery.namespace,
         shell_terminal: {
           inherited_fd(index: number) {
             checkActive();
@@ -73,7 +76,8 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
     beforeBindings({ wasi }) {
       if (!request.terminal) for (const fd of [0, 1, 2]) wasi.descriptors.close(fd);
     },
-    imports(imports) {
+    imports(imports, { wasi }) {
+      if (imports.bash_web_executable) executableQuery.bind(wasi);
       // Sample the guest's allocation at host boundaries without retaining any guest
       // memory view across memory.grow. This telemetry is not an allocation quota.
       if (!sample && !bridge) return;

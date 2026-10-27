@@ -8,10 +8,13 @@ import { loadSortUniqObservations } from "./sort-uniq-observations.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const utilities = [
+  "env",
   "cat",
   "cut",
+  "find",
   "grep",
   "head",
+  "which",
   "ls",
   "mkdir",
   "rg",
@@ -117,6 +120,26 @@ test("each utility entry references only its own program", async () => {
       assert.doesNotMatch(text, new RegExp(`${other}\\.wasm`), `${name} entry`);
     assert.match(text, new RegExp(`function install${name[0].toUpperCase()}${name.slice(1)}`));
   }
+});
+
+test("find packages the pinned upstream entry and source receipt", () => {
+  const revision = "505421d4e03586efeb7b9c55adf057599e192e0a";
+  const manifest = readFileSync(resolve(root, "shell/utilities/Cargo.toml"), "utf8");
+  assert.match(
+    manifest,
+    new RegExp(
+      `findutils = \\{ git = "https://github.com/uutils/findutils", rev = "${revision}" \\}`,
+    ),
+  );
+  const entry = readFileSync(resolve(root, "shell/utilities/src/bin/find.rs"), "utf8");
+  assert.match(entry, /findutils::find::find_main/);
+  const receipt = JSON.parse(
+    readFileSync(resolve(root, "shell/utilities/find.source.json"), "utf8"),
+  );
+  assert.equal(receipt.revision, revision);
+  assert.equal(receipt.entry, "findutils::find::find_main");
+  const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
+  assert.match(notices, /## findutils 0\.11\.0 \/ LICENSE/);
 });
 
 test("head packages the pinned upstream entry and its license notices", () => {
@@ -225,6 +248,31 @@ test("native sort and uniq qualification runs candidates, not host GNU programs"
   const source = readFileSync(resolve(root, "shell/utilities/tests/sort_uniq.rs"), "utf8");
   assert.match(source, /owned-fixtures\/sort-uniq\.json/);
   assert.doesNotMatch(source, /run\(name,|Command::new\("(?:bash|sort|uniq)"\)/);
+});
+
+test("env packages the exact print-only upstream source and root license", () => {
+  const receipt = JSON.parse(
+    readFileSync(resolve(root, "shell/utilities/env.source.json"), "utf8"),
+  );
+  const revision = "07763857f6b9a547742a994b58aef0ccd036198b";
+  assert.equal(receipt.repository, "https://github.com/uutils/coreutils");
+  assert.equal(receipt.revision, revision);
+  assert.deepEqual(receipt.packages, { uu_env: { version: "0.13.0", path: "src/uu/env" } });
+  assert.equal(receipt.sharedPackage.dependencyAlias, "uucore_files");
+  const manifest = readFileSync(resolve(root, "shell/utilities/Cargo.toml"), "utf8");
+  assert.ok(manifest.includes(`uu_env = { git = "${receipt.repository}", rev = "${revision}" }`));
+  const lock = readFileSync(resolve(root, "shell/Cargo.lock"), "utf8");
+  assert.ok(
+    lock.includes(
+      `name = "uu_env"\nversion = "0.13.0"\nsource = "git+${receipt.repository}?rev=${revision}#${revision}"`,
+    ),
+  );
+  const entry = readFileSync(resolve(root, "shell/utilities/src/bin/env.rs"), "utf8");
+  assert.match(entry, /extern crate uucore_files as uucore/);
+  assert.match(entry, /uucore::bin!\(uu_env\)/);
+  assert.doesNotMatch(entry, /process::Command|runtime_proc/);
+  const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
+  assert.ok(notices.includes(`## uutils coreutils ${revision} / LICENSE`));
 });
 
 test("cut packages the accepted upstream wrapper, ordinary admission and notices", () => {
